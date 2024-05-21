@@ -1,10 +1,7 @@
-import { Base64ImageField } from 'https://cardstack.com/base/base64-image';
-import {
-  MaybeBase64Field,
-  CardDef,
-  field,
-  contains,
-} from 'https://cardstack.com/base/card-api';
+import Base64ImageField from 'https://cardstack.com/base/base64-image';
+import { field, contains } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
+import MaybeBase64Field from 'https://cardstack.com/base/maybe-base64-image';
 import StringField from 'https://cardstack.com/base/string';
 
 export class PuppyCard extends CardDef {

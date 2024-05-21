@@ -1,10 +1,7 @@
 import NumberField from 'https://cardstack.com/base/number';
-import {
-  CardDef,
-  field,
-  contains,
-  StringField,
-} from 'https://cardstack.com/base/card-api';
+import { field, contains } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
+import StringField from 'https://cardstack.com/base/string';
 import { Component } from 'https://cardstack.com/base/card-api';
 
 function or(value: number | undefined, defaultValue: number) {

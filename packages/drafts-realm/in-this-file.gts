@@ -1,10 +1,7 @@
-import {
-  contains,
-  field,
-  CardDef,
-  FieldDef,
-} from 'https://cardstack.com/base/card-api';
+import { contains, field } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
+import CardDef from 'https://cardstack.com/base/card-def';
+import FieldDef from 'https://cardstack.com/base/field-def';
 
 export const exportedVar = 'exported var';
 
@@ -12,8 +9,7 @@ export const exportedVar = 'exported var';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const localVar = 'local var';
 
-class LocalClass
- {}
+class LocalClass {}
 
 export class ExportedClass {}
 

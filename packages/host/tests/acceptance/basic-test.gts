@@ -25,9 +25,12 @@ module('Acceptance | basic tests', function (hooks) {
       'service:loader-service',
     ) as LoaderService;
     let loader = loaderService.loader;
-    let { field, contains, CardDef, Component } = await loader.import<
+    let { field, contains, Component } = await loader.import<
       typeof import('https://cardstack.com/base/card-api')
     >(`${baseRealm.url}card-api`);
+    let { default: CardDef } = await loader.import<
+      typeof import('https://cardstack.com/base/card-def')
+    >(`${baseRealm.url}card-def`);
     let { default: StringField } = await loader.import<
       typeof import('https://cardstack.com/base/string')
     >(`${baseRealm.url}string`);

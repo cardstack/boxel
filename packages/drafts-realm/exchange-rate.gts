@@ -1,9 +1,5 @@
-import {
-  CardDef,
-  field,
-  contains,
-  linksTo,
-} from 'https://cardstack.com/base/card-api';
+import { field, contains, linksTo } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
 import { Currency } from './asset';
 import NumberField from 'https://cardstack.com/base/number';
 import StringField from 'https://cardstack.com/base/string';

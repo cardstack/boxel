@@ -8,7 +8,6 @@ import {
 import {
   // intentionally not exporting this so that the outside world
   // cannot mark a card as being saved
-  isSavedInstance,
   formats,
   type Format,
   type FieldType,
@@ -30,7 +29,6 @@ import {
   type BaseDefConstructor,
   type BaseInstanceType,
 } from './card-api/-base-def';
-import { CardDef } from './card-api/-card-def';
 import {
   Component,
   type CardContext,
@@ -45,7 +43,6 @@ import {
   type SerializeOpts,
 } from './card-api/-fields/storage';
 import { type BoxComponent } from './card-api/-components/field-component';
-import { FieldDef } from './card-api/-field-def';
 import {
   formatQueryValue,
   getQueryableValue,
@@ -59,7 +56,6 @@ import {
   updateFromSerialized,
 } from './card-api/-serialization';
 import { flushLogs } from './card-api/-logger';
-import { StringField } from './card-api/-fields/string';
 import { field, getFieldDescription } from './card-api/-fields/decorator';
 import { contains } from './card-api/-fields/contains';
 import { containsMany } from './card-api/-fields/contains-many';
@@ -71,11 +67,9 @@ import {
   unsubscribeFromChanges,
 } from './card-api/-subscriptions';
 import { IdentityContext } from './card-api/-identity-context';
-import { MaybeBase64Field } from './card-api/-fields/maybe-base-64';
 
 export {
   BaseDef,
-  CardDef,
   Component,
   contains,
   containsMany,
@@ -83,7 +77,6 @@ export {
   deserialize,
   field,
   fieldDecorator,
-  FieldDef,
   fieldType,
   flushLogs,
   formatQuery,
@@ -99,7 +92,6 @@ export {
   isField,
   linksTo,
   linksToMany,
-  MaybeBase64Field,
   primitive,
   queryableValue,
   realmInfo,
@@ -110,7 +102,6 @@ export {
   searchDoc,
   serialize,
   serializeCard,
-  StringField,
   subscribeToChanges,
   unsubscribeFromChanges,
   updateFromSerialized,
@@ -127,14 +118,6 @@ export {
   type SerializeOpts,
   type SignatureFor,
 };
-
-export function isSaved(instance: CardDef): boolean {
-  return instance[isSavedInstance] === true;
-}
-
-export function setCardAsSavedForTest(instance: CardDef): void {
-  instance[isSavedInstance] = true;
-}
 
 declare module 'ember-provide-consume-context/context-registry' {
   export default interface ContextRegistry {

@@ -2,8 +2,6 @@ import {
   contains,
   field,
   Component,
-  CardDef,
-  FieldDef,
   BaseDef,
   primitive,
   relativeTo,
@@ -21,6 +19,8 @@ import {
 import { isEqual } from 'lodash';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import GlimmerComponent from '@glimmer/component';
+import CardDef from './card-def';
+import FieldDef from './field-def';
 
 export class CatalogEntry extends CardDef {
   static displayName = 'Catalog Entry';

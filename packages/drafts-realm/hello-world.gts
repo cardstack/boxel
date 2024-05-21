@@ -2,11 +2,11 @@ import TextAreaCard from 'https://cardstack.com/base/text-area';
 import MarkdownCard from 'https://cardstack.com/base/markdown';
 import StringCard from 'https://cardstack.com/base/string';
 import {
-  CardDef,
   Component,
   field,
   contains,
 } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
 
 export class HelloWorld extends CardDef {
   @field fullName = contains(StringCard);

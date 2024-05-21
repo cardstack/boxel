@@ -3,7 +3,6 @@ import {
   primitive,
   Component,
   useIndexBasedKey,
-  FieldDef,
   deserialize,
   BaseInstanceType,
   BaseDefConstructor,
@@ -12,6 +11,7 @@ import {
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
 import { not } from '@cardstack/boxel-ui/helpers';
+import FieldDef from './field-def';
 
 function isChecksumAddress(address: string): boolean {
   return getAddress(address) === address;

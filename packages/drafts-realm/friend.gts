@@ -2,9 +2,9 @@ import {
   contains,
   linksTo,
   field,
-  CardDef,
   Component,
 } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
 import NumberCard from 'https://cardstack.com/base/number';
 import StringCard from 'https://cardstack.com/base/string';
 import { GridContainer } from '@cardstack/boxel-ui/components';

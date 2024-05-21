@@ -47,7 +47,8 @@ import {
   DefaultFormatProvider,
   getBoxComponent,
 } from '../-components/field-component';
-import { type CardDef, type CardDefConstructor } from '../-card-def';
+import type CardDef from '../../card-def';
+import { type CardDefConstructor } from '../../card-def';
 import { identityContexts, IdentityContext } from '../-identity-context';
 import { on } from '@ember/modifier';
 import {

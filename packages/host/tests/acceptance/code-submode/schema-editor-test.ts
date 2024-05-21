@@ -30,7 +30,8 @@ import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 const indexCardSource = `
-  import { CardDef, Component } from "https://cardstack.com/base/card-api";
+  import { Component } from "https://cardstack.com/base/card-api";
+  import CardDef from "https://cardstack.com/base/card-def";
 
   export class Index extends CardDef {
     static isolated = class Isolated extends Component<typeof this> {
@@ -44,7 +45,9 @@ const indexCardSource = `
 `;
 
 const personCardSource = `
-  import { contains, containsMany, field, linksToMany, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
+  import { contains, containsMany, field, linksToMany, Component } from "https://cardstack.com/base/card-api";
+  import CardDef from "https://cardstack.com/base/card-def";
+  import StringField from "https://cardstack.com/base/string";
   import { Friend } from './friend';
 
   export class Person extends CardDef {
@@ -105,9 +108,9 @@ const inThisFileSource = `
   import {
     contains,
     field,
-    CardDef,
-    FieldDef,
   } from 'https://cardstack.com/base/card-api';
+  import CardDef from "https://cardstack.com/base/card-def";
+  import FieldDef from "https://cardstack.com/base/field-def";
   import StringField from 'https://cardstack.com/base/string';
 
   export const exportedVar = 'exported var';
@@ -153,7 +156,8 @@ const inThisFileSource = `
 `;
 
 const friendCardSource = `
-  import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+  import { contains, linksTo, field, Component } from "https://cardstack.com/base/card-api";
+  import CardDef from "https://cardstack.com/base/card-def";
   import StringField from "https://cardstack.com/base/string";
 
   export class Friend extends CardDef {
@@ -185,11 +189,11 @@ const friendCardSource = `
 
 const ambiguousDisplayNamesCardSource = `
   import {
-    CardDef,
     field,
     linksTo,
     Component,
   } from 'https://cardstack.com/base/card-api';
+  import CardDef from "https://cardstack.com/base/card-def";
 
   export class Editor extends CardDef {
     static displayName = 'Author Bio';
@@ -892,7 +896,9 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       assert.codeEqual(
         content,
         `
-  import { contains, containsMany, field, linksToMany, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
+  import { contains, containsMany, field, linksToMany, Component } from "https://cardstack.com/base/card-api";
+  import CardDef from "https://cardstack.com/base/card-def";
+  import StringField from 'https://cardstack.com/base/string';
   import { Friend } from './friend';
 
   export class Person extends CardDef {
@@ -957,7 +963,9 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       assert.codeEqual(
         content,
         `
-  import { contains, containsMany, field, linksToMany, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
+  import { contains, containsMany, field, linksToMany, Component } from "https://cardstack.com/base/card-api";
+  import CardDef from "https://cardstack.com/base/card-def";
+  import StringField from 'https://cardstack.com/base/string';
   import { Friend } from './friend';
 
   export class Person extends CardDef {

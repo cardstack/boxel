@@ -7,7 +7,7 @@ import {
   deserialize,
 } from '../-constants';
 import { cardThunk, type BaseInstanceType, type BaseDef } from '../-base-def';
-import { type FieldDefConstructor } from '../-field-def';
+import { type FieldDefConstructor } from '../../field-def';
 import { makeDescriptor } from './decorator';
 import { cardClassFromResource, type Options } from './utils';
 import { getter, type Field } from './storage';

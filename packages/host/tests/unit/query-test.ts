@@ -15,7 +15,7 @@ import ENV from '@cardstack/host/config/environment';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 import { testRealmURL, p, getDbAdapter } from '../helpers';
 

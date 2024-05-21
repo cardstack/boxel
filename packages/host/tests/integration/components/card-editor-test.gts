@@ -20,7 +20,7 @@ import CardPrerender from '@cardstack/host/components/card-prerender';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
 
 import {
   testRealmURL,

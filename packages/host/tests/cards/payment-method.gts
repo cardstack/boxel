@@ -1,4 +1,5 @@
-import { contains, field, FieldDef } from 'https://cardstack.com/base/card-api';
+import { contains, field } from 'https://cardstack.com/base/card-api';
+import FieldDef from 'https://cardstack.com/base/field-def';
 import StringCard from 'https://cardstack.com/base/string';
 
 import { Payment } from './payment';

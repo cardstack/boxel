@@ -10,7 +10,7 @@ import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import Pill from '@cardstack/host/components/pill';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 interface CardPillSignature {
   Element: HTMLDivElement;

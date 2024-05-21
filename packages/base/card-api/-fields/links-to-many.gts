@@ -52,7 +52,8 @@ import {
   BoxComponentSignature,
 } from '../-components/field-component';
 import { cardTypeFor, isCardOrField } from '../-type-utils';
-import { type CardDef, type CardDefConstructor } from '../-card-def';
+import type CardDef from '../../card-def';
+import { type CardDefConstructor } from '../../card-def';
 import { identityContexts, IdentityContext } from '../-identity-context';
 import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
@@ -73,7 +74,7 @@ import { IconMinusCircle, IconX } from '@cardstack/boxel-ui/icons';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { consume } from 'ember-provide-consume-context';
 import { CardContext } from '../-components/utils';
-import { FieldDef } from '../-field-def';
+import FieldDef from '../../field-def';
 
 export function linksToMany<CardT extends CardDefConstructor>(
   cardOrThunk: CardT | (() => CardT),

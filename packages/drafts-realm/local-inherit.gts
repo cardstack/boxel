@@ -1,9 +1,6 @@
-import {
-  contains,
-  field,
-  CardDef,
-  FieldDef,
-} from 'https://cardstack.com/base/card-api';
+import { contains, field } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
+import FieldDef from 'https://cardstack.com/base/field-def';
 
 class GrandParent extends CardDef {
   static displayName = 'local grandparent';

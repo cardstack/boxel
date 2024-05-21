@@ -10,7 +10,7 @@ import { runSharedTest, p } from '@cardstack/runtime-common/helpers';
 import { testRealmURL } from '@cardstack/runtime-common/helpers/const';
 import PgAdapter from '../pg-adapter';
 import { shimExternals } from '../lib/externals';
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 import queryTests from '@cardstack/runtime-common/tests/query-test';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');

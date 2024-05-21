@@ -13,7 +13,7 @@ import {
   isCardInstance as _isCardInstance,
   isField,
 } from '@cardstack/runtime-common';
-import { type CardDef } from '../-card-def';
+import type CardDef from '../../card-def';
 import {
   type Field,
   type StaleValue,
@@ -22,7 +22,7 @@ import {
   isStaleValue,
   recompute,
 } from './storage';
-import { IDField } from './id';
+import { IDField } from '../../id';
 import { notifySubscribers } from '../-subscriptions';
 import { logger } from '../-logger';
 

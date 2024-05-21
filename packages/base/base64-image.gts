@@ -15,7 +15,7 @@ import StringField from './string';
 import NumberField from './number';
 import { Component } from './card-api/-components/utils';
 import { BaseDefConstructor, BaseInstanceType } from './card-api/-base-def';
-import { FieldDef } from './card-api/-field-def';
+import FieldDef from './field-def';
 import { deserialize, useIndexBasedKey } from './card-api/-constants';
 import { field } from './card-api/-fields/decorator';
 import { contains } from './card-api/-fields/contains';
@@ -281,7 +281,7 @@ function getConstrainedImageSize(maxHeight: number) {
   };
 }
 
-export class Base64ImageField extends FieldDef {
+export default class Base64ImageField extends FieldDef {
   static displayName = 'Base64 Image Card';
   @field altText = contains(StringField);
   @field size = contains(ImageSizeField);

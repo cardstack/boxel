@@ -73,7 +73,7 @@ import {
 } from './router';
 import { parseQueryString } from './query';
 import type { Readable } from 'stream';
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';

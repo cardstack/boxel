@@ -39,7 +39,8 @@ import {
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
 
 const indexCardSource = `
-  import { CardDef, Component } from "https://cardstack.com/base/card-api";
+  import { Component } from "https://cardstack.com/base/card-api";
+  import CardDef from "https://cardstack.com/base/card-def";
 
   export class Index extends CardDef {
     static isolated = class Isolated extends Component<typeof this> {
@@ -114,8 +115,8 @@ const countryCardSource = `
     contains,
     field,
     Component,
-    CardDef,
   } from 'https://cardstack.com/base/card-api';
+  import CardDef from "https://cardstack.com/base/card-def";
   import StringField from 'https://cardstack.com/base/string';
 
   export class Country extends CardDef {
@@ -161,7 +162,8 @@ const tripsFieldSource = `
 `;
 
 const personCardSource = `
-  import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
+  import { contains, containsMany, field, linksTo, linksToMany, Component } from "https://cardstack.com/base/card-api";
+  import CardDef from "https://cardstack.com/base/card-def";
   import StringCard from "https://cardstack.com/base/string";
   import { Friend } from './friend';
   import { Pet } from "./pet";
@@ -203,7 +205,8 @@ const personCardSource = `
 `;
 
 const petCardSource = `
-  import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+  import { contains, field, Component } from "https://cardstack.com/base/card-api";
+  import CardDef from "https://cardstack.com/base/card-def";
   import StringCard from "https://cardstack.com/base/string";
 
   export class Pet extends CardDef {
@@ -280,9 +283,9 @@ const inThisFileSource = `
   import {
     contains,
     field,
-    CardDef,
-    FieldDef,
   } from 'https://cardstack.com/base/card-api';
+  import CardDef from "https://cardstack.com/base/card-def";
+  import FieldDef from "https://cardstack.com/base/field-def";
   import StringCard from 'https://cardstack.com/base/string';
 
   export const exportedVar = 'exported var';
@@ -328,7 +331,8 @@ const inThisFileSource = `
 `;
 
 const friendCardSource = `
-  import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+  import { contains, linksTo, field, Component } from "https://cardstack.com/base/card-api";
+  import CardDef from "https://cardstack.com/base/card-def";
   import StringCard from "https://cardstack.com/base/string";
 
   export class Friend extends CardDef {

@@ -1,4 +1,6 @@
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
+import type FieldDef from 'https://cardstack.com/base/card-def';
 import { primitive } from '../constants';
 import { Loader } from '../loader';
 
@@ -92,7 +94,7 @@ export type Schema =
  * representations.
  */
 export async function basicMappings(loader: Loader) {
-  let mappings = new Map<typeof CardAPI.FieldDef, Schema>();
+  let mappings = new Map<typeof FieldDef, Schema>();
 
   let string: typeof import('https://cardstack.com/base/string') =
     await loader.import('https://cardstack.com/base/string');
@@ -171,7 +173,7 @@ function getPrimitiveType(
 function generatePatchCallSpecification(
   def: typeof CardAPI.BaseDef,
   cardApi: typeof CardAPI,
-  mappings: Map<typeof CardAPI.FieldDef, Schema>,
+  mappings: Map<typeof FieldDef, Schema>,
   relationshipsOnly = false,
 ): Schema | RelationshipsSchema | undefined {
   // If we're looking at a primitive field we can get the schema
@@ -271,9 +273,9 @@ function generatePatchCallSpecification(
  * @returns The generated patch call specification as JSON schema
  */
 export function generateCardPatchCallSpecification(
-  def: typeof CardAPI.CardDef,
+  def: typeof CardDef,
   cardApi: typeof CardAPI,
-  mappings: Map<typeof CardAPI.FieldDef, Schema>,
+  mappings: Map<typeof FieldDef, Schema>,
 ):
   | { attributes: Schema }
   | { attributes: Schema; relationships: RelationshipsSchema } {

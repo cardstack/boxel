@@ -1,16 +1,16 @@
+import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { not } from '@cardstack/boxel-ui/helpers';
 import {
   primitive,
   Component,
   serialize,
-  FieldDef,
   BaseDefConstructor,
   deserialize,
   BaseInstanceType,
   queryableValue,
 } from './card-api';
-import { BoxelInput } from '@cardstack/boxel-ui/components';
+import FieldDef from './field-def';
 import { TextInputValidator } from './text-input-validator';
-import { not } from '@cardstack/boxel-ui/helpers';
 
 function _serialize(val: bigint | null): string | undefined {
   return val == null ? undefined : String(val);

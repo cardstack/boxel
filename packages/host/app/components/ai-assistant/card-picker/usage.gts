@@ -10,7 +10,7 @@ import { TrackedSet } from 'tracked-built-ins';
 
 import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 import AiAssistantCardPicker from './index';
 

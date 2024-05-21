@@ -1,12 +1,12 @@
 import StringCard from 'https://cardstack.com/base/string';
 import MarkdownCard from 'https://cardstack.com/base/markdown';
 import {
-  CardDef,
   field,
   contains,
   linksTo,
   Component,
 } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
 import { Author } from './author';
 
 export class BlogPost extends CardDef {

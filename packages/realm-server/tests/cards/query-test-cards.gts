@@ -4,9 +4,9 @@ import {
   linksTo,
   linksToMany,
   containsMany,
-  FieldDef,
-  CardDef,
 } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
+import FieldDef from 'https://cardstack.com/base/field-def';
 import StringField from 'https://cardstack.com/base/string';
 import CodeRefField from 'https://cardstack.com/base/code-ref';
 import DateField from 'https://cardstack.com/base/date';

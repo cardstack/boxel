@@ -15,7 +15,7 @@ import CardPill from '@cardstack/host/components/card-pill';
 
 import type CardService from '@cardstack/host/services/card-service';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 import type { ComponentLike } from '@glint/template';
 

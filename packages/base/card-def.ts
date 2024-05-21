@@ -1,18 +1,18 @@
 import { type RealmInfo } from '@cardstack/runtime-common';
-import { DefaultAtomViewTemplate } from './-components/default-atom';
-import { isSavedInstance, realmInfo, realmURL } from './-constants';
-import { field } from './-fields/decorator';
-import { type BaseDefComponent } from './-components/utils';
-import { getDataBucket } from './-fields/storage';
-import { MissingEmbeddedTemplate } from './-components/missing-embedded';
-import { DefaultCardDefTemplate } from './-components/default-card';
-import { contains } from './-fields/contains';
-import { IDField } from './-fields/id';
-import { StringField } from './-fields/string';
-import { MaybeBase64Field } from './-fields/maybe-base-64';
-import { BaseDef } from './-base-def';
+import { DefaultAtomViewTemplate } from './card-api/-components/default-atom';
+import { isSavedInstance, realmInfo, realmURL } from './card-api/-constants';
+import { field } from './card-api/-fields/decorator';
+import { type BaseDefComponent } from './card-api/-components/utils';
+import { getDataBucket } from './card-api/-fields/storage';
+import { MissingEmbeddedTemplate } from './card-api/-components/missing-embedded';
+import { DefaultCardDefTemplate } from './card-api/-components/default-card';
+import { contains } from './card-api/-fields/contains';
+import { BaseDef } from './card-api/-base-def';
+import IDField from './id';
+import StringField from './string';
+import MaybeBase64Field from './maybe-base-64';
 
-export class CardDef extends BaseDef {
+export default class CardDef extends BaseDef {
   [isSavedInstance] = false;
   [realmInfo]: RealmInfo | undefined = undefined;
   [realmURL]: URL | undefined = undefined;
@@ -53,3 +53,11 @@ export class CardDef extends BaseDef {
 }
 
 export type CardDefConstructor = typeof CardDef;
+
+export function isSaved(instance: CardDef): boolean {
+  return instance[isSavedInstance] === true;
+}
+
+export function setCardAsSavedForTest(instance: CardDef): void {
+  instance[isSavedInstance] = true;
+}

@@ -42,10 +42,8 @@ import {
   isReexportCardOrField,
 } from '@cardstack/host/resources/module-contents';
 
-import {
-  type CardDef,
-  type BaseDef,
-} from 'https://cardstack.com/base/card-api';
+import { type BaseDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 import { lastModifiedDate } from '../../resources/last-modified-date';
 import { ModuleContentsResource } from '../../resources/module-contents';

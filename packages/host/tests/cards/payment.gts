@@ -1,9 +1,5 @@
-import {
-  contains,
-  field,
-  FieldDef,
-  linksTo,
-} from 'https://cardstack.com/base/card-api';
+import { contains, field, linksTo } from 'https://cardstack.com/base/card-api';
+import FieldDef from 'https://cardstack.com/base/field-def';
 import StringCard from 'https://cardstack.com/base/string';
 
 import { Chain } from './chain';

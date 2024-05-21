@@ -2,8 +2,8 @@ import {
   linksToMany,
   field,
   Component,
-  FieldDef,
 } from 'https://cardstack.com/base/card-api';
+import FieldDef from 'https://cardstack.com/base/field-def';
 import { Country } from './country';
 
 export class Trips extends FieldDef {

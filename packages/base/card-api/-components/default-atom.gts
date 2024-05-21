@@ -1,5 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
-import { CardDef } from '../-card-def';
+import type CardDef from '../../card-def';
 
 export class DefaultAtomViewTemplate extends GlimmerComponent<{
   Args: {

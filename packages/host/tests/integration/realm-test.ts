@@ -2556,7 +2556,7 @@ module('Integration | realm', function (hooks) {
 
   test('requests do not contain entries that match patterns in ignore files', async function (assert) {
     const cardSource = `
-      import { CardDef } from 'https://cardstack.com/base/card-api';
+      import CardDef from 'https://cardstack.com/base/card-def';
       export class Post extends CardDef {}
     `;
 

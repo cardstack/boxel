@@ -13,7 +13,8 @@ import {
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
 
 const indexCardSource = `
-  import { CardDef, Component } from "https://cardstack.com/base/card-api";
+  import { Component } from "https://cardstack.com/base/card-api";
+  import CardDef from "https://cardstack.com/base/card-def";
 
   export class Index extends CardDef {
     static isolated = class Isolated extends Component<typeof this> {
@@ -27,7 +28,8 @@ const indexCardSource = `
 `;
 
 const personCardSource = `
-  import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
+  import { contains, containsMany, field, linksTo, linksToMany, Component } from "https://cardstack.com/base/card-api";
+  import CardDef from "https://cardstack.com/base/card-def";
   import StringCard from "https://cardstack.com/base/string";
   import { Friend } from './friend';
   import { Pet } from "./pet";

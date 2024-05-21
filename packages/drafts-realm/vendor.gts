@@ -1,12 +1,12 @@
 import {
   contains,
   field,
-  CardDef,
-  FieldDef,
   relativeTo,
   Component,
   containsMany,
 } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
+import FieldDef from 'https://cardstack.com/base/field-def';
 import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Address } from './address';

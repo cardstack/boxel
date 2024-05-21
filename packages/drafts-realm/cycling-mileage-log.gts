@@ -1,11 +1,11 @@
 import {
   contains,
   containsMany,
-  CardDef,
-  FieldDef,
-  StringField,
   field,
 } from 'https://cardstack.com/base/card-api';
+import FieldDef from 'https://cardstack.com/base/field-def';
+import CardDef from 'https://cardstack.com/base/card-def';
+import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import { Component } from 'https://cardstack.com/base/card-api';
 import Date from 'https://cardstack.com/base/date';

@@ -3,10 +3,10 @@ import {
   containsMany,
   linksTo,
   field,
-  CardDef,
-  FieldDef,
   Component,
 } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
+import FieldDef from 'https://cardstack.com/base/field-def';
 import DateCard from 'https://cardstack.com/base/date';
 import DatetimeCard from 'https://cardstack.com/base/datetime';
 import NumberCard from 'https://cardstack.com/base/number';

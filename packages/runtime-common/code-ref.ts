@@ -2,9 +2,10 @@ import {
   type BaseDefConstructor,
   type Field,
   type BaseDef,
-  type CardDef,
-  type FieldDef,
 } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
+import type FieldDef from 'https://cardstack.com/base/field-def';
+
 import { Loader } from './loader';
 import { isField } from './constants';
 import { CardError } from './error';

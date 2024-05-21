@@ -1,3 +1,4 @@
+import FieldDef from './field-def';
 import {
   Component,
   primitive,
@@ -6,7 +7,6 @@ import {
   queryableValue,
   BaseInstanceType,
   BaseDefConstructor,
-  FieldDef,
 } from './card-api';
 import { format, parseISO } from 'date-fns';
 import { fn } from '@ember/helper';

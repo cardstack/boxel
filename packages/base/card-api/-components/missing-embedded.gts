@@ -1,10 +1,10 @@
 import GlimmerComponent from '@glimmer/component';
-import { type BaseDef } from '../-base-def';
-import { type CardDef } from '../-card-def';
-import { type CardContext } from './utils';
 import { identifyCard, isCardDef, moduleFrom } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type CardDef from '../../card-def';
+import { type BaseDef } from '../-base-def';
+import { type CardContext } from './utils';
 
 export class MissingEmbeddedTemplate extends GlimmerComponent<{
   Args: {

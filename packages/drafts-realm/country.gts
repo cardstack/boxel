@@ -2,8 +2,8 @@ import {
   contains,
   field,
   Component,
-  CardDef,
 } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
 import StringField from 'https://cardstack.com/base/string';
 
 export class Country extends CardDef {

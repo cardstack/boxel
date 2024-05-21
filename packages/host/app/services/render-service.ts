@@ -19,11 +19,10 @@ import config from '@cardstack/host/config/environment';
 
 import {
   type IdentityContext as IdentityContextType,
-  type CardDef,
   type Format,
 } from 'https://cardstack.com/base/card-api';
-
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 import { render } from '../lib/isolated-render';
 

@@ -1,10 +1,10 @@
 import {
   Component,
-  FieldDef,
   queryableValue,
   formatQuery,
   primitive,
 } from 'https://cardstack.com/base/card-api';
+import FieldDef from 'https://cardstack.com/base/field-def';
 
 class View extends Component<typeof SillyNumberField> {
   <template>

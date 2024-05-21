@@ -4,8 +4,8 @@ import {
   contains,
   field,
   Component,
-  CardDef,
 } from 'https://cardstack.com/base/card-api';
+import CardDef from "https://cardstack.com/base/card-def";
 import StringCard from 'https://cardstack.com/base/string';
 
 export class Person extends CardDef {
@@ -33,7 +33,8 @@ function _toPropertyKey(t) { var i = _toPrimitive(t, \"string\"); return "symbol
 function _toPrimitive(t, r) { if ("object" != typeof t || !t) return t; var e = t[Symbol.toPrimitive]; if (void 0 !== e) { var i = e.call(t, r || "default"); if ("object" != typeof i) return i; throw new TypeError(\"@@toPrimitive must return a primitive value.\"); } return ("string" === r ? String : Number)(t); }
 function _applyDecoratedDescriptor(target, property, decorators, descriptor, context) { var desc = {}; Object.keys(descriptor).forEach(function (key) { desc[key] = descriptor[key]; }); desc.enumerable = !!desc.enumerable; desc.configurable = !!desc.configurable; if ('value' in desc || desc.initializer) { desc.writable = true; } desc = decorators.slice().reverse().reduce(function (desc, decorator) { return decorator(target, property, desc) || desc; }, desc); if (context && desc.initializer !== void 0) { desc.value = desc.initializer ? desc.initializer.call(context) : void 0; desc.initializer = undefined; } if (desc.initializer === void 0) { Object.defineProperty(target, property, desc); desc = null; } return desc; }
 function _initializerWarningHelper(descriptor, context) { throw new Error('Decorating class property failed. Please ensure that ' + 'transform-class-properties is enabled and runs after the decorators transform.'); }
-import { contains, field, Component, CardDef } from 'https://cardstack.com/base/card-api';
+import { contains, field, Component } from 'https://cardstack.com/base/card-api';
+import CardDef from "https://cardstack.com/base/card-def";
 import StringCard from 'https://cardstack.com/base/string';
 import { createTemplateFactory } from \"@ember/template-factory\";
 export let Person = (_class = (_class2 = class Person extends CardDef {
@@ -44,9 +45,9 @@ export let Person = (_class = (_class2 = class Person extends CardDef {
   }
 }, _defineProperty(_class2, "displayName", 'Person'), _defineProperty(_class2, \"isolated\", setComponentTemplate(createTemplateFactory(
 /*
-\ \ 
+\ \
       <h1 data-test-card><@fields.firstName /></h1>
-\ \ \ \ 
+\ \ \ \
 */
 {
   \"id\": ${id},

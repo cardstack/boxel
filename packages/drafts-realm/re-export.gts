@@ -1,9 +1,6 @@
-import {
-  CardDef,
-  FieldDef,
-  BaseDef as BDef,
-  contains,
-} from 'https://cardstack.com/base/card-api';
+import { BaseDef as BDef, contains } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
+import FieldDef from 'https://cardstack.com/base/field-def';
 import StringCard from 'https://cardstack.com/base/string';
 import NumberCard from 'https://cardstack.com/base/number';
 

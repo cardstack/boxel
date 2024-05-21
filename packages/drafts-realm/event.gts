@@ -8,10 +8,10 @@ import {
   Component,
   field,
   contains,
-  CardDef,
   linksTo,
-  StringField
 } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
+import StringField from 'https://cardstack.com/base/string';
 import TextAreaCard from '../base/text-area';
 import { FieldContainer, BoxelSelect } from '@cardstack/boxel-ui/components';
 

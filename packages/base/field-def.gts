@@ -1,10 +1,10 @@
-import { BaseDef } from './-base-def';
-import { DefaultAtomViewTemplate } from './-components/default-atom';
-import { FieldDefEditTemplate } from './-components/field-def-edit';
-import { MissingEmbeddedTemplate } from './-components/missing-embedded';
-import { type BaseDefComponent } from './-components/utils';
+import { BaseDef } from './card-api/-base-def';
+import { DefaultAtomViewTemplate } from './card-api/-components/default-atom';
+import { FieldDefEditTemplate } from './card-api/-components/field-def-edit';
+import { MissingEmbeddedTemplate } from './card-api/-components/missing-embedded';
+import { type BaseDefComponent } from './card-api/-components/utils';
 
-export class FieldDef extends BaseDef {
+export default class FieldDef extends BaseDef {
   // this changes the shape of the class type FieldDef so that a CardDef
   // class type cannot masquarade as a FieldDef class type
   static isFieldDef = true;

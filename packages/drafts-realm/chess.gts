@@ -1,7 +1,5 @@
-import {
-  Component as BoxelComponent,
-  CardDef,
-} from 'https://cardstack.com/base/card-api';
+import { Component as BoxelComponent } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
 import Component from '@glimmer/component';
 import StringCard from 'https://cardstack.com/base/string';
 import { contains, field } from 'https://cardstack.com/base/card-api';

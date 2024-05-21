@@ -43,10 +43,8 @@ import type MessageService from '@cardstack/host/services/message-service';
 
 import type QueueService from '@cardstack/host/services/queue';
 
-import {
-  type CardDef,
-  type FieldDef,
-} from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
+import type FieldDef from 'https://cardstack.com/base/field-def';
 
 import { TestRealmAdapter } from './adapter';
 import percySnapshot from './percy-snapshot';

@@ -1,8 +1,8 @@
-import { Component } from '../-components/utils';
-import { StringField } from './string';
+import { Component } from './card-api/-components/utils';
+import StringField from './string';
 
 // TODO: This is a simple workaround until the thumbnailURL is converted into an actual image field
-export class MaybeBase64Field extends StringField {
+export default class MaybeBase64Field extends StringField {
   static embedded = class Embedded extends Component<typeof this> {
     get isBase64() {
       return this.args.model?.startsWith('data:');

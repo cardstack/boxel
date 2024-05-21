@@ -1,5 +1,5 @@
 import { getField } from './index';
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 export class NotLoaded extends Error {
   readonly isNotLoadedError: true = true;

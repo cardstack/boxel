@@ -2,13 +2,13 @@ import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import {
   Component,
-  CardDef,
-  FieldDef,
   field,
   contains,
   containsMany,
   linksToMany,
 } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
+import FieldDef from 'https://cardstack.com/base/field-def';
 
 class Alias extends CardDef {
   static displayName = 'Alias';

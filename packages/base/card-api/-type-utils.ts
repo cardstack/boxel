@@ -3,8 +3,8 @@ import { primitive } from '@cardstack/runtime-common';
 import { type BaseDef } from './-base-def';
 import { type Field } from './-fields/storage';
 import { type Box } from './-box';
-import { type CardDef } from './-card-def';
-import { type FieldDef } from './-field-def';
+import type CardDef from '../card-def';
+import type FieldDef from '../field-def';
 
 export function isCardOrField(card: any): card is CardDef | FieldDef {
   return card && typeof card === 'object' && isBaseInstance in card;

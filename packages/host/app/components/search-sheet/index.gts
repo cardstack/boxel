@@ -30,7 +30,7 @@ import { catalogEntryRef } from '@cardstack/runtime-common';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RecentCards from '@cardstack/host/services/recent-cards-service';
 
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
 
 import { getCard } from '../../resources/card-resource';
 

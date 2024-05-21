@@ -85,24 +85,22 @@ module('Acceptance | interact submode tests', function (hooks) {
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
+    let cardDef: typeof import('https://cardstack.com/base/card-def');
+    let fieldDef: typeof import('https://cardstack.com/base/field-def');
     let string: typeof import('https://cardstack.com/base/string');
     let catalogEntry: typeof import('https://cardstack.com/base/catalog-entry');
     let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
+    cardDef = await loader.import(`${baseRealm.url}card-def`);
+    fieldDef = await loader.import(`${baseRealm.url}field-def`);
     string = await loader.import(`${baseRealm.url}string`);
     catalogEntry = await loader.import(`${baseRealm.url}catalog-entry`);
     cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
 
-    let {
-      field,
-      contains,
-      containsMany,
-      linksTo,
-      linksToMany,
-      CardDef,
-      Component,
-      FieldDef,
-    } = cardApi;
+    let { field, contains, containsMany, linksTo, linksToMany, Component } =
+      cardApi;
+    let { default: CardDef } = cardDef;
+    let { default: FieldDef } = fieldDef;
     let { default: StringField } = string;
     let { CatalogEntry } = catalogEntry;
     let { CardsGrid } = cardsGrid;

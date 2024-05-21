@@ -1,9 +1,9 @@
 import {
-  CardDef,
+  Component,
   field,
   linksToMany,
 } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
 import { Product as ProductCard, EmbeddedProductComponent } from './product';
 import { MonetaryAmountAtom } from './monetary-amount';
 import GlimmerComponent from '@glimmer/component';
@@ -218,6 +218,8 @@ export class ProductList extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+
 
 
 

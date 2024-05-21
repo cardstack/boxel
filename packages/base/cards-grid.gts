@@ -6,7 +6,6 @@ import {
   contains,
   field,
   Component,
-  CardDef,
   realmInfo,
   realmURL,
   type BaseDef,
@@ -25,6 +24,7 @@ import { tracked } from '@glimmer/tracking';
 import cssUrl from 'ember-css-url';
 import { type CatalogEntry } from './catalog-entry';
 import StringField from './string';
+import CardDef from './card-def';
 
 class Isolated extends Component<typeof CardsGrid> {
   <template>

@@ -63,11 +63,8 @@ import {
 } from '@cardstack/host/resources/realm-session';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 
-import type {
-  CardDef,
-  Format,
-  FieldType,
-} from 'https://cardstack.com/base/card-api';
+import type { Format, FieldType } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 import ElementTracker from '../../resources/element-tracker';
 import Preview from '../preview';

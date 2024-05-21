@@ -1,6 +1,6 @@
 import { initSharedState } from '../shared-state';
 import { type BaseDef } from './-base-def';
-import { type CardDef } from './-card-def';
+import type CardDef from '../card-def';
 
 export const identityContexts = initSharedState(
   'identityContexts',

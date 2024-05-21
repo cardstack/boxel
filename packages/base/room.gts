@@ -5,9 +5,9 @@ import {
   Component,
   primitive,
   useIndexBasedKey,
-  FieldDef,
-  type CardDef,
 } from './card-api';
+import FieldDef from './field-def';
+import type CardDef from './card-def';
 import StringField from './string';
 import DateTimeField from './datetime';
 import NumberField from './number';

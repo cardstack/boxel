@@ -1,11 +1,11 @@
 import { on } from '@ember/modifier';
 import { pick } from '@cardstack/boxel-ui/helpers';
 import { primitive } from '@cardstack/runtime-common';
-import { useIndexBasedKey } from '../-constants';
-import { Component } from '../-components/utils';
-import { FieldDef } from '../-field-def';
+import FieldDef from './field-def';
+import { useIndexBasedKey } from './card-api/-constants';
+import { Component } from './card-api/-components/utils';
 
-export class IDField extends FieldDef {
+export default class IDField extends FieldDef {
   static [primitive]: string;
   static [useIndexBasedKey]: never;
   static embedded = class Embedded extends Component<typeof this> {

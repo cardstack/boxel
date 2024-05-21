@@ -24,11 +24,8 @@ import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import CardService from '@cardstack/host/services/card-service';
 
-import type {
-  CardDef,
-  Format,
-  FieldType,
-} from 'https://cardstack.com/base/card-api';
+import type { Format, FieldType } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 import { type RenderedCardForOverlayActions } from './stack-item';
 

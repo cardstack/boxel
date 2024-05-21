@@ -34,7 +34,7 @@ import {
   relativeTo,
   serialize,
 } from './-constants';
-import { type CardDef } from './-card-def';
+import type CardDef from '../card-def';
 import { isCardOrField } from './-type-utils';
 import { merge } from 'lodash';
 import {

@@ -2,8 +2,8 @@ import {
   contains,
   linksToMany,
   field,
-  CardDef,
 } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
 import StringCard from 'https://cardstack.com/base/string';
 
 export class Friends extends CardDef {

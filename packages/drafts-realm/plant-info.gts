@@ -1,11 +1,11 @@
 import {
-  FieldDef,
-  CardDef,
   field,
   containsMany,
-  StringField,
   contains,
 } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
+import StringField from 'https://cardstack.com/base/string';
+import FieldDef from 'https://cardstack.com/base/field-def';
 import { Component } from 'https://cardstack.com/base/card-api';
 
 import { BoxelDropdown, Menu, Button } from '@cardstack/boxel-ui/components';
@@ -126,6 +126,7 @@ export class PlantInfo extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
 
   */
 }

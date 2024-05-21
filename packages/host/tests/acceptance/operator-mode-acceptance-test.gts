@@ -55,8 +55,12 @@ module('Acceptance | operator mode tests', function (hooks) {
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
+    let cardDef: typeof import('https://cardstack.com/base/card-def');
+    let fieldDef: typeof import('https://cardstack.com/base/field-def');
     let string: typeof import('https://cardstack.com/base/string');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
+    cardDef = await loader.import(`${baseRealm.url}card-def`);
+    fieldDef = await loader.import(`${baseRealm.url}field-def`);
     string = await loader.import(`${baseRealm.url}string`);
 
     let {
@@ -66,10 +70,10 @@ module('Acceptance | operator mode tests', function (hooks) {
       linksTo,
       linksToMany,
       BaseDef,
-      CardDef,
       Component,
-      FieldDef,
     } = cardApi;
+    let { default: CardDef } = cardDef;
+    let { default: FieldDef } = fieldDef;
     let { default: StringField } = string;
     type BaseDefConstructor = typeof BaseDef;
     type BaseInstanceType<T extends BaseDefConstructor> = T extends {

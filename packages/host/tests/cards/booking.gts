@@ -3,8 +3,8 @@ import {
   containsMany,
   field,
   Component,
-  CardDef,
 } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
 import DateTimeCard from 'https://cardstack.com/base/datetime';
 import StringCard from 'https://cardstack.com/base/string';
 

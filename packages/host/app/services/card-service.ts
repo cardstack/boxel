@@ -27,12 +27,12 @@ import type MessageService from '@cardstack/host/services/message-service';
 
 import type {
   BaseDef,
-  CardDef,
-  FieldDef,
   Field,
   SerializeOpts,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
+import type FieldDef from 'https://cardstack.com/base/field-def';
 
 import { trackCard } from '../resources/card-resource';
 

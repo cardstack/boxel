@@ -1,3 +1,4 @@
+import FieldDef from './field-def';
 import {
   primitive,
   serialize,
@@ -5,7 +6,6 @@ import {
   formatQuery,
   Component,
   useIndexBasedKey,
-  FieldDef,
   BaseDefConstructor,
   BaseInstanceType,
   deserialize,

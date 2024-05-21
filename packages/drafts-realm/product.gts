@@ -7,15 +7,15 @@ import {
   MonetaryAmountAtom,
 } from './monetary-amount';
 import {
-  CardDef,
+  Component,
   field,
   linksTo,
   contains,
   containsMany,
-  StringField,
   type FieldsTypeFor,
 } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
+import StringField from 'https://cardstack.com/base/string';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';

@@ -1,11 +1,11 @@
 import {
   contains,
   field,
-  CardDef,
-  FieldDef,
   Component,
   relativeTo,
 } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
+import FieldDef from 'https://cardstack.com/base/field-def';
 import StringField from 'https://cardstack.com/base/string';
 
 export class Asset extends CardDef {

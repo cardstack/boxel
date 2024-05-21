@@ -102,12 +102,9 @@ export { sanitizeHtml } from './dompurify';
 export { markedSync, markdownToHtml } from './marked-sync';
 export { getPlural } from './pluralize';
 
-import type {
-  CardDef,
-  FieldDef,
-  BaseDef,
-  Format,
-} from 'https://cardstack.com/base/card-api';
+import type { BaseDef, Format } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
+import FieldDef from 'https://cardstack.com/base/field-def';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 export const maxLinkDepth = 5;

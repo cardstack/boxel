@@ -1,3 +1,5 @@
+import CardDef from './card-def';
+import FieldDef from './field-def';
 import {
   Component,
   primitive,
@@ -5,10 +7,8 @@ import {
   deserialize,
   formatQuery,
   queryableValue,
-  CardDef,
   BaseDefConstructor,
   BaseInstanceType,
-  FieldDef,
   relativeTo,
   type SerializeOpts,
   type JSONAPISingleResourceDocument,

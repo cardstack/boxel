@@ -15,7 +15,7 @@ import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
 import CardPill from '@cardstack/host/components/card-pill';
 import Pill from '@cardstack/host/components/pill';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 interface Signature {
   Element: HTMLDivElement;

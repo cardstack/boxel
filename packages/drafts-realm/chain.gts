@@ -1,9 +1,9 @@
 import {
   contains,
   field,
-  CardDef,
   Component,
 } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
 import StringCard from 'https://cardstack.com/base/string';
 import NumberCard from 'https://cardstack.com/base/number';
 import { FieldContainer } from '@cardstack/boxel-ui/components';

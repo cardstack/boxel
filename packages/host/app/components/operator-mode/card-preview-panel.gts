@@ -27,7 +27,8 @@ import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import Preview from '@cardstack/host/components/preview';
 
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import type { Format } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 interface Signature {
   Element: HTMLElement;

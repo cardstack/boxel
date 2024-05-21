@@ -1,13 +1,13 @@
 import NumberField from 'https://cardstack.com/base/number';
 import {
-  CardDef,
-  FieldDef,
   field,
   contains,
   containsMany,
   linksTo,
   linksToMany,
 } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
+import FieldDef from 'https://cardstack.com/base/field-def';
 import { Component } from 'https://cardstack.com/base/card-api';
 import { Product as ProductCard } from './product';
 import { MonetaryAmount, MonetaryAmountEmbedded } from './monetary-amount';

@@ -4,7 +4,7 @@ import Modifier from 'ember-modifier';
 import { Actions, primitive } from '@cardstack/runtime-common';
 import { type BaseDefConstructor, type BaseDef } from '../-base-def';
 import { type FieldType, type Format } from '../-constants';
-import { type CardDef } from '../-card-def';
+import type CardDef from '../../card-def';
 import { type BoxComponent } from './field-component';
 
 type Setter = (value: any) => void;

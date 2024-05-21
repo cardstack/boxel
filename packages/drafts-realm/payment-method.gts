@@ -1,10 +1,10 @@
 import {
   contains,
   field,
-  FieldDef,
   Component,
   linksTo,
 } from 'https://cardstack.com/base/card-api';
+import FieldDef from 'https://cardstack.com/base/field-def';
 import StringCard from 'https://cardstack.com/base/string';
 import { Chain } from './chain';
 import { Token, Currency } from './asset';

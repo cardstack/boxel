@@ -40,7 +40,7 @@ import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 import { getRealmSession } from '@cardstack/host/resources/realm-session';
 
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import * as RoomModule from 'https://cardstack.com/base/room';
 import type {

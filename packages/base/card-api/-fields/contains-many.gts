@@ -1,3 +1,4 @@
+import FieldDef, { type FieldDefConstructor } from '../../field-def';
 import {
   type FieldType,
   type JSONAPISingleResourceDocument,
@@ -9,7 +10,6 @@ import {
   Format,
 } from '../-constants';
 import { cardThunk, type BaseInstanceType, type BaseDef } from '../-base-def';
-import { FieldDef, type FieldDefConstructor } from '../-field-def';
 import { makeDescriptor } from './decorator';
 import { cardClassFromResource, type Options } from './utils';
 import { getter, type Field, type SerializeOpts, recompute } from './storage';

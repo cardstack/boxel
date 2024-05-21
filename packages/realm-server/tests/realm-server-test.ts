@@ -1114,7 +1114,8 @@ module('Realm Server', function (hooks) {
               return await request
                 .post('/test-card.gts')
                 .set('Accept', 'application/vnd.card+source').send(`
-                import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
+                import { contains, field } from 'https://cardstack.com/base/card-api';
+                import CardDef from "https://cardstack.com/base/card-def";
                 import StringCard from 'https://cardstack.com/base/string';
 
                 export class TestCard extends CardDef {
@@ -1181,7 +1182,8 @@ module('Realm Server', function (hooks) {
               return await request
                 .post('/test-card.gts')
                 .set('Accept', 'application/vnd.card+source').send(`
-                import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
+                import { contains, field } from 'https://cardstack.com/base/card-api';
+                import CardDef from "https://cardstack.com/base/card-def";
                 import StringCard from 'https://cardstack.com/base/string';
 
                 export class TestCard extends CardDef {

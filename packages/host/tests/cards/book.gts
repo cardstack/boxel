@@ -1,4 +1,5 @@
-import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
+import { contains, field } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
 import DateCard from 'https://cardstack.com/base/date';
 import NumberCard from 'https://cardstack.com/base/number';
 

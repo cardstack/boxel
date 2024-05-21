@@ -1,10 +1,10 @@
 import NumberField from 'https://cardstack.com/base/number';
 import {
-  CardDef,
   Component,
   field,
   contains,
 } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
 import GlimmerComponent from '@glimmer/component';
 
 const formatter = new Intl.NumberFormat('en-US', {
@@ -594,6 +594,7 @@ export class MortgageCalculator extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
 
 
 

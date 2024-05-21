@@ -2,10 +2,10 @@ import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import {
   Component,
-  CardDef,
   field,
   contains,
 } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
 import { GridContainer } from '@cardstack/boxel-ui/components';
 
 export class Author extends CardDef {

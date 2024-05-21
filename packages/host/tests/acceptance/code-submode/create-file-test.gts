@@ -47,7 +47,7 @@ const files: Record<string, any> = {
     },
   },
   'error.gts': `
-    import { CardDef } from 'https://cardstack.com/base/card-api';
+    import CardDef from 'https://cardstack.com/base/card-def';
 
     export default class ErrorCard extends CardDef {
       static displayName = 'error';
@@ -59,7 +59,8 @@ const files: Record<string, any> = {
     }
   `,
   'pet.gts': `
-    import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+    import { contains, linksTo, field, Component } from "https://cardstack.com/base/card-api";
+    import CardDef from "https://cardstack.com/base/card-def";
     import StringField from "https://cardstack.com/base/string";
 
     export default class Pet extends CardDef {
@@ -74,7 +75,8 @@ const files: Record<string, any> = {
     }
   `,
   'person.gts': `
-    import { contains, linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
+    import { contains, linksTo, field } from "https://cardstack.com/base/card-api";
+    import CardDef from "https://cardstack.com/base/card-def";
     import StringField from "https://cardstack.com/base/string";
     import Pet from "./pet";
 
@@ -552,7 +554,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   test<TestContextWithSave>('can create a new card definition in different realm than inherited definition', async function (assert) {
     assert.expect(11);
     let expectedSrc = `
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
 import { Component } from 'https://cardstack.com/base/card-api';
 export class TrèsTestCard extends CardDef {
   static displayName = "Très test card 😀";
@@ -958,7 +960,7 @@ export class Map0 extends Pet {
   test<TestContextWithSave>('can specify new directory as part of filename when creating a new definition', async function (assert) {
     assert.expect(2);
     let expectedSrc = `
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
 import { Component } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
@@ -1011,7 +1013,7 @@ export class TestCard extends CardDef {
   test<TestContextWithSave>('can handle filename with .gts extension in filename when creating a new definition', async function (assert) {
     assert.expect(2);
     let expectedSrc = `
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
 import { Component } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";
@@ -1064,7 +1066,7 @@ export class TestCard extends CardDef {
   test<TestContextWithSave>('can handle leading "/" in filename when creating a new definition', async function (assert) {
     assert.expect(2);
     let expectedSrc = `
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
 import { Component } from 'https://cardstack.com/base/card-api';
 export class TestCard extends CardDef {
   static displayName = "Test Card";

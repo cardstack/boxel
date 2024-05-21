@@ -1,11 +1,11 @@
 import { primitive } from '@cardstack/runtime-common';
-import { useIndexBasedKey } from '../-constants';
-import { Component } from '../-components/utils';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
-import { FieldDef } from '../-field-def';
+import FieldDef from './field-def';
+import { useIndexBasedKey } from './card-api/-constants';
+import { Component } from './card-api/-components/utils';
 
-export class StringField extends FieldDef {
+export default class StringField extends FieldDef {
   static displayName = 'String';
   static [primitive]: string;
   static [useIndexBasedKey]: never;

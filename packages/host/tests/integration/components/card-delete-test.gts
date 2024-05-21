@@ -17,7 +17,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RecentCardsService from '@cardstack/host/services/recent-cards-service';
 
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
 
 import {
   percySnapshot,

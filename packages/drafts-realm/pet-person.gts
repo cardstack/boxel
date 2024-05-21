@@ -4,8 +4,8 @@ import {
   linksToMany,
   field,
   Component,
-  CardDef,
 } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
 import StringCard from 'https://cardstack.com/base/string';
 import { Pet } from './pet';
 import { Person } from './person';

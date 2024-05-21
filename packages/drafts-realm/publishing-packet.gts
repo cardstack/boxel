@@ -1,10 +1,6 @@
 import TextAreaCard from 'https://cardstack.com/base/text-area';
-import {
-  CardDef,
-  field,
-  contains,
-  linksTo,
-} from 'https://cardstack.com/base/card-api';
+import { field, contains, linksTo } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
 import StringCard from 'https://cardstack.com/base/string';
 import { BlogPost } from './blog-post';
 

@@ -65,7 +65,8 @@ module('indexing', function (hooks) {
         queue,
         fileSystem: {
           'person.gts': `
-            import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+            import { contains, field, Component } from "https://cardstack.com/base/card-api";
+            import CardDef from "https://cardstack.com/base/card-def";
             import StringCard from "https://cardstack.com/base/string";
 
             export class Person extends CardDef {
@@ -78,7 +79,8 @@ module('indexing', function (hooks) {
             }
           `,
           'pet.gts': `
-            import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+            import { contains, field } from "https://cardstack.com/base/card-api";
+            import CardDef from "https://cardstack.com/base/card-def";
             import StringCard from "https://cardstack.com/base/string";
 
             export class Pet extends CardDef {
@@ -95,7 +97,8 @@ module('indexing', function (hooks) {
             }
           `,
           'post.gts': `
-            import { contains, field, linksTo, CardDef, Component } from "https://cardstack.com/base/card-api";
+            import { contains, field, linksTo, Component } from "https://cardstack.com/base/card-api";
+            import CardDef from "https://cardstack.com/base/card-def";
             import StringCard from "https://cardstack.com/base/string";
             import { Person } from "./person";
 
@@ -111,7 +114,8 @@ module('indexing', function (hooks) {
             }
           `,
           'boom.gts': `
-            import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+            import { contains, field, Component } from "https://cardstack.com/base/card-api";
+            import CardDef from "https://cardstack.com/base/card-def";
             import StringCard from "https://cardstack.com/base/string";
 
             export class Boom extends CardDef {
@@ -338,7 +342,8 @@ module('indexing', function (hooks) {
     await realm.write(
       'pet.gts',
       `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import { contains, field } from "https://cardstack.com/base/card-api";
+          import CardDef from "https://cardstack.com/base/card-def";
           import StringCard from "https://cardstack.com/base/string";
           export class Pet extends CardDef {
             @field firstName = contains(StringCard);
@@ -384,7 +389,8 @@ module('indexing', function (hooks) {
     await realm.write(
       'person.gts',
       `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import { contains, field } from "https://cardstack.com/base/card-api";
+          import CardDef from "https://cardstack.com/base/card-def";
           import StringCard from "https://cardstack.com/base/string";
 
           export class Person extends CardDef {
@@ -440,7 +446,8 @@ module('indexing', function (hooks) {
     await realm.write(
       'post.gts',
       `
-        import { contains, linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
+        import { contains, linksTo, field } from "https://cardstack.com/base/card-api";
+        import CardDef from "https://cardstack.com/base/card-def";
         import StringCard from "https://cardstack.com/base/string";
         import { Person } from "./person";
 
@@ -478,7 +485,8 @@ module('indexing', function (hooks) {
     await realm.write(
       'person.gts',
       `
-          import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+          import { contains, field, Component } from "https://cardstack.com/base/card-api";
+          import CardDef from "https://cardstack.com/base/card-def";
           import StringCard from "https://cardstack.com/base/string";
 
           export class Person extends CardDef {
@@ -563,7 +571,8 @@ module('indexing', function (hooks) {
     await realm.write(
       'post.gts',
       `
-        import { contains, linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
+        import { contains, linksTo, field } from "https://cardstack.com/base/card-api";
+        import CardDef from "https://cardstack.com/base/card-def";
         import StringCard from "https://cardstack.com/base/string";
         import { Person } from "./person";
 
@@ -637,7 +646,8 @@ module('permissioned realm', function (hooks) {
           realmURL: testRealm1URL,
           fileSystem: {
             'article.gts': `
-              import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+              import { contains, field, Component } from "https://cardstack.com/base/card-api";
+              import CardDef from "https://cardstack.com/base/card-def";
               import StringCard from "https://cardstack.com/base/string";
               export class Article extends CardDef {
                 @field title = contains(StringCard);
@@ -660,7 +670,8 @@ module('permissioned realm', function (hooks) {
             realmURL: testRealm2URL,
             fileSystem: {
               'website.gts': `
-                import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+                import { contains, field, linksTo } from "https://cardstack.com/base/card-api";
+                import CardDef from "https://cardstack.com/base/card-def";
                 import { Article } from "${testRealm1URL.href}article" // importing from another realm;
                 export class Website extends CardDef {
                   @field linkedArticle = linksTo(Article);

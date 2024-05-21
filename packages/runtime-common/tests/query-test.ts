@@ -13,7 +13,7 @@ import { testRealmURL } from '../helpers/const';
 import { type SharedTests } from '../helpers';
 import { type TestIndexRow, setupIndex, getTypes } from '../helpers/indexer';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 interface TestCards {
   [name: string]: CardDef;

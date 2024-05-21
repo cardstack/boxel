@@ -1,8 +1,9 @@
+import { startCase } from 'lodash';
 import GlimmerComponent from '@glimmer/component';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
-import { CardDef } from '../-card-def';
-import { Format } from '../-constants';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import type CardDef from '../../card-def';
+import { Format } from '../-constants';
 
 export class DefaultCardDefTemplate extends GlimmerComponent<{
   Args: {

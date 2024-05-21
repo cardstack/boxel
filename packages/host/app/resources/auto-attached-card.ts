@@ -6,7 +6,7 @@ import { TrackedSet } from 'tracked-built-ins';
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 interface Args {
   named: {

@@ -63,7 +63,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     ({ realm, adapter } = await setupAcceptanceTestRealm({
       contents: {
         'pet.gts': `
-        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+        import { contains, field, Component } from "https://cardstack.com/base/card-api";
+        import CardDef from "https://cardstack.com/base/card-def";
         import StringCard from "https://cardstack.com/base/string";
 
         export class Pet extends CardDef {
@@ -84,7 +85,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         }
       `,
         'shipping-info.gts': `
-        import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
+        import { contains, field, Component } from "https://cardstack.com/base/card-api";
+        import FieldDef from "https://cardstack.com/base/field-def";
         import StringCard from "https://cardstack.com/base/string";
         export class ShippingInfo extends FieldDef {
           static displayName = 'Shipping Info';
@@ -104,7 +106,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         }
       `,
         'address.gts': `
-        import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
+        import { contains, field, Component } from "https://cardstack.com/base/card-api";
+        import FieldDef from "https://cardstack.com/base/field-def";
         import StringCard from "https://cardstack.com/base/string";
         import { ShippingInfo } from "./shipping-info";
         import { FieldContainer } from '@cardstack/boxel-ui/components';
@@ -140,7 +143,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         }
       `,
         'person.gts': `
-        import { contains, linksTo, field, Component, CardDef, linksToMany } from "https://cardstack.com/base/card-api";
+        import { contains, linksTo, field, Component, linksToMany } from "https://cardstack.com/base/card-api";
+        import CardDef from "https://cardstack.com/base/card-def";
         import StringCard from "https://cardstack.com/base/string";
         import { Pet } from "./pet";
         import { Address } from "./address";
@@ -691,7 +695,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     assert.expect(2);
 
     let expected = `
-    import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+    import { contains, field, Component } from "https://cardstack.com/base/card-api";
+    import CardDef from "https://cardstack.com/base/card-def";
     import StringCard from "https://cardstack.com/base/string";
 
     export class Pet extends CardDef {
