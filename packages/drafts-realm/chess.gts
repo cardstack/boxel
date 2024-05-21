@@ -280,7 +280,7 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
         flex-direction: column;
         align-items: center;
         gap: 10px;
-        padding: 30px;
+        padding: 15px;
         max-width: 700px;
       }
       .actions {
@@ -299,7 +299,6 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
       }
       .info {
         display: flex;
-        gap: 10px;
         width: 100%;
       }
       .game-info {
