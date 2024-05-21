@@ -9,6 +9,8 @@ import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { modifier } from 'ember-modifier';
 
+import { trackedFunction } from 'ember-resources/util/function';
+
 import { Button } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
@@ -79,84 +81,94 @@ export default class RoomMessage extends Component<Signature> {
   }
 
   <template>
-    <AiAssistantMessage
-      id='message-container-{{@index}}'
-      class='room-message'
-      @formattedMessage={{htmlSafe (markdownToHtml @message.formattedMessage)}}
-      @datetime={{@message.created}}
-      @isFromAssistant={{this.isFromAssistant}}
-      @profileAvatar={{component
-        ProfileAvatarIcon
-        userId=@message.author.userId
-      }}
-      @resources={{this.resources}}
-      @errorMessage={{this.errorMessage}}
-      @isStreaming={{@isStreaming}}
-      @retryAction={{if
-        (eq @message.command.commandType 'patchCard')
-        (perform this.patchCard)
-        @retryAction
-      }}
-      @isPending={{@isPending}}
-      data-test-boxel-message-from={{@message.author.name}}
-      ...attributes
-    >
-      {{#if (eq @message.command.commandType 'patchCard')}}
-        <div
-          class='patch-button-bar'
-          data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
-        >
-          <Button
-            class='view-code-button'
-            {{on 'click' this.viewCodeToggle}}
-            @kind={{if this.isDisplayingCode 'primary-dark' 'secondary-dark'}}
-            @size='extra-small'
-            data-test-view-code-button
+    {{! We Intentionally wait until message resources are loaded (i.e. have a value) before rendering the message.
+      This is because if the message resources render asynchronously after the message is already rendered (e.g. card pills),
+      it is problematic to ensure the last message sticks to the bottom of the screen.
+      In AiAssistantMessage, there is a ScrollIntoView modifier that will scroll the last message into view (i.e. scroll to the bottom) when it renders.
+      If we let things in the message render asynchronously, the height of the message will change after that and the scroll position will move up a bit (i.e. not stick to the bottom).
+    }}
+    {{#if this.resources}}
+      <AiAssistantMessage
+        id='message-container-{{@index}}'
+        class='room-message'
+        @formattedMessage={{htmlSafe
+          (markdownToHtml @message.formattedMessage)
+        }}
+        @datetime={{@message.created}}
+        @isFromAssistant={{this.isFromAssistant}}
+        @profileAvatar={{component
+          ProfileAvatarIcon
+          userId=@message.author.userId
+        }}
+        @resources={{this.resources}}
+        @errorMessage={{this.errorMessage}}
+        @isStreaming={{@isStreaming}}
+        @retryAction={{if
+          (eq @message.command.commandType 'patchCard')
+          (perform this.patchCard)
+          @retryAction
+        }}
+        @isPending={{@isPending}}
+        data-test-boxel-message-from={{@message.author.name}}
+        ...attributes
+      >
+        {{#if (eq @message.command.commandType 'patchCard')}}
+          <div
+            class='patch-button-bar'
+            data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
           >
-            {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
-          </Button>
-          <ApplyButton
-            @state={{this.applyButtonState}}
-            {{on 'click' (perform this.patchCard)}}
-            data-test-command-apply={{this.applyButtonState}}
-          />
-        </div>
-        {{#if this.isDisplayingCode}}
-          <div class='preview-code'>
             <Button
-              class='copy-to-clipboard-button'
-              @kind='text-only'
+              class='view-code-button'
+              {{on 'click' this.viewCodeToggle}}
+              @kind={{if this.isDisplayingCode 'primary-dark' 'secondary-dark'}}
               @size='extra-small'
-              {{on 'click' (perform this.copyToClipboard)}}
-              data-test-copy-code
+              data-test-view-code-button
             >
-              <CopyIcon
-                width='16'
-                height='16'
-                role='presentation'
-                aria-hidden='true'
-              />
-              Copy to clipboard
+              {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
             </Button>
-            <div
-              class='monaco-container'
-              {{this.scrollBottomIntoView}}
-              {{monacoModifier
-                content=this.previewPatchCode
-                contentChanged=undefined
-                monacoSDK=@monacoSDK
-                language='json'
-                readOnly=true
-                darkTheme=true
-                editorDisplayOptions=this.editorDisplayOptions
-              }}
-              data-test-editor
-              data-test-percy-hide
+            <ApplyButton
+              @state={{this.applyButtonState}}
+              {{on 'click' (perform this.patchCard)}}
+              data-test-command-apply={{this.applyButtonState}}
             />
           </div>
+          {{#if this.isDisplayingCode}}
+            <div class='preview-code'>
+              <Button
+                class='copy-to-clipboard-button'
+                @kind='text-only'
+                @size='extra-small'
+                {{on 'click' (perform this.copyToClipboard)}}
+                data-test-copy-code
+              >
+                <CopyIcon
+                  width='16'
+                  height='16'
+                  role='presentation'
+                  aria-hidden='true'
+                />
+                Copy to clipboard
+              </Button>
+              <div
+                class='monaco-container'
+                {{this.scrollBottomIntoView}}
+                {{monacoModifier
+                  content=this.previewPatchCode
+                  contentChanged=undefined
+                  monacoSDK=@monacoSDK
+                  language='json'
+                  readOnly=true
+                  darkTheme=true
+                  editorDisplayOptions=this.editorDisplayOptions
+                }}
+                data-test-editor
+                data-test-percy-hide
+              />
+            </div>
+          {{/if}}
         {{/if}}
-      {{/if}}
-    </AiAssistantMessage>
+      </AiAssistantMessage>
+    {{/if}}
 
     <style>
       .room-message {
@@ -233,24 +245,37 @@ export default class RoomMessage extends Component<Signature> {
     await navigator.clipboard.writeText(this.previewPatchCode);
   });
 
-  private get resources() {
+  private loadMessageResources = trackedFunction(this, async () => {
     let cards: CardDef[] = [];
     let errors: { id: string; error: Error }[] = [];
-    this.args.message.attachedResources?.map((resource) => {
-      if (resource.card) {
-        cards.push(resource.card);
-      } else if (resource.cardError) {
-        let { id, error } = resource.cardError;
-        errors.push({
-          id,
-          error,
-        });
-      }
-    });
+
+    let promises = this.args.message.attachedResources?.map(
+      async (resource) => {
+        await resource.loaded;
+        if (resource.card) {
+          cards.push(resource.card);
+        } else if (resource.cardError) {
+          let { id, error } = resource.cardError;
+          errors.push({
+            id,
+            error,
+          });
+        }
+      },
+    );
+
+    if (promises) {
+      await Promise.all(promises);
+    }
+
     return {
       cards: cards.length ? cards : undefined,
       errors: errors.length ? errors : undefined,
     };
+  });
+
+  private get resources() {
+    return this.loadMessageResources.value;
   }
 
   private get errorMessage() {
@@ -266,7 +291,7 @@ export default class RoomMessage extends Component<Signature> {
       return 'This message was processing for too long. Please try again.';
     }
 
-    if (!this.resources.errors) {
+    if (!this.resources?.errors) {
       return undefined;
     }
 
