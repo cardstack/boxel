@@ -230,7 +230,7 @@ type GameState = 'checkmate' | 'check' | 'draw' | 'play';
 
 class ChessGameComponent extends Component<ChessGameComponentSignature> {
   <template>
-    <div class='main'>
+    <div class='content'>
       <div class='position-info'>
         <div><strong>Pgn:</strong> {{this.pgnDisplay}}</div>
       </div>
@@ -275,12 +275,13 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
 
     </div>
     <style>
-      .main {
+      .content {
         display: flex;
         flex-direction: column;
         align-items: center;
         gap: 10px;
         padding: 30px;
+        max-width: 700px;
       }
       .actions {
         display: flex;
@@ -436,19 +437,22 @@ class Isolated extends BoxelComponent<typeof Chess> {
   }
 
   <template>
-    <div class={{cn 'mode' analysis=this.args.model.analysis}}>
-      <h1>
-        {{this.mode}}
-      </h1>
+    <div class='main'>
+      <div class={{cn analysis=this.args.model.analysis}}>
+        <h1>
+          {{this.mode}}
+        </h1>
+      </div>
+      <ChessGameComponent
+        @pgn={{this.args.model.pgn}}
+        @updatePgn={{this.updatePgn}}
+        @analysis={{this.args.model.analysis}}
+      />
     </div>
-    <ChessGameComponent
-      @pgn={{this.args.model.pgn}}
-      @updatePgn={{this.updatePgn}}
-      @analysis={{this.args.model.analysis}}
-    />
     <style>
-      .mode {
+      .main {
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
       }
