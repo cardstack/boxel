@@ -1526,7 +1526,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: { attributes: { firstName: 'Dave' } },
               eventId: undefined,
