@@ -7,7 +7,8 @@
     "@cardstack/boxel-ui": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
     "@types/lodash": "^4.14.182",
-    "ember-modifier": "^4.1.0"
+    "ember-modifier": "^4.1.0",
+    "tracked-built-ins": "^3.3.0"
   },
   "scripts": {}
 }
