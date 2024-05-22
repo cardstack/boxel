@@ -10,6 +10,8 @@ import {
   Deferred,
 } from '@cardstack/runtime-common';
 
+import { time } from '@cardstack/host/utils/time';
+
 export default class SQLiteAdapter implements DBAdapter {
   private _sqlite: typeof SQLiteWorker | undefined;
   private _dbId: string | undefined;
@@ -106,10 +108,8 @@ export default class SQLiteAdapter implements DBAdapter {
   async execute(sql: string, opts?: ExecuteOptions) {
     this.assertNotClosed();
     sql = this.adjustSQL(sql);
-    console.debug(
-      `executing sql: ${sql}, with bindings: ${JSON.stringify(opts?.bind)}`,
-    );
-    return await this.query(sql, opts);
+
+    return await time('sql', this.query(sql, opts));
   }
 
   async close() {
