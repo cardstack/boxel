@@ -478,6 +478,105 @@ module('getModifyPrompt', () => {
     assert.equal(relevantCards.length, 2);
   });
 
+  test('Gets multiple uploaded cards in the system prompt', () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1234567890,
+        content: {
+          msgtype: 'org.boxel.message',
+          format: 'org.matrix.custom.html',
+          body: 'Hey',
+          formatted_body: 'Hey',
+          data: {
+            attachedCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Author/1',
+                  attributes: {
+                    firstName: 'Terry',
+                    lastName: 'Pratchett',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../author',
+                      name: 'Author',
+                    },
+                  },
+                },
+              },
+            ],
+            context: {
+              openCards: [],
+              tools: [],
+              submode: 'interact',
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 115498,
+          transaction_id: '1',
+        },
+      },
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1234567890,
+        content: {
+          msgtype: 'org.boxel.message',
+          format: 'org.matrix.custom.html',
+          body: 'Hey',
+          formatted_body: 'Hey',
+          data: {
+            attachedCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Author/2',
+                  attributes: {
+                    firstName: 'Mr',
+                    lastName: 'T',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../author',
+                      name: 'Author',
+                    },
+                  },
+                },
+              },
+            ],
+            context: {
+              openCards: [],
+              tools: [],
+              submode: 'interact',
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 115498,
+          transaction_id: '2',
+        },
+      },
+    ];
+    const fullPrompt = getModifyPrompt(history, '@aibot:localhost');
+    const systemMessage = fullPrompt.find(
+      (message) => message.role === 'system',
+    );
+    assert.true(
+      systemMessage?.content?.includes('http://localhost:4201/drafts/Author/1'),
+    );
+    assert.true(
+      systemMessage?.content?.includes('http://localhost:4201/drafts/Author/2'),
+    );
+  });
+
   test('If a user stops sharing their context keep it in the system prompt', () => {
     const history: DiscreteMatrixEvent[] = [
       {

@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Arcane Fury",
+      "level": 3,
+      "isPrepared": false,
+      "damageDice": [
+        "2d6",
+        "1d8"
+      ],
+      "spellDescription": "Arcane Fury is a level 3 spell that calls forth a devastating combination of fire and lightning, causing significant damage to all enemies in a 20-foot radius. When cast, the spell deals 2d6 fire damage and 1d8 lightning damage to each target within range\n\nUnleashing the raw force of untamed magic, the caster conjures a storm of fire and lightning towards their target.",
+      "title": "Arcane Fury",
+      "description": "",
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../dnd",
+        "name": "Spell"
+      }
+    }
+  }
+}

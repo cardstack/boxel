@@ -353,6 +353,9 @@ function cardTypeFor(
   if (primitive in field.card) {
     return field.card;
   }
+  if (boxedElement.value == null) {
+    return field.card;
+  }
   return Reflect.getPrototypeOf(boxedElement.value)!
     .constructor as typeof BaseDef;
 }
@@ -448,9 +451,12 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     // WatchedArray proxy is not structuredClone-able, and hence cannot be
     // communicated over the postMessage boundary between worker and DOM.
     // TODO: can this be simplified since we don't have the worker anymore?
-    return [...instances].map((instance) => {
-      return this.card[queryableValue](instance, stack);
-    });
+    let results = [...instances]
+      .map((instance) => {
+        return this.card[queryableValue](instance, stack);
+      })
+      .filter((i) => i != null);
+    return results.length === 0 ? null : results;
   }
 
   serialize(
@@ -1138,17 +1144,23 @@ class LinksToMany<FieldT extends CardDefConstructor>
     // WatchedArray proxy is not structuredClone-able, and hence cannot be
     // communicated over the postMessage boundary between worker and DOM.
     // TODO: can this be simplified since we don't have the worker anymore?
-    return [...instances].map((instance) => {
-      if (primitive in instance) {
-        throw new Error(
-          `the linksToMany field '${this.name}' contains a primitive card '${instance.name}'`,
-        );
-      }
-      if (isNotLoadedValue(instance)) {
-        return { id: instance.reference };
-      }
-      return this.card[queryableValue](instance, stack);
-    });
+    let results = [...instances]
+      .map((instance) => {
+        if (instance == null) {
+          return null;
+        }
+        if (primitive in instance) {
+          throw new Error(
+            `the linksToMany field '${this.name}' contains a primitive card '${instance.name}'`,
+          );
+        }
+        if (isNotLoadedValue(instance)) {
+          return { id: instance.reference };
+        }
+        return this.card[queryableValue](instance, stack);
+      })
+      .filter((i) => i != null);
+    return results.length === 0 ? null : results;
   }
 
   serialize(
@@ -1173,6 +1185,15 @@ class LinksToMany<FieldT extends CardDefConstructor>
 
     let relationships: Record<string, Relationship> = {};
     values.map((value, i) => {
+      if (value == null) {
+        relationships[`${this.name}\.${i}`] = {
+          links: {
+            self: null,
+          },
+          data: null,
+        };
+        return;
+      }
       if (isNotLoadedValue(value)) {
         relationships[`${this.name}\.${i}`] = {
           links: {
@@ -1739,10 +1760,15 @@ class DefaultCardDefTemplate extends GlimmerComponent<{
         gap: var(--boxel-sp-lg);
         padding: var(--boxel-sp-xl);
       }
-      .default-card-template.edit {
-        padding-right: var(
-          --boxel-sp-xxl
-        ); /* allow room for trash/delete icons that appear on hover */
+      /* this aligns edit fields with containsMany, linksTo, and linksToMany fields */
+      .default-card-template.edit
+        > .boxel-field
+        > :deep(
+          *:nth-child(2):not(.links-to-many-editor):not(
+              .contains-many-editor
+            ):not(.links-to-editor)
+        ) {
+        padding-right: var(--boxel-icon-lg);
       }
     </style>
   </template>
