@@ -315,16 +315,20 @@ export default class RoomMessage extends Component<Signature> {
     let { payload, eventId } = this.args.message.command;
     this.matrixService.failedCommandState.delete(eventId);
     try {
-      await this.operatorModeStateService.patchCard.perform(
+      let res = await this.operatorModeStateService.patchCard.perform(
         payload.id,
         payload.patch,
       );
-      //here is reaction event
-      await this.matrixService.sendReactionEvent(
-        this.args.roomId,
-        eventId,
-        'applied',
-      );
+      if (res) {
+        let [_, cardDoc] = res;
+        //here is reaction event
+        await this.matrixService.sendReactionEvent(
+          this.args.roomId,
+          eventId,
+          'applied',
+          cardDoc,
+        );
+      }
     } catch (e) {
       let error =
         typeof e === 'string'
