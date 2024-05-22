@@ -16,7 +16,11 @@ import {
   getTools,
   isPatchReactionEvent,
 } from './helpers';
-import { shouldSetRoomTitle, setTitle } from './lib/set-title';
+import {
+  shouldSetRoomTitle,
+  setTitle,
+  roomTitleAlreadySet,
+} from './lib/set-title';
 import { handleDebugCommands } from './lib/debug';
 import { sendError, sendOption, sendMessage } from './lib/matrix';
 import { OpenAIError } from 'openai/error';
@@ -293,9 +297,13 @@ Common issues are:
       undefined,
     );
     try {
+      //TODO: optimise this so we don't need to sync room events within a reaction event
       let initial = await client.roomInitialSync(room!.roomId, 1000);
       let eventList = (initial!.messages?.chunk || []) as DiscreteMatrixEvent[];
       let history: DiscreteMatrixEvent[] = constructHistory(eventList);
+      if (roomTitleAlreadySet(eventList)) {
+        return;
+      }
       return await assistant.setTitle(room, history, event);
     } catch (e) {
       log.error(e);

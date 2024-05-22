@@ -119,7 +119,7 @@ export const getLatestPatchApplyMessage = (
   return [];
 };
 
-const roomTitleAlreadySet = (rawEventLog: DiscreteMatrixEvent[]) => {
+export const roomTitleAlreadySet = (rawEventLog: DiscreteMatrixEvent[]) => {
   return (
     rawEventLog.filter((event) => event.type === 'm.room.name').length > 1 ??
     false
