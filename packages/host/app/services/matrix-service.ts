@@ -374,13 +374,19 @@ export default class MatrixService extends Service {
     }
   }
 
-  async sendReactionEvent(roomId: string, eventId: string, status: string) {
+  async sendReactionEvent(
+    roomId: string,
+    eventId: string,
+    status: string,
+    result?: any,
+  ) {
     let content: ReactionEventContent = {
       'm.relates_to': {
         event_id: eventId,
         key: status,
         rel_type: 'm.annotation',
       },
+      result,
     };
     try {
       return await this.sendEvent(roomId, 'm.reaction', content);
