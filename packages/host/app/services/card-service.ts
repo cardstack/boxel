@@ -296,6 +296,9 @@ export default class CardService extends Service {
     }
     for (let [key, patchValue] of Object.entries(patchData)) {
       if (!(key in cardData)) {
+        if (key.includes('.') && patchValue.links?.self === null) {
+          return true;
+        }
         return false;
       }
       let cardValue = cardData[key];

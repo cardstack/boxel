@@ -415,10 +415,18 @@ export default class MatrixService extends Service {
       );
       // Generate tool calls for patching currently open cards permitted for modification
       for (let attachedOpenCard of attachedOpenCards) {
+        debugger;
+        let type: 'remove' | 'add' | undefined;
+        if (body?.toLowerCase().includes('remove' || 'delete' || 'unlink')) {
+          type = 'remove';
+        } else if (body?.includes('add' || 'link')) {
+          type = 'add';
+        }
         let patchSpec = generateCardPatchCallSpecification(
-          attachedOpenCard.constructor as typeof CardDef,
+          attachedOpenCard,
           this.cardAPI,
           mappings,
+          type,
         );
         let realmSession = getRealmSession(this, {
           card: () => attachedOpenCard,

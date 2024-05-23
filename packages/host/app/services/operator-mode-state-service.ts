@@ -113,6 +113,20 @@ export default class OperatorModeStateService extends Service {
       if ('card' in item && item.card.id == id) {
         let document = await this.cardService.serializeCard(item.card);
         document.data = merge(document.data, patch);
+        if (patch.relationships && document.data.relationships) {
+          Object.entries(document.data.relationships)
+            .filter(([fieldName]) => fieldName.includes('.'))
+            .map(([fieldName]) => {
+              if (
+                patch.relationships[fieldName.split('.')[0]]?.links.self ===
+                  null ||
+                patch.relationships[fieldName]?.links.self === null
+              ) {
+                // remove individual linksToMany relationship data if patch is null
+                delete document.data.relationships?.[fieldName];
+              }
+            });
+        }
         await this.cardService.patchCard(item.card, document, patch);
       }
     }
