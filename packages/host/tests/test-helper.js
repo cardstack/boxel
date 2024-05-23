@@ -4,7 +4,7 @@ import * as QUnit from 'qunit';
 import { setApplication } from '@ember/test-helpers';
 import { setup } from 'qunit-dom';
 import { start } from 'ember-qunit';
-import { getTimes } from '@cardstack/host/utils/time';
+import { getTimes } from '@cardstack/runtime-common/helpers/time';
 
 import setupOperatorModeParametersMatchAssertion from '@cardstack/host/tests/helpers/operator-mode-parameters-match';
 

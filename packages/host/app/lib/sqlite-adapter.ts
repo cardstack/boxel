@@ -10,7 +10,7 @@ import {
   Deferred,
 } from '@cardstack/runtime-common';
 
-import { time } from '@cardstack/host/utils/time';
+import { time } from '@cardstack/runtime-common/helpers/time';
 
 export default class SQLiteAdapter implements DBAdapter {
   private _sqlite: typeof SQLiteWorker | undefined;
