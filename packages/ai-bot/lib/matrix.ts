@@ -7,7 +7,7 @@ let log = logger('ai-bot');
 
 export async function sendEvent(
   client: MatrixClient,
-  room: Room,
+  roomId: string,
   eventType: string,
   content: IContent,
   eventToUpdate: string | undefined,
@@ -22,12 +22,12 @@ export async function sendEvent(
     };
   }
   log.debug('sending event', content);
-  return await client.sendEvent(room.roomId, eventType, content);
+  return await client.sendEvent(roomId, eventType, content);
 }
 
 export async function sendMessage(
   client: MatrixClient,
-  room: Room,
+  roomId: string,
   content: string,
   eventToUpdate: string | undefined,
   data: any = {},
@@ -50,7 +50,7 @@ export async function sendMessage(
   };
   return await sendEvent(
     client,
-    room,
+    roomId,
     'm.room.message',
     messageObject,
     eventToUpdate,
@@ -62,7 +62,7 @@ export async function sendMessage(
 // like we split cards into fragments
 export async function sendOption(
   client: MatrixClient,
-  room: Room,
+  roomId: string,
   patch: any,
   eventToUpdate: string | undefined,
 ) {
@@ -88,7 +88,7 @@ export async function sendOption(
   };
   return await sendEvent(
     client,
-    room,
+    roomId,
     'm.room.message',
     messageObject,
     eventToUpdate,
@@ -97,7 +97,7 @@ export async function sendOption(
 
 export async function sendError(
   client: MatrixClient,
-  room: Room,
+  roomId: string,
   error: any,
   eventToUpdate: string | undefined,
 ) {
@@ -106,7 +106,7 @@ export async function sendError(
     log.error(errorMessage);
     await sendMessage(
       client,
-      room,
+      roomId,
       'There was an error processing your request, please try again later',
       eventToUpdate,
       {
