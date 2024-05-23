@@ -14,7 +14,6 @@ import {
   setupCardLogs,
   provideConsumeContext,
 } from '../../helpers';
-import { renderCard } from '../../helpers/render-component';
 import {
   setupBaseRealm,
   StringField,
@@ -29,6 +28,7 @@ import {
   linksTo,
   linksToMany,
 } from '../../helpers/base-realm';
+import { renderCard } from '../../helpers/render-component';
 
 let loader: Loader;
 
