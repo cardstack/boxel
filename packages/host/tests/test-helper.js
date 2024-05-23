@@ -41,7 +41,6 @@ QUnit.done(async () => {
   });
 
   log.error('that is all…?');
-  log.flush();
 
   return new Promise((resolve) => {
     log.error('waiting for logs to flush');
