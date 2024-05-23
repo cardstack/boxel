@@ -377,7 +377,7 @@ export function getLinksToManyComponent({
         {{/if}}
       </DefaultFormatConsumer>
       <style>
-        .linksToMany-field.embedded-format > div + div {
+        .linksToMany-field.embedded-effectiveFormat > div + div {
           margin-top: var(--boxel-sp);
         }
         .linksToMany-field.atom-format {
