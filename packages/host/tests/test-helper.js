@@ -19,6 +19,18 @@ QUnit.on('runStart', () => {
   log.error('Starting tests abcdefghijklmnopqrstuvwxyz');
 });
 
+QUnit.on('suiteEnd', (moduleName) => {
+  console.log(`Done tests for ${moduleName}`);
+
+  let times = getTimes();
+
+  [...times.keys()].forEach((key) => {
+    log.error(`${key}: ${times.get(key)}`);
+  });
+
+  log.error('that is all');
+});
+
 QUnit.on('runEnd', () => {
   console.log('Done all tests');
 
