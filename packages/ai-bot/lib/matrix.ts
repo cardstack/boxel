@@ -1,9 +1,19 @@
-import { IContent, Room, MatrixClient } from 'matrix-js-sdk';
+import { IContent } from 'matrix-js-sdk';
 import { logger } from '@cardstack/runtime-common';
 import { OpenAIError } from 'openai/error';
 import * as Sentry from '@sentry/node';
 
 let log = logger('ai-bot');
+
+export interface MatrixClient {
+  sendEvent(
+    roomId: string,
+    eventType: string,
+    content: IContent,
+  ): Promise<{ event_id: string }>;
+
+  setRoomName(roomId: string, title: string): Promise<{ event_id: string }>;
+}
 
 export async function sendEvent(
   client: MatrixClient,
