@@ -583,7 +583,10 @@ export class RoomField extends FieldDef {
             (e) =>
               e.type === 'm.reaction' &&
               e.content['m.relates_to']?.rel_type === 'm.annotation' &&
-              e.content['m.relates_to']?.event_id === command.eventId,
+              e.content['m.relates_to']?.event_id ===
+                // If the message is a replacement message, eventId in command payload will be undefined.
+                // Because it will not refer to any other events, so we can use event_id of the message itself.
+                (command.eventId ?? event_id),
           ) as ReactionEvent | undefined;
 
           messageField = new MessageField({
@@ -606,6 +609,11 @@ export class RoomField extends FieldDef {
         }
 
         if (messageField) {
+          // if the message is a replacement for other messages,
+          // use `created` from the oldest one.
+          if (newMessages.has(event_id)) {
+            messageField.created = newMessages.get(event_id)!.created;
+          }
           newMessages.set(
             (event.content as CardMessageContent).clientGeneratedId ?? event_id,
             messageField,
@@ -770,6 +778,7 @@ interface LeaveEvent extends RoomStateEvent {
   };
 }
 
+//Here are some message events
 interface MessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: {
@@ -792,7 +801,7 @@ interface MessageEvent extends BaseMatrixEvent {
   };
 }
 
-interface CommandEvent extends BaseMatrixEvent {
+export interface CommandEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: CommandMessageContent;
   unsigned: {

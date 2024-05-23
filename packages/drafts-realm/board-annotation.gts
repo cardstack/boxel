@@ -81,13 +81,31 @@ class BodyBalance extends FieldDef {
 
 export class BoardAnnotation extends FieldDef {
   static displayName = 'Board Annotation';
-  @field step = contains(NumberField);
-  @field comment = contains(StringField);
-  @field bodyPositionDegrees = contains(NumberField);
-  @field bodyBalance = contains(BodyBalance);
-  @field edgeAngleDegrees = contains(NumberField);
+  @field position = contains(NumberField, {
+    description:
+      'The position on the turn that the annotation describes. Each turn is divided into 10 equal sections, where position 0 is the beginning of the turn, position 5 is the fall line, and position 10 is the end of the turn.',
+  });
+  @field comment = contains(StringField, {
+    description: 'A comment to include in the annotation.',
+  });
+  @field bodyPositionDegrees = contains(NumberField, {
+    description:
+      'The angle at which the body is facing where 0 degrees is in the direction the board is travelling, and a positive angle the side of the board opposite to where your feet are pointing.',
+  });
+  @field bodyBalance = contains(BodyBalance, {
+    description: `The amount of weight to distribute between the front of the board and the back of the board. The first number is the proportion of the weight for the front of the board, the second number is the proportion of the weight for the back of the board. This is expressed as a proportion of 10. So "5/5" represents an even rider weight distribution between the front of the board and the back of the board. "6/4" represents that 60% of the rider's weight is over the front of the board and 40% of the rider's weight is over the back of the board. "4/6" represents that 40% of the riders weight is over the front of the board and 60% of the rider's weight is over the back of the board.`,
+  });
+  @field edgeAngleDegrees = contains(NumberField, {
+    description:
+      'The edge angle is the angle the edge of the board makes with the ground. When the board is lying flat on the snow the edge angle is 0 degrees. At the most extreme part of the turn the edge angle is at or above 90 degrees with the ground.',
+  });
 
   static embedded = class Embedded extends Component<typeof this> {
+    // It would be great is this could be unpersisted application
+    // state that could be shared with this field--similar to component arguments
+    get stance() {
+      return (globalThis as any).__carvingDiagram?.stance ?? 'regular';
+    }
     get hasBodyBalance() {
       return this.args.model.bodyBalance != null;
     }
@@ -117,7 +135,8 @@ export class BoardAnnotation extends FieldDef {
       return this.args.model.edgeAngleDegrees ?? 0;
     }
     get positionStyle() {
-      return `transform: rotate(${-1 * this.positionDegrees}deg)`;
+      let stanceFactor = this.stance === 'regular' ? -1 : 1;
+      return `transform: rotate(${stanceFactor * this.positionDegrees}deg)`;
     }
     get edgeRayStyle() {
       return `transform: rotate(${-1 * this.edgeAngleDegrees}deg)`;
@@ -144,10 +163,9 @@ export class BoardAnnotation extends FieldDef {
             </div>
           {{/if}}
           {{#if this.hasBodyPosition}}
-            <div
-              class='body-position'
-              style='{{this.positionStyle}}'
-            >{{this.positionDegrees}}°
+            <div class='body-position' style='{{this.positionStyle}}'><div
+                class='position-value'
+              >{{this.positionDegrees}}°</div>
               <div class='arrow'></div>
             </div>
           {{/if}}
@@ -158,9 +176,9 @@ export class BoardAnnotation extends FieldDef {
       {{/if}}
       <style>
         .comment {
-          font-size: 18px;
-          font-weight: bold;
-          max-width: 100px;
+          font-size: 13px;
+          max-width: 60px;
+          font-weight: normal;
         }
         .board {
           position: absolute;
