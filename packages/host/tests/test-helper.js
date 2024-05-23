@@ -11,6 +11,14 @@ import setupOperatorModeParametersMatchAssertion from '@cardstack/host/tests/hel
 
 const log = logger('current-run');
 
+console.log('Setting Qunit hooks?');
+
+log.error('Setting Qunit hooks?');
+
+QUnit.on('runStart', () => {
+  log.error('Starting tests abcdefghijklmnopqrstuvwxyz');
+});
+
 QUnit.on('runEnd', () => {
   console.log('Done all tests');
 
