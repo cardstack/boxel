@@ -19,8 +19,8 @@ QUnit.on('runStart', () => {
   log.error('Starting tests abcdefghijklmnopqrstuvwxyz');
 });
 
-QUnit.on('suiteEnd', (moduleName) => {
-  console.log(`Done tests for ${moduleName}`);
+QUnit.on('suiteEnd', (suiteEnd) => {
+  console.log(`Done tests for ${suiteEnd.name}`);
 
   let times = getTimes();
 
