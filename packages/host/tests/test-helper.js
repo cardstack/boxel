@@ -17,7 +17,7 @@ QUnit.on('runEnd', () => {
   let times = getTimes();
 
   [...times.keys()].forEach((key) => {
-    log.info(`${key}: ${times.get(key)}`);
+    log.error(`${key}: ${times.get(key)}`);
   });
 });
 
