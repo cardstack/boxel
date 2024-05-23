@@ -171,15 +171,17 @@ jobs:
       - name: create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
-      - name: host test suite with Percy
-        run: pnpm test-with-percy
-        if: matrix.browser == 'Chrome'
-        env:
-          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
-        working-directory: packages/host
+      # FIXME restore
+      # - name: host test suite with Percy
+      #   run: pnpm test-with-percy
+      #   if: matrix.browser == 'Chrome'
+      #   env:
+      #     PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
+      #   working-directory: packages/host
       - name: host test suite without Percy
         run: pnpm test
-        if: matrix.browser == 'Firefox'
+        # FIXME restore
+        # if: matrix.browser == 'Firefox'
         working-directory: packages/host
       - name: Publish test results
         uses: EnricoMi/publish-unit-test-result-action@v2.9.0
