@@ -27,6 +27,29 @@ QUnit.on('runEnd', () => {
   [...times.keys()].forEach((key) => {
     log.error(`${key}: ${times.get(key)}`);
   });
+
+  log.error('that is all');
+});
+
+QUnit.done(async () => {
+  console.log('Done all tests?? again');
+
+  let times = getTimes();
+
+  [...times.keys()].forEach((key) => {
+    log.error(`${key}: ${times.get(key)}`);
+  });
+
+  log.error('that is all…?');
+  log.flush();
+
+  return new Promise((resolve) => {
+    log.error('waiting for logs to flush');
+    setTimeout(() => {
+      log.error('logs flushed?');
+      resolve();
+    }, 5000);
+  });
 });
 
 setApplication(Application.create(config.APP));
