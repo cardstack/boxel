@@ -15,15 +15,26 @@ import {
   provideConsumeContext,
 } from '../../helpers';
 import { renderCard } from '../../helpers/render-component';
-
-let cardApi: typeof import('https://cardstack.com/base/card-api');
-let string: typeof import('https://cardstack.com/base/string');
-let number: typeof import('https://cardstack.com/base/number');
+import {
+  setupBaseRealm,
+  StringField,
+  NumberField,
+  field,
+  contains,
+  CardDef,
+  Component,
+  FieldDef,
+  containsMany,
+  recompute,
+  linksTo,
+  linksToMany,
+} from '../../helpers/base-realm';
 
 let loader: Loader;
 
 module('Integration | computeds', function (hooks) {
   setupRenderingTest(hooks);
+  setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     provideConsumeContext(RealmSessionContextName, {
@@ -39,15 +50,7 @@ module('Integration | computeds', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  hooks.beforeEach(async function () {
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    number = await loader.import(`${baseRealm.url}number`);
-  });
-
   test('can render a synchronous computed field', async function (assert) {
-    let { field, contains, CardDef, Component } = cardApi;
-    let { default: StringField } = string;
     class Person extends CardDef {
       @field firstName = contains(StringField);
       @field lastName = contains(StringField);
@@ -69,8 +72,6 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a synchronous computed field (using a string in `computeVia`)', async function (assert) {
-    let { field, contains, CardDef, Component } = cardApi;
-    let { default: StringField } = string;
     class Person extends CardDef {
       @field firstName = contains(StringField);
       @field lastName = contains(StringField);
@@ -91,8 +92,6 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a computed that consumes a nested property', async function (assert) {
-    let { field, contains, CardDef, Component, FieldDef } = cardApi;
-    let { default: StringField } = string;
     class Person extends FieldDef {
       @field firstName = contains(StringField);
     }
@@ -122,8 +121,6 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a computed that is a composite type', async function (assert) {
-    let { field, contains, CardDef, FieldDef, Component } = cardApi;
-    let { default: StringField } = string;
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
@@ -155,8 +152,6 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a containsMany computed primitive field', async function (assert) {
-    let { field, contains, containsMany, CardDef, Component } = cardApi;
-    let { default: StringField } = string;
     class Person extends CardDef {
       @field firstName = contains(StringField);
       @field languagesSpoken = containsMany(StringField);
@@ -185,8 +180,6 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('supports an empty containsMany computed primitive field', async function (assert) {
-    let { field, contains, containsMany, CardDef, Component } = cardApi;
-    let { default: StringField } = string;
     class Person extends CardDef {
       @field firstName = contains(StringField);
       @field languagesSpoken = containsMany(StringField);
@@ -212,9 +205,6 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a containsMany computed composite field', async function (this: RenderingTestContext, assert) {
-    let { field, contains, containsMany, CardDef, FieldDef, Component } =
-      cardApi;
-    let { default: StringField } = string;
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
@@ -268,9 +258,6 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('supports an empty containsMany computed composite field', async function (assert) {
-    let { field, contains, containsMany, FieldDef, CardDef, Component } =
-      cardApi;
-    let { default: StringField } = string;
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
@@ -303,11 +290,6 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can recompute containsMany field', async function (assert) {
-    let { field, contains, containsMany, FieldDef, CardDef, recompute } =
-      cardApi;
-    let { default: StringField } = string;
-    let { default: NumberField } = number;
-
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       @field age = contains(NumberField);
@@ -339,8 +321,6 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('computed fields render as embedded in the edit format', async function (assert) {
-    let { field, contains, CardDef } = cardApi;
-    let { default: StringField } = string;
     class Person extends CardDef {
       @field firstName = contains(StringField);
       @field alias = contains(StringField, {
@@ -359,8 +339,6 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a computed linksTo relationship', async function (assert) {
-    let { field, contains, linksTo, CardDef, FieldDef, Component } = cardApi;
-    let { default: StringField } = string;
     class Pet extends CardDef {
       @field name = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
@@ -414,8 +392,6 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a computed linksToMany relationship', async function (this: RenderingTestContext, assert) {
-    let { field, contains, linksTo, linksToMany, CardDef, Component } = cardApi;
-    let { default: StringField } = string;
     class Pet extends CardDef {
       @field name = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
