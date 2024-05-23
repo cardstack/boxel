@@ -4,7 +4,7 @@
     "attributes": {
       "title": "General Card",
       "description": "A general card that can contain any card type.",
-      "isField": true,
+      "isField": false,
       "ref": {
         "module": "https://cardstack.com/base/card-api",
         "name": "CardDef"
