@@ -88,8 +88,6 @@ import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
 
 import { RealmAuthHandler } from './realm-auth-handler';
 
-import { time } from './helpers/time';
-
 export interface RealmSession {
   canRead: boolean;
   canWrite: boolean;
@@ -1175,9 +1173,7 @@ export class Realm {
 
   private makeJS(content: string, debugFilename: string): Response {
     try {
-      time('transpileJS', () => {
-        content = this.transpileJS(content, debugFilename);
-      });
+      content = this.transpileJS(content, debugFilename);
     } catch (err: any) {
       return createResponse(this, err.message, {
         // using "Not Acceptable" here because no text/javascript representation
