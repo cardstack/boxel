@@ -27,6 +27,7 @@ import {
   testRealmInfo,
   testRealmURL,
 } from '@cardstack/runtime-common/helpers/const';
+import { time } from '@cardstack/runtime-common/helpers/time';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import { Realm } from '@cardstack/runtime-common/realm';
@@ -250,9 +251,11 @@ class MockLocalIndexer extends Service {
 
 export function setupLocalIndexing(hooks: NestedHooks) {
   hooks.beforeEach(async function () {
-    let dbAdapter = await getDbAdapter();
-    await dbAdapter.reset();
-    this.owner.register('service:local-indexer', MockLocalIndexer);
+    await time('setupLocalIndexing:reset', async () => {
+      let dbAdapter = await getDbAdapter();
+      await dbAdapter.reset();
+      this.owner.register('service:local-indexer', MockLocalIndexer);
+    });
   });
 }
 
@@ -317,80 +320,82 @@ export function setupServerSentEvents(hooks: NestedHooks) {
       callback: () => Promise<T>;
       opts?: { timeout?: number };
     }): Promise<T> => {
-      let defer = new Deferred();
-      let events: { type: string; data: Record<string, any> }[] = [];
-      let numOfEvents = expectedEvents?.length ?? expectedNumberOfEvents;
-      if (numOfEvents == null) {
-        throw new Error(
-          `expectEvents() must specify either 'expectedEvents' or 'expectedNumberOfEvents'`,
-        );
-      }
-      let response = await realm.handle(
-        new Request(`${realm.url}_message`, {
-          method: 'GET',
-          headers: {
-            Accept: 'text/event-stream',
-          },
-        }),
-      );
-      if (!response.ok) {
-        throw new Error(`failed to connect to realm: ${response.status}`);
-      }
-      let reader = response.body!.getReader();
-      let timeout = setTimeout(
-        () =>
-          defer.reject(
-            new Error(
-              `expectEvent timed out, saw events ${JSON.stringify(events)}`,
-            ),
-          ),
-        opts?.timeout ?? 3000,
-      );
-      let result = await callback();
-      let decoder = new TextDecoder();
-      while (events.length < numOfEvents) {
-        let { done, value } = await Promise.race([
-          reader.read(),
-          defer.promise as any, // this one always throws so type is not important
-        ]);
-        if (done) {
+      return await time('setupServerSentEvents:expectEvents', async () => {
+        let defer = new Deferred();
+        let events: { type: string; data: Record<string, any> }[] = [];
+        let numOfEvents = expectedEvents?.length ?? expectedNumberOfEvents;
+        if (numOfEvents == null) {
           throw new Error(
-            `expected ${numOfEvents} events, saw ${events.length} events`,
+            `expectEvents() must specify either 'expectedEvents' or 'expectedNumberOfEvents'`,
           );
         }
-        if (value) {
-          let ev = getEventData(decoder.decode(value, { stream: true }));
-          if (ev) {
-            events.push(ev);
-            for (let subscriber of this.subscribers) {
-              let evWireFormat = {
-                type: ev.type,
-                data: JSON.stringify(ev.data),
-              };
-              subscriber(evWireFormat);
+        let response = await realm.handle(
+          new Request(`${realm.url}_message`, {
+            method: 'GET',
+            headers: {
+              Accept: 'text/event-stream',
+            },
+          }),
+        );
+        if (!response.ok) {
+          throw new Error(`failed to connect to realm: ${response.status}`);
+        }
+        let reader = response.body!.getReader();
+        let timeout = setTimeout(
+          () =>
+            defer.reject(
+              new Error(
+                `expectEvent timed out, saw events ${JSON.stringify(events)}`,
+              ),
+            ),
+          opts?.timeout ?? 3000,
+        );
+        let result = await callback();
+        let decoder = new TextDecoder();
+        while (events.length < numOfEvents) {
+          let { done, value } = await Promise.race([
+            reader.read(),
+            defer.promise as any, // this one always throws so type is not important
+          ]);
+          if (done) {
+            throw new Error(
+              `expected ${numOfEvents} events, saw ${events.length} events`,
+            );
+          }
+          if (value) {
+            let ev = getEventData(decoder.decode(value, { stream: true }));
+            if (ev) {
+              events.push(ev);
+              for (let subscriber of this.subscribers) {
+                let evWireFormat = {
+                  type: ev.type,
+                  data: JSON.stringify(ev.data),
+                };
+                subscriber(evWireFormat);
+              }
             }
           }
         }
-      }
-      if (expectedEvents) {
-        let eventsWithoutClientRequestId = events.map((e) => {
-          delete e.data.clientRequestId;
-          return e;
-        });
-        assert.deepEqual(
-          eventsWithoutClientRequestId.forEach((e) =>
-            e.data.invalidations?.sort(),
-          ),
-          expectedEvents.forEach((e) => e.data.invalidations?.sort()),
-          'sse response is correct',
-        );
-      }
-      if (onEvents) {
-        onEvents(events);
-      }
-      clearTimeout(timeout);
-      realm.unsubscribe();
-      return result;
+        if (expectedEvents) {
+          let eventsWithoutClientRequestId = events.map((e) => {
+            delete e.data.clientRequestId;
+            return e;
+          });
+          assert.deepEqual(
+            eventsWithoutClientRequestId.forEach((e) =>
+              e.data.invalidations?.sort(),
+            ),
+            expectedEvents.forEach((e) => e.data.invalidations?.sort()),
+            'sse response is correct',
+          );
+        }
+        if (onEvents) {
+          onEvents(events);
+        }
+        clearTimeout(timeout);
+        realm.unsubscribe();
+        return result;
+      });
     };
   });
 }
@@ -572,7 +577,9 @@ export function setupCardLogs(
 ) {
   hooks.afterEach(async function () {
     let api = await apiThunk();
-    await api.flushLogs();
+    time('setupCardLogs:flushLogs', async () => {
+      await api.flushLogs();
+    });
   });
 }
 
