@@ -1679,7 +1679,7 @@ export class Realm {
   }
 
   private async sendServerEvent(event: ServerEvents): Promise<void> {
-    this.#log.info(
+    this.#log.debug(
       `sending updates to ${this.listeningClients.length} clients`,
     );
     let { type, data, id } = event;
