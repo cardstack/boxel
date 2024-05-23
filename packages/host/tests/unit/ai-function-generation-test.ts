@@ -206,7 +206,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
         links: {
           type: 'object',
           properties: {
-            self: { type: 'null' },
+            self: { type: 'string' },
           },
           required: ['self'],
         },
@@ -493,7 +493,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
             links: {
               type: 'object',
               properties: {
-                self: { type: 'null' },
+                self: { type: 'string' },
               },
               required: ['self'],
             },
@@ -507,7 +507,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
             links: {
               type: 'object',
               properties: {
-                self: { type: 'null' },
+                self: { type: 'string' },
               },
               required: ['self'],
             },
@@ -516,6 +516,59 @@ module('Unit | ai-function-generation-test', function (hooks) {
         },
       },
       required: ['linkedCard', 'linkedCard2'],
+    };
+    assert.deepEqual(schema, { attributes, relationships });
+  });
+
+  test(`supports descriptions in linksToMany`, async function (assert) {
+    let { field, contains, linksToMany, CardDef } = cardApi;
+    let { default: StringField } = string;
+    class OtherCard extends CardDef {
+      @field innerStringField = contains(StringField);
+    }
+
+    class TestCard extends CardDef {
+      static displayName = 'TestCard';
+      @field simpleField = contains(StringField);
+      @field linkedCards = linksToMany(OtherCard, {
+        description: 'linked cards',
+      });
+    }
+
+    let schema = generateCardPatchCallSpecification(
+      TestCard,
+      cardApi,
+      mappings,
+    );
+
+    let attributes: ObjectSchema = {
+      type: 'object',
+      properties: {
+        simpleField: { type: 'string' },
+        title: { type: 'string' },
+        description: { type: 'string' },
+        thumbnailURL: { type: 'string' },
+      },
+    };
+    let relationships: RelationshipsSchema = {
+      type: 'object',
+      properties: {
+        linkedCard: {
+          type: 'object',
+          description: 'linked cards',
+          properties: {
+            links: {
+              type: 'object',
+              properties: {
+                self: { type: 'string' },
+              },
+              required: ['self'],
+            },
+          },
+          required: ['links'],
+        },
+      },
+      required: ['linkedCards'],
     };
     assert.deepEqual(schema, { attributes, relationships });
   });

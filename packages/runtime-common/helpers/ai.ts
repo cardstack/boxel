@@ -226,16 +226,12 @@ function generatePatchCallSpecification(
 }
 
 function generatePatchCallRelationshipsSpecification(
-  card: CardAPI.CardDef,
+  def: typeof CardAPI.BaseDef,
   cardApi: typeof CardAPI,
-  type?: 'add' | 'remove',
 ): RelationshipsSchema | undefined {
-  const { id: _removedIdField, ...fields } = cardApi.getFields(
-    card.constructor,
-    {
-      usedFieldsOnly: false,
-    },
-  );
+  const { id: _removedIdField, ...fields } = cardApi.getFields(def, {
+    usedFieldsOnly: false,
+  });
   let schema: RelationshipsSchema | undefined;
   for (let [fieldName, field] of Object.entries(fields)) {
     if (field.fieldType !== 'linksTo' && field.fieldType !== 'linksToMany') {
@@ -248,54 +244,24 @@ function generatePatchCallRelationshipsSpecification(
         required: [],
       };
     }
-    if (field.fieldType == 'linksTo') {
-      (schema as RelationshipsSchema).required.push(fieldName);
-      let self: { type: 'string' } | { type: 'null' } = { type: 'string' };
-      if (type === 'remove') {
-        self = { type: 'null' };
-      }
-      schema.properties[fieldName] = {
-        type: 'object',
-        properties: {
-          links: {
-            type: 'object',
-            properties: { self },
-            required: ['self'],
+    schema.required.push(fieldName);
+    schema.properties[fieldName] = {
+      type: 'object',
+      properties: {
+        links: {
+          type: 'object',
+          properties: {
+            self: { type: 'string' },
           },
+          required: ['self'],
         },
-        required: ['links'],
-      };
-      if (field.description) {
-        schema.properties[fieldName].description = field.description;
-      }
-    } else if (field.fieldType == 'linksToMany') {
-      let fName = fieldName;
-      let self: { type: 'string' } | { type: 'null' } = { type: 'string' };
-      if (type === 'add') {
-        let valIndex = (card as any)[fieldName].length;
-        fName = `${fieldName}\.${valIndex}`;
-      } else if (type === 'remove') {
-        self = { type: 'null' };
-      }
-
-      (schema as RelationshipsSchema).required.push(fName);
-      schema.properties[fName] = {
-        type: 'object',
-        properties: {
-          links: {
-            type: 'object',
-            properties: { self },
-            required: ['self'],
-          },
-        },
-        required: ['links'],
-      };
-      if (field.description) {
-        schema.properties[fName].description = field.description;
-      }
+      },
+      required: ['links'],
+    };
+    if (field.description) {
+      schema.properties[fieldName].description = field.description;
     }
   }
-
   return schema;
 }
 
@@ -312,18 +278,15 @@ function generatePatchCallRelationshipsSpecification(
  * @returns The generated patch call specification as JSON schema
  */
 export function generateCardPatchCallSpecification(
-  card: CardAPI.CardDef,
+  def: typeof CardAPI.CardDef,
   cardApi: typeof CardAPI,
   mappings: Map<typeof CardAPI.FieldDef, Schema>,
-  type?: 'add' | 'remove',
 ):
   | { attributes: Schema }
   | { attributes: Schema; relationships: RelationshipsSchema } {
-  let schema = generatePatchCallSpecification(
-    card.constructor,
-    cardApi,
-    mappings,
-  ) as Schema | undefined;
+  let schema = generatePatchCallSpecification(def, cardApi, mappings) as
+    | Schema
+    | undefined;
   if (schema == undefined) {
     return {
       attributes: {
@@ -333,9 +296,8 @@ export function generateCardPatchCallSpecification(
     };
   } else {
     let relationships = generatePatchCallRelationshipsSpecification(
-      card,
+      def,
       cardApi,
-      type,
     );
     if (
       !relationships ||
