@@ -79,9 +79,9 @@ export default class EthereumAddressField extends FieldDef {
   static [useIndexBasedKey]: never;
   static async [deserialize]<T extends BaseDefConstructor>(
     this: T,
-    string: any,
+    address: any,
   ): Promise<BaseInstanceType<T>> {
-    return _deserialize(string) as BaseInstanceType<T>;
+    return _deserialize(address) as BaseInstanceType<T>;
   }
   static [queryableValue](val: string | undefined): string | undefined {
     return serialize(val ?? null);
