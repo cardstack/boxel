@@ -110,7 +110,9 @@ export class Worker {
   #indexer: Indexer;
   #queue: Queue;
   #loader: Loader;
-  #fromScratch: ((realmURL: URL) => Promise<IndexResults>) | undefined;
+  #fromScratch:
+    | ((realmURL: URL, boom?: true) => Promise<IndexResults>)
+    | undefined;
   #realmAdapter: RealmAdapter;
   #incremental:
     | ((
@@ -195,13 +197,14 @@ export class Worker {
     return result;
   }
 
-  private fromScratch = async (args: FromScratchArgs) => {
+  private fromScratch = async (args: FromScratchArgs & { boom?: true }) => {
     return await this.prepareAndRunJob<FromScratchResult>(async () => {
       if (!this.#fromScratch) {
         throw new Error(`Index runner has not been registered`);
       }
       let { ignoreData, stats } = await this.#fromScratch(
         new URL(args.realmURL),
+        args.boom,
       );
       return {
         ignoreData: { ...ignoreData },
