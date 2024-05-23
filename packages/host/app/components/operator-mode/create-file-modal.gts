@@ -515,6 +515,7 @@ export default class CreateFileModal extends Component<Signature> {
     this.selectedCatalogEntry = await chooseCard({
       filter: {
         on: catalogEntryRef,
+        // REMEMBER ME
         eq: { isField },
       },
     });

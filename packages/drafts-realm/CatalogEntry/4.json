@@ -4,6 +4,7 @@
     "attributes": {
       "title": "Token from /asset",
       "description": "Catalog entry for Token from /asset",
+      "isField": false,
       "ref": {
         "module": "../asset",
         "name": "Token"
