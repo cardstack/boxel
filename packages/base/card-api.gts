@@ -921,7 +921,10 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     });
     await cardResource.loaded;
     let cachedInstance =
-      cardResource.card ?? identityContext.identities.get(value.links.self);
+      cardResource.card ??
+      identityContext.identities.get(
+        new URL(value.links.self, relativeTo).href,
+      );
     if (cachedInstance) {
       cachedInstance[isSavedInstance] = true;
       return cachedInstance as BaseInstanceType<CardT>;
@@ -1276,7 +1279,10 @@ class LinksToMany<FieldT extends CardDefConstructor>
         });
         await cardResource.loaded;
         let cachedInstance =
-          cardResource.card ?? identityContext.identities.get(value.links.self);
+          cardResource.card ??
+          identityContext.identities.get(
+            new URL(value.links.self, relativeTo).href,
+          );
         if (cachedInstance) {
           cachedInstance[isSavedInstance] = true;
           return cachedInstance;
@@ -2072,7 +2078,13 @@ export function subscribeToChanges(
 export function unsubscribeFromChanges(
   fieldOrCard: BaseDef,
   subscriber: CardChangeSubscriber,
+  visited: Set<BaseDef> = new Set(),
 ) {
+  if (visited.has(fieldOrCard)) {
+    return;
+  }
+
+  visited.add(fieldOrCard);
   let changeSubscribers = subscribers.get(fieldOrCard);
   if (!changeSubscribers) {
     return;
@@ -2086,7 +2098,7 @@ export function unsubscribeFromChanges(
   Object.keys(fields).forEach((fieldName) => {
     let value = peekAtField(fieldOrCard, fieldName);
     if (isCardOrField(value)) {
-      unsubscribeFromChanges(value, subscriber);
+      unsubscribeFromChanges(value, subscriber, visited);
     }
   });
 }
