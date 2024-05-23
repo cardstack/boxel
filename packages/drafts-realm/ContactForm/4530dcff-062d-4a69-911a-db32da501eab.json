@@ -2,23 +2,24 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": null,
+      "title": "Application of Job",
       "name": {
-        "salutation": null,
-        "firstName": null,
-        "lastName": null
+        "salutation": "Mr.",
+        "firstName": "Law",
+        "lastName": "Yung xxx"
       },
-      "email": null,
-      "phone": null,
-      "fax": null,
-      "department": null,
+      "email": "lorem@gmail.com",
+      "phone": "0103819999",
+      "fax": "+609092312",
+      "department": "IT",
       "addressInfo": {
-        "address": "1, Lorong Tebu 3",
-        "zip": "96000",
-        "city": "",
-        "state": "Antwerp",
-        "country": "Belgium",
-        "countryCode": "BE"
+        "address": "1 Chome-3-8 Hashiba Higashinocho",
+        "zip": "570-0031",
+        "city": "Moriguchi",
+        "state": "Ōsaka Prefecture",
+        "country": "Japan",
+        "countryCode": "JP",
+        "stateCode": "27"
       },
       "description": null,
       "thumbnailURL": null

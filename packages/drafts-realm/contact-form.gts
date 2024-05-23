@@ -4,7 +4,6 @@ import { AddressInfo } from './address-info';
 import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
-
 import {
   FieldContainer,
   CardContainer,
@@ -61,6 +60,7 @@ class Isolated extends Component<typeof ContactForm> {
             <label>Department: </label>
             <@fields.department />
           </div>
+
           <div class='field-input'>
             <label>AddressInfo: </label>
             <@fields.addressInfo />
@@ -72,8 +72,7 @@ class Isolated extends Component<typeof ContactForm> {
 
     </CardContainer>
 
-    <style
-    >
+    <style>
       h2 {
         font-size: 2.2rem;
         margin: 0;
@@ -99,23 +98,22 @@ class Isolated extends Component<typeof ContactForm> {
       }
 
       .contact-form-details {
-        width: 100%;
-        padding: 3rem 2rem;
         border: 1px solid var(--boxel-300);
         border-radius: var(--boxel-border-radius-xl);
         background-color: #eeeeee50;
         display: grid;
         grid-template-columns: 1fr;
-        gap: var(--boxel-sp-lg);
+        gap: var(--boxel-sp);
         justify-content: center;
         text-align: center;
+        padding: 2.5rem 2rem;
+        max-width: 800px;
+        margin: auto;
       }
-
-
 
       .field-input {
         display: flex;
-        gap: var(--boxel-sp-xxl);
+        gap: var(--boxel-sp-sm);
         font-size: 1rem;
         flex-wrap: wrap;
         min-width: 280px;
@@ -138,18 +136,18 @@ class Isolated extends Component<typeof ContactForm> {
         text-align: center;
       }
 
-      @media (max-width: 767px) {
-         .left-col {
-      grid-column:span 2;
-        {{! display: grid;
-        gap: var(--boxel-sp-lg); }}
-      }
+      @media (min-width: 767px) {
+        .contact-form-details {
+          gap: var(--boxel-sp-lg);
+        }
 
-      .right-col {
-      grid-column: span 2;
-        {{! display: grid;
-        gap: var(--boxel-sp-lg); }}
-      }
+        .field-input {
+          display: flex;
+          gap: var(--boxel-sp);
+          font-size: 1rem;
+          flex-wrap: wrap;
+          min-width: 280px;
+        }
       }
     </style>
   </template>
@@ -243,12 +241,15 @@ export class ContactForm extends CardDef {
   @field title = contains(StringField, {
     description: `Contact Form Title`,
   });
+
   @field name = contains(UserName, {
     description: `User's Full Name`,
   });
+
   @field email = contains(UserEmail, {
     description: `User's Email`,
   });
+
   @field phone = contains(StringField, {
     description: `User's phone number`,
   });

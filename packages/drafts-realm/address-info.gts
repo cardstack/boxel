@@ -1,80 +1,147 @@
 import { FieldDef, field, contains } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
-
+import { not } from '@cardstack/boxel-ui/helpers';
 import {
   BoxelSelect,
   FieldContainer,
   CardContainer,
-  BoxelInput,
 } from '@cardstack/boxel-ui/components';
+import { task } from 'ember-concurrency';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
-import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
-import { eq } from '@cardstack/boxel-ui/helpers';
-import {
-  Country,
-  State,
-  City,
-} from 'https://cdn.jsdelivr.net/npm/country-state-city@3.2.1/+esm';
 
-// import govukCountryAndTerritoryAutocomplete from 'https://cdn.jsdelivr.net/npm/govuk-country-and-territory-autocomplete@1.0.2/+esm';
-// import openregisterPickerEngine from 'https://cdn.jsdelivr.net/npm/openregister-picker-engine@1.2.1/+esm';
-// import accessibleAutocomplete from 'https://cdn.jsdelivr.net/npm/accessible-autocomplete@3.0.0/+esm';
+interface Timezone {
+  zoneName: string;
+  gmtOffset: number;
+  gmtOffsetName: string;
+  abbreviation: string;
+  tzName: string;
+}
+
+interface Translations {
+  kr: string;
+  'pt-BR': string;
+  pt: string;
+  nl: string;
+  hr: string;
+  fa: string;
+  de: string;
+  es: string;
+  fr: string;
+  ja: string;
+  it: string;
+  cn: string;
+  tr: string;
+}
+
+interface CountrySignature {
+  id: number;
+  name: string;
+  iso3: string;
+  iso2: string;
+  numeric_code: string;
+  phone_code: string;
+  capital: string;
+  currency: string;
+  currency_name: string;
+  currency_symbol: string;
+  tld: string;
+  native: string;
+  region: string;
+  region_id: string;
+  subregion: string;
+  subregion_id: string;
+  nationality: string;
+  timezones: Timezone[];
+  translations: Translations;
+  latitude: string;
+  longitude: string;
+  emoji: string;
+  emojiU: string;
+}
+
+interface StateSignature {
+  id: number;
+  name: string;
+  country_id: number;
+  country_code: string;
+  country_name: string;
+  state_code: string;
+  type?: string | null;
+  latitude: string;
+  longitude: string;
+}
+
+interface CitySignature {
+  id: number;
+  name: string;
+  state_id: number;
+  state_code: string;
+  state_name: string;
+  country_id: number;
+  country_code: string;
+  country_name: string;
+  latitude: string;
+  longitude: string;
+  wikiDataId: string;
+}
 
 class View extends Component<typeof AddressInfo> {
-  get placeUrl() {
-    return this.args.model.mapUrl;
+  get addressInfo() {
+    let { address, zip, state, city, country } = this.args.model;
+    let arr = [address, zip, state, city, country];
+
+    return arr
+      .map((str: string | undefined) => str?.trim())
+      .filter((str) => str && str.length > 0)
+      .join(', ');
   }
 
   <template>
     <div class='address-info'>
-      <div><@fields.address /></div>
-      <div><@fields.city /></div>
-      <div><@fields.state /></div>
-      <div><@fields.zip /></div>
-      <div><@fields.country /></div>
+      {{this.addressInfo}}
+      <div class='map-container'>
+        <iframe
+          id='gmap_canvas'
+          width={{400}}
+          height={{300}}
+          referrerpolicy='no-referrer-when-downgrade'
+          src={{this.args.model.mapUrl}}
+          loading='lazy'
+          center='true'
+        ></iframe>
+      </div>
     </div>
 
-    <div class='map-container'>
-      <iframe
-        id='gmap_canvas'
-        width={{600}}
-        height={{400}}
-        referrerpolicy='no-referrer-when-downgrade'
-        src={{this.placeUrl}}
-        loading='lazy'
-        center='true'
-        style='pointer-events: none;'
-      ></iframe>
-    </div>
+    <style>
+      .address-info {
+        text-align: left;
+        display: grid;
+        gap: var(--boxel-sp);
+      }
 
-    <style
-    >
-
-      {{! .map-container {
-        overflow: hidden;
-        padding-bottom: 56.25%;
+      .map-container {
         position: relative;
-        height: 100%;
-        width: 100%;
+        overflow: hidden;
+        padding-top: 56.25%; /* 16:9 aspect ratio */
+        min-width: 320px;
       }
 
       .map-container iframe {
-        left: 0;
-        top: 0;
-        height: 100%;
-        width: 100%;
         position: absolute;
-      } }}
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        min-width: 300px;
+      }
     </style>
   </template>
 }
 
 class Edit extends Component<typeof AddressInfo> {
-  @tracked stateCode = '';
-
   @tracked selectedCountryType = {
     name: this.args.model.country || 'Select',
   };
@@ -85,34 +152,32 @@ class Edit extends Component<typeof AddressInfo> {
     name: this.args.model.city || 'Select',
   };
 
-  get allCountries() {
-    return Country.getAllCountries();
+  @tracked private allCountries = [];
+  @tracked private allStatesOfCountry = [];
+  @tracked private allCitiesOfState = [];
+
+  get hasStates() {
+    return this.allStatesOfCountry.length > 0;
   }
 
-  get allStatesOfCountry() {
-    return State.getStatesOfCountry(this.args.model.countryCode);
+  get hasCities() {
+    return this.allCitiesOfState.length > 0;
   }
-
-  get allCitiesOfState() {
-    return City.getCitiesOfState(this.args.model.countryCode, this.stateCode);
-  }
-
-  // get isValidStates() {
-  //   return this.allStatesOfCountry.length === 0;
-  // }
 
   @action
-  updateCountry(type: any) {
-    this.args.model.countryCode = type.isoCode;
+  async updateCountry(type: CountrySignature) {
+    this.args.model.countryCode = type.iso2;
     this.selectedCountryType = type;
     this.args.model.country = type.name;
 
-    const states = this.allStatesOfCountry;
+    // reset state while country is changed
+    const states = await this.loadStates.perform(type.iso2);
+
     if (states.length > 0) {
       this.updateState(states[0]);
     } else {
       this.selectedStateType = { name: 'Select' };
-      this.stateCode = '';
+      this.args.model.stateCode = '';
       this.args.model.state = '';
       this.selectedCityType = { name: 'Select' };
       this.args.model.city = '';
@@ -120,37 +185,119 @@ class Edit extends Component<typeof AddressInfo> {
   }
 
   @action
-  updateState(type: any) {
-    if (type.isoCode) {
-      this.stateCode = type.isoCode;
-      this.selectedStateType = type;
-      this.args.model.state = type.name;
+  async updateState(type: StateSignature) {
+    this.args.model.stateCode = type.state_code;
+    this.selectedStateType = type;
+    this.args.model.state = type.name;
 
-      const cities = this.allCitiesOfState;
-      if (cities.length > 0) {
-        this.updateCity(cities[0]);
-      } else {
-        this.selectedCityType = { name: 'Select' };
-        this.args.model.city = '';
-      }
+    // reset city while state is changed
+    const cities = await this.loadCities.perform(
+      this.args.model.countryCode,
+      this.args.model.stateCode,
+    );
+
+    if (cities.length > 0) {
+      this.updateCity(cities[0]);
     } else {
-      this.selectedStateType = { name: 'Select' };
-      this.stateCode = '';
-      this.args.model.state = '';
       this.selectedCityType = { name: 'Select' };
       this.args.model.city = '';
     }
   }
 
   @action
-  updateCity(type) {
+  updateCity(type: CitySignature) {
+    console.log(type);
     this.selectedCityType = type;
     this.args.model.city = type.name;
   }
 
+  //query fetch
+  private loadCountry = task(async () => {
+    try {
+      let response = await fetch(
+        'https://raw.githubusercontent.com/dr5hn/countries-states-cities-database/master/countries.json',
+      );
+      if (!response.ok) {
+        throw new Error('Network response was not ok ' + response.statusText);
+      }
+      let data = await response.json();
+
+      this.allCountries = data;
+
+      return data;
+    } catch (error) {
+      console.error('loadCountry', error);
+    }
+  });
+
+  private loadStates = task(async (countryCode: string | null) => {
+    try {
+      let response = await fetch(
+        'https://raw.githubusercontent.com/dr5hn/countries-states-cities-database/master/states.json',
+      );
+      if (!response.ok) {
+        throw new Error('Network response was not ok ' + response.statusText);
+      }
+      let data = await response.json();
+
+      if (!countryCode) {
+        return data;
+      }
+
+      let filterData = data.filter(
+        (state: StateSignature) => state.country_code === countryCode,
+      );
+
+      this.allStatesOfCountry = filterData;
+
+      return filterData;
+    } catch (error) {
+      console.error('loadStates', error);
+    }
+  });
+
+  private loadCities = task(
+    async (countryCode: string | null, stateCode: string | null) => {
+      try {
+        let response = await fetch(
+          'https://raw.githubusercontent.com/dr5hn/countries-states-cities-database/master/cities.json',
+        );
+        if (!response.ok) {
+          throw new Error('Network response was not ok ' + response.statusText);
+        }
+
+        let data = await response.json();
+
+        if (!countryCode || !stateCode) {
+          return data;
+        }
+
+        let filterData = data.filter(
+          (item: CitySignature) =>
+            item.country_code === countryCode && item.state_code === stateCode,
+        );
+
+        this.allCitiesOfState = filterData;
+
+        return filterData;
+      } catch (error) {
+        console.error('loadCities', error);
+      }
+    },
+  );
+
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+    this.loadCountry.perform();
+    this.loadStates.perform(this.args.model.countryCode);
+    this.loadCities.perform(
+      this.args.model.countryCode,
+      this.args.model.stateCode,
+    );
+  }
+
   <template>
     <CardContainer @displayBoundaries={{true}} class='card-container'>
-
       <FieldContainer
         @tag='label'
         @label='Stress Address'
@@ -164,7 +311,6 @@ class Edit extends Component<typeof AddressInfo> {
       ><@fields.zip /></FieldContainer>
 
       <FieldContainer @tag='label' @label='Country' @vertical={{true}}>
-
         <BoxelSelect
           @searchEnabled={{true}}
           @searchField='name'
@@ -172,23 +318,22 @@ class Edit extends Component<typeof AddressInfo> {
           @selected={{this.selectedCountryType}}
           @onChange={{this.updateCountry}}
           @options={{this.allCountries}}
-          id='location-autocomplete'
           class='select'
           as |item|
         >
           <div>{{item.name}}</div>
         </BoxelSelect>
-
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='State' @vertical={{true}}>
         <BoxelSelect
+          @searchEnabled={{true}}
+          @searchField='name'
           @placeholder='Select'
           @selected={{this.selectedStateType}}
           @onChange={{this.updateState}}
           @options={{this.allStatesOfCountry}}
-          {{!-- @disabled={{this.isValidStates}} --}}
-          id='location-autocomplete'
+          @disabled={{not this.hasStates}}
           class='select'
           as |item|
         >
@@ -198,23 +343,19 @@ class Edit extends Component<typeof AddressInfo> {
 
       <FieldContainer @tag='label' @label='City' @vertical={{true}}>
         <BoxelSelect
+          @searchEnabled={{true}}
+          @searchField='name'
           @placeholder='Select'
           @selected={{this.selectedCityType}}
           @onChange={{this.updateCity}}
           @options={{this.allCitiesOfState}}
-          id='location-autocomplete'
+          @disabled={{not this.hasCities}}
           class='select'
           as |item|
         >
           <div>{{item.name}}</div>
         </BoxelSelect>
       </FieldContainer>
-
-      <FieldContainer
-        @tag='label'
-        @label='Country Code'
-        @vertical={{true}}
-      ><@fields.countryCode /></FieldContainer>
     </CardContainer>
 
     <style>
@@ -328,6 +469,9 @@ export class AddressInfo extends FieldDef {
   @field countryCode = contains(StringField, {
     description: `Mailing Country Code`,
   });
+  @field stateCode = contains(StringField, {
+    description: `Mailing State Code`,
+  });
 
   @field mapUrl = contains(StringField, {
     computeVia: function (this: AddressInfo) {
@@ -346,27 +490,6 @@ export class AddressInfo extends FieldDef {
     },
   });
 
-  // static atom = View;
   static embedded = View;
   static edit = Edit;
 }
-
-//  <div class='autocomplete-select'>
-//         <input
-//           type='text'
-//           class='select-input'
-//           placeholder={{this.countryPlaceholder}}
-//           value={{this.filterCountry}}
-//           {{on 'input' this.updateFilter}}
-//         />
-
-//         {{#if this.filterCountry}}
-//           <ul class='options-list'>
-//             {{#each this.allCountriesByCode as |option|}}
-//               <li class='option-item' {{on 'click' this.selectOption option}}>
-//                 {{option.name}}
-//               </li>
-//             {{/each}}
-//           </ul>
-//         {{/if}}
-//       </div>
