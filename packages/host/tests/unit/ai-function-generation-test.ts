@@ -257,7 +257,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
         links: {
           type: 'object',
           properties: {
-            self: { type: 'null' },
+            self: { type: 'string' },
           },
           required: ['self'],
         },
@@ -267,7 +267,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
     let relationships: RelationshipsSchema = {
       type: 'object',
       properties: {
-        linkedCards: linksToManyRelationship,
+        linkedCards: {
+          type: 'array',
+          items: linksToManyRelationship,
+        },
       },
       required: ['linkedCards'],
     };
@@ -553,19 +556,22 @@ module('Unit | ai-function-generation-test', function (hooks) {
     let relationships: RelationshipsSchema = {
       type: 'object',
       properties: {
-        linkedCard: {
-          type: 'object',
+        linkedCards: {
+          type: 'array',
           description: 'linked cards',
-          properties: {
-            links: {
-              type: 'object',
-              properties: {
-                self: { type: 'string' },
+          items: {
+            type: 'object',
+            properties: {
+              links: {
+                type: 'object',
+                properties: {
+                  self: { type: 'string' },
+                },
+                required: ['self'],
               },
-              required: ['self'],
             },
+            required: ['links'],
           },
-          required: ['links'],
         },
       },
       required: ['linkedCards'],

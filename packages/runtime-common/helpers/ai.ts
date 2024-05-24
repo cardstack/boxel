@@ -253,45 +253,29 @@ function generatePatchCallRelationshipsSpecification(
         required: [],
       };
     }
-    if (field.fieldType === 'linksTo') {
-      schema.required.push(fieldName);
-      schema.properties[fieldName] = {
-        type: 'object',
-        properties: {
-          links: {
-            type: 'object',
-            properties: {
-              self: { type: 'string' },
-            },
-            required: ['self'],
-          },
-        },
-        required: ['links'],
-      };
-      if (field.description) {
-        schema.properties[fieldName].description = field.description;
-      }
-    } else if (field.fieldType === 'linksToMany') {
-      schema.required.push(fieldName);
-      schema.properties[fieldName] = {
-        type: 'array',
-        items: {
+    let linkedItemSchema: LinksToSchema = {
+      type: 'object',
+      properties: {
+        links: {
           type: 'object',
           properties: {
-            links: {
-              type: 'object',
-              properties: {
-                self: { type: 'string' },
-              },
-              required: ['self'],
-            },
+            self: { type: 'string' },
           },
-          required: ['links'],
+          required: ['self'],
         },
-      };
-      if (field.description) {
-        schema.properties[fieldName].description = field.description;
-      }
+      },
+      required: ['links'],
+    };
+    schema.required.push(fieldName);
+    schema.properties[fieldName] =
+      field.fieldType === 'linksTo'
+        ? linkedItemSchema
+        : {
+            type: 'array',
+            items: linkedItemSchema,
+          };
+    if (field.description) {
+      schema.properties[fieldName].description = field.description;
     }
   }
   return schema;
