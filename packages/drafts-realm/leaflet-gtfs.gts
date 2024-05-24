@@ -12,6 +12,7 @@ import Papa from 'https://cdn.jsdelivr.net/npm/papaparse@5.4.1/+esm';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
+import { LeafletModifier } from './leaflet-map';
 
 type Route = {
   id: string;
@@ -132,8 +133,10 @@ export class LeafletGtfs extends CardDef {
           lat=@model.lat
           lon=@model.lon
           tileserverUrl=@model.tileserverUrl
-          gtfsUrl=@model.gtfsUrl
           setMap=@model.setMap
+        }}
+        {{GtfsModifier
+          gtfsUrl=@model.gtfsUrl
           setRoutes=@model.setRoutes
           setShapes=@model.setShapes
           setTrips=@model.setTrips
@@ -201,14 +204,11 @@ export class LeafletGtfs extends CardDef {
   */
 }
 
-interface LeafletModifierSignature {
+interface GtfsModifierSignature {
   Args: {
     Positional: [];
     Named: {
-      lat: number;
-      lon: number;
-      tileserverUrl?: string;
-      setMap: (any) => {};
+      gtfsUrl?: string;
       setRoutes: (any) => {};
       setShapes: (any) => {};
       setTrips: (any) => {};
@@ -216,38 +216,11 @@ interface LeafletModifierSignature {
   };
 }
 
-class LeafletModifier extends Modifier<LeafletModifierSignature> {
+class GtfsModifier extends Modifier<GtfsModifierSignature> {
   HTMLElement: element = null;
 
-  modify(
-    element,
-    [],
-    {
-      lat,
-      lon,
-      tileserverUrl,
-      gtfsUrl,
-      setMap,
-      setRoutes,
-      setShapes,
-      setTrips,
-    },
-  ) {
-    let map;
-
-    fetch('https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js')
-      .then((r) => r.text())
-      .then((t) => {
-        eval(t);
-        map = L.map(element).setView([lat, lon], 13);
-        setMap(map);
-
-        L.tileLayer(
-          tileserverUrl || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-        ).addTo(map);
-
-        return fetch(gtfsUrl);
-      })
+  modify(_element, [], { gtfsUrl, setRoutes, setShapes, setTrips }) {
+    fetch(gtfsUrl)
       .then((gtfsResponse) => {
         return gtfsResponse.blob();
       })

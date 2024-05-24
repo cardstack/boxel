@@ -71,23 +71,26 @@ interface LeafletModifierSignature {
       lat: number;
       lon: number;
       tileserverUrl?: string;
+      setMap: (map: any) => void;
     };
   };
 }
 
-class LeafletModifier extends Modifier<LeafletModifierSignature> {
+export class LeafletModifier extends Modifier<LeafletModifierSignature> {
   HTMLElement: element = null;
 
-  modify(element, [], { lat, lon, tileserverUrl }) {
+  modify(element, [], { lat, lon, tileserverUrl, setMap }) {
     fetch('https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js')
       .then((r) => r.text())
       .then((t) => {
         eval(t);
-        var map = L.map(element).setView([lat, lon], 13);
+        let map = L.map(element).setView([lat, lon], 13);
 
         L.tileLayer(
           tileserverUrl || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
         ).addTo(map);
+
+        setMap(map);
       });
   }
 }
