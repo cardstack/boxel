@@ -10,6 +10,7 @@ import {
   identifyCard,
   hasExecutableExtension,
   trimExecutableExtension,
+  RealmPaths,
 } from './index';
 import {
   type PgPrimitive,
@@ -51,7 +52,6 @@ import { type DBAdapter } from './db';
 
 import type { BaseDef, Field } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import { RealmPaths } from './index';
 
 export interface BoxelIndexTable {
   url: string;
@@ -864,6 +864,11 @@ export class Batch {
           };
         },
   ): Promise<void> {
+    if (!new RealmPaths(this.realmURL).inRealm(url)) {
+      // TODO this is a workaround for CS-6886. after we have solved that issue we can
+      // drop this band-aid
+      return;
+    }
     let href = url.href;
     this.touched.add(href);
     let { nameExpressions, valueExpressions } = asExpressions(
