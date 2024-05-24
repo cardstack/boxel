@@ -4,7 +4,6 @@ import StringField from 'https://cardstack.com/base/string';
 import {
   Component,
   contains,
-  containsMany,
   field,
 } from 'https://cardstack.com/base/card-api';
 import Modifier from 'ember-modifier';
@@ -12,8 +11,6 @@ import jszip from 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm';
 import Papa from 'https://cdn.jsdelivr.net/npm/papaparse@5.4.1/+esm';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import { eq } from '@cardstack/boxel-ui/helpers';
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 
 type Route = {
