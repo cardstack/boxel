@@ -138,7 +138,7 @@ export class LeafletGtfs extends CardDef {
         {{@model.lon}}
       </figure>
 
-      <ul>
+      <ul class='routes'>
         {{#if @model.routes}}
           Route to view:
           {{#each @model.routes as |route|}}
@@ -158,7 +158,11 @@ export class LeafletGtfs extends CardDef {
         figure.map {
           margin: 0;
           width: 100%;
-          height: 20rem;
+          height: 60%;
+        }
+
+        .routes {
+          height: 40%;
         }
 
         button.active {
