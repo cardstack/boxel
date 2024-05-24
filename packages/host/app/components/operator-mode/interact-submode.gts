@@ -64,8 +64,8 @@ const clearSelections = new WeakMap<StackItem, () => void>();
 const stackItemScrollers = new WeakMap<
   StackItem,
   {
-    stableScroll: (changeSizeCallback: () => Promise<void>) => void;
-    scrollIntoView: (selector: string) => void;
+    stableScroll: (_changeSizeCallback: () => Promise<void>) => void;
+    scrollIntoView: (_selector: string) => void;
   }
 >();
 
