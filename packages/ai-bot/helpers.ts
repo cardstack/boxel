@@ -253,10 +253,9 @@ export const attachedCardsToMessage = (
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ) => {
-  for (let card of getRelevantCards(history, aiBotUserId)) {
-    return `Full card data: ${JSON.stringify(card)}`;
-  }
-  return;
+  return `Full card data: ${JSON.stringify(
+    getRelevantCards(history, aiBotUserId),
+  )}`;
 };
 
 export function cleanContent(content: string) {

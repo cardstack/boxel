@@ -4,6 +4,7 @@
     "attributes": {
       "title": "Person",
       "description": "Catalog entry for Person card",
+      "isField": false,
       "ref": {
         "module": "../person",
         "name": "Person"

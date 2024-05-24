@@ -236,6 +236,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     ({ realm } = await setupAcceptanceTestRealm({
       contents: {
         'index.gts': indexCardSource,
+        'empty.gts': ' ',
         'pet-person.gts': personCardSource,
         'person.gts': personCardSource,
         'friend.gts': friendCardSource,
@@ -248,6 +249,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
             attributes: {
               title: 'Person',
               description: 'Catalog entry',
+              isField: false,
               ref: {
                 module: `./person`,
                 name: 'Person',
@@ -1073,5 +1075,17 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       '[data-test-card-schema="Blog Post"] [data-test-field-name="editorBio"] [data-test-card-display-name="Author Bio"]',
       'mouseleave',
     );
+  });
+
+  test('an empty file is detected', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}empty.gts`,
+    });
+
+    await waitForCodeEditor();
+    await waitFor('[data-test-syntax-errors]');
+
+    assert.dom('[data-test-syntax-errors]').hasText('File is empty');
   });
 });

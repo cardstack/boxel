@@ -50,7 +50,6 @@ let date: typeof import('https://cardstack.com/base/date');
 let datetime: typeof import('https://cardstack.com/base/datetime');
 let boolean: typeof import('https://cardstack.com/base/boolean');
 let codeRef: typeof import('https://cardstack.com/base/code-ref');
-let catalogEntry: typeof import('https://cardstack.com/base/catalog-entry');
 let base64Image: typeof import('https://cardstack.com/base/base64-image');
 let ethereumAddress: typeof import('https://cardstack.com/base/ethereum-address');
 let markdown: typeof import('https://cardstack.com/base/markdown');
@@ -84,7 +83,6 @@ module('Integration | card-basics', function (hooks) {
     datetime = await loader.import(`${baseRealm.url}datetime`);
     boolean = await loader.import(`${baseRealm.url}boolean`);
     codeRef = await loader.import(`${baseRealm.url}code-ref`);
-    catalogEntry = await loader.import(`${baseRealm.url}catalog-entry`);
     base64Image = await loader.import(`${baseRealm.url}base64-image`);
     markdown = await loader.import(`${baseRealm.url}markdown`);
     ethereumAddress = await loader.import(`${baseRealm.url}ethereum-address`);
@@ -1152,56 +1150,6 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-person]').containsText('Hassan');
       assert.dom('[data-test-pet="Mango"]').containsText('Mango');
       assert.dom('[data-test-pet="Van Gogh"]').containsText('Van Gogh');
-    });
-
-    test('catalog entry isField indicates if the catalog entry is a field card', async function (assert) {
-      let { CatalogEntry } = catalogEntry;
-
-      let cardEntry = new CatalogEntry({
-        title: 'CatalogEntry Card',
-        ref: {
-          module: 'https://cardstack.com/base/catalog-entry',
-          name: 'CatalogEntry',
-        },
-      });
-      let fieldEntry = new CatalogEntry({
-        title: 'String Card',
-        ref: {
-          module: 'https://cardstack.com/base/string',
-          name: 'default',
-        },
-      });
-
-      await cardApi.recompute(cardEntry, { recomputeAllFields: true });
-      await cardApi.recompute(fieldEntry, { recomputeAllFields: true });
-
-      assert.strictEqual(cardEntry.isField, false, 'isField is correct');
-      assert.strictEqual(fieldEntry.isField, true, 'isField is correct');
-    });
-
-    test('catalog entry isField indicates if the catalog entry references a card descended from FieldDef', async function (assert) {
-      let { CatalogEntry } = catalogEntry;
-
-      let cardFromCardDef = new CatalogEntry({
-        title: 'CatalogEntry Card',
-        ref: {
-          module: 'https://cardstack.com/base/catalog-entry',
-          name: 'CatalogEntry',
-        },
-      });
-      let cardFromFieldDef = new CatalogEntry({
-        title: 'String Card',
-        ref: {
-          module: 'https://cardstack.com/base/string',
-          name: 'default',
-        },
-      });
-
-      await cardApi.recompute(cardFromCardDef, { recomputeAllFields: true });
-      await cardApi.recompute(cardFromFieldDef, { recomputeAllFields: true });
-
-      assert.strictEqual(cardFromCardDef.isField, false, 'isField is correct');
-      assert.strictEqual(cardFromFieldDef.isField, true, 'isField is correct');
     });
 
     test('render whole composite field', async function (assert) {

@@ -487,6 +487,7 @@ module(`Integration | search-index`, function (hooks) {
             attributes: {
               title: 'Person Card',
               description: 'Catalog entry for Person card',
+              isField: false,
               ref: {
                 module: './person',
                 name: 'Person',
@@ -530,7 +531,6 @@ module(`Integration | search-index`, function (hooks) {
           moduleHref: `${testRealmURL}person`,
           realmName: 'Unnamed Workspace',
           isField: false,
-          isPrimitive: false,
           ref: {
             module: `./person`,
             name: 'Person',
@@ -1366,6 +1366,7 @@ module(`Integration | search-index`, function (hooks) {
             attributes: {
               title: 'Booking',
               description: 'Catalog entry for Booking',
+              isField: false,
               ref: {
                 module: 'http://localhost:4202/test/booking',
                 name: 'Booking',
@@ -1412,7 +1413,6 @@ module(`Integration | search-index`, function (hooks) {
       },
       description: 'Catalog entry for Booking',
       isField: false,
-      isPrimitive: false,
       moduleHref: 'http://localhost:4202/test/booking',
       realmName: 'Unnamed Workspace',
       ref: 'http://localhost:4202/test/booking/Booking',
@@ -1699,6 +1699,7 @@ module(`Integration | search-index`, function (hooks) {
             attributes: {
               title: 'PetPerson',
               description: 'Catalog entry for PetPerson',
+              isField: false,
               ref: {
                 module: `${testModuleRealm}pet-person`,
                 name: 'PetPerson',
@@ -1763,7 +1764,6 @@ module(`Integration | search-index`, function (hooks) {
           },
           demo: { firstName: 'Hassan' },
           isField: false,
-          isPrimitive: false,
           moduleHref: `${testModuleRealm}pet-person`,
           realmName: 'Unnamed Workspace',
         },
@@ -1881,7 +1881,6 @@ module(`Integration | search-index`, function (hooks) {
           friend: null,
         },
         isField: false,
-        isPrimitive: false,
         moduleHref: `${testModuleRealm}pet-person`,
         realmName: 'Unnamed Workspace',
       });
@@ -3042,6 +3041,7 @@ posts/ignore-me.json
           attributes: {
             title: 'Post',
             description: 'A card that represents a blog post',
+            isField: false,
             ref: {
               module: `${testModuleRealm}post`,
               name: 'Post',
@@ -3061,6 +3061,7 @@ posts/ignore-me.json
           attributes: {
             title: 'Article',
             description: 'A card that represents an online article ',
+            isField: false,
             ref: {
               module: `${testModuleRealm}article`,
               name: 'Article',
@@ -3308,6 +3309,125 @@ posts/ignore-me.json
           },
         },
       },
+      'larry.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Larry',
+          },
+          relationships: {
+            'friends.0': {
+              links: {
+                self: './missing',
+              },
+            },
+            'friends.1': {
+              links: {
+                self: './empty',
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}friends`,
+              name: 'Friends',
+            },
+          },
+        },
+      },
+      'missing.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Missing',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}friends`,
+              name: 'Friends',
+            },
+          },
+        },
+      },
+      'empty.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Empty',
+          },
+          relationships: {
+            'friends.0': {
+              links: {
+                self: null,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}friends`,
+              name: 'Friends',
+            },
+          },
+        },
+      },
+      'bob.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            stringField: 'Bob',
+            stringArrayField: ['blue', 'tree', 'carrot'],
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}type-examples`,
+              name: 'TypeExamples',
+            },
+          },
+        },
+      },
+      'alicia.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            stringField: 'Alicia',
+            stringArrayField: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}type-examples`,
+              name: 'TypeExamples',
+            },
+          },
+        },
+      },
+      'margaret.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            stringField: 'Margaret',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}type-examples`,
+              name: 'TypeExamples',
+            },
+          },
+        },
+      },
+      'noname.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            stringArrayField: ['happy', 'green'],
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}type-examples`,
+              name: 'TypeExamples',
+            },
+          },
+        },
+      },
     };
 
     let indexer: SearchIndex;
@@ -3333,7 +3453,7 @@ posts/ignore-me.json
       );
     });
 
-    test(`can use 'eq' to find 'null' values`, async function (assert) {
+    test(`can use 'eq' to find empty values`, async function (assert) {
       let { data: matching } = await indexer.search({
         filter: {
           on: { module: `${testModuleRealm}booking`, name: 'Booking' },
@@ -3343,6 +3463,54 @@ posts/ignore-me.json
       assert.deepEqual(
         matching.map((m) => m.id),
         [`${testRealmURL}booking1`],
+      );
+    });
+
+    test(`can use 'eq' to find missing values`, async function (assert) {
+      let { data: matching } = await indexer.search({
+        filter: {
+          on: {
+            module: `${testModuleRealm}type-examples`,
+            name: 'TypeExamples',
+          },
+          eq: { stringField: null },
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${testRealmURL}noname`],
+      );
+    });
+
+    test(`can use 'eq' to find empty containsMany field and missing containsMany field`, async function (assert) {
+      let { data: matching } = await indexer.search({
+        filter: {
+          on: {
+            module: `${testModuleRealm}type-examples`,
+            name: 'TypeExamples',
+          },
+          eq: { stringArrayField: null },
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${testRealmURL}alicia`, `${testRealmURL}margaret`],
+      );
+    });
+
+    test(`can use 'eq' to find empty linksToMany field and missing linksToMany field`, async function (assert) {
+      let { data: matching } = await indexer.search({
+        filter: {
+          on: {
+            module: `${testModuleRealm}friends`,
+            name: 'Friends',
+          },
+          eq: { friends: null },
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${testRealmURL}empty`, `${testRealmURL}missing`],
       );
     });
 
@@ -3855,9 +4023,16 @@ posts/ignore-me.json
           `${paths.url}event-2`, // event
           `${paths.url}friend1`, // friend
           `${paths.url}friend2`, // friend
+          `${paths.url}empty`, // friends
+          `${paths.url}larry`, // friends
+          `${paths.url}missing`, // friends
           `${paths.url}person-card1`, // person
           `${paths.url}person-card2`, // person
           `${paths.url}cards/1`, // person
+          `${paths.url}alicia`, // type example
+          `${paths.url}bob`, // type example
+          `${paths.url}margaret`, // type example
+          `${paths.url}noname`, // type example
         ],
       );
     });

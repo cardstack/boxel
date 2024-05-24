@@ -14,8 +14,7 @@ export class Person extends CardDef {
   @field email = contains(StringCard);
   @field posts = contains(NumberCard);
   @field fullName = contains(StringCard, {
-    computeVia: async function (this: Person) {
-      await new Promise((resolve) => setTimeout(resolve, 10));
+    computeVia: function (this: Person) {
       return `${this.firstName ?? ''} ${this.lastName ?? ''}`;
     },
   });
@@ -46,8 +45,7 @@ export class PersonField extends FieldDef {
   @field email = contains(StringCard);
   @field posts = contains(NumberCard);
   @field fullName = contains(StringCard, {
-    computeVia: async function (this: Person) {
-      await new Promise((resolve) => setTimeout(resolve, 10));
+    computeVia: function (this: Person) {
       return `${this.firstName ?? ''} ${this.lastName ?? ''}`;
     },
   });

@@ -4,6 +4,7 @@
     "attributes": {
       "title": "Base64 Image Field",
       "description": "A field capable of representing an image via base64 encoding.",
+      "isField": true,
       "ref": {
         "module": "https://cardstack.com/base/base64-image",
         "name": "Base64ImageField"
