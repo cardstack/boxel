@@ -258,6 +258,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         'person-entry.json': new CatalogEntry({
           title: 'Person Card',
           description: 'Catalog entry for Person Card',
+          isField: false,
           ref: {
             module: `${testRealmURL}person`,
             name: 'Person',
