@@ -29,7 +29,7 @@ export class LeafletGtfs extends CardDef {
   map;
 
   @tracked routes: Route[] = [];
-  @tracked activeRouteId: string = null;
+  @tracked activeRouteId: string | null = null;
 
   @tracked shapes = [];
 
