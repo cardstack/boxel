@@ -79,16 +79,16 @@ interface LeafletModifierSignature {
   Args: {
     Positional: [];
     Named: {
-      lat: number;
-      lon: number;
+      lat: number | undefined;
+      lon: number | undefined;
       tileserverUrl?: string;
-      setMap: (map: any) => void;
+      setMap?: (map: any) => void;
     };
   };
 }
 
 export class LeafletModifier extends Modifier<LeafletModifierSignature> {
-  HTMLElement: element = null;
+  element: HTMLElement | null = null;
 
   modify(
     element: HTMLElement,

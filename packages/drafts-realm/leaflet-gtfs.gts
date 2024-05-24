@@ -7,7 +7,9 @@ import {
   field,
 } from 'https://cardstack.com/base/card-api';
 import Modifier, { NamedArgs } from 'ember-modifier';
+//@ts-expect-error no types available
 import jszip from 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm';
+//@ts-expect-error no types available
 import Papa from 'https://cdn.jsdelivr.net/npm/papaparse@5.4.1/+esm';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
@@ -17,6 +19,7 @@ import { LeafletModifier } from './leaflet-map';
 type Route = {
   id: string;
   number: string;
+  name: string;
 };
 
 export class LeafletGtfs extends CardDef {
@@ -116,9 +119,9 @@ export class LeafletGtfs extends CardDef {
             shapeIdToPoints.set(shape.shape_id, []);
           }
 
-          shapeIdToPoints?
-            .get(shape.shape_id)
-            .push([shape.shape_pt_lat, shape.shape_pt_lon]);
+          shapeIdToPoints
+            ?.get(shape.shape_id)
+            ?.push([shape.shape_pt_lat, shape.shape_pt_lon]);
         }
       });
 
@@ -199,6 +202,9 @@ export class LeafletGtfs extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+
+
   */
 }
 
@@ -207,16 +213,14 @@ interface GtfsModifierSignature {
     Positional: [];
     Named: {
       gtfsUrl?: string;
-      setRoutes: (routes: any) => {};
-      setShapes: (shapes: any) => {};
-      setTrips: (trips: any) => {};
+      setRoutes?: (routes: any) => {};
+      setShapes?: (shapes: any) => {};
+      setTrips?: (trips: any) => {};
     };
   };
 }
 
 class GtfsModifier extends Modifier<GtfsModifierSignature> {
-  HTMLElement: element = null;
-
   modify(
     _element: HTMLElement,
     [],
@@ -227,6 +231,10 @@ class GtfsModifier extends Modifier<GtfsModifierSignature> {
       setTrips,
     }: NamedArgs<GtfsModifierSignature>,
   ) {
+    if (!gtfsUrl) {
+      return;
+    }
+
     fetch(gtfsUrl)
       .then((gtfsResponse) => {
         return gtfsResponse.blob();
