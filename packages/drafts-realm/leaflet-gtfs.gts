@@ -239,7 +239,7 @@ class LeafletModifier extends Modifier<LeafletModifierSignature> {
         ).addTo(map);
 
         return fetch(
-          'https://preserved.chromatin.ca/temp/cors/google_transit.zip',
+          'https://s3.gtfs.pro/files/sourcedata/winnipegtransit.zip',
         );
       })
       .then((gtfsResponse) => {
