@@ -65,6 +65,14 @@ export class LeafletGtfs extends CardDef {
   }
 
   @action
+  handleRouteSelect(e: Event) {
+    if (e.target) {
+      let select = e.target as HTMLSelectElement;
+      this.setActiveRouteId(select.value);
+    }
+  }
+
+  @action
   setActiveRouteId(activeRouteId: string) {
     this.activeRouteId = activeRouteId;
 
@@ -141,16 +149,15 @@ export class LeafletGtfs extends CardDef {
       <ul class='routes'>
         {{#if @model.routes}}
           Route to view:
-          {{#each @model.routes as |route|}}
-            <li>
-              <button
-                class={{if (eq @model.activeRouteId route.id) 'active'}}
-                {{on 'click' (fn @model.setActiveRouteId route.id)}}
-              >
-                {{route.name}}
-              </button>
-            </li>
-          {{/each}}
+          <select
+            value={{@model.activeRouteId}}
+            {{on 'change' @model.handleRouteSelect}}
+          >
+            <option value=''>Select a route</option>
+            {{#each @model.routes as |route|}}
+              <option value={{route.id}}>{{route.name}}</option>
+            {{/each}}
+          </select>
         {{/if}}
       </ul>
 
@@ -158,11 +165,11 @@ export class LeafletGtfs extends CardDef {
         figure.map {
           margin: 0;
           width: 100%;
-          height: 60%;
+          height: 90%;
         }
 
         .routes {
-          height: 40%;
+          height: 10%;
         }
 
         button.active {
