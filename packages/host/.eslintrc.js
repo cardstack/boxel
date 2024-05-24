@@ -51,9 +51,17 @@ module.exports = {
       files: ['**/*.gts'],
       parser: 'ember-eslint-parser',
       parserOptions: {
-        ecmaVersion: '2020',
+        ecmaVersion: 'latest',
         sourceType: 'module',
         requireConfigFile: false,
+        babelOptions: {
+          plugins: [
+            [
+              '@babel/plugin-proposal-decorators',
+              { decoratorsBeforeExport: true },
+            ],
+          ],
+        },
         warnOnUnsupportedTypeScriptVersion: false,
       },
       plugins: ['ember'],
