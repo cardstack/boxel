@@ -105,7 +105,7 @@ export class LeafletModifier extends Modifier<LeafletModifierSignature> {
           tileserverUrl || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
         ).addTo(map);
 
-        setMap(map);
+        setMap?.(map);
       });
   }
 }
