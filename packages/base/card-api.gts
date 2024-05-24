@@ -40,7 +40,6 @@ import {
   maybeURL,
   maybeRelativeURL,
   moduleFrom,
-  getCard,
   trackCard,
   type Meta,
   type CardFields,
@@ -915,16 +914,9 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       return null;
     }
     let loader = Loader.getLoaderFor(this.card)!;
-    let cardResource = getCard(new URL(value.links.self, relativeTo), {
-      cachedOnly: true,
-      loader,
-    });
-    await cardResource.loaded;
-    let cachedInstance =
-      cardResource.card ??
-      identityContext.identities.get(
-        new URL(value.links.self, relativeTo).href,
-      );
+    let cachedInstance = identityContext.identities.get(
+      new URL(value.links.self, relativeTo).href,
+    );
     if (cachedInstance) {
       cachedInstance[isSavedInstance] = true;
       return cachedInstance as BaseInstanceType<CardT>;
@@ -1273,16 +1265,9 @@ class LinksToMany<FieldT extends CardDefConstructor>
           return null;
         }
         let loader = Loader.getLoaderFor(this.card)!;
-        let cardResource = getCard(new URL(value.links.self, relativeTo), {
-          cachedOnly: true,
-          loader,
-        });
-        await cardResource.loaded;
-        let cachedInstance =
-          cardResource.card ??
-          identityContext.identities.get(
-            new URL(value.links.self, relativeTo).href,
-          );
+        let cachedInstance = identityContext.identities.get(
+          new URL(value.links.self, relativeTo).href,
+        );
         if (cachedInstance) {
           cachedInstance[isSavedInstance] = true;
           return cachedInstance;
@@ -2452,11 +2437,8 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
   instance: BaseInstanceType<T>,
   doc: LooseSingleCardDocument,
 ): Promise<BaseInstanceType<T>> {
-  let identityContext = identityContexts.get(instance);
-  if (!identityContext) {
-    identityContext = new IdentityContext();
-    identityContexts.set(instance, identityContext);
-  }
+  let identityContext = new IdentityContext();
+  identityContexts.set(instance, identityContext);
   if (!instance[relativeTo] && doc.data.id) {
     instance[relativeTo] = new URL(doc.data.id);
   }
