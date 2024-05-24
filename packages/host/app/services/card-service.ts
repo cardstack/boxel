@@ -296,12 +296,16 @@ export default class CardService extends Service {
     }
     for (let [key, patchValue] of Object.entries(patchData)) {
       if (!(key in cardData)) {
-        if (key.includes('.') && patchValue.links?.self === null) {
-          return true;
+        if (key.includes('.')) {
+          // TODO: handle linksToMany and nested linksTo fields
+          continue;
         }
         return false;
       }
       let cardValue = cardData[key];
+      if (cardValue?.links?.self === null && isEqual(patchValue, [])) {
+        return true;
+      }
       if (
         !isEqual(cardValue, patchValue) &&
         typeof cardValue === 'object' &&

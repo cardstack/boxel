@@ -112,21 +112,42 @@ export default class OperatorModeStateService extends Service {
     for (let item of stackItems) {
       if ('card' in item && item.card.id == id) {
         let document = await this.cardService.serializeCard(item.card);
-        document.data = merge(document.data, patch);
-        if (patch.relationships && document.data.relationships) {
-          Object.entries(document.data.relationships)
-            .filter(([fieldName]) => fieldName.includes('.'))
-            .map(([fieldName]) => {
-              if (
-                patch.relationships[fieldName.split('.')[0]]?.links.self ===
-                  null ||
-                patch.relationships[fieldName]?.links.self === null
-              ) {
-                // remove individual linksToMany relationship data if patch is null
-                delete document.data.relationships?.[fieldName];
-              }
-            });
+        if (patch.attributes) {
+          for (let key of Object.keys(patch.attributes)) {
+            if (!(key in item.card)) {
+              throw new Error(`Attribute "${key}" does not exist in card`);
+            }
+          }
+          document.data.attributes = merge(
+            document.data.attributes,
+            patch.attributes,
+          );
         }
+
+        if (patch.relationships) {
+          for (let [key, value] of Object.entries(patch.relationships)) {
+            if (!Array.isArray(value)) {
+              continue;
+            }
+            if (!(key in item.card)) {
+              throw new Error(`Relationship "${key}" does not exist in card`);
+            }
+            if (document.data.relationships) {
+              Object.entries(document.data.relationships)
+                .filter(([fieldName]) => fieldName.includes('.'))
+                .map(([fieldName]) => {
+                  if (fieldName.split('.')[0] === key) {
+                    delete document.data.relationships![fieldName];
+                  }
+                });
+            }
+          }
+          document.data.relationships = merge(
+            document.data.relationships,
+            patch.relationships,
+          );
+        }
+
         await this.cardService.patchCard(item.card, document, patch);
       }
     }

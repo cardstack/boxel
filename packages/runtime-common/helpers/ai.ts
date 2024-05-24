@@ -19,14 +19,14 @@ export type ObjectSchema = {
   };
 };
 
-export type RelationshipSchema = {
+type LinksToSchema = {
   type: 'object';
   description?: string;
   properties: {
     links: {
       type: 'object';
       properties: {
-        self: { type: 'null' | 'string' };
+        self: { type: 'string' | 'null' };
       };
       required: ['self'];
     };
@@ -34,11 +34,19 @@ export type RelationshipSchema = {
   required: ['links'];
 };
 
+type LinksToManySchema = {
+  type: 'array';
+  description?: string;
+  items: LinksToSchema;
+};
+
+export type RelationshipSchema = LinksToSchema | LinksToManySchema;
+
 export type RelationshipsSchema = {
   type: 'object';
   description?: string;
   properties: {
-    [fieldName: string]: RelationshipSchema;
+    [fieldName: string]: LinksToSchema | LinksToManySchema;
   };
   required: string[]; // fieldName array;
 };
@@ -191,6 +199,7 @@ function generatePatchCallSpecification(
 
   for (let [fieldName, field] of Object.entries(fields)) {
     // We're generating patch data, so computeds should be skipped
+    // We'll be handling relationships separately in `generatePatchCallRelationshipsSpecification`
     if (
       field.computeVia ||
       field.fieldType == 'linksTo' ||
@@ -244,22 +253,45 @@ function generatePatchCallRelationshipsSpecification(
         required: [],
       };
     }
-    schema.required.push(fieldName);
-    schema.properties[fieldName] = {
-      type: 'object',
-      properties: {
-        links: {
+    if (field.fieldType === 'linksTo') {
+      schema.required.push(fieldName);
+      schema.properties[fieldName] = {
+        type: 'object',
+        properties: {
+          links: {
+            type: 'object',
+            properties: {
+              self: { type: 'string' },
+            },
+            required: ['self'],
+          },
+        },
+        required: ['links'],
+      };
+      if (field.description) {
+        schema.properties[fieldName].description = field.description;
+      }
+    } else if (field.fieldType === 'linksToMany') {
+      schema.required.push(fieldName);
+      schema.properties[fieldName] = {
+        type: 'array',
+        items: {
           type: 'object',
           properties: {
-            self: { type: 'string' },
+            links: {
+              type: 'object',
+              properties: {
+                self: { type: 'string' },
+              },
+              required: ['self'],
+            },
           },
-          required: ['self'],
+          required: ['links'],
         },
-      },
-      required: ['links'],
-    };
-    if (field.description) {
-      schema.properties[fieldName].description = field.description;
+      };
+      if (field.description) {
+        schema.properties[fieldName].description = field.description;
+      }
     }
   }
   return schema;

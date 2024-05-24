@@ -9,9 +9,9 @@
       "thumbnailURL": null
     },
     "relationships": {
-      "destinations": {
+      "destinations.0": {
         "links": {
-          "self": null
+          "self": "../Country/2"
         }
       },
       "traveler.countryOfOrigin": {
@@ -19,7 +19,12 @@
           "self": "http://localhost:4201/drafts/Country/1"
         }
       },
-      "traveler.countriesVisited": {
+      "traveler.countriesVisited.0": {
+        "links": {
+          "self": "http://localhost:4201/drafts/Country/4"
+        }
+      },
+      "traveler.countriesVisited.1": {
         "links": {
           "self": null
         }
