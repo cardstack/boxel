@@ -248,9 +248,9 @@ class GtfsModifier extends Modifier<GtfsModifierSignature> {
         ),
       )
       .then(([routesCsv, shapesCsv, tripsCsv]) => {
-        setRoutes(Papa.parse(routesCsv, { header: true }).data);
-        setShapes(Papa.parse(shapesCsv, { header: true }).data);
-        setTrips(Papa.parse(tripsCsv, { header: true }).data);
+        setRoutes?.(Papa.parse(routesCsv, { header: true }).data);
+        setShapes?.(Papa.parse(shapesCsv, { header: true }).data);
+        setTrips?.(Papa.parse(tripsCsv, { header: true }).data);
       });
   }
 }
