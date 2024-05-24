@@ -3,8 +3,6 @@ import {
   RoomMemberEvent,
   RoomEvent,
   createClient,
-  Room,
-  MatrixClient,
   type MatrixEvent,
 } from 'matrix-js-sdk';
 import OpenAI from 'openai';
@@ -12,7 +10,6 @@ import { logger, aiBotUsername } from '@cardstack/runtime-common';
 import {
   constructHistory,
   getModifyPrompt,
-  cleanContent,
   getTools,
   isPatchReactionEvent,
 } from './helpers';
@@ -21,9 +18,9 @@ import {
   setTitle,
   roomTitleAlreadySet,
 } from './lib/set-title';
+import { Responder } from './lib/send-response';
 import { handleDebugCommands } from './lib/debug';
-import { sendError, sendOption, sendMessage } from './lib/matrix';
-import { OpenAIError } from 'openai/error';
+import { MatrixClient } from './lib/matrix';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
 import * as Sentry from '@sentry/node';
 
@@ -35,116 +32,6 @@ if (process.env.SENTRY_DSN) {
 }
 
 let log = logger('ai-bot');
-
-class BotResponder {
-  // internally has a debounced function that will send the text messages
-
-  initialMessageId: string | undefined;
-  initialMessageReplaced = false;
-  unsent = 0;
-  client: MatrixClient;
-  roomId: string;
-
-  constructor(client: MatrixClient, roomId: string) {
-    this.roomId = roomId;
-    this.client = client;
-  }
-
-  async initialize() {
-    let initialMessage = await sendMessage(
-      this.client,
-      this.roomId,
-      'Thinking...',
-      undefined,
-    );
-    this.initialMessageId = initialMessage.event_id;
-  }
-
-  // Can have
-  async onChunk(chunk: {
-    usage?: { prompt_tokens: number; completion_tokens: number };
-  }) {
-    // This usage value is set *once* and *only once* at the end of the conversation
-    // It will be null at all other times.
-    if (chunk.usage) {
-      log.info(
-        `Request used ${chunk.usage.prompt_tokens} prompt tokens and ${chunk.usage.completion_tokens}`,
-      );
-    }
-  }
-
-  async onContent(snapshot: string) {
-    this.unsent += 1;
-    if (this.unsent > 40) {
-      this.unsent = 0;
-      await sendMessage(
-        this.client,
-        this.roomId,
-        cleanContent(snapshot),
-        this.initialMessageId,
-      );
-    }
-    this.initialMessageReplaced = true;
-  }
-
-  async onMessage(msg: {
-    role: string;
-    tool_calls?: { function: { name: string; arguments: string } }[];
-  }) {
-    if (msg.role === 'assistant') {
-      for (const toolCall of msg.tool_calls || []) {
-        const functionCall = toolCall.function;
-        log.debug('[Room Timeline] Function call', toolCall);
-        let args;
-        try {
-          args = JSON.parse(functionCall.arguments);
-        } catch (error) {
-          Sentry.captureException(error);
-          return await sendError(
-            this.client,
-            this.roomId,
-            error,
-            this.initialMessageReplaced ? undefined : this.initialMessageId,
-          );
-        }
-        if (functionCall.name === 'patchCard') {
-          await sendOption(
-            this.client,
-            this.roomId,
-            args,
-            this.initialMessageReplaced ? undefined : this.initialMessageId,
-          );
-          this.initialMessageReplaced = true;
-        }
-      }
-    }
-  }
-
-  async onError(error: OpenAIError) {
-    Sentry.captureException(error);
-    return await sendError(
-      this.client,
-      this.roomId,
-      error,
-      this.initialMessageId,
-    );
-  }
-
-  async finalize(finalContent: string | void | null | undefined) {
-    if (finalContent) {
-      finalContent = cleanContent(finalContent);
-      await sendMessage(
-        this.client,
-        this.roomId,
-        finalContent,
-        this.initialMessageId,
-        {
-          isStreamingFinished: true,
-        },
-      );
-    }
-  }
-}
 
 class Assistant {
   private openai: OpenAI;
@@ -175,22 +62,22 @@ class Assistant {
     }
   }
 
-  async handleDebugCommands(eventBody: string, room: Room) {
+  async handleDebugCommands(eventBody: string, roomId: string) {
     return handleDebugCommands(
       this.openai,
       eventBody,
       this.client,
-      room,
+      roomId,
       this.id,
     );
   }
 
   async setTitle(
-    room: Room,
+    roomId: string,
     history: DiscreteMatrixEvent[],
     event?: MatrixEvent,
   ) {
-    return setTitle(this.openai, this.client, room, history, this.id, event);
+    return setTitle(this.openai, this.client, roomId, history, this.id, event);
   }
 }
 
@@ -284,7 +171,7 @@ Common issues are:
         let history: DiscreteMatrixEvent[] = constructHistory(eventList);
         log.info("Compressed into just the history that's ", history.length);
 
-        const responder = new BotResponder(client, room.roomId);
+        const responder = new Responder(client, room.roomId);
         await responder.initialize();
         const runner = assistant
           .getResponse(history)
@@ -305,7 +192,7 @@ Common issues are:
         await responder.finalize(finalContent);
 
         if (shouldSetRoomTitle(eventList, aiBotUserId, event)) {
-          return await assistant.setTitle(room, history, event);
+          return await assistant.setTitle(room.roomId, history, event);
         }
         return;
       } catch (e) {
@@ -340,7 +227,7 @@ Common issues are:
       if (roomTitleAlreadySet(eventList)) {
         return;
       }
-      return await assistant.setTitle(room, history, event);
+      return await assistant.setTitle(room.roomId, history, event);
     } catch (e) {
       log.error(e);
       Sentry.captureException(e);
@@ -372,7 +259,7 @@ Common issues are:
       event.getSender(),
       eventBody,
     );
-    return await assistant.handleDebugCommands(eventBody, room);
+    return await assistant.handleDebugCommands(eventBody, room.roomId);
   });
 
   await client.startClient();
