@@ -270,7 +270,16 @@ export default class CardService extends Service {
     let updatedCard = await api.updateFromSerialized<typeof CardDef>(card, doc);
     let updatedCardDoc = await this.serializeCard(updatedCard);
 
-    if (!this.isPatchApplied(updatedCardDoc.data, patchData, card.id)) {
+    // TODO: update isPatchApplied to handle relationships
+    if (
+      patchData.attributes &&
+      Object.keys(patchData.attributes).length &&
+      !this.isPatchApplied(
+        updatedCardDoc.data.attributes,
+        patchData.attributes,
+        card.id,
+      )
+    ) {
       await api.updateFromSerialized<typeof CardDef>(card, initialDoc);
       throw new Error('Patch failed.');
     }
@@ -296,10 +305,6 @@ export default class CardService extends Service {
     }
     for (let [key, patchValue] of Object.entries(patchData)) {
       if (!(key in cardData)) {
-        if (key.includes('.')) {
-          // TODO: handle linksToMany and nested linksTo fields
-          continue;
-        }
         return false;
       }
       let cardValue = cardData[key];
