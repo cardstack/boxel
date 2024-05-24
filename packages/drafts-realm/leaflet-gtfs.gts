@@ -6,7 +6,7 @@ import {
   contains,
   field,
 } from 'https://cardstack.com/base/card-api';
-import Modifier from 'ember-modifier';
+import Modifier, { NamedArgs } from 'ember-modifier';
 import jszip from 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm';
 import Papa from 'https://cdn.jsdelivr.net/npm/papaparse@5.4.1/+esm';
 import { tracked } from '@glimmer/tracking';
@@ -28,38 +28,38 @@ export class LeafletGtfs extends CardDef {
   @field tileserverUrl = contains(StringField);
   @field gtfsUrl = contains(StringField);
 
-  map;
+  map: any;
 
   @tracked routes: Route[] = [];
   @tracked activeRouteId: string | null = null;
 
-  @tracked shapes = [];
+  @tracked shapes: any[] = [];
 
-  @tracked trips = [];
+  @tracked trips: any[] = [];
 
-  @tracked routesFeatureGroup = null;
-  @tracked routePolylines = [];
+  @tracked routesFeatureGroup: any = null;
+  @tracked routePolylines: any[] = [];
 
   @action
-  setMap(map) {
+  setMap(map: any) {
     this.map = map;
   }
 
   @action
-  setRoutes(routes) {
-    this.routes = routes.map((routeCsv) => ({
+  setRoutes(routes: any) {
+    this.routes = routes.map((routeCsv: any) => ({
       id: routeCsv.route_id,
       name: `${routeCsv.route_short_name} ${routeCsv.route_long_name}`,
     }));
   }
 
   @action
-  setShapes(shapes) {
+  setShapes(shapes: any) {
     this.shapes = shapes;
   }
 
   @action
-  setTrips(trips) {
+  setTrips(trips: any) {
     this.trips = trips;
   }
 
@@ -116,7 +116,7 @@ export class LeafletGtfs extends CardDef {
             shapeIdToPoints.set(shape.shape_id, []);
           }
 
-          shapeIdToPoints
+          shapeIdToPoints?
             .get(shape.shape_id)
             .push([shape.shape_pt_lat, shape.shape_pt_lon]);
         }
@@ -124,6 +124,8 @@ export class LeafletGtfs extends CardDef {
 
       return Array.from(shapeIdToPoints.values());
     }
+
+    return [];
   }
 
   static isolated = class Isolated extends Component<typeof this> {
@@ -197,10 +199,6 @@ export class LeafletGtfs extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
-
-
-
-
   */
 }
 
@@ -209,9 +207,9 @@ interface GtfsModifierSignature {
     Positional: [];
     Named: {
       gtfsUrl?: string;
-      setRoutes: (any) => {};
-      setShapes: (any) => {};
-      setTrips: (any) => {};
+      setRoutes: (routes: any) => {};
+      setShapes: (shapes: any) => {};
+      setTrips: (trips: any) => {};
     };
   };
 }
@@ -219,13 +217,22 @@ interface GtfsModifierSignature {
 class GtfsModifier extends Modifier<GtfsModifierSignature> {
   HTMLElement: element = null;
 
-  modify(_element, [], { gtfsUrl, setRoutes, setShapes, setTrips }) {
+  modify(
+    _element: HTMLElement,
+    [],
+    {
+      gtfsUrl,
+      setRoutes,
+      setShapes,
+      setTrips,
+    }: NamedArgs<GtfsModifierSignature>,
+  ) {
     fetch(gtfsUrl)
       .then((gtfsResponse) => {
         return gtfsResponse.blob();
       })
       .then(jszip.loadAsync)
-      .then((zip) =>
+      .then((zip: any) =>
         Promise.all(
           ['routes.txt', 'shapes.txt', 'trips.txt'].map((filename) =>
             zip.file(filename).async('string'),

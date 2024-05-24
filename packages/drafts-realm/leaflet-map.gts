@@ -6,7 +6,12 @@ import {
   contains,
   field,
 } from 'https://cardstack.com/base/card-api';
-import Modifier from 'ember-modifier';
+import Modifier, { NamedArgs } from 'ember-modifier';
+import { action } from '@ember/object';
+
+declare global {
+  let L: any;
+}
 
 export class LeafletMap extends CardDef {
   static displayName = 'Leaflet Map';
@@ -16,6 +21,13 @@ export class LeafletMap extends CardDef {
 
   @field tileserverUrl = contains(StringField);
 
+  map: any;
+
+  @action
+  setMap(map: any) {
+    this.map = map;
+  }
+
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <figure
@@ -23,6 +35,7 @@ export class LeafletMap extends CardDef {
           lat=@model.lat
           lon=@model.lon
           tileserverUrl=@model.tileserverUrl
+          setMap=@model.setMap
         }}
         class='map'
       >
@@ -59,8 +72,6 @@ export class LeafletMap extends CardDef {
   }
 
 
-
-
   */
 }
 
@@ -79,7 +90,11 @@ interface LeafletModifierSignature {
 export class LeafletModifier extends Modifier<LeafletModifierSignature> {
   HTMLElement: element = null;
 
-  modify(element, [], { lat, lon, tileserverUrl, setMap }) {
+  modify(
+    element: HTMLElement,
+    [],
+    { lat, lon, tileserverUrl, setMap }: NamedArgs<LeafletModifierSignature>,
+  ) {
     fetch('https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js')
       .then((r) => r.text())
       .then((t) => {
