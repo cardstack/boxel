@@ -4,7 +4,9 @@
     "attributes": {
       "lat": 49.89752818254307,
       "lon": -97.13997495986952,
-      "tileserverUrl": "https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}.png",     "title": "Winnipeg",
+      "tileserverUrl": "https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}.png",
+      "gtfsUrl": "https://s3.gtfs.pro/files/sourcedata/winnipegtransit.zip",
+      "title": "Winnipeg",
       "description": null,
       "thumbnailURL": null
     },
@@ -16,5 +18,3 @@
     }
   }
 }
-
-

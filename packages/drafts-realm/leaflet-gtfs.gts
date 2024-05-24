@@ -25,6 +25,7 @@ export class LeafletGtfs extends CardDef {
   @field lon = contains(NumberField);
 
   @field tileserverUrl = contains(StringField);
+  @field gtfsUrl = contains(StringField);
 
   map;
 
@@ -131,6 +132,7 @@ export class LeafletGtfs extends CardDef {
           lat=@model.lat
           lon=@model.lon
           tileserverUrl=@model.tileserverUrl
+          gtfsUrl=@model.gtfsUrl
           setMap=@model.setMap
           setRoutes=@model.setRoutes
           setShapes=@model.setShapes
@@ -220,7 +222,16 @@ class LeafletModifier extends Modifier<LeafletModifierSignature> {
   modify(
     element,
     [],
-    { lat, lon, tileserverUrl, setMap, setRoutes, setShapes, setTrips },
+    {
+      lat,
+      lon,
+      tileserverUrl,
+      gtfsUrl,
+      setMap,
+      setRoutes,
+      setShapes,
+      setTrips,
+    },
   ) {
     let map;
 
@@ -235,9 +246,7 @@ class LeafletModifier extends Modifier<LeafletModifierSignature> {
           tileserverUrl || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
         ).addTo(map);
 
-        return fetch(
-          'https://s3.gtfs.pro/files/sourcedata/winnipegtransit.zip',
-        );
+        return fetch(gtfsUrl);
       })
       .then((gtfsResponse) => {
         return gtfsResponse.blob();
