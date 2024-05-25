@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 
 import { Indexer } from '@cardstack/runtime-common';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
@@ -70,4 +70,6 @@ module('Unit | indexer', function (hooks) {
   test('can perform invalidations for an instance with deps more than a thousand', async function (assert) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
+
+  skip('TODO: cross realm invalidation');
 });

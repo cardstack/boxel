@@ -40,7 +40,6 @@ import {
   maybeURL,
   maybeRelativeURL,
   moduleFrom,
-  getCard,
   trackCard,
   type Meta,
   type CardFields,
@@ -915,13 +914,9 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       return null;
     }
     let loader = Loader.getLoaderFor(this.card)!;
-    let cardResource = getCard(new URL(value.links.self, relativeTo), {
-      cachedOnly: true,
-      loader,
-    });
-    await cardResource.loaded;
-    let cachedInstance =
-      cardResource.card ?? identityContext.identities.get(value.links.self);
+    let cachedInstance = identityContext.identities.get(
+      new URL(value.links.self, relativeTo).href,
+    );
     if (cachedInstance) {
       cachedInstance[isSavedInstance] = true;
       return cachedInstance as BaseInstanceType<CardT>;
@@ -1270,13 +1265,9 @@ class LinksToMany<FieldT extends CardDefConstructor>
           return null;
         }
         let loader = Loader.getLoaderFor(this.card)!;
-        let cardResource = getCard(new URL(value.links.self, relativeTo), {
-          cachedOnly: true,
-          loader,
-        });
-        await cardResource.loaded;
-        let cachedInstance =
-          cardResource.card ?? identityContext.identities.get(value.links.self);
+        let cachedInstance = identityContext.identities.get(
+          new URL(value.links.self, relativeTo).href,
+        );
         if (cachedInstance) {
           cachedInstance[isSavedInstance] = true;
           return cachedInstance;
@@ -2072,7 +2063,13 @@ export function subscribeToChanges(
 export function unsubscribeFromChanges(
   fieldOrCard: BaseDef,
   subscriber: CardChangeSubscriber,
+  visited: Set<BaseDef> = new Set(),
 ) {
+  if (visited.has(fieldOrCard)) {
+    return;
+  }
+
+  visited.add(fieldOrCard);
   let changeSubscribers = subscribers.get(fieldOrCard);
   if (!changeSubscribers) {
     return;
@@ -2086,7 +2083,7 @@ export function unsubscribeFromChanges(
   Object.keys(fields).forEach((fieldName) => {
     let value = peekAtField(fieldOrCard, fieldName);
     if (isCardOrField(value)) {
-      unsubscribeFromChanges(value, subscriber);
+      unsubscribeFromChanges(value, subscriber, visited);
     }
   });
 }
@@ -2440,11 +2437,8 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
   instance: BaseInstanceType<T>,
   doc: LooseSingleCardDocument,
 ): Promise<BaseInstanceType<T>> {
-  let identityContext = identityContexts.get(instance);
-  if (!identityContext) {
-    identityContext = new IdentityContext();
-    identityContexts.set(instance, identityContext);
-  }
+  let identityContext = new IdentityContext();
+  identityContexts.set(instance, identityContext);
   if (!instance[relativeTo] && doc.data.id) {
     instance[relativeTo] = new URL(doc.data.id);
   }

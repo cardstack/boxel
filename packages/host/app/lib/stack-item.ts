@@ -1,9 +1,4 @@
-import {
-  type Deferred,
-  Loader,
-  apiFor,
-  loaderFor,
-} from '@cardstack/runtime-common';
+import { type Deferred, apiFor } from '@cardstack/runtime-common';
 
 import {
   type CardResource,
@@ -53,9 +48,7 @@ export class StackItem {
       this.cardResource = cardResource;
     } else if (card?.id) {
       // if the card is not actually new--load a resource instead
-      this.cardResource = getCard(owner, () => card!.id, {
-        loader: () => loaderFor(card!),
-      });
+      this.cardResource = getCard(owner, () => card!.id);
     } else if (card) {
       this.newCard = card;
       this.newCardApiPromise = apiFor(this.card).then(
@@ -104,16 +97,14 @@ export class StackItem {
     await Promise.all([this.cardResource?.loaded, this.newCardApiPromise]);
   }
 
-  async setCardURL(url: URL, loader?: Loader) {
+  async setCardURL(url: URL) {
     if (this.cardResource) {
       throw new Error(
         `Cannot set cardURL ${url.href} on this stack item when CardResource has already been set`,
       );
     }
 
-    this.cardResource = getCard(this.owner, () => url.href, {
-      ...(loader ? { loader: () => loader } : {}),
-    });
+    this.cardResource = getCard(this.owner, () => url.href);
     await this.cardResource.loaded;
     this.newCard = undefined;
   }
