@@ -255,9 +255,8 @@ export default class CardService extends Service {
     card: CardDef,
     doc: LooseSingleCardDocument,
     patchData: Record<string, any>,
-    loader?: Loader,
   ): Promise<[CardDef, LooseSingleCardDocument] | undefined> {
-    let api = await this.getAPI(loader);
+    let api = await this.getAPI();
     let initialDoc = await this.serializeCard(card);
     let updatedCard = await api.updateFromSerialized<typeof CardDef>(card, doc);
     let linkedCards = await this.loadPatchedCards(patchData, new URL(card.id));
