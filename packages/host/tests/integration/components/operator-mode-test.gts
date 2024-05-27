@@ -518,7 +518,7 @@ module('Integration | operator-mode', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              firstName: 'Friend A',
+              name: 'Friend A',
             },
             relationships: {
               friend: {
@@ -539,7 +539,7 @@ module('Integration | operator-mode', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              firstName: 'Friend B',
+              name: 'Friend B',
             },
             relationships: {
               friend: {
@@ -2974,8 +2974,7 @@ module('Integration | operator-mode', function (hooks) {
       .containsText('Jackie Woody Mango');
   });
 
-  // CS-6837 - causes a loop and a crash
-  skip('can add a card to a linksTo field creating a loop', async function (assert) {
+  test('can add a card to a linksTo field creating a loop', async function (assert) {
     // Friend A already links to friend B.
     // This test links B back to A
     await setCardInOperatorModeState(`${testRealmURL}Friend/friend-b`);
@@ -3005,7 +3004,9 @@ module('Integration | operator-mode', function (hooks) {
     // Normally we'd only have an assert like this at the end that may work,
     // but the rest of the application may be broken.
 
-    assert.dom('[data-test-field="friend"]').containsText('Friend A');
+    assert
+      .dom('[data-test-stack-card] [data-test-field="friend"]')
+      .containsText('Friend A');
 
     // Instead try and go somewhere else in the application to see if it's broken
     await waitFor('[data-test-submode-switcher]');
@@ -3193,9 +3194,6 @@ module('Integration | operator-mode', function (hooks) {
       .doesNotContainText('Jackie');
     assert.dom(`[data-test-plural-view-item]`).doesNotExist();
   });
-
-  skip('can create a specialized a new card to populate a linksTo field');
-  skip('can create a specialized a new card to populate a linksToMany field');
 
   test('can close cards by clicking the header of a card deeper in the stack', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);

@@ -615,7 +615,7 @@ module('Integration | card-basics', function (hooks) {
       await renderCard(loader, driver, 'edit');
       assert.dom('input').doesNotExist('no input fields exist');
       assert
-        .dom('[data-test-ref')
+        .dom('[data-test-ref]')
         .containsText(`Module: http://localhost:4202/test/person Name: Person`);
     });
 
