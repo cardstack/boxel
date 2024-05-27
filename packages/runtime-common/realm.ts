@@ -313,9 +313,9 @@ export class Realm {
     adapter.setLoader?.(loader);
 
     this.#realmAuthHandler = new RealmAuthHandler(
-      this.#matrixClient,
       loader,
       url,
+      this.#matrixClient,
     );
     this.loaderTemplate = loader;
     this.loaderTemplate.registerURLHandler(

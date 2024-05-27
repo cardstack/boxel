@@ -1,7 +1,12 @@
 import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
-import { VirtualNetwork, baseRealm } from '@cardstack/runtime-common';
+import {
+  IRealmCache,
+  RealmAuthHandler,
+  VirtualNetwork,
+  baseRealm,
+} from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import config from '@cardstack/host/config/environment';
@@ -24,6 +29,7 @@ export default class LoaderService extends Service {
   // The owner is the service, which stays around for the whole lifetime of the host app,
   // which in turn assures the resources will not get torn down.
   private realmSessions: Map<string, RealmSessionResource> = new Map();
+  private realmAuthHandler: RealmAuthHandler | undefined;
 
   virtualNetwork = new VirtualNetwork();
 
@@ -47,68 +53,50 @@ export default class LoaderService extends Service {
       new URL(baseRealm.url),
       new URL(config.resolvedBaseRealmURL),
     );
-    loader.prependURLHandlers([(req) => this.fetchWithAuth(req)]);
+    loader.prependURLHandlers([
+      (req) => {
+        if (!this.realmAuthHandler) {
+          this.realmAuthHandler = this.makeRealmAuthHandler();
+        }
+        return this.realmAuthHandler.fetchWithAuth(req);
+      },
+    ]);
     shimExternals(this.virtualNetwork);
 
     return loader;
   }
 
-  private async fetchWithAuth(request: Request) {
-    // To avoid deadlock, we can assume that any GET requests to baseRealm don't need authentication.
-    let isGetRequestToBaseRealm =
-      request.url.includes(baseRealm.url) && request.method === 'GET';
-    if (
-      isGetRequestToBaseRealm ||
-      request.url.endsWith('_session') ||
-      request.method === 'HEAD' ||
-      request.headers.has('Authorization')
-    ) {
-      return null;
-    }
-    let realmURL = await this.realmInfoService.fetchRealmURL(request.url);
-    if (!realmURL) {
-      return null;
-    }
+  private makeRealmAuthHandler() {
+    let realmCache = {
+      getRealmInfoByURL: async (url: string) => {
+        let realmURL = await this.realmInfoService.fetchRealmURL(url);
+        if (!realmURL) {
+          return null;
+        }
+        // We have to get public readable status
+        // before we instantiate realm resource and load realm token.
+        // Because we don't want to do authentication
+        // for GET request to publicly readable realm.
+        let isPublicReadable = await this.realmInfoService.isPublicReadable(
+          realmURL,
+        );
 
-    // We have to get public readable status
-    // before we instantiate realm resource and load realm token.
-    // Because we don't want to do authentication
-    // for GET request to publicly readable realm.
-    let isPublicReadable = await this.realmInfoService.isPublicReadable(
-      realmURL,
-    );
-    if (request.method === 'GET' && isPublicReadable) {
-      return null;
-    }
+        return {
+          isPublicReadable,
+          url: realmURL,
+        };
+      },
+      getJWT: async (realmURL: string) => {
+        let realmSession = await this.getRealmSession(new URL(realmURL));
+        return realmSession.rawRealmToken ?? null;
+      },
+      resetAuth: async (realmURL: string) => {
+        let realmSession = await this.getRealmSession(new URL(realmURL));
+        await realmSession.refreshToken();
+      },
+    } as IRealmCache;
 
-    await this.matrixService.ready;
-    if (!this.matrixService.isLoggedIn) {
-      return null;
-    }
-
-    let realmSession = await this.getRealmSession(realmURL);
-    if (!realmSession.rawRealmToken) {
-      return null;
-    }
-
-    request.headers.set('Authorization', realmSession.rawRealmToken);
-
-    let response = await this.loader.fetch(request);
-
-    // We will get a 401 from the server in three cases. When the token is invalid,
-    // the JWT is expired, and the permissions in the JWT payload differ
-    // from what is configured on the server (e.g. someone changed permissions for the user during the life
-    // of the JWT). In those cases, we have to retrieve a new JWT.
-    if (!response.ok && response.status === 401) {
-      await realmSession.refreshToken();
-      if (!realmSession.rawRealmToken) {
-        return null;
-      }
-      request.headers.set('Authorization', realmSession.rawRealmToken);
-      response = await this.loader.fetch(request);
-    }
-
-    return response;
+    return new RealmAuthHandler(this.loader, undefined, undefined, realmCache);
   }
 
   private async getRealmSession(realmURL: URL) {
