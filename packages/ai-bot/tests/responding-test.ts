@@ -2,7 +2,6 @@ import { module, test, assert } from 'qunit';
 import { Responder } from '../lib/send-response';
 import { IContent } from 'matrix-js-sdk';
 import { MatrixClient } from '../lib/matrix';
-import { setName } from '@ember/-internals/utils/lib/name';
 
 class FakeMatrixClient implements MatrixClient {
   private eventId = 0;
