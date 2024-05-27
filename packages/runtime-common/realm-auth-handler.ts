@@ -8,9 +8,9 @@ import { baseRealm } from './constants';
 type RealmInfo = {
   isPublicReadable: boolean;
   url: string;
-}
+};
 
-type RealmInfoAuth = RealmInfo & { realmAuthClient?: RealmAuthClient; }
+type RealmInfoAuth = RealmInfo & { realmAuthClient?: RealmAuthClient };
 
 export interface IRealmCache {
   getRealmInfoByURL(url: string): Promise<RealmInfo | null>;
@@ -22,10 +22,7 @@ class RealmCache implements IRealmCache {
   private matrixClient: MatrixClient;
   private loader: Loader;
   // Cached realm info to avoid fetching it multiple times for the same realm
-  private visitedRealms = new Map<
-    string,
-    RealmInfoAuth
-  >();
+  private visitedRealms = new Map<string, RealmInfoAuth>();
 
   constructor(loader: Loader, matrixClient: MatrixClient) {
     this.loader = loader;
@@ -89,8 +86,8 @@ class RealmCache implements IRealmCache {
 
     return {
       isPublicReadable: targetRealm.isPublicReadable,
-      url: targetRealm.url
-    }
+      url: targetRealm.url,
+    };
   }
 
   // A separate method for realm auth client creation to support mocking in tests
@@ -108,12 +105,19 @@ export class RealmAuthHandler {
   private realmURL?: string;
   private realmCache: IRealmCache;
 
-  constructor(loader: Loader, realmURL?: string, matrixClient?: MatrixClient, realmCache?: IRealmCache) {
+  constructor(
+    loader: Loader,
+    realmURL?: string,
+    matrixClient?: MatrixClient,
+    realmCache?: IRealmCache,
+  ) {
     this.loader = loader;
     this.realmURL = realmURL;
     if (!realmCache) {
       if (!matrixClient) {
-        throw new Error('bug: realmCache or matrixClient is required to instatiate RealmAuthHandler');
+        throw new Error(
+          'bug: realmCache or matrixClient is required to instatiate RealmAuthHandler',
+        );
       }
       realmCache = new RealmCache(loader, matrixClient);
     }
@@ -128,7 +132,7 @@ export class RealmAuthHandler {
     if (request.url.startsWith(PACKAGES_FAKE_ORIGIN)) {
       return null;
     }
-    
+
     // To avoid deadlock, we can assume that any GET requests to baseRealm don't need authentication.
     let isGetRequestToBaseRealm =
       request.url.includes(baseRealm.url) && request.method === 'GET';
@@ -147,14 +151,16 @@ export class RealmAuthHandler {
     }
 
     let isRequestToItself = realmInfo.url === this.realmURL; // Could be a request to itself when indexing its own cards
-
     if (
       isRequestToItself ||
       (realmInfo.isPublicReadable && request.method === 'GET')
     ) {
       return null;
     } else {
-      request.headers.set('Authorization', await this.realmCache.getJWT(realmInfo.url));
+      request.headers.set(
+        'Authorization',
+        await this.realmCache.getJWT(realmInfo.url),
+      );
 
       let response = await this.loader.fetch(request);
 
