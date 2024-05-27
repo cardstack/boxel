@@ -2,6 +2,7 @@ import { module, test, assert } from 'qunit';
 import { Responder } from '../lib/send-response';
 import { IContent } from 'matrix-js-sdk';
 import { MatrixClient } from '../lib/matrix';
+import FakeTimers from '@sinonjs/fake-timers';
 
 class FakeMatrixClient implements MatrixClient {
   private eventId = 0;
@@ -49,13 +50,18 @@ class FakeMatrixClient implements MatrixClient {
 module('Responding', (hooks) => {
   let fakeMatrixClient: FakeMatrixClient;
   let responder: Responder;
+  let clock: FakeTimers.InstalledClock;
 
   hooks.beforeEach(() => {
+    clock = FakeTimers.install();
     fakeMatrixClient = new FakeMatrixClient();
     responder = new Responder(fakeMatrixClient, 'room-id');
   });
 
   hooks.afterEach(() => {
+    clock.runToLast();
+    clock.uninstall();
+    responder.finalize();
     fakeMatrixClient.resetSentEvents();
   });
 
@@ -81,34 +87,30 @@ module('Responding', (hooks) => {
     );
   });
 
-  test('Sends message content events after 40 unsent, and replace the thinking message', async () => {
+  test('Sends first content message immediately, replace the thinking message', async () => {
     await responder.initialize();
 
-    for (let i = 0; i < 40; i++) {
+    // Send several messages
+    for (let i = 0; i < 10; i++) {
       await responder.onContent('content ' + i);
     }
 
     let sentEvents = fakeMatrixClient.getSentEvents();
-    assert.equal(sentEvents.length, 1, 'Only initial message should be sent');
+    assert.equal(
+      sentEvents.length,
+      2,
+      'Only the initial message and one content message should be sent',
+    );
     assert.equal(
       sentEvents[0].content.body,
       'Thinking...',
       'Just the thinking message sent',
     );
 
-    await responder.onContent('content final');
-
-    sentEvents = fakeMatrixClient.getSentEvents();
-    assert.equal(sentEvents.length, 2, 'Only initial message should be sent');
-    assert.equal(
-      sentEvents[0].content.body,
-      'Thinking...',
-      'Just the thinking message sent',
-    );
     assert.equal(
       sentEvents[1].content.body,
-      'content final',
-      'The final content should be sent',
+      'content 0',
+      'The first new content message should be sent',
     );
     assert.deepEqual(
       sentEvents[1].content['m.relates_to'],
@@ -116,7 +118,67 @@ module('Responding', (hooks) => {
         rel_type: 'm.replace',
         event_id: '0',
       },
-      'The final content should replace the original thinking message',
+      'The first content should replace the original thinking message',
+    );
+  });
+
+  test('Sends first content message immediately, only sends new content updates after 250ms, replacing the thinking message', async () => {
+    await responder.initialize();
+
+    // Send several messages
+    for (let i = 0; i < 10; i++) {
+      await responder.onContent('content ' + i);
+    }
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    assert.equal(
+      sentEvents.length,
+      2,
+      'Only the initial message and one content message should be sent',
+    );
+    assert.equal(
+      sentEvents[0].content.body,
+      'Thinking...',
+      'Just the thinking message sent',
+    );
+
+    assert.equal(
+      sentEvents[1].content.body,
+      'content 0',
+      'The first new content message should be sent',
+    );
+    assert.deepEqual(
+      sentEvents[1].content['m.relates_to'],
+      {
+        rel_type: 'm.replace',
+        event_id: '0',
+      },
+      'The first content should replace the original thinking message',
+    );
+
+    // Advance the clock 250ms
+    clock.tick(250);
+
+    sentEvents = fakeMatrixClient.getSentEvents();
+
+    assert.equal(
+      sentEvents.length,
+      3,
+      'Only the initial message and two content messages should be sent',
+    );
+
+    assert.equal(
+      sentEvents[2].content.body,
+      'content 9',
+      'The last new content message should be sent',
+    );
+    assert.deepEqual(
+      sentEvents[2].content['m.relates_to'],
+      {
+        rel_type: 'm.replace',
+        event_id: '0',
+      },
+      'The updated content should replace the original thinking message',
     );
   });
 
@@ -179,7 +241,7 @@ module('Responding', (hooks) => {
     );
   });
 
-  test('Sends tool call event separately when content is sent before tool call, under the chunk threshold', async () => {
+  test('Sends tool call event separately when content is sent before tool call', async () => {
     const patchArgs = {
       card_id: 'card/1',
       description: 'A new thing',
@@ -204,7 +266,7 @@ module('Responding', (hooks) => {
     let sentEvents = fakeMatrixClient.getSentEvents();
     assert.equal(
       sentEvents.length,
-      2,
+      3,
       'Thinking message, and tool call event should be sent',
     );
     assert.equal(
@@ -213,7 +275,7 @@ module('Responding', (hooks) => {
       'Thinking message should be sent first',
     );
     assert.deepEqual(
-      JSON.parse(sentEvents[1].content.data),
+      JSON.parse(sentEvents[2].content.data),
       {
         command: {
           type: 'patchCard',
@@ -224,22 +286,17 @@ module('Responding', (hooks) => {
       'Tool call event should be sent with correct content',
     );
     assert.notOk(
-      sentEvents[1].content['m.relates_to'],
+      sentEvents[2].content['m.relates_to'],
       'The tool call event should not replace any message',
     );
 
-    // Send enough chunks to
-    for (let i = 0; i < 40; i++) {
-      await responder.onContent('content ' + i);
-    }
-
     assert.equal(
-      sentEvents[2].content.body,
-      'content 39',
-      'Content event should be sent next',
+      sentEvents[1].content.body,
+      'some content',
+      'Content event should be sent',
     );
     assert.deepEqual(
-      sentEvents[2].content['m.relates_to'],
+      sentEvents[1].content['m.relates_to'],
       {
         rel_type: 'm.replace',
         event_id: '0',
