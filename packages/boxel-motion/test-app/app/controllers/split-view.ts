@@ -74,7 +74,7 @@ function addPanelAnimation(
         width: `${fixedContentWidth}px`,
       },
       timing: {
-        behavior: new StaticBehavior(),
+        behavior: new StaticBehavior({ fill: true }),
       },
     });
   }
