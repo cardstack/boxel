@@ -702,6 +702,7 @@ export class Loader {
     | { type: 'shimmed'; module: Record<string, unknown> }
   > {
     let response: Response;
+    timeStart('load:fetch');
     try {
       response = await this.fetch(moduleURL);
     } catch (err) {
@@ -710,6 +711,8 @@ export class Loader {
       // "broken" state, since the server hosting the module is likely down. it
       // might be a good idea to be able to try again in this case...
       throw err;
+    } finally {
+      timeEnd('load:fetch');
     }
     if (!response.ok) {
       let error = await CardError.fromFetchResponse(moduleURL.href, response);
