@@ -2,6 +2,7 @@ import TransformModulesAmdPlugin from 'transform-modules-amd-plugin';
 import { transformSync } from '@babel/core';
 import { Deferred } from './deferred';
 import { trimExecutableExtension, logger } from './index';
+import { time } from './helpers/time';
 
 import { CardError } from './error';
 import flatMap from 'lodash/flatMap';
@@ -278,7 +279,7 @@ export class Loader {
 
       outer_switch: switch (module?.state) {
         case undefined:
-          await this.fetchModule(resolvedURL);
+          await time('fetchModule', this.fetchModule(resolvedURL));
           break;
         case 'fetching':
           await module.deferred.promise;

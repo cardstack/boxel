@@ -36,6 +36,7 @@ export async function makeFastBootIndexRunner(
           getRunnerOpts,
           _logDefinitions: (globalThis as any)._logDefinitions,
           jsdom: new JSDOM(''),
+          performance: globalThis.performance,
         });
       },
     }) as FastBootInstance;
@@ -53,6 +54,7 @@ export async function makeFastBootIndexRunner(
           getRunnerOpts,
           _logDefinitions: (globalThis as any)._logDefinitions,
           jsdom: new JSDOM(''),
+          performance: globalThis.performance,
         });
       },
     ));
