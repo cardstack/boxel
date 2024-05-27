@@ -27,6 +27,7 @@ QUnit.on('suiteEnd', (suiteEnd) => {
   [...times.keys()].forEach((key) => {
     log.error(`${key}: ${times.get(key)}`);
   });
+  log.error(JSON.stringify(Array.from(times.entries())));
 
   log.error('that is all');
 });
@@ -39,6 +40,7 @@ QUnit.on('runEnd', () => {
   [...times.keys()].forEach((key) => {
     log.error(`${key}: ${times.get(key)}`);
   });
+  log.error(JSON.stringify(Array.from(times.entries())));
 
   log.error('that is all');
 });
