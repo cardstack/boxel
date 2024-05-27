@@ -2,7 +2,7 @@ import TransformModulesAmdPlugin from 'transform-modules-amd-plugin';
 import { transformSync } from '@babel/core';
 import { Deferred } from './deferred';
 import { trimExecutableExtension, logger } from './index';
-import { time } from './helpers/time';
+import { time, timeStart, timeEnd } from './helpers/time';
 
 import { CardError } from './error';
 import flatMap from 'lodash/flatMap';
@@ -540,6 +540,7 @@ export class Loader {
       | { type: 'shimmed'; module: Record<string, unknown> };
 
     try {
+      timeStart('fetchModule:load');
       loaded = await this.load(moduleURL);
     } catch (exception) {
       this.setModule(moduleIdentifier, {
@@ -548,6 +549,8 @@ export class Loader {
         consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
       });
       throw exception;
+    } finally {
+      timeEnd('fetchModule:load');
     }
 
     if (loaded.type === 'shimmed') {
@@ -562,6 +565,7 @@ export class Loader {
 
     let src: string | null | undefined = loaded.source;
 
+    timeStart('fetchModule:transformSync');
     src = transformSync(src, {
       plugins: [
         [
@@ -572,6 +576,7 @@ export class Loader {
       sourceMaps: 'inline',
       filename: moduleIdentifier,
     })?.code;
+    timeEnd('fetchModule:transformSync');
     if (!src) {
       throw new Error(`bug: should never get here`);
     }
@@ -601,6 +606,7 @@ export class Loader {
       implementation = impl;
     };
 
+    timeStart('fetchModule:eval');
     try {
       eval(src); // + "\n//# sourceURL=" + moduleIdentifier);
     } catch (exception) {
@@ -610,6 +616,8 @@ export class Loader {
         consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
       });
       throw exception;
+    } finally {
+      timeEnd('fetchModule:eval');
     }
 
     let registeredModule: RegisteredModule = {
