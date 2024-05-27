@@ -59,7 +59,6 @@ export class Responder {
     this.initialMessageId = initialMessage.event_id;
   }
 
-  // Can have
   async onChunk(chunk: {
     usage?: { prompt_tokens: number; completion_tokens: number };
   }) {
