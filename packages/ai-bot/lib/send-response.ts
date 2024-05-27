@@ -77,6 +77,7 @@ export class Responder {
             error,
             this.initialMessageReplaced ? undefined : this.initialMessageId,
           );
+          this.initialMessageReplaced = true;
         }
         if (functionCall.name === 'patchCard') {
           await sendOption(
