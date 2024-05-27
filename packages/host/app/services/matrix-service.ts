@@ -30,7 +30,6 @@ import {
   basicMappings,
   generateCardPatchCallSpecification,
 } from '@cardstack/runtime-common/helpers/ai';
-import { time } from '@cardstack/runtime-common/helpers/time';
 
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
@@ -97,9 +96,7 @@ export default class MatrixService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
-    this.#ready = time('matrix-service-load-sdk', async () =>
-      this.loadSDK.perform(),
-    );
+    this.#ready = this.loadSDK.perform();
   }
 
   get ready() {

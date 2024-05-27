@@ -577,9 +577,7 @@ export function setupCardLogs(
 ) {
   hooks.afterEach(async function () {
     let api = await apiThunk();
-    time('setupCardLogs:flushLogs', async () => {
-      await api.flushLogs();
-    });
+    await api.flushLogs();
   });
 }
 
