@@ -68,7 +68,7 @@
     "@types/rsvp": "^4.0.9",
     "@typescript-eslint/eslint-plugin": "^5.48.1",
     "@typescript-eslint/parser": "^5.48.1",
-    "babel-plugin-ember-template-compilation": "^2.2.1",
+    "babel-plugin-ember-template-compilation": "^2.2.5",
     "concurrently": "^8.0.1",
     "ember-source": "~5.4.0",
     "ember-template-imports": "^4.1.1",
