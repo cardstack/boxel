@@ -383,7 +383,7 @@ module('getModifyPrompt', () => {
       },
     ];
 
-    const relevantCards = getRelevantCards(history, '@aibot:localhost');
+    const [_, relevantCards] = getRelevantCards(history, '@aibot:localhost');
     assert.equal(relevantCards.length, 0);
   });
 
@@ -432,7 +432,7 @@ module('getModifyPrompt', () => {
         },
       },
     ];
-    const relevantCards = getRelevantCards(history, '@aibot:localhost');
+    const [_, relevantCards] = getRelevantCards(history, '@aibot:localhost');
     assert.equal(relevantCards.length, 1);
   });
 
@@ -695,7 +695,7 @@ module('getModifyPrompt', () => {
         age: 115498,
       },
     ];
-    const relevantCards = getRelevantCards(history, '@aibot:localhost');
+    const [_, relevantCards] = getRelevantCards(history, '@aibot:localhost');
     assert.equal(relevantCards.length, 1);
     assert.equal(
       relevantCards[0],
