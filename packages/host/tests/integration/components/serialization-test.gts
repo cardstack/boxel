@@ -26,22 +26,40 @@ import {
   provideConsumeContext,
 } from '../../helpers';
 
-import { renderCard } from '../../helpers/render-component';
+import {
+  setupBaseRealm,
+  contains,
+  CardDef,
+  Component,
+  DateField,
+  DatetimeField,
+  createFromSerialized,
+  serializeCard,
+  StringField,
+  field,
+  NumberField,
+  isSaved,
+  Base64ImageField,
+  updateFromSerialized,
+  CodeRefField,
+  linksTo,
+  relationshipMeta,
+  FieldDef,
+  containsMany,
+  linksToMany,
+  recompute,
+  BigIntegerField,
+  getQueryableValue,
+  EthereumAddressField,
+} from '../../helpers/base-realm';
 
-let cardApi: typeof import('https://cardstack.com/base/card-api');
-let codeRef: typeof import('https://cardstack.com/base/code-ref');
-let date: typeof import('https://cardstack.com/base/date');
-let datetime: typeof import('https://cardstack.com/base/datetime');
-let number: typeof import('https://cardstack.com/base/number');
-let string: typeof import('https://cardstack.com/base/string');
-let bigInteger: typeof import('https://cardstack.com/base/big-integer');
-let ethereumAddress: typeof import('https://cardstack.com/base/ethereum-address');
-let base64Image: typeof import('https://cardstack.com/base/base64-image');
+import { renderCard } from '../../helpers/render-component';
 
 let loader: Loader;
 
 module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
+  setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
     provideConsumeContext(RealmSessionContextName, {
@@ -58,23 +76,7 @@ module('Integration | serialization', function (hooks) {
   );
   const realmURL = `https://test-realm/`;
 
-  hooks.beforeEach(async function () {
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    number = await loader.import(`${baseRealm.url}number`);
-    date = await loader.import(`${baseRealm.url}date`);
-    datetime = await loader.import(`${baseRealm.url}datetime`);
-    codeRef = await loader.import(`${baseRealm.url}code-ref`);
-    bigInteger = await loader.import(`${baseRealm.url}big-integer`);
-    ethereumAddress = await loader.import(`${baseRealm.url}ethereum-address`);
-    base64Image = await loader.import(`${baseRealm.url}base64-image`);
-  });
-
   test('can deserialize field', async function (assert) {
-    let { field, contains, CardDef, Component, createFromSerialized } = cardApi;
-    let { default: StringField } = string;
-    let { default: DateField } = date;
-    let { default: DatetimeField } = datetime;
     class Post extends CardDef {
       @field title = contains(StringField);
       @field created = contains(DateField);
@@ -122,9 +124,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a card where the card instance has fields that are not found in the definition', async function (assert) {
-    let { field, contains, CardDef, Component, createFromSerialized } = cardApi;
-    let { default: NumberField } = number;
-
     class Item extends CardDef {
       @field priceRenamed = contains(NumberField); // Simulating the scenario where someone renamed the price field to priceRenamed and did not also update the field in the instance data
       static isolated = class Isolated extends Component<typeof this> {
@@ -161,8 +160,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a card that has an ID', async function (assert) {
-    let { field, contains, CardDef, createFromSerialized, isSaved } = cardApi;
-    let { default: StringField } = string;
     class Person extends CardDef {
       @field firstName = contains(StringField);
     }
@@ -209,8 +206,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a card that has an ID', async function (assert) {
-    let { field, contains, CardDef, serializeCard } = cardApi;
-    let { default: StringField } = string;
     class Person extends CardDef {
       @field firstName = contains(StringField);
       @field title = contains(StringField, {
@@ -249,9 +244,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can omit specified field type from serialized data', async function (assert) {
-    let { field, contains, CardDef, serializeCard } = cardApi;
-    let { default: StringField } = string;
-    let { Base64ImageField } = base64Image;
     class Person extends CardDef {
       @field firstName = contains(StringField);
       @field picture = contains(Base64ImageField);
@@ -287,8 +279,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can update an instance from serialized data', async function (assert) {
-    let { field, contains, CardDef, updateFromSerialized, isSaved } = cardApi;
-    let { default: StringField } = string;
     class Person extends CardDef {
       @field firstName = contains(StringField);
     }
@@ -328,14 +318,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('throws when updating the id of a saved instance from serialized data', async function (assert) {
-    let {
-      field,
-      contains,
-      CardDef,
-      updateFromSerialized,
-      createFromSerialized,
-    } = cardApi;
-    let { default: StringField } = string;
     class Person extends CardDef {
       @field firstName = contains(StringField);
     }
@@ -387,10 +369,8 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('deserialized card ref fields are not strict equal to serialized card ref', async function (assert) {
-    let { field, contains, CardDef, Component, createFromSerialized } = cardApi;
-    let { default: CardRefCard } = codeRef;
     class DriverCard extends CardDef {
-      @field ref = contains(CardRefCard);
+      @field ref = contains(CodeRefField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <div data-test-ref><@fields.ref /></div>
@@ -430,10 +410,8 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('serialized card ref fields are not strict equal to their deserialized card ref values', async function (assert) {
-    let { field, contains, CardDef, Component, serializeCard } = cardApi;
-    let { default: CardRefCard } = codeRef;
     class DriverCard extends CardDef {
-      @field ref = contains(CardRefCard);
+      @field ref = contains(CodeRefField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <div data-test-ref><@fields.ref /></div>
@@ -459,9 +437,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize field', async function (assert) {
-    let { field, contains, CardDef, serializeCard } = cardApi;
-    let { default: DateField } = date;
-    let { default: DatetimeField } = datetime;
     class Post extends CardDef {
       @field created = contains(DateField);
       @field published = contains(DatetimeField);
@@ -485,10 +460,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a date field with null value', async function (assert) {
-    let { field, contains, CardDef, Component, createFromSerialized } = cardApi;
-    let { default: StringField } = string;
-    let { default: DateField } = date;
-    let { default: DatetimeField } = datetime;
     class Post extends CardDef {
       @field title = contains(StringField);
       @field created = contains(DateField);
@@ -533,9 +504,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a linksTo relationship', async function (assert) {
-    let { field, contains, linksTo, CardDef, serializeCard } = cardApi;
-    let { default: StringField } = string;
-
     class Toy extends CardDef {
       @field title = contains(StringField, {
         computeVia: function (this: Toy) {
@@ -657,17 +625,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a linksTo relationship', async function (assert) {
-    let {
-      field,
-      contains,
-      linksTo,
-      CardDef,
-      createFromSerialized,
-      relationshipMeta,
-      isSaved,
-    } = cardApi;
-    let { default: StringField } = string;
-
     class Toy extends CardDef {
       @field description = contains(StringField);
     }
@@ -799,17 +756,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a linksTo relationship that does not include all the related resources', async function (assert) {
-    let {
-      field,
-      contains,
-      linksTo,
-      CardDef,
-      createFromSerialized,
-      relationshipMeta,
-      serializeCard,
-    } = cardApi;
-    let { default: StringField } = string;
-
     class Pet extends CardDef {
       @field firstName = contains(StringField);
       @field title = contains(StringField, {
@@ -916,9 +862,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize an empty linksTo relationship', async function (assert) {
-    let { field, contains, linksTo, CardDef, serializeCard } = cardApi;
-    let { default: StringField } = string;
-
     class Pet extends CardDef {
       @field firstName = contains(StringField);
       @field title = contains(StringField, {
@@ -994,9 +937,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize an empty linksTo relationship', async function (assert) {
-    let { field, contains, linksTo, CardDef, createFromSerialized } = cardApi;
-    let { default: StringField } = string;
-
     class Pet extends CardDef {
       @field firstName = contains(StringField);
     }
@@ -1040,19 +980,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize coexisting linksTo, contains, and containsMany fields in a card', async function (assert) {
-    let {
-      field,
-      contains,
-      containsMany,
-      linksTo,
-      CardDef,
-      createFromSerialized,
-      FieldDef,
-      relationshipMeta,
-      isSaved,
-    } = cardApi;
-    let { default: StringField } = string;
-
     class Person extends CardDef {
       @field firstName = contains(StringField);
     }
@@ -1168,9 +1095,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a linksTo relationship that points to own card class', async function (assert) {
-    let { field, contains, linksTo, CardDef, serializeCard } = cardApi;
-    let { default: StringField } = string;
-
     class Person extends CardDef {
       @field firstName = contains(StringField);
       @field friend = linksTo(() => Person);
@@ -1241,10 +1165,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a linksTo relationship that points to own card class', async function (assert) {
-    let { field, contains, linksTo, CardDef, createFromSerialized, isSaved } =
-      cardApi;
-    let { default: StringField } = string;
-
     class Person extends CardDef {
       @field firstName = contains(StringField);
       @field friend = linksTo(() => Person);
@@ -1314,9 +1234,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('throws when serializing a linksTo relationship to an unsaved card', async function (assert) {
-    let { field, contains, linksTo, CardDef, serializeCard } = cardApi;
-    let { default: StringField } = string;
-
     class Pet extends CardDef {
       @field firstName = contains(StringField);
     }
@@ -1344,17 +1261,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a contains field that has a nested linksTo field', async function (assert) {
-    let {
-      field,
-      contains,
-      linksTo,
-      CardDef,
-      FieldDef,
-      serializeCard,
-      createFromSerialized,
-    } = cardApi;
-    let { default: StringField } = string;
-
     class Toy extends CardDef {
       @field title = contains(StringField, {
         computeVia: function (this: Toy) {
@@ -1480,17 +1386,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a contains field that only has a nested linksTo field', async function (assert) {
-    let {
-      field,
-      contains,
-      linksTo,
-      CardDef,
-      FieldDef,
-      serializeCard,
-      createFromSerialized,
-    } = cardApi;
-    let { default: StringField } = string;
-
     class Toy extends CardDef {
       @field title = contains(StringField, {
         computeVia: function (this: Toy) {
@@ -1606,18 +1501,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a containsMany field that has a nested linksTo field', async function (assert) {
-    let {
-      field,
-      contains,
-      containsMany,
-      linksTo,
-      CardDef,
-      FieldDef,
-      serializeCard,
-      createFromSerialized,
-    } = cardApi;
-    let { default: StringField } = string;
-
     class Toy extends CardDef {
       @field description = contains(StringField);
       @field title = contains(StringField, {
@@ -1752,8 +1635,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can maintain object identity when deserializing linksTo relationship', async function (assert) {
-    let { field, contains, linksTo, CardDef, createFromSerialized } = cardApi;
-    let { default: StringField } = string;
     class Person extends CardDef {
       @field firstName = contains(StringField);
       @field parent = linksTo(() => Person);
@@ -1828,9 +1709,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a date field with null value', async function (assert) {
-    let { field, contains, CardDef, serializeCard } = cardApi;
-    let { default: DateField } = date;
-    let { default: DatetimeField } = datetime;
     class Post extends CardDef {
       @field created = contains(DateField);
       @field published = contains(DatetimeField);
@@ -1847,17 +1725,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a nested field', async function (assert) {
-    let {
-      field,
-      contains,
-      CardDef,
-      FieldDef,
-      Component,
-      createFromSerialized,
-    } = cardApi;
-    let { default: StringField } = string;
-    let { default: DateField } = date;
-    let { default: DatetimeField } = datetime;
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       @field birthdate = contains(DateField);
@@ -1911,17 +1778,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a composite field', async function (assert) {
-    let {
-      field,
-      contains,
-      CardDef,
-      FieldDef,
-      Component,
-      createFromSerialized,
-    } = cardApi;
-    let { default: StringField } = string;
-    let { default: DateField } = date;
-    let { default: DatetimeField } = datetime;
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       @field birthdate = contains(DateField);
@@ -1981,11 +1837,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a composite field', async function (assert) {
-    let { field, contains, serializeCard, CardDef, FieldDef } = cardApi;
-    let { default: DateField } = date;
-    let { default: DatetimeField } = datetime;
-    let { default: StringField } = string;
-
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       @field birthdate = contains(DateField);
@@ -2035,11 +1886,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a polymorphic composite field', async function (assert) {
-    let { field, contains, serializeCard, CardDef, FieldDef } = cardApi;
-    let { default: StringField } = string;
-    let { default: DateField } = date;
-    let { default: DatetimeField } = datetime;
-
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       @field birthdate = contains(DateField);
@@ -2088,10 +1934,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a composite field that has been edited', async function (assert) {
-    let { field, contains, serializeCard, CardDef, FieldDef, Component } =
-      cardApi;
-    let { default: StringField } = string;
-    let { default: NumberField } = number;
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       @field title = contains(StringField, {
@@ -2168,8 +2010,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a computed field', async function (assert) {
-    let { field, contains, serializeCard, CardDef } = cardApi;
-    let { default: DateField } = date;
     class Person extends CardDef {
       @field birthdate = contains(DateField);
       @field firstBirthday = contains(DateField, {
@@ -2193,8 +2033,6 @@ module('Integration | serialization', function (hooks) {
 
   module('computed linksTo', function () {
     test('can serialize a computed linksTo field', async function (assert) {
-      let { field, contains, linksTo, serializeCard, CardDef } = cardApi;
-      let { default: StringField } = string;
       class Pet extends CardDef {
         @field name = contains(StringField);
         @field description = contains(StringField, { computeVia: () => 'Pet' });
@@ -2291,16 +2129,6 @@ module('Integration | serialization', function (hooks) {
     });
 
     test('can deserialize a computed linksTo field', async function (assert) {
-      let {
-        field,
-        contains,
-        linksTo,
-        CardDef,
-        createFromSerialized,
-        relationshipMeta,
-        isSaved,
-      } = cardApi;
-      let { default: StringField } = string;
       class Pet extends CardDef {
         @field name = contains(StringField);
       }
@@ -2404,8 +2232,6 @@ module('Integration | serialization', function (hooks) {
     });
 
     test('can serialize an empty computed linksTo field', async function (assert) {
-      let { field, contains, linksTo, CardDef, serializeCard } = cardApi;
-      let { default: StringField } = string;
       class Pet extends CardDef {
         @field name = contains(StringField);
       }
@@ -2447,15 +2273,6 @@ module('Integration | serialization', function (hooks) {
     });
 
     test('can deserialize an empty computed linksTo field', async function (assert) {
-      let {
-        field,
-        contains,
-        linksTo,
-        CardDef,
-        createFromSerialized,
-        relationshipMeta,
-      } = cardApi;
-      let { default: StringField } = string;
       class Pet extends CardDef {
         @field name = contains(StringField);
       }
@@ -2499,15 +2316,6 @@ module('Integration | serialization', function (hooks) {
     });
 
     test('can deserialize a computed linksTo relationship that does not include all the related resources', async function (assert) {
-      let {
-        field,
-        contains,
-        linksTo,
-        CardDef,
-        createFromSerialized,
-        relationshipMeta,
-      } = cardApi;
-      let { default: StringField } = string;
       class Pet extends CardDef {
         @field name = contains(StringField);
       }
@@ -2570,9 +2378,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a containsMany field', async function (assert) {
-    let { field, containsMany, CardDef, Component, createFromSerialized } =
-      cardApi;
-    let { default: DateField } = date;
     class Schedule extends CardDef {
       @field dates = containsMany(DateField);
       static isolated = class Isolated extends Component<typeof this> {
@@ -2610,17 +2415,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test("can deserialize a containsMany's nested field", async function (this: RenderingTestContext, assert) {
-    let {
-      field,
-      contains,
-      containsMany,
-      CardDef,
-      FieldDef,
-      Component,
-      createFromSerialized,
-    } = cardApi;
-    let { default: StringField } = string;
-    let { default: DateField } = date;
     class Appointment extends FieldDef {
       @field date = contains(DateField);
       @field location = contains(StringField);
@@ -2680,8 +2474,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a containsMany field', async function (assert) {
-    let { field, containsMany, serializeCard, CardDef } = cardApi;
-    let { default: DateField } = date;
     class Schedule extends CardDef {
       @field dates = containsMany(DateField);
     }
@@ -2696,10 +2488,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test("can serialize a containsMany's nested field", async function (assert) {
-    let { field, contains, containsMany, serializeCard, CardDef, FieldDef } =
-      cardApi;
-    let { default: StringField } = string;
-    let { default: DateField } = date;
     class Appointment extends FieldDef {
       @field date = contains(DateField);
       @field location = contains(StringField);
@@ -2749,10 +2537,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a card with primitive fields', async function (assert) {
-    let { field, contains, serializeCard, CardDef, recompute } = cardApi;
-    let { default: StringField } = string;
-    let { default: DateField } = date;
-    let { default: DatetimeField } = datetime;
     class Post extends CardDef {
       @field title = contains(StringField);
       @field created = contains(DateField);
@@ -2794,9 +2578,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a card with composite field', async function (assert) {
-    let { field, contains, serializeCard, CardDef, FieldDef } = cardApi;
-    let { default: StringField } = string;
-    let { default: DateField } = date;
     class Animal extends FieldDef {
       @field species = contains(StringField);
       @field description = contains(StringField, {
@@ -2855,17 +2636,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a card that has a polymorphic field value', async function (assert) {
-    let {
-      field,
-      contains,
-      serializeCard,
-      CardDef,
-      FieldDef,
-      createFromSerialized,
-    } = cardApi;
-    let { default: StringField } = string;
-    let { default: DateField } = date;
-
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       @field birthdate = contains(DateField);
@@ -2946,17 +2716,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a card that has a nested polymorphic field value', async function (assert) {
-    let {
-      field,
-      contains,
-      serializeCard,
-      CardDef,
-      FieldDef,
-      createFromSerialized,
-    } = cardApi;
-    let { default: StringField } = string;
-    let { default: DateField } = date;
-
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       @field birthdate = contains(DateField);
@@ -3069,18 +2828,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a polymorphic containsMany field', async function (assert) {
-    let {
-      field,
-      contains,
-      containsMany,
-      serializeCard,
-      CardDef,
-      FieldDef,
-      createFromSerialized,
-    } = cardApi;
-    let { default: NumberField } = number;
-    let { default: StringField } = string;
-
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       @field title = contains(StringField, {
@@ -3207,18 +2954,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize polymorphic containsMany with nested polymorphic values', async function (assert) {
-    let {
-      field,
-      contains,
-      containsMany,
-      serializeCard,
-      CardDef,
-      FieldDef,
-      createFromSerialized,
-    } = cardApi;
-    let { default: NumberField } = number;
-    let { default: StringField } = string;
-
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       @field title = contains(StringField, {
@@ -3360,17 +3095,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a linksTo field that contains a polymorphic field', async function (assert) {
-    let {
-      field,
-      contains,
-      linksTo,
-      CardDef,
-      FieldDef,
-      createFromSerialized,
-      isSaved,
-    } = cardApi;
-    let { default: StringField } = string;
-
     class Toy extends CardDef {
       @field description = contains(StringField);
     }
@@ -3460,10 +3184,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a card from a resource object', async function (assert) {
-    let { field, contains, serializeCard, CardDef, createFromSerialized } =
-      cardApi;
-    let { default: StringField } = string;
-
     class Person extends CardDef {
       @field firstName = contains(StringField);
       @field title = contains(StringField, {
@@ -3520,16 +3240,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a card from a resource object with composite fields', async function (assert) {
-    let {
-      field,
-      contains,
-      serializeCard,
-      CardDef,
-      FieldDef,
-      createFromSerialized,
-    } = cardApi;
-    let { default: StringField } = string;
-
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       @field title = contains(StringField, {
@@ -3601,17 +3311,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a card with contains many of a compound field', async function (assert) {
-    let {
-      field,
-      contains,
-      containsMany,
-      serializeCard,
-      CardDef,
-      FieldDef,
-      createFromSerialized,
-    } = cardApi;
-    let { default: StringField } = string;
-
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       @field title = contains(StringField, {
@@ -3719,20 +3418,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a card with contains many of a compound field including a linksTo', async function (assert) {
-    let {
-      field,
-      contains,
-      containsMany,
-      linksTo,
-      serializeCard,
-      CardDef,
-      FieldDef,
-      createFromSerialized,
-    } = cardApi;
-    let { default: StringField } = string;
-    let { default: NumberField } = number;
-    let { default: DateField } = date;
-
     class Certificate extends CardDef {
       @field earnedOn = contains(DateField);
       @field level = contains(NumberField);
@@ -4009,9 +3694,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a card with computed field', async function (assert) {
-    let { field, contains, serializeCard, CardDef } = cardApi;
-    let { default: DateField } = date;
-    let { default: StringField } = string;
     class Person extends CardDef {
       @field birthdate = contains(DateField);
       @field firstBirthday = contains(DateField, {
@@ -4076,8 +3758,6 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('Includes non-computed contained fields, even if the fields are unrendered', async function (assert) {
-    let { field, contains, CardDef, Component, serializeCard } = cardApi;
-    let { default: StringField } = string;
     class Person extends CardDef {
       @field firstName = contains(StringField);
       @field unRenderedField = contains(StringField);
@@ -4118,9 +3798,6 @@ module('Integration | serialization', function (hooks) {
 
   module('linksToMany', function () {
     test('can serialize a linksToMany relationship', async function (assert) {
-      let { field, contains, linksToMany, CardDef, serializeCard } = cardApi;
-      let { default: StringField } = string;
-
       class Pet extends CardDef {
         @field firstName = contains(StringField);
         @field title = contains(StringField, {
@@ -4211,17 +3888,6 @@ module('Integration | serialization', function (hooks) {
     });
 
     test('can deserialize a linksToMany relationship', async function (assert) {
-      let {
-        field,
-        contains,
-        linksToMany,
-        CardDef,
-        createFromSerialized,
-        relationshipMeta,
-        isSaved,
-      } = cardApi;
-      let { default: StringField } = string;
-
       class Pet extends CardDef {
         @field firstName = contains(StringField);
       }
@@ -4345,17 +4011,6 @@ module('Integration | serialization', function (hooks) {
     });
 
     test('can serialize a linkstoMany relationship with nested linksTo field', async function (assert) {
-      let {
-        field,
-        contains,
-        linksToMany,
-        linksTo,
-        CardDef,
-        serializeCard,
-        createFromSerialized,
-      } = cardApi;
-      let { default: StringField } = string;
-
       class Toy extends CardDef {
         @field description = contains(StringField);
         @field title = contains(StringField, {
@@ -4497,9 +4152,6 @@ module('Integration | serialization', function (hooks) {
     });
 
     test('can serialize an empty linksToMany relationship', async function (assert) {
-      let { field, contains, linksToMany, CardDef, serializeCard } = cardApi;
-      let { default: StringField } = string;
-
       class Pet extends CardDef {
         @field firstName = contains(StringField);
         @field title = contains(StringField, {
@@ -4570,10 +4222,6 @@ module('Integration | serialization', function (hooks) {
     });
 
     test('can deserialize an empty linksToMany relationship', async function (assert) {
-      let { field, contains, linksToMany, CardDef, createFromSerialized } =
-        cardApi;
-      let { default: StringField } = string;
-
       class Pet extends CardDef {
         @field firstName = contains(StringField);
       }
@@ -4615,17 +4263,6 @@ module('Integration | serialization', function (hooks) {
     });
 
     test('can deserialize a linksToMany relationship that does not include all the related resources', async function (assert) {
-      let {
-        field,
-        contains,
-        linksToMany,
-        CardDef,
-        createFromSerialized,
-        relationshipMeta,
-        serializeCard,
-      } = cardApi;
-      let { default: StringField } = string;
-
       class Pet extends CardDef {
         @field firstName = contains(StringField);
         @field title = contains(StringField, {
@@ -4772,9 +4409,6 @@ module('Integration | serialization', function (hooks) {
     });
 
     test('can serialize a linksToMany relationship that points to own card class', async function (assert) {
-      let { field, contains, linksToMany, CardDef, serializeCard } = cardApi;
-      let { default: StringField } = string;
-
       class Person extends CardDef {
         @field firstName = contains(StringField);
         @field friends = linksToMany(() => Person);
@@ -4855,16 +4489,6 @@ module('Integration | serialization', function (hooks) {
     });
 
     test('can deserialize a linksToMany relationship that points to own card class', async function (assert) {
-      let {
-        field,
-        contains,
-        linksToMany,
-        CardDef,
-        createFromSerialized,
-        isSaved,
-      } = cardApi;
-      let { default: StringField } = string;
-
       class Person extends CardDef {
         @field firstName = contains(StringField);
         @field friends = linksToMany(() => Person);
@@ -4962,9 +4586,6 @@ module('Integration | serialization', function (hooks) {
 
   module('computed linksToMany', function () {
     test('can serialize a computed linksToMany relationship', async function (assert) {
-      let { field, contains, linksTo, linksToMany, serializeCard, CardDef } =
-        cardApi;
-      let { default: StringField } = string;
       class Pet extends CardDef {
         @field name = contains(StringField);
       }
@@ -5074,17 +4695,6 @@ module('Integration | serialization', function (hooks) {
     });
 
     test('can deserialize a computed linksToMany relationship', async function (assert) {
-      let {
-        field,
-        contains,
-        linksTo,
-        linksToMany,
-        createFromSerialized,
-        CardDef,
-        isSaved,
-        relationshipMeta,
-      } = cardApi;
-      let { default: StringField } = string;
       class Pet extends CardDef {
         @field name = contains(StringField);
       }
@@ -5194,9 +4804,6 @@ module('Integration | serialization', function (hooks) {
     });
 
     test('can serialize an empty computed linksToMany relationship', async function (assert) {
-      let { field, contains, linksTo, linksToMany, serializeCard, CardDef } =
-        cardApi;
-      let { default: StringField } = string;
       class Pet extends CardDef {
         @field name = contains(StringField);
       }
@@ -5240,15 +4847,6 @@ module('Integration | serialization', function (hooks) {
     });
 
     test('can deserialize an empty computed linksToMany relationship', async function (assert) {
-      let {
-        field,
-        contains,
-        linksTo,
-        linksToMany,
-        createFromSerialized,
-        CardDef,
-      } = cardApi;
-      let { default: StringField } = string;
       class Pet extends CardDef {
         @field name = contains(StringField);
       }
@@ -5292,17 +4890,6 @@ module('Integration | serialization', function (hooks) {
     });
 
     test('can deserialize a computed linksToMany relationship that does not include all the related resources', async function (assert) {
-      let {
-        field,
-        contains,
-        linksTo,
-        linksToMany,
-        CardDef,
-        createFromSerialized,
-        relationshipMeta,
-        serializeCard,
-      } = cardApi;
-      let { default: StringField } = string;
       class Pet extends CardDef {
         @field name = contains(StringField);
       }
@@ -5424,9 +5011,6 @@ module('Integration | serialization', function (hooks) {
 
     module('NumberField', function () {
       test('can deserialize field', async function (assert) {
-        let { field, contains, CardDef, createFromSerialized } = cardApi;
-        let { default: StringField } = string;
-        let { default: NumberField } = number;
         class Sample extends CardDef {
           @field title = contains(StringField);
           @field someNumber = contains(NumberField);
@@ -5488,9 +5072,6 @@ module('Integration | serialization', function (hooks) {
       });
 
       test('can serialize field', async function (assert) {
-        let { field, contains, CardDef, serializeCard } = cardApi;
-        let { default: StringField } = string;
-        let { default: NumberField } = number;
         class Sample extends CardDef {
           @field title = contains(StringField);
           @field someNumber = contains(NumberField);
@@ -5526,9 +5107,6 @@ module('Integration | serialization', function (hooks) {
         return typeof input == 'bigint';
       }
       test('can deserialize field', async function (assert) {
-        let { field, contains, CardDef, createFromSerialized } = cardApi;
-        let { default: StringField } = string;
-        let { default: BigIntegerField } = bigInteger;
         class Sample extends CardDef {
           @field title = contains(StringField);
           @field someBigInt = contains(BigIntegerField);
@@ -5578,9 +5156,6 @@ module('Integration | serialization', function (hooks) {
       });
 
       test('can serialize field', async function (assert) {
-        let { field, contains, CardDef, serializeCard } = cardApi;
-        let { default: StringField } = string;
-        let { default: BigIntegerField } = bigInteger;
         class Sample extends CardDef {
           @field title = contains(StringField);
           @field someBigInt = contains(BigIntegerField);
@@ -5614,8 +5189,6 @@ module('Integration | serialization', function (hooks) {
       });
 
       test('queryable value', async function (assert) {
-        let { getQueryableValue } = cardApi;
-        let { default: BigIntegerField } = bigInteger;
         assert.strictEqual(
           getQueryableValue(BigIntegerField, BigInt('9223372036854775808')),
           '9223372036854775808',
@@ -5628,10 +5201,6 @@ module('Integration | serialization', function (hooks) {
       });
 
       test('can perform bigint operations with computed', async function (assert) {
-        let { field, contains, CardDef, serializeCard } = cardApi;
-        let { default: StringField } = string;
-        let { default: BigIntegerField } = bigInteger;
-
         class Sample extends CardDef {
           @field title = contains(StringField);
           @field someBigInt = contains(BigIntegerField);
@@ -5675,9 +5244,6 @@ module('Integration | serialization', function (hooks) {
         return isAddress(address);
       }
       test('can deserialize field', async function (assert) {
-        let { field, contains, CardDef, createFromSerialized } = cardApi;
-        let { default: StringField } = string;
-        let { default: EthereumAddressField } = ethereumAddress;
         class Sample extends CardDef {
           @field title = contains(StringField);
           @field someAddress = contains(EthereumAddressField);
@@ -5732,9 +5298,6 @@ module('Integration | serialization', function (hooks) {
       });
 
       test('can serialize field', async function (assert) {
-        let { field, contains, CardDef, serializeCard } = cardApi;
-        let { default: StringField } = string;
-        let { default: EthereumAddressField } = ethereumAddress;
         class Sample extends CardDef {
           @field title = contains(StringField);
           @field someAddress = contains(EthereumAddressField);
@@ -5774,8 +5337,6 @@ module('Integration | serialization', function (hooks) {
       });
 
       test('queryable value', async function (assert) {
-        let { getQueryableValue } = cardApi;
-        let { default: EthereumAddressField } = ethereumAddress;
         assert.strictEqual(
           getQueryableValue(
             EthereumAddressField,
