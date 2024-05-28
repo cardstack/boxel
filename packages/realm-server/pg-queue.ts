@@ -44,6 +44,13 @@ const defaultQueueOpts: Required<QueueOpts> = Object.freeze({
   queueName: 'default',
 });
 
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.SENTRY_ENVIRONMENT || 'development',
+  });
+}
+
 // Tracks a job that should loop with a timeout and an interruptible sleep.
 class WorkLoop {
   private internalWaker: Deferred<void> | undefined;
