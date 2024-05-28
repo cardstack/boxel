@@ -6,8 +6,6 @@ module.exports = {
       [data-test-percy-hide] {
         visibility: hidden;
       }
-
-      .create-file { display: none !important; }
     `,
   },
 };
