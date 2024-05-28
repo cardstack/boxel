@@ -907,7 +907,6 @@ interface CommandMessageContent {
   formatted_body: string;
   data: {
     command: CommandPayload;
-    result?: any;
   };
 }
 
@@ -916,16 +915,13 @@ export interface ReactionEvent extends BaseMatrixEvent {
   content: ReactionEventContent;
 }
 
-// any ai interaction with our card system will deliver a result
-// currently, we only use ReactionResult as a way to extract this data
-// since that is when the user applies the command
 export interface ReactionEventContent {
   'm.relates_to': {
     event_id: string;
     key: string;
     rel_type: 'm.annotation';
   };
-  result?: any; // will already have data: bcos of our json schema spec
+  result?: any;
 }
 
 interface CardMessageEvent extends BaseMatrixEvent {
