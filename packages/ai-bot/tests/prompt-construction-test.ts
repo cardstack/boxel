@@ -68,7 +68,6 @@ function getSearchTool(cardId: string) {
         required: ['card_id', 'filter'],
       },
     },
-
   };
 }
 
@@ -953,9 +952,7 @@ module('getModifyPrompt', () => {
           data: {
             context: {
               openCardIds: ['http://localhost:4201/drafts/Friend/1'],
-              tools: [
-                getSearchTool('http://localhost:4201/drafts/Friend/1'),
-              ],
+              tools: [getSearchTool('http://localhost:4201/drafts/Friend/1')],
               submode: 'interact',
             },
           },
@@ -971,50 +968,43 @@ module('getModifyPrompt', () => {
 
     const functions = getTools(history, '@aibot:localhost');
     assert.equal(functions.length, 1);
-    assert.deepEqual(functions[0], 
-      {
-        type: "function",
-        function: {
-          name: "searchCard",
-          description: "Propose a query to search for a card instance related to module it was from. \n      Always prioritise search based upon the card that was last shared. \n      Ensure that you find the correct \"module\" and \"name\" from the OUTERMOST \"adoptsFrom\" field from the card data that is shared",
-          parameters: {
-            type: "object",
-            properties: {
-              card_id: {
-                type: "string",
-                const: "http://localhost:4201/drafts/Friend/1"
-              },
-              filter: {
-                type: "object",
-                properties: {
-                  type: {
-                    type: "object",
-                    properties: {
-                      module: {
-                        type: "string",
-                        description: "the absolute path of the module"
-                      },
-                      name: {
-                        type: "string",
-                        description: "the name of the module"
-                      }
-                    },
-                    required: [
-                      "module",
-                      "name"
-                    ]
-                  }
-                }
-              }
+    assert.deepEqual(functions[0], {
+      type: 'function',
+      function: {
+        name: 'searchCard',
+        description:
+          'Propose a query to search for a card instance related to module it was from. \n      Always prioritise search based upon the card that was last shared. \n      Ensure that you find the correct "module" and "name" from the OUTERMOST "adoptsFrom" field from the card data that is shared',
+        parameters: {
+          type: 'object',
+          properties: {
+            card_id: {
+              type: 'string',
+              const: 'http://localhost:4201/drafts/Friend/1',
             },
-            required: [
-              "card_id",
-              "filter"
-            ]
-          }
-        }
-      }
-    )
+            filter: {
+              type: 'object',
+              properties: {
+                type: {
+                  type: 'object',
+                  properties: {
+                    module: {
+                      type: 'string',
+                      description: 'the absolute path of the module',
+                    },
+                    name: {
+                      type: 'string',
+                      description: 'the name of the module',
+                    },
+                  },
+                  required: ['module', 'name'],
+                },
+              },
+            },
+          },
+          required: ['card_id', 'filter'],
+        },
+      },
+    });
   });
 
   test('Gets only the latest functions', () => {
