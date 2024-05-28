@@ -254,8 +254,8 @@ export default class CardService extends Service {
   async patchCard(
     card: CardDef,
     doc: LooseSingleCardDocument,
-    patchData: Record<string, any>,
-  ): Promise<[CardDef, LooseSingleCardDocument] | undefined> {
+    patchData: PatchData,
+  ): Promise<CardDef | undefined> {
     let api = await this.getAPI();
     let initialDoc = await this.serializeCard(card);
     let updatedCard = await api.updateFromSerialized<typeof CardDef>(card, doc);
@@ -276,11 +276,7 @@ export default class CardService extends Service {
 
     // TODO setting `this` as an owner until we can have a better solution here...
     // (currently only used by the AI bot to patch cards from chat)
-    let savedCard = await this.saveModel(this, updatedCard); //this returns a CardDef which is too much to understand
-    if (savedCard) {
-      return [savedCard, updatedCardDoc];
-    }
-    return;
+    return await this.saveModel(this, updatedCard);
   }
 
   private async loadPatchedCards(
