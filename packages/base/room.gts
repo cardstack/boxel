@@ -298,21 +298,6 @@ class SearchCommandField extends CommandField {
   @field intent = contains(StringField);
   @field query = contains(SearchQueryField);
   @field results = linksToMany(CardDef); //TODO: computeVia using linksTo
-  get searchResults() {
-    let query = this.query.filter;
-    return query;
-  }
-  static embedded = class Embedded extends Component<
-    typeof SearchCommandField
-  > {
-    <template>
-      {{#each @model.results as |card|}}
-        <div>
-          {{card.id}}
-        </div>
-      {{/each}}
-    </template>
-  };
 }
 
 export function getEventIdForCard(
