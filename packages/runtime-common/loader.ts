@@ -453,16 +453,22 @@ export class Loader {
         mergedHeaders = { ...mergedHeaders, ...headersFromRequest(request) };
         setHeaders(request, mergedHeaders);
 
+        timeStart('fetch:handler');
         let result = await handler(request);
+        timeEnd('fetch:handler');
+
         // the handler is allowed to mutate the headers, so we merge any updated headers
         mergedHeaders = { ...mergedHeaders, ...headersFromRequest(request) };
 
         if (result) {
-          return await followRedirections(
+          timeStart('fetch:followRedirections');
+          let followed = await followRedirections(
             request,
             result,
             this.fetch.bind(this),
           );
+          timeEnd('fetch:followRedirections');
+          return followed;
         }
       }
 
@@ -475,9 +481,18 @@ export class Loader {
         return response;
       }
 
+      timeStart('fetch:asRequest');
       let request = this.asRequest(urlOrRequest, init);
+      timeEnd('fetch:asRequest');
+
+      timeStart('fetch:setHeaders');
       setHeaders(request, mergedHeaders);
-      return await this.fetchImplementation(request);
+      timeEnd('fetch:setHeaders');
+
+      timeStart('fetch:actualFetch');
+      let actualFetch = await this.fetchImplementation(request);
+      timeEnd('fetch:actualFetch');
+      return actualFetch;
     } catch (err: any) {
       let url =
         urlOrRequest instanceof Request
