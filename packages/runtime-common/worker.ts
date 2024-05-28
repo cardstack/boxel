@@ -198,7 +198,7 @@ export class Worker {
           // indexer DB issues. Let's just log in sentry here and let developers
           // followup on the issue from the sentry logs. Likely if an exception
           // was raised to this level the fastboot instance is probably no
-          // longer usable.0
+          // longer usable.
           reportError(e);
           console.error(
             `Error raised during indexing has likely stopped the indexer`,
