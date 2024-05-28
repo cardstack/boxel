@@ -10,10 +10,10 @@ import {
   RealmAdapter,
   LooseSingleCardDocument,
   baseRealm,
-  RealmPermissions,
   Deferred,
   Worker,
   RunnerOptionsManager,
+  RealmPermissions,
   type RealmInfo,
   type TokenClaims,
   type Indexer,
@@ -21,6 +21,7 @@ import {
   type IndexRunner,
   type IndexResults,
   assetsDir,
+  insertPermissions,
 } from '@cardstack/runtime-common';
 
 import {
@@ -445,6 +446,7 @@ export async function setupIntegrationTestRealm({
   contents,
   realmURL,
   onFetch,
+  permissions,
 }: {
   loader: Loader;
   contents: RealmContents;
@@ -453,12 +455,14 @@ export async function setupIntegrationTestRealm({
     req: Request;
     res: Response | null;
   }>;
+  permissions?: RealmPermissions;
 }) {
   return await setupTestRealm({
     contents,
     realmURL,
     onFetch,
     isAcceptanceTest: false,
+    permissions,
   });
 }
 
@@ -526,13 +530,15 @@ async function setupTestRealm({
   };
 
   let dbAdapter = await getDbAdapter();
+
+  await insertPermissions(dbAdapter, new URL(realmURL), permissions);
+
   realm = new Realm({
     url: realmURL,
     adapter,
     getIndexHTML: async () =>
       `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
     matrix: testMatrix,
-    permissions,
     realmSecretSeed: testRealmSecretSeed,
     virtualNetwork,
     dbAdapter,
