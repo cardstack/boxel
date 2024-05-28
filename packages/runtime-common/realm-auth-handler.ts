@@ -18,7 +18,7 @@ export interface IRealmCache {
   resetAuth(realmURL: string): void;
 }
 
-class RealmCache implements IRealmCache {
+export class RealmCache implements IRealmCache {
   private matrixClient: MatrixClient;
   private loader: Loader;
   // Cached realm info to avoid fetching it multiple times for the same realm

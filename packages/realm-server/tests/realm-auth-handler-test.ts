@@ -1,4 +1,8 @@
-import { Loader, RealmAuthHandler } from '@cardstack/runtime-common';
+import {
+  Loader,
+  RealmAuthHandler,
+  RealmCache,
+} from '@cardstack/runtime-common';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { AuthenticationErrorMessages } from '@cardstack/runtime-common/router';
 import { module, test } from 'qunit';
@@ -12,7 +16,6 @@ module('realm-auth-handler-test', function () {
 
   test('it does not run auth for requests that do not need it', async function (assert) {
     let realmAuthHandler = new RealmAuthHandler(
-      matrixClient,
       {
         fetch: async () => {
           return new Response(null, {
@@ -24,6 +27,7 @@ module('realm-auth-handler-test', function () {
         },
       } as unknown as Loader,
       'http://test-realm/',
+      matrixClient,
     );
 
     // Case 1: POST request to _session which is for creating a session
@@ -64,17 +68,18 @@ module('realm-auth-handler-test', function () {
       },
     } as unknown as Loader;
 
-    let realmAuthHandler = new RealmAuthHandler(
-      matrixClient,
-      loader,
-      'http://test-realm/',
-    );
-
-    (realmAuthHandler as any).createRealmAuthClient = () => {
+    let realmCache = new RealmCache(loader, matrixClient);
+    (realmCache as any).createRealmAuthClient = () => {
       return {
         getJWT: () => 'Bearer token_1',
       };
     };
+    let realmAuthHandler = new RealmAuthHandler(
+      loader,
+      'http://test-realm/',
+      undefined,
+      realmCache,
+    );
 
     let request = new Request('http://another-test-realm/card');
 
@@ -117,9 +122,9 @@ module('realm-auth-handler-test', function () {
     } as unknown as Loader;
 
     let realmAuthHandler = new RealmAuthHandler(
-      matrixClient,
       loader,
       'http://test-realm/',
+      matrixClient,
     );
 
     let request = new Request('http://another-test-realm/card');
@@ -149,9 +154,9 @@ module('realm-auth-handler-test', function () {
     } as unknown as Loader;
 
     let realmAuthHandler = new RealmAuthHandler(
-      matrixClient,
       loader,
       'http://test-realm/',
+      matrixClient,
     );
 
     let request = new Request('http://test-realm/card');
@@ -180,14 +185,9 @@ module('realm-auth-handler-test', function () {
       },
     } as unknown as Loader;
 
-    let realmAuthHandler = new RealmAuthHandler(
-      matrixClient,
-      loader,
-      'http://test-realm/',
-    );
-
     let bearerToken = 'Bearer token_1';
-    (realmAuthHandler as any).createRealmAuthClient = () => {
+    let realmCache = new RealmCache(loader, matrixClient);
+    (realmCache as any).createRealmAuthClient = () => {
       return {
         getJWT: () => {
           let token = bearerToken;
@@ -196,12 +196,18 @@ module('realm-auth-handler-test', function () {
         },
       };
     };
+    let realmAuthHandler = new RealmAuthHandler(
+      loader,
+      'http://test-realm/',
+      undefined,
+      realmCache,
+    );
 
     let request = new Request('http://another-test-realm/card');
 
     await realmAuthHandler.fetchWithAuth(request);
 
-    assert.strictEqual(requestsMade.length, 3); // realm info request, actual request, and the retry
+    assert.strictEqual(requestsMade.length, 4); // realm info request, actual request, re-fetch realm info, and the retry
     assert.strictEqual(requestsMade[0].method, 'HEAD');
     assert.strictEqual(requestsMade[0].headers.get('Authorization'), null);
 
@@ -211,10 +217,10 @@ module('realm-auth-handler-test', function () {
       'Bearer token_1',
     );
 
-    assert.strictEqual(requestsMade.length, 3);
-    assert.strictEqual(requestsMade[2].method, 'GET');
+    assert.strictEqual(requestsMade.length, 4);
+    assert.strictEqual(requestsMade[3].method, 'GET');
     assert.strictEqual(
-      requestsMade[2].headers.get('Authorization'),
+      requestsMade[3].headers.get('Authorization'),
       'Bearer new_token_for_retry',
     ); // It generated a new token for the retry
   });
@@ -235,14 +241,9 @@ module('realm-auth-handler-test', function () {
       },
     } as unknown as Loader;
 
-    let realmAuthHandler = new RealmAuthHandler(
-      matrixClient,
-      loader,
-      'http://test-realm/',
-    );
-
+    let realmCache = new RealmCache(loader, matrixClient);
     let bearerToken = 'Bearer token_1';
-    (realmAuthHandler as any).createRealmAuthClient = () => {
+    (realmCache as any).createRealmAuthClient = () => {
       return {
         getJWT: () => {
           let token = bearerToken;
@@ -251,13 +252,19 @@ module('realm-auth-handler-test', function () {
         },
       };
     };
+    let realmAuthHandler = new RealmAuthHandler(
+      loader,
+      'http://test-realm/',
+      undefined,
+      realmCache,
+    );
 
     let request = new Request('http://another-test-realm/card');
 
     await realmAuthHandler.fetchWithAuth(request);
 
     // Fetch with autorization header should not be made because the realm is making requests to itself
-    assert.strictEqual(requestsMade.length, 3); // realm info request, actual request, and the retry
+    assert.strictEqual(requestsMade.length, 4); // realm info request, actual request, re-fetch realm info request and the retry
     assert.strictEqual(requestsMade[0].method, 'HEAD');
     assert.strictEqual(requestsMade[0].headers.get('Authorization'), null);
 
@@ -267,10 +274,10 @@ module('realm-auth-handler-test', function () {
       'Bearer token_1',
     );
 
-    assert.strictEqual(requestsMade.length, 3);
-    assert.strictEqual(requestsMade[2].method, 'GET');
+    assert.strictEqual(requestsMade.length, 4);
+    assert.strictEqual(requestsMade[3].method, 'GET');
     assert.strictEqual(
-      requestsMade[2].headers.get('Authorization'),
+      requestsMade[3].headers.get('Authorization'),
       'Bearer new_token_for_retry',
     ); // It generated a new token for the retry
   });
@@ -291,14 +298,9 @@ module('realm-auth-handler-test', function () {
       },
     } as unknown as Loader;
 
-    let realmAuthHandler = new RealmAuthHandler(
-      matrixClient,
-      loader,
-      'http://test-realm/',
-    );
-
+    let realmCache = new RealmCache(loader, matrixClient);
     let bearerToken = 'Bearer token_1';
-    (realmAuthHandler as any).createRealmAuthClient = () => {
+    (realmCache as any).createRealmAuthClient = () => {
       return {
         getJWT: () => {
           let token = bearerToken;
@@ -307,6 +309,12 @@ module('realm-auth-handler-test', function () {
         },
       };
     };
+    let realmAuthHandler = new RealmAuthHandler(
+      loader,
+      'http://test-realm/',
+      undefined,
+      realmCache,
+    );
 
     let request = new Request('http://another-test-realm/card');
 
@@ -341,14 +349,9 @@ module('realm-auth-handler-test', function () {
       },
     } as unknown as Loader;
 
-    let realmAuthHandler = new RealmAuthHandler(
-      matrixClient,
-      loader,
-      'http://test-realm/',
-    );
-
+    let realmCache = new RealmCache(loader, matrixClient);
     let bearerToken = 'Bearer token_1';
-    (realmAuthHandler as any).createRealmAuthClient = () => {
+    (realmCache as any).createRealmAuthClient = () => {
       return {
         getJWT: () => {
           let token = bearerToken;
@@ -357,6 +360,12 @@ module('realm-auth-handler-test', function () {
         },
       };
     };
+    let realmAuthHandler = new RealmAuthHandler(
+      loader,
+      'http://test-realm/',
+      undefined,
+      realmCache,
+    );
 
     let request = new Request('http://another-test-realm/card');
 
