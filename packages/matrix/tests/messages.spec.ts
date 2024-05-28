@@ -391,40 +391,43 @@ test.describe('Room messages', () => {
         },
       },
       {
-        type:"function",
-        function:
-        {
-          name:"searchCard",
-          description:
-        `Propose a query to search for a card instance related to module it was from. 
+        type: 'function',
+        function: {
+          name: 'searchCard',
+          description: `Propose a query to search for a card instance related to module it was from. 
         Always prioritise search based upon the card that was last shared. 
         Ensure that you find the correct "module" and "name" from the OUTERMOST "adoptsFrom" field from the card data that is shared`,
-        parameters:{
-          type:"object",
-          properties:{
-          card_id:
-          {
-            type:"string",
-            const:"http://localhost:4202/test/mango"
-          },
-          filter:{
-            type:"object",
-            properties:{
-              type:{
-                type:"object",
-                properties:{
-                  module:{
-                    type:"string",description:"the absolute path of the module"
+          parameters: {
+            type: 'object',
+            properties: {
+              card_id: {
+                type: 'string',
+                const: 'http://localhost:4202/test/mango',
+              },
+              filter: {
+                type: 'object',
+                properties: {
+                  type: {
+                    type: 'object',
+                    properties: {
+                      module: {
+                        type: 'string',
+                        description: 'the absolute path of the module',
+                      },
+                      name: {
+                        type: 'string',
+                        description: 'the name of the module',
+                      },
+                    },
+                    required: ['module', 'name'],
                   },
-                  name:{type:"string",description:"the name of the module"
-                    
-                  }},
-                  required:["module","name"]
-                }
-              }
-            }
+                },
+              },
+            },
+            required: ['card_id', 'filter'],
           },
-          required:["card_id","filter"]}}}
+        },
+      },
     ]);
   });
 
