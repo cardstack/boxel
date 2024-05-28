@@ -330,6 +330,104 @@ test.describe('Room messages', () => {
     ]);
   });
 
+  test(`it does include search tool in all message events`, async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass');
+    let room1 = await getRoomId(page);
+    await page
+      .locator(
+        `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${testHost}/mango"]`,
+      )
+      .click();
+    await expect(
+      page.locator(`[data-test-stack-card="${testHost}/mango"]`),
+    ).toHaveCount(1);
+    await sendMessage(page, room1, 'please change this card');
+    let message = (await getRoomEvents()).pop()!;
+    expect(message.content.msgtype).toStrictEqual('org.boxel.message');
+    let boxelMessageData = JSON.parse(message.content.data);
+    debugger;
+    expect(boxelMessageData.context.tools).toMatchObject([
+      {
+        type: 'function',
+        function: {
+          name: 'patchCard',
+          description:
+            'Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making',
+          parameters: {
+            type: 'object',
+            properties: {
+              description: {
+                type: 'string',
+              },
+              card_id: {
+                type: 'string',
+                const: `${testHost}/mango`,
+              },
+              attributes: {
+                type: 'object',
+                properties: {
+                  firstName: {
+                    type: 'string',
+                  },
+                  lastName: {
+                    type: 'string',
+                  },
+                  email: {
+                    type: 'string',
+                  },
+                  posts: {
+                    type: 'number',
+                  },
+                  thumbnailURL: {
+                    type: 'string',
+                  },
+                },
+              },
+            },
+            required: ['card_id', 'attributes', 'description'],
+          },
+        },
+      },
+      {
+        type:"function",
+        function:
+        {
+          name:"searchCard",
+          description:
+        `Propose a query to search for a card instance related to module it was from. 
+        Always prioritise search based upon the card that was last shared. 
+        Ensure that you find the correct "module" and "name" from the OUTERMOST "adoptsFrom" field from the card data that is shared`,
+        parameters:{
+          type:"object",
+          properties:{
+          card_id:
+          {
+            type:"string",
+            const:"http://localhost:4202/test/mango"
+          },
+          filter:{
+            type:"object",
+            properties:{
+              type:{
+                type:"object",
+                properties:{
+                  module:{
+                    type:"string",description:"the absolute path of the module"
+                  },
+                  name:{type:"string",description:"the name of the module"
+                    
+                  }},
+                  required:["module","name"]
+                }
+              }
+            }
+          },
+          required:["card_id","filter"]}}}
+    ]);
+  });
+
   test(`it does not include patch tool in message event for an open card that is not attached`, async ({
     page,
   }) => {

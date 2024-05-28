@@ -29,6 +29,49 @@ function getPatchTool(cardId: string, properties: any) {
   };
 }
 
+function getSearchTool(cardId: string) {
+  return {
+    type: 'function',
+    function: {
+      name: 'searchCard',
+      description: `Propose a query to search for a card instance related to module it was from. 
+      Always prioritise search based upon the card that was last shared. 
+      Ensure that you find the correct "module" and "name" from the OUTERMOST "adoptsFrom" field from the card data that is shared`,
+      parameters: {
+        type: 'object',
+        properties: {
+          card_id: {
+            type: 'string',
+            const: cardId, // Force the valid card_id to be the id of the card being patched
+          },
+          filter: {
+            type: 'object',
+            properties: {
+              type: {
+                //resolved code ref essentially
+                type: 'object',
+                properties: {
+                  module: {
+                    type: 'string',
+                    description: `the absolute path of the module`,
+                  },
+                  name: {
+                    type: 'string',
+                    description: 'the name of the module',
+                  },
+                },
+                required: ['module', 'name'],
+              },
+            },
+          },
+        },
+        required: ['card_id', 'filter'],
+      },
+    },
+
+  };
+}
+
 module('getModifyPrompt', () => {
   test('should generate a prompt from the user', () => {
     const history: DiscreteMatrixEvent[] = [
@@ -896,6 +939,82 @@ module('getModifyPrompt', () => {
         },
       },
     });
+  });
+
+  test('Create search function calls', () => {
+    const history: IRoomEvent[] = [
+      {
+        type: 'm.room.message',
+        sender: '@ian:localhost',
+        content: {
+          msgtype: 'org.boxel.message',
+          body: 'set the name to dave',
+          formatted_body: '<p>set the name to dave</p>\n',
+          data: {
+            context: {
+              openCardIds: ['http://localhost:4201/drafts/Friend/1'],
+              tools: [
+                getSearchTool('http://localhost:4201/drafts/Friend/1'),
+              ],
+              submode: 'interact',
+            },
+          },
+        },
+        origin_server_ts: 1696813813166,
+        unsigned: {
+          age: 115498,
+        },
+        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        age: 115498,
+      },
+    ];
+
+    const functions = getTools(history, '@aibot:localhost');
+    assert.equal(functions.length, 1);
+    assert.deepEqual(functions[0], 
+      {
+        type: "function",
+        function: {
+          name: "searchCard",
+          description: "Propose a query to search for a card instance related to module it was from. \n      Always prioritise search based upon the card that was last shared. \n      Ensure that you find the correct \"module\" and \"name\" from the OUTERMOST \"adoptsFrom\" field from the card data that is shared",
+          parameters: {
+            type: "object",
+            properties: {
+              card_id: {
+                type: "string",
+                const: "http://localhost:4201/drafts/Friend/1"
+              },
+              filter: {
+                type: "object",
+                properties: {
+                  type: {
+                    type: "object",
+                    properties: {
+                      module: {
+                        type: "string",
+                        description: "the absolute path of the module"
+                      },
+                      name: {
+                        type: "string",
+                        description: "the name of the module"
+                      }
+                    },
+                    required: [
+                      "module",
+                      "name"
+                    ]
+                  }
+                }
+              }
+            },
+            required: [
+              "card_id",
+              "filter"
+            ]
+          }
+        }
+      }
+    )
   });
 
   test('Gets only the latest functions', () => {
