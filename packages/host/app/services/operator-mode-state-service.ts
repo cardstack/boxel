@@ -113,7 +113,7 @@ export default class OperatorModeStateService extends Service {
       if ('card' in item && item.card.id == id) {
         let document = await this.cardService.serializeCard(item.card);
         document.data = merge(document.data, patch);
-        return await this.cardService.patchCard(item.card, document, patch);
+        await this.cardService.patchCard(item.card, document, patch);
       }
     }
   });

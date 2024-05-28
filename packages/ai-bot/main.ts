@@ -11,7 +11,7 @@ import {
   constructHistory,
   getModifyPrompt,
   getTools,
-  isPatchReactionEvent,
+  isCommandReactionEvent,
 } from './helpers';
 import {
   shouldSetRoomTitle,
@@ -45,6 +45,8 @@ class Assistant {
   }
 
   getResponse(history: DiscreteMatrixEvent[]) {
+    //when gathering tools from history. It will get the ai confused bcos there are conflicting tools
+    //bocs different cards are attached
     let tools = getTools(history, this.id);
     let messages = getModifyPrompt(history, this.id, tools);
     if (tools.length === 0) {
@@ -203,12 +205,12 @@ Common issues are:
     },
   );
 
-  //handle reaction events
+  //handle set title by commands
   client.on(RoomEvent.Timeline, async function (event, room) {
     if (!room) {
       return;
     }
-    if (!isPatchReactionEvent(event)) {
+    if (!isCommandReactionEvent(event)) {
       return;
     }
     log.info(
@@ -228,6 +230,35 @@ Common issues are:
         return;
       }
       return await assistant.setTitle(room.roomId, history, event);
+    } catch (e) {
+      log.error(e);
+      Sentry.captureException(e);
+      return;
+    }
+  });
+
+  //handle reactions from commands
+  client.on(RoomEvent.Timeline, async function (event, room) {
+    if (!room) {
+      return;
+    }
+    if (!isCommandReactionEvent(event)) {
+      return;
+    }
+    log.info(
+      '(%s) (Room: "%s" %s) (Message: %s %s)',
+      event.getType(),
+      room?.name,
+      room?.roomId,
+      event.getSender(),
+      undefined,
+    );
+    try {
+      let content = event.getContent();
+      let searchMessage = content.result.join('\n\n');
+      await sendMessage(client, room, searchMessage, undefined, {
+        isStreamingFinished: true,
+      });
     } catch (e) {
       log.error(e);
       Sentry.captureException(e);

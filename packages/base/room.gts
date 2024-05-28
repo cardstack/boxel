@@ -6,7 +6,8 @@ import {
   primitive,
   useIndexBasedKey,
   FieldDef,
-  type CardDef,
+  CardDef,
+  linksToMany,
 } from './card-api';
 import StringField from './string';
 import DateTimeField from './datetime';
@@ -24,6 +25,8 @@ import { initSharedState } from './shared-state';
 import BooleanField from './boolean';
 import { md5 } from 'super-fast-md5';
 import { EventStatus, MatrixError } from 'matrix-js-sdk';
+import { CardTypeFilter as CFFilter } from '@cardstack/runtime-common/query';
+import CodeRefField from './code-ref';
 
 const ErrorMessage: Record<string, string> = {
   ['M_TOO_LARGE']: 'Message is too large',
@@ -237,14 +240,24 @@ type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
 
 type JSONObject = { [x: string]: JSONValue };
 
-type PatchObject = { patch: { attributes: JSONObject }; id: string };
+export type PatchObject = { patch: { attributes: JSONObject }; id: string };
 
-class PatchObjectField extends FieldDef {
-  static [primitive]: PatchObject;
+export type SearchObject = {
+  search: {
+    card_id: string; //we search relative to the card that is shared
+    filter: CardTypeFilter; //TODO: can be enhanced by other filter types
+  };
+};
+
+class CommandObjectField extends FieldDef {
+  //this is probably wrong
+  static [primitive]: PatchObject | SearchObject;
 }
 
+type CommandTypeValue = 'patchCard' | 'searchCard';
+
 class CommandType extends FieldDef {
-  static [primitive]: 'patchCard';
+  static [primitive]: CommandTypeValue;
 }
 
 type CommandStatus = 'applied' | 'ready';
@@ -254,12 +267,14 @@ class CommandStatusField extends FieldDef {
 }
 
 // Subclass, add a validator that checks the fields required?
-class PatchField extends FieldDef {
+export class CommandField extends FieldDef {
   @field commandType = contains(CommandType);
-  @field payload = contains(PatchObjectField);
+  @field payload = contains(CommandObjectField);
   @field eventId = contains(StringField);
   @field status = contains(CommandStatusField);
 }
+
+export class PatchCommandField extends CommandField {}
 
 // A map from a hash of roomId + card document to the first card fragment event id.
 // This map can be used to avoid sending the same version of the card more than once in a conversation.
@@ -267,6 +282,37 @@ class PatchField extends FieldDef {
 const cardHashes: Map<string, string> = new Map();
 function generateCardHashKey(roomId: string, cardDoc: LooseSingleCardDocument) {
   return md5(roomId + JSON.stringify(cardDoc));
+}
+
+class CardTypeFilter extends FieldDef {
+  static [primitive]: CFFilter;
+  @field type = contains(CodeRefField);
+}
+
+class SearchQueryField extends FieldDef {
+  static [primitive]: any;
+  @field filter = contains(CardTypeFilter);
+}
+
+class SearchCommandField extends CommandField {
+  @field intent = contains(StringField);
+  @field query = contains(SearchQueryField);
+  @field results = linksToMany(CardDef); //TODO: computeVia using linksTo
+  get searchResults() {
+    let query = this.query.filter;
+    return query;
+  }
+  static embedded = class Embedded extends Component<
+    typeof SearchCommandField
+  > {
+    <template>
+      {{#each @model.results as |card|}}
+        <div>
+          {{card.id}}
+        </div>
+      {{/each}}
+    </template>
+  };
 }
 
 export function getEventIdForCard(
@@ -285,7 +331,7 @@ export class MessageField extends FieldDef {
   @field attachedCardIds = containsMany(StringField);
   @field index = contains(NumberField);
   @field transactionId = contains(StringField);
-  @field command = contains(PatchField);
+  @field command = contains(CommandField);
   @field isStreamingFinished = contains(BooleanField);
   @field errorMessage = contains(StringField);
   // ID from the client and can be used by client
@@ -577,29 +623,53 @@ export class RoomField extends FieldDef {
             attachedCardIds,
           });
         } else if (event.content.msgtype === 'org.boxel.command') {
-          // We only handle patches for now
-          let command = event.content.data.command;
-          let annotation = this.events.find(
-            (e) =>
-              e.type === 'm.reaction' &&
-              e.content['m.relates_to']?.rel_type === 'm.annotation' &&
-              e.content['m.relates_to']?.event_id ===
-                // If the message is a replacement message, eventId in command payload will be undefined.
-                // Because it will not refer to any other events, so we can use event_id of the message itself.
-                (command.eventId ?? event_id),
-          ) as ReactionEvent | undefined;
+          if (event.content.data.command.type === 'patchCard') {
+            // We only handle patches for now
+            let command = event.content.data.command;
+            let annotation = this.events.find(
+              (e) =>
+                e.type === 'm.reaction' &&
+                e.content['m.relates_to']?.rel_type === 'm.annotation' &&
+                e.content['m.relates_to']?.event_id ===
+                  // If the message is a replacement message, eventId in command payload will be undefined.
+                  // Because it will not refer to any other events, so we can use event_id of the message itself.
+                  (command.eventId ?? event_id),
+            ) as ReactionEvent | undefined;
 
-          messageField = new MessageField({
-            ...cardArgs,
-            formattedMessage: `<p class="patch-message">${event.content.formatted_body}</p>`,
-            command: new PatchField({
-              eventId: event_id,
-              commandType: command.type,
-              payload: command,
-              status: annotation?.content['m.relates_to'].key ?? 'ready',
-            }),
-            isStreamingFinished: true,
-          });
+            messageField = new MessageField({
+              ...cardArgs,
+              formattedMessage: `<p class="patch-message">${event.content.formatted_body}</p>`,
+              command: new PatchCommandField({
+                eventId: event_id,
+                commandType: command.type,
+                payload: command,
+                status: annotation?.content['m.relates_to'].key ?? 'ready',
+              }),
+              isStreamingFinished: true,
+            });
+          } else if (event.content.data.command.type === 'searchCard') {
+            let command = event.content.data.command;
+            let annotation = this.events.find(
+              (e) =>
+                e.type === 'm.reaction' &&
+                e.content['m.relates_to']?.rel_type === 'm.annotation' &&
+                e.content['m.relates_to']?.event_id ===
+                  // If the message is a replacement message, eventId in command payload will be undefined.
+                  // Because it will not refer to any other events, so we can use event_id of the message itself.
+                  (command.eventId ?? event_id),
+            ) as ReactionEvent | undefined;
+            messageField = new MessageField({
+              ...cardArgs,
+              formattedMessage: `<p class="patch-message">${event.content.formatted_body}</p>`,
+              command: new SearchCommandField({
+                eventId: event_id,
+                commandType: command.type,
+                payload: command,
+                status: annotation?.content['m.relates_to'].key ?? 'ready',
+              }),
+              isStreamingFinished: true,
+            });
+          }
         } else {
           // Text from the AI bot
           if (event.content.msgtype === 'm.text') {
@@ -812,6 +882,20 @@ export interface CommandEvent extends BaseMatrixEvent {
   };
 }
 
+type CommandPayload = PatchCardPayload | SearchCardPayload;
+
+export interface PatchCardPayload {
+  type: 'patchCard';
+  payload: PatchObject;
+  eventId: string;
+}
+
+export interface SearchCardPayload {
+  type: 'searchCard';
+  payload: SearchObject;
+  eventId: string;
+}
+
 interface CommandMessageContent {
   'm.relates_to'?: {
     rel_type: string;
@@ -822,11 +906,8 @@ interface CommandMessageContent {
   body: string;
   formatted_body: string;
   data: {
-    command: {
-      type: 'patchCard';
-      payload: PatchObject;
-      eventId: string;
-    };
+    command: CommandPayload;
+    result?: any;
   };
 }
 
@@ -838,14 +919,13 @@ export interface ReactionEvent extends BaseMatrixEvent {
 // any ai interaction with our card system will deliver a result
 // currently, we only use ReactionResult as a way to extract this data
 // since that is when the user applies the command
-
 export interface ReactionEventContent {
   'm.relates_to': {
     event_id: string;
     key: string;
     rel_type: 'm.annotation';
   };
-  result: any; // will already have data: bcos of our json schema spec
+  result?: any; // will already have data: bcos of our json schema spec
 }
 
 interface CardMessageEvent extends BaseMatrixEvent {
@@ -856,6 +936,15 @@ interface CardMessageEvent extends BaseMatrixEvent {
     transaction_id: string;
     prev_content?: any;
     prev_sender?: string;
+  };
+}
+
+interface Tools {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: Schema;
   };
 }
 
@@ -882,15 +971,8 @@ export interface CardMessageContent {
     attachedCards?: LooseSingleCardDocument[];
     context: {
       openCardIds?: string[];
-      tools: {
-        type: 'function';
-        function: {
-          name: string;
-          description: string;
-          parameters: Schema;
-        };
-      }[];
       submode: string | undefined;
+      tools: Tools[];
     };
   };
 }

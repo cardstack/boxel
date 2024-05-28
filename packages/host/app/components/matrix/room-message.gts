@@ -12,10 +12,13 @@ import { modifier } from 'ember-modifier';
 import { trackedFunction } from 'ember-resources/util/function';
 
 import { Button } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq, or } from '@cardstack/boxel-ui/helpers';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
-import { markdownToHtml } from '@cardstack/runtime-common';
+import {
+  markdownToHtml,
+  codeRefWithAbsoluteURL,
+} from '@cardstack/runtime-common';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
@@ -23,15 +26,21 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type CardService from '@cardstack/host/services/card-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-import { type MessageField } from 'https://cardstack.com/base/room';
+import {
+  type MessageField,
+  PatchObject,
+  SearchObject,
+} from 'https://cardstack.com/base/room';
 
 import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
+// import { RealmPaths } from '@cardstack/runtime-common/paths';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -48,7 +57,7 @@ interface Signature {
   };
 }
 
-const STREAMING_TIMEOUT_MS = 60000;
+const STREAMING_TIMEOUT_MS = 600000;
 
 export default class RoomMessage extends Component<Signature> {
   constructor(owner: unknown, args: Signature['Args']) {
@@ -104,15 +113,23 @@ export default class RoomMessage extends Component<Signature> {
         @errorMessage={{this.errorMessage}}
         @isStreaming={{@isStreaming}}
         @retryAction={{if
-          (eq @message.command.commandType 'patchCard')
-          (perform this.patchCard)
+          (or
+            (eq @message.command.commandType 'patchCard')
+            (eq @message.command.commandType 'searchCard')
+          )
+          (perform this.handleCommands)
           @retryAction
         }}
         @isPending={{@isPending}}
         data-test-boxel-message-from={{@message.author.name}}
         ...attributes
       >
-        {{#if (eq @message.command.commandType 'patchCard')}}
+        {{#if
+          (or
+            (eq @message.command.commandType 'patchCard')
+            (eq @message.command.commandType 'searchCard')
+          )
+        }}
           <div
             class='patch-button-bar'
             data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
@@ -128,7 +145,7 @@ export default class RoomMessage extends Component<Signature> {
             </Button>
             <ApplyButton
               @state={{this.applyButtonState}}
-              {{on 'click' (perform this.patchCard)}}
+              {{on 'click' (perform this.handleCommands)}}
               data-test-command-apply={{this.applyButtonState}}
             />
           </div>
@@ -153,7 +170,7 @@ export default class RoomMessage extends Component<Signature> {
                 class='monaco-container'
                 {{this.scrollBottomIntoView}}
                 {{monacoModifier
-                  content=this.previewPatchCode
+                  content=this.previewCommandCode
                   contentChanged=undefined
                   monacoSDK=@monacoSDK
                   language='json'
@@ -241,11 +258,12 @@ export default class RoomMessage extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
   @service private declare monacoService: MonacoService;
+  @service private declare cardService: CardService;
 
   @tracked private isDisplayingCode = false;
 
   private copyToClipboard = task(async () => {
-    await navigator.clipboard.writeText(this.previewPatchCode);
+    await navigator.clipboard.writeText(this.previewCommandCode);
   });
 
   private loadMessageResources = trackedFunction(this, async () => {
@@ -308,27 +326,24 @@ export default class RoomMessage extends Component<Signature> {
       .join(', ');
   }
 
-  private patchCard = task(async () => {
-    if (this.operatorModeStateService.patchCard.isRunning) {
-      return;
-    }
+  private handleCommands = task(async () => {
     let { payload, eventId } = this.args.message.command;
-    this.matrixService.failedCommandState.delete(eventId);
     try {
-      let res = await this.operatorModeStateService.patchCard.perform(
-        payload.id,
-        payload.patch,
-      );
-      if (res) {
-        let [_, cardDoc] = res;
-        //here is reaction event
-        await this.matrixService.sendReactionEvent(
-          this.args.roomId,
-          eventId,
-          'applied',
-          cardDoc,
-        );
+      let res: any;
+      this.matrixService.failedCommandState.delete(eventId);
+      if (this.args.message.command.commandType === 'patchCard') {
+        res = await this.patchCard.perform(eventId, payload as PatchObject);
+      } else if (this.args.message.command.commandType === 'searchCard') {
+        res = await this.searchCard.perform(payload as SearchObject);
+      } else {
+        throw new Error('Unknown command type');
       }
+      await this.matrixService.sendReactionEvent(
+        this.args.roomId,
+        eventId,
+        'applied',
+        res,
+      );
     } catch (e) {
       let error =
         typeof e === 'string'
@@ -340,7 +355,40 @@ export default class RoomMessage extends Component<Signature> {
     }
   });
 
-  private get previewPatchCode() {
+  private patchCard = task(async (eventId: string, payload: PatchObject) => {
+    if (this.operatorModeStateService.patchCard.isRunning) {
+      return;
+    }
+    //TODO: The discriminant doesn't interact with at the field level
+    this.matrixService.failedCommandState.delete(eventId);
+    return await this.operatorModeStateService.patchCard.perform(
+      payload.id,
+      payload.patch,
+    );
+  });
+
+  private searchCard = task(async (payload: SearchObject) => {
+    let query = payload.search;
+    let adoptsFrom = {
+      name: query.filter.type.name,
+      module: query.filter.type.module,
+    };
+    //If ai returns a relative module path, we make it absolute
+    let maybeCodeRef = codeRefWithAbsoluteURL(
+      adoptsFrom,
+      new URL(query.card_id), //relative to the attached card id shared
+    );
+    if ('name' in maybeCodeRef && 'module' in maybeCodeRef) {
+      query.filter.type = maybeCodeRef;
+    }
+    let searchResults = await this.cardService.search(
+      { filter: query.filter },
+      new URL(this.cardService.realmURLs[0]), //search in drafts only for now
+    );
+    return searchResults.map((c) => c.id);
+  });
+
+  private get previewCommandCode() {
     let { commandType, payload } = this.args.message.command;
     return JSON.stringify({ commandType, payload }, null, 2);
   }
@@ -355,9 +403,13 @@ export default class RoomMessage extends Component<Signature> {
     );
   }
 
+  get commandIsRunning() {
+    return this.handleCommands.isRunning;
+  }
+
   @cached
   private get applyButtonState(): ApplyButtonState {
-    if (this.patchCard.isRunning) {
+    if (this.commandIsRunning) {
       return 'applying';
     }
     if (this.failedCommandState) {

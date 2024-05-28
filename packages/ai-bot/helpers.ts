@@ -1,4 +1,7 @@
-import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
+import {
+  LooseCardResource,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardFragmentContent,
@@ -145,8 +148,9 @@ export interface OpenAIPromptMessage {
 export function getRelevantCards(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
-) {
+): [LooseCardResource | undefined, LooseCardResource[]] {
   let relevantCards: Map<string, any> = new Map();
+  let mostRecentlySharedCard;
   for (let event of history) {
     if (event.type !== 'm.room.message') {
       continue;
@@ -157,6 +161,7 @@ export function getRelevantCards(
         const attachedCards = content.data?.attachedCards || [];
         for (let card of attachedCards) {
           if (card.data.id) {
+            mostRecentlySharedCard = card.data;
             relevantCards.set(card.data.id, card.data);
           } else {
             throw new Error(`bug: don't know how to handle card without ID`);
@@ -170,7 +175,7 @@ export function getRelevantCards(
   let sortedCards = Array.from(relevantCards.values()).sort((a, b) => {
     return a.id.localeCompare(b.id);
   });
-  return sortedCards;
+  return [mostRecentlySharedCard, sortedCards];
 }
 
 export function getTools(history: DiscreteMatrixEvent[], aiBotUserId: string) {
@@ -230,8 +235,7 @@ export function getModifyPrompt(
   let systemMessage =
     MODIFY_SYSTEM_MESSAGE +
     `
-  The user currently has given you the following data to work with:
-  Cards:\n`;
+  The user currently has given you the following data to work with. \n`;
   systemMessage += attachedCardsToMessage(history, aiBotUserId);
   if (tools.length == 0) {
     systemMessage +=
@@ -253,9 +257,21 @@ export const attachedCardsToMessage = (
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ) => {
-  return `Full card data: ${JSON.stringify(
-    getRelevantCards(history, aiBotUserId),
-  )}`;
+  let [mostRecentlySharedCard, allSharedCards] = getRelevantCards(
+    history,
+    aiBotUserId,
+  );
+  let a =
+    mostRecentlySharedCard !== undefined
+      ? `Most recently shared card: ${JSON.stringify(
+          mostRecentlySharedCard,
+        )}.\n`
+      : ``;
+  let b =
+    allSharedCards.length > 0
+      ? `All previously shared cards: ${JSON.stringify(allSharedCards)}.\n`
+      : ``;
+  return a + b;
 };
 
 export function cleanContent(content: string) {
@@ -266,8 +282,7 @@ export function cleanContent(content: string) {
   return content.trim();
 }
 
-//matrix-js-sdk extensions
-export const isPatchReactionEvent = (event?: MatrixEvent) => {
+export const isCommandReactionEvent = (event?: MatrixEvent) => {
   if (event === undefined) {
     return false;
   }
@@ -297,5 +312,13 @@ export function isPatchCommandEvent(
 ): event is CommandEvent {
   return (
     isCommandEvent(event) && event.content.data.command.type === 'patchCard'
+  );
+}
+
+export function isSearchCommandEvent(
+  event: DiscreteMatrixEvent,
+): event is CommandEvent {
+  return (
+    isCommandEvent(event) && event.content.data.command.type === 'searchCard'
   );
 }

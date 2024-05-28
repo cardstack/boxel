@@ -7,11 +7,13 @@ import { type CodeRef, isCodeRef } from './index';
 export interface Query {
   filter?: Filter;
   sort?: Sort;
-  page?: {
-    number: number; // page.number is 0-based
-    size: number;
-    realmVersion?: number;
-  };
+  page?: Pagination;
+}
+
+export interface Pagination {
+  number: number; // page.number is 0-based
+  size: number;
+  realmVersion?: number;
 }
 
 export type CardURL = string;
