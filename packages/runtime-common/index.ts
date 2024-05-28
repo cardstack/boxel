@@ -11,6 +11,11 @@ export interface LooseSingleCardDocument {
   included?: CardResource<Saved>[];
 }
 
+export type PatchData = {
+  attributes?: CardResource['attributes'];
+  relationships?: CardResource['relationships'];
+};
+
 export { Deferred } from './deferred';
 export { CardError } from './error';
 

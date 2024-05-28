@@ -4,6 +4,7 @@
     "attributes": {
       "title": "Friends from ../friends",
       "description": "Catalog entry for Friends from ../friends",
+      "isField": false,
       "ref": {
         "module": "../friends",
         "name": "Friends"
