@@ -1952,6 +1952,7 @@ export class TestField extends ExportedField {
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
+    await settled();
   });
 
   test<TestContextWithSave>('inherit modal state is cleared when modal is cancelled', async function (assert) {

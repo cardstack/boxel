@@ -5,7 +5,6 @@ import {
   Realm,
   LooseSingleCardDocument,
   baseRealm,
-  RealmPermissions,
   VirtualNetwork,
   Worker,
   RunnerOptionsManager,
@@ -13,6 +12,8 @@ import {
   type Queue,
   type IndexRunner,
   assetsDir,
+  RealmPermissions,
+  insertPermissions,
 } from '@cardstack/runtime-common';
 import { makeFastBootIndexRunner } from '../../fastboot';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -66,7 +67,7 @@ export function setupDB(
 
   const runAfterHook = async () => {
     await queue?.destroy();
-    await dbAdapter?.close();
+    // await dbAdapter?.close();
   };
 
   // we need to pair before/after and beforeEach/afterEach. within this setup
@@ -144,6 +145,8 @@ export async function createRealm({
     }
   }
 
+  insertPermissions(dbAdapter, new URL(realmURL), permissions);
+
   let adapter = new NodeAdapter(dir);
   let realm = new Realm(
     {
@@ -152,7 +155,6 @@ export async function createRealm({
       getIndexHTML: async () =>
         readFileSync(join(distPath, 'index.html')).toString(),
       matrix: matrixConfig,
-      permissions,
       realmSecretSeed: "shhh! it's a secret",
       virtualNetwork,
       dbAdapter,
@@ -199,6 +201,7 @@ export async function runBaseRealmServer(
   virtualNetwork: VirtualNetwork,
   queue: Queue,
   dbAdapter: PgAdapter,
+  permissions: RealmPermissions = { '*': ['read'] },
 ) {
   let localBaseRealmURL = new URL(localBaseRealm);
   virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
@@ -209,6 +212,7 @@ export async function runBaseRealmServer(
     virtualNetwork,
     queue,
     dbAdapter,
+    permissions,
   });
   virtualNetwork.mount(testBaseRealm.maybeExternalHandle);
   await testBaseRealm.ready;
@@ -220,30 +224,30 @@ export async function runTestRealmServer({
   dir,
   fileSystem,
   realmURL,
-  permissions,
   virtualNetwork,
   queue,
   dbAdapter,
   matrixConfig,
+  permissions = { '*': ['read', 'write'] },
 }: {
   dir: string;
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
   realmURL: URL;
-  permissions?: RealmPermissions;
   virtualNetwork: VirtualNetwork;
   queue: Queue;
   dbAdapter: PgAdapter;
   matrixConfig?: MatrixConfig;
+  permissions?: RealmPermissions;
 }) {
   let testRealm = await createRealm({
     dir,
     fileSystem,
     realmURL: realmURL.href,
-    permissions,
     virtualNetwork,
     matrixConfig,
     queue,
     dbAdapter,
+    permissions,
   });
   virtualNetwork.mount(testRealm.maybeExternalHandle);
   await testRealm.ready;

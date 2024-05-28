@@ -23,6 +23,7 @@ import {
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { settled } from '@ember/test-helpers';
 
 const testRealmURL2 = 'http://test-realm/test2/';
 const testRealmAIconURL = 'https://i.postimg.cc/L8yXRvws/icon.png';
@@ -483,6 +484,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${fileID}.json`);
 
     await deferred.promise;
+    await settled();
   });
 
   test<TestContextWithSave>('can create new card-instance file in a remote realm with card type from a local realm', async function (assert) {
@@ -547,6 +549,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${fileID}.json`);
 
     await deferred.promise;
+    await settled();
   });
 
   test<TestContextWithSave>('can create a new card definition in different realm than inherited definition', async function (assert) {
@@ -673,6 +676,7 @@ export class TestCard extends Person {
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
+    await settled();
   });
 
   test<TestContextWithSave>('an error when creating a new card definition is shown', async function (assert) {
@@ -760,6 +764,7 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
+    await settled();
   });
 
   test<TestContextWithSave>('an error when creating a new field definition is shown', async function (assert) {
@@ -841,6 +846,7 @@ export class TestCard extends Pet {
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
+    await settled();
   });
 
   test<TestContextWithSave>('can reconcile a classname collision with the selected name of extending a card definition which uses a default export', async function (assert) {
@@ -897,6 +903,7 @@ export class Pet extends PetParent {
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
+    await settled();
   });
 
   test<TestContextWithSave>('can reconcile a classname collision with a javascript builtin object', async function (assert) {
@@ -953,6 +960,7 @@ export class Map0 extends Pet {
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
+    await settled();
   });
 
   test<TestContextWithSave>('can specify new directory as part of filename when creating a new definition', async function (assert) {
@@ -999,6 +1007,7 @@ export class TestCard extends CardDef {
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
+    await settled();
 
     let file = await adapter.openFile('test-dir/test-card.gts');
     assert.strictEqual(
@@ -1052,6 +1061,7 @@ export class TestCard extends CardDef {
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
+    await settled();
 
     let file = await adapter.openFile('test-card.gts');
     assert.strictEqual(
@@ -1105,6 +1115,7 @@ export class TestCard extends CardDef {
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
+    await settled();
 
     let file = await adapter.openFile('test-card.gts');
     assert.strictEqual(
