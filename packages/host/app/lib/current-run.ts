@@ -131,7 +131,7 @@ export class CurrentRun {
       await current.batch.makeNewGeneration();
       if (boom) {
         throw new Error(
-          `Boom! this is a manually generated unhanded exception during indexing used for testing`,
+          `Boom! this is a manually generated unhandled exception during indexing used for testing`,
         );
       }
       await current.visitDirectory(current.realmURL);
