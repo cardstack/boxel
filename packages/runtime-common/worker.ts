@@ -187,8 +187,12 @@ export class Worker {
       registerRunner: async (fromScratch, incremental) => {
         this.#fromScratch = fromScratch;
         this.#incremental = incremental;
-        let result = await run();
-        deferred.fulfill(result);
+        try {
+          let result = await run();
+          deferred.fulfill(result);
+        } catch (e) {
+          deferred.reject(e);
+        }
       },
     });
     await this.#runner(optsId);
