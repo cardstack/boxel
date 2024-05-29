@@ -213,14 +213,13 @@ export class Worker {
     return result;
   }
 
-  private fromScratch = async (args: FromScratchArgs & { boom?: true }) => {
+  private fromScratch = async (args: FromScratchArgs) => {
     return await this.prepareAndRunJob<FromScratchResult>(async () => {
       if (!this.#fromScratch) {
         throw new Error(`Index runner has not been registered`);
       }
       let { ignoreData, stats } = await this.#fromScratch(
         new URL(args.realmURL),
-        args.boom,
       );
       return {
         ignoreData: { ...ignoreData },
