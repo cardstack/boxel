@@ -29,6 +29,7 @@ import {
   type DBAdapter,
   type Queue,
   type Indexer,
+  fetchUserPermissions,
 } from './index';
 import merge from 'lodash/merge';
 import flatMap from 'lodash/flatMap';
@@ -254,6 +255,7 @@ export class Realm {
     ],
   ]);
   #assetsURL: URL;
+  #dbAdapter: DBAdapter;
 
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
@@ -330,6 +332,8 @@ export class Realm {
       dbAdapter,
       queue,
     });
+
+    this.#dbAdapter = dbAdapter;
 
     this.#router = new Router(new URL(url))
       .post('/', SupportedMimeType.CardJson, this.createCard.bind(this))
@@ -1039,15 +1043,21 @@ export class Realm {
 
     try {
       token = this.#adapter.verifyJWT(tokenString, this.#realmSecretSeed);
+
+      let realmPermissions = await fetchUserPermissions(
+        this.#dbAdapter,
+        new URL(this.url),
+      );
+
       let realmPermissionChecker = new RealmPermissionChecker(
-        this.#permissions,
+        realmPermissions,
         this.#matrixClient,
       );
 
-      let permissions = await realmPermissionChecker.for(token.user);
+      let userPermissions = await realmPermissionChecker.for(token.user);
       if (
         JSON.stringify(token.permissions.sort()) !==
-        JSON.stringify(permissions.sort())
+        JSON.stringify(userPermissions.sort())
       ) {
         throw new AuthenticationError(
           AuthenticationErrorMessages.PermissionMismatch,
