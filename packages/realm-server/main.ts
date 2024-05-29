@@ -179,7 +179,7 @@ if (distURL) {
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
 
-    seedRealmPermissions(dbAdapter, new URL(url));
+    await seedRealmPermissions(dbAdapter, new URL(url));
 
     let manager = new RunnerOptionsManager();
     let matrixURL = String(matrixURLs[i]);
