@@ -344,7 +344,7 @@ export function setupServerSentEvents(hooks: NestedHooks) {
               `expectEvent timed out, saw events ${JSON.stringify(events)}`,
             ),
           ),
-        opts?.timeout ?? 3000,
+        opts?.timeout ?? 10000,
       );
       let result = await callback();
       let decoder = new TextDecoder();
