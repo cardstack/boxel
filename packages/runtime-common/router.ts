@@ -1,5 +1,5 @@
 import { notFound, CardError, responseWithError } from './error';
-import { Realm, RealmPaths, logger } from './index';
+import { RealmPaths, RequestContext, logger } from './index';
 
 export class AuthenticationError extends Error {}
 export class AuthorizationError extends Error {}
@@ -10,7 +10,10 @@ export enum AuthenticationErrorMessages {
   TokenInvalid = 'Token invalid',
 }
 
-type Handler = (request: Request) => Promise<Response>;
+type Handler = (
+  request: Request,
+  requestContext: RequestContext,
+) => Promise<Response>;
 export type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 export enum SupportedMimeType {
   CardJson = 'application/vnd.card+json',
@@ -138,16 +141,19 @@ export class Router {
     return !!this.lookupHandler(request);
   }
 
-  async handle(realm: Realm, request: Request): Promise<Response> {
+  async handle(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
     let handler = this.lookupHandler(request);
     if (!handler) {
-      return notFound(realm, request);
+      return notFound(request, requestContext);
     }
     try {
-      return await handler(request);
+      return await handler(request, requestContext);
     } catch (err) {
       if (err instanceof CardError) {
-        return responseWithError(realm, err);
+        return responseWithError(err, requestContext);
       }
 
       this.log.error(err);

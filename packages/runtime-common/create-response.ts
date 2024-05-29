@@ -1,17 +1,24 @@
-import { Realm } from './realm';
+import { RequestContext } from './realm';
 
-export function createResponse(
-  realm: Realm,
-  body?: BodyInit | null | undefined,
-  init?: ResponseInit | undefined,
-  relaxDocumentDomain?: boolean, // only use for CI!
-): Response {
+interface CreateResponseArgs {
+  body?: BodyInit | null | undefined;
+  init?: ResponseInit | undefined;
+  relaxDocumentDomain?: boolean; // only use for CI!
+  requestContext: RequestContext;
+}
+
+export function createResponse({
+  body,
+  init,
+  relaxDocumentDomain,
+  requestContext,
+}: CreateResponseArgs): Response {
   return new Response(body, {
     ...init,
     headers: {
       ...init?.headers,
-      'X-Boxel-Realm-Url': realm.url,
-      ...(realm.isPublicReadable && {
+      'X-Boxel-Realm-Url': requestContext.realm.url,
+      ...(requestContext.realm.isPublicReadable && {
         'X-Boxel-Realm-Public-Readable': 'true',
       }),
       vary: 'Accept',

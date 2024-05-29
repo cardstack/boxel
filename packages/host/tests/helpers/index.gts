@@ -21,6 +21,7 @@ import {
   type IndexRunner,
   type IndexResults,
   assetsDir,
+  insertPermissions,
 } from '@cardstack/runtime-common';
 
 import {
@@ -526,6 +527,7 @@ async function setupTestRealm({
   };
 
   let dbAdapter = await getDbAdapter();
+  await insertPermissions(dbAdapter, new URL(realmURL), permissions);
   realm = new Realm({
     url: realmURL,
     adapter,
