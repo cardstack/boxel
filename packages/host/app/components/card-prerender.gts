@@ -49,9 +49,9 @@ export default class CardPrerender extends Component {
     }
   }
 
-  private async fromScratch(realmURL: URL, boom?: true): Promise<IndexResults> {
+  private async fromScratch(realmURL: URL): Promise<IndexResults> {
     try {
-      let results = await this.doFromScratch.perform(realmURL, boom);
+      let results = await this.doFromScratch.perform(realmURL);
       return results;
     } catch (e: any) {
       if (!didCancel(e)) {
