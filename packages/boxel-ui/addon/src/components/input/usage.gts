@@ -1,4 +1,4 @@
-import { fn } from '@ember/helper';
+import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
@@ -171,7 +171,7 @@ export default class InputUsage extends Component {
           @name='variant'
           @description='Optional larger size'
           @onInput={{fn (mut this.variant)}}
-          @options={{Array 'default' 'large'}}
+          @options={{array 'default' 'large'}}
           @value={{this.variant}}
           @defaultValue={{this.variant}}
         />
