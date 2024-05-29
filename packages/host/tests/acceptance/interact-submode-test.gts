@@ -1152,7 +1152,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         await click(
           `[data-test-links-to-editor="pet"] [data-test-field-component-card]`,
         );
-        await settled();
+        await waitFor(`[data-test-stack-card="${testRealmURL}Pet/mango"]`);
         assert
           .dom(
             `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-card-format="isolated"]`,
@@ -1160,6 +1160,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           .exists(
             'linked card now rendered as a stack item in isolated (non-edit) format',
           );
+        await settled();
       });
     });
 
