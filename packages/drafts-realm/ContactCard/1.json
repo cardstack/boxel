@@ -17,18 +17,10 @@
         },
         "email": "mama@leonesons.com"
       },
-      "guestNames": [
-        "Liliana Evergreen",
-        "Marcellus Wilde",
-        null
-      ],
+      "guestNames": ["Liliana Evergreen", "Marcellus Wilde", null],
       "guest": {
         "name": "Mama Leone",
-        "additionalNames": [
-          "Felicity Shaw",
-          "Grant Kingston",
-          "Valerie Storm"
-        ]
+        "additionalNames": ["Felicity Shaw", "Grant Kingston", "Valerie Storm"]
       },
       "description": null,
       "thumbnailURL": null
