@@ -551,8 +551,9 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     }
     let metas: Partial<Meta>[] = fieldMeta ?? [];
     return new WatchedArray(
-      (arrayValue) =>
+      (prevArrayValue, arrayValue) =>
         instancePromise.then((instance) => {
+          applySubscribersToInstanceValue(instance, prevArrayValue, arrayValue);
           notifySubscribers(instance, field.name, arrayValue);
           logger.log(recompute(instance));
         }),
@@ -593,7 +594,12 @@ class ContainsMany<FieldT extends FieldDefConstructor>
   }
 
   emptyValue(instance: BaseDef) {
-    return new WatchedArray((value) => {
+    return new WatchedArray((oldValue, value) => {
+      applySubscribersToInstanceValue(
+        instance,
+        oldValue as BaseDef[],
+        value as BaseDef[],
+      );
       notifySubscribers(instance, this.name, value);
       logger.log(recompute(instance));
     });
@@ -603,7 +609,12 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     if (value && !Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
-    return new WatchedArray((value) => {
+    return new WatchedArray((oldValue, value) => {
+      applySubscribersToInstanceValue(
+        instance,
+        oldValue as BaseDef[],
+        value as BaseDef[],
+      );
       notifySubscribers(instance, this.name, value);
       logger.log(recompute(instance));
     }, value);
@@ -1309,8 +1320,13 @@ class LinksToMany<FieldT extends CardDefConstructor>
       });
 
     return new WatchedArray(
-      (value) =>
+      (oldValue, value) =>
         instancePromise.then((instance) => {
+          applySubscribersToInstanceValue(
+            instance,
+            oldValue as BaseDef[],
+            value as BaseDef[],
+          );
           notifySubscribers(instance, this.name, value);
           logger.log(recompute(instance));
         }),
@@ -1319,7 +1335,12 @@ class LinksToMany<FieldT extends CardDefConstructor>
   }
 
   emptyValue(instance: BaseDef) {
-    return new WatchedArray((value) => {
+    return new WatchedArray((oldValue, value) => {
+      applySubscribersToInstanceValue(
+        instance,
+        oldValue as BaseDef[],
+        value as BaseDef[],
+      );
       notifySubscribers(instance, this.name, value);
       logger.log(recompute(instance));
     });
@@ -1348,7 +1369,12 @@ class LinksToMany<FieldT extends CardDefConstructor>
       }
     }
 
-    return new WatchedArray((value) => {
+    return new WatchedArray((oldValue, value) => {
+      applySubscribersToInstanceValue(
+        instance,
+        oldValue as BaseDef[],
+        value as BaseDef[],
+      );
       notifySubscribers(instance, this.name, value);
       logger.log(recompute(instance));
     }, values);
@@ -1704,6 +1730,16 @@ export class BaseDef {
   }
 }
 
+export function isArrayOfCardOrField(
+  cardsOrFields: any,
+): cardsOrFields is CardDef[] | FieldDef[] {
+  return (
+    Array.isArray(cardsOrFields) &&
+    (cardsOrFields.length === 0 ||
+      cardsOrFields.every((item) => isCardOrField(item)))
+  );
+}
+
 export function isCardOrField(card: any): card is CardDef | FieldDef {
   return card && typeof card === 'object' && isBaseInstance in card;
 }
@@ -2033,9 +2069,16 @@ export type CardDefConstructor = typeof CardDef;
 export type FieldDefConstructor = typeof FieldDef;
 
 export function subscribeToChanges(
-  fieldOrCard: BaseDef,
+  fieldOrCard: BaseDef | BaseDef[],
   subscriber: CardChangeSubscriber,
 ) {
+  if (isArrayOfCardOrField(fieldOrCard)) {
+    fieldOrCard.forEach((item) => {
+      subscribeToChanges(item, subscriber);
+    });
+    return;
+  }
+
   let changeSubscribers = subscribers.get(fieldOrCard);
   if (changeSubscribers && changeSubscribers.has(subscriber)) {
     return;
@@ -2054,17 +2097,24 @@ export function subscribeToChanges(
   });
   Object.keys(fields).forEach((fieldName) => {
     let value = peekAtField(fieldOrCard, fieldName);
-    if (isCardOrField(value)) {
+    if (isCardOrField(value) || isArrayOfCardOrField(value)) {
       subscribeToChanges(value, subscriber);
     }
   });
 }
 
 export function unsubscribeFromChanges(
-  fieldOrCard: BaseDef,
+  fieldOrCard: BaseDef | BaseDef[],
   subscriber: CardChangeSubscriber,
   visited: Set<BaseDef> = new Set(),
 ) {
+  if (isArrayOfCardOrField(fieldOrCard)) {
+    fieldOrCard.forEach((item) => {
+      unsubscribeFromChanges(item, subscriber);
+    });
+    return;
+  }
+
   if (visited.has(fieldOrCard)) {
     return;
   }
@@ -2082,22 +2132,42 @@ export function unsubscribeFromChanges(
   });
   Object.keys(fields).forEach((fieldName) => {
     let value = peekAtField(fieldOrCard, fieldName);
-    if (isCardOrField(value)) {
+    if (isCardOrField(value) || isArrayOfCardOrField(value)) {
       unsubscribeFromChanges(value, subscriber, visited);
     }
   });
 }
 
-function migrateSubscribers(oldFieldOrCard: BaseDef, newFieldOrCard: BaseDef) {
-  let changeSubscribers = subscribers.get(oldFieldOrCard);
-  if (changeSubscribers) {
-    changeSubscribers.forEach((changeSubscriber) =>
-      subscribeToChanges(newFieldOrCard, changeSubscriber),
-    );
-    changeSubscribers.forEach((changeSubscriber) =>
-      unsubscribeFromChanges(oldFieldOrCard, changeSubscriber),
-    );
+function applySubscribersToInstanceValue(
+  instance: BaseDef,
+  oldValue: BaseDef | BaseDef[],
+  newValue: BaseDef | BaseDef[],
+) {
+  let changeSubscribers = subscribers.get(instance);
+  if (!changeSubscribers) {
+    return;
   }
+
+  let toArray = (item: BaseDef | BaseDef[]) =>
+    isCardOrField(item) ? [item] : item ?? [];
+
+  let oldItems = toArray(oldValue);
+  let newItems = toArray(newValue);
+
+  let addedItems = newItems.filter((item) => !oldItems.includes(item));
+  let removedItems = oldItems.filter((item) => !newItems.includes(item));
+
+  addedItems.forEach((item) =>
+    changeSubscribers!.forEach((subscriber) =>
+      subscribeToChanges(item, subscriber),
+    ),
+  );
+
+  removedItems.forEach((item) =>
+    changeSubscribers!.forEach((subscriber) =>
+      unsubscribeFromChanges(item, subscriber),
+    ),
+  );
 }
 
 function getDataBucket<T extends BaseDef>(instance: T): Map<string, any> {
@@ -2594,11 +2664,12 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
       // the subscribers also subscribes to a new value.
       let existingValue = deserialized.get(fieldName as string);
       if (
-        isCardOrField(existingValue) &&
-        isCardOrField(value) &&
-        existingValue !== value
+        isCardOrField(existingValue) ||
+        isArrayOfCardOrField(existingValue) ||
+        isCardOrField(value) ||
+        isArrayOfCardOrField(value)
       ) {
-        migrateSubscribers(existingValue, value);
+        applySubscribersToInstanceValue(instance, existingValue, value);
       }
       deserialized.set(fieldName as string, value);
       logger.log(recompute(instance));
