@@ -41,10 +41,10 @@ import { type Reader, type Stats } from '@cardstack/runtime-common/worker';
 
 import {
   type IdentityContext as IdentityContextType,
-  LoaderType,
+  type LoaderType,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import CardDef from 'https://cardstack.com/base/card-def';
+import type CardDef from 'https://cardstack.com/base/card-def';
 
 import { type RenderCard } from '../services/render-service';
 

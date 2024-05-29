@@ -1,9 +1,9 @@
 import {
-  FieldDef,
   field,
   contains,
   primitive,
 } from 'https://cardstack.com/base/card-api';
+import FieldDef from 'https://cardstack.com/base/field-def';
 import { concat, fn } from '@ember/helper';
 import { Component } from 'https://cardstack.com/base/card-api';
 import { RadioInput } from '@cardstack/boxel-ui/components';

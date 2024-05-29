@@ -345,7 +345,9 @@ module('Unit | ai-function-generation-test', function (hooks) {
   });
 
   test(`supports descriptions on fields`, async function (assert) {
-    let { field, contains, CardDef, FieldDef } = cardApi;
+    let { field, contains } = cardApi;
+    let { default: CardDef } = cardDef;
+    let { default: FieldDef } = fieldDef;
     let { default: StringField } = string;
 
     class InternalField extends FieldDef {
@@ -382,7 +384,9 @@ module('Unit | ai-function-generation-test', function (hooks) {
   });
 
   test(`supports descriptions on nested fields`, async function (assert) {
-    let { field, contains, CardDef, FieldDef } = cardApi;
+    let { field, contains } = cardApi;
+    let { default: CardDef } = cardDef;
+    let { default: FieldDef } = fieldDef;
     let { default: StringField } = string;
 
     class InternalField extends FieldDef {
@@ -421,7 +425,8 @@ module('Unit | ai-function-generation-test', function (hooks) {
   });
 
   test(`supports descriptions in linksTo`, async function (assert) {
-    let { field, contains, linksTo, CardDef } = cardApi;
+    let { field, contains, linksTo } = cardApi;
+    let { default: CardDef } = cardDef;
     let { default: StringField } = string;
     class OtherCard extends CardDef {
       @field innerStringField = contains(StringField);
@@ -486,7 +491,9 @@ module('Unit | ai-function-generation-test', function (hooks) {
   });
 
   test(`supports descriptions on containsMany fields`, async function (assert) {
-    let { field, contains, containsMany, CardDef, FieldDef } = cardApi;
+    let { field, contains, containsMany } = cardApi;
+    let { default: CardDef } = cardDef;
+    let { default: FieldDef } = fieldDef;
     let { default: StringField } = string;
 
     class InternalField extends FieldDef {

@@ -210,7 +210,7 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
 
   test('filter by card instance', async function (assert) {
     let filter = {
-      type: { module: `${baseRealm.url}card-api`, name: 'CardDef' },
+      type: { module: `${baseRealm.url}card-def`, name: 'default' },
     };
     let suggestions = await suggestCardChooserTitle(filter, 0, { loader });
     assert.deepEqual(suggestions, [
@@ -233,7 +233,7 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
         { eq: { title: 'Card 1' } },
         { not: { eq: { 'author.firstName': 'Cardy' } } },
       ],
-      type: { module: `${baseRealm.url}card-api`, name: 'CardDef' },
+      type: { module: `${baseRealm.url}card-def`, name: 'default' },
     };
     let suggestions = await suggestCardChooserTitle(filter, 0, { loader });
     assert.deepEqual(suggestions, [
@@ -256,7 +256,7 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
     let filter = {
       every: [
         {
-          type: { module: `${baseRealm.url}card-api`, name: 'CardDef' },
+          type: { module: `${baseRealm.url}card-def`, name: 'default' },
         },
         {
           on: {

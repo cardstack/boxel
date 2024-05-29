@@ -308,8 +308,8 @@ export default class CardCatalogModal extends Component<Signature> {
         sort: [
           {
             on: {
-              module: `${baseRealm.url}card-api`,
-              name: 'CardDef',
+              module: `${baseRealm.url}card-def`,
+              name: 'default',
             },
             by: 'title',
           },

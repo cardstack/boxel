@@ -4,9 +4,9 @@ import {
   linksTo,
   linksToMany,
   field,
-  CardDef,
   Component,
 } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import BooleanField from 'https://cardstack.com/base/boolean';

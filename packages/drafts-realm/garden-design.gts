@@ -1,7 +1,11 @@
+import {
+  Component,
+  field,
+  contains,
+} from 'https://cardstack.com/base/card-api';
 import NumberField from 'https://cardstack.com/base/number';
 import StringField from 'https://cardstack.com/base/string';
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -357,5 +361,7 @@ export class GardenDesign extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+
   */
 }

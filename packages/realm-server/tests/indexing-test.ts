@@ -227,8 +227,8 @@ module('indexing', function (hooks) {
               attributes: {},
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api',
-                  name: 'CardDef',
+                  module: 'https://cardstack.com/base/card-def',
+                  name: 'default',
                 },
               },
             },

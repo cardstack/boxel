@@ -36,8 +36,6 @@
  */
 
 import {
-  CardDef,
-  FieldDef,
   primitive,
   deserialize,
   BaseDefConstructor,
@@ -46,6 +44,8 @@ import {
   containsMany,
   field,
 } from 'https://cardstack.com/base/card-api';
+import CardDef from 'https://cardstack.com/base/card-def';
+import FieldDef from 'https://cardstack.com/base/field-def';
 import { Component } from 'https://cardstack.com/base/card-api';
 import { RadioInput } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';

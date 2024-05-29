@@ -36,7 +36,7 @@ import {
   type FieldsTypeFor,
 } from './card-api/-components/utils';
 import {
-  Field,
+  type Field,
   getFields,
   getIfReady,
   recompute,
@@ -49,7 +49,7 @@ import {
   searchDoc,
 } from './card-api/-query-support';
 import {
-  LoaderType,
+  type LoaderType,
   createFromSerialized,
   relationshipMeta,
   serializeCard,

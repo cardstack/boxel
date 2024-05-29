@@ -75,7 +75,7 @@ export type {
 
 import type { Saved } from './card-document';
 
-import type { CodeRef } from './code-ref';
+import { loadCard, type CodeRef } from './code-ref';
 export type { CodeRef };
 
 export * from './code-ref';
@@ -106,6 +106,7 @@ import type { BaseDef, Format } from 'https://cardstack.com/base/card-api';
 import CardDef from 'https://cardstack.com/base/card-def';
 import FieldDef from 'https://cardstack.com/base/field-def';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import perform from '../host/types/ember-concurrency/helpers/perform';
 
 export const maxLinkDepth = 5;
 export const assetsDir = '__boxel/';

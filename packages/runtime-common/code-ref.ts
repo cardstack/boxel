@@ -234,9 +234,8 @@ export function isRootCardDef(candidate: CodeRef) {
     return false;
   }
   return (
-    candidate.name === 'CardDef' &&
-    (candidate.module === 'https://cardstack.com/base/card-api' ||
-      candidate.module === 'https://cardstack.com/base/card-api/-card-def')
+    candidate.name === 'default' &&
+    candidate.module === 'https://cardstack.com/base/card-def'
   );
 }
 
@@ -245,8 +244,7 @@ export function isRootFieldDef(candidate: CodeRef) {
     return false;
   }
   return (
-    candidate.name === 'FieldDef' &&
-    (candidate.module === 'https://cardstack.com/base/card-api' ||
-      candidate.module === 'https://cardstack.com/base/card-api/-field-def')
+    candidate.name === 'default' &&
+    candidate.module === 'https://cardstack.com/base/field-def'
   );
 }

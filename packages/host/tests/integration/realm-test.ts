@@ -59,8 +59,8 @@ module('Integration | realm', function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
-                name: 'CardDef',
+                module: 'https://cardstack.com/base/card-def',
+                name: 'default',
               },
             },
           },
@@ -89,8 +89,8 @@ module('Integration | realm', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
-            name: 'CardDef',
+            module: 'https://cardstack.com/base/card-def',
+            name: 'default',
           },
           lastModified: adapter.lastModified.get(
             `${testRealmURL}dir/empty.json`,
@@ -345,8 +345,8 @@ module('Integration | realm', function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
-                name: 'CardDef',
+                module: 'https://cardstack.com/base/card-def',
+                name: 'default',
               },
             },
           },
@@ -409,8 +409,8 @@ module('Integration | realm', function (hooks) {
               type: 'card',
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api',
-                  name: 'CardDef',
+                  module: 'https://cardstack.com/base/card-def',
+                  name: 'default',
                 },
               },
             },
@@ -1920,8 +1920,8 @@ module('Integration | realm', function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
-                name: 'CardDef',
+                module: 'https://cardstack.com/base/card-def',
+                name: 'default',
               },
             },
           },
@@ -1930,8 +1930,8 @@ module('Integration | realm', function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
-                name: 'CardDef',
+                module: 'https://cardstack.com/base/card-def',
+                name: 'default',
               },
             },
           },
@@ -2257,8 +2257,8 @@ module('Integration | realm', function (hooks) {
             attributes: {},
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
-                name: 'CardDef',
+                module: 'https://cardstack.com/base/card-def',
+                name: 'default',
               },
             },
           },
@@ -2357,7 +2357,7 @@ module('Integration | realm', function (hooks) {
           sort: [
             {
               by: 'id',
-              on: { module: `${baseRealm.url}card-api`, name: 'CardDef' },
+              on: { module: `${baseRealm.url}card-def`, name: 'default' },
             },
           ],
         })}`,
@@ -2511,8 +2511,8 @@ module('Integration | realm', function (hooks) {
             attributes: {},
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
-                name: 'CardDef',
+                module: 'https://cardstack.com/base/card-def',
+                name: 'default',
               },
             },
           },
@@ -2744,8 +2744,8 @@ posts/ignore-me.gts
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
-                name: 'FieldDef',
+                module: 'https://cardstack.com/base/field-def',
+                name: 'default',
               },
             },
           },

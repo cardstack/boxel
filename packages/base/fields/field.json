@@ -5,8 +5,8 @@
       "title": "General Field",
       "description": "A general field that can contain any field type.",
       "ref": {
-        "module": "https://cardstack.com/base/card-api",
-        "name": "FieldDef"
+        "module": "https://cardstack.com/base/field-def",
+        "name": "default"
       }
     },
     "meta": {

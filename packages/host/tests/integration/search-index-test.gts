@@ -55,8 +55,8 @@ module(`Integration | search-index`, function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
-                name: 'CardDef',
+                module: 'https://cardstack.com/base/card-def',
+                name: 'default',
               },
             },
           },
@@ -76,8 +76,8 @@ module(`Integration | search-index`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
-            name: 'CardDef',
+            module: 'https://cardstack.com/base/card-def',
+            name: 'default',
           },
           lastModified: adapter.lastModified.get(`${testRealmURL}empty.json`),
           realmInfo: testRealmInfo,

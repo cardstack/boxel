@@ -328,8 +328,8 @@ module('Realm Server', function (hooks) {
                   attributes: {},
                   meta: {
                     adoptsFrom: {
-                      module: 'https://cardstack.com/base/card-api',
-                      name: 'CardDef',
+                      module: 'https://cardstack.com/base/card-def',
+                      name: 'default',
                     },
                   },
                 },
@@ -375,8 +375,8 @@ module('Realm Server', function (hooks) {
                 type: 'card',
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
-                    name: 'CardDef',
+                    module: 'https://cardstack.com/base/card-def',
+                    name: 'default',
                   },
                 },
               },
@@ -448,8 +448,8 @@ module('Realm Server', function (hooks) {
               attributes: {},
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api',
-                  name: 'CardDef',
+                  module: 'https://cardstack.com/base/card-def',
+                  name: 'default',
                 },
               },
             },

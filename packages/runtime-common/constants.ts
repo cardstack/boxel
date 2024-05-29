@@ -9,12 +9,12 @@ export const catalogEntryRef: ResolvedCodeRef = {
 };
 export const baseCardRef: ResolvedCodeRef = {
   module: `${baseRealm.url}card-def`,
-  name: 'CardDef',
+  name: 'default',
 };
 
 export const baseFieldRef: ResolvedCodeRef = {
   module: `${baseRealm.url}field-def`,
-  name: 'FieldDef',
+  name: 'default',
 };
 
 export const isField = Symbol('cardstack-field');

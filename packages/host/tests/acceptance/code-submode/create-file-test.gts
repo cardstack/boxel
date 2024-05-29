@@ -406,8 +406,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       assert.deepEqual(
         json.data.meta.adoptsFrom,
         {
-          module: `${baseRealm.url}card-api`,
-          name: 'CardDef',
+          module: `${baseRealm.url}card-def`,
+          name: 'default',
         },
         'adoptsFrom is correct',
       );
@@ -466,8 +466,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       assert.deepEqual(
         json.data.meta.adoptsFrom,
         {
-          module: `${baseRealm.url}card-api`,
-          name: 'CardDef',
+          module: `${baseRealm.url}card-def`,
+          name: 'default',
         },
         'adoptsFrom is correct',
       );
