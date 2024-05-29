@@ -4,6 +4,7 @@
     "attributes": {
       "title": "String Field",
       "description": "A field that captures string values",
+      "isField": true,
       "ref": {
         "module": "https://cardstack.com/base/string",
         "name": "default"

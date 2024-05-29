@@ -4,21 +4,13 @@ import {
   Component,
   CardDef,
   FieldDef,
-  BaseDef,
-  primitive,
   relativeTo,
   realmInfo,
 } from './card-api';
 import StringField from './string';
 import BooleanField from './boolean';
 import CodeRef from './code-ref';
-import {
-  baseCardRef,
-  isFieldDef,
-  loadCard,
-  Loader,
-} from '@cardstack/runtime-common';
-import { isEqual } from 'lodash';
+
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import GlimmerComponent from '@glimmer/component';
 
@@ -27,49 +19,10 @@ export class CatalogEntry extends CardDef {
   @field title = contains(StringField);
   @field description = contains(StringField);
   @field ref = contains(CodeRef);
-  @field isPrimitive = contains(BooleanField, {
-    computeVia: async function (this: CatalogEntry) {
-      let loader = Loader.getLoaderFor(Object.getPrototypeOf(this).constructor);
 
-      if (!loader) {
-        throw new Error(
-          'Could not find a loader for this instance’s class’s module',
-        );
-      }
-
-      let card: typeof BaseDef | undefined = await loadCard(this.ref, {
-        loader,
-        relativeTo: this[relativeTo],
-      });
-      if (!card) {
-        throw new Error(`Could not load card '${this.ref.name}'`);
-      }
-      // the base card is a special case where it is technically not a primitive, but because it has no fields
-      // it is not useful to treat as a composite card (for the purposes of creating new card instances).
-      return primitive in card || isEqual(baseCardRef, this.ref);
-    },
-  });
   // If it's not a field, then it's a card
-  @field isField = contains(BooleanField, {
-    computeVia: async function (this: CatalogEntry) {
-      let loader = Loader.getLoaderFor(Object.getPrototypeOf(this).constructor);
+  @field isField = contains(BooleanField);
 
-      if (!loader) {
-        throw new Error(
-          'Could not find a loader for this instance’s class’s module',
-        );
-      }
-
-      let card: typeof BaseDef | undefined = await loadCard(this.ref, {
-        loader,
-        relativeTo: this[relativeTo],
-      });
-      if (!card) {
-        throw new Error(`Could not load card '${this.ref.name}'`);
-      }
-      return isFieldDef(card);
-    },
-  });
   @field moduleHref = contains(StringField, {
     computeVia: function (this: CatalogEntry) {
       return new URL(this.ref.module, this[relativeTo]).href;
@@ -163,10 +116,6 @@ export class CatalogEntry extends CardDef {
         </div>
         {{#if @model.showDemo}}
           <div data-test-demo><@fields.demo /></div>
-        {{/if}}
-        {{! field needs to be used in order to be indexed }}
-        {{#if @model.isPrimitive}}
-          <div>Field is primitive</div>
         {{/if}}
       </CatalogEntryContainer>
       <style>

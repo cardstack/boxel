@@ -40,7 +40,6 @@ import {
   maybeURL,
   maybeRelativeURL,
   moduleFrom,
-  getCard,
   trackCard,
   type Meta,
   type CardFields,
@@ -353,6 +352,9 @@ function cardTypeFor(
   if (primitive in field.card) {
     return field.card;
   }
+  if (boxedElement.value == null) {
+    return field.card;
+  }
   return Reflect.getPrototypeOf(boxedElement.value)!
     .constructor as typeof BaseDef;
 }
@@ -448,9 +450,12 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     // WatchedArray proxy is not structuredClone-able, and hence cannot be
     // communicated over the postMessage boundary between worker and DOM.
     // TODO: can this be simplified since we don't have the worker anymore?
-    return [...instances].map((instance) => {
-      return this.card[queryableValue](instance, stack);
-    });
+    let results = [...instances]
+      .map((instance) => {
+        return this.card[queryableValue](instance, stack);
+      })
+      .filter((i) => i != null);
+    return results.length === 0 ? null : results;
   }
 
   serialize(
@@ -909,13 +914,9 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       return null;
     }
     let loader = Loader.getLoaderFor(this.card)!;
-    let cardResource = getCard(new URL(value.links.self, relativeTo), {
-      cachedOnly: true,
-      loader,
-    });
-    await cardResource.loaded;
-    let cachedInstance =
-      cardResource.card ?? identityContext.identities.get(value.links.self);
+    let cachedInstance = identityContext.identities.get(
+      new URL(value.links.self, relativeTo).href,
+    );
     if (cachedInstance) {
       cachedInstance[isSavedInstance] = true;
       return cachedInstance as BaseInstanceType<CardT>;
@@ -1138,17 +1139,23 @@ class LinksToMany<FieldT extends CardDefConstructor>
     // WatchedArray proxy is not structuredClone-able, and hence cannot be
     // communicated over the postMessage boundary between worker and DOM.
     // TODO: can this be simplified since we don't have the worker anymore?
-    return [...instances].map((instance) => {
-      if (primitive in instance) {
-        throw new Error(
-          `the linksToMany field '${this.name}' contains a primitive card '${instance.name}'`,
-        );
-      }
-      if (isNotLoadedValue(instance)) {
-        return { id: instance.reference };
-      }
-      return this.card[queryableValue](instance, stack);
-    });
+    let results = [...instances]
+      .map((instance) => {
+        if (instance == null) {
+          return null;
+        }
+        if (primitive in instance) {
+          throw new Error(
+            `the linksToMany field '${this.name}' contains a primitive card '${instance.name}'`,
+          );
+        }
+        if (isNotLoadedValue(instance)) {
+          return { id: instance.reference };
+        }
+        return this.card[queryableValue](instance, stack);
+      })
+      .filter((i) => i != null);
+    return results.length === 0 ? null : results;
   }
 
   serialize(
@@ -1173,6 +1180,15 @@ class LinksToMany<FieldT extends CardDefConstructor>
 
     let relationships: Record<string, Relationship> = {};
     values.map((value, i) => {
+      if (value == null) {
+        relationships[`${this.name}\.${i}`] = {
+          links: {
+            self: null,
+          },
+          data: null,
+        };
+        return;
+      }
       if (isNotLoadedValue(value)) {
         relationships[`${this.name}\.${i}`] = {
           links: {
@@ -1249,13 +1265,9 @@ class LinksToMany<FieldT extends CardDefConstructor>
           return null;
         }
         let loader = Loader.getLoaderFor(this.card)!;
-        let cardResource = getCard(new URL(value.links.self, relativeTo), {
-          cachedOnly: true,
-          loader,
-        });
-        await cardResource.loaded;
-        let cachedInstance =
-          cardResource.card ?? identityContext.identities.get(value.links.self);
+        let cachedInstance = identityContext.identities.get(
+          new URL(value.links.self, relativeTo).href,
+        );
         if (cachedInstance) {
           cachedInstance[isSavedInstance] = true;
           return cachedInstance;
@@ -2051,7 +2063,13 @@ export function subscribeToChanges(
 export function unsubscribeFromChanges(
   fieldOrCard: BaseDef,
   subscriber: CardChangeSubscriber,
+  visited: Set<BaseDef> = new Set(),
 ) {
+  if (visited.has(fieldOrCard)) {
+    return;
+  }
+
+  visited.add(fieldOrCard);
   let changeSubscribers = subscribers.get(fieldOrCard);
   if (!changeSubscribers) {
     return;
@@ -2065,7 +2083,7 @@ export function unsubscribeFromChanges(
   Object.keys(fields).forEach((fieldName) => {
     let value = peekAtField(fieldOrCard, fieldName);
     if (isCardOrField(value)) {
-      unsubscribeFromChanges(value, subscriber);
+      unsubscribeFromChanges(value, subscriber, visited);
     }
   });
 }
@@ -2419,11 +2437,8 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
   instance: BaseInstanceType<T>,
   doc: LooseSingleCardDocument,
 ): Promise<BaseInstanceType<T>> {
-  let identityContext = identityContexts.get(instance);
-  if (!identityContext) {
-    identityContext = new IdentityContext();
-    identityContexts.set(instance, identityContext);
-  }
+  let identityContext = new IdentityContext();
+  identityContexts.set(instance, identityContext);
   if (!instance[relativeTo] && doc.data.id) {
     instance[relativeTo] = new URL(doc.data.id);
   }

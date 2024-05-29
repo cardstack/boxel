@@ -92,6 +92,7 @@ const files: Record<string, any> = {
       attributes: {
         title: 'Error',
         description: 'Catalog entry for Error',
+        isField: false,
         ref: {
           module: '../error',
           name: 'default',
@@ -114,6 +115,7 @@ const files: Record<string, any> = {
       attributes: {
         title: 'Pet',
         description: 'Catalog entry for Pet',
+        isField: false,
         ref: { module: `../pet`, name: 'default' },
       },
       meta: {
@@ -130,6 +132,7 @@ const files: Record<string, any> = {
       attributes: {
         title: 'Person',
         description: 'Catalog entry for Person',
+        isField: false,
         ref: { module: `../person`, name: 'Person' },
       },
       meta: {

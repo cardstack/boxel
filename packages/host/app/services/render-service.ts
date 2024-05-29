@@ -123,6 +123,7 @@ export default class RenderService extends Service {
     return parseCardHtml(html);
   }
 
+  // TODO delete me
   private async resolveField(
     params: Omit<RenderCardParams, 'format'> & { fieldName: string },
   ): Promise<void> {

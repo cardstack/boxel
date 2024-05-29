@@ -4,6 +4,7 @@
     "attributes": {
       "title": "Markdown Field",
       "description": "A field that captures markdown values",
+      "isField": true,
       "ref": {
         "module": "https://cardstack.com/base/markdown",
         "name": "default"

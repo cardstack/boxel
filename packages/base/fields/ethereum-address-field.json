@@ -4,6 +4,7 @@
     "attributes": {
       "title": "Ethereum Address Field",
       "description": "A field that captures checksum ethereum addresses",
+      "isField": true,
       "ref": {
         "module": "https://cardstack.com/base/ethereum-address",
         "name": "default"
