@@ -275,6 +275,7 @@ if (distURL) {
     );
   }
 })().catch((e: any) => {
+  Sentry.captureException(e);
   console.error(
     `Unexpected error encountered starting realm, stopping server`,
     e,
