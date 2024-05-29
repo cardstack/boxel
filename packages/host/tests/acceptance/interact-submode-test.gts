@@ -5,6 +5,7 @@ import {
   triggerKeyEvent,
   waitFor,
   waitUntil,
+  settled,
 } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
@@ -912,7 +913,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         ),
       ]);
 
-      await waitFor(`[data-stack-card="${testRealmURL}Person/fadhlan"]`);
+      await settled();
       assert
         .dom(`[data-stack-card="${testRealmURL}Person/fadhlan"]`)
         .exists({ count: 1 });
@@ -1151,7 +1152,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         await click(
           `[data-test-links-to-editor="pet"] [data-test-field-component-card]`,
         );
-        await waitFor(`[data-test-stack-card="${testRealmURL}Pet/mango"]`);
+        await settled();
         assert
           .dom(
             `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-card-format="isolated"]`,

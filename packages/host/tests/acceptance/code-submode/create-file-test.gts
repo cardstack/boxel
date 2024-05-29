@@ -2,6 +2,7 @@ import type Owner from '@ember/owner';
 import { click, fillIn, waitFor } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
+
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
