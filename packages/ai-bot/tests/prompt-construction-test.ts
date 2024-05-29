@@ -655,7 +655,7 @@ module('getModifyPrompt', () => {
   });
 
   test('If there are no functions in the last message from the user, store none', () => {
-    const history: IRoomEvent[] = [
+    const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
         sender: '@ian:localhost',
@@ -837,7 +837,7 @@ module('getModifyPrompt', () => {
   });
 
   test('Create patch function calls when there is a cardSpec', () => {
-    const history: IRoomEvent[] = [
+    const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
         sender: '@ian:localhost',
