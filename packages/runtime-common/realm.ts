@@ -243,7 +243,6 @@ export class Realm {
   #flushUpdateEvents: Promise<void> | undefined;
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
-  #permissions: RealmPermissions;
   #realmAuthHandler: RealmAuthHandler;
   #onIndexer: ((indexer: Indexer) => Promise<void>) | undefined;
   #publicEndpoints: RouteTable<true> = new Map([
@@ -283,7 +282,6 @@ export class Realm {
       getIndexHTML,
       matrix,
       realmSecretSeed,
-      permissions, // TODO remove this
       dbAdapter,
       queue,
       virtualNetwork,
@@ -294,7 +292,6 @@ export class Realm {
       adapter: RealmAdapter;
       getIndexHTML: () => Promise<string>;
       matrix: MatrixConfig;
-      permissions: RealmPermissions;
       realmSecretSeed: string;
       dbAdapter: DBAdapter;
       queue: Queue;
@@ -307,7 +304,6 @@ export class Realm {
     this.paths = new RealmPaths(new URL(url));
     let { username, password, url: matrixURL } = matrix;
     this.#matrixClient = new MatrixClient(matrixURL, username, password);
-    this.#permissions = permissions;
     this.#realmSecretSeed = realmSecretSeed;
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
@@ -1855,10 +1851,6 @@ export class Realm {
       relaxDocumentDomain: this.#useTestingDomain,
       requestContext,
     });
-  }
-
-  get isPublicReadable(): boolean {
-    return this.#permissions['*']?.includes('read') ?? false;
   }
 }
 

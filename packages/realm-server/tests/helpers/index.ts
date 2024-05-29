@@ -155,7 +155,6 @@ export async function createRealm({
       getIndexHTML: async () =>
         readFileSync(join(distPath, 'index.html')).toString(),
       matrix: matrixConfig,
-      permissions,
       realmSecretSeed: "shhh! it's a secret",
       virtualNetwork,
       dbAdapter,

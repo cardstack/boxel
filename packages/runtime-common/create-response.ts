@@ -18,7 +18,7 @@ export function createResponse({
     headers: {
       ...init?.headers,
       'X-Boxel-Realm-Url': requestContext.realm.url,
-      ...(requestContext.realm.isPublicReadable && {
+      ...(requestContext.permissions['*']?.includes('read') && {
         'X-Boxel-Realm-Public-Readable': 'true',
       }),
       vary: 'Accept',
