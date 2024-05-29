@@ -96,7 +96,7 @@ export default class CardPrerender extends Component {
     await register(this.fromScratch.bind(this), this.incremental.bind(this));
   });
 
-  private doFromScratch = enqueueTask(async (realmURL: URL, boom?: true) => {
+  private doFromScratch = enqueueTask(async (realmURL: URL) => {
     let { reader, indexer } = this.getRunnerParams();
     await this.resetLoaderInFastboot.perform();
     let current = await CurrentRun.fromScratch(
@@ -107,7 +107,6 @@ export default class CardPrerender extends Component {
         indexer,
         renderCard: this.renderService.renderCard.bind(this.renderService),
       }),
-      boom,
     );
     this.renderService.indexRunDeferred?.fulfill();
     return current;
