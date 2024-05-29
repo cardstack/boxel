@@ -125,11 +125,10 @@ export class RealmAuthHandler {
     this.realmCache = realmCache;
   }
 
-  fetchWithAuth = async (
+  addAuthorizationHeader = async (
     request: Request,
     retryOnAuthFail = true,
   ): Promise<Response | null> => {
-    // todo rename method and retryOnAuthFail
     if (request.url.startsWith(PACKAGES_FAKE_ORIGIN)) {
       return null;
     }
@@ -174,7 +173,7 @@ export class RealmAuthHandler {
           this.realmCache.resetAuth(realmInfo.url);
           request.headers.delete('Authorization');
 
-          return this.fetchWithAuth(request, false);
+          return this.addAuthorizationHeader(request, false);
         }
       }
       return response;

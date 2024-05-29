@@ -54,7 +54,7 @@ export default class LoaderService extends Service {
     if (this.fastboot.isFastBoot) {
       let loader = this.virtualNetwork.createLoader();
       this.loader.prependURLHandlers([
-        (req) => this.realmAuthHandler.fetchWithAuth(req),
+        (req) => this.realmAuthHandler.addAuthorizationHeader(req),
       ]);
       shimExternals(this.virtualNetwork);
       return loader;
@@ -66,7 +66,7 @@ export default class LoaderService extends Service {
       new URL(config.resolvedBaseRealmURL),
     );
     this.loader.prependURLHandlers([
-      (req) => this.realmAuthHandler.fetchWithAuth(req),
+      (req) => this.realmAuthHandler.addAuthorizationHeader(req),
     ]);
     shimExternals(this.virtualNetwork);
     return loader;
