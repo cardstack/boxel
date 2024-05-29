@@ -145,7 +145,7 @@ export async function createRealm({
     }
   }
 
-  insertPermissions(dbAdapter, new URL(realmURL), permissions);
+  await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
   let adapter = new NodeAdapter(dir);
   let realm = new Realm(
