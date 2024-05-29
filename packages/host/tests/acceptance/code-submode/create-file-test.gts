@@ -1,5 +1,5 @@
 import type Owner from '@ember/owner';
-import { click, fillIn, waitFor } from '@ember/test-helpers';
+import { click, fillIn, waitFor, settled } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
 
@@ -24,7 +24,6 @@ import {
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
-import { settled } from '@ember/test-helpers';
 
 const testRealmURL2 = 'http://test-realm/test2/';
 const testRealmAIconURL = 'https://i.postimg.cc/L8yXRvws/icon.png';
