@@ -59,6 +59,8 @@ export { maybeRelativeURL, maybeURL, relativeURL } from './url';
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';
 
+export * from './realm-permission-queries';
+
 // From https://github.com/iliakan/detect-node
 export const isNode =
   Object.prototype.toString.call((globalThis as any).process) ===

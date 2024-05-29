@@ -7,6 +7,8 @@ import {
   RunnerOptionsManager,
   baseRealm,
   assetsDir,
+  permissionsExist,
+  insertPermissions,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
@@ -179,6 +181,9 @@ if (distURL) {
 
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
+
+    await seedRealmPermissions(dbAdapter, new URL(url));
+
     let manager = new RunnerOptionsManager();
     let matrixURL = String(matrixURLs[i]);
     if (matrixURL.length === 0) {
@@ -328,4 +333,20 @@ function getRealmPermissions(realmUrl: string) {
   }
 
   return userPermissions[realmUrl];
+}
+
+// In case there are no permissions in the database, seed the realm with default permissions:
+// Base realm: read permissions for everyone
+// Other realms: read permissions for everyone, read/write permissions for signed up users
+async function seedRealmPermissions(dbAdapter: PgAdapter, realmURL: URL) {
+  if (!(await permissionsExist(dbAdapter, realmURL))) {
+    if (realmURL.href === 'https://cardstack.com/base/') {
+      await insertPermissions(dbAdapter, realmURL, { '*': ['read'] });
+    } else {
+      await insertPermissions(dbAdapter, realmURL, {
+        '*': ['read'],
+        users: ['read', 'write'],
+      });
+    }
+  }
 }
