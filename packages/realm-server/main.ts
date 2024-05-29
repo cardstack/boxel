@@ -288,9 +288,9 @@ if (distURL) {
 async function seedRealmPermissions(dbAdapter: PgAdapter, realmURL: URL) {
   if (!(await permissionsExist(dbAdapter, realmURL))) {
     if (realmURL.href === 'https://cardstack.com/base/') {
-      insertPermissions(dbAdapter, realmURL, { '*': ['read'] });
+      await insertPermissions(dbAdapter, realmURL, { '*': ['read'] });
     } else {
-      insertPermissions(dbAdapter, realmURL, {
+      await insertPermissions(dbAdapter, realmURL, {
         '*': ['read'],
         users: ['read', 'write'],
       });
