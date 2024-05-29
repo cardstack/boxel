@@ -15,8 +15,8 @@ module('realm-auth-handler-test', function () {
   } as MatrixClient;
 
   test('it does not run auth for requests that do not need it', async function (assert) {
-    let realmAuthHandler = new RealmAuthHandler(
-      {
+    let realmAuthHandler = new RealmAuthHandler({
+      loader: {
         fetch: async () => {
           return new Response(null, {
             status: 200,
@@ -26,9 +26,9 @@ module('realm-auth-handler-test', function () {
           });
         },
       } as unknown as Loader,
-      'http://test-realm/',
+      realmURL: 'http://test-realm/',
       matrixClient,
-    );
+    });
 
     // Case 1: POST request to _session which is for creating a session
     let request1 = new Request('http://localhost/test-realm/_session', {
@@ -74,12 +74,11 @@ module('realm-auth-handler-test', function () {
         getJWT: () => 'Bearer token_1',
       };
     };
-    let realmAuthHandler = new RealmAuthHandler(
+    let realmAuthHandler = new RealmAuthHandler({
       loader,
-      'http://test-realm/',
-      undefined,
+      realmURL: 'http://test-realm/',
       realmCache,
-    );
+    });
 
     let request = new Request('http://another-test-realm/card');
 
@@ -121,11 +120,11 @@ module('realm-auth-handler-test', function () {
       },
     } as unknown as Loader;
 
-    let realmAuthHandler = new RealmAuthHandler(
+    let realmAuthHandler = new RealmAuthHandler({
       loader,
-      'http://test-realm/',
+      realmURL: 'http://test-realm/',
       matrixClient,
-    );
+    });
 
     let request = new Request('http://another-test-realm/card');
 
@@ -153,11 +152,11 @@ module('realm-auth-handler-test', function () {
       },
     } as unknown as Loader;
 
-    let realmAuthHandler = new RealmAuthHandler(
+    let realmAuthHandler = new RealmAuthHandler({
       loader,
-      'http://test-realm/',
+      realmURL: 'http://test-realm/',
       matrixClient,
-    );
+    });
 
     let request = new Request('http://test-realm/card');
 
@@ -196,12 +195,11 @@ module('realm-auth-handler-test', function () {
         },
       };
     };
-    let realmAuthHandler = new RealmAuthHandler(
+    let realmAuthHandler = new RealmAuthHandler({
       loader,
-      'http://test-realm/',
-      undefined,
+      realmURL: 'http://test-realm/',
       realmCache,
-    );
+    });
 
     let request = new Request('http://another-test-realm/card');
 
@@ -252,12 +250,11 @@ module('realm-auth-handler-test', function () {
         },
       };
     };
-    let realmAuthHandler = new RealmAuthHandler(
+    let realmAuthHandler = new RealmAuthHandler({
       loader,
-      'http://test-realm/',
-      undefined,
+      realmURL: 'http://test-realm/',
       realmCache,
-    );
+    });
 
     let request = new Request('http://another-test-realm/card');
 
@@ -309,12 +306,11 @@ module('realm-auth-handler-test', function () {
         },
       };
     };
-    let realmAuthHandler = new RealmAuthHandler(
+    let realmAuthHandler = new RealmAuthHandler({
       loader,
-      'http://test-realm/',
-      undefined,
+      realmURL: 'http://test-realm/',
       realmCache,
-    );
+    });
 
     let request = new Request('http://another-test-realm/card');
 
@@ -360,12 +356,11 @@ module('realm-auth-handler-test', function () {
         },
       };
     };
-    let realmAuthHandler = new RealmAuthHandler(
+    let realmAuthHandler = new RealmAuthHandler({
       loader,
-      'http://test-realm/',
-      undefined,
+      realmURL: 'http://test-realm/',
       realmCache,
-    );
+    });
 
     let request = new Request('http://another-test-realm/card');
 

@@ -1,3 +1,4 @@
+import Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
@@ -24,14 +25,22 @@ export default class LoaderService extends Service {
   @service private declare matrixService: MatrixService;
   @service declare realmInfoService: RealmInfoService;
 
-  @tracked loader = this.makeInstance();
+  @tracked loader: Loader;
   // This resources all have the same owner, it's safe to reuse cache.
   // The owner is the service, which stays around for the whole lifetime of the host app,
   // which in turn assures the resources will not get torn down.
   private realmSessions: Map<string, RealmSessionResource> = new Map();
-  private realmAuthHandler: RealmAuthHandler | undefined;
+  private realmAuthHandler: RealmAuthHandler;
 
-  virtualNetwork = new VirtualNetwork();
+  virtualNetwork: VirtualNetwork;
+
+  constructor(owner: Owner) {
+    super(owner);
+
+    this.virtualNetwork = new VirtualNetwork();
+    this.loader = this.makeInstance();
+    this.realmAuthHandler = this.makeRealmAuthHandler();
+  }
 
   reset() {
     if (this.loader) {
@@ -44,6 +53,9 @@ export default class LoaderService extends Service {
   private makeInstance() {
     if (this.fastboot.isFastBoot) {
       let loader = this.virtualNetwork.createLoader();
+      this.loader.prependURLHandlers([
+        (req) => this.realmAuthHandler.fetchWithAuth(req),
+      ]);
       shimExternals(this.virtualNetwork);
       return loader;
     }
@@ -53,16 +65,10 @@ export default class LoaderService extends Service {
       new URL(baseRealm.url),
       new URL(config.resolvedBaseRealmURL),
     );
-    loader.prependURLHandlers([
-      (req) => {
-        if (!this.realmAuthHandler) {
-          this.realmAuthHandler = this.makeRealmAuthHandler();
-        }
-        return this.realmAuthHandler.fetchWithAuth(req);
-      },
+    this.loader.prependURLHandlers([
+      (req) => this.realmAuthHandler.fetchWithAuth(req),
     ]);
     shimExternals(this.virtualNetwork);
-
     return loader;
   }
 
@@ -96,7 +102,7 @@ export default class LoaderService extends Service {
       },
     } as IRealmCache;
 
-    return new RealmAuthHandler(this.loader, undefined, undefined, realmCache);
+    return new RealmAuthHandler({ loader: this.loader, realmCache });
   }
 
   private async getRealmSession(realmURL: URL) {

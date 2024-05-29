@@ -312,11 +312,11 @@ export class Realm {
     let loader = virtualNetwork.createLoader();
     adapter.setLoader?.(loader);
 
-    this.#realmAuthHandler = new RealmAuthHandler(
-      loader,
-      url,
-      this.#matrixClient,
-    );
+    this.#realmAuthHandler = new RealmAuthHandler({
+      loader: loader,
+      realmURL: url,
+      matrixClient: this.#matrixClient,
+    });
     this.loaderTemplate = loader;
     this.loaderTemplate.registerURLHandler(
       this.#realmAuthHandler.fetchWithAuth,

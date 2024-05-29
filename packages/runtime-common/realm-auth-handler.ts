@@ -106,10 +106,10 @@ export class RealmAuthHandler {
   private realmCache: IRealmCache;
 
   constructor(args: {
-    loader: Loader,
-    realmURL?: string,
-    matrixClient?: MatrixClient,
-    realmCache?: IRealmCache
+    loader: Loader;
+    realmURL?: string;
+    matrixClient?: MatrixClient;
+    realmCache?: IRealmCache;
   }) {
     let { loader, realmURL, matrixClient, realmCache } = args;
     this.loader = loader;
