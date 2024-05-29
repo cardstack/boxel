@@ -6,7 +6,7 @@ import {
   type FieldDef,
 } from 'https://cardstack.com/base/card-api';
 import { Loader } from './loader';
-import { isField } from './constants';
+import { isField, resolvedCodeRef } from './constants';
 import { CardError } from './error';
 import { trimExecutableExtension } from './index';
 
@@ -139,8 +139,12 @@ export function identifyCard(
   if (!isBaseDef(card)) {
     return undefined;
   }
-
-  let ref = Loader.identify(card);
+  let ref: ResolvedCodeRef | undefined;
+  if (card[resolvedCodeRef]) {
+    ref = card[resolvedCodeRef];
+  } else {
+    ref = Loader.identify(card);
+  }
   if (ref) {
     return maybeRelativeURL
       ? { ...ref, module: maybeRelativeURL(ref.module) }

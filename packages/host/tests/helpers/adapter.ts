@@ -3,8 +3,14 @@ import {
   LocalPath,
   RealmAdapter,
   RealmPaths,
+  ResolvedCodeRef,
   baseRealm,
   createResponse,
+  isBaseDef,
+  loadedBy,
+  resolvedCodeRef,
+  shimmedModuleKey,
+  trimExecutableExtension,
 } from '@cardstack/runtime-common';
 
 import {
@@ -183,10 +189,6 @@ export class TestRealmAdapter implements RealmAdapter {
       if (typeof value === 'string') {
         fileRefContent = value;
       } else {
-        let moduleURLString = `${this.#paths.url}${path.replace(/\.gts$/, '')}`;
-
-        this.#loader.shimModule(moduleURLString, value as object);
-
         fileRefContent = shimmedModuleIndicator;
       }
     } else {
@@ -200,7 +202,23 @@ export class TestRealmAdapter implements RealmAdapter {
     };
 
     if (fileRefContent === shimmedModuleIndicator) {
-      fileRef[Symbol.for('shimmed-module')] = value as object;
+      let shimmedModule = value as object;
+      for (let propName of Object.keys(shimmedModule)) {
+        let possibleBaseDef = (shimmedModule as any)[propName];
+        if (!isBaseDef(possibleBaseDef)) {
+          return undefined;
+        }
+
+        if (!possibleBaseDef[resolvedCodeRef]) {
+          possibleBaseDef[loadedBy] = this.#loader;
+          possibleBaseDef[resolvedCodeRef] = {
+            module: trimExecutableExtension(new URL(path, this.#paths.url))
+              .href,
+            name: propName,
+          } as ResolvedCodeRef;
+        }
+      }
+      fileRef[shimmedModuleKey] = shimmedModule;
     }
 
     return fileRef;

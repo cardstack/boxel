@@ -1,7 +1,12 @@
 import TransformModulesAmdPlugin from 'transform-modules-amd-plugin';
 import { transformSync } from '@babel/core';
 import { Deferred } from './deferred';
-import { trimExecutableExtension, logger } from './index';
+import {
+  trimExecutableExtension,
+  logger,
+  loadedBy,
+  shimmedModuleKey,
+} from './index';
 
 import { CardError } from './error';
 import flatMap from 'lodash/flatMap';
@@ -230,7 +235,7 @@ export class Loader {
 
   static getLoaderFor(value: unknown): Loader | undefined {
     if (typeof value === 'function') {
-      return Loader.loaders.get(value);
+      return (value as any)[loadedBy] ?? Loader.loaders.get(value);
     }
     return undefined;
   }
@@ -470,7 +475,7 @@ export class Loader {
       );
       if (shimmedModule) {
         let response = new Response();
-        (response as any)[Symbol.for('shimmed-module')] = shimmedModule;
+        (response as any)[shimmedModuleKey] = shimmedModule;
         return response;
       }
 
@@ -707,10 +712,10 @@ export class Loader {
       throw error;
     }
 
-    if (Symbol.for('shimmed-module') in response) {
+    if (shimmedModuleKey in response) {
       return {
         type: 'shimmed',
-        module: (response as any)[Symbol.for('shimmed-module')],
+        module: (response as any)[shimmedModuleKey],
       };
     }
 

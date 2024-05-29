@@ -1,4 +1,4 @@
-import { logger, trimExecutableExtension } from './index';
+import { logger, shimmedModuleKey, trimExecutableExtension } from './index';
 
 function trimModuleIdentifier(moduleIdentifier: string): string {
   return trimExecutableExtension(new URL(moduleIdentifier)).href;
@@ -21,7 +21,7 @@ export class PackageShimHandler {
         let shimmedModule = this.getModule(request.url);
         if (shimmedModule) {
           let response = new Response();
-          (response as any)[Symbol.for('shimmed-module')] = shimmedModule;
+          (response as any)[shimmedModuleKey] = shimmedModule;
           return response;
         }
 

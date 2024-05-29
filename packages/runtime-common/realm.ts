@@ -29,6 +29,7 @@ import {
   type DBAdapter,
   type Queue,
   type Indexer,
+  shimmedModuleKey,
 } from './index';
 import merge from 'lodash/merge';
 import flatMap from 'lodash/flatMap';
@@ -885,9 +886,8 @@ export class Realm {
         fileRef.path,
       );
 
-      if (fileRef[Symbol.for('shimmed-module')]) {
-        (response as any)[Symbol.for('shimmed-module')] =
-          fileRef[Symbol.for('shimmed-module')];
+      if (fileRef[shimmedModuleKey]) {
+        (response as any)[shimmedModuleKey] = fileRef[shimmedModuleKey];
       }
 
       return response;

@@ -50,6 +50,9 @@ import {
   type CardResource,
   type Actions,
   type RealmInfo,
+  resolvedCodeRef,
+  ResolvedCodeRef,
+  loadedBy,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
@@ -1649,6 +1652,9 @@ export class BaseDef {
   static getDisplayName(instance: BaseDef) {
     return instance.constructor.displayName;
   }
+
+  static [resolvedCodeRef]: ResolvedCodeRef | undefined;
+  static [loadedBy]: Loader | undefined;
 
   static [serialize](
     value: any,

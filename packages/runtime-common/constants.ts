@@ -18,6 +18,9 @@ export const baseFieldRef: ResolvedCodeRef = {
 
 export const isField = Symbol('cardstack-field');
 export const primitive = Symbol('cardstack-primitive');
+export const resolvedCodeRef = Symbol.for('cardstack-resolved-code-ref');
+export const loadedBy = Symbol.for('cardstack-loaded-by');
+export const shimmedModuleKey = Symbol.for('cardstack-shimmed-module');
 
 export const aiBotUsername = 'aibot';
 
