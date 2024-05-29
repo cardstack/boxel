@@ -13,6 +13,7 @@ import {
   type Queue,
   type IndexRunner,
   assetsDir,
+  insertPermissions,
 } from '@cardstack/runtime-common';
 import { makeFastBootIndexRunner } from '../../fastboot';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -66,7 +67,7 @@ export function setupDB(
 
   const runAfterHook = async () => {
     await queue?.destroy();
-    await dbAdapter?.close();
+    // await dbAdapter?.close();
   };
 
   // we need to pair before/after and beforeEach/afterEach. within this setup
@@ -129,6 +130,8 @@ export async function createRealm({
   dbAdapter: PgAdapter;
   deferStartUp?: true;
 }): Promise<Realm> {
+  await insertPermissions(dbAdapter, new URL(realmURL), permissions);
+
   if (!getRunner) {
     ({ getRunner } = await makeFastBootIndexRunner(
       distPath,
@@ -199,6 +202,7 @@ export async function runBaseRealmServer(
   virtualNetwork: VirtualNetwork,
   queue: Queue,
   dbAdapter: PgAdapter,
+  permissions: RealmPermissions = { '*': ['read'] },
 ) {
   let localBaseRealmURL = new URL(localBaseRealm);
   virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
@@ -209,6 +213,7 @@ export async function runBaseRealmServer(
     virtualNetwork,
     queue,
     dbAdapter,
+    permissions,
   });
   virtualNetwork.mount(testBaseRealm.maybeExternalHandle);
   await testBaseRealm.ready;
@@ -220,11 +225,11 @@ export async function runTestRealmServer({
   dir,
   fileSystem,
   realmURL,
-  permissions,
   virtualNetwork,
   queue,
   dbAdapter,
   matrixConfig,
+  permissions = { '*': ['read', 'write'] },
 }: {
   dir: string;
   fileSystem?: Record<string, string | LooseSingleCardDocument>;

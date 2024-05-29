@@ -744,9 +744,15 @@ export class Realm {
     hash.update(response);
     hash.update(this.#realmSecretSeed);
     let hashedResponse = uint8ArrayToHex(await hash.digest());
+
+    let realmPermissions = await fetchUserPermissions(
+      this.#dbAdapter,
+      new URL(this.url),
+    );
+
     if (hashedResponse === challenge) {
       let permissions = await new RealmPermissionChecker(
-        this.#permissions,
+        realmPermissions,
         this.#matrixClient,
       ).for(user);
       let jwt = this.#adapter.createJWT(
@@ -1019,14 +1025,18 @@ export class Realm {
     request: Request,
     neededPermission: 'read' | 'write',
   ) {
+    let realmPermissions = await fetchUserPermissions(
+      this.#dbAdapter,
+      new URL(this.url),
+    );
+
     if (
       lookupRouteTable(this.#publicEndpoints, this.paths, request) ||
       request.method === 'HEAD' ||
       // If the realm is public readable or writable, do not require a JWT
       (neededPermission === 'read' &&
-        this.#permissions['*']?.includes('read')) ||
-      (neededPermission === 'write' &&
-        this.#permissions['*']?.includes('write'))
+        realmPermissions['*']?.includes('read')) ||
+      (neededPermission === 'write' && realmPermissions['*']?.includes('write'))
     ) {
       return;
     }
@@ -1043,11 +1053,6 @@ export class Realm {
 
     try {
       token = this.#adapter.verifyJWT(tokenString, this.#realmSecretSeed);
-
-      let realmPermissions = await fetchUserPermissions(
-        this.#dbAdapter,
-        new URL(this.url),
-      );
 
       let realmPermissionChecker = new RealmPermissionChecker(
         realmPermissions,
