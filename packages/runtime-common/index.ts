@@ -184,7 +184,7 @@ export interface CardSearch {
   };
   getCard(
     url: URL,
-    opts?: { cachedOnly?: true; loader?: Loader; isLive?: boolean },
+    opts?: { loader?: Loader; isLive?: boolean },
   ): {
     card: CardDef | undefined;
     loaded: Promise<void> | undefined;
@@ -209,7 +209,7 @@ export function getCards(query: Query, realms?: string[]) {
 
 export function getCard(
   url: URL,
-  opts?: { cachedOnly?: true; loader?: Loader; isLive?: boolean },
+  opts?: { loader?: Loader; isLive?: boolean },
 ) {
   let here = globalThis as any;
   if (!here._CARDSTACK_CARD_SEARCH) {
