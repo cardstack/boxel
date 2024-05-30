@@ -679,7 +679,7 @@ export class TestCard extends Person {
   });
 
   test<TestContextWithSave>('can create new card definition in different realm than realm of current file opened in code mode', async function (assert) {
-    assert.expect(1);
+    let done = assert.async();
     await visitOperatorMode(this.owner, `${baseRealm.url}card-api.gts`);
     await openNewFileModal('Card Definition');
 
@@ -693,18 +693,16 @@ export class TestCard extends Person {
     await fillIn('[data-test-display-name-field]', 'Test Card');
     await fillIn('[data-test-file-name-field]', 'test-card');
 
-    let deferred = new Deferred<void>();
     this.onSave((url, content) => {
       if (typeof content !== 'string') {
         throw new Error(`expected string save data`);
       }
       assert.strictEqual(url.href, `${testRealmURL}test-card.gts`);
-      deferred.fulfill();
+      done();
     });
 
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
-    await deferred.promise;
   });
 
   test('an error when creating a new card definition is shown', async function (assert) {
