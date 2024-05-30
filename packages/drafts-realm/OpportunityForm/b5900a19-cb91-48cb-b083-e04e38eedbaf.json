@@ -1,0 +1,44 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "opportunityName": "Business Opportunity",
+      "accountName": {
+        "account": "Acme Corporation"
+      },
+      "closeDate": "2024-08-02",
+      "amount": {
+        "currency": "RM",
+        "amount": 123123
+      },
+      "description": null,
+      "stage": {
+        "category": "Closed Won"
+      },
+      "percentage": null,
+      "forecastCategory": {
+        "category": "Commit"
+      },
+      "title": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "accountName.accounts.0": {
+        "links": {
+          "self": "http://localhost:4201/drafts/CardDef/7298c9c6-2964-41a0-87f7-42127a16e12b"
+        }
+      },
+      "accountName.accounts.1": {
+        "links": {
+          "self": "http://localhost:4201/drafts/CrmAccount/4802eeed-bec6-4d7a-8f05-6370866edd40"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../opportunity-form",
+        "name": "OpportunityForm"
+      }
+    }
+  }
+}
