@@ -1,14 +1,12 @@
-import Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import {
-  IRealmAuthCache,
-  createRealmAuthHandler,
   VirtualNetwork,
   baseRealm,
+  addAuthorizationHeader,
 } from '@cardstack/runtime-common';
-import { Loader, RequestHandler } from '@cardstack/runtime-common/loader';
+import { Loader } from '@cardstack/runtime-common/loader';
 
 import config from '@cardstack/host/config/environment';
 import {
@@ -30,25 +28,14 @@ export default class LoaderService extends Service {
   // The owner is the service, which stays around for the whole lifetime of the host app,
   // which in turn assures the resources will not get torn down.
   private realmSessions: Map<string, RealmSessionResource> = new Map();
-  private addAuthorizationHeader: RequestHandler;
 
-  virtualNetwork: VirtualNetwork;
-
-  constructor(owner: Owner) {
-    super(owner);
-
-    this.virtualNetwork = new VirtualNetwork();
-    this.loader = this.makeInstance();
-    this.addAuthorizationHeader = this.createRealmAuthHandler();
-    this.loader.prependURLHandlers([this.addAuthorizationHeader]);
-  }
+  virtualNetwork = new VirtualNetwork();
 
   reset() {
     if (this.loader) {
       this.loader = Loader.cloneLoader(this.loader);
     } else {
       this.loader = this.makeInstance();
-      this.loader.prependURLHandlers([this.addAuthorizationHeader]);
     }
   }
 
@@ -64,41 +51,34 @@ export default class LoaderService extends Service {
       new URL(baseRealm.url),
       new URL(config.resolvedBaseRealmURL),
     );
+    loader.prependURLHandlers([(req) => this.addAuthorizationHeader(req)]);
     shimExternals(this.virtualNetwork);
+
     return loader;
   }
 
-  private createRealmAuthHandler() {
-    let realmCache = {
+  private async addAuthorizationHeader(request: Request) {
+    return await addAuthorizationHeader(this.loader, request, {
+      getJWT: async (realmURL: string) => {
+        return (await this.getRealmSession(new URL(realmURL))).rawRealmToken!;
+      },
       getRealmInfoByURL: async (url: string) => {
         let realmURL = await this.realmInfoService.fetchRealmURL(url);
         if (!realmURL) {
           return null;
         }
-        // We have to get public readable status
-        // before we instantiate realm resource and load realm token.
-        // Because we don't want to do authentication
-        // for GET request to publicly readable realm.
         let isPublicReadable = await this.realmInfoService.isPublicReadable(
           realmURL,
         );
-
         return {
+          url: realmURL.href,
           isPublicReadable,
-          url: realmURL,
         };
       },
-      getJWT: async (realmURL: string) => {
-        let realmSession = await this.getRealmSession(new URL(realmURL));
-        return realmSession.rawRealmToken ?? null;
-      },
       resetAuth: async (realmURL: string) => {
-        let realmSession = await this.getRealmSession(new URL(realmURL));
-        await realmSession.refreshToken();
+        return (await this.getRealmSession(new URL(realmURL))).refreshToken();
       },
-    } as IRealmAuthCache;
-
-    return createRealmAuthHandler(this.loader, realmCache);
+    });
   }
 
   private async getRealmSession(realmURL: URL) {

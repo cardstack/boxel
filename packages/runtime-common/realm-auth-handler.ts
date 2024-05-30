@@ -1,66 +1,106 @@
-import { PACKAGES_FAKE_ORIGIN } from './package-shim-handler';
-import { Loader, RequestHandler } from './loader';
-import { AuthenticationErrorMessages } from './router';
-import { baseRealm } from './constants';
-import { IRealmAuthCache } from './realm-auth-cache';
+import { MatrixClient } from './matrix-client';
+import { RealmAuthClient } from './realm-auth-client';
+import { Loader } from './loader';
+import { addAuthorizationHeader } from './index';
 
-export function createRealmAuthHandler(
-  loader: Loader,
-  realmCache: IRealmAuthCache,
-  realmURL?: string,
-): RequestHandler {
-  return async function addAuthorizationHeader(
+export class RealmAuthHandler {
+  // Cached realm info and session to avoid fetching it multiple times for the same realm
+  private visitedRealms = new Map<
+    string,
+    {
+      isPublicReadable: boolean;
+      realmAuthClient?: RealmAuthClient;
+      url: string;
+    }
+  >();
+  private matrixClient: MatrixClient;
+  private loader: Loader;
+  private realmURL: string;
+
+  constructor(matrixClient: MatrixClient, loader: Loader, realmURL: string) {
+    this.matrixClient = matrixClient;
+    this.loader = loader;
+    this.realmURL = realmURL;
+  }
+
+  addAuthorizationHeader = async (
     request: Request,
-    retryOnAuthFail = true,
-  ): Promise<Response | null> {
-    if (request.url.startsWith(PACKAGES_FAKE_ORIGIN)) {
-      return null;
+  ): Promise<Response | null> => {
+    return await addAuthorizationHeader(this.loader, request, {
+      originRealmURL: this.realmURL,
+      getJWT: this.getJWT.bind(this),
+      getRealmInfoByURL: this.getRealmInfoByURL.bind(this),
+      resetAuth: this.resetAuth.bind(this),
+    });
+  };
+
+  private async getJWT(realmURL: string): Promise<string> {
+    let targetRealm = this.visitedRealms.get(realmURL);
+    if (!targetRealm || !targetRealm.realmAuthClient) {
+      throw new Error(
+        `bug: should not have been able to get here without a targetRealm or without an auth client`,
+      );
     }
 
-    // To avoid deadlock, we can assume that any GET requests to baseRealm don't need authentication.
-    let isGetRequestToBaseRealm =
-      request.url.includes(baseRealm.url) && request.method === 'GET';
-    if (
-      isGetRequestToBaseRealm ||
-      request.url.endsWith('_session') ||
-      request.method === 'HEAD' ||
-      request.headers.has('Authorization')
-    ) {
-      return null;
+    if (!this.matrixClient.isLoggedIn()) {
+      await this.matrixClient.login();
     }
+    return await targetRealm.realmAuthClient.getJWT(); // This will use a cached JWT from the realm auth client or create a new one if it's expired or about to expire
+  }
 
-    let realmInfo = await realmCache.getRealmInfoByURL(request.url);
-    if (!realmInfo) {
-      return null;
-    }
+  private resetAuth(realmURL: string) {
+    this.visitedRealms.delete(realmURL);
+  }
 
-    let isRequestToItself = realmInfo.url === realmURL; // Could be a request to itself when indexing its own cards
-    if (
-      isRequestToItself ||
-      (realmInfo.isPublicReadable && request.method === 'GET')
-    ) {
-      return null;
+  private async getRealmInfoByURL(url: string) {
+    let visitedRealmURL = Array.from(this.visitedRealms.keys()).find((key) => {
+      return url.includes(key);
+    });
+    let targetRealm;
+
+    if (visitedRealmURL) {
+      targetRealm = this.visitedRealms.get(visitedRealmURL)!;
     } else {
-      request.headers.set(
-        'Authorization',
-        await realmCache.getJWT(realmInfo.url),
+      let targetRealmHeadResponse = await this.loader.fetch(url, {
+        method: 'HEAD',
+      });
+
+      let targetRealmURL =
+        targetRealmHeadResponse.headers.get('x-boxel-realm-url');
+
+      if (!targetRealmURL) {
+        return null; // It doesn't look like we are talking to a realm (the request is for something else), so skip adding auth header
+      }
+
+      let isPublicReadable = Boolean(
+        targetRealmHeadResponse.headers.get('x-boxel-realm-public-readable'),
       );
 
-      let response = await loader.fetch(request);
+      targetRealm = {
+        isPublicReadable,
+        url: targetRealmURL,
+        realmAuthClient: this.createRealmAuthClient(
+          new URL(targetRealmURL),
+          this.matrixClient,
+          this.loader,
+        ),
+      };
 
-      if (response.status === 401 && retryOnAuthFail) {
-        let errorMessage = await response.text();
-        if (
-          errorMessage === AuthenticationErrorMessages.PermissionMismatch ||
-          errorMessage === AuthenticationErrorMessages.TokenExpired
-        ) {
-          realmCache.resetAuth(realmInfo.url);
-          request.headers.delete('Authorization');
-
-          return addAuthorizationHeader(request, false);
-        }
-      }
-      return response;
+      this.visitedRealms.set(targetRealmURL, targetRealm);
     }
-  };
+
+    return {
+      isPublicReadable: targetRealm.isPublicReadable,
+      url: targetRealm.url,
+    };
+  }
+
+  // A separate method for realm auth client creation to support mocking in tests
+  private createRealmAuthClient(
+    realmURL: URL,
+    matrixClient: MatrixClient,
+    loader: Loader,
+  ) {
+    return new RealmAuthClient(realmURL, matrixClient, loader);
+  }
 }
