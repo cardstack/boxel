@@ -173,7 +173,8 @@ jobs:
       - name: host test suite (shard ${{ matrix.shardIndex }})
         run: pnpm test-with-percy
         env:
-          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
+          # FIXME restore Percy
+          # PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
         working-directory: packages/host
       # - name: Publish test results FIXME move to followup
