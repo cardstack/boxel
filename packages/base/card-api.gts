@@ -5,7 +5,7 @@ import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
 import { BoxelInput, FieldContainer } from '@cardstack/boxel-ui/components';
-import { cn, eq, pick } from '@cardstack/boxel-ui/helpers';
+import { cn, eq, not, pick } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import { startCase } from 'lodash';
 import {
@@ -40,7 +40,6 @@ import {
   maybeURL,
   maybeRelativeURL,
   moduleFrom,
-  getCard,
   trackCard,
   type Meta,
   type CardFields,
@@ -323,10 +322,6 @@ export interface Field<
   component(model: Box<BaseDef>): BoxComponent;
   getter(instance: BaseDef): BaseInstanceType<CardT>;
   queryableValue(value: any, stack: BaseDef[]): SearchT;
-  // TODO remove this after feature flag is removed
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: SearchT) => boolean | null;
   handleNotLoadedError(
     instance: BaseInstanceType<CardT>,
     e: NotLoaded,
@@ -355,6 +350,9 @@ function cardTypeFor(
   boxedElement: Box<BaseDef>,
 ): typeof BaseDef {
   if (primitive in field.card) {
+    return field.card;
+  }
+  if (boxedElement.value == null) {
     return field.card;
   }
   return Reflect.getPrototypeOf(boxedElement.value)!
@@ -452,25 +450,12 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     // WatchedArray proxy is not structuredClone-able, and hence cannot be
     // communicated over the postMessage boundary between worker and DOM.
     // TODO: can this be simplified since we don't have the worker anymore?
-    return [...instances].map((instance) => {
-      return this.card[queryableValue](instance, stack);
-    });
-  }
-
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: any[] | null) => boolean | null {
-    return (value) => {
-      if (Array.isArray(value) && value.length === 0) {
-        return innerMatcher(null);
-      }
-      return (
-        Array.isArray(value) &&
-        value.some((innerValue) => {
-          return innerMatcher(innerValue);
-        })
-      );
-    };
+    let results = [...instances]
+      .map((instance) => {
+        return this.card[queryableValue](instance, stack);
+      })
+      .filter((i) => i != null);
+    return results.length === 0 ? null : results;
   }
 
   serialize(
@@ -676,12 +661,6 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     return this.card[queryableValue](instance, stack);
   }
 
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: any) => boolean | null {
-    return (value) => innerMatcher(value);
-  }
-
   serialize(
     value: InstanceType<CardT>,
     doc: JSONAPISingleResourceDocument,
@@ -835,12 +814,6 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     return this.card[queryableValue](instance, stack);
   }
 
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: any) => boolean | null {
-    return (value) => innerMatcher(value);
-  }
-
   serialize(
     value: InstanceType<CardT>,
     doc: JSONAPISingleResourceDocument,
@@ -941,13 +914,9 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       return null;
     }
     let loader = Loader.getLoaderFor(this.card)!;
-    let cardResource = getCard(new URL(value.links.self, relativeTo), {
-      cachedOnly: true,
-      loader,
-    });
-    await cardResource.loaded;
-    let cachedInstance =
-      cardResource.card ?? identityContext.identities.get(value.links.self);
+    let cachedInstance = identityContext.identities.get(
+      new URL(value.links.self, relativeTo).href,
+    );
     if (cachedInstance) {
       cachedInstance[isSavedInstance] = true;
       return cachedInstance as BaseInstanceType<CardT>;
@@ -1170,33 +1139,23 @@ class LinksToMany<FieldT extends CardDefConstructor>
     // WatchedArray proxy is not structuredClone-able, and hence cannot be
     // communicated over the postMessage boundary between worker and DOM.
     // TODO: can this be simplified since we don't have the worker anymore?
-    return [...instances].map((instance) => {
-      if (primitive in instance) {
-        throw new Error(
-          `the linksToMany field '${this.name}' contains a primitive card '${instance.name}'`,
-        );
-      }
-      if (isNotLoadedValue(instance)) {
-        return { id: instance.reference };
-      }
-      return this.card[queryableValue](instance, stack);
-    });
-  }
-
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: any[] | null) => boolean | null {
-    return (value) => {
-      if (Array.isArray(value) && value.length === 0) {
-        return innerMatcher(null);
-      }
-      return (
-        Array.isArray(value) &&
-        value.some((innerValue) => {
-          return innerMatcher(innerValue);
-        })
-      );
-    };
+    let results = [...instances]
+      .map((instance) => {
+        if (instance == null) {
+          return null;
+        }
+        if (primitive in instance) {
+          throw new Error(
+            `the linksToMany field '${this.name}' contains a primitive card '${instance.name}'`,
+          );
+        }
+        if (isNotLoadedValue(instance)) {
+          return { id: instance.reference };
+        }
+        return this.card[queryableValue](instance, stack);
+      })
+      .filter((i) => i != null);
+    return results.length === 0 ? null : results;
   }
 
   serialize(
@@ -1221,6 +1180,15 @@ class LinksToMany<FieldT extends CardDefConstructor>
 
     let relationships: Record<string, Relationship> = {};
     values.map((value, i) => {
+      if (value == null) {
+        relationships[`${this.name}\.${i}`] = {
+          links: {
+            self: null,
+          },
+          data: null,
+        };
+        return;
+      }
       if (isNotLoadedValue(value)) {
         relationships[`${this.name}\.${i}`] = {
           links: {
@@ -1297,13 +1265,9 @@ class LinksToMany<FieldT extends CardDefConstructor>
           return null;
         }
         let loader = Loader.getLoaderFor(this.card)!;
-        let cardResource = getCard(new URL(value.links.self, relativeTo), {
-          cachedOnly: true,
-          loader,
-        });
-        await cardResource.loaded;
-        let cachedInstance =
-          cardResource.card ?? identityContext.identities.get(value.links.self);
+        let cachedInstance = identityContext.identities.get(
+          new URL(value.links.self, relativeTo).href,
+        );
         if (cachedInstance) {
           cachedInstance[isSavedInstance] = true;
           return cachedInstance;
@@ -1787,10 +1751,15 @@ class DefaultCardDefTemplate extends GlimmerComponent<{
         gap: var(--boxel-sp-lg);
         padding: var(--boxel-sp-xl);
       }
-      .default-card-template.edit {
-        padding-right: var(
-          --boxel-sp-xxl
-        ); /* allow room for trash/delete icons that appear on hover */
+      /* this aligns edit fields with containsMany, linksTo, and linksToMany fields */
+      .default-card-template.edit
+        > .boxel-field
+        > :deep(
+          *:nth-child(2):not(.links-to-many-editor):not(
+              .contains-many-editor
+            ):not(.links-to-editor)
+        ) {
+        padding-right: var(--boxel-icon-lg);
       }
     </style>
   </template>
@@ -1942,6 +1911,7 @@ export type BaseDefComponent = ComponentLike<{
     set: Setter;
     fieldName: string | undefined;
     context?: CardContext;
+    canEdit?: boolean;
   };
 }>;
 
@@ -1987,7 +1957,11 @@ export class StringField extends FieldDef {
   };
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <BoxelInput @value={{@model}} @onInput={{@set}} />
+      <BoxelInput
+        @value={{@model}}
+        @onInput={{@set}}
+        @disabled={{not @canEdit}}
+      />
     </template>
   };
   static atom = class Atom extends Component<typeof this> {
@@ -2089,7 +2063,13 @@ export function subscribeToChanges(
 export function unsubscribeFromChanges(
   fieldOrCard: BaseDef,
   subscriber: CardChangeSubscriber,
+  visited: Set<BaseDef> = new Set(),
 ) {
+  if (visited.has(fieldOrCard)) {
+    return;
+  }
+
+  visited.add(fieldOrCard);
   let changeSubscribers = subscribers.get(fieldOrCard);
   if (!changeSubscribers) {
     return;
@@ -2103,7 +2083,7 @@ export function unsubscribeFromChanges(
   Object.keys(fields).forEach((fieldName) => {
     let value = peekAtField(fieldOrCard, fieldName);
     if (isCardOrField(value)) {
-      unsubscribeFromChanges(value, subscriber);
+      unsubscribeFromChanges(value, subscriber, visited);
     }
   });
 }
@@ -2457,11 +2437,8 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
   instance: BaseInstanceType<T>,
   doc: LooseSingleCardDocument,
 ): Promise<BaseInstanceType<T>> {
-  let identityContext = identityContexts.get(instance);
-  if (!identityContext) {
-    identityContext = new IdentityContext();
-    identityContexts.set(instance, identityContext);
-  }
+  let identityContext = new IdentityContext();
+  identityContexts.set(instance, identityContext);
   if (!instance[relativeTo] && doc.data.id) {
     instance[relativeTo] = new URL(doc.data.id);
   }
@@ -2787,6 +2764,7 @@ export type SignatureFor<CardT extends BaseDefConstructor> = {
     set: Setter;
     fieldName: string | undefined;
     context?: CardContext;
+    canEdit?: boolean;
   };
 };
 

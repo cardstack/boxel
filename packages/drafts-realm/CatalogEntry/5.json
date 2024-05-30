@@ -4,6 +4,7 @@
     "attributes": {
       "title": "InvoicePacket from /invoice-packet",
       "description": "Catalog entry for InvoicePacket from /invoice-packet",
+      "isField": false,
       "ref": {
         "module": "../invoice-packet",
         "name": "InvoicePacket"

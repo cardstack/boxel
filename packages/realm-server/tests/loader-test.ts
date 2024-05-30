@@ -82,7 +82,6 @@ module('loader', function (hooks) {
     let loader = virtualNetwork.createLoader();
     await loader.import<{ a(): string }>(`${testRealmHref}a`);
     assert.deepEqual(await loader.getConsumedModules(`${testRealmHref}a`), [
-      `${testRealmHref}a`,
       `${testRealmHref}b`,
       `${testRealmHref}c`,
     ]);
@@ -96,7 +95,6 @@ module('loader', function (hooks) {
     } catch (e: any) {
       assert.strictEqual(e.message, 'intentional error thrown');
       assert.deepEqual(await loader.getConsumedModules(`${testRealmHref}d`), [
-        `${testRealmHref}d`,
         `${testRealmHref}a`,
         `${testRealmHref}b`,
         `${testRealmHref}c`,
@@ -109,10 +107,7 @@ module('loader', function (hooks) {
     let loader = virtualNetwork.createLoader();
     await loader.import<{ three(): number }>(`${testRealmHref}cycle-two`);
     let modules = await loader.getConsumedModules(`${testRealmHref}cycle-two`);
-    assert.deepEqual(modules, [
-      `${testRealmHref}cycle-two`,
-      `${testRealmHref}cycle-one`,
-    ]);
+    assert.deepEqual(modules, [`${testRealmHref}cycle-one`]);
   });
 
   test('supports identify API', async function (assert) {

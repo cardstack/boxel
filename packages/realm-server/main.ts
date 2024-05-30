@@ -4,13 +4,15 @@ import {
   Worker,
   VirtualNetwork,
   logger,
+  RunnerOptionsManager,
+  baseRealm,
+  assetsDir,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
 import { RealmServer } from './server';
 import { resolve, join } from 'path';
 import { makeFastBootIndexRunner } from './fastboot';
-import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
 import { readFileSync } from 'fs-extra';
 import { shimExternals } from './lib/externals';
 import { type RealmPermissions as RealmPermissionsInterface } from '@cardstack/runtime-common/realm';
@@ -36,11 +38,6 @@ if (process.env.REALM_SENTRY_DSN) {
     `No REALM_SENTRY_DSN environment variable found, skipping Sentry setup.`,
   );
 }
-
-if (process.env.PG_INDEXER) {
-  console.log('enabling db-based indexing');
-}
-(globalThis as any).__enablePgIndexer = () => Boolean(process.env.PG_INDEXER);
 
 const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
 if (!REALM_SECRET_SEED) {
@@ -160,15 +157,25 @@ if (distURL) {
   dist = resolve(distDir);
 }
 
+let assetsURL;
+
+if (distURL) {
+  assetsURL = new URL(distURL);
+} else {
+  // Default to the base dist URL for assets
+  let baseRealmDistUrlPair = hrefs!.find((pair) => pair[0] == baseRealm.url);
+  if (baseRealmDistUrlPair) {
+    assetsURL = new URL(`${baseRealmDistUrlPair[1]}${assetsDir}`); // Final resolved absolute URL for assets
+  } else {
+    throw new Error(`Base realm dist URL not found.`);
+  }
+}
+
 (async () => {
   let realms: Realm[] = [];
-  let dbAdapter: PgAdapter | undefined;
-  let queue: PgQueue | undefined;
-  if (process.env.PG_INDEXER) {
-    dbAdapter = new PgAdapter();
-    queue = new PgQueue(dbAdapter);
-    await dbAdapter.startClient();
-  }
+  let dbAdapter = new PgAdapter();
+  let queue = new PgQueue(dbAdapter);
+  await dbAdapter.startClient();
 
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
@@ -199,31 +206,33 @@ if (distURL) {
       {
         url,
         adapter: realmAdapter,
-        indexRunner: getRunner,
-        runnerOptsMgr: manager,
         getIndexHTML: async () =>
           readFileSync(join(distPath, 'index.html')).toString(),
         matrix: { url: new URL(matrixURL), username, password },
         realmSecretSeed: REALM_SECRET_SEED,
         permissions: realmPermissions.users,
         virtualNetwork,
-        // TODO remove this guard after the feature flag is removed
-        ...(dbAdapter && queue ? { dbAdapter, queue } : {}),
+        dbAdapter,
+        queue,
         onIndexer: async (indexer) => {
-          // TODO remove this guard after the feature flag is removed
-          if (queue) {
-            let worker = new Worker({
-              realmURL: new URL(url),
-              indexer,
-              queue,
-              realmAdapter,
-              runnerOptsManager: manager,
-              loader: virtualNetwork.createLoader(),
-              indexRunner: getRunner,
-            });
-            await worker.run();
-          }
+          // Note for future: we are taking advantage of the fact that the realm
+          // does not need to auth with itself and are passing in the realm's
+          // loader which includes a url handler for internal requests that
+          // bypasses auth. when workers are moved outside of the realm server
+          // they will need to provide realm authentication credentials when
+          // indexing.
+          let worker = new Worker({
+            realmURL: new URL(url),
+            indexer,
+            queue,
+            realmAdapter,
+            runnerOptsManager: manager,
+            loader: realm.loaderTemplate,
+            indexRunner: getRunner,
+          });
+          await worker.run();
         },
+        assetsURL,
       },
       {
         deferStartUp: true,
@@ -238,9 +247,7 @@ if (distURL) {
     virtualNetwork.mount(realm.maybeExternalHandle);
   }
 
-  let server = new RealmServer(realms, virtualNetwork, {
-    ...(distURL ? { assetsURL: new URL(distURL) } : {}),
-  });
+  let server = new RealmServer(realms, virtualNetwork);
 
   server.listen(port);
   log.info(`Realm server listening on port ${port}:`);
@@ -268,6 +275,7 @@ if (distURL) {
     );
   }
 })().catch((e: any) => {
+  Sentry.captureException(e);
   console.error(
     `Unexpected error encountered starting realm, stopping server`,
     e,

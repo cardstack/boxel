@@ -11,6 +11,11 @@ export interface LooseSingleCardDocument {
   included?: CardResource<Saved>[];
 }
 
+export type PatchData = {
+  attributes?: CardResource['attributes'];
+  relationships?: CardResource['relationships'];
+};
+
 export { Deferred } from './deferred';
 export { CardError } from './error';
 
@@ -70,6 +75,7 @@ export type {
   RealmInfo,
   TokenClaims,
   RealmPermissions,
+  RealmSession,
 } from './realm';
 
 import type { Saved } from './card-document';
@@ -111,7 +117,6 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 export const maxLinkDepth = 5;
 export const assetsDir = '__boxel/';
-export const boxelUIAssetsDir = '@cardstack/boxel-ui/';
 
 export interface MatrixCardError {
   id?: string;

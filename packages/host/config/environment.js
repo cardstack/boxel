@@ -56,9 +56,7 @@ module.exports = function (environment) {
       environment === 'test'
         ? 'http://test-realm/test/'
         : process.env.OWN_REALM_URL || 'http://localhost:4200/',
-    featureFlags: {
-      'pg-indexer': process.env.PG_INDEXER,
-    },
+    featureFlags: {},
   };
 
   if (environment === 'development') {

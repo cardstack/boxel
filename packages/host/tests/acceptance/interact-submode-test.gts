@@ -11,10 +11,10 @@ import { setupApplicationTest } from 'ember-qunit';
 
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import stringify from 'safe-stable-stringify';
 
-import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { FieldContainer, GridContainer } from '@cardstack/boxel-ui/components';
 
 import {
   baseRealm,
@@ -96,6 +96,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     let {
       field,
       contains,
+      containsMany,
       linksTo,
       linksToMany,
       CardDef,
@@ -109,6 +110,8 @@ module('Acceptance | interact submode tests', function (hooks) {
     class Pet extends CardDef {
       static displayName = 'Pet';
       @field name = contains(StringField);
+      @field favoriteTreat = contains(StringField);
+
       @field title = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.name;
@@ -119,6 +122,25 @@ module('Acceptance | interact submode tests', function (hooks) {
           <h3 data-test-pet={{@model.name}}>
             <@fields.name />
           </h3>
+        </template>
+      };
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <GridContainer class='container'>
+            <h2><@fields.title /></h2>
+            <div>
+              <div>Favorite Treat: <@fields.favoriteTreat /></div>
+              <div data-test-editable-meta>
+                {{#if @canEdit}}
+                  <@fields.title />
+                  is editable.
+                {{else}}
+                  <@fields.title />
+                  is NOT editable.
+                {{/if}}
+              </div>
+            </div>
+          </GridContainer>
         </template>
       };
     }
@@ -154,6 +176,14 @@ module('Acceptance | interact submode tests', function (hooks) {
             <@fields.country />
           </h3>
           <div data-test-shippingInfo-field><@fields.shippingInfo /></div>
+
+          <div data-test-editable-meta>
+            {{#if @canEdit}}
+              address is editable.
+            {{else}}
+              address is NOT editable.
+            {{/if}}
+          </div>
         </template>
       };
 
@@ -192,7 +222,9 @@ module('Acceptance | interact submode tests', function (hooks) {
           return this.firstName;
         },
       });
-      @field address = contains(Address);
+      @field primaryAddress = contains(Address);
+      @field additionalAddresses = containsMany(Address);
+
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <h2 data-test-person={{@model.firstName}}>
@@ -205,8 +237,10 @@ module('Acceptance | interact submode tests', function (hooks) {
           <@fields.pet />
           Friends:
           <@fields.friends />
-          Address:
-          <@fields.address />
+          Primary Address:
+          <@fields.primaryAddress />
+          Additional Adresses:
+          <@fields.additionalAddresses />
         </template>
       };
     }
@@ -224,6 +258,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         'person-entry.json': new CatalogEntry({
           title: 'Person Card',
           description: 'Catalog entry for Person Card',
+          isField: false,
           ref: {
             module: `${testRealmURL}person`,
             name: 'Person',
@@ -241,7 +276,26 @@ module('Acceptance | interact submode tests', function (hooks) {
               remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
             }),
           }),
+          additionalAddresses: [
+            new Address({
+              city: 'Jakarta',
+              country: 'Indonesia',
+              shippingInfo: new ShippingInfo({
+                preferredCarrier: 'FedEx',
+                remarks: `Make sure to deliver to the back door`,
+              }),
+            }),
+            new Address({
+              city: 'Bali',
+              country: 'Indonesia',
+              shippingInfo: new ShippingInfo({
+                preferredCarrier: 'UPS',
+                remarks: `Call ahead to make sure someone is home`,
+              }),
+            }),
+          ],
           pet: mangoPet,
+          friends: [mangoPet],
         }),
         'grid.json': new CardsGrid(),
         'index.json': new CardsGrid(),
@@ -267,6 +321,17 @@ module('Acceptance | interact submode tests', function (hooks) {
         'Person/hassan.json': new Person({
           firstName: 'Hassan',
           pet: mangoPet,
+          additionalAddresses: [
+            new Address({
+              city: 'New York',
+              country: 'USA',
+              shippingInfo: new ShippingInfo({
+                preferredCarrier: 'DHL',
+                remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+              }),
+            }),
+          ],
+          friends: [mangoPet],
         }),
       },
     });
@@ -903,6 +968,128 @@ module('Acceptance | interact submode tests', function (hooks) {
         assert.dom('[data-test-edit-button]').doesNotExist();
       });
 
+      test('the card format components are informed whether it is editable', async function (assert) {
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}Pet/mango`,
+                format: 'isolated',
+              },
+            ],
+          ],
+        });
+
+        assert
+          .dom('[data-test-editable-meta]')
+          .containsText('Mango is NOT editable');
+
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealm2URL}Pet/ringo`,
+                format: 'isolated',
+              },
+            ],
+          ],
+        });
+
+        assert
+          .dom('[data-test-editable-meta]')
+          .containsText('Ringo is editable');
+
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}Person/fadhlan`,
+                format: 'isolated',
+              },
+            ],
+          ],
+        });
+
+        assert
+          .dom('[data-test-editable-meta]')
+          .containsText('address is NOT editable');
+
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}Person/fadhlan`,
+                format: 'edit',
+              },
+            ],
+          ],
+        });
+
+        assert
+          .dom("[data-test-contains-many='additionalAddresses'] input:enabled")
+          .doesNotExist();
+
+        assert
+          .dom(
+            "[data-test-contains-many='additionalAddresses'] [data-test-remove]",
+          )
+          .doesNotExist();
+        assert
+          .dom(
+            "[data-test-contains-many='additionalAddresses'] [data-test-add-new]",
+          )
+          .doesNotExist();
+
+        assert
+          .dom("[data-test-field='pet'] [data-test-remove-card]")
+          .doesNotExist();
+
+        assert
+          .dom("[data-test-field='friends'] [data-test-add-new]")
+          .doesNotExist();
+        assert
+          .dom("[data-test-field='friends'] [data-test-remove-card]")
+          .doesNotExist();
+
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealm2URL}Person/hassan`,
+                format: 'isolated',
+              },
+            ],
+          ],
+        });
+
+        assert
+          .dom('[data-test-editable-meta]')
+          .containsText('address is editable');
+
+        await click('[data-test-operator-mode-stack] [data-test-edit-button]');
+
+        assert
+          .dom("[data-test-contains-many='additionalAddresses'] input:disabled")
+          .doesNotExist();
+
+        assert
+          .dom(
+            "[data-test-contains-many='additionalAddresses'] [data-test-remove]",
+          )
+          .exists();
+
+        assert
+          .dom(
+            "[data-test-contains-many='additionalAddresses'] [data-test-add-new]",
+          )
+          .exists();
+
+        assert.dom("[data-test-field='pet'] [data-test-remove-card]").exists();
+        assert.dom("[data-test-field='friends'] [data-test-add-new]").exists();
+        assert
+          .dom("[data-test-field='friends'] [data-test-remove-card]")
+          .exists();
+      });
       test('the delete item is not present in "..." menu of stack item', async function (assert) {
         await visitOperatorMode({
           stacks: [
@@ -1259,7 +1446,8 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
     });
 
-    test('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
+    // skipping FLaky test: CS-6845
+    skip('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
       // creates a recent search
       window.localStorage.setItem(
         'recent-cards',

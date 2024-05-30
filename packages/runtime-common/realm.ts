@@ -1,9 +1,5 @@
 import { Deferred } from './deferred';
-import {
-  SearchIndex,
-  type IndexRunner,
-  type RunnerOptionsManager,
-} from './search-index';
+import { SearchIndex } from './search-index';
 import { type SingleCardDocument } from './card-document';
 import { Loader } from './loader';
 import { RealmPaths, LocalPath, join } from './paths';
@@ -91,6 +87,11 @@ import RealmPermissionChecker from './realm-permission-checker';
 import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
 
 import { RealmAuthHandler } from './realm-auth-handler';
+
+export interface RealmSession {
+  canRead: boolean;
+  canWrite: boolean;
+}
 
 export type RealmInfo = {
   name: string;
@@ -220,24 +221,8 @@ interface MessageEvent {
   id?: string;
 }
 
-type Operation = WriteOperation | DeleteOperation;
-
 interface WriteResult {
   lastModified: number;
-}
-
-interface WriteOperation {
-  type: 'write';
-  path: LocalPath;
-  contents: string;
-  clientRequestId?: string | null; // Used for client to be able to see if the SSE event is a result of the client's own write
-  deferred: Deferred<WriteResult>;
-}
-
-interface DeleteOperation {
-  type: 'delete';
-  path: LocalPath;
-  deferred: Deferred<void>;
 }
 
 export class Realm {
@@ -254,8 +239,6 @@ export class Realm {
   #updateItems: UpdateItem[] = [];
   #flushUpdateEvents: Promise<void> | undefined;
   #recentWrites: Map<string, number> = new Map();
-  #flushOperations: Promise<void> | undefined;
-  #operationQueue: Operation[] = [];
   #realmSecretSeed: string;
   #permissions: RealmPermissions;
   #realmAuthHandler: RealmAuthHandler;
@@ -270,15 +253,12 @@ export class Realm {
       new Map([['GET' as Method, new Map([['/_readiness-check', true]])]]),
     ],
   ]);
+  #assetsURL: URL;
 
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
   readonly loaderTemplate: Loader;
   readonly paths: RealmPaths;
-
-  private get isDbIndexerEnabled() {
-    return Boolean((globalThis as any).__enablePgIndexer?.());
-  }
 
   get url(): string {
     return this.paths.url;
@@ -296,10 +276,6 @@ export class Realm {
     {
       url,
       adapter,
-      // TODO remove this after feature flag is removed
-      indexRunner,
-      // TODO remove this after feature flag is removed
-      runnerOptsMgr,
       getIndexHTML,
       matrix,
       realmSecretSeed,
@@ -308,19 +284,19 @@ export class Realm {
       queue,
       virtualNetwork,
       onIndexer,
+      assetsURL,
     }: {
       url: string;
       adapter: RealmAdapter;
-      indexRunner: IndexRunner;
-      runnerOptsMgr: RunnerOptionsManager;
       getIndexHTML: () => Promise<string>;
       matrix: MatrixConfig;
       permissions: RealmPermissions;
       realmSecretSeed: string;
-      dbAdapter?: DBAdapter;
-      queue?: Queue;
+      dbAdapter: DBAdapter;
+      queue: Queue;
       virtualNetwork: VirtualNetwork;
       onIndexer?: (indexer: Indexer) => Promise<void>;
+      assetsURL: URL;
     },
     opts?: Options,
   ) {
@@ -331,6 +307,7 @@ export class Realm {
     this.#realmSecretSeed = realmSecretSeed;
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
+    this.#assetsURL = assetsURL;
 
     let loader = virtualNetwork.createLoader();
     adapter.setLoader?.(loader);
@@ -350,10 +327,6 @@ export class Realm {
     this.#onIndexer = onIndexer;
     this.#searchIndex = new SearchIndex({
       realm: this,
-      readdir: this.#adapter.readdir.bind(this.#adapter),
-      readFileAsText: this.readFileAsText.bind(this),
-      runner: indexRunner,
-      runnerOptsManager: runnerOptsMgr,
       dbAdapter,
       queue,
     });
@@ -436,41 +409,12 @@ export class Realm {
     await this.ready;
   }
 
+  async fullIndex() {
+    await this.searchIndex.fullIndex();
+  }
+
   async flushUpdateEvents() {
     return this.#flushUpdateEvents;
-  }
-
-  async flushOperations() {
-    return this.#flushOperations;
-  }
-
-  // in order to prevent issues with concurrent index manipulation clobbering
-  // each other we use a queue of operations to mutate realm state. We should
-  // remove this queue when we move to a pg backed index
-  private async drainOperations() {
-    await this.#flushOperations;
-
-    let operationsDrained: () => void;
-    this.#flushOperations = new Promise<void>(
-      (res) => (operationsDrained = res),
-    );
-    let operations = [...this.#operationQueue];
-    this.#operationQueue = [];
-    for (let operation of operations) {
-      if (operation.type === 'write') {
-        let result = await this.#write(
-          operation.path,
-          operation.contents,
-          operation.clientRequestId,
-        );
-        operation.deferred.fulfill(result);
-      } else {
-        await this.#delete(operation.path);
-        operation.deferred.fulfill();
-      }
-    }
-
-    operationsDrained!();
   }
 
   createJWT(claims: TokenClaims, expiration: string): string {
@@ -478,27 +422,6 @@ export class Realm {
   }
 
   async write(
-    path: LocalPath,
-    contents: string,
-    clientRequestId?: string | null,
-  ): Promise<WriteResult> {
-    if (this.isDbIndexerEnabled) {
-      return await this.#write(path, contents, clientRequestId);
-    } else {
-      let deferred = new Deferred<WriteResult>();
-      this.#operationQueue.push({
-        type: 'write',
-        path,
-        contents,
-        clientRequestId,
-        deferred,
-      });
-      this.drainOperations();
-      return deferred.promise;
-    }
-  }
-
-  async #write(
     path: LocalPath,
     contents: string,
     clientRequestId?: string | null,
@@ -567,21 +490,6 @@ export class Realm {
   }
 
   async delete(path: LocalPath): Promise<void> {
-    let deferred = new Deferred<void>();
-    this.#operationQueue.push({
-      type: 'delete',
-      path,
-      deferred,
-    });
-    if (this.isDbIndexerEnabled) {
-      return await this.#delete(path);
-    } else {
-      this.drainOperations();
-      return deferred.promise;
-    }
-  }
-
-  async #delete(path: LocalPath): Promise<void> {
     await this.trackOwnWrite(path, { isDelete: true });
     await this.#adapter.remove(path);
     await this.#searchIndex.update(this.paths.fileURL(path), {
@@ -883,9 +791,20 @@ export class Realm {
     try {
       // local requests are allowed to query the realm as the index is being built up
       if (!isLocal) {
-        // allow any WIP index requests to query the index while it's building up
-        if (!request.headers.get('X-Boxel-Use-WIP-Index')) {
-          await this.ready;
+        let timeout = await Promise.race<void | Error>([
+          this.ready,
+          new Promise((resolve) =>
+            setTimeout(() => {
+              resolve(
+                new Error(
+                  `Timeout waiting for realm ${this.url} to become ready`,
+                ),
+              );
+            }, 60 * 1000),
+          ),
+        ]);
+        if (timeout) {
+          return new Response(timeout.message, { status: 500 });
         }
 
         let isWrite = ['PUT', 'PATCH', 'POST', 'DELETE'].includes(
@@ -937,6 +856,9 @@ export class Realm {
     return undefined;
   }
 
+  // TODO we could really improve performance if this utilized the index instead
+  // of directly hitting the filesystem--especially the TS transpilation
+  // involved in making JS.
   async fallbackHandle(request: Request) {
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
@@ -984,14 +906,17 @@ export class Realm {
           resolvedOwnRealmURL: this.url,
           hostsOwnAssets: !isNode,
           realmsServed: opts?.realmsServed,
+          assetsURL: this.#assetsURL.href,
         });
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
       },
     );
 
     if (isNode) {
-      // set the static public asset paths in index.html
-      indexHTML = indexHTML.replace(/(src|href)="\//g, `$1="/${assetsDir}`);
+      indexHTML = indexHTML.replace(
+        /(src|href)="\//g,
+        `$1="${this.#assetsURL.href}`,
+      );
 
       // this installs an event listener to allow a test driver to introspect
       // the DOM from a different localhost:4205 origin (the test driver's
@@ -1193,6 +1118,12 @@ export class Realm {
   }
 
   private transpileJS(content: string, debugFilename: string): string {
+    let contentIsAllWhitespace = content.match(/^\s*$/);
+
+    if (contentIsAllWhitespace) {
+      throw new Error('File is empty');
+    }
+
     let hash = md5(content);
     let cached = this.#transpileCache.get(hash);
     if (cached) {
@@ -1748,7 +1679,7 @@ export class Realm {
   }
 
   private async sendServerEvent(event: ServerEvents): Promise<void> {
-    this.#log.info(
+    this.#log.debug(
       `sending updates to ${this.listeningClients.length} clients`,
     );
     let { type, data, id } = event;

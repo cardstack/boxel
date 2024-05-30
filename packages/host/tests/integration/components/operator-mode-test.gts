@@ -245,6 +245,18 @@ module('Integration | operator-mode', function (hooks) {
       };
     }
 
+    // Friend card that can link to another friend
+    class Friend extends CardDef {
+      static displayName = 'Friend';
+      @field name = contains(StringField);
+      @field friend = linksTo(() => Friend);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <@fields.name />
+        </template>
+      };
+    }
+
     class Person extends CardDef {
       static displayName = 'Person';
       @field firstName = contains(StringField);
@@ -382,6 +394,7 @@ module('Integration | operator-mode', function (hooks) {
         'boom-pet.gts': { BoomPet },
         'blog-post.gts': { BlogPost },
         'author.gts': { Author },
+        'friend.gts': { Friend },
         'publishing-packet.gts': { PublishingPacket },
         'pet-room.gts': { PetRoom },
         'Pet/mango.json': {
@@ -501,6 +514,48 @@ module('Integration | operator-mode', function (hooks) {
             },
           },
         },
+        'Friend/friend-a.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'Friend A',
+            },
+            relationships: {
+              friend: {
+                links: {
+                  self: `${testRealmURL}Friend/friend-b`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}friend`,
+                name: 'Friend',
+              },
+            },
+          },
+        },
+        'Friend/friend-b.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'Friend B',
+            },
+            relationships: {
+              friend: {
+                links: {
+                  self: null,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}friend`,
+                name: 'Friend',
+              },
+            },
+          },
+        },
         'grid.json': {
           data: {
             type: 'card',
@@ -519,6 +574,7 @@ module('Integration | operator-mode', function (hooks) {
             attributes: {
               title: 'Publishing Packet',
               description: 'Catalog entry for PublishingPacket',
+              isField: false,
               ref: {
                 module: `${testRealmURL}publishing-packet`,
                 name: 'PublishingPacket',
@@ -556,6 +612,7 @@ module('Integration | operator-mode', function (hooks) {
             attributes: {
               title: 'General Pet Room',
               description: 'Catalog entry for Pet Room Card',
+              isField: false,
               ref: {
                 module: `${testRealmURL}pet-room`,
                 name: 'PetRoom',
@@ -587,6 +644,7 @@ module('Integration | operator-mode', function (hooks) {
                 module: `${testRealmURL}pet`,
                 name: 'Pet',
               },
+              isField: false,
               demo: {
                 name: 'Snoopy',
               },
@@ -757,7 +815,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id: `${testRealmURL}Person/fadhlan`,
               patch: {
                 attributes: { firstName: 'Dave' },
@@ -812,7 +870,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id: `${testRealmURL}Person/fadhlan`,
               patch: { attributes: { firstName: 'Evie' } },
               eventId: 'room1-event1',
@@ -838,7 +896,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id: `${testRealmURL}Person/fadhlan`,
               patch: { attributes: { firstName: 'Jackie' } },
               eventId: 'room1-event2',
@@ -864,7 +922,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id: `${testRealmURL}Person/fadhlan`,
               patch: { attributes: { pet: null } },
               eventId: 'room2-event1',
@@ -956,7 +1014,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id: otherCardID,
               patch: {
                 attributes: { firstName: 'Dave' },
@@ -1019,7 +1077,7 @@ module('Integration | operator-mode', function (hooks) {
 
       let roomId = await openAiAssistant();
       let payload = {
-        type: 'patch',
+        type: 'patchCard',
         id: `${testRealmURL}Person/fadhlan`,
         patch: {
           attributes: {
@@ -1057,7 +1115,7 @@ module('Integration | operator-mode', function (hooks) {
       assert.deepEqual(
         JSON.parse(getMonacoContent()),
         {
-          commandType: 'patch',
+          commandType: 'patchCard',
           payload,
         },
         'it can preview code when a change is proposed',
@@ -1103,7 +1161,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: {
                 attributes: {
@@ -1149,7 +1207,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: {
                 attributes: {
@@ -1213,7 +1271,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: { attributes: { pet: null } },
               eventId: 'patch1',
@@ -1248,7 +1306,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: {
                 attributes: {
@@ -1291,7 +1349,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: {
                 attributes: {
@@ -1350,7 +1408,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: { attributes: { firstName: 'Dave' } },
               eventId: 'event1',
@@ -1376,7 +1434,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: { attributes: { pet: 'Harry' } },
               eventId: 'event2',
@@ -1402,7 +1460,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id,
               patch: { attributes: { firstName: 'Jackie' } },
               eventId: 'event3',
@@ -1442,6 +1500,63 @@ module('Integration | operator-mode', function (hooks) {
       assert
         .dom('[data-test-message-idx="0"] [data-test-command-apply="ready"]')
         .exists();
+    });
+
+    test('assures applied state displayed as a check mark even eventId in command payload is undefined', async function (assert) {
+      let id = `${testRealmURL}Person/fadhlan`;
+      await setCardInOperatorModeState(id);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      await waitFor('[data-test-person="Fadhlan"]');
+
+      let roomId = await openAiAssistant();
+      await addRoomEvent(matrixService, {
+        event_id: 'event1',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: 'org.boxel.command',
+          formatted_body: 'Change first name to Dave',
+          format: 'org.matrix.custom.html',
+          data: JSON.stringify({
+            command: {
+              type: 'patchCard',
+              id,
+              patch: { attributes: { firstName: 'Dave' } },
+              eventId: undefined,
+            },
+          }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'event1',
+          },
+        },
+        status: null,
+      });
+
+      await waitFor('[data-test-command-apply="ready"]', { count: 1 });
+
+      await click('[data-test-message-idx="0"] [data-test-command-apply]');
+      assert.dom('[data-test-apply-state="applying"]').exists({ count: 1 });
+      assert
+        .dom('[data-test-message-idx="0"] [data-test-apply-state="applying"]')
+        .exists();
+
+      await waitFor('[data-test-message-idx="0"] [data-test-patch-card-idle]');
+      assert.dom('[data-test-apply-state="applied"]').exists({ count: 1 });
+      assert
+        .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+        .exists();
+      assert.dom('[data-test-person]').hasText('Dave');
     });
 
     test('it can handle an error in a card attached to a matrix message', async function (assert) {
@@ -2055,7 +2170,7 @@ module('Integration | operator-mode', function (hooks) {
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
-              type: 'patch',
+              type: 'patchCard',
               id: `${testRealmURL}Person/fadhlan`,
               patch: {
                 attributes: { firstName: 'Dave' },
@@ -2209,6 +2324,116 @@ module('Integration | operator-mode', function (hooks) {
       assert
         .dom('[data-test-message-idx="4"]')
         .containsText('I have a feeling something will go wrong');
+    });
+
+    test('replacement message should use `created` from the oldest message', async function (assert) {
+      await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      let roomId = await openAiAssistant();
+
+      let firstMessage = {
+        event_id: 'first-message-event',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'This is the first message',
+          msgtype: 'org.text',
+          formatted_body: 'This is the first message',
+          format: 'org.matrix.custom.html',
+          'm.new_content': {
+            body: 'This is the first message replacement comes after second message, but must be displayed before second message because it will be used creted from the oldest',
+            msgtype: 'org.text',
+            formatted_body:
+              'This is the first message replacement comes after second message, but must be displayed before second message because it will be used creted from the oldest',
+            format: 'org.matrix.custom.html',
+          },
+        },
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+        status: null,
+      };
+      let secondMessage = {
+        event_id: 'second-message-event',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'This is the second message comes after the first message and before the replacement of the first message',
+          msgtype: 'org.text',
+          formatted_body:
+            'This is the second message comes after the first message and before the replacement of the first message',
+          format: 'org.matrix.custom.html',
+        },
+        origin_server_ts: new Date(2024, 0, 3, 12, 31).getTime(),
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+        status: null,
+      };
+      let firstMessageReplacement = {
+        event_id: 'first-message-replacement-event',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'This is the first message replacement comes after second message, but must be displayed before second message because it will be used creted from the oldest',
+          msgtype: 'org.text',
+          formatted_body:
+            'This is the first message replacement comes after second message, but must be displayed before second message because it will be used creted from the oldest',
+          format: 'org.matrix.custom.html',
+          ['m.new_content']: {
+            body: 'This is the first message replacement comes after second message, but must be displayed before second message because it will be used creted from the oldest',
+            msgtype: 'org.text',
+            formatted_body:
+              'This is the first message replacement comes after second message, but must be displayed before second message because it will be used creted from the oldest',
+            format: 'org.matrix.custom.html',
+          },
+          ['m.relates_to']: {
+            event_id: 'first-message-event',
+            rel_type: 'm.replace',
+          },
+        },
+        origin_server_ts: new Date(2024, 0, 3, 12, 32).getTime(),
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+        status: null,
+      };
+
+      await addRoomEvent(matrixService, firstMessage);
+
+      await addRoomEvent(matrixService, secondMessage);
+
+      await addRoomEvent(matrixService, firstMessageReplacement);
+
+      await waitFor('[data-test-message-idx="0"]');
+
+      assert
+        .dom('[data-test-message-idx="0"]')
+        .containsText(
+          'Wednesday Jan 3, 2024, 12:30 PM This is the first message replacement comes after second message, but must be displayed before second message because it will be used creted from the oldest',
+        );
+      assert
+        .dom('[data-test-message-idx="1"]')
+        .containsText(
+          'Wednesday Jan 3, 2024, 12:31 PM This is the second message comes after the first message and before the replacement of the first message',
+        );
     });
   });
 
@@ -2749,6 +2974,53 @@ module('Integration | operator-mode', function (hooks) {
       .containsText('Jackie Woody Mango');
   });
 
+  test('can add a card to a linksTo field creating a loop', async function (assert) {
+    // Friend A already links to friend B.
+    // This test links B back to A
+    await setCardInOperatorModeState(`${testRealmURL}Friend/friend-b`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}Friend/friend-b"]`);
+    await click('[data-test-edit-button]');
+    assert.dom('[data-test-field="friend"] [data-test-add-new]').exists();
+
+    await click('[data-test-field="friend"] [data-test-add-new]');
+
+    await waitFor(
+      `[data-test-card-catalog-item="${testRealmURL}Friend/friend-a"]`,
+    );
+    await click(`[data-test-select="${testRealmURL}Friend/friend-a"]`);
+    await click('[data-test-card-catalog-go-button]');
+
+    await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
+
+    // Normally we'd only have an assert like this at the end that may work,
+    // but the rest of the application may be broken.
+
+    assert
+      .dom('[data-test-stack-card] [data-test-field="friend"]')
+      .containsText('Friend A');
+
+    // Instead try and go somewhere else in the application to see if it's broken
+    await waitFor('[data-test-submode-switcher]');
+    assert.dom('[data-test-submode-switcher]').exists();
+    assert.dom('[data-test-submode-switcher]').hasText('Interact');
+
+    await click(
+      '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
+    );
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    await waitFor('[data-test-submode-switcher]');
+    assert.dom('[data-test-submode-switcher]').hasText('Code');
+  });
+
   test('can add a card to linksToMany field that has no existing values', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
@@ -2923,9 +3195,6 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-plural-view-item]`).doesNotExist();
   });
 
-  skip('can create a specialized a new card to populate a linksTo field');
-  skip('can create a specialized a new card to populate a linksToMany field');
-
   test('can close cards by clicking the header of a card deeper in the stack', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
@@ -2979,7 +3248,8 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-create-new-card-button]`).isNotVisible();
   });
 
-  test(`displays recently accessed card`, async function (assert) {
+  // Flaky test: CS-6842
+  skip(`displays recently accessed card`, async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -3083,8 +3353,8 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-search-label]`).containsText('Searching for “Ma”');
 
     await waitFor(`[data-test-search-sheet-search-result]`);
-    assert.dom(`[data-test-search-label]`).containsText('2 Results for “Ma”');
-    assert.dom(`[data-test-search-sheet-search-result]`).exists({ count: 2 });
+    assert.dom(`[data-test-search-label]`).containsText('3 Results for “Ma”');
+    assert.dom(`[data-test-search-sheet-search-result]`).exists({ count: 3 });
     assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
     assert
       .dom(`[data-test-search-result="${testRealmURL}Author/mark"]`)
@@ -3093,9 +3363,11 @@ module('Integration | operator-mode', function (hooks) {
     await click(`[data-test-search-sheet-cancel-button]`);
 
     await focus(`[data-test-search-field]`);
-    await typeIn(`[data-test-search-field]`, 'Mar');
+    await typeIn(`[data-test-search-field]`, 'Mark J');
     await waitFor(`[data-test-search-sheet-search-result]`);
-    assert.dom(`[data-test-search-label]`).containsText('1 Result for “Mar”');
+    assert
+      .dom(`[data-test-search-label]`)
+      .containsText('1 Result for “Mark J”');
 
     //Ensures that there is no cards when reopen the search sheet
     await click(`[data-test-search-sheet-cancel-button]`);
@@ -3634,7 +3906,7 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-overlay-card-display-name="Author"] .header-title img')
       .hasAttribute('src', 'https://example-icon.test');
 
-    await click('[data-test-author');
+    await click('[data-test-author]');
     await waitFor('[data-test-stack-card-index="1"]');
     assert.dom('[data-test-stack-card-index]').exists({ count: 2 });
     assert

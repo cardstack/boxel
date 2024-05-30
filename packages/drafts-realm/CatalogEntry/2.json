@@ -3,6 +3,7 @@
     "attributes": {
       "title": "Pet",
       "description": "Catalog entry for Pet card",
+      "isField": false,
       "ref": {
         "module": "../pet",
         "name": "Pet"

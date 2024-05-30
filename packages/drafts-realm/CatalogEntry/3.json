@@ -4,6 +4,7 @@
     "attributes": {
       "title": "Chain from /chain",
       "description": "Catalog entry for Chain from /chain",
+      "isField": false,
       "ref": {
         "module": "../chain",
         "name": "Chain"

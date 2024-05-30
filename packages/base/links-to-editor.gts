@@ -4,7 +4,11 @@ import {
   restartableTask,
   type EncapsulatedTaskDescriptor as Descriptor,
 } from 'ember-concurrency';
-import { DefaultFormatProvider, getBoxComponent } from './field-component';
+import {
+  DefaultFormatProvider,
+  RealmSessionConsumer,
+  getBoxComponent,
+} from './field-component';
 import {
   type CardDef,
   type BaseDef,
@@ -21,6 +25,7 @@ import {
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
 import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
 import { consume } from 'ember-provide-consume-context';
+import { and } from '@cardstack/boxel-ui/helpers';
 
 interface Signature {
   Args: {
@@ -33,55 +38,64 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
   @consume(CardContextName) declare cardContext: CardContext;
 
   <template>
-    <div class='links-to-editor' data-test-links-to-editor={{@field.name}}>
-      {{#if this.isEmpty}}
-        <AddButton
-          class='add-new'
-          @variant='full-width'
-          @hideIcon={{true}}
-          {{on 'click' this.add}}
-          data-test-add-new
-        >
-          Link
-          {{@field.card.displayName}}
-        </AddButton>
-      {{else}}
-        <DefaultFormatProvider @value='embedded'>
-          <this.linkedCard />
-        </DefaultFormatProvider>
-        <div class='remove-button-container'>
-          <IconButton
-            @variant='primary'
-            @icon={{IconMinusCircle}}
-            @width='20px'
-            @height='20px'
-            class='remove'
-            {{on 'click' this.remove}}
-            disabled={{this.isEmpty}}
-            aria-label='Remove'
-            data-test-remove-card
-          />
-        </div>
-      {{/if}}
-    </div>
+    <RealmSessionConsumer as |realmSession|>
+      <div class='links-to-editor' data-test-links-to-editor={{@field.name}}>
+        {{#if (and realmSession.canWrite this.isEmpty)}}
+          <AddButton
+            class='add-new'
+            @variant='full-width'
+            @hideIcon={{true}}
+            {{on 'click' this.add}}
+            data-test-add-new
+          >
+            Link
+            {{@field.card.displayName}}
+          </AddButton>
+        {{else}}
+          {{#if realmSession.canWrite}}
+            <IconButton
+              @variant='primary'
+              @icon={{IconMinusCircle}}
+              @width='20px'
+              @height='20px'
+              class='remove'
+              {{on 'click' this.remove}}
+              disabled={{this.isEmpty}}
+              aria-label='Remove'
+              data-test-remove-card
+            />
+          {{/if}}
+          <DefaultFormatProvider @value='embedded'>
+            <this.linkedCard />
+          </DefaultFormatProvider>
+        {{/if}}
+      </div>
+    </RealmSessionConsumer>
     <style>
       .links-to-editor {
+        --remove-icon-size: var(--boxel-icon-lg);
         position: relative;
+        display: grid;
+        grid-template-columns: 1fr var(--remove-icon-size);
       }
-      .remove-button-container {
-        position: absolute;
-        top: 0;
-        left: 100%;
-        height: 100%;
-        display: flex;
-        align-items: center;
+      .links-to-editor > :deep(.boxel-card-container.embedded-format) {
+        order: -1;
       }
       .remove {
         --icon-color: var(--boxel-light);
+        align-self: center;
+        outline: 0;
       }
+      .remove:focus,
       .remove:hover {
         --icon-bg: var(--boxel-dark);
         --icon-border: var(--boxel-dark);
+      }
+      .remove:focus + :deep(.boxel-card-container.embedded-format),
+      .remove:hover + :deep(.boxel-card-container.embedded-format) {
+        box-shadow:
+          0 0 0 1px var(--boxel-light-500),
+          var(--boxel-box-shadow-hover);
       }
     </style>
   </template>
