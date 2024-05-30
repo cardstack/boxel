@@ -175,12 +175,18 @@ jobs:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
           HOST_TEST_PARTITION: ${{ matrix.shard }}
         working-directory: packages/host
-      - name: Publish test results FIXME move to followup
-        uses: EnricoMi/publish-unit-test-result-action@v2.9.0
-        if: always()
+      # - name: Publish test results FIXME move to followup
+      #   uses: EnricoMi/publish-unit-test-result-action@v2.9.0
+      #   if: always()
+      #   with:
+      #     junit_files: junit/host.xml
+      #     check_name: Host Tests Test Results ${{ matrix.shard }}
+      - name: Upload junit report to GitHub Actions Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          junit_files: junit/host.xml
-          check_name: Host Tests Test Results ${{ matrix.shard }}
+          name: host-test-report
+          path: junit/host.xml
+          retention-days: 30
 
   matrix-client-test:
     name: Matrix Client Tests
