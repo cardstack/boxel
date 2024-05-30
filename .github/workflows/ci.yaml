@@ -191,6 +191,45 @@ jobs:
           path: junit/host.xml
           retention-days: 30
 
+  host-merge-reports-and-publish:
+    name: Merge Host reports and publish
+    if: always()
+    needs: host-test
+    runs-on: ubuntu-latest
+
+    # ?
+    # permissions:
+    #   id-token: write
+    #   contents: write
+    #   checks: write
+    #   statuses: write
+
+    steps:
+      - name: Download JUnit reports from GitHub Actions Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-host-reports
+          pattern: host-test-report-*
+          merge-multiple: true
+
+      - name: Merge reports
+        run: npx junit-report-merger host.xml ./all-host-reports
+
+      - name: Upload merged report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: host-test-report-merged
+          path: host.xml
+          retention-days: 30
+
+      - name: Publish test results
+        uses: EnricoMi/publish-unit-test-result-action@v2.9.0
+        if: always()
+        with:
+          junit_files: host.xml
+          check_name: Host Tests Test Results
+
   matrix-client-test:
     name: Matrix Client Tests
     runs-on: ubuntu-latest
