@@ -173,6 +173,7 @@ jobs:
         run: pnpm test-with-percy
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
+          HOST_TEST_PARTITION: ${{ matrix.shard }}
         working-directory: packages/host
       - name: Publish test results FIXME move to followup
         uses: EnricoMi/publish-unit-test-result-action@v2.9.0
