@@ -148,9 +148,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: ["Acceptance", "Integration", "Unit"]
+        shardIndex: [1, 2, 3, 4]
+        # FIXME 4 is hardcoded in package.json right now
     concurrency:
-      group: boxel-host-test${{ github.head_ref || github.run_id }}-${{ matrix.shard }}
+      group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
@@ -169,11 +170,11 @@ jobs:
       - name: create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
-      - name: host test suite (${{ matrix.shard }})
+      - name: host test suite (shard ${{ matrix.shardIndex }})
         run: pnpm test-with-percy
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
-          HOST_TEST_PARTITION: ${{ matrix.shard }}
+          HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
         working-directory: packages/host
       # - name: Publish test results FIXME move to followup
       #   uses: EnricoMi/publish-unit-test-result-action@v2.9.0
