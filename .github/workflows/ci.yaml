@@ -184,6 +184,7 @@ jobs:
       #     check_name: Host Tests Test Results ${{ matrix.shard }}
       - name: Upload junit report to GitHub Actions Artifacts
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: host-test-report
           path: junit/host.xml
