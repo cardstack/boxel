@@ -176,6 +176,12 @@ jobs:
         with:
           junit_files: junit/host.xml
           check_name: Host Tests Test Results
+      - name: Upload junit report to GitHub Actions Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: host-test-report
+          path: junit/host.xml
+          retention-days: 30
 
   matrix-client-test:
     name: Matrix Client Tests
