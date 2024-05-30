@@ -1,5 +1,10 @@
 import Service from '@ember/service';
-import { type TestContext, getContext, visit } from '@ember/test-helpers';
+import {
+  type TestContext,
+  getContext,
+  visit,
+  settled,
+} from '@ember/test-helpers';
 import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
 import { buildWaiter } from '@ember/test-waiters';
 import GlimmerComponent from '@glimmer/component';
@@ -52,7 +57,6 @@ import { TestRealmAdapter } from './adapter';
 import percySnapshot from './percy-snapshot';
 import { renderComponent } from './render-component';
 import visitOperatorMode from './visit-operator-mode';
-import { settled } from '@ember/test-helpers';
 
 export { visitOperatorMode, testRealmURL, testRealmInfo, percySnapshot };
 export * from '@cardstack/runtime-common/helpers';
