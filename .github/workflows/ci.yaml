@@ -169,7 +169,7 @@ jobs:
       - name: create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
-      - name: host test suite
+      - name: host test suite: ${{ matrix.shard }}
         run: pnpm test-with-percy
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
