@@ -145,8 +145,12 @@ jobs:
   host-test:
     name: Host Tests
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["Acceptance", "Integration", "Unit"]
     concurrency:
-      group: boxel-host-test${{ github.head_ref || github.run_id }}
+      group: boxel-host-test${{ github.head_ref || github.run_id }}-${{ matrix.shard }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
@@ -170,12 +174,12 @@ jobs:
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
         working-directory: packages/host
-      - name: Publish test results
+      - name: Publish test results FIXME move to followup
         uses: EnricoMi/publish-unit-test-result-action@v2.9.0
         if: always()
         with:
           junit_files: junit/host.xml
-          check_name: Host Tests Test Results
+          check_name: Host Tests Test Results ${{ matrix.shard }}
 
   matrix-client-test:
     name: Matrix Client Tests
