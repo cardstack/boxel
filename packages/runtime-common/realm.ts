@@ -29,6 +29,8 @@ import {
   type DBAdapter,
   type Queue,
   type Indexer,
+  RealmAuthCache,
+  createRealmAuthHandler,
 } from './index';
 import merge from 'lodash/merge';
 import flatMap from 'lodash/flatMap';
@@ -85,8 +87,6 @@ import { Sha256 } from '@aws-crypto/sha256-js';
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import RealmPermissionChecker from './realm-permission-checker';
 import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
-
-import { RealmAuthHandler } from './realm-auth-handler';
 
 export interface RealmSession {
   canRead: boolean;
@@ -241,7 +241,6 @@ export class Realm {
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
   #permissions: RealmPermissions;
-  #realmAuthHandler: RealmAuthHandler;
   #onIndexer: ((indexer: Indexer) => Promise<void>) | undefined;
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -312,14 +311,13 @@ export class Realm {
     let loader = virtualNetwork.createLoader();
     adapter.setLoader?.(loader);
 
-    this.#realmAuthHandler = new RealmAuthHandler({
-      loader: loader,
-      realmURL: url,
-      matrixClient: this.#matrixClient,
-    });
     this.loaderTemplate = loader;
     this.loaderTemplate.registerURLHandler(
-      this.#realmAuthHandler.addAuthorizationHeader,
+      createRealmAuthHandler(
+        loader,
+        new RealmAuthCache(loader, this.#matrixClient),
+        url,
+      ),
     );
     this.loaderTemplate.registerURLHandler(this.maybeHandle.bind(this));
 
