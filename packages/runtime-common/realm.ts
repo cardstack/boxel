@@ -806,19 +806,13 @@ export class Realm {
     request: Request,
     isLocal: boolean,
   ): Promise<ResponseWithNodeStream> {
-    let permissions = await fetchUserPermissions(
-      this.#dbAdapter,
-      new URL(this.url),
-    );
-    let requestContext = {
-      realm: this,
-      permissions,
-    };
-
     let redirectResponse = this.rootRealmRedirect(request);
     if (redirectResponse) {
       return redirectResponse;
     }
+
+    let requestContext = await this.createRequestContext(); // Cache realm permissions for the duration of the request so that we don't have to fetch them multiple times
+
     try {
       // local requests are allowed to query the realm as the index is being built up
       if (!isLocal) {
@@ -1851,6 +1845,17 @@ export class Realm {
       relaxDocumentDomain: this.#useTestingDomain,
       requestContext,
     });
+  }
+
+  private async createRequestContext(): Promise<RequestContext> {
+    let permissions = await fetchUserPermissions(
+      this.#dbAdapter,
+      new URL(this.url),
+    );
+    return {
+      realm: this,
+      permissions,
+    };
   }
 }
 
