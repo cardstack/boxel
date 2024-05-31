@@ -135,7 +135,7 @@ module('Integration | ResizablePanelGroup', function (hooks) {
     await sleep(100); // let didResizeModifier run
   }
 
-  test('it can lay out panels vertically (default)', async function (this: MyTestContext, assert) {
+  test<MyTestContext>('it can lay out panels vertically (default)', async function (assert) {
     this.renderController.containerStyle =
       'max-height: 100%; width: 100px; height: 318px;';
     await renderVerticalResizablePanelGroup(this.renderController);
@@ -143,7 +143,7 @@ module('Integration | ResizablePanelGroup', function (hooks) {
     assert.hasNumericStyle('.panel-1-content', 'height', 300 * 0.4, 1);
   });
 
-  test('it can lay out panels vertically (length specified)', async function (this: MyTestContext, assert) {
+  test<MyTestContext>('it can lay out panels vertically (length specified)', async function (assert) {
     this.renderController.containerStyle =
       'max-height: 100%; width: 200px; height: 518px; border: 1px solid green';
     this.renderController.panels[0].lengthPx = 355;
@@ -153,7 +153,7 @@ module('Integration | ResizablePanelGroup', function (hooks) {
     assert.hasNumericStyle('.panel-1-content', 'height', 143, 1);
   });
 
-  test('it respects vertical minLength (default)', async function (this: MyTestContext, assert) {
+  test<MyTestContext>('it respects vertical minLength (default)', async function (assert) {
     this.renderController.containerStyle =
       'max-height: 100%; width: 200px; height: 108px;';
     await renderVerticalResizablePanelGroup(this.renderController);
@@ -161,7 +161,7 @@ module('Integration | ResizablePanelGroup', function (hooks) {
     assert.hasNumericStyle('.panel-1-content', 'height', 50, 1);
   });
 
-  test('it respects vertical minLength (length specified)', async function (this: MyTestContext, assert) {
+  test<MyTestContext>('it respects vertical minLength (length specified)', async function (assert) {
     this.renderController.containerStyle =
       'max-height: 100%; width: 200px; height: 108px; border: 1px solid green';
     this.renderController.panels[0].lengthPx = 45;
@@ -171,7 +171,7 @@ module('Integration | ResizablePanelGroup', function (hooks) {
     assert.hasNumericStyle('.panel-1-content', 'height', 50, 2);
   });
 
-  test('it adjusts to its container growing (default)', async function (this: MyTestContext, assert) {
+  test<MyTestContext>('it adjusts to its container growing (default)', async function (assert) {
     this.renderController.containerStyle =
       'max-height: 100%; width: 200px; height: 218px;';
     await renderVerticalResizablePanelGroup(this.renderController);
@@ -182,7 +182,7 @@ module('Integration | ResizablePanelGroup', function (hooks) {
     assert.hasNumericStyle('.panel-1-content', 'height', 160, 1);
   });
 
-  test('it adjusts to its container growing (length specified)', async function (this: MyTestContext, assert) {
+  test<MyTestContext>('it adjusts to its container growing (length specified)', async function (assert) {
     this.renderController.containerStyle =
       'max-height: 100%; width: 200px; height: 218px; border: 1px solid green';
     this.renderController.panels[0].lengthPx = 100;
@@ -197,7 +197,7 @@ module('Integration | ResizablePanelGroup', function (hooks) {
     assert.hasNumericStyle('.panel-1-content', 'height', 200, 1.5);
   });
 
-  test('it adjusts to its container shrinking (default)', async function (this: MyTestContext, assert) {
+  test<MyTestContext>('it adjusts to its container shrinking (default)', async function (assert) {
     this.renderController.containerStyle =
       'max-height: 100%; width: 200px; height: 418px;';
     await renderVerticalResizablePanelGroup(this.renderController);
@@ -208,7 +208,7 @@ module('Integration | ResizablePanelGroup', function (hooks) {
     assert.hasNumericStyle('.panel-1-content', 'height', 80, 1);
   });
 
-  test('it adjusts to its container shrinking (length specified A)', async function (this: MyTestContext, assert) {
+  test<MyTestContext>('it adjusts to its container shrinking (length specified A)', async function (assert) {
     this.renderController.containerStyle =
       'max-height: 100%; width: 200px; height: 420px; border: 1px solid green';
     // Height ratio panel 1 and panel 2 is 3:2
@@ -225,7 +225,7 @@ module('Integration | ResizablePanelGroup', function (hooks) {
     assert.hasNumericStyle('.panel-1-content', 'height', 80, 1);
   });
 
-  test('it adjusts to its container shrinking (length specified B)', async function (this: MyTestContext, assert) {
+  test<MyTestContext>('it adjusts to its container shrinking (length specified B)', async function (assert) {
     this.renderController.containerStyle =
       'max-height: 100%; width: 200px; height: 620px; border: 1px solid green';
     // Height ratio panel 1 and panel 2 is 2:1
@@ -244,7 +244,7 @@ module('Integration | ResizablePanelGroup', function (hooks) {
     assert.hasNumericStyle('.panel-1-content', 'height', 67, 1);
   });
 
-  test('it adjusts to its container shrinking and growing', async function (this: MyTestContext, assert) {
+  test<MyTestContext>('it adjusts to its container shrinking and growing', async function (assert) {
     this.renderController.containerStyle =
       'max-height: 100%; width: 200px; height: 620px; border: 1px solid green';
     this.renderController.panels[0].lengthPx = 400;
@@ -276,7 +276,7 @@ module('Integration | ResizablePanelGroup', function (hooks) {
     assert.hasNumericStyle('.panel-1-content', 'height', 240, 1);
   });
 
-  test('it excludes hidden panels from participating in layout', async function (this: MyTestContext, assert) {
+  test<MyTestContext>('it excludes hidden panels from participating in layout', async function (assert) {
     this.renderController.containerStyle =
       'max-height: 100%; width: 200px; height: 218px;';
     this.renderController.panels = [

@@ -120,20 +120,12 @@ export class CurrentRun {
     ]);
   }
 
-  static async fromScratch(
-    current: CurrentRun,
-    boom?: true,
-  ): Promise<IndexResults> {
+  static async fromScratch(current: CurrentRun): Promise<IndexResults> {
     await current.whileIndexing(async () => {
       let start = Date.now();
       log.debug(`starting from scratch indexing`);
       current.#batch = await current.#indexer.createBatch(current.realmURL);
       await current.batch.makeNewGeneration();
-      if (boom) {
-        throw new Error(
-          `Boom! this is a manually generated unhanded exception during indexing used for testing`,
-        );
-      }
       await current.visitDirectory(current.realmURL);
       await current.batch.done();
       log.debug(`completed from scratch indexing in ${Date.now() - start}ms`);

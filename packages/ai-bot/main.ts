@@ -3,8 +3,6 @@ import {
   RoomMemberEvent,
   RoomEvent,
   createClient,
-  Room,
-  MatrixClient,
   type MatrixEvent,
 } from 'matrix-js-sdk';
 import OpenAI from 'openai';
@@ -12,7 +10,6 @@ import { logger, aiBotUsername } from '@cardstack/runtime-common';
 import {
   constructHistory,
   getModifyPrompt,
-  cleanContent,
   getTools,
   isPatchReactionEvent,
 } from './helpers';
@@ -21,9 +18,9 @@ import {
   setTitle,
   roomTitleAlreadySet,
 } from './lib/set-title';
+import { Responder } from './lib/send-response';
 import { handleDebugCommands } from './lib/debug';
-import { sendError, sendOption, sendMessage } from './lib/matrix';
-import { OpenAIError } from 'openai/error';
+import { MatrixClient } from './lib/matrix';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
 import * as Sentry from '@sentry/node';
 
@@ -65,22 +62,22 @@ class Assistant {
     }
   }
 
-  async handleDebugCommands(eventBody: string, room: Room) {
+  async handleDebugCommands(eventBody: string, roomId: string) {
     return handleDebugCommands(
       this.openai,
       eventBody,
       this.client,
-      room,
+      roomId,
       this.id,
     );
   }
 
   async setTitle(
-    room: Room,
+    roomId: string,
     history: DiscreteMatrixEvent[],
     event?: MatrixEvent,
   ) {
-    return setTitle(this.openai, this.client, room, history, this.id, event);
+    return setTitle(this.openai, this.client, roomId, history, this.id, event);
   }
 }
 
@@ -174,102 +171,28 @@ Common issues are:
         let history: DiscreteMatrixEvent[] = constructHistory(eventList);
         log.info("Compressed into just the history that's ", history.length);
 
-        let initialMessage = await sendMessage(
-          client,
-          room,
-          'Thinking...',
-          undefined,
-        );
-
-        let unsent = 0;
-        let thinkingMessageReplaced = false;
+        const responder = new Responder(client, room.roomId);
+        await responder.initialize();
         const runner = assistant
           .getResponse(history)
           .on('chunk', async (chunk, _snapshot) => {
-            // This usage value is set *once* and *only once* at the end of the conversation
-            // It will be null at all other times.
-            if (chunk.usage) {
-              log.info(
-                `Request used ${chunk.usage.prompt_tokens} prompt tokens and ${chunk.usage.completion_tokens}`,
-              );
-            }
+            await responder.onChunk(chunk);
           })
           .on('content', async (_delta, snapshot) => {
-            unsent += 1;
-            if (unsent > 40) {
-              unsent = 0;
-              await sendMessage(
-                client,
-                room,
-                cleanContent(snapshot),
-                initialMessage.event_id,
-              );
-            }
-            thinkingMessageReplaced = true;
+            await responder.onContent(snapshot);
           })
-          // Messages can have both content and tool calls
-          // We handle tool calls here
           .on('message', async (msg) => {
-            if (msg.role === 'assistant') {
-              for (const toolCall of msg.tool_calls || []) {
-                const functionCall = toolCall.function;
-                log.debug('[Room Timeline] Function call', toolCall);
-                let args;
-                try {
-                  args = JSON.parse(functionCall.arguments);
-                } catch (error) {
-                  Sentry.captureException(error);
-                  return await sendError(
-                    client,
-                    room,
-                    error,
-                    thinkingMessageReplaced
-                      ? undefined
-                      : initialMessage.event_id,
-                  );
-                }
-                if (functionCall.name === 'patchCard') {
-                  await sendOption(
-                    client,
-                    room,
-                    args,
-                    thinkingMessageReplaced
-                      ? undefined
-                      : initialMessage.event_id,
-                  );
-                  thinkingMessageReplaced = true;
-                }
-              }
-            }
+            await responder.onMessage(msg);
           })
-          .on('error', async (error: OpenAIError) => {
-            Sentry.captureException(error);
-            return await sendError(
-              client,
-              room,
-              error,
-              initialMessage.event_id,
-            );
+          .on('error', async (error) => {
+            await responder.onError(error);
           });
         // We also need to catch the error when getting the final content
-        let finalContent = await runner.finalContent().catch(async (error) => {
-          return await sendError(client, room, error, initialMessage.event_id);
-        });
-        if (finalContent) {
-          finalContent = cleanContent(finalContent);
-          await sendMessage(
-            client,
-            room,
-            finalContent,
-            initialMessage.event_id,
-            {
-              isStreamingFinished: true,
-            },
-          );
-        }
+        let finalContent = await runner.finalContent().catch(responder.onError);
+        await responder.finalize(finalContent);
 
         if (shouldSetRoomTitle(eventList, aiBotUserId, event)) {
-          return await assistant.setTitle(room, history, event);
+          return await assistant.setTitle(room.roomId, history, event);
         }
         return;
       } catch (e) {
@@ -304,7 +227,7 @@ Common issues are:
       if (roomTitleAlreadySet(eventList)) {
         return;
       }
-      return await assistant.setTitle(room, history, event);
+      return await assistant.setTitle(room.roomId, history, event);
     } catch (e) {
       log.error(e);
       Sentry.captureException(e);
@@ -336,7 +259,7 @@ Common issues are:
       event.getSender(),
       eventBody,
     );
-    return await assistant.handleDebugCommands(eventBody, room);
+    return await assistant.handleDebugCommands(eventBody, room.roomId);
   });
 
   await client.startClient();
