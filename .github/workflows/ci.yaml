@@ -188,7 +188,7 @@ jobs:
         if: always()
         with:
           name: host-test-report-${{ matrix.shardIndex }}
-          path: junit/host-${{ matrix.shardIndex }}.xml
+          path: junit/host.xml
           retention-days: 30
 
   host-merge-reports-and-publish:
