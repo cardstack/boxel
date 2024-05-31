@@ -220,6 +220,7 @@ jobs:
           pattern: host-test-report-*
           merge-multiple: true
 
+      - run: ls
       - run: ls all-host-reports
 
       - name: Merge reports
