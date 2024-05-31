@@ -148,8 +148,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shardIndex: [1, 2, 3, 4]
-        # FIXME 4 is hardcoded in package.json right now
+        shardIndex: [1, 2, 3, 4, 5, 6]
+        # FIXME 6 is hardcoded in package.json right now
     concurrency:
       group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
       cancel-in-progress: true
