@@ -36,14 +36,12 @@ export const formatNumber = (val: number) => {
 class EditSecForPercentageField extends Component<typeof PercentageField> {
   @action
   updatePercentage(val: number) {
-    this.args.model.percentage = val;
+    this.args.model.total = val;
   }
 
   get getFormattedPercentage() {
-    if (!this.args.model.percentage) return null;
-    const formattedNumber = formatNumber(
-      Math.round(this.args.model.percentage),
-    );
+    if (!this.args.model.total) return null;
+    const formattedNumber = formatNumber(Math.round(this.args.model.total));
 
     return formattedNumber + '%';
   }
@@ -52,7 +50,7 @@ class EditSecForPercentageField extends Component<typeof PercentageField> {
     <CardContainer @displayBoundaries={{false}} class='card-container'>
       <FieldContainer @tag='label' @vertical={{true}}>
         <BoxelInput
-          @value={{this.args.model.percentage}}
+          @value={{this.args.model.total}}
           @onInput={{this.updatePercentage}}
           @helperText={{this.getFormattedPercentage}}
         />
@@ -63,10 +61,8 @@ class EditSecForPercentageField extends Component<typeof PercentageField> {
 
 class EmbdeddedSecForPercentageField extends Component<typeof PercentageField> {
   get getFormattedPercentage() {
-    if (!this.args.model.percentage) return null;
-    const formattedNumber = formatNumber(
-      Math.round(this.args.model.percentage),
-    );
+    if (!this.args.model.total) return null;
+    const formattedNumber = formatNumber(Math.round(this.args.model.total));
 
     return formattedNumber + '%';
   }
@@ -84,7 +80,7 @@ class EmbdeddedSecForPercentageField extends Component<typeof PercentageField> {
 }
 
 class PercentageField extends FieldDef {
-  @field percentage = contains(NumberField, {
+  @field total = contains(NumberField, {
     description: `Percentage`,
   });
 
