@@ -205,6 +205,9 @@ jobs:
     #   statuses: write
 
     steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/init
+
       - name: Finalise Percy
         run: npx percy build:finalize
         working-directory: packages/host
