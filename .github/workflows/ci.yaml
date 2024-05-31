@@ -173,8 +173,7 @@ jobs:
       - name: host test suite (shard ${{ matrix.shardIndex }})
         run: pnpm test-with-percy
         env:
-          # FIXME restore Percy
-          # PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
+          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
         working-directory: packages/host
       # - name: Publish test results FIXME move to followup
@@ -211,6 +210,8 @@ jobs:
       - name: Finalise Percy
         run: npx percy build:finalize
         working-directory: packages/host
+        env:
+          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
 
       - name: Download JUnit reports from GitHub Actions Artifacts
         uses: actions/download-artifact@v4
