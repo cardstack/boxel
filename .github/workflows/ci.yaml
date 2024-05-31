@@ -182,12 +182,14 @@ jobs:
       #   with:
       #     junit_files: junit/host.xml
       #     check_name: Host Tests Test Results ${{ matrix.shard }}
+      - name: Add shard index to report filename
+        run: mv junit/host.xml junit/host-${{ matrix.shardIndex }}
       - name: Upload junit report to GitHub Actions Artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: host-test-report-${{ matrix.shardIndex }}
-          path: junit/host.xml
+          path: junit/host-${{ matrix.shardIndex }}.xml
           retention-days: 30
 
   host-merge-reports-and-publish:
