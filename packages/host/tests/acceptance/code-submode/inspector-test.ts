@@ -990,9 +990,9 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       },
     });
     await waitFor('[data-test-empty-code-mode]');
-    // await percySnapshot(
-    //   'Acceptance | operator mode tests | can delete a card instance from code submode with no recent files - empty code submode',
-    // );
+    await percySnapshot(
+      'Acceptance | operator mode tests | can delete a card instance from code submode with no recent files - empty code submode',
+    );
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Interact"]');
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/1"]`);
