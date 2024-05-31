@@ -221,7 +221,7 @@ jobs:
           merge-multiple: true
 
       - name: Merge reports
-        run: npx junit-report-merger host.xml ./all-host-reports/*.xml
+        run: npx junit-report-merger host.xml "./all-host-reports/*.xml"
 
       - name: Upload merged report
         uses: actions/upload-artifact@v4
