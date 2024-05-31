@@ -893,11 +893,7 @@ module('Integration | card-basics', function (hooks) {
         let firstWorkExperience = new WorkExperience();
         mango.workExperiences.push(firstWorkExperience);
         await flushLogs();
-        assert.strictEqual(
-          eventCount,
-          1,
-          'the change event was fired the correct amount of times',
-        );
+        await waitUntil(() => eventCount === 1);
         assert.deepEqual(
           changeEvent?.instance,
           mango,
@@ -915,11 +911,7 @@ module('Integration | card-basics', function (hooks) {
         );
 
         firstWorkExperience.company = 'First Company';
-        assert.strictEqual(
-          eventCount,
-          2,
-          'the change event was fired the correct amount of times',
-        );
+        await waitUntil(() => eventCount === 2);
         assert.deepEqual(
           changeEvent?.instance,
           firstWorkExperience,

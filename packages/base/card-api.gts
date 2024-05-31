@@ -2143,13 +2143,28 @@ function applySubscribersToInstanceValue(
   oldValue: BaseDef | BaseDef[],
   newValue: BaseDef | BaseDef[],
 ) {
+  // If value doesn't have its own subscribers,
+  // we can use instance's subscribers.
   let changeSubscribers = subscribers.get(instance);
+  if (isArrayOfCardOrField(oldValue) && subscribers.has(oldValue[0])) {
+    changeSubscribers = subscribers.get(oldValue[0]);
+  } else if (isCardOrField(oldValue) && subscribers.has(oldValue)) {
+    changeSubscribers = subscribers.get(oldValue);
+  }
+
   if (!changeSubscribers) {
     return;
   }
 
-  let toArray = (item: BaseDef | BaseDef[]) =>
-    isCardOrField(item) ? [item] : item ?? [];
+  let toArray = function (item: BaseDef | BaseDef[]) {
+    if (isCardOrField(item)) {
+      return [item];
+    } else if (isArrayOfCardOrField(item)) {
+      return [...item];
+    } else {
+      return [];
+    }
+  };
 
   let oldItems = toArray(oldValue);
   let newItems = toArray(newValue);
