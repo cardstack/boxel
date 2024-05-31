@@ -67,7 +67,7 @@ export function setupDB(
 
   const runAfterHook = async () => {
     await queue?.destroy();
-    // await dbAdapter?.close();
+    // await dbAdapter?.close(); TODO: by closing the adapter here, getting "Error: Cannot use a pool after calling end on the pool" when running loader tests
   };
 
   // we need to pair before/after and beforeEach/afterEach. within this setup
