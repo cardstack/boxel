@@ -8,8 +8,8 @@ async function insertPermission(
   read: boolean,
   write: boolean,
 ) {
-  const query = `INSERT INTO realm_user_permissions (realm_url, username, read, write) VALUES ($1, $2, $3, $4);`;
-  const values = [realmURL.href, username, read, write];
+  let query = `INSERT INTO realm_user_permissions (realm_url, username, read, write) VALUES ($1, $2, $3, $4);`;
+  let values = [realmURL.href, username, read, write];
   return dbAdapter.execute(query, { bind: values });
 }
 
@@ -18,7 +18,7 @@ export async function insertPermissions(
   realmURL: URL,
   permissions: RealmPermissions,
 ) {
-  const insertPromises = Object.entries(permissions).map(
+  let insertPromises = Object.entries(permissions).map(
     ([user, userPermissions]) => {
       return insertPermission(
         dbAdapter,
@@ -52,7 +52,7 @@ export async function fetchUserPermissions(
   );
 
   return permissions.reduce((permissionsAcc, { username, read, write }) => {
-    const userPermissions: ('read' | 'write')[] = [];
+    let userPermissions: ('read' | 'write')[] = [];
     if (read) userPermissions.push('read');
     if (write) userPermissions.push('write');
     permissionsAcc[username as string] = userPermissions;
