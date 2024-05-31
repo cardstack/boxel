@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "subject": {
+        "title": "Send Quote"
+      },
+      "dueDate": "2024-05-16",
+      "comments": "Hi dear, please send quote to us asap.",
+      "relatedTo": {
+        "account": "Cardstack Malaysia"
+      },
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "relatedTo.accounts.0": {
+        "links": {
+          "self": "http://localhost:4201/drafts/CardDef/7298c9c6-2964-41a0-87f7-42127a16e12b"
+        }
+      },
+      "relatedTo.accounts.1": {
+        "links": {
+          "self": "http://localhost:4201/drafts/CrmAccount/4802eeed-bec6-4d7a-8f05-6370866edd40"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../task-form",
+        "name": "TaskForm"
+      }
+    }
+  }
+}
