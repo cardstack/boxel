@@ -205,6 +205,9 @@ jobs:
     #   statuses: write
 
     steps:
+      - name: Finalise Percy
+        run: npx percy build:finalize
+
       - name: Download JUnit reports from GitHub Actions Artifacts
         uses: actions/download-artifact@v4
         with:
