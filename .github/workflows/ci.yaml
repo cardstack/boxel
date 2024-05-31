@@ -207,6 +207,7 @@ jobs:
     steps:
       - name: Finalise Percy
         run: npx percy build:finalize
+        working-directory: packages/host
 
       - name: Download JUnit reports from GitHub Actions Artifacts
         uses: actions/download-artifact@v4
