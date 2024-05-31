@@ -220,6 +220,8 @@ jobs:
           pattern: host-test-report-*
           merge-multiple: true
 
+      - run: ls all-host-reports
+
       - name: Merge reports
         run: npx junit-report-merger host.xml "./all-host-reports/*.xml"
 
