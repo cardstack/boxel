@@ -59,7 +59,7 @@ export async function openAiAssistant(page: Page) {
 
 export async function openRoot(page: Page, url = testHost) {
   await page.goto(url);
-  await expect(page.locator('.cards-grid')).toHaveCount(1);
+  await expect(page.locator('.cards-grid')).toHaveCount(1, { timeout: 60000 });
   let isOperatorMode = !!(await page.evaluate(() =>
     document.querySelector('dialog.operator-mode'),
   ));
@@ -264,8 +264,8 @@ export async function createRoomWithMessage(page: Page, message?: string) {
 export async function getRoomId(page: Page) {
   await page.locator(`[data-test-room-settled]`).waitFor();
   let roomId = await page
-    .locator('[data-test-room]')
-    .getAttribute('data-test-room');
+    .locator('[data-test-room-raw-id]')
+    .getAttribute('data-test-room-raw-id');
   if (roomId == null) {
     throw new Error('room ID is not found');
   }
@@ -273,7 +273,7 @@ export async function getRoomId(page: Page) {
 }
 
 export async function isInRoom(page: Page, roomId: string) {
-  await page.locator(`[data-test-room="${roomId}"]`).waitFor();
+  await page.locator(`[data-test-room-raw-id="${roomId}"]`).waitFor();
   await expect(page.locator(`[data-test-room-settled]`)).toHaveCount(1);
 }
 

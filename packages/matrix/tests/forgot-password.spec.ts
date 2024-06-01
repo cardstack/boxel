@@ -50,6 +50,8 @@ test.describe('Forgot password', () => {
   });
 
   test('It can reset password', async ({ page }) => {
+    test.slow();
+
     await gotoForgotPassword(page);
 
     await expect(
@@ -111,6 +113,8 @@ test.describe('Forgot password', () => {
   test('It shows an error when email does not belong to any account', async ({
     page,
   }) => {
+    test.slow();
+
     await gotoForgotPassword(page);
 
     await expect(

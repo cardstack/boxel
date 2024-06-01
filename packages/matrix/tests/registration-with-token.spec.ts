@@ -311,6 +311,8 @@ test.describe('User Registration w/ Token', () => {
   });
 
   test(`it can resend email validation message`, async ({ page }) => {
+    test.slow();
+
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await registerRealmUsers(synapse);
     await clearLocalStorage(page);

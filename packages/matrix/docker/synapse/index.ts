@@ -103,6 +103,7 @@ export async function synapseStart(
   stopExisting = true,
 ): Promise<SynapseInstance> {
   if (stopExisting) {
+    console.log('in synapseStart, stopping existing');
     // Stop the main server if it's running
     let stopPromises = [dockerStop({ containerId: 'boxel-synapse' })];
     for (const [id, _synapse] of synapses) {
@@ -121,7 +122,8 @@ export async function synapseStart(
   );
   await dockerCreateNetwork({ networkName: 'boxel' });
   const synapseId = await dockerRun({
-    image: 'matrixdotorg/synapse:develop',
+    // FIXME back to develop?
+    image: 'matrixdotorg/synapse:v1.105.0',
     containerName: 'boxel-synapse',
     dockerParams: [
       '--rm',
@@ -159,6 +161,26 @@ export async function synapseStart(
       `http://localhost:8008/health`,
     ],
   });
+
+  // Await Synapse healthcheck
+  console.log(
+    `Synapse version`,
+    await dockerExec({
+      containerId: synapseId,
+      params: [
+        'curl',
+        '--connect-timeout',
+        '30',
+        '--retry',
+        '30',
+        '--retry-delay',
+        '1',
+        '--retry-all-errors',
+        '--silent',
+        `http://localhost:8008/_synapse/admin/v1/server_version`,
+      ],
+    }),
+  );
 
   const synapse: SynapseInstance = { synapseId, ...synCfg };
   synapses.set(synapseId, synapse);

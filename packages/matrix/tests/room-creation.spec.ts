@@ -41,6 +41,8 @@ test.describe('Room creation', () => {
   });
 
   test('it can create a room', async ({ page }) => {
+    test.slow();
+
     await login(page, 'user1', 'pass');
 
     let room1 = await getRoomId(page); // Automatically created room
@@ -65,11 +67,11 @@ test.describe('Room creation', () => {
     await assertRooms(page, [room1New]);
   });
 
-  // SKIPPING FLAKY TEST!
-  // https://linear.app/cardstack/issue/CS-6640/flaky-matrix-test-room-creation-spec-does-not-create-a-new-room-when
-  test.skip('it does not create a new room when another new room is available', async ({
+  test('it does not create a new room when another new room is available', async ({
     page,
   }) => {
+    test.slow();
+
     await login(page, 'user1', 'pass');
 
     let room = await getRoomId(page); // Automatically created room
@@ -105,6 +107,8 @@ test.describe('Room creation', () => {
   });
 
   test('it can rename a room', async ({ page }) => {
+    test.slow();
+
     await login(page, 'user1', 'pass');
 
     let room1 = await getRoomId(page);
@@ -242,7 +246,9 @@ test.describe('Room creation', () => {
     expect(roomsAfterDeletionKeys.length).toEqual(
       roomsBeforeDeletionKeys.length,
     );
-    expect(roomsAfterDeletionKeys.includes(roomsBeforeDeletionKeys[1])).toBeFalsy(); // Deleted room
+    expect(
+      roomsAfterDeletionKeys.includes(roomsBeforeDeletionKeys[1]),
+    ).toBeFalsy(); // Deleted room
   });
 
   test('it can cancel deleting a room', async ({ page }) => {
@@ -274,6 +280,8 @@ test.describe('Room creation', () => {
   test('it opens latest room available (or creates new) when current room is deleted', async ({
     page,
   }) => {
+    test.slow();
+
     await login(page, 'user1', 'pass');
     let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'Room 1');

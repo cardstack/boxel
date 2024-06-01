@@ -776,8 +776,8 @@ module('Integration | operator-mode', function (hooks) {
       await click('[data-test-open-ai-assistant]');
       await waitFor('[data-test-room-settled]');
       let roomId = document
-        .querySelector('[data-test-room]')
-        ?.getAttribute('data-test-room');
+        .querySelector('[data-test-room-raw-id]')
+        ?.getAttribute('data-test-room-raw-id');
       if (!roomId) {
         throw new Error('Expected a room ID');
       }
@@ -1690,7 +1690,7 @@ module('Integration | operator-mode', function (hooks) {
 
       await waitFor(`[data-test-open-ai-assistant]`);
       await click('[data-test-open-ai-assistant]');
-      await waitFor(`[data-room-settled]`);
+      await waitFor(`[data-test-room-settled]`);
 
       assert
         .dom(`[data-test-room="${room3Id}"]`)
@@ -1703,7 +1703,7 @@ module('Integration | operator-mode', function (hooks) {
 
       await click('[data-test-close-ai-assistant]');
       await click('[data-test-open-ai-assistant]');
-      await waitFor(`[data-room-settled]`);
+      await waitFor(`[data-test-room-settled]`);
       assert
         .dom(`[data-test-room="${room2Id}"]`)
         .exists(
@@ -1716,7 +1716,7 @@ module('Integration | operator-mode', function (hooks) {
         "room-id-that-doesn't-exist-and-should-not-break-the-implementation",
       );
       await click('[data-test-open-ai-assistant]');
-      await waitFor(`[data-room-settled]`);
+      await waitFor(`[data-test-room-settled]`);
       assert
         .dom(`[data-test-room="${room3Id}"]`)
         .exists(

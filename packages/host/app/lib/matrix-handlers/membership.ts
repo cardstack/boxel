@@ -52,6 +52,8 @@ async function drainMembership(context: Context) {
     }
     let room = context.client.getRoom(roomId);
     if (!room) {
+      console.log('failure to find room in drainMembership, listing rooms');
+      console.log(context.client.getRooms().map((r) => r.roomId));
       throw new Error(
         `bug: should never get here--matrix sdk returned a null room for ${roomId}`,
       );
