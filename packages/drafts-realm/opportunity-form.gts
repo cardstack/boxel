@@ -4,7 +4,7 @@ import {
   FieldDef,
   contains,
   field,
-  linksToMany,
+  linksTo,
 } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import DateCard from 'https://cardstack.com/base/date';
@@ -24,7 +24,7 @@ interface CategorySignature {
   name: string;
 }
 
-export const formatNumber = (val: number) => {
+const formatNumber = (val: number) => {
   let formatter = new Intl.NumberFormat('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -32,305 +32,34 @@ export const formatNumber = (val: number) => {
   return formatter.format(val);
 };
 
-/* Percentage */
-class EditSecForPercentageField extends Component<typeof PercentageField> {
-  @action
-  updatePercentage(val: number) {
-    this.args.model.total = val;
-  }
-
-  get getFormattedPercentage() {
-    if (!this.args.model.total) return null;
-    const formattedNumber = formatNumber(Math.round(this.args.model.total));
-
-    return formattedNumber + '%';
-  }
-
-  <template>
-    <CardContainer @displayBoundaries={{false}} class='card-container'>
-      <FieldContainer @tag='label' @vertical={{true}}>
-        <BoxelInput
-          @value={{this.args.model.total}}
-          @onInput={{this.updatePercentage}}
-          @helperText={{this.getFormattedPercentage}}
-        />
-      </FieldContainer>
-    </CardContainer>
-  </template>
-}
-
-class EmbdeddedSecForPercentageField extends Component<typeof PercentageField> {
-  get getFormattedPercentage() {
-    if (!this.args.model.total) return null;
-    const formattedNumber = formatNumber(Math.round(this.args.model.total));
-
-    return formattedNumber + '%';
-  }
-
-  <template>
-    <div class='totalCurrencyAmount'>{{this.getFormattedPercentage}}</div>
-
-    <style>
-      .totalCurrencyAmount {
-        color: var(--boxel-dark-teal);
-        font-weight: bold;
-      }
-    </style>
-  </template>
-}
-
-class PercentageField extends FieldDef {
-  @field total = contains(NumberField, {
-    description: `Percentage`,
-  });
-
-  static edit = EditSecForPercentageField;
-  static embedded = EmbdeddedSecForPercentageField;
-}
-
-/* Forecast */
-class EmbeddedSecForForecastField extends Component<typeof ForecastField> {
-  <template>
-    <div class='subject'>{{this.args.model.category}}</div>
-
-    <style>
-      .subject {
-        margin: 0px;
-      }
-    </style>
-  </template>
-}
-
-class EditSecForForecastField extends Component<typeof ForecastField> {
-  @tracked selectedCategory = {
-    name: this.args.model.category || 'None',
-  };
-
-  @tracked categoryPlaceholder = this.args.model.category || 'None';
-
-  @tracked categoryOptions = [
-    { name: 'None' },
-    { name: 'Omitted' },
-    { name: 'Pipeline' },
-    { name: 'Best Case' },
-    { name: 'Commit' },
-    { name: 'Closed' },
-  ] as Array<CategorySignature>;
-
-  @action updateCategory(type: { name: string }) {
-    this.selectedCategory = type;
-    this.args.model.category = type.name;
-  }
-
-  <template>
-    <CardContainer @displayBoundaries={{false}} class='card-container'>
-
-      <BoxelSelect
-        @searchEnabled={{true}}
-        @searchField='name'
-        @placeholder={{this.categoryPlaceholder}}
-        @selected={{this.selectedCategory}}
-        @onChange={{this.updateCategory}}
-        @options={{this.categoryOptions}}
-        class='select'
-        as |item|
-      >
-        <div>{{item.name}}</div>
-      </BoxelSelect>
-
-    </CardContainer>
-
-    <style>
-      .select {
-        padding: var(--boxel-sp-xs);
-        background-color: white;
-      }
-    </style>
-  </template>
-}
-
-class ForecastField extends FieldDef {
-  @field category = contains(StringField, {
-    description: `Selected Category`,
-  });
-
-  static edit = EditSecForForecastField;
-  static embedded = EmbeddedSecForForecastField;
-}
-
-/* Stage */
-class EmbeddedSecForStageField extends Component<typeof StageField> {
-  <template>
-    <div class='subject'>{{this.args.model.category}}</div>
-
-    <style>
-      .subject {
-        margin: 0px;
-      }
-    </style>
-  </template>
-}
-
-class EditSecForStageField extends Component<typeof StageField> {
-  @tracked selectedCategory = {
-    name: this.args.model.category || 'None',
-  };
-
-  @tracked categoryPlaceholder = this.args.model.category || 'None';
-
-  @tracked categoryOptions = [
-    { name: 'None' },
-    { name: 'Qualification' },
-    { name: 'Needs Analysis' },
-    { name: 'Proposal' },
-    { name: 'Negotiation' },
-    { name: 'Closed Won' },
-    { name: 'Closed Lost' },
-  ] as Array<CategorySignature>;
-
-  @action updateCategory(type: { name: string }) {
-    this.selectedCategory = type;
-    this.args.model.category = type.name;
-  }
-
-  <template>
-    <CardContainer @displayBoundaries={{false}} class='card-container'>
-
-      <BoxelSelect
-        @searchEnabled={{true}}
-        @searchField='name'
-        @placeholder={{this.categoryPlaceholder}}
-        @selected={{this.selectedCategory}}
-        @onChange={{this.updateCategory}}
-        @options={{this.categoryOptions}}
-        class='select'
-        as |item|
-      >
-        <div>{{item.name}}</div>
-      </BoxelSelect>
-
-    </CardContainer>
-
-    <style>
-      .select {
-        padding: var(--boxel-sp-xs);
-        background-color: white;
-      }
-    </style>
-  </template>
-}
-
-class StageField extends FieldDef {
-  @field category = contains(StringField, {
-    description: `Selected Category`,
-  });
-
-  static edit = EditSecForStageField;
-  static embedded = EmbeddedSecForStageField;
-}
-
-/* Account */
-class EditSecForAccountField extends Component<typeof AccountField> {
-  @tracked selectedAccount = {
-    name: this.args.model.name || 'Select',
-  };
-
-  @tracked accountPlaceholder = this.args.model.name || 'Select';
-
-  get getAccountsNames() {
-    let allAccounts = this.args.model.accounts || [];
-    return allAccounts.map((o) => ({ name: o.accountName }));
-  }
-
-  @action updateAccount(type: { name: string }) {
-    this.selectedAccount = type;
-    this.args.model.name = type.name;
-  }
-
-  <template>
-    <CardContainer @displayBoundaries={{false}} class='card-container'>
-
-      <BoxelSelect
-        @placeholder={{this.accountPlaceholder}}
-        @selected={{this.selectedAccount}}
-        @onChange={{this.updateAccount}}
-        @options={{this.getAccountsNames}}
-        class='select'
-        as |item|
-      >
-        <div>{{item.name}}</div>
-      </BoxelSelect>
-
-    </CardContainer>
-
-    <style>
-      .select {
-        padding: var(--boxel-sp-xs);
-        background-color: white;
-      }
-    </style>
-  </template>
-}
-
-class EmbeddedSecForAccountField extends Component<typeof AccountField> {
-  <template>
-    <CardContainer @displayBoundaries={{false}} class='card-container'>
-      {{this.args.model.name}}
-    </CardContainer>
-
-    <style>
-      .card-container {
-        background: transparent;
-      }
-    </style>
-  </template>
-}
-
-class AccountField extends FieldDef {
-  @field accounts = linksToMany(() => CrmAccount, {
-    description: `CRM Accounts`,
-  });
-  @field name = contains(StringField, {
-    description: `Account Name`,
-  });
-
-  static edit = EditSecForAccountField;
-  static embedded = EmbeddedSecForAccountField;
-}
-
 /* Amount */
-class EditSecForAmountField extends Component<typeof AmountField> {
-  @tracked currencyOptions = ['USD', 'RM'];
-  @tracked currencyPlaceHolder = 'RM';
-  @tracked selectedCurrency = this.args.model.currency || 'RM';
-
-  @action selectExampleOnSelectItem(item: string) {
-    this.selectedCurrency = item;
+class EditSecForAmount extends Component<typeof AmountField> {
+  @tracked currencyOptions = ['Select', 'RM', 'USD'];
+  get selectedCurrency() {
+    return this.args.model.currency || this.currencyOptions[0] || 'Select';
   }
 
   @action
   updateCurrency(item: string) {
     this.args.model.currency = item;
-    this.selectedCurrency = item;
   }
 
   @action
   updateAmount(val: number) {
-    this.args.model.total = val;
+    this.args.model.totalAmount = val;
   }
 
   get getFormattedAmount() {
-    if (!this.args.model.total) return null;
-    const formattedNumber = formatNumber(this.args.model.total);
+    if (!this.args.model.totalAmount) return null;
+    const formattedNumber = formatNumber(this.args.model.totalAmount);
     return formattedNumber;
   }
 
   <template>
-    <CardContainer @displayBoundaries={{false}} class='card-container'>
+    <CardContainer @displayBoundaries={{false}} class='container'>
       <div class='form-row-full'>
-        <FieldContainer @tag='label' @vertical={{true}} class='inline-block'>
+        <FieldContainer @tag='label' @vertical={{true}} class='left-input'>
           <BoxelSelect
-            @placeholder={{this.currencyPlaceHolder}}
             @selected={{this.selectedCurrency}}
             @onChange={{this.updateCurrency}}
             @options={{this.currencyOptions}}
@@ -342,9 +71,9 @@ class EditSecForAmountField extends Component<typeof AmountField> {
           </BoxelSelect>
         </FieldContainer>
 
-        <FieldContainer @tag='label' @vertical={{true}} class='inline-block'>
+        <FieldContainer @tag='label' @vertical={{true}} class='right-input'>
           <BoxelInput
-            @value={{this.args.model.total}}
+            @value={{this.args.model.totalAmount}}
             @onInput={{this.updateAmount}}
             @helperText={{this.getFormattedAmount}}
           />
@@ -359,7 +88,11 @@ class EditSecForAmountField extends Component<typeof AmountField> {
         width: 100%;
         gap: var(--boxel-sp-xs);
       }
-      .inline-block {
+      .left-input {
+        display: inline-block;
+        min-width: 100px;
+      }
+      .right-input {
         display: inline-block;
         flex-grow: 1;
       }
@@ -371,88 +104,105 @@ class EditSecForAmountField extends Component<typeof AmountField> {
   </template>
 }
 
-class EmbdeddedSecForAmountField extends Component<typeof AmountField> {
-  get getFormattedAmount() {
-    if (!this.args.model.total) return null;
-    const formattedNumber = formatNumber(this.args.model.total);
-    return formattedNumber;
-  }
-
-  get totalCurrencyAmount() {
-    if (!this.args.model.currency || !this.getFormattedAmount) return null;
-    return this.args.model.currency + this.getFormattedAmount;
-  }
-
-  <template>
-    <div class='totalCurrencyAmount'>{{this.totalCurrencyAmount}}</div>
-
-    <style>
-      .totalCurrencyAmount {
-        color: var(--boxel-dark-teal);
-        font-weight: bold;
-      }
-    </style>
-  </template>
-}
-
 class AmountField extends FieldDef {
   @field currency = contains(StringField, {
     description: `Currency`,
   });
 
-  @field total = contains(NumberField, {
+  @field totalAmount = contains(NumberField, {
     description: `Total Amount`,
   });
 
-  static edit = EditSecForAmountField;
-  static embedded = EmbdeddedSecForAmountField;
+  static edit = EditSecForAmount;
 }
 
 /* Opportunity Form */
 class IsolatedSecForOpportunityForm extends Component<typeof OpportunityForm> {
+  get getFormattedAmount() {
+    const amount = this.args.model.amount;
+    const hasAmount = amount && amount.totalAmount;
+    if (!hasAmount) return null;
+    const formattedNumber = formatNumber(amount.totalAmount);
+    return formattedNumber;
+  }
+
+  get getTotalCurrencyAmount() {
+    const amount = this.args.model.amount;
+    const hasTotalCurrency =
+      amount &&
+      amount.currency &&
+      amount.currency !== 'Select' &&
+      this.getFormattedAmount;
+    if (!hasTotalCurrency) return '-';
+    return amount.currency + ' ' + this.getFormattedAmount;
+  }
+
+  get getStage() {
+    if (!this.args.model.stage) return '-';
+    return this.args.model.stage;
+  }
+
+  get getFormattedPercentage() {
+    if (!this.args.model.percentage) return '-';
+
+    const formattedNumber = formatNumber(
+      Math.round(this.args.model.percentage),
+    );
+
+    return formattedNumber + '%';
+  }
+
+  get getForestCategory() {
+    if (!this.args.model.forecastCategory) return '-';
+    return this.args.model.forecastCategory;
+  }
+
   <template>
-    <div class='card-container'>
+    <CardContainer @displayBoundaries={{false}} class='container'>
       <div class='left-box'>
         <h2><@fields.opportunityName /></h2>
-        <div class='description'><@fields.description /></div>
+
+        <div class='description'>
+          <@fields.description />
+        </div>
       </div>
 
       <div class='right-box'>
-        <div class='field-input'>
+
+        <div class='field-input-column'>
           <label>Account Name: </label>
           <@fields.accountName />
         </div>
 
-        <div class='field-input'>
-          <label>Close Date: </label>
-          <@fields.closeDate />
-        </div>
+        <div class='field-input-group'>
+          <div class='field-input'>
+            <label>Close Date: </label>
+            <@fields.closeDate />
+          </div>
+          <div class='field-input'>
+            <label>Amount: </label>
+            {{this.getTotalCurrencyAmount}}
+          </div>
+          <div class='field-input'>
+            <label>Stage: </label>
+            {{this.getStage}}
+          </div>
+          <div class='field-input'>
+            <label>Percentage: </label>
+            {{this.getFormattedPercentage}}
 
-        <div class='field-input'>
-          <label>Amount: </label>
-          <@fields.amount />
-        </div>
-
-        <div class='field-input'>
-          <label>Stage: </label>
-          <@fields.stage />
-        </div>
-
-        <div class='field-input'>
-          <label>Percentage: </label>
-          <@fields.percentage />
-        </div>
-
-        <div class='field-input'>
-          <label>Forecast Category: </label>
-          <@fields.forecastCategory />
+          </div>
+          <div class='field-input'>
+            <label>Forecast Category: </label>
+            {{this.getForestCategory}}
+          </div>
         </div>
       </div>
 
-    </div>
+    </CardContainer>
 
     <style>
-      .card-container {
+      .container {
         padding: var(--boxel-sp-xl);
         display: grid;
         gap: var(--boxel-sp-lg);
@@ -466,13 +216,12 @@ class IsolatedSecForOpportunityForm extends Component<typeof OpportunityForm> {
       .right-box {
         display: flex;
         flex-direction: column;
-        justify-content: space-evenly;
-        gap: var(--boxel-sp-lg);
         grid-column: span 4;
-        padding: var(--boxel-sp);
-        background-color: #eeeeee50;
-        border: 1px solid var(--boxel-300);
-        border-radius: var(--boxel-border-radius-xl);
+        gap: var(--boxel-sp);
+      }
+      .right-box > * + * {
+        border-top: 1px solid var(--boxel-form-control-border-color);
+        border-bottom-width: 0px;
       }
       .description {
         text-align: justify;
@@ -480,11 +229,27 @@ class IsolatedSecForOpportunityForm extends Component<typeof OpportunityForm> {
       .field-input {
         display: flex;
         gap: var(--boxel-sp-sm);
-        font-size: 0.795rem;
+        font-size: var(--boxel-font-size-sm);
         flex-wrap: wrap;
       }
-
-      .field-input > label {
+      .field-input-group {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-evenly;
+        gap: var(--boxel-sp);
+        background-color: #fbfbfb;
+        border: 1px solid var(--boxel-300);
+        border-radius: var(--boxel-border-radius);
+        padding: var(--boxel-sp);
+      }
+      .field-input-column {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+        font-size: var(--boxel-font-size-sm);
+        flex-wrap: wrap;
+      }
+      label {
         font-weight: 700;
       }
 
@@ -502,8 +267,67 @@ class IsolatedSecForOpportunityForm extends Component<typeof OpportunityForm> {
 }
 
 class EditSecForOpportunityForm extends Component<typeof OpportunityForm> {
+  /* Stage Category */
+  get selectedStageCategory() {
+    return {
+      name:
+        this.args.model.stage || this.stageCategoryOptions[0].name || 'Select',
+    };
+  }
+
+  @tracked stageCategoryOptions = [
+    { name: 'None' },
+    { name: 'Qualification' },
+    { name: 'Needs Analysis' },
+    { name: 'Proposal' },
+    { name: 'Negotiation' },
+    { name: 'Closed Won' },
+    { name: 'Closed Lost' },
+  ] as Array<CategorySignature>;
+
+  @action updateStageCategory(type: { name: string }) {
+    this.args.model.stage = type.name;
+  }
+
+  /* Percentage */
+  @action
+  updatePercentage(val: number) {
+    this.args.model.percentage = val;
+  }
+
+  get getFormattedPercentage() {
+    if (!this.args.model.percentage) return null;
+    const formattedNumber = formatNumber(
+      Math.round(this.args.model.percentage),
+    );
+
+    return formattedNumber + '%';
+  }
+
+  /* Forecast Category */
+  @tracked forecastCategoryOptions = [
+    { name: 'None' },
+    { name: 'Omitted' },
+    { name: 'Pipeline' },
+    { name: 'Best Case' },
+    { name: 'Commit' },
+    { name: 'Closed' },
+  ] as Array<CategorySignature>;
+
+  @tracked selectedForecastCategory = {
+    name:
+      this.args.model.forecastCategory ||
+      this.forecastCategoryOptions[0].name ||
+      'Select',
+  };
+
+  @action updateForecastCategory(type: { name: string }) {
+    this.selectedForecastCategory = type;
+    this.args.model.forecastCategory = type.name;
+  }
+
   <template>
-    <CardContainer @displayBoundaries={{false}} class='card-container'>
+    <CardContainer @displayBoundaries={{false}} class='container'>
       <FieldContainer @tag='label' @label='Opportunity Name' @vertical={{true}}>
         <@fields.opportunityName />
       </FieldContainer>
@@ -525,11 +349,25 @@ class EditSecForOpportunityForm extends Component<typeof OpportunityForm> {
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Stage' @vertical={{true}}>
-        <@fields.stage />
+        <BoxelSelect
+          @searchEnabled={{true}}
+          @searchField='name'
+          @selected={{this.selectedStageCategory}}
+          @onChange={{this.updateStageCategory}}
+          @options={{this.stageCategoryOptions}}
+          class='select'
+          as |item|
+        >
+          <div>{{item.name}}</div>
+        </BoxelSelect>
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Percentage' @vertical={{true}}>
-        <@fields.percentage />
+        <BoxelInput
+          @value={{this.args.model.percentage}}
+          @onInput={{this.updatePercentage}}
+          @helperText={{this.getFormattedPercentage}}
+        />
       </FieldContainer>
 
       <FieldContainer
@@ -537,15 +375,29 @@ class EditSecForOpportunityForm extends Component<typeof OpportunityForm> {
         @label='Forecast Category'
         @vertical={{true}}
       >
-        <@fields.forecastCategory />
+        <BoxelSelect
+          @searchEnabled={{true}}
+          @searchField='name'
+          @selected={{this.selectedForecastCategory}}
+          @onChange={{this.updateForecastCategory}}
+          @options={{this.forecastCategoryOptions}}
+          class='select'
+          as |item|
+        >
+          <div>{{item.name}}</div>
+        </BoxelSelect>
       </FieldContainer>
     </CardContainer>
 
     <style>
-      .card-container {
+      .container {
         padding: var(--boxel-sp-lg);
         display: grid;
         gap: var(--boxel-sp);
+      }
+      .select {
+        padding: var(--boxel-sp-xs);
+        background-color: white;
       }
     </style>
   </template>
@@ -553,16 +405,18 @@ class EditSecForOpportunityForm extends Component<typeof OpportunityForm> {
 
 class ViewSecForOpportunityForm extends Component<typeof OpportunityForm> {
   <template>
-    <CardContainer @displayBoundaries={{true}} class='card-container'>
-      <@fields.opportunityName />
-    </CardContainer>
+    {{#if this.args.model.opportunityName}}
+      <CardContainer @displayBoundaries={{true}} class='container'>
+        <@fields.opportunityName />
+      </CardContainer>
+    {{/if}}
 
     <style>
-      .card-container {
+      .container {
         padding: var(--boxel-sp-lg);
         display: grid;
         gap: var(--boxel-sp);
-        background-color: #eeeeee50;
+        background-color: #fbfbfb;
       }
     </style>
   </template>
@@ -573,7 +427,7 @@ export class OpportunityForm extends CardDef {
   @field opportunityName = contains(StringField, {
     description: `Opportunity Name`,
   });
-  @field accountName = contains(AccountField, {
+  @field accountName = linksTo(CrmAccount, {
     description: `Account Name`,
   });
   @field closeDate = contains(DateCard, {
@@ -585,13 +439,13 @@ export class OpportunityForm extends CardDef {
   @field description = contains(MarkdownField, {
     description: `Description`,
   });
-  @field stage = contains(StageField, {
+  @field stage = contains(StringField, {
     description: `Stage`,
   });
-  @field percentage = contains(PercentageField, {
+  @field percentage = contains(NumberField, {
     description: `Percentage`,
   });
-  @field forecastCategory = contains(ForecastField, {
+  @field forecastCategory = contains(StringField, {
     description: `Forecast Category`,
   });
 
