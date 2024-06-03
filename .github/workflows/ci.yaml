@@ -177,8 +177,6 @@ jobs:
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
         working-directory: packages/host
-      - name: Add shard index to report filename
-        run: mv junit/host.xml junit/host-${{ matrix.shardIndex }}.xml
       - name: Upload junit report to GitHub Actions Artifacts
         uses: actions/upload-artifact@v4
         if: always()
