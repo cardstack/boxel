@@ -209,7 +209,11 @@ export class TestRealmAdapter implements RealmAdapter {
           return undefined;
         }
 
-        if (!possibleBaseDef[resolvedCodeRef]) {
+        if (
+          !Object.getOwnPropertySymbols(possibleBaseDef).includes(
+            resolvedCodeRef,
+          )
+        ) {
           possibleBaseDef[loadedBy] = this.#loader;
           possibleBaseDef[resolvedCodeRef] = {
             module: trimExecutableExtension(new URL(path, this.#paths.url))
