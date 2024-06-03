@@ -411,31 +411,36 @@ export default class CardService extends Service {
       );
     }
     let collectionDoc = json;
-    return (
-      await Promise.all(
-        collectionDoc.data.map(async (doc) => {
-          try {
-            return await this.createFromSerialized(
-              doc,
-              collectionDoc,
-              new URL(doc.id),
-            );
-          } catch (e) {
-            console.warn(
-              `Skipping ${
-                doc.id
-              }. Encountered error deserializing from search result for query ${JSON.stringify(
-                query,
-                null,
-                2,
-              )} against realm ${realmURL}`,
-              e,
-            );
-            return undefined;
-          }
-        }),
-      )
-    ).filter(Boolean) as CardDef[];
+    try {
+      console.time('search deserialization');
+      return (
+        await Promise.all(
+          collectionDoc.data.map(async (doc) => {
+            try {
+              return await this.createFromSerialized(
+                doc,
+                collectionDoc,
+                new URL(doc.id),
+              );
+            } catch (e) {
+              console.warn(
+                `Skipping ${
+                  doc.id
+                }. Encountered error deserializing from search result for query ${JSON.stringify(
+                  query,
+                  null,
+                  2,
+                )} against realm ${realmURL}`,
+                e,
+              );
+              return undefined;
+            }
+          }),
+        )
+      ).filter(Boolean) as CardDef[];
+    } finally {
+      console.timeEnd('search deserialization');
+    }
   }
 
   async getFields(

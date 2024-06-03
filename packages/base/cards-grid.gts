@@ -226,6 +226,20 @@ class Isolated extends Component<typeof CardsGrid> {
     if (!this.liveQuery) {
       return;
     }
+
+    // This is a nice place to measure the end of the app boot as this is where
+    // we'll get the instances to show in the index card's grid which is usually
+    // what we present when showing the app for the first time
+    if (
+      (globalThis as any).__bootStart &&
+      this.liveQuery.instances.length > 0
+    ) {
+      console.log(
+        `time since app boot: ${
+          performance.now() - (globalThis as any).__bootStart
+        } ms`,
+      );
+    }
     return this.liveQuery.instances;
   }
 
