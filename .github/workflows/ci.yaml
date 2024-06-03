@@ -142,9 +142,17 @@ jobs:
       - name: Fail if generated icons have been changed without underlying raw icon changing
         run: git diff --exit-code
 
-  host-build:
-    name: Build Host for tests
+  host-test:
+    name: Host Tests
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [1, 2, 3, 4, 5, 6]
+        shardTotal: [6]
+    concurrency:
+      group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/init
@@ -156,30 +164,6 @@ jobs:
         env:
           NODE_OPTIONS: --max_old_space_size=4096
         working-directory: packages/host
-      - name: Upload built code
-        uses: actions/upload-artifact@v4
-        with:
-          name: host-build
-          path: ./
-          retention-days: 30
-
-  host-test:
-    name: Host Tests
-    needs: host-build
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        shardIndex: [1, 2, 3, 4, 5, 6]
-        shardTotal: [6]
-    concurrency:
-      group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
-      cancel-in-progress: true
-    steps:
-      - name: Download build
-        uses: actions/download-artifact@v4
-        with:
-          path: host-build
       - name: Start realm servers
         run: pnpm start:all &
         working-directory: packages/realm-server
