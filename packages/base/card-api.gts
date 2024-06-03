@@ -2699,6 +2699,9 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
       instance[isSavedInstance] = false;
     }
     for (let [field, value] of values) {
+      if (!field) {
+        continue;
+      }
       if (field.name === 'id' && wasSaved && originalId !== value) {
         throw new Error(
           `cannot change the id for saved instance ${originalId}`,
