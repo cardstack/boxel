@@ -553,7 +553,12 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     return new WatchedArray(
       (prevArrayValue, arrayValue) =>
         instancePromise.then((instance) => {
-          applySubscribersToInstanceValue(instance, prevArrayValue, arrayValue);
+          applySubscribersToInstanceValue(
+            instance,
+            this,
+            prevArrayValue,
+            arrayValue,
+          );
           notifySubscribers(instance, field.name, arrayValue);
           logger.log(recompute(instance));
         }),
@@ -597,6 +602,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     return new WatchedArray((oldValue, value) => {
       applySubscribersToInstanceValue(
         instance,
+        this,
         oldValue as BaseDef[],
         value as BaseDef[],
       );
@@ -612,6 +618,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     return new WatchedArray((oldValue, value) => {
       applySubscribersToInstanceValue(
         instance,
+        this,
         oldValue as BaseDef[],
         value as BaseDef[],
       );
@@ -1324,6 +1331,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
         instancePromise.then((instance) => {
           applySubscribersToInstanceValue(
             instance,
+            this,
             oldValue as BaseDef[],
             value as BaseDef[],
           );
@@ -1338,6 +1346,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
     return new WatchedArray((oldValue, value) => {
       applySubscribersToInstanceValue(
         instance,
+        this,
         oldValue as BaseDef[],
         value as BaseDef[],
       );
@@ -1372,6 +1381,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
     return new WatchedArray((oldValue, value) => {
       applySubscribersToInstanceValue(
         instance,
+        this,
         oldValue as BaseDef[],
         value as BaseDef[],
       );
@@ -2096,9 +2106,15 @@ export function subscribeToChanges(
     includeComputeds: false,
   });
   Object.keys(fields).forEach((fieldName) => {
-    let value = peekAtField(fieldOrCard, fieldName);
-    if (isCardOrField(value) || isArrayOfCardOrField(value)) {
-      subscribeToChanges(value, subscriber);
+    let field = getField(fieldOrCard, fieldName) as Field<typeof BaseDef>;
+    if (
+      field &&
+      (field.fieldType === 'contains' || field.fieldType === 'containsMany')
+    ) {
+      let value = peekAtField(fieldOrCard, fieldName);
+      if (isCardOrField(value) || isArrayOfCardOrField(value)) {
+        subscribeToChanges(value, subscriber);
+      }
     }
   });
 }
@@ -2131,24 +2147,35 @@ export function unsubscribeFromChanges(
     includeComputeds: false,
   });
   Object.keys(fields).forEach((fieldName) => {
-    let value = peekAtField(fieldOrCard, fieldName);
-    if (isCardOrField(value) || isArrayOfCardOrField(value)) {
-      unsubscribeFromChanges(value, subscriber, visited);
+    let field = getField(fieldOrCard, fieldName) as Field<typeof BaseDef>;
+    if (
+      field &&
+      (field.fieldType === 'contains' || field.fieldType === 'containsMany')
+    ) {
+      let value = peekAtField(fieldOrCard, fieldName);
+      if (isCardOrField(value) || isArrayOfCardOrField(value)) {
+        unsubscribeFromChanges(value, subscriber);
+      }
     }
   });
 }
 
 function applySubscribersToInstanceValue(
   instance: BaseDef,
+  field: Field<typeof BaseDef>,
   oldValue: BaseDef | BaseDef[],
   newValue: BaseDef | BaseDef[],
 ) {
-  // If value doesn't have its own subscribers,
-  // we can use instance's subscribers.
-  let changeSubscribers = subscribers.get(instance);
-  if (isArrayOfCardOrField(oldValue) && subscribers.has(oldValue[0])) {
+  let changeSubscribers: Set<CardChangeSubscriber> | undefined = undefined;
+  if (field.fieldType === 'contains' || field.fieldType === 'containsMany') {
+    changeSubscribers = subscribers.get(instance);
+  } else if (
+    isArrayOfCardOrField(oldValue) &&
+    oldValue[0] &&
+    subscribers.has(oldValue[0])
+  ) {
     changeSubscribers = subscribers.get(oldValue[0]);
-  } else if (isCardOrField(oldValue) && subscribers.has(oldValue)) {
+  } else if (isCardOrField(oldValue)) {
     changeSubscribers = subscribers.get(oldValue);
   }
 
@@ -2642,7 +2669,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
       }
       let relativeToVal = instance[relativeTo];
       return [
-        fieldName,
+        field,
         await getDeserializedValue({
           card,
           loadedValue: loadedValues.get(fieldName),
@@ -2656,7 +2683,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
         }),
       ];
     }),
-  )) as [keyof BaseInstanceType<T>, any][];
+  )) as [Field<T>, any][];
 
   // this block needs to be synchronous
   {
@@ -2667,8 +2694,8 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
       originalId = (instance as CardDef).id; // the instance is a composite card
       instance[isSavedInstance] = false;
     }
-    for (let [fieldName, value] of values) {
-      if (fieldName === 'id' && wasSaved && originalId !== value) {
+    for (let [field, value] of values) {
+      if (field.name === 'id' && wasSaved && originalId !== value) {
         throw new Error(
           `cannot change the id for saved instance ${originalId}`,
         );
@@ -2677,16 +2704,16 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
 
       // Before updating field's value, we also have to make sure
       // the subscribers also subscribes to a new value.
-      let existingValue = deserialized.get(fieldName as string);
+      let existingValue = deserialized.get(field.name as string);
       if (
         isCardOrField(existingValue) ||
         isArrayOfCardOrField(existingValue) ||
         isCardOrField(value) ||
         isArrayOfCardOrField(value)
       ) {
-        applySubscribersToInstanceValue(instance, existingValue, value);
+        applySubscribersToInstanceValue(instance, field, existingValue, value);
       }
-      deserialized.set(fieldName as string, value);
+      deserialized.set(field.name as string, value);
       logger.log(recompute(instance));
     }
     if (isCardInstance(instance) && resource.id != null) {
