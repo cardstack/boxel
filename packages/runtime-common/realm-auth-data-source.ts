@@ -8,8 +8,7 @@ type RealmInfo = {
 };
 
 export interface IRealmAuthDataSource {
-  getLoader(): Loader;
-  getOriginRealmURL(): string | undefined;
+  get originalRealmURL(): string | undefined;
   getRealmInfo(url: string): Promise<RealmInfo | null>;
   getJWT(realmURL: string): Promise<string>;
   resetAuth(realmURL: string): void;
@@ -22,20 +21,16 @@ export class RealmAuthDataSource implements IRealmAuthDataSource {
   private visitedRealms = new Map<string, RealmInfoAndAuth>();
   private matrixClient: MatrixClient;
   private loader: Loader;
-  realmURL: string;
+  private _originRealmURL: string;
 
   constructor(matrixClient: MatrixClient, loader: Loader, realmURL: string) {
     this.matrixClient = matrixClient;
     this.loader = loader;
-    this.realmURL = realmURL;
+    this._originRealmURL = realmURL;
   }
 
-  getLoader(): Loader {
-    return this.loader;
-  }
-
-  getOriginRealmURL(): string {
-    return this.realmURL;
+  get originalRealmURL(): string {
+    return this._originRealmURL;
   }
 
   async getJWT(realmURL: string): Promise<string> {

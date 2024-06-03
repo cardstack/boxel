@@ -53,13 +53,8 @@ export default class LoaderService extends Service {
       new URL(config.resolvedBaseRealmURL),
     );
     loader.prependURLHandlers([
-      addAuthorizationHeader({
-        getLoader: () => {
-          return this.loader;
-        },
-        getOriginRealmURL: () => {
-          return undefined;
-        },
+      addAuthorizationHeader(loader, {
+        originalRealmURL: undefined,
         getJWT: async (realmURL: string) => {
           return (await this.getRealmSession(new URL(realmURL))).rawRealmToken!;
         },

@@ -315,6 +315,7 @@ export class Realm {
     this.loaderTemplate = loader;
     this.loaderTemplate.registerURLHandler(
       addAuthorizationHeader(
+        loader,
         new RealmAuthDataSource(
           this.#matrixClient,
           this.loaderTemplate,
