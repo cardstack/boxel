@@ -5,468 +5,458 @@ import {
 import Component from '@glimmer/component';
 import StringCard from 'https://cardstack.com/base/string';
 import { contains, field } from 'https://cardstack.com/base/card-api';
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { cn } from '@cardstack/boxel-ui/helpers';
+import { not } from '@cardstack/boxel-ui/helpers';
 
 // @ts-ignore
-import lodash from 'https://cdn.jsdelivr.net/npm/lodash@4.17.21/+esm';
 import {
   Chessboard,
-  FEN,
   INPUT_EVENT_TYPE,
+  COLOR,
+  PROMOTION_DIALOG_RESULT_TYPE,
   // @ts-ignore
-} from 'https://cdn.jsdelivr.net/npm/cm-chessboard@8.7.3/+esm';
-// 'https://cdn.jsdelivr.net/npm/cm-chessboard@8/src/Chessboard.js' //this url is much slower bcos there are separate request to js
-// You can use unpkg: 'https://unpkg.com/cm-chessboard@8.7.4/src/Chessboard.js'; //but its even slower
+} from 'https://esm.run/cm-chessboard@8.7.3';
+
+//@ts-ignore
+import { action } from '@ember/object';
+//@ts-ignore
+import { Chess as ChessJS } from 'https://cdn.jsdelivr.net/npm/chess.js/+esm';
+//@ts-ignore
+import {
+  MARKER_TYPE,
+  Markers,
+  //@ts-ignore
+} from 'https://cdn.jsdelivr.net/npm/cm-chessboard@8.7.3/src/extensions/markers/Markers.js/+esm';
 
 import Modifier from 'ember-modifier';
+import { Resource } from 'ember-resources';
+
+import BooleanField from 'https://cardstack.com/base/boolean';
+import { tracked } from '@glimmer/tracking';
 
 type ChessboardModifierSignature = {
   Args: {
     Named: {
-      fen?: string;
+      game: ChessJS;
+      updatePgn: (pgn: string) => void;
     };
   };
   Element: HTMLElement;
 };
-
-function inputHandler(event: any) {
-  console.log(event);
-  switch (event.type) {
-    case INPUT_EVENT_TYPE.moveInputStarted:
-      console.log(`moveInputStarted: ${event.squareFrom}`);
-      return true; // false cancels move
-    case INPUT_EVENT_TYPE.validateMoveInput:
-      console.log(`validateMoveInput: ${event.squareFrom}-${event.squareTo}`);
-      return true; // false cancels move
-    case INPUT_EVENT_TYPE.moveInputCanceled:
-      console.log(`moveInputCanceled`);
-      break;
-    case INPUT_EVENT_TYPE.moveInputFinished:
-      console.log(`moveInputFinished`);
-      break;
-    case INPUT_EVENT_TYPE.movingOverSquare:
-      console.log(`movingOverSquare: ${event.squareTo}`);
-      break;
-  }
-  return;
-}
 
 class ChessboardModifier extends Modifier<ChessboardModifierSignature> {
   chessboard: any;
   modify(
     element: HTMLElement,
     _positional: [],
-    { fen }: ChessboardModifierSignature['Args']['Named'],
+    { game, updatePgn }: ChessboardModifierSignature['Args']['Named'],
   ) {
-    if (this.chessboard == undefined) {
+    function inputHandler(event: any) {
+      console.log(event);
+      if (event.type === INPUT_EVENT_TYPE.movingOverSquare) {
+        return; // ignore this event
+      }
+      if (event.type !== INPUT_EVENT_TYPE.moveInputFinished) {
+        event.chessboard.removeMarkers(MARKER_TYPE.bevel);
+        event.chessboard.removeMarkers(MARKER_TYPE.dot);
+      }
+      if (event.type === INPUT_EVENT_TYPE.moveInputStarted) {
+        console.log(`moveInputStarted: ${event.squareFrom}`);
+        const moves = game.moves({
+          square: event.squareFrom,
+          verbose: true,
+        });
+
+        event.chessboard.addLegalMovesMarkers(moves);
+        return moves.length > 0;
+      } else if (event.type === INPUT_EVENT_TYPE.validateMoveInput) {
+        console.log(`validateMoveInput: ${event.squareFrom}-${event.squareTo}`);
+        const move = {
+          from: event.squareFrom,
+          to: event.squareTo,
+          promotion: event.promotion,
+        };
+        const result = game.move(move);
+        if (result) {
+          event.chessboard.state.moveInputProcess.then(() => {
+            // wait for the move input process has finished
+            event.chessboard.setPosition(game.fen(), true).then(() => {
+              updatePgn(game.pgn());
+              // update position, maybe castled and wait for animation has finished
+              // makeEngineMove(event.chessboard)
+            });
+          });
+        } else {
+          // promotion?
+          let possibleMoves = game.moves({
+            square: event.squareFrom,
+            verbose: true,
+          });
+          for (const possibleMove of possibleMoves) {
+            if (possibleMove.promotion && possibleMove.to === event.squareTo) {
+              event.chessboard.showPromotionDialog(
+                event.squareTo,
+                COLOR.white,
+                (result: any) => {
+                  console.log('promotion result', result);
+                  if (
+                    result.type === PROMOTION_DIALOG_RESULT_TYPE.pieceSelected
+                  ) {
+                    game.move({
+                      from: event.squareFrom,
+                      to: event.squareTo,
+                      promotion: result.piece.charAt(1),
+                    });
+                    event.chessboard.setPosition(game.fen(), true);
+                    // makeEngineMove(event.chessboard)
+                  } else {
+                    // promotion canceled
+                    event.chessboard.enableMoveInput(inputHandler, COLOR.white);
+                    event.chessboard.setPosition(game.fen(), true);
+                  }
+                },
+              );
+              return true;
+            }
+          }
+        }
+        return result;
+      }
+    }
+    if (this.chessboard === undefined) {
       this.chessboard = new Chessboard(element, {
-        position: fen ?? FEN.start,
+        position: game.fen(),
         assetsUrl: 'https://cdn.jsdelivr.net/npm/cm-chessboard@latest/assets/',
         style: {
           cssClass: 'green',
           pieces: {
-            // @ts-ignore
             file: 'pieces/staunty.svg',
           },
         },
+        extensions: [
+          { class: Markers, props: { autoMarkers: MARKER_TYPE.square } },
+        ],
       });
       this.chessboard.enableMoveInput(inputHandler);
     } else {
-      this.chessboard.setPosition(fen);
+      //I hate that I have to do this
+      //It comes from inputHandler function perhaps needs to use an arrow
+      this.chessboard.setPosition(game.fen());
+      this.chessboard.disableMoveInput();
+      this.chessboard.enableMoveInput(inputHandler);
     }
   }
 }
 
-interface Signature {
-  Args: {
-    fen?: string;
+interface ChessJSResourceArgs {
+  named: {
+    pgn?: string;
   };
 }
 
-class ChessboardComponent extends Component<Signature> {
+class ChessJSResource extends Resource<ChessJSResourceArgs> {
+  game: ChessJS;
+  snapshot: ChessJS;
+  private future: any[] = [];
+  @tracked snapshotPgn: string | undefined;
+
+  modify(_positional: never[], named: ChessJSResourceArgs['named']) {
+    this.game = new ChessJS();
+    this.snapshot = new ChessJS();
+    if (named.pgn) {
+      this.game.loadPgn(named.pgn);
+    }
+
+    if (this.snapshotPgn) {
+      this.snapshot.loadPgn(this.snapshotPgn);
+    } else {
+      this.snapshot.loadPgn(named.pgn);
+    }
+  }
+
+  @action
+  prev() {
+    let tmp = new ChessJS();
+    let moves = this.game.history();
+    let previous = moves.length - this.future.length - 1;
+    for (var i = 0; i < previous; i++) {
+      tmp.move(moves[i]);
+    }
+    let previousPgn = tmp.pgn();
+    tmp.move(moves[previous]);
+    let futurePgn = tmp.pgn();
+    this.future.push(futurePgn);
+    this.snapshotPgn = previousPgn;
+  }
+
+  @action
+  next() {
+    this.snapshotPgn = this.future.pop();
+  }
+
+  @action
+  updatePgn(pgn: string) {
+    this.future = [];
+    this.snapshotPgn = pgn;
+  }
+
+  @action reset() {
+    this.snapshotPgn = '';
+    this.future = [];
+    this.game = new ChessJS();
+    this.snapshot = new ChessJS();
+  }
+}
+
+function getChessJS(parent: object, pgn: () => string | undefined) {
+  return ChessJSResource.from(parent, () => ({
+    named: {
+      pgn: pgn(),
+    },
+  }));
+}
+
+interface ChessGameComponentSignature {
+  Args: {
+    pgn?: string;
+    updatePgn?: (pgn: string) => void;
+    analysis?: boolean;
+  };
+}
+
+type GameState = 'checkmate' | 'check' | 'draw' | 'play';
+
+class ChessGameComponent extends Component<ChessGameComponentSignature> {
   <template>
-    <div id='board' {{ChessboardModifier fen=this.args.fen}}>
+    <div class='content'>
+      <div class='position-info'>
+        <div><strong>Pgn:</strong> {{this.pgnDisplay}}</div>
+      </div>
+      <div class='board-container'>
+        <div
+          id='board'
+          class={{cn disabled=this.notAtMostCurrentMove}}
+          {{ChessboardModifier game=this.snapshot updatePgn=this.updatePgn}}
+        >
+        </div>
+      </div>
+      <div class='actions'>
+        <button {{on 'click' (fn this.prevMove)}}>Prev Move</button>
+        <button {{on 'click' (fn this.nextMove)}}>Next Move</button>
+        <button {{on 'click' (fn this.backToPosition)}}>Back To Game Position</button>
+        {{#if (not this.args.analysis)}}
+          <button {{on 'click' (fn this.reset)}}>Reset</button>
+        {{/if}}
+      </div>
+
+      <div class='info'>
+
+        <div class='game-info'>
+          <h2> Info </h2>
+          <div><strong>Turn:</strong> {{this.turn}}</div>
+          <div><strong>State:</strong> {{this.state}}</div>
+          <div><strong>Move:</strong> {{this.moveNumber}}</div>
+        </div>
+        <div class='move-info'>
+          <h2>Game Moves</h2>
+          <div class='game-moves'>
+            {{#each this.moves as |move|}}
+              <div>
+                {{move}}
+              </div>
+            {{/each}}
+          </div>
+
+        </div>
+      </div>
+
     </div>
     <style>
+      .content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        padding: 15px;
+        max-width: 700px;
+      }
+      .actions {
+        display: flex;
+        flex-direction: row;
+        gap: 10px;
+      }
       #board {
         width: 600px;
       }
+      #board.disabled {
+        pointer-events: none;
+      }
+      .selected {
+        color: red;
+      }
+      .info {
+        display: flex;
+        width: 100%;
+      }
+      .game-info {
+        flex: 1;
+      }
+
+      .move-info {
+        flex: 3;
+      }
+      .game-moves {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 2px;
+      }
     </style>
-    {{! needs unscoped or global }}
-    {{! import 'https://cdn.jsdelivr.net/npm/cm-chessboard@8.7.4/assets/chessboard.css'; }}
+    <link
+      href='https://cdn.jsdelivr.net/npm/cm-chessboard@8.7.3/assets/chessboard.css'
+      rel='stylesheet'
+    />
+    <link
+      rel='stylesheet'
+      href='https://cdn.jsdelivr.net/npm/cm-chessboard@8.7.3/assets/extensions/markers/markers.css'
+    />
+    {{! This is absolutely needed so piece doesn't diapplear when dragging }}
     <style unscoped>
-      .cm-chessboard .board.input-enabled .square {
-        cursor: pointer;
+      .cm-chessboard-draggable-piece {
+        z-index: 100;
       }
+    </style>
+  </template>
 
-      .cm-chessboard .coordinates,
-      .cm-chessboard .markers-layer,
-      .cm-chessboard .pieces-layer,
-      .cm-chessboard .markers-top-layer {
-        pointer-events: none;
-      }
+  private chessJSResource = getChessJS(this, () => this.args.pgn);
+  @tracked selectedMoveIndex: number | undefined;
 
-      .cm-chessboard-content .list-inline {
-        padding-left: 0;
-        list-style: none;
-      }
+  @action
+  updatePgn(pgn: string) {
+    if (this.args.analysis) {
+      this.chessJSResource.updatePgn(pgn);
+    } else {
+      this.args.updatePgn!(pgn);
+    }
+  }
 
-      .cm-chessboard-content .list-inline-item {
-        display: inline-block;
-      }
-      .cm-chessboard-content .list-inline-item:not(:last-child) {
-        margin-right: 1rem;
-      }
+  get notAtMostCurrentMove() {
+    return (
+      !this.args.analysis &&
+      !(this.pgnDisplay === this.game.pgn({ strict: true }))
+    );
+  }
 
-      .cm-chessboard-content .list-inline {
-        padding-left: 0;
-        list-style: none;
-      }
+  //Game state
+  get game() {
+    return this.chessJSResource.game;
+  }
+  get pgnDisplay() {
+    return this.snapshot.pgn({ strict: true });
+  }
 
-      .cm-chessboard-content .list-inline-item {
-        display: inline-block;
-      }
-      .cm-chessboard-content .list-inline-item:not(:last-child) {
-        margin-right: 1rem;
-      }
+  get isGameOver() {
+    return this.game.isGameOver();
+  }
 
-      .cm-chessboard-accessibility.visually-hidden {
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border: 0;
-      }
+  get moves() {
+    return this.game.history({ verbose: true }).map((move: any) => move.san);
+  }
 
-      .cm-chessboard.default .board .square.white {
-        fill: #ecdab9;
-      }
+  @action
+  reset() {
+    this.args.updatePgn!('');
+    this.chessJSResource.reset();
+  }
+  //snapshot state
+  get snapshot() {
+    return this.chessJSResource.snapshot;
+  }
 
-      .cm-chessboard.default .board .square.black {
-        fill: #c5a076;
-      }
+  get snapshotHistory() {
+    return this.snapshot.history({ verbose: true });
+  }
+  get snapshotMoves() {
+    return this.snapshotHistory.map((move: any) => move.san);
+  }
 
-      .cm-chessboard.default.border-type-thin .board .border {
-        stroke: #c5a076;
-        stroke-width: 0.7%;
-        fill: #c5a076;
-      }
+  get fen() {
+    return this.snapshot.fen();
+  }
 
-      .cm-chessboard.default.border-type-none .board .border {
-        stroke: #c5a076;
-        stroke-width: 0;
-        fill: #c5a076;
-      }
+  get turn() {
+    return this.snapshot.turn() === 'b' ? 'black' : 'white';
+  }
 
-      .cm-chessboard.default.border-type-frame .board .border {
-        fill: #ecdab9;
-        stroke: none;
-      }
+  get moveNumber() {
+    return this.snapshot.moveNumber();
+  }
 
-      .cm-chessboard.default.border-type-frame .board .border-inner {
-        fill: #c5a076;
-        stroke: #c5a076;
-        stroke-width: 0.7%;
-      }
+  get state(): GameState {
+    if (this.snapshot.isCheckmate()) {
+      return 'checkmate';
+    }
+    if (this.snapshot.inCheck()) {
+      return 'check';
+    }
+    if (this.snapshot.isDraw()) {
+      return 'draw';
+    }
+    return 'play';
+  }
 
-      .cm-chessboard.default .coordinates {
-        pointer-events: none;
-        user-select: none;
-      }
-      .cm-chessboard.default .coordinates .coordinate {
-        fill: #b5936d;
-        font-size: 7px;
-        cursor: default;
-      }
-      .cm-chessboard.default .coordinates .coordinate.black {
-        fill: #eeddbf;
-      }
-      .cm-chessboard.default .coordinates .coordinate.white {
-        fill: #b5936d;
-      }
+  @action
+  prevMove() {
+    this.chessJSResource.prev();
+  }
 
-      .cm-chessboard.default-contrast .board .square.white {
-        fill: #ecdab9;
-      }
+  @action
+  nextMove() {
+    this.chessJSResource.next();
+  }
 
-      .cm-chessboard.default-contrast .board .square.black {
-        fill: #c5a076;
-      }
+  @action
+  backToPosition() {
+    this.selectedMoveIndex = undefined;
+    this.chessJSResource.updatePgn(this.game.pgn());
+  }
+}
 
-      .cm-chessboard.default-contrast.border-type-thin .board .border {
-        stroke: #c5a076;
-        stroke-width: 0.7%;
-        fill: #c5a076;
-      }
+class Isolated extends BoxelComponent<typeof Chess> {
+  @action
+  updatePgn(pgn: string): void {
+    this.args.model.pgn = pgn;
+  }
 
-      .cm-chessboard.default-contrast.border-type-none .board .border {
-        stroke: #c5a076;
-        stroke-width: 0;
-        fill: #c5a076;
-      }
+  // have to toggle between analysis and play mode
+  get mode() {
+    return this.args.model.analysis ? 'Analysis' : 'Game';
+  }
 
-      .cm-chessboard.default-contrast.border-type-frame .board .border {
-        fill: #ecdab9;
-        stroke: none;
+  <template>
+    <div class='main'>
+      <div class={{cn analysis=this.args.model.analysis}}>
+        <h1>
+          {{this.mode}}
+        </h1>
+      </div>
+      <ChessGameComponent
+        @pgn={{this.args.model.pgn}}
+        @updatePgn={{this.updatePgn}}
+        @analysis={{this.args.model.analysis}}
+      />
+    </div>
+    <style>
+      .main {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
       }
-
-      .cm-chessboard.default-contrast.border-type-frame .board .border-inner {
-        fill: #c5a076;
-        stroke: #c5a076;
-        stroke-width: 0.7%;
-      }
-
-      .cm-chessboard.default-contrast .coordinates {
-        pointer-events: none;
-        user-select: none;
-      }
-      .cm-chessboard.default-contrast .coordinates .coordinate {
-        fill: #b5936d;
-        font-size: 7px;
-        cursor: default;
-      }
-      .cm-chessboard.default-contrast .coordinates .coordinate.black {
-        fill: #333;
-      }
-      .cm-chessboard.default-contrast .coordinates .coordinate.white {
-        fill: #333;
-      }
-
-      .cm-chessboard.green .board .square.white {
-        fill: #e0ddcc;
-      }
-
-      .cm-chessboard.green .board .square.black {
-        fill: #4c946a;
-      }
-
-      .cm-chessboard.green.border-type-thin .board .border {
-        stroke: #4c946a;
-        stroke-width: 0.7%;
-        fill: #4c946a;
-      }
-
-      .cm-chessboard.green.border-type-none .board .border {
-        stroke: #4c946a;
-        stroke-width: 0;
-        fill: #4c946a;
-      }
-
-      .cm-chessboard.green.border-type-frame .board .border {
-        fill: #e0ddcc;
-        stroke: none;
-      }
-
-      .cm-chessboard.green.border-type-frame .board .border-inner {
-        fill: #4c946a;
-        stroke: #4c946a;
-        stroke-width: 0.7%;
-      }
-
-      .cm-chessboard.green .coordinates {
-        pointer-events: none;
-        user-select: none;
-      }
-      .cm-chessboard.green .coordinates .coordinate {
-        fill: #468862;
-        font-size: 7px;
-        cursor: default;
-      }
-      .cm-chessboard.green .coordinates .coordinate.black {
-        fill: #e2e0d0;
-      }
-      .cm-chessboard.green .coordinates .coordinate.white {
-        fill: #468862;
-      }
-
-      .cm-chessboard.blue .board .square.white {
-        fill: #d8ecfb;
-      }
-
-      .cm-chessboard.blue .board .square.black {
-        fill: #86afcf;
-      }
-
-      .cm-chessboard.blue.border-type-thin .board .border {
-        stroke: #86afcf;
-        stroke-width: 0.7%;
-        fill: #86afcf;
-      }
-
-      .cm-chessboard.blue.border-type-none .board .border {
-        stroke: #86afcf;
-        stroke-width: 0;
-        fill: #86afcf;
-      }
-
-      .cm-chessboard.blue.border-type-frame .board .border {
-        fill: #d8ecfb;
-        stroke: none;
-      }
-
-      .cm-chessboard.blue.border-type-frame .board .border-inner {
-        fill: #86afcf;
-        stroke: #86afcf;
-        stroke-width: 0.7%;
-      }
-
-      .cm-chessboard.blue .coordinates {
-        pointer-events: none;
-        user-select: none;
-      }
-      .cm-chessboard.blue .coordinates .coordinate {
-        fill: #7ba1be;
-        font-size: 7px;
-        cursor: default;
-      }
-      .cm-chessboard.blue .coordinates .coordinate.black {
-        fill: #dbeefb;
-      }
-      .cm-chessboard.blue .coordinates .coordinate.white {
-        fill: #7ba1be;
-      }
-
-      .cm-chessboard.chess-club .board .square.white {
-        fill: #e6d3b1;
-      }
-
-      .cm-chessboard.chess-club .board .square.black {
-        fill: #af6b3f;
-      }
-
-      .cm-chessboard.chess-club.border-type-thin .board .border {
-        stroke: #692e2b;
-        stroke-width: 0.7%;
-        fill: #af6b3f;
-      }
-
-      .cm-chessboard.chess-club.border-type-none .board .border {
-        stroke: #692e2b;
-        stroke-width: 0;
-        fill: #af6b3f;
-      }
-
-      .cm-chessboard.chess-club.border-type-frame .board .border {
-        fill: #692e2b;
-        stroke: none;
-      }
-
-      .cm-chessboard.chess-club.border-type-frame .board .border-inner {
-        fill: #af6b3f;
-        stroke: #692e2b;
-        stroke-width: 0.7%;
-      }
-
-      .cm-chessboard.chess-club .coordinates {
-        pointer-events: none;
-        user-select: none;
-      }
-      .cm-chessboard.chess-club .coordinates .coordinate {
-        fill: #e6d3b1;
-        font-size: 7px;
-        cursor: default;
-      }
-      .cm-chessboard.chess-club .coordinates .coordinate.black {
-        fill: #e6d3b1;
-      }
-      .cm-chessboard.chess-club .coordinates .coordinate.white {
-        fill: #af6b3f;
-      }
-
-      .cm-chessboard.chessboard-js .board .square.white {
-        fill: #f0d9b5;
-      }
-
-      .cm-chessboard.chessboard-js .board .square.black {
-        fill: #b58863;
-      }
-
-      .cm-chessboard.chessboard-js.border-type-thin .board .border {
-        stroke: #404040;
-        stroke-width: 0.7%;
-        fill: #b58863;
-      }
-
-      .cm-chessboard.chessboard-js.border-type-none .board .border {
-        stroke: #404040;
-        stroke-width: 0;
-        fill: #b58863;
-      }
-
-      .cm-chessboard.chessboard-js.border-type-frame .board .border {
-        fill: #f0d9b5;
-        stroke: none;
-      }
-
-      .cm-chessboard.chessboard-js.border-type-frame .board .border-inner {
-        fill: #b58863;
-        stroke: #404040;
-        stroke-width: 0.7%;
-      }
-
-      .cm-chessboard.chessboard-js .coordinates {
-        pointer-events: none;
-        user-select: none;
-      }
-      .cm-chessboard.chessboard-js .coordinates .coordinate {
-        fill: #404040;
-        font-size: 7px;
-        cursor: default;
-      }
-      .cm-chessboard.chessboard-js .coordinates .coordinate.black {
-        fill: #f0d9b5;
-      }
-      .cm-chessboard.chessboard-js .coordinates .coordinate.white {
-        fill: #b58863;
-      }
-
-      .cm-chessboard.black-and-white .board .square.white {
-        fill: #ffffff;
-      }
-
-      .cm-chessboard.black-and-white .board .square.black {
-        fill: #9c9c9c;
-      }
-
-      .cm-chessboard.black-and-white.border-type-thin .board .border {
-        stroke: #9c9c9c;
-        stroke-width: 0.7%;
-        fill: #9c9c9c;
-      }
-
-      .cm-chessboard.black-and-white.border-type-none .board .border {
-        stroke: #9c9c9c;
-        stroke-width: 0;
-        fill: #9c9c9c;
-      }
-
-      .cm-chessboard.black-and-white.border-type-frame .board .border {
-        fill: #ffffff;
-        stroke: none;
-      }
-
-      .cm-chessboard.black-and-white.border-type-frame .board .border-inner {
-        fill: #9c9c9c;
-        stroke: #9c9c9c;
-        stroke-width: 0.7%;
-      }
-
-      .cm-chessboard.black-and-white .coordinates {
-        pointer-events: none;
-        user-select: none;
-      }
-      .cm-chessboard.black-and-white .coordinates .coordinate {
-        fill: #909090;
-        font-size: 7px;
-        cursor: default;
-      }
-      .cm-chessboard.black-and-white .coordinates .coordinate.black {
-        fill: white;
-      }
-      .cm-chessboard.black-and-white .coordinates .coordinate.white {
-        fill: #909090;
+      .analysis {
+        color: blue;
       }
     </style>
   </template>
@@ -474,24 +464,14 @@ class ChessboardComponent extends Component<Signature> {
 
 export class Chess extends CardDef {
   static displayName = 'Chess';
-
-  @field fen = contains(StringCard);
+  @field pgn = contains(StringCard);
+  @field analysis = contains(BooleanField);
 
   @field title = contains(StringCard, {
     computeVia: function (this: Chess) {
-      return lodash.kebabCase('BobbyFischer');
+      return 'Chess Game';
     },
   });
 
-  static isolated = class Isolated extends BoxelComponent<typeof this> {
-    get fenString() {
-      return this.args.model.fen;
-    }
-    <template>
-      <div>
-        {{this.fenString}}
-      </div>
-      <ChessboardComponent @fen={{this.args.model.fen}} />
-    </template>
-  };
+  static isolated = Isolated;
 }

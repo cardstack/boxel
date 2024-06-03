@@ -11,6 +11,11 @@ export interface LooseSingleCardDocument {
   included?: CardResource<Saved>[];
 }
 
+export type PatchData = {
+  attributes?: CardResource['attributes'];
+  relationships?: CardResource['relationships'];
+};
+
 export { Deferred } from './deferred';
 export { CardError } from './error';
 
@@ -61,7 +66,11 @@ export const isNode =
 
 export { SupportedMimeType } from './router';
 export { VirtualNetwork, type ResponseWithNodeStream } from './virtual-network';
-export { RealmAuthHandler } from './realm-auth-handler';
+export {
+  IRealmAuthDataSource,
+  RealmAuthDataSource,
+} from './realm-auth-data-source';
+export { addAuthorizationHeader } from './add-authorization-header';
 
 export type {
   Kind,
