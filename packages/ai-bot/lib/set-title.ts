@@ -1,9 +1,4 @@
-import {
-  Room,
-  MatrixClient,
-  type MatrixEvent,
-  type IEventRelation,
-} from 'matrix-js-sdk';
+import { type MatrixEvent, type IEventRelation } from 'matrix-js-sdk';
 import OpenAI from 'openai';
 import {
   type OpenAIPromptMessage,
@@ -11,6 +6,7 @@ import {
   isPatchCommandEvent,
   attachedCardsToMessage,
 } from '../helpers';
+import { MatrixClient } from './matrix';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
 
 const SET_TITLE_SYSTEM_MESSAGE = `You are a chat titling system, you must read the conversation and return a suggested title of no more than six words.
@@ -21,7 +17,7 @@ Explain the general actions and user intent. If 'patchCard' was used, express th
 export async function setTitle(
   openai: OpenAI,
   client: MatrixClient,
-  room: Room,
+  roomId: string,
   history: DiscreteMatrixEvent[],
   userId: string,
   event?: MatrixEvent,
@@ -52,7 +48,7 @@ export async function setTitle(
   let title = result.choices[0].message.content || 'no title';
   // strip leading and trailing quotes
   title = title.replace(/^"(.*)"$/, '$1');
-  return await client.setRoomName(room.roomId, title);
+  return await client.setRoomName(roomId, title);
 }
 
 export function getStartOfConversation(

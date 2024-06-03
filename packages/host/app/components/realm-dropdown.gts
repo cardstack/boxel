@@ -8,8 +8,6 @@ import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 
 import { type RealmInfo, RealmPaths } from '@cardstack/runtime-common';
 
-import ENV from '@cardstack/host/config/environment';
-
 import RealmIcon from './operator-mode/realm-icon';
 
 import type RealmInfoService from '../services/realm-info-service';
@@ -17,7 +15,6 @@ import type RealmInfoService from '../services/realm-info-service';
 export interface RealmDropdownItem extends RealmInfo {
   path: string;
 }
-const { ownRealmURL } = ENV;
 
 interface Signature {
   Args: {
@@ -165,15 +162,8 @@ export default class RealmDropdown extends Component<Signature> {
       return selectedRealm;
     }
 
-    // if there is no selected realm then default to the user's personal
-    // realm. Currently the personal realm has not yet been implemented,
-    // until then default to the realm serving the host app if it is writable,
-    // otherwise default to the first writable realm lexically
-    let ownRealm = this.realms.find((r) => r.path === ownRealmURL);
-    if (ownRealm) {
-      return ownRealm;
-    } else {
-      return this.realms[0];
-    }
+    return this.realms.find(
+      (realm) => realm.path === this.realmInfoService.userDefaultRealm.path,
+    );
   }
 }
