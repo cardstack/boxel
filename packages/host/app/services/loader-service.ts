@@ -5,6 +5,7 @@ import {
   VirtualNetwork,
   baseRealm,
   addAuthorizationHeader,
+  IRealmAuthDataSource,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
@@ -51,34 +52,38 @@ export default class LoaderService extends Service {
       new URL(baseRealm.url),
       new URL(config.resolvedBaseRealmURL),
     );
-    loader.prependURLHandlers([(req) => this.addAuthorizationHeader(req)]);
+    loader.prependURLHandlers([
+      addAuthorizationHeader({
+        getLoader: () => {
+          return this.loader;
+        },
+        getOriginRealmURL: () => {
+          return undefined;
+        },
+        getJWT: async (realmURL: string) => {
+          return (await this.getRealmSession(new URL(realmURL))).rawRealmToken!;
+        },
+        getRealmInfo: async (url: string) => {
+          let realmURL = await this.realmInfoService.fetchRealmURL(url);
+          if (!realmURL) {
+            return null;
+          }
+          let isPublicReadable = await this.realmInfoService.isPublicReadable(
+            realmURL,
+          );
+          return {
+            url: realmURL.href,
+            isPublicReadable,
+          };
+        },
+        resetAuth: async (realmURL: string) => {
+          return (await this.getRealmSession(new URL(realmURL))).refreshToken();
+        },
+      } as IRealmAuthDataSource),
+    ]);
     shimExternals(this.virtualNetwork);
 
     return loader;
-  }
-
-  private async addAuthorizationHeader(request: Request) {
-    return await addAuthorizationHeader(this.loader, request, {
-      getJWT: async (realmURL: string) => {
-        return (await this.getRealmSession(new URL(realmURL))).rawRealmToken!;
-      },
-      getRealmInfoByURL: async (url: string) => {
-        let realmURL = await this.realmInfoService.fetchRealmURL(url);
-        if (!realmURL) {
-          return null;
-        }
-        let isPublicReadable = await this.realmInfoService.isPublicReadable(
-          realmURL,
-        );
-        return {
-          url: realmURL.href,
-          isPublicReadable,
-        };
-      },
-      resetAuth: async (realmURL: string) => {
-        return (await this.getRealmSession(new URL(realmURL))).refreshToken();
-      },
-    });
   }
 
   private async getRealmSession(realmURL: URL) {

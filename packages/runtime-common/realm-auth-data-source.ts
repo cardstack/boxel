@@ -1,21 +1,28 @@
 import { MatrixClient } from './matrix-client';
 import { RealmAuthClient } from './realm-auth-client';
 import { Loader } from './loader';
-import { addAuthorizationHeader } from './index';
 
-export class RealmAuthHandler {
+type RealmInfo = {
+  isPublicReadable: boolean;
+  url: string;
+};
+
+export interface IRealmAuthDataSource {
+  getLoader(): Loader;
+  getOriginRealmURL(): string | undefined;
+  getRealmInfo(url: string): Promise<RealmInfo | null>;
+  getJWT(realmURL: string): Promise<string>;
+  resetAuth(realmURL: string): void;
+}
+
+type RealmInfoAndAuth = RealmInfo & { realmAuthClient?: RealmAuthClient };
+
+export class RealmAuthDataSource implements IRealmAuthDataSource {
   // Cached realm info and session to avoid fetching it multiple times for the same realm
-  private visitedRealms = new Map<
-    string,
-    {
-      isPublicReadable: boolean;
-      realmAuthClient?: RealmAuthClient;
-      url: string;
-    }
-  >();
+  private visitedRealms = new Map<string, RealmInfoAndAuth>();
   private matrixClient: MatrixClient;
   private loader: Loader;
-  private realmURL: string;
+  realmURL: string;
 
   constructor(matrixClient: MatrixClient, loader: Loader, realmURL: string) {
     this.matrixClient = matrixClient;
@@ -23,18 +30,15 @@ export class RealmAuthHandler {
     this.realmURL = realmURL;
   }
 
-  addAuthorizationHeader = async (
-    request: Request,
-  ): Promise<Response | null> => {
-    return await addAuthorizationHeader(this.loader, request, {
-      originRealmURL: this.realmURL,
-      getJWT: this.getJWT.bind(this),
-      getRealmInfoByURL: this.getRealmInfoByURL.bind(this),
-      resetAuth: this.resetAuth.bind(this),
-    });
-  };
+  getLoader(): Loader {
+    return this.loader;
+  }
 
-  private async getJWT(realmURL: string): Promise<string> {
+  getOriginRealmURL(): string {
+    return this.realmURL;
+  }
+
+  async getJWT(realmURL: string): Promise<string> {
     let targetRealm = this.visitedRealms.get(realmURL);
     if (!targetRealm || !targetRealm.realmAuthClient) {
       throw new Error(
@@ -48,11 +52,11 @@ export class RealmAuthHandler {
     return await targetRealm.realmAuthClient.getJWT(); // This will use a cached JWT from the realm auth client or create a new one if it's expired or about to expire
   }
 
-  private resetAuth(realmURL: string) {
+  resetAuth(realmURL: string) {
     this.visitedRealms.delete(realmURL);
   }
 
-  private async getRealmInfoByURL(url: string) {
+  async getRealmInfo(url: string) {
     let visitedRealmURL = Array.from(this.visitedRealms.keys()).find((key) => {
       return url.includes(key);
     });
