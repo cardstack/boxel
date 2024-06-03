@@ -227,7 +227,7 @@ jobs:
         if: always()
         with:
           junit_files: host.xml
-          check_name: Host Tests Test Results
+          check_name: Host Test Results
 
   matrix-client-test:
     name: Matrix Client Tests
