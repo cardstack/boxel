@@ -1,5 +1,10 @@
 import Service from '@ember/service';
-import { type TestContext, getContext, visit } from '@ember/test-helpers';
+import {
+  type TestContext,
+  getContext,
+  visit,
+  settled,
+} from '@ember/test-helpers';
 import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
 import { buildWaiter } from '@ember/test-waiters';
 import GlimmerComponent from '@glimmer/component';
@@ -253,6 +258,15 @@ export function setupLocalIndexing(hooks: NestedHooks) {
     let dbAdapter = await getDbAdapter();
     await dbAdapter.reset();
     this.owner.register('service:local-indexer', MockLocalIndexer);
+  });
+
+  hooks.afterEach(async function () {
+    // This is here to allow card prerender component (which renders cards as part
+    // of the indexer process) to come to a graceful stop before we tear a test
+    // down (this should prevent tests from finishing before the prerender is still doing work).
+    // Without this, we have been experiencing test failures related to a destroyed owner, e.g.
+    // "Cannot call .factoryFor('template:index-card_error') after the owner has been destroyed"
+    await settled();
   });
 }
 
