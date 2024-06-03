@@ -8,10 +8,10 @@ type RealmInfo = {
 };
 
 export interface IRealmAuthDataSource {
-  originalRealmURL: string | undefined;
+  realmURL: string | undefined;
   getRealmInfo(url: string): Promise<RealmInfo | null>;
-  getJWT(realmURL: string): Promise<string>;
-  resetAuth(realmURL: string): void;
+  getJWT(targetRealmURL: string): Promise<string>;
+  resetAuth(targetRealmURL: string): void;
 }
 
 type RealmInfoAndAuth = RealmInfo & { realmAuthClient?: RealmAuthClient };
@@ -21,16 +21,16 @@ export class RealmAuthDataSource implements IRealmAuthDataSource {
   private visitedRealms = new Map<string, RealmInfoAndAuth>();
   private matrixClient: MatrixClient;
   private loader: Loader;
-  originalRealmURL: string;
+  realmURL: string;
 
   constructor(matrixClient: MatrixClient, loader: Loader, realmURL: string) {
     this.matrixClient = matrixClient;
     this.loader = loader;
-    this.originalRealmURL = realmURL;
+    this.realmURL = realmURL;
   }
 
-  async getJWT(realmURL: string): Promise<string> {
-    let targetRealm = this.visitedRealms.get(realmURL);
+  async getJWT(targetRealmURL: string): Promise<string> {
+    let targetRealm = this.visitedRealms.get(targetRealmURL);
     if (!targetRealm || !targetRealm.realmAuthClient) {
       throw new Error(
         `bug: should not have been able to get here without a targetRealm or without an auth client`,
@@ -43,8 +43,8 @@ export class RealmAuthDataSource implements IRealmAuthDataSource {
     return await targetRealm.realmAuthClient.getJWT(); // This will use a cached JWT from the realm auth client or create a new one if it's expired or about to expire
   }
 
-  resetAuth(realmURL: string) {
-    this.visitedRealms.delete(realmURL);
+  resetAuth(targetRealmURL: string) {
+    this.visitedRealms.delete(targetRealmURL);
   }
 
   async getRealmInfo(url: string) {
@@ -92,10 +92,10 @@ export class RealmAuthDataSource implements IRealmAuthDataSource {
 
   // A separate method for realm auth client creation to support mocking in tests
   private createRealmAuthClient(
-    realmURL: URL,
+    targetRealmURL: URL,
     matrixClient: MatrixClient,
     loader: Loader,
   ) {
-    return new RealmAuthClient(realmURL, matrixClient, loader);
+    return new RealmAuthClient(targetRealmURL, matrixClient, loader);
   }
 }

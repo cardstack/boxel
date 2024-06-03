@@ -33,8 +33,7 @@ export function addAuthorizationHeader(
       return null;
     }
 
-    let isRequestToItself =
-      realmInfo.url === realmAuthDataSource.originalRealmURL; // Could be a request to itself when indexing its own cards
+    let isRequestToItself = realmInfo.url === realmAuthDataSource.realmURL; // Could be a request to itself when indexing its own cards
     if (
       isRequestToItself ||
       (realmInfo.isPublicReadable && request.method === 'GET')
