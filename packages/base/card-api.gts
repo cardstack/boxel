@@ -2106,7 +2106,9 @@ export function subscribeToChanges(
     includeComputeds: false,
   });
   Object.keys(fields).forEach((fieldName) => {
-    let field = getField(fieldOrCard, fieldName) as Field<typeof BaseDef>;
+    let field = getField(fieldOrCard.constructor, fieldName) as Field<
+      typeof BaseDef
+    >;
     if (
       field &&
       (field.fieldType === 'contains' || field.fieldType === 'containsMany')
@@ -2147,7 +2149,9 @@ export function unsubscribeFromChanges(
     includeComputeds: false,
   });
   Object.keys(fields).forEach((fieldName) => {
-    let field = getField(fieldOrCard, fieldName) as Field<typeof BaseDef>;
+    let field = getField(fieldOrCard.constructor, fieldName) as Field<
+      typeof BaseDef
+    >;
     if (
       field &&
       (field.fieldType === 'contains' || field.fieldType === 'containsMany')
