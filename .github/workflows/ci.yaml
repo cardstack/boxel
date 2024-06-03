@@ -177,12 +177,6 @@ jobs:
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
         working-directory: packages/host
-      # - name: Publish test results FIXME move to followup
-      #   uses: EnricoMi/publish-unit-test-result-action@v2.9.0
-      #   if: always()
-      #   with:
-      #     junit_files: junit/host.xml
-      #     check_name: Host Tests Test Results ${{ matrix.shard }}
       - name: Add shard index to report filename
         run: mv junit/host.xml junit/host-${{ matrix.shardIndex }}.xml
       - name: Upload junit report to GitHub Actions Artifacts
@@ -198,13 +192,6 @@ jobs:
     if: always()
     needs: host-test
     runs-on: ubuntu-latest
-
-    # ?
-    # permissions:
-    #   id-token: write
-    #   contents: write
-    #   checks: write
-    #   statuses: write
 
     steps:
       - uses: actions/checkout@v4
