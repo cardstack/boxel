@@ -202,10 +202,6 @@ export class LeafletGtfs extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
-
-
-
-
   */
 }
 
