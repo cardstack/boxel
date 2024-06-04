@@ -550,9 +550,14 @@ export class Loader {
     }
 
     if (loaded.type === 'shimmed') {
+      let proxiedModule = this.createModuleProxy(
+        loaded.module,
+        moduleIdentifier,
+      );
+
       this.setModule(moduleIdentifier, {
         state: 'evaluated',
-        moduleInstance: loaded.module,
+        moduleInstance: proxiedModule,
         consumedModules: new Set(),
       });
       module.deferred.fulfill();
