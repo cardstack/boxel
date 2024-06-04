@@ -34,6 +34,7 @@ import {
   newContains,
 } from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
+import { settled } from '@ember/test-helpers';
 
 let loader: Loader;
 
@@ -81,6 +82,9 @@ module('Integration | computeds', function (hooks) {
     let mango = new Person({ firstName: 'Mango', lastName: 'Abdel-Rahman' });
     let root = await renderCard(loader, mango, 'isolated');
     assert.strictEqual(root.textContent!.trim(), 'Mango Abdel-Rahman');
+    mango.lastName = 'Tango';
+    await settled();
+    assert.strictEqual(root.textContent!.trim(), 'Mango Tango');
   });
 
   test('can render a synchronous computed field (using a string in `computeVia`)', async function (assert) {
