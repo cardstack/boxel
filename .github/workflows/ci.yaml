@@ -145,8 +145,13 @@ jobs:
   host-test:
     name: Host Tests
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [1, 2, 3, 4, 5, 6]
+        shardTotal: [6]
     concurrency:
-      group: boxel-host-test${{ github.head_ref || github.run_id }}
+      group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
@@ -165,17 +170,64 @@ jobs:
       - name: create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
-      - name: host test suite
+      - name: host test suite (shard ${{ matrix.shardIndex }})
         run: pnpm test-with-percy
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
+          HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
+          HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
         working-directory: packages/host
+      - name: Upload junit report to GitHub Actions Artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: host-test-report-${{ matrix.shardIndex }}
+          path: junit/host-${{ matrix.shardIndex }}.xml
+          retention-days: 30
+
+  host-merge-reports-and-publish:
+    name: Merge Host reports and publish
+    if: always()
+    needs: host-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/init
+
+      - name: Finalise Percy
+        run: npx percy build:finalize
+        working-directory: packages/host
+        env:
+          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
+
+      - name: Download JUnit reports from GitHub Actions Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-host-reports
+          pattern: host-test-report-*
+          merge-multiple: true
+
+      - run: ls
+      - run: ls all-host-reports
+
+      - name: Merge reports
+        run: npx junit-report-merger host.xml "./all-host-reports/*.xml"
+
+      - name: Upload merged report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: host-test-report-merged
+          path: host.xml
+          retention-days: 30
+
       - name: Publish test results
         uses: EnricoMi/publish-unit-test-result-action@v2.9.0
         if: always()
         with:
-          junit_files: junit/host.xml
-          check_name: Host Tests Test Results
+          junit_files: host.xml
+          check_name: Host Test Results
 
   matrix-client-test:
     name: Matrix Client Tests
