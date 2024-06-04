@@ -319,6 +319,7 @@ export interface Field<
     instancePromise: Promise<BaseDef>,
     loadedValue: any,
     relativeTo: URL | undefined,
+    loader: Loader | undefined,
   ): Promise<any>;
   emptyValue(instance: BaseDef): any;
   validate(instance: BaseDef, value: any): void;
@@ -538,6 +539,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     instancePromise: Promise<BaseDef>,
     _loadedValue: any,
     relativeTo: URL | undefined,
+    loader: Loader | undefined,
   ): Promise<BaseInstanceType<FieldT>[] | null> {
     if (value == null) {
       return null;
@@ -593,7 +595,12 @@ class ContainsMany<FieldT extends FieldDefConstructor>
               );
             }
             return (
-              await cardClassFromResource(resource, this.card, relativeTo)
+              await cardClassFromResource(
+                resource,
+                this.card,
+                relativeTo,
+                loader,
+              )
             )[deserialize](resource, relativeTo, doc);
           }
         }),
@@ -733,6 +740,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     _instancePromise: Promise<BaseDef>,
     _loadedValue: any,
     relativeTo: URL | undefined,
+    loader: Loader | undefined,
   ): Promise<BaseInstanceType<CardT>> {
     if (primitive in this.card) {
       return this.card[deserialize](value, relativeTo, doc);
@@ -761,9 +769,9 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
           ]),
       );
     }
-    return (await cardClassFromResource(resource, this.card, relativeTo))[
-      deserialize
-    ](resource, relativeTo, doc);
+    return (
+      await cardClassFromResource(resource, this.card, relativeTo, loader)
+    )[deserialize](resource, relativeTo, doc);
   }
 
   emptyValue(_instance: BaseDef) {
@@ -923,6 +931,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     _instancePromise: Promise<CardDef>,
     loadedValue: any,
     relativeTo: URL | undefined,
+    loader: Loader | undefined,
   ): Promise<BaseInstanceType<CardT> | null | NotLoadedValue> {
     if (!isRelationship(value)) {
       throw new Error(
@@ -934,7 +943,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     if (value?.links?.self == null) {
       return null;
     }
-    let loader = Loader.getLoaderFor(this.card)!;
+    loader = loader || Loader.getLoaderFor(this.card)!;
     let cachedInstance = identityContext.identities.get(
       new URL(value.links.self, relativeTo).href,
     );
@@ -954,7 +963,12 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       };
     }
 
-    let clazz = await cardClassFromResource(resource, this.card, relativeTo);
+    let clazz = await cardClassFromResource(
+      resource,
+      this.card,
+      relativeTo,
+      loader,
+    );
     let deserialized = await clazz[deserialize](
       resource,
       relativeTo,
@@ -1266,6 +1280,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
     instancePromise: Promise<BaseDef>,
     loadedValues: any,
     relativeTo: URL | undefined,
+    loader: Loader | undefined,
   ): Promise<(BaseInstanceType<FieldT> | NotLoadedValue)[]> {
     if (!Array.isArray(values) && values.links.self === null) {
       return [];
@@ -1313,6 +1328,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
           resource,
           this.card,
           relativeTo,
+          loader,
         );
         let deserialized = await clazz[deserialize](
           resource,
@@ -2416,6 +2432,7 @@ async function getDeserializedValue<CardT extends BaseDefConstructor>({
   if (!field) {
     throw new Error(`could not find field ${fieldName} in card ${card.name}`);
   }
+  let loader = Loader.getLoaderFor(card);
   let result = await field.deserialize(
     value,
     doc,
@@ -2425,6 +2442,7 @@ async function getDeserializedValue<CardT extends BaseDefConstructor>({
     modelPromise,
     loadedValue,
     relativeTo,
+    loader,
   );
   return result;
 }
@@ -2776,6 +2794,7 @@ async function cardClassFromResource<CardT extends BaseDefConstructor>(
   resource: LooseCardResource | undefined,
   fallback: CardT,
   relativeTo: URL | undefined,
+  loader: Loader | undefined,
 ): Promise<CardT> {
   let cardIdentity = identifyCard(fallback);
   if (!cardIdentity) {
@@ -2784,7 +2803,7 @@ async function cardClassFromResource<CardT extends BaseDefConstructor>(
     );
   }
   if (resource && !isEqual(resource.meta.adoptsFrom, cardIdentity)) {
-    let loader = Loader.getLoaderFor(fallback);
+    loader = loader || Loader.getLoaderFor(fallback);
 
     if (!loader) {
       throw new Error('Could not find a loader, this should not happen');
