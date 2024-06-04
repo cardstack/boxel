@@ -53,6 +53,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
+import { tracked } from '@glimmer/tracking';
 
 export { primitive, isField, type BoxComponent };
 export const serialize = Symbol.for('cardstack-serialize');
@@ -1575,6 +1576,78 @@ export function containsMany<FieldT extends FieldDefConstructor>(
   } as any;
 }
 containsMany[fieldType] = 'contains-many' as FieldType;
+
+interface BabelDecoratorDescriptor {
+  configurable?: boolean;
+  enumerable?: boolean;
+  writable?: boolean;
+  get?(): any;
+  set?(v: any): void;
+  initializer?: null | (() => any);
+  value?: any;
+}
+
+type BabelDecorator = (
+  target: object,
+  prop: string | symbol,
+  desc: BabelDecoratorDescriptor,
+) => BabelDecoratorDescriptor | null | undefined | void;
+
+interface TrackedDescriptor<T> {
+  get(): T;
+  set(value: T): void;
+}
+
+function isTrackedDescriptor<T>(desc: any): desc is TrackedDescriptor<T> {
+  return Boolean(desc?.get && desc?.set);
+}
+
+export function newContains<FieldT extends FieldDefConstructor>(
+  field: FieldT,
+  options?: Options,
+): PropertyDecorator {
+  // our decorators are implemented by Babel, not TypeScript, so they have a
+  // different signature than Typescript thinks they do.
+  let decorator: BabelDecorator = function (
+    target,
+    key,
+    desc,
+  ): PropertyDescriptor {
+    if (typeof key !== 'string') {
+      throw new Error(`"contains" decorator only supports string field names`);
+    }
+    let isComputed = Boolean(desc.get);
+    let result: PropertyDescriptor;
+    if (isComputed) {
+      result = desc;
+    } else {
+      const trackedDesc = tracked(target, key, desc)!;
+
+      if (!isTrackedDescriptor(trackedDesc)) {
+        throw new Error(`bug: got unexpected result from @glimmer/tracking`);
+      }
+      result = {
+        get() {
+          return trackedDesc.get.call(this);
+        },
+        set(value) {
+          trackedDesc.set.call(this, value);
+        },
+      };
+    }
+    (result.get as any)[isField] = new Contains(
+      cardThunk(field),
+      () => {
+        throw new Error(`todo: this will become just a boolean`);
+      },
+      key,
+      options?.description,
+      options?.isUsed,
+    );
+    return result;
+  };
+  return decorator as unknown as PropertyDecorator;
+}
 
 export function contains<FieldT extends FieldDefConstructor>(
   field: FieldT,

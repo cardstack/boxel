@@ -8,6 +8,8 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 
+import type { BaseInstanceType } from 'https://cardstack.com/base/card-api';
+
 import {
   cleanWhiteSpace,
   testRealmURL,
@@ -29,6 +31,7 @@ import {
   recompute,
   linksTo,
   linksToMany,
+  newContains,
 } from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 
@@ -55,13 +58,19 @@ module('Integration | computeds', function (hooks) {
 
   test('can render a synchronous computed field', async function (assert) {
     class Person extends CardDef {
-      @field firstName = contains(StringField);
-      @field lastName = contains(StringField);
-      @field fullName = contains(StringField, {
-        computeVia: function (this: Person) {
-          return `${this.firstName} ${this.lastName}`;
-        },
-      });
+      @newContains(StringField) declare firstName: BaseInstanceType<
+        typeof StringField
+      >;
+
+      @newContains(StringField) declare lastName: BaseInstanceType<
+        typeof StringField
+      >;
+
+      @newContains(StringField)
+      get fullName(): BaseInstanceType<typeof StringField> {
+        return `${this.firstName} ${this.lastName}`;
+      }
+
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <@fields.fullName />
