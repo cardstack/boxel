@@ -44,7 +44,7 @@ export type CardSaveSubscriber = (
   content: SingleCardDocument | string,
 ) => void;
 
-const { ownRealmURL, otherRealmURLs } = ENV;
+const { ownRealmURL, otherRealmURLs, environment } = ENV;
 
 export default class CardService extends Service {
   @service private declare loaderService: LoaderService;
@@ -411,31 +411,38 @@ export default class CardService extends Service {
       );
     }
     let collectionDoc = json;
-    return (
-      await Promise.all(
-        collectionDoc.data.map(async (doc) => {
-          try {
-            return await this.createFromSerialized(
-              doc,
-              collectionDoc,
-              new URL(doc.id),
-            );
-          } catch (e) {
-            console.warn(
-              `Skipping ${
-                doc.id
-              }. Encountered error deserializing from search result for query ${JSON.stringify(
-                query,
-                null,
-                2,
-              )} against realm ${realmURL}`,
-              e,
-            );
-            return undefined;
-          }
-        }),
-      )
-    ).filter(Boolean) as CardDef[];
+    try {
+      console.time('search deserialization');
+      return (
+        await Promise.all(
+          collectionDoc.data.map(async (doc) => {
+            try {
+              return await this.createFromSerialized(
+                doc,
+                collectionDoc,
+                new URL(doc.id),
+              );
+            } catch (e) {
+              console.warn(
+                `Skipping ${
+                  doc.id
+                }. Encountered error deserializing from search result for query ${JSON.stringify(
+                  query,
+                  null,
+                  2,
+                )} against realm ${realmURL}`,
+                e,
+              );
+              return undefined;
+            }
+          }),
+        )
+      ).filter(Boolean) as CardDef[];
+    } finally {
+      if (environment !== 'test') {
+        console.timeEnd('search deserialization');
+      }
+    }
   }
 
   async getFields(
