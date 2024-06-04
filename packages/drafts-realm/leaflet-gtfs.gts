@@ -205,6 +205,7 @@ export class LeafletGtfs extends CardDef {
 
 
 
+
   */
 }
 
@@ -213,9 +214,9 @@ interface GtfsModifierSignature {
     Positional: [];
     Named: {
       gtfsUrl?: string;
-      setRoutes?: (routes: any) => {};
-      setShapes?: (shapes: any) => {};
-      setTrips?: (trips: any) => {};
+      setRoutes?: (routes: any) => void;
+      setShapes?: (shapes: any) => void;
+      setTrips?: (trips: any) => void;
     };
   };
 }
