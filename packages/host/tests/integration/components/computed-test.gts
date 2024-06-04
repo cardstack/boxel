@@ -109,17 +109,16 @@ module('Integration | computeds', function (hooks) {
 
   test('can render a computed that consumes a nested property', async function (assert) {
     class Person extends FieldDef {
-      @field firstName = contains(StringField);
+      @newContains(StringField)
+      declare firstName: BaseInstanceType<typeof StringField>;
     }
 
     class Post extends CardDef {
-      @field title = contains(StringField);
-      @field author = contains(Person);
-      @field summary = contains(StringField, {
-        computeVia: function (this: Post) {
-          return `${this.title} by ${this.author.firstName}`;
-        },
-      });
+      @newContains(Person) declare author: Person;
+      @newContains(StringField)
+      get summary() {
+        return `${this.title} by ${this.author.firstName}`;
+      }
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <@fields.summary />
@@ -140,6 +139,9 @@ module('Integration | computeds', function (hooks) {
     });
     let root = await renderCard(loader, firstPost, 'isolated');
     assert.strictEqual(root.textContent!.trim(), 'First Post by Mango');
+    firstPost.author.firstName = 'Tango';
+    await settled();
+    assert.strictEqual(root.textContent!.trim(), 'First Post by Tango');
   });
 
   test('can render a computed that is a composite type', async function (assert) {
