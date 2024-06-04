@@ -29,5 +29,6 @@ declare const config: {
   minSaveTaskDurationMs: number;
   sqlSchema: string;
   assetsURL: string;
+  ci?: true;
   featureFlags?: {};
 };

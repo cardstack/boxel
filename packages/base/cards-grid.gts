@@ -232,6 +232,7 @@ class Isolated extends Component<typeof CardsGrid> {
     // what we present when showing the app for the first time
     if (
       (globalThis as any).__bootStart &&
+      !(globalThis as any).__ci &&
       this.liveQuery.instances.length > 0
     ) {
       console.log(

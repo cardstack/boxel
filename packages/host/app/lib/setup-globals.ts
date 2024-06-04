@@ -8,3 +8,4 @@ import ENV from '@cardstack/host/config/environment';
   (globalThis as any)._logDefinitions ?? makeLogDefinitions(ENV.logLevels);
 
 (globalThis as any).Buffer = Buffer;
+(globalThis as any).__ci = ENV.ci;

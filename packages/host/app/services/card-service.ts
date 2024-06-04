@@ -44,7 +44,7 @@ export type CardSaveSubscriber = (
   content: SingleCardDocument | string,
 ) => void;
 
-const { ownRealmURL, otherRealmURLs } = ENV;
+const { ownRealmURL, otherRealmURLs, ci } = ENV;
 
 export default class CardService extends Service {
   @service private declare loaderService: LoaderService;
@@ -439,7 +439,9 @@ export default class CardService extends Service {
         )
       ).filter(Boolean) as CardDef[];
     } finally {
-      console.timeEnd('search deserialization');
+      if (!ci) {
+        console.timeEnd('search deserialization');
+      }
     }
   }
 
