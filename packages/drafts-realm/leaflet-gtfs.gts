@@ -15,6 +15,7 @@ import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { LeafletModifier } from './leaflet-map';
+import { optional } from '@cardstack/boxel-ui/helpers';
 
 type Route = {
   id: string;
@@ -158,7 +159,7 @@ export class LeafletGtfs extends CardDef {
           Route to view:
           <select
             value={{@model.activeRouteId}}
-            {{on 'change' @model.handleRouteSelect}}
+            {{on 'change' (optional @model.handleRouteSelect)}}
           >
             <option value=''>Select a route</option>
             {{#each @model.routes as |route|}}
