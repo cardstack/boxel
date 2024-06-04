@@ -1667,7 +1667,9 @@ module('Realm Server', function (hooks) {
   module('various other realm tests', function (hooks) {
     let testRealmServer2: Server;
 
-    hooks.beforeEach(async function () {
+    hooks.before(async function () {
+      dir = dirSync();
+      copySync(join(__dirname, 'cards'), dir.name);
       shimExternals(virtualNetwork);
     });
 
@@ -1676,18 +1678,16 @@ module('Realm Server', function (hooks) {
     });
 
     setupDB(hooks, {
-      beforeEach: async (dbAdapter, queue) => {
-        testRealmServer2 = (
-          await runTestRealmServer({
-            virtualNetwork,
-            dir: dir.name,
-            realmURL: testRealm2URL,
-            dbAdapter,
-            queue,
-          })
-        ).testRealmServer;
+      before: async (dbAdapter, queue) => {
+        ({ testRealmServer: testRealmServer2 } = await runTestRealmServer({
+          virtualNetwork,
+          dir: dir.name,
+          realmURL: testRealm2URL,
+          dbAdapter,
+          queue,
+        }));
       },
-      afterEach: async () => {
+      after: async () => {
         testRealmServer2.close();
       },
     });
@@ -2200,13 +2200,13 @@ module('Realm server serving multiple realms', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  hooks.beforeEach(async function () {
+  hooks.before(async function () {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
   });
 
   setupDB(hooks, {
-    beforeEach: async (dbAdapter, queue) => {
+    before: async (dbAdapter, queue) => {
       let localBaseRealmURL = new URL('http://127.0.0.1:4446/base/');
       virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
 
@@ -2239,7 +2239,7 @@ module('Realm server serving multiple realms', function (hooks) {
 
       request = supertest(testRealmServer);
     },
-    afterEach: async () => {
+    after: async () => {
       testRealmServer.close();
     },
   });
