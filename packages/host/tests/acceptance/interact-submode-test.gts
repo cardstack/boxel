@@ -23,6 +23,8 @@ import {
 } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 
+import { AuthenticationErrorMessages } from '@cardstack/runtime-common/router';
+
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import { claimsFromRawToken } from '@cardstack/host/resources/realm-session';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -1169,7 +1171,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           realmPermissions = { [testRealmURL]: ['read'] };
         });
 
-        test('retrieve a new JWT on  401 error', async function (assert) {
+        test('retrieve a new JWT on 401 error', async function (assert) {
           let token = createJWT(
             {
               user: '@testuser:staging',
@@ -1202,9 +1204,12 @@ module('Acceptance | interact submode tests', function (hooks) {
               req.method !== 'HEAD' &&
               req.headers.get('Authorization') === token
             ) {
-              return new Response(`Authentication error`, {
-                status: 401,
-              });
+              return new Response(
+                AuthenticationErrorMessages.PermissionMismatch,
+                {
+                  status: 401,
+                },
+              );
             }
 
             return null;
