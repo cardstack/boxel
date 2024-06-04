@@ -4399,4 +4399,65 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-isolated-author]');
     assert.dom('[data-test-isolated-author]').exists();
   });
+
+  test('displays card in interact mode when clicking `Open in Interact Mode` menu in preview panel', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await waitFor(`[data-test-cards-grid-item]`);
+    await click(`[data-test-cards-grid-item="${testRealmURL}BlogPost/1"]`);
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/1"]`);
+    await click(
+      `[data-test-stack-card="${testRealmURL}BlogPost/1"] [data-test-edit-button]`,
+    );
+
+    await click(
+      `[data-test-links-to-editor="authorBio"] [data-test-author="Alien"]`,
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}Author/1"]`);
+
+    assert.dom(`[data-test-stack-card]`).exists({ count: 3 });
+    assert.dom(`[data-test-stack-card="${testRealmURL}grid"]`).exists();
+    assert.dom(`[data-test-stack-card="${testRealmURL}BlogPost/1"]`).exists();
+    assert.dom(`[data-test-stack-card="${testRealmURL}Author/1"]`).exists();
+
+    await click(
+      '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
+    );
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    await waitFor('[data-test-submode-switcher]');
+    assert.dom('[data-test-submode-switcher]').hasText('Code');
+
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `${testRealmURL}Pet/mango.json`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    await blur('[data-test-card-url-bar-input]');
+    assert
+      .dom('[data-test-card-url-bar-realm-info]')
+      .hasText('in Operator Mode Workspace');
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}Pet/mango.json`);
+    await click(`[data-test-more-options-button]`);
+    await click(`[data-test-boxel-menu-item-text="Open in Interact Mode"]`);
+
+    await waitFor(`[data-test-stack-card]`);
+    assert.dom(`[data-test-stack-card]`).exists({ count: 1 });
+    assert.dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`).exists();
+  });
 });
