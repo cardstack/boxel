@@ -239,6 +239,10 @@ export function getBoxComponent(
       </RealmSessionConsumer>
     </CardContextConsumer>
     <style>
+      .field-component-card.isolated-format {
+        height: 100%;
+      }
+
       .field-component-card.embedded-format {
         padding: var(--boxel-sp);
       }
