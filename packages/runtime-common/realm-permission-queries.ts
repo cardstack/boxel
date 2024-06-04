@@ -1,5 +1,12 @@
 import { DBAdapter } from './db';
 import { RealmPermissions } from './realm';
+import {
+  query,
+  separatedByCommas,
+  Expression,
+  asExpressions,
+  param,
+} from './expression';
 
 async function insertPermission(
   dbAdapter: DBAdapter,
@@ -8,9 +15,18 @@ async function insertPermission(
   read: boolean,
   write: boolean,
 ) {
-  let query = `INSERT INTO realm_user_permissions (realm_url, username, read, write) VALUES ($1, $2, $3, $4);`;
-  let values = [realmURL.href, username, read, write];
-  return dbAdapter.execute(query, { bind: values });
+  let { valueExpressions } = asExpressions({
+    realm_url: realmURL.href,
+    username,
+    read,
+    write,
+  });
+
+  return query(dbAdapter, [
+    'INSERT INTO realm_user_permissions (realm_url, username, read, write) VALUES (',
+    ...separatedByCommas(valueExpressions),
+    ')',
+  ] as Expression);
 }
 
 export async function insertPermissions(
@@ -35,10 +51,11 @@ export async function insertPermissions(
 
 export async function permissionsExist(dbAdapter: DBAdapter, realmURL: URL) {
   return (
-    await dbAdapter.execute(
-      `SELECT EXISTS(SELECT 1 FROM realm_user_permissions WHERE realm_url = $1) AS has_rows`,
-      { bind: [realmURL.href] },
-    )
+    await query(dbAdapter, [
+      `SELECT EXISTS(SELECT 1 FROM realm_user_permissions WHERE realm_url =`,
+      param(realmURL.href),
+      `) as has_rows`,
+    ])
   )[0].has_rows;
 }
 
@@ -46,10 +63,10 @@ export async function fetchUserPermissions(
   dbAdapter: DBAdapter,
   realmURL: URL,
 ) {
-  let permissions = await dbAdapter.execute(
-    `SELECT username, read, write FROM realm_user_permissions WHERE realm_url = $1;`,
-    { bind: [realmURL.href] },
-  );
+  let permissions = await query(dbAdapter, [
+    `SELECT username, read, write FROM realm_user_permissions WHERE realm_url =`,
+    param(realmURL.href),
+  ]);
 
   return permissions.reduce((permissionsAcc, { username, read, write }) => {
     let userPermissions: ('read' | 'write')[] = [];
