@@ -244,11 +244,7 @@ export class Realm {
   #flushUpdateEvents: Promise<void> | undefined;
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
-<<<<<<< HEAD
-  #realmAuthHandler: RealmAuthHandler;
-=======
-  #permissions: RealmPermissions;
->>>>>>> main
+
   #onIndexer: ((indexer: Indexer) => Promise<void>) | undefined;
   #publicEndpoints: RouteTable<true> = new Map([
     [
