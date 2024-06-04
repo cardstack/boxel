@@ -1,7 +1,5 @@
 import Service, { service } from '@ember/service';
 
-import isEqual from 'lodash/isEqual';
-
 import { stringify } from 'qs';
 
 import { v4 as uuidv4 } from 'uuid';
@@ -37,6 +35,7 @@ import type {
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import { trackCard, getCard } from '../resources/card-resource';
+import { isPatchApplied } from '../utils/patch-utils';
 
 import type LoaderService from './loader-service';
 
@@ -274,7 +273,7 @@ export default class CardService extends Service {
     if (
       patchData.attributes &&
       Object.keys(patchData.attributes).length &&
-      !this.isPatchApplied(
+      !isPatchApplied(
         updatedCardDoc.data.attributes,
         patchData.attributes,
         card.id,
@@ -331,56 +330,6 @@ export default class CardService extends Service {
       }),
     );
     return result;
-  }
-
-  // TODO let's use better types for cardData and patchData here
-  private isPatchApplied(
-    cardData: Record<string, any> | undefined,
-    patchData: Record<string, any>,
-    relativeTo: string,
-  ): boolean {
-    if (!cardData || !patchData) {
-      return false;
-    }
-    if (isEqual(cardData, patchData)) {
-      return true;
-    }
-    if (!Object.keys(patchData).length) {
-      return false;
-    }
-    for (let [key, patchValue] of Object.entries(patchData)) {
-      if (!(key in cardData)) {
-        return false;
-      }
-      let cardValue = cardData[key];
-      if (cardValue?.links?.self === null && isEqual(patchValue, [])) {
-        return true;
-      }
-      if (
-        !isEqual(cardValue, patchValue) &&
-        typeof cardValue === 'object' &&
-        typeof patchValue === 'object'
-      ) {
-        if (key === 'attributes' && !Object.keys(patchValue).length) {
-          continue;
-        }
-        if (!this.isPatchApplied(cardValue, patchValue, relativeTo)) {
-          return false;
-        }
-      } else if (!isEqual(cardValue, patchValue)) {
-        try {
-          if (
-            new URL(cardValue, relativeTo).href ===
-            new URL(patchValue, relativeTo).href
-          ) {
-            return true;
-          }
-        } catch (e) {
-          return false;
-        }
-      }
-    }
-    return true;
   }
 
   private async saveCardDocument(
