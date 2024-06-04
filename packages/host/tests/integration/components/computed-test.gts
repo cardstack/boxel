@@ -13,6 +13,8 @@ import {
   testRealmURL,
   setupCardLogs,
   provideConsumeContext,
+  setupIntegrationTestRealm,
+  setupLocalIndexing,
 } from '../../helpers';
 import {
   setupBaseRealm,
@@ -44,6 +46,7 @@ module('Integration | computeds', function (hooks) {
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
   });
+  setupLocalIndexing(hooks);
 
   setupCardLogs(
     hooks,
@@ -110,7 +113,13 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
+
+    await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'test-cards.gts': { Post, Person },
+      },
+    });
 
     let firstPost = new Post({
       title: 'First Post',
@@ -227,7 +236,13 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    loader.shimModule(`${testRealmURL}test-cards`, { Family, Person });
+
+    await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'test-cards.gts': { Family, Person },
+      },
+    });
 
     let abdelRahmans = new Family({
       people: [
@@ -303,7 +318,13 @@ module('Integration | computeds', function (hooks) {
         },
       });
     }
-    loader.shimModule(`${testRealmURL}test-cards`, { Family, Person });
+
+    await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'test-cards.gts': { Family, Person },
+      },
+    });
 
     let family = new Family({
       people: [
