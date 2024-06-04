@@ -1,0 +1,25 @@
+# compiled output
+/dist-for-testing/
+/tmp/
+
+# dependencies
+/node_modules/
+
+# misc
+/.DS_Store
+/.env*
+/.eslintcache
+/.eslintignore
+/.eslintrc.cjs
+/.git/
+/.github/
+/.gitignore
+/.pnpm-debug.log
+/.prettierignore
+/.prettierrc.cjs
+/build.sh
+/codemod-test-fixture.sh
+/codemod-test-fixtures.sh
+/CONTRIBUTING.md
+/create-test-fixture.sh
+/tests/

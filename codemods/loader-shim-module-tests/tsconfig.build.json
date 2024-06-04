@@ -1,0 +1,13 @@
+{
+  "extends": [
+    "@tsconfig/node18/tsconfig",
+    "@tsconfig/strictest/tsconfig"
+  ],
+  "compilerOptions": {
+    "declaration": false,
+    "moduleResolution": "NodeNext",
+    "outDir": "dist"
+  },
+  "include": ["bin", "src"],
+  "exclude": ["src/blueprints"]
+}

@@ -3,3 +3,4 @@ packages:
   - packages/boxel-motion/*
   - packages/boxel-ui/*
   - vendor/*
+  - codemods/*

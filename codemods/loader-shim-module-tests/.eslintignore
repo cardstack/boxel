@@ -1,0 +1,13 @@
+# compiled output
+/dist/
+/dist-for-testing/
+/tmp/
+
+# dependencies
+/node_modules/
+
+# misc
+!.*
+.*/
+/src/blueprints/
+/tests/fixtures/
