@@ -77,6 +77,7 @@ module('Acceptance | basic tests', function (hooks) {
         'person-entry.json': new CatalogEntry({
           title: 'Person',
           description: 'Catalog entry',
+          isField: false,
           ref: {
             module: `./person`,
             name: 'Person',

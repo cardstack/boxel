@@ -2,6 +2,8 @@ import Service, { service } from '@ember/service';
 
 import { buildWaiter } from '@ember/test-waiters';
 
+import { cached } from '@glimmer/tracking';
+
 import { restartableTask } from 'ember-concurrency';
 import { TrackedMap } from 'tracked-built-ins';
 
@@ -11,12 +13,14 @@ import {
   RealmPaths,
 } from '@cardstack/runtime-common';
 
+import ENV from '@cardstack/host/config/environment';
 import { getRealmSession } from '@cardstack/host/resources/realm-session';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 const waiter = buildWaiter('realm-info-service:waiter');
+const { ownRealmURL } = ENV;
 
 type RealmInfoWithPermissions = RealmInfo & {
   canRead: boolean;
@@ -30,6 +34,7 @@ export default class RealmInfoService extends Service {
   cachedRealmInfos: TrackedMap<string, RealmInfoWithPermissions> =
     new TrackedMap(); // Has the realm url already been resolved to a realm info?
   cachedPublicReadableRealms: Map<string, boolean> = new Map();
+  cachedFetchTasks: Map<string, Promise<Response>> = new Map();
 
   async fetchRealmURL(url: string): Promise<URL | undefined> {
     let realmURLString = this.getRealmURLFromCache(url);
@@ -99,12 +104,15 @@ export default class RealmInfoService extends Service {
       if (this.cachedRealmInfos.has(realmURLString)) {
         return this.cachedRealmInfos.get(realmURLString)!;
       } else {
-        let realmInfoResponse = await this.loaderService.loader.fetch(
+        let realmInfoResponse = await this.cachedFetch(
           `${realmURLString}_info`,
-          { headers: { Accept: SupportedMimeType.RealmInfo } },
+          {
+            headers: { Accept: SupportedMimeType.RealmInfo },
+          },
         );
 
-        let realmInfo = (await realmInfoResponse.json())?.data
+        //The usage of `clone()` is to avoid the `json already read` error.
+        let realmInfo = (await realmInfoResponse.clone().json())?.data
           ?.attributes as RealmInfo;
         let realmSession = getRealmSession(this, {
           realmURL: () => new URL(realmURLString!),
@@ -138,4 +146,33 @@ export default class RealmInfoService extends Service {
       waiter.endAsync(token);
     }
   });
+
+  // Currently the personal realm has not yet been implemented,
+  // until then default to the realm serving the host app if it is writable,
+  // otherwise default to the first writable realm lexically
+  @cached
+  get userDefaultRealm(): { path: string; info: RealmInfo } {
+    let writeableRealms = [...this.cachedRealmInfos.entries()]
+      .filter(([_, realmInfo]) => realmInfo.canWrite)
+      .sort(([_a, a], [_b, b]) => a.name.localeCompare(b.name));
+    let ownRealm = writeableRealms.find(([path]) => path === ownRealmURL);
+    if (ownRealm) {
+      let [path, info] = ownRealm;
+      return { path, info };
+    } else {
+      let [path, info] = writeableRealms[0];
+      return { path, info };
+    }
+  }
+
+  private cachedFetch(url: string, init: RequestInit): Promise<Response> {
+    let fetchTaskKey = url + init.method;
+    let fetchTask = this.cachedFetchTasks.get(fetchTaskKey);
+    if (fetchTask) {
+      return fetchTask;
+    }
+    fetchTask = this.loaderService.loader.fetch(url, init);
+    this.cachedFetchTasks.set(fetchTaskKey, fetchTask);
+    return fetchTask;
+  }
 }

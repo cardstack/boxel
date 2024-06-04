@@ -56,10 +56,7 @@ module.exports = function (environment) {
       environment === 'test'
         ? 'http://test-realm/test/'
         : process.env.OWN_REALM_URL || 'http://localhost:4200/',
-    sqlSchema,
-    featureFlags: {
-      'pg-indexer': process.env.PG_INDEXER,
-    },
+    featureFlags: {},
   };
 
   if (environment === 'development') {
@@ -88,6 +85,7 @@ module.exports = function (environment) {
     ENV.serverEchoDebounceMs = 0;
     ENV.loginMessageTimeoutMs = 0;
     ENV.minSaveTaskDurationMs = 0;
+    ENV.sqlSchema = sqlSchema;
   }
 
   if (environment === 'production') {

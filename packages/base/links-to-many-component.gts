@@ -14,6 +14,7 @@ import {
 import {
   BoxComponentSignature,
   DefaultFormatConsumer,
+  RealmSessionConsumer,
   getBoxComponent,
 } from './field-component';
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
@@ -49,7 +50,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
   @consume(CardContextName) declare cardContext: CardContext;
 
   <template>
-    <div data-test-links-to-many={{@field.name}}>
+    <div class='links-to-many-editor' data-test-links-to-many={{@field.name}}>
       {{#if (eq @childFormat 'atom')}}
         <LinksToManyCompactEditor
           @model={{@model}}
@@ -122,44 +123,51 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
   @consume(CardContextName) declare cardContext: CardContext;
 
   <template>
-    {{#if @arrayField.children.length}}
-      <ul class='list'>
-        {{#each @arrayField.children as |boxedElement i|}}
-          <li class='editor' data-test-item={{i}}>
-            {{#let
-              (getBoxComponent
-                (this.args.cardTypeFor @field boxedElement) boxedElement @field
-              )
-              as |Item|
-            }}
-              <Item @format='embedded' />
-            {{/let}}
-            <div class='remove-button-container'>
-              <IconButton
-                @variant='primary'
-                @icon={{IconMinusCircle}}
-                @width='20px'
-                @height='20px'
-                class='remove'
-                {{on 'click' (fn @remove i)}}
-                aria-label='Remove'
-                data-test-remove-card
-                data-test-remove={{i}}
-              />
-            </div>
-          </li>
-        {{/each}}
-      </ul>
-    {{/if}}
-    <AddButton
-      class='add-new'
-      @variant='full-width'
-      {{on 'click' @add}}
-      data-test-add-new
-    >
-      Add
-      {{getPlural @field.card.displayName}}
-    </AddButton>
+    <RealmSessionConsumer as |realmSession|>
+      {{#if @arrayField.children.length}}
+        <ul class='list'>
+          {{#each @arrayField.children as |boxedElement i|}}
+            <li class='editor' data-test-item={{i}}>
+              {{#if realmSession.canWrite}}
+                <IconButton
+                  @variant='primary'
+                  @icon={{IconMinusCircle}}
+                  @width='20px'
+                  @height='20px'
+                  class='remove'
+                  {{on 'click' (fn @remove i)}}
+                  aria-label='Remove'
+                  data-test-remove-card
+                  data-test-remove={{i}}
+                />
+              {{/if}}
+              {{#let
+                (getBoxComponent
+                  (this.args.cardTypeFor @field boxedElement)
+                  boxedElement
+                  @field
+                )
+                as |Item|
+              }}
+                <Item @format='embedded' />
+              {{/let}}
+            </li>
+          {{/each}}
+        </ul>
+      {{/if}}
+
+      {{#if realmSession.canWrite}}
+        <AddButton
+          class='add-new'
+          @variant='full-width'
+          {{on 'click' @add}}
+          data-test-add-new
+        >
+          Add
+          {{getPlural @field.card.displayName}}
+        </AddButton>
+      {{/if}}
+    </RealmSessionConsumer>
     <style>
       .list {
         list-style: none;
@@ -171,21 +179,30 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       }
       .editor {
         position: relative;
+        display: grid;
+        grid-template-columns: 1fr var(--boxel-icon-lg);
       }
-      .remove-button-container {
-        position: absolute;
-        top: 0;
-        left: 100%;
-        height: 100%;
-        display: flex;
-        align-items: center;
+      .editor > :deep(.boxel-card-container.embedded-format) {
+        order: -1;
       }
       .remove {
         --icon-color: var(--boxel-light);
+        align-self: center;
+        outline: 0;
       }
+      .remove:focus,
       .remove:hover {
         --icon-bg: var(--boxel-dark);
         --icon-border: var(--boxel-dark);
+      }
+      .remove:focus + :deep(.boxel-card-container.embedded-format),
+      .remove:hover + :deep(.boxel-card-container.embedded-format) {
+        box-shadow:
+          0 0 0 1px var(--boxel-light-500),
+          var(--boxel-box-shadow-hover);
+      }
+      .add-new {
+        width: calc(100% - var(--boxel-icon-lg));
       }
     </style>
   </template>

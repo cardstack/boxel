@@ -5,7 +5,7 @@ import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
 import { BoxelInput, FieldContainer } from '@cardstack/boxel-ui/components';
-import { cn, eq, pick } from '@cardstack/boxel-ui/helpers';
+import { cn, eq, not, pick } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import { startCase } from 'lodash';
 import {
@@ -40,7 +40,6 @@ import {
   maybeURL,
   maybeRelativeURL,
   moduleFrom,
-  getCard,
   trackCard,
   type Meta,
   type CardFields,
@@ -323,10 +322,6 @@ export interface Field<
   component(model: Box<BaseDef>): BoxComponent;
   getter(instance: BaseDef): BaseInstanceType<CardT>;
   queryableValue(value: any, stack: BaseDef[]): SearchT;
-  // TODO remove this after feature flag is removed
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: SearchT) => boolean | null;
   handleNotLoadedError(
     instance: BaseInstanceType<CardT>,
     e: NotLoaded,
@@ -355,6 +350,9 @@ function cardTypeFor(
   boxedElement: Box<BaseDef>,
 ): typeof BaseDef {
   if (primitive in field.card) {
+    return field.card;
+  }
+  if (boxedElement.value == null) {
     return field.card;
   }
   return Reflect.getPrototypeOf(boxedElement.value)!
@@ -452,25 +450,12 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     // WatchedArray proxy is not structuredClone-able, and hence cannot be
     // communicated over the postMessage boundary between worker and DOM.
     // TODO: can this be simplified since we don't have the worker anymore?
-    return [...instances].map((instance) => {
-      return this.card[queryableValue](instance, stack);
-    });
-  }
-
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: any[] | null) => boolean | null {
-    return (value) => {
-      if (Array.isArray(value) && value.length === 0) {
-        return innerMatcher(null);
-      }
-      return (
-        Array.isArray(value) &&
-        value.some((innerValue) => {
-          return innerMatcher(innerValue);
-        })
-      );
-    };
+    let results = [...instances]
+      .map((instance) => {
+        return this.card[queryableValue](instance, stack);
+      })
+      .filter((i) => i != null);
+    return results.length === 0 ? null : results;
   }
 
   serialize(
@@ -566,8 +551,14 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     }
     let metas: Partial<Meta>[] = fieldMeta ?? [];
     return new WatchedArray(
-      (arrayValue) =>
+      (prevArrayValue, arrayValue) =>
         instancePromise.then((instance) => {
+          applySubscribersToInstanceValue(
+            instance,
+            this,
+            prevArrayValue,
+            arrayValue,
+          );
           notifySubscribers(instance, field.name, arrayValue);
           logger.log(recompute(instance));
         }),
@@ -608,7 +599,13 @@ class ContainsMany<FieldT extends FieldDefConstructor>
   }
 
   emptyValue(instance: BaseDef) {
-    return new WatchedArray((value) => {
+    return new WatchedArray((oldValue, value) => {
+      applySubscribersToInstanceValue(
+        instance,
+        this,
+        oldValue as BaseDef[],
+        value as BaseDef[],
+      );
       notifySubscribers(instance, this.name, value);
       logger.log(recompute(instance));
     });
@@ -618,7 +615,13 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     if (value && !Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
-    return new WatchedArray((value) => {
+    return new WatchedArray((oldValue, value) => {
+      applySubscribersToInstanceValue(
+        instance,
+        this,
+        oldValue as BaseDef[],
+        value as BaseDef[],
+      );
       notifySubscribers(instance, this.name, value);
       logger.log(recompute(instance));
     }, value);
@@ -674,12 +677,6 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
       return null;
     }
     return this.card[queryableValue](instance, stack);
-  }
-
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: any) => boolean | null {
-    return (value) => innerMatcher(value);
   }
 
   serialize(
@@ -835,12 +832,6 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     return this.card[queryableValue](instance, stack);
   }
 
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: any) => boolean | null {
-    return (value) => innerMatcher(value);
-  }
-
   serialize(
     value: InstanceType<CardT>,
     doc: JSONAPISingleResourceDocument,
@@ -941,13 +932,9 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       return null;
     }
     let loader = Loader.getLoaderFor(this.card)!;
-    let cardResource = getCard(new URL(value.links.self, relativeTo), {
-      cachedOnly: true,
-      loader,
-    });
-    await cardResource.loaded;
-    let cachedInstance =
-      cardResource.card ?? identityContext.identities.get(value.links.self);
+    let cachedInstance = identityContext.identities.get(
+      new URL(value.links.self, relativeTo).href,
+    );
     if (cachedInstance) {
       cachedInstance[isSavedInstance] = true;
       return cachedInstance as BaseInstanceType<CardT>;
@@ -1170,33 +1157,23 @@ class LinksToMany<FieldT extends CardDefConstructor>
     // WatchedArray proxy is not structuredClone-able, and hence cannot be
     // communicated over the postMessage boundary between worker and DOM.
     // TODO: can this be simplified since we don't have the worker anymore?
-    return [...instances].map((instance) => {
-      if (primitive in instance) {
-        throw new Error(
-          `the linksToMany field '${this.name}' contains a primitive card '${instance.name}'`,
-        );
-      }
-      if (isNotLoadedValue(instance)) {
-        return { id: instance.reference };
-      }
-      return this.card[queryableValue](instance, stack);
-    });
-  }
-
-  queryMatcher(
-    innerMatcher: (innerValue: any) => boolean | null,
-  ): (value: any[] | null) => boolean | null {
-    return (value) => {
-      if (Array.isArray(value) && value.length === 0) {
-        return innerMatcher(null);
-      }
-      return (
-        Array.isArray(value) &&
-        value.some((innerValue) => {
-          return innerMatcher(innerValue);
-        })
-      );
-    };
+    let results = [...instances]
+      .map((instance) => {
+        if (instance == null) {
+          return null;
+        }
+        if (primitive in instance) {
+          throw new Error(
+            `the linksToMany field '${this.name}' contains a primitive card '${instance.name}'`,
+          );
+        }
+        if (isNotLoadedValue(instance)) {
+          return { id: instance.reference };
+        }
+        return this.card[queryableValue](instance, stack);
+      })
+      .filter((i) => i != null);
+    return results.length === 0 ? null : results;
   }
 
   serialize(
@@ -1221,6 +1198,15 @@ class LinksToMany<FieldT extends CardDefConstructor>
 
     let relationships: Record<string, Relationship> = {};
     values.map((value, i) => {
+      if (value == null) {
+        relationships[`${this.name}\.${i}`] = {
+          links: {
+            self: null,
+          },
+          data: null,
+        };
+        return;
+      }
       if (isNotLoadedValue(value)) {
         relationships[`${this.name}\.${i}`] = {
           links: {
@@ -1297,13 +1283,9 @@ class LinksToMany<FieldT extends CardDefConstructor>
           return null;
         }
         let loader = Loader.getLoaderFor(this.card)!;
-        let cardResource = getCard(new URL(value.links.self, relativeTo), {
-          cachedOnly: true,
-          loader,
-        });
-        await cardResource.loaded;
-        let cachedInstance =
-          cardResource.card ?? identityContext.identities.get(value.links.self);
+        let cachedInstance = identityContext.identities.get(
+          new URL(value.links.self, relativeTo).href,
+        );
         if (cachedInstance) {
           cachedInstance[isSavedInstance] = true;
           return cachedInstance;
@@ -1345,8 +1327,14 @@ class LinksToMany<FieldT extends CardDefConstructor>
       });
 
     return new WatchedArray(
-      (value) =>
+      (oldValue, value) =>
         instancePromise.then((instance) => {
+          applySubscribersToInstanceValue(
+            instance,
+            this,
+            oldValue as BaseDef[],
+            value as BaseDef[],
+          );
           notifySubscribers(instance, this.name, value);
           logger.log(recompute(instance));
         }),
@@ -1355,7 +1343,13 @@ class LinksToMany<FieldT extends CardDefConstructor>
   }
 
   emptyValue(instance: BaseDef) {
-    return new WatchedArray((value) => {
+    return new WatchedArray((oldValue, value) => {
+      applySubscribersToInstanceValue(
+        instance,
+        this,
+        oldValue as BaseDef[],
+        value as BaseDef[],
+      );
       notifySubscribers(instance, this.name, value);
       logger.log(recompute(instance));
     });
@@ -1384,7 +1378,13 @@ class LinksToMany<FieldT extends CardDefConstructor>
       }
     }
 
-    return new WatchedArray((value) => {
+    return new WatchedArray((oldValue, value) => {
+      applySubscribersToInstanceValue(
+        instance,
+        this,
+        oldValue as BaseDef[],
+        value as BaseDef[],
+      );
       notifySubscribers(instance, this.name, value);
       logger.log(recompute(instance));
     }, values);
@@ -1740,6 +1740,16 @@ export class BaseDef {
   }
 }
 
+export function isArrayOfCardOrField(
+  cardsOrFields: any,
+): cardsOrFields is CardDef[] | FieldDef[] {
+  return (
+    Array.isArray(cardsOrFields) &&
+    (cardsOrFields.length === 0 ||
+      cardsOrFields.every((item) => isCardOrField(item)))
+  );
+}
+
 export function isCardOrField(card: any): card is CardDef | FieldDef {
   return card && typeof card === 'object' && isBaseInstance in card;
 }
@@ -1787,10 +1797,15 @@ class DefaultCardDefTemplate extends GlimmerComponent<{
         gap: var(--boxel-sp-lg);
         padding: var(--boxel-sp-xl);
       }
-      .default-card-template.edit {
-        padding-right: var(
-          --boxel-sp-xxl
-        ); /* allow room for trash/delete icons that appear on hover */
+      /* this aligns edit fields with containsMany, linksTo, and linksToMany fields */
+      .default-card-template.edit
+        > .boxel-field
+        > :deep(
+          *:nth-child(2):not(.links-to-many-editor):not(
+              .contains-many-editor
+            ):not(.links-to-editor)
+        ) {
+        padding-right: var(--boxel-icon-lg);
       }
     </style>
   </template>
@@ -1942,6 +1957,7 @@ export type BaseDefComponent = ComponentLike<{
     set: Setter;
     fieldName: string | undefined;
     context?: CardContext;
+    canEdit?: boolean;
   };
 }>;
 
@@ -1987,7 +2003,11 @@ export class StringField extends FieldDef {
   };
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <BoxelInput @value={{@model}} @onInput={{@set}} />
+      <BoxelInput
+        @value={{@model}}
+        @onInput={{@set}}
+        @disabled={{not @canEdit}}
+      />
     </template>
   };
   static atom = class Atom extends Component<typeof this> {
@@ -2059,9 +2079,16 @@ export type CardDefConstructor = typeof CardDef;
 export type FieldDefConstructor = typeof FieldDef;
 
 export function subscribeToChanges(
-  fieldOrCard: BaseDef,
+  fieldOrCard: BaseDef | BaseDef[],
   subscriber: CardChangeSubscriber,
 ) {
+  if (isArrayOfCardOrField(fieldOrCard)) {
+    fieldOrCard.forEach((item) => {
+      subscribeToChanges(item, subscriber);
+    });
+    return;
+  }
+
   let changeSubscribers = subscribers.get(fieldOrCard);
   if (changeSubscribers && changeSubscribers.has(subscriber)) {
     return;
@@ -2079,17 +2106,38 @@ export function subscribeToChanges(
     includeComputeds: false,
   });
   Object.keys(fields).forEach((fieldName) => {
-    let value = peekAtField(fieldOrCard, fieldName);
-    if (isCardOrField(value)) {
-      subscribeToChanges(value, subscriber);
+    let field = getField(fieldOrCard.constructor, fieldName) as Field<
+      typeof BaseDef
+    >;
+    if (
+      field &&
+      (field.fieldType === 'contains' || field.fieldType === 'containsMany')
+    ) {
+      let value = peekAtField(fieldOrCard, fieldName);
+      if (isCardOrField(value) || isArrayOfCardOrField(value)) {
+        subscribeToChanges(value, subscriber);
+      }
     }
   });
 }
 
 export function unsubscribeFromChanges(
-  fieldOrCard: BaseDef,
+  fieldOrCard: BaseDef | BaseDef[],
   subscriber: CardChangeSubscriber,
+  visited: Set<BaseDef> = new Set(),
 ) {
+  if (isArrayOfCardOrField(fieldOrCard)) {
+    fieldOrCard.forEach((item) => {
+      unsubscribeFromChanges(item, subscriber);
+    });
+    return;
+  }
+
+  if (visited.has(fieldOrCard)) {
+    return;
+  }
+
+  visited.add(fieldOrCard);
   let changeSubscribers = subscribers.get(fieldOrCard);
   if (!changeSubscribers) {
     return;
@@ -2101,23 +2149,71 @@ export function unsubscribeFromChanges(
     includeComputeds: false,
   });
   Object.keys(fields).forEach((fieldName) => {
-    let value = peekAtField(fieldOrCard, fieldName);
-    if (isCardOrField(value)) {
-      unsubscribeFromChanges(value, subscriber);
+    let field = getField(fieldOrCard.constructor, fieldName) as Field<
+      typeof BaseDef
+    >;
+    if (
+      field &&
+      (field.fieldType === 'contains' || field.fieldType === 'containsMany')
+    ) {
+      let value = peekAtField(fieldOrCard, fieldName);
+      if (isCardOrField(value) || isArrayOfCardOrField(value)) {
+        unsubscribeFromChanges(value, subscriber);
+      }
     }
   });
 }
 
-function migrateSubscribers(oldFieldOrCard: BaseDef, newFieldOrCard: BaseDef) {
-  let changeSubscribers = subscribers.get(oldFieldOrCard);
-  if (changeSubscribers) {
-    changeSubscribers.forEach((changeSubscriber) =>
-      subscribeToChanges(newFieldOrCard, changeSubscriber),
-    );
-    changeSubscribers.forEach((changeSubscriber) =>
-      unsubscribeFromChanges(oldFieldOrCard, changeSubscriber),
-    );
+function applySubscribersToInstanceValue(
+  instance: BaseDef,
+  field: Field<typeof BaseDef>,
+  oldValue: BaseDef | BaseDef[],
+  newValue: BaseDef | BaseDef[],
+) {
+  let changeSubscribers: Set<CardChangeSubscriber> | undefined = undefined;
+  if (field.fieldType === 'contains' || field.fieldType === 'containsMany') {
+    changeSubscribers = subscribers.get(instance);
+  } else if (
+    isArrayOfCardOrField(oldValue) &&
+    oldValue[0] &&
+    subscribers.has(oldValue[0])
+  ) {
+    changeSubscribers = subscribers.get(oldValue[0]);
+  } else if (isCardOrField(oldValue)) {
+    changeSubscribers = subscribers.get(oldValue);
   }
+
+  if (!changeSubscribers) {
+    return;
+  }
+
+  let toArray = function (item: BaseDef | BaseDef[]) {
+    if (isCardOrField(item)) {
+      return [item];
+    } else if (isArrayOfCardOrField(item)) {
+      return [...item];
+    } else {
+      return [];
+    }
+  };
+
+  let oldItems = toArray(oldValue);
+  let newItems = toArray(newValue);
+
+  let addedItems = newItems.filter((item) => !oldItems.includes(item));
+  let removedItems = oldItems.filter((item) => !newItems.includes(item));
+
+  addedItems.forEach((item) =>
+    changeSubscribers!.forEach((subscriber) =>
+      subscribeToChanges(item, subscriber),
+    ),
+  );
+
+  removedItems.forEach((item) =>
+    changeSubscribers!.forEach((subscriber) =>
+      unsubscribeFromChanges(item, subscriber),
+    ),
+  );
 }
 
 function getDataBucket<T extends BaseDef>(instance: T): Map<string, any> {
@@ -2457,11 +2553,8 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
   instance: BaseInstanceType<T>,
   doc: LooseSingleCardDocument,
 ): Promise<BaseInstanceType<T>> {
-  let identityContext = identityContexts.get(instance);
-  if (!identityContext) {
-    identityContext = new IdentityContext();
-    identityContexts.set(instance, identityContext);
-  }
+  let identityContext = new IdentityContext();
+  identityContexts.set(instance, identityContext);
   if (!instance[relativeTo] && doc.data.id) {
     instance[relativeTo] = new URL(doc.data.id);
   }
@@ -2580,7 +2673,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
       }
       let relativeToVal = instance[relativeTo];
       return [
-        fieldName,
+        field,
         await getDeserializedValue({
           card,
           loadedValue: loadedValues.get(fieldName),
@@ -2594,7 +2687,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
         }),
       ];
     }),
-  )) as [keyof BaseInstanceType<T>, any][];
+  )) as [Field<T>, any][];
 
   // this block needs to be synchronous
   {
@@ -2605,8 +2698,11 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
       originalId = (instance as CardDef).id; // the instance is a composite card
       instance[isSavedInstance] = false;
     }
-    for (let [fieldName, value] of values) {
-      if (fieldName === 'id' && wasSaved && originalId !== value) {
+    for (let [field, value] of values) {
+      if (!field) {
+        continue;
+      }
+      if (field.name === 'id' && wasSaved && originalId !== value) {
         throw new Error(
           `cannot change the id for saved instance ${originalId}`,
         );
@@ -2615,15 +2711,16 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
 
       // Before updating field's value, we also have to make sure
       // the subscribers also subscribes to a new value.
-      let existingValue = deserialized.get(fieldName as string);
+      let existingValue = deserialized.get(field.name as string);
       if (
-        isCardOrField(existingValue) &&
-        isCardOrField(value) &&
-        existingValue !== value
+        isCardOrField(existingValue) ||
+        isArrayOfCardOrField(existingValue) ||
+        isCardOrField(value) ||
+        isArrayOfCardOrField(value)
       ) {
-        migrateSubscribers(existingValue, value);
+        applySubscribersToInstanceValue(instance, field, existingValue, value);
       }
-      deserialized.set(fieldName as string, value);
+      deserialized.set(field.name as string, value);
       logger.log(recompute(instance));
     }
     if (isCardInstance(instance) && resource.id != null) {
@@ -2787,6 +2884,7 @@ export type SignatureFor<CardT extends BaseDefConstructor> = {
     set: Setter;
     fieldName: string | undefined;
     context?: CardContext;
+    canEdit?: boolean;
   };
 };
 

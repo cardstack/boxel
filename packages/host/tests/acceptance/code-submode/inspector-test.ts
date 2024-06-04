@@ -437,6 +437,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
             attributes: {
               title: 'Person',
               description: 'Catalog entry',
+              isField: false,
               ref: {
                 module: `./person`,
                 name: 'Person',
@@ -928,6 +929,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test<TestContextWithSSE>('can delete a card instance from code submode with no recent files to fall back on', async function (assert) {
+    let done = assert.async();
+
     let expectedEvents = [
       {
         type: 'index',
@@ -986,6 +989,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       expectedEvents,
       callback: async () => {
         await click('[data-test-confirm-delete-button]');
+        done();
       },
     });
     await waitFor('[data-test-empty-code-mode]');

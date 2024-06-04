@@ -14,6 +14,7 @@ import {
   type BoxComponentSignature,
   getBoxComponent,
   DefaultFormatConsumer,
+  RealmSessionConsumer,
 } from './field-component';
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
 import { getPlural } from '@cardstack/runtime-common';
@@ -34,45 +35,54 @@ interface ContainsManyEditorSignature {
 
 class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
   <template>
-    <div data-test-contains-many={{@field.name}}>
-      {{#if @arrayField.children.length}}
-        <ul class='list'>
-          {{#each @arrayField.children as |boxedElement i|}}
-            <li class='editor' data-test-item={{i}}>
-              {{#let
-                (getBoxComponent
-                  (@cardTypeFor @field boxedElement) boxedElement @field
-                )
-                as |Item|
-              }}
-                <Item />
-              {{/let}}
-              <div class='remove-button-container'>
-                <IconButton
-                  @icon={{IconTrash}}
-                  @width='18px'
-                  @height='18px'
-                  class='remove'
-                  {{on 'click' (fn this.remove i)}}
-                  data-test-remove={{i}}
-                  aria-label='Remove'
-                />
-              </div>
-            </li>
-          {{/each}}
-        </ul>
-      {{/if}}
-      <AddButton
-        class='add-new'
-        @variant='full-width'
-        {{on 'click' this.add}}
-        data-test-add-new
-      >
-        Add
-        {{getPlural @field.card.displayName}}
-      </AddButton>
-    </div>
+    <RealmSessionConsumer as |realmSession|>
+      <div class='contains-many-editor' data-test-contains-many={{@field.name}}>
+        {{#if @arrayField.children.length}}
+          <ul class='list'>
+            {{#each @arrayField.children as |boxedElement i|}}
+              <li class='editor' data-test-item={{i}}>
+                {{#if realmSession.canWrite}}
+                  <IconButton
+                    @icon={{IconTrash}}
+                    @width='18px'
+                    @height='18px'
+                    class='remove'
+                    {{on 'click' (fn this.remove i)}}
+                    data-test-remove={{i}}
+                    aria-label='Remove'
+                  />
+                {{/if}}
+                <div class='item-container'>
+                  {{#let
+                    (getBoxComponent
+                      (@cardTypeFor @field boxedElement) boxedElement @field
+                    )
+                    as |Item|
+                  }}
+                    <Item />
+                  {{/let}}
+                </div>
+              </li>
+            {{/each}}
+          </ul>
+        {{/if}}
+        {{#if realmSession.canWrite}}
+          <AddButton
+            class='add-new'
+            @variant='full-width'
+            {{on 'click' this.add}}
+            data-test-add-new
+          >
+            Add
+            {{getPlural @field.card.displayName}}
+          </AddButton>
+        {{/if}}
+      </div>
+    </RealmSessionConsumer>
     <style>
+      .contains-many-editor {
+        --remove-icon-size: var(--boxel-icon-lg);
+      }
       .list {
         list-style: none;
         padding: 0;
@@ -80,13 +90,8 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
       }
       .editor {
         position: relative;
-        cursor: pointer;
-        padding: var(--boxel-sp);
-        background-color: var(--boxel-100);
-        border-radius: var(--boxel-form-control-border-radius);
-      }
-      .editor:hover {
-        background-color: var(--boxel-200);
+        display: grid;
+        grid-template-columns: 1fr var(--remove-icon-size);
       }
       .editor :deep(.boxel-input:hover) {
         border-color: var(--boxel-form-control-border-color);
@@ -94,18 +99,28 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
       .editor + .editor {
         margin-top: var(--boxel-sp-xs);
       }
-      .remove-button-container {
-        position: absolute;
-        top: 0;
-        left: 100%;
-        height: 100%;
+      .item-container {
+        padding: var(--boxel-sp);
+        background-color: var(--boxel-100);
+        border-radius: var(--boxel-form-control-border-radius);
+        order: -1;
+        transition: background-color var(--boxel-transition);
       }
       .remove {
         --icon-color: var(--boxel-dark);
+        --icon-stroke-width: 1.5px;
       }
-      .editor:hover .remove,
+      .remove:focus,
       .remove:hover {
         --icon-color: var(--boxel-red);
+        outline: 0;
+      }
+      .remove:focus + .item-container,
+      .remove:hover + .item-container {
+        background-color: var(--boxel-200);
+      }
+      .add-new {
+        width: calc(100% - var(--remove-icon-size));
       }
     </style>
   </template>

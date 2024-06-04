@@ -2,31 +2,56 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { primitive } from '../constants';
 import { Loader } from '../loader';
 
-type EmptySchema = {};
-
 type ArraySchema = {
   type: 'array';
+  description?: string;
   items: Schema;
   minItems?: number;
   maxItems?: number;
   uniqueItems?: boolean;
 };
 
-type ObjectSchema = {
+export type ObjectSchema = {
   type: 'object';
+  description?: string;
   properties: {
     [fieldName: string]: Schema;
   };
-  required?: string[];
+};
+
+export type RelationshipSchema = {
+  type: 'object';
+  description?: string;
+  properties: {
+    links: {
+      type: 'object';
+      properties: {
+        self: { type: 'null' | 'string' };
+      };
+      required: ['self'];
+    };
+  };
+  required: ['links'];
+};
+
+export type RelationshipsSchema = {
+  type: 'object';
+  description?: string;
+  properties: {
+    [fieldName: string]: RelationshipSchema;
+  };
+  required: string[]; // fieldName array;
 };
 
 type DateSchema = {
   type: 'string';
+  description?: string;
   format: 'date' | 'date-time';
 };
 
 type NumberSchema = {
   type: 'number' | 'integer';
+  description?: string;
   exclusiveMinimum?: number;
   minimum?: number;
   exclusiveMaximum?: number;
@@ -36,22 +61,24 @@ type NumberSchema = {
 
 type StringSchema = {
   type: 'string';
+  description?: string;
   minLength?: number;
   maxLength?: number;
   pattern?: string;
 };
 
 type BooleanSchema = {
+  description?: string;
   type: 'boolean';
 };
 
 type EnumSchema = {
   // JSON Schema allows a mix of any types in an enum
+  description?: string;
   enum: any[];
 };
 
 export type Schema =
-  | EmptySchema
   | ArraySchema
   | ObjectSchema
   | DateSchema
@@ -107,6 +134,9 @@ export async function basicMappings(loader: Loader) {
   mappings.set(BooleanField, {
     type: 'boolean',
   });
+  for (const value of mappings.values()) {
+    Object.freeze(value);
+  }
   return mappings;
 }
 
@@ -119,7 +149,7 @@ function getPrimitiveType(
     return undefined;
   }
   if (mappings.has(def)) {
-    return mappings.get(def);
+    return { ...mappings.get(def) } as Schema;
   } else {
     // Try the parent class, recurse up until we hit a type recognised
     return getPrimitiveType(Object.getPrototypeOf(def), mappings);
@@ -142,7 +172,8 @@ function generatePatchCallSpecification(
   def: typeof CardAPI.BaseDef,
   cardApi: typeof CardAPI,
   mappings: Map<typeof CardAPI.FieldDef, Schema>,
-): Schema | undefined {
+  relationshipsOnly = false,
+): Schema | RelationshipsSchema | undefined {
   // If we're looking at a primitive field we can get the schema
   if (primitive in def) {
     return getPrimitiveType(def, mappings);
@@ -150,42 +181,78 @@ function generatePatchCallSpecification(
 
   // If it's not a primitive, it contains other fields
   // and should be represented by an object
-  let schema: ObjectSchema = {
-    type: 'object',
-    properties: {},
-  };
+  let schema: ObjectSchema | RelationshipsSchema;
+  if (relationshipsOnly) {
+    schema = {
+      type: 'object',
+      properties: {},
+      required: [],
+    };
+  } else {
+    schema = {
+      type: 'object',
+      properties: {},
+    };
+  }
 
   const { id: _removedIdField, ...fields } = cardApi.getFields(def, {
     usedFieldsOnly: false,
   });
 
-  //
   for (let [fieldName, field] of Object.entries(fields)) {
     // We're generating patch data, so computeds should be skipped
-    // as should any linksTo or linksToMany fields
+    // Currently also skipping linksToMany fields
     if (
       field.computeVia ||
       field.fieldType == 'linksTo' ||
       field.fieldType == 'linksToMany'
     ) {
-      continue;
+      if (relationshipsOnly && field.fieldType == 'linksTo') {
+        (schema as RelationshipsSchema).required.push(fieldName);
+        schema.properties[fieldName] = {
+          type: 'object',
+          properties: {
+            links: {
+              type: 'object',
+              properties: {
+                self: { type: 'null' || 'string' },
+              },
+              required: ['self'],
+            },
+          },
+          required: ['links'],
+        };
+        if (field.description) {
+          schema.properties[fieldName].description = field.description;
+        }
+      } else {
+        continue;
+      }
     }
-    const fieldSchema = generatePatchCallSpecification(
-      field.card,
-      cardApi,
-      mappings,
-    );
-    // This happens when we have no known schema for the field type
-    if (fieldSchema == undefined) {
-      continue;
-    }
-    if (field.fieldType == 'containsMany') {
-      schema.properties[fieldName] = {
-        type: 'array',
-        items: fieldSchema,
-      };
-    } else if (field.fieldType == 'contains') {
-      schema.properties[fieldName] = fieldSchema;
+
+    if (!relationshipsOnly) {
+      let fieldSchemaForSingleItem = generatePatchCallSpecification(
+        field.card,
+        cardApi,
+        mappings,
+      ) as Schema | undefined;
+      // This happens when we have no known schema for the field type
+      if (fieldSchemaForSingleItem == undefined) {
+        continue;
+      }
+
+      if (field.fieldType == 'containsMany') {
+        schema.properties[fieldName] = {
+          type: 'array',
+          items: fieldSchemaForSingleItem,
+        };
+      } else if (field.fieldType == 'contains') {
+        schema.properties[fieldName] = fieldSchemaForSingleItem;
+      }
+
+      if (field.description) {
+        schema.properties[fieldName].description = field.description;
+      }
     }
   }
   return schema;
@@ -207,14 +274,36 @@ export function generateCardPatchCallSpecification(
   def: typeof CardAPI.CardDef,
   cardApi: typeof CardAPI,
   mappings: Map<typeof CardAPI.FieldDef, Schema>,
-): Schema {
-  let schema = generatePatchCallSpecification(def, cardApi, mappings);
+):
+  | { attributes: Schema }
+  | { attributes: Schema; relationships: RelationshipsSchema } {
+  let schema = generatePatchCallSpecification(def, cardApi, mappings) as
+    | Schema
+    | undefined;
   if (schema == undefined) {
     return {
-      type: 'object',
-      properties: {},
+      attributes: {
+        type: 'object',
+        properties: {},
+      },
     };
   } else {
-    return schema;
+    let relationships = generatePatchCallSpecification(
+      def,
+      cardApi,
+      mappings,
+      true,
+    );
+    if (
+      !relationships ||
+      !('required' in relationships) ||
+      !relationships.required.length
+    ) {
+      return { attributes: schema };
+    }
+    return {
+      attributes: schema,
+      relationships,
+    };
   }
 }

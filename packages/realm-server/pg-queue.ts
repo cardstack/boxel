@@ -13,8 +13,10 @@ import {
   asExpressions,
   Deferred,
   Job,
+  setErrorReporter,
 } from '@cardstack/runtime-common';
 import PgAdapter from './pg-adapter';
+import * as Sentry from '@sentry/node';
 
 const log = logger('queue');
 
@@ -42,6 +44,14 @@ export interface QueueOpts {
 const defaultQueueOpts: Required<QueueOpts> = Object.freeze({
   queueName: 'default',
 });
+
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.SENTRY_ENVIRONMENT || 'development',
+  });
+  setErrorReporter(Sentry.captureException);
+}
 
 // Tracks a job that should loop with a timeout and an interruptible sleep.
 class WorkLoop {
@@ -338,7 +348,14 @@ export default class PgQueue implements Queue {
           log.debug(`running %s`, coalescedIds);
           result = await this.runJob(firstJob.category, firstJob.args);
           newStatus = 'resolved';
-        } catch (err) {
+        } catch (err: any) {
+          Sentry.captureException(err);
+          console.error(
+            `Error running job ${firstJob.id}: category=${
+              firstJob.category
+            } queue=${firstJob.queue} args=${JSON.stringify(firstJob.args)}`,
+            err,
+          );
           result = serializableError(err);
           newStatus = 'rejected';
         }

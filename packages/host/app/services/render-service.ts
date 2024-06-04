@@ -123,6 +123,7 @@ export default class RenderService extends Service {
     return parseCardHtml(html);
   }
 
+  // TODO delete me
   private async resolveField(
     params: Omit<RenderCardParams, 'format'> & { fieldName: string },
   ): Promise<void> {
@@ -140,7 +141,7 @@ export default class RenderService extends Service {
         let notLoaded = err.additionalErrors?.find((e: any) =>
           isNotLoadedError(e),
         ) as NotLoaded | undefined;
-        if (isCardError(err) && notLoaded) {
+        if (isCardError(err) && err.status !== 500 && notLoaded) {
           let linkURL = new URL(`${notLoaded.reference}.json`);
           if (realmPath.inRealm(linkURL)) {
             await visit(linkURL, identityContext);

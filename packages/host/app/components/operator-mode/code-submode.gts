@@ -15,6 +15,8 @@ import perform from 'ember-concurrency/helpers/perform';
 
 import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 
+import { provide } from 'ember-provide-consume-context';
+
 import { Accordion } from '@cardstack/boxel-ui/components';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
@@ -27,6 +29,7 @@ import {
   hasExecutableExtension,
   RealmPaths,
   type ResolvedCodeRef,
+  RealmSessionContextName,
 } from '@cardstack/runtime-common';
 import { SerializedError } from '@cardstack/runtime-common/error';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
@@ -49,7 +52,8 @@ import type CardService from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import RecentFilesService from '@cardstack/host/services/recent-files-service';
+import type RealmInfoService from '@cardstack/host/services/realm-info-service';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
@@ -115,6 +119,7 @@ export default class CodeSubmode extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare recentFilesService: RecentFilesService;
   @service private declare environmentService: EnvironmentService;
+  @service private declare realmInfoService: RealmInfoService;
 
   @tracked private loadFileError: string | null = null;
   @tracked private userHasDismissedURLError = false;
@@ -599,9 +604,10 @@ export default class CodeSubmode extends Component<Signature> {
         throw new Error(`bug: CreateFileModal not instantiated`);
       }
       this.isCreateModalOpen = true;
+      await this.realmInfoService.fetchAllKnownRealmInfos.perform();
       let url = await this.createFileModal.createNewFile(
         fileType,
-        this.realmURL,
+        new URL(this.realmInfoService.userDefaultRealm.path),
         definitionClass,
         sourceInstance,
       );
@@ -659,6 +665,11 @@ export default class CodeSubmode extends Component<Signature> {
 
   get isReadOnly() {
     return !this.readyFile.realmSession.canWrite;
+  }
+
+  @provide(RealmSessionContextName)
+  get realmSession() {
+    return this.readyFile.realmSession;
   }
 
   <template>

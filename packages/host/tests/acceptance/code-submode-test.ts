@@ -443,6 +443,7 @@ module('Acceptance | code submode tests', function (hooks) {
             attributes: {
               title: 'Person',
               description: 'Catalog entry',
+              isField: false,
               ref: {
                 module: `./person`,
                 name: 'Person',
@@ -1418,6 +1419,7 @@ module('Acceptance | code submode tests', function (hooks) {
 
     await click('[data-test-select-card-type]');
     await waitFor('[data-test-card-catalog-modal]');
+    await percySnapshot(assert);
     let cardCatalogModalOverlay = document.querySelector(
       '[data-test-card-catalog-modal]',
     )?.previousElementSibling;

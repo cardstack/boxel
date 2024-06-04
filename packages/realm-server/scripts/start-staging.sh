@@ -3,8 +3,7 @@ pnpm setup:base-in-deployment
 pnpm setup:drafts-in-deployment
 pnpm setup:published-in-deployment
 NODE_NO_WARNINGS=1 \
-  PG_INDEXER=true \
-  LOG_LEVELS='*=info' \
+  LOG_LEVELS='perf=debug' \
   ts-node \
   --transpileOnly main \
   --port=3000 \

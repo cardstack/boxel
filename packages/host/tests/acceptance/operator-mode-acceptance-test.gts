@@ -266,6 +266,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             attributes: {
               title: 'Person Card',
               description: 'Catalog entry for Person Card',
+              isField: false,
               ref: {
                 module: `${testRealmURL}person`,
                 name: 'Person',
@@ -398,6 +399,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.dom('[data-test-stack-card-index="0"]').exists(); // Index card opens in the stack
 
     await waitFor(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`);
+
     assert
       .dom(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`)
       .exists();
@@ -407,6 +409,14 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert
       .dom(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`)
       .exists();
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}index"]`)
+      .doesNotExist('grid cards do not show other grid cards');
+    // this was an unspelled, but very valid assertion that percy is making
+    // that I'm now making concrete
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}grid"]`)
+      .doesNotExist('grid cards do not show other grid cards');
     // this asserts that cards that throw errors during search
     // query deserialization (boom.json) are handled gracefully
     assert
@@ -684,7 +694,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
   });
 
-  module('realm session expiration', function () {
+  module('realm session expiration', function (hooks) {
     let refreshInSec = 2;
 
     hooks.beforeEach(async function () {

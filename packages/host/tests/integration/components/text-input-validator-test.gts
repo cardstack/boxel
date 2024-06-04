@@ -12,7 +12,7 @@ import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { RealmSessionContextName, baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 
@@ -31,7 +31,9 @@ import {
   setupLocalIndexing,
   saveCard,
   setupIntegrationTestRealm,
+  provideConsumeContext,
 } from '../../helpers';
+import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -42,6 +44,7 @@ module('Integration | text-input-validator', function (hooks) {
   let realm: Realm;
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
+  setupMatrixServiceMock(hooks);
 
   async function loadCard(url: string): Promise<CardDef> {
     let { createFromSerialized, recompute } = cardApi;
@@ -64,6 +67,10 @@ module('Integration | text-input-validator', function (hooks) {
   }
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
+    provideConsumeContext(RealmSessionContextName, {
+      canWrite: true,
+    });
+
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
 

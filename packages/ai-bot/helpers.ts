@@ -2,8 +2,9 @@ import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardFragmentContent,
+  CommandEvent,
 } from 'https://cardstack.com/base/room';
-import { type IRoomEvent } from 'matrix-js-sdk';
+import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
 
 const MODIFY_SYSTEM_MESSAGE =
   '\
@@ -19,7 +20,8 @@ If the user request is unclear, you may ask clarifying questions. \
 You may make multiple function calls, all calls are gated by the user so multiple options can be explored.\
 If a user asks you about things in the world, use your existing knowledge to help them. Only if necessary, add a *small* caveat at the end of your message to explain that you do not have live external data. \
 \
-If you need access to the cards the user can see, you can ask them to attach the cards.';
+If you need access to the cards the user can see, you can ask them to attach the cards. \
+If you encounter JSON structures, please enclose them within backticks to ensure they are displayed stylishly in Markdown.';
 
 type CommandMessage = {
   type: 'command';
@@ -192,74 +194,6 @@ export function getTools(history: DiscreteMatrixEvent[], aiBotUserId: string) {
   }
 }
 
-export function shouldSetRoomTitle(
-  rawEventLog: DiscreteMatrixEvent[],
-  aiBotUserId: string,
-  additionalCommands = 0, // These are any that have been sent since the event log was retrieved
-) {
-  // If the room title has been set already, we don't want to set it again
-  let nameEvents = rawEventLog.filter((event) => event.type === 'm.room.name');
-  if (nameEvents.length > 1) {
-    return false;
-  }
-
-  // If there has been a command sent,
-  // we should be at a stage where we can set the room title
-  let commandsSent = rawEventLog.filter(
-    (event) =>
-      event.type === 'm.room.message' &&
-      event.content.msgtype === 'org.boxel.command',
-  );
-
-  if (commandsSent.length + additionalCommands > 0) {
-    return true;
-  }
-
-  // If there has been a 5 user messages we should still set the room title
-  let userEvents = rawEventLog.filter(
-    (event) => event.sender !== aiBotUserId && event.type === 'm.room.message',
-  );
-  if (userEvents.length >= 5) {
-    return true;
-  }
-
-  return false;
-}
-
-export function getStartOfConversation(
-  history: DiscreteMatrixEvent[],
-  aiBotUserId: string,
-  maxLength = 2000,
-) {
-  /**
-   * Get just the start of the conversation
-   * useful for summarizing while limiting the context
-   */
-  let messages: OpenAIPromptMessage[] = [];
-  let totalLength = 0;
-  for (let event of history) {
-    if (event.type !== 'm.room.message') {
-      continue;
-    }
-    let body = event.content.body;
-    if (body && totalLength + body.length <= maxLength) {
-      if (event.sender === aiBotUserId) {
-        messages.push({
-          role: 'assistant',
-          content: body,
-        });
-      } else {
-        messages.push({
-          role: 'user',
-          content: body,
-        });
-      }
-      totalLength += body.length;
-    }
-  }
-  return messages;
-}
-
 export function getModifyPrompt(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
@@ -298,9 +232,7 @@ export function getModifyPrompt(
     `
   The user currently has given you the following data to work with:
   Cards:\n`;
-  for (let card of getRelevantCards(history, aiBotUserId)) {
-    systemMessage += `Full data: ${JSON.stringify(card)}`;
-  }
+  systemMessage += attachedCardsToMessage(history, aiBotUserId);
   if (tools.length == 0) {
     systemMessage +=
       'You are unable to edit any cards, the user has not given you access, they need to open the card on the stack and let it be auto-attached';
@@ -317,12 +249,53 @@ export function getModifyPrompt(
   return messages;
 }
 
+export const attachedCardsToMessage = (
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+) => {
+  return `Full card data: ${JSON.stringify(
+    getRelevantCards(history, aiBotUserId),
+  )}`;
+};
+
 export function cleanContent(content: string) {
   content = content.trim();
-  content = content.replace(/```json/g, '');
-  content = content.replace(/`/g, '');
   if (content.endsWith('json')) {
     content = content.slice(0, -4);
   }
   return content.trim();
+}
+
+//matrix-js-sdk extensions
+export const isPatchReactionEvent = (event?: MatrixEvent) => {
+  if (event === undefined) {
+    return false;
+  }
+  let content = event.getContent();
+  return (
+    event.getType() === 'm.reaction' &&
+    content['m.relates_to']?.rel_type === 'm.annotation' &&
+    content['m.relates_to']?.key === 'applied'
+  );
+};
+
+export function isCommandEvent(
+  event: DiscreteMatrixEvent,
+): event is CommandEvent {
+  return (
+    event.type === 'm.room.message' &&
+    typeof event.content === 'object' &&
+    event.content.msgtype === 'org.boxel.command' &&
+    event.content.format === 'org.matrix.custom.html' &&
+    typeof event.content.data === 'object' &&
+    typeof event.content.data.command === 'object'
+  );
+}
+
+export function isPatchCommandEvent(
+  event: DiscreteMatrixEvent,
+): event is CommandEvent {
+  return (
+    isCommandEvent(event) && event.content.data.command.type === 'patchCard'
+  );
 }

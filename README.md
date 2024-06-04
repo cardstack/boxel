@@ -120,7 +120,7 @@ If you wish to drop the development databases you can execute:
 pnpm drop-all-dbs
 ```
 
-You can then run `PGDATABASE=boxel_dev pnpm migrate up` (with `PGDATABASE` set accordingly) or just start the realm server (`PG_INDEXER=true pnpm start:all`) to create the database again.
+You can then run `pnpm migrate up` (with `PGDATABASE` set accordingly if you want to migrate a database other than `boxel`) or just start the realm server (`pnpm start:all`) to create the database again.
 
 To interact with your local database directly you can use psql:
 ```

@@ -6,7 +6,7 @@ const testContainerId = 'test-container';
 const iframeSelectorTempId = 'iframe-selector-temp';
 const username = 'user';
 const password = 'password';
-const timeoutMs = 10000;
+const timeoutMs = 30000;
 
 class Messenger {
   #request;
@@ -144,7 +144,7 @@ async function boot(url, waitForSelector, isLoginRequired) {
   iframe.setAttribute('src', url);
   container.append(iframe);
   // wait moment for iframe src to load
-  await new Promise((res) => setTimeout(res, 1000));
+  await new Promise((res) => setTimeout(res, 3000));
   let messenger = new Messenger(iframe);
   await waitFor('[data-test-boxel-root]', messenger);
   try {

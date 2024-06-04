@@ -38,7 +38,8 @@
       "style-loader@2.0.0": "patches/style-loader@2.0.0.patch",
       "ember-css-url@1.0.0": "patches/ember-css-url@1.0.0.patch",
       "matrix-js-sdk@31.0.0": "patches/matrix-js-sdk@31.0.0.patch",
-      "ember-basic-dropdown@8.0.4": "patches/ember-basic-dropdown@8.0.4.patch"
+      "ember-basic-dropdown@8.0.4": "patches/ember-basic-dropdown@8.0.4.patch",
+      "ember-source@5.4.1": "patches/ember-source@5.4.1.patch"
     }
   },
   "devDependencies": {
@@ -56,7 +57,7 @@
     "ember-cli-htmlbars": "^6.3.0",
     "ember-resources": "^6.3.1",
     "ember-source": "~5.4.0",
-    "ember-template-imports": "^3.0.1",
+    "ember-template-imports": "^4.1.1",
     "eslint": "^7.32.0",
     "eslint-config-prettier": "^8.4.0",
     "eslint-plugin-import": "^2.26.0",

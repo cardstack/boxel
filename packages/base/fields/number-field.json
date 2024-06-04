@@ -4,6 +4,7 @@
     "attributes": {
       "title": "Number Field",
       "description": "A field that captures number values",
+      "isField": true,
       "ref": {
         "module": "https://cardstack.com/base/number",
         "name": "default"

@@ -159,11 +159,15 @@ export class Loader {
   async getConsumedModules(
     moduleIdentifier: string,
     consumed = new Set<string>(),
+    initialIdentifier = moduleIdentifier,
   ): Promise<string[]> {
     if (consumed.has(moduleIdentifier)) {
       return [];
     }
-    consumed.add(moduleIdentifier);
+    // you can't consume yourself
+    if (moduleIdentifier !== initialIdentifier) {
+      consumed.add(moduleIdentifier);
+    }
 
     let resolvedModuleIdentifier = new URL(moduleIdentifier);
     let module = this.getModule(resolvedModuleIdentifier.href);
@@ -189,7 +193,11 @@ export class Loader {
         return cached;
       }
       for (let consumedModule of module?.consumedModules ?? []) {
-        await this.getConsumedModules(consumedModule, consumed);
+        await this.getConsumedModules(
+          consumedModule,
+          consumed,
+          initialIdentifier,
+        );
       }
       cached = [...consumed];
       this.consumptionCache.set(module, cached);

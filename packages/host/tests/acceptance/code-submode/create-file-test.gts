@@ -91,6 +91,7 @@ const files: Record<string, any> = {
       attributes: {
         title: 'Error',
         description: 'Catalog entry for Error',
+        isField: false,
         ref: {
           module: '../error',
           name: 'default',
@@ -113,6 +114,7 @@ const files: Record<string, any> = {
       attributes: {
         title: 'Pet',
         description: 'Catalog entry for Pet',
+        isField: false,
         ref: { module: `../pet`, name: 'default' },
       },
       meta: {
@@ -129,6 +131,7 @@ const files: Record<string, any> = {
       attributes: {
         title: 'Person',
         description: 'Catalog entry for Person',
+        isField: false,
         ref: { module: `../person`, name: 'Person' },
       },
       meta: {
@@ -675,7 +678,34 @@ export class TestCard extends Person {
     await deferred.promise;
   });
 
-  test<TestContextWithSave>('an error when creating a new card definition is shown', async function (assert) {
+  test<TestContextWithSave>('can create new card definition in different realm than realm of current file opened in code mode', async function (assert) {
+    let done = assert.async();
+    await visitOperatorMode(this.owner, `${baseRealm.url}card-api.gts`);
+    await openNewFileModal('Card Definition');
+
+    await click('[data-test-select-card-type]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
+    await click(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
+    await click('[data-test-card-catalog-go-button]');
+    await waitFor(`[data-test-selected-type="Person"]`);
+
+    await fillIn('[data-test-display-name-field]', 'Test Card');
+    await fillIn('[data-test-file-name-field]', 'test-card');
+
+    this.onSave((url, content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(url.href, `${testRealmURL}test-card.gts`);
+      done();
+    });
+
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+  });
+
+  test('an error when creating a new card definition is shown', async function (assert) {
     await visitOperatorMode(this.owner);
     await openNewFileModal('Card Definition');
 
@@ -762,7 +792,7 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
     await deferred.promise;
   });
 
-  test<TestContextWithSave>('an error when creating a new field definition is shown', async function (assert) {
+  test('an error when creating a new field definition is shown', async function (assert) {
     await visitOperatorMode(this.owner);
     await openNewFileModal('Field Definition');
     await click('[data-test-select-card-type]');
