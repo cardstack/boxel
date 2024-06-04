@@ -1927,6 +1927,22 @@ module('Realm Server', function (hooks) {
         assert.strictEqual(response.status, 404, 'HTTP 404 status');
       }
     });
+
+    test('can make HEAD request to get realmURL and isPublicReadable status', async function (assert) {
+      let response = await request
+        .head('/person-1')
+        .set('Accept', 'application/vnd.card+json');
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        response.headers['x-boxel-realm-url'],
+        testRealmURL.href,
+      );
+      assert.strictEqual(
+        response.headers['x-boxel-realm-public-readable'],
+        'true',
+      );
+    });
   });
 
   module('BOXEL_HTTP_BASIC_PW env var', function (hooks) {
