@@ -57,7 +57,6 @@ module.exports = function (environment) {
         ? 'http://test-realm/test/'
         : process.env.OWN_REALM_URL || 'http://localhost:4200/',
     featureFlags: {},
-    ...(process.env.CI ? { ci: true } : {}),
   };
 
   if (environment === 'development') {
