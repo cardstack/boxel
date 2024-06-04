@@ -6,12 +6,16 @@ import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
-import { merge } from 'lodash';
+import { mergeWith } from 'lodash';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
-import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
-import { RealmPaths } from '@cardstack/runtime-common/paths';
+import {
+  mergeRelationships,
+  type PatchData,
+  type ResolvedCodeRef,
+  RealmPaths,
+} from '@cardstack/runtime-common';
 
 import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
 import { StackItem } from '@cardstack/host/lib/stack-item';
@@ -101,7 +105,7 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
-  patchCard = task({ enqueue: true }, async (id: string, patch: any) => {
+  patchCard = task({ enqueue: true }, async (id: string, patch: PatchData) => {
     let stackItems = this.state?.stacks.flat() ?? [];
     if (
       !stackItems.length ||
@@ -118,34 +122,20 @@ export default class OperatorModeStateService extends Service {
               throw new Error(`Attribute "${key}" does not exist in card`);
             }
           }
-          document.data.attributes = merge(
+          document.data.attributes = mergeWith(
             document.data.attributes,
             patch.attributes,
           );
         }
 
         if (patch.relationships) {
-          for (let [key, value] of Object.entries(patch.relationships)) {
-            if (!Array.isArray(value)) {
-              continue;
-            }
-            if (!(key in item.card)) {
-              throw new Error(`Relationship "${key}" does not exist in card`);
-            }
-            if (document.data.relationships) {
-              Object.entries(document.data.relationships)
-                .filter(([fieldName]) => fieldName.includes('.'))
-                .map(([fieldName]) => {
-                  if (fieldName.split('.')[0] === key) {
-                    delete document.data.relationships![fieldName];
-                  }
-                });
-            }
-          }
-          document.data.relationships = merge(
+          let mergedRel = mergeRelationships(
             document.data.relationships,
             patch.relationships,
           );
+          if (mergedRel && Object.keys(mergedRel).length !== 0) {
+            document.data.relationships = mergedRel;
+          }
         }
 
         await this.cardService.patchCard(item.card, document, patch);

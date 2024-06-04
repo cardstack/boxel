@@ -19,6 +19,7 @@ import {
   type RealmInfo,
   type Loader,
   type PatchData,
+  type Relationship,
 } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 
@@ -288,27 +289,44 @@ export default class CardService extends Service {
     return await this.saveModel(this, updatedCard);
   }
 
+  private async loadRelationshipCard(rel: Relationship, relativeTo: URL) {
+    if (!rel.links.self) {
+      return;
+    }
+    let id = rel.links.self;
+    let cardResource = getCard(this, () => new URL(id, relativeTo).href);
+    await cardResource.loaded;
+    return cardResource.card;
+  }
+
   private async loadPatchedCards(
     patchData: PatchData,
     relativeTo: URL,
   ): Promise<{
-    [fieldName: string]: CardDef;
+    [fieldName: string]: CardDef | CardDef[];
   }> {
     if (!patchData?.relationships) {
       return {};
     }
-    let result: { [fieldName: string]: CardDef } = {};
+    let result: { [fieldName: string]: CardDef | CardDef[] } = {};
     await Promise.all(
       Object.entries(patchData.relationships).map(async ([fieldName, rel]) => {
-        if (!rel.links.self) {
-          return;
-        }
-
-        let id = rel.links.self;
-        let cardResource = getCard(this, () => new URL(id, relativeTo).href);
-        await cardResource.loaded;
-        if (cardResource.card) {
-          result[fieldName] = cardResource.card;
+        if (Array.isArray(rel)) {
+          let cards: CardDef[] = [];
+          await Promise.all(
+            rel.map(async (r) => {
+              let card = await this.loadRelationshipCard(r, relativeTo);
+              if (card) {
+                cards.push(card);
+              }
+            }),
+          );
+          result[fieldName] = cards;
+        } else {
+          let card = await this.loadRelationshipCard(rel, relativeTo);
+          if (card) {
+            result[fieldName] = card;
+          }
         }
       }),
     );
