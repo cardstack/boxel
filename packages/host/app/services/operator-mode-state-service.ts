@@ -532,4 +532,17 @@ export default class OperatorModeStateService extends Service {
       },
     }));
   });
+
+  async openCardInInteractMode(card: CardDef) {
+    this.clearStacks();
+    let newItem = new StackItem({
+      card,
+      stackIndex: 0,
+      owner: this, // We need to think for better owner
+      format: 'isolated',
+    });
+    await newItem.ready();
+    this.addItemToStack(newItem);
+    this.updateSubmode(Submodes.Interact);
+  }
 }
