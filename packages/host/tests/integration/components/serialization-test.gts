@@ -53,7 +53,6 @@ import {
   FieldDef,
   containsMany,
   linksToMany,
-  recompute,
   BigIntegerField,
   getQueryableValue,
   EthereumAddressField,

@@ -106,9 +106,7 @@ module('Integration | card-basics', function (hooks) {
         @newContains(BooleanField) declare boolean: BaseInstanceType<
           typeof BooleanField
         >;
-        @newContains(Base64ImageField) declare base64: BaseInstanceType<
-          typeof Base64ImageField
-        >;
+        @newContains(Base64ImageField) declare base64: Base64ImageField;
         @newContains(DateField) declare date: BaseInstanceType<
           typeof DateField
         >;

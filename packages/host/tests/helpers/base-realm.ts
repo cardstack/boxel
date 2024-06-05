@@ -17,17 +17,38 @@ import type * as NumberFieldModule from 'https://cardstack.com/base/number';
 import type * as StringFieldModule from 'https://cardstack.com/base/string';
 import type * as TextAreaFieldModule from 'https://cardstack.com/base/text-area';
 
-let _string: (typeof StringFieldModule)['default'];
-let _number: (typeof NumberFieldModule)['default'];
-let _date: (typeof DateFieldModule)['default'];
-let _datetime: (typeof DatetimeFieldModule)['default'];
-let _base64Image: (typeof Base64ImageFieldModule)['Base64ImageField'];
-let _codeRef: (typeof CodeRefModule)['default'];
-let _bigInteger: (typeof BigIntegerModule)['default'];
-let _ethereumAddress: (typeof EthereumAddressModule)['default'];
-let _boolean: (typeof BooleanFieldModule)['default'];
-let _markdown: (typeof MarkdownFieldModule)['default'];
-let _textarea: (typeof TextAreaFieldModule)['default'];
+type StringField = (typeof StringFieldModule)['default'];
+let StringField: StringField;
+
+type NumberField = (typeof NumberFieldModule)['default'];
+let NumberField: NumberField;
+
+type DateField = (typeof DateFieldModule)['default'];
+let DateField: DateField;
+
+type DatetimeField = (typeof DatetimeFieldModule)['default'];
+let DatetimeField: DatetimeField;
+
+type Base64ImageField = (typeof Base64ImageFieldModule)['Base64ImageField'];
+let Base64ImageField: Base64ImageField;
+
+type CodeRefField = (typeof CodeRefModule)['default'];
+let CodeRefField: CodeRefField;
+
+type BigIntegerField = (typeof BigIntegerModule)['default'];
+let BigIntegerField: BigIntegerField;
+
+type EthereumAddressField = (typeof EthereumAddressModule)['default'];
+let EthereumAddressField: EthereumAddressField;
+
+type BooleanField = (typeof BooleanFieldModule)['default'];
+let BooleanField: BooleanField;
+
+type MarkdownField = (typeof MarkdownFieldModule)['default'];
+let MarkdownField: MarkdownField;
+
+type TextAreaField = (typeof TextAreaFieldModule)['default'];
+let TextAreaField: TextAreaField;
 
 let field: (typeof CardAPIModule)['field'];
 let CardDef: (typeof CardAPIModule)['CardDef'];
@@ -55,50 +76,51 @@ async function initialize() {
   let owner = (getContext() as TestContext).owner;
   let loader = (owner.lookup('service:loader-service') as LoaderService).loader;
 
-  _string = (
+  StringField = (
     await loader.import<typeof StringFieldModule>(`${baseRealm.url}string`)
   ).default;
 
-  _number = (
+  NumberField = (
     await loader.import<typeof NumberFieldModule>(`${baseRealm.url}number`)
   ).default;
 
-  _date = (await loader.import<typeof DateFieldModule>(`${baseRealm.url}date`))
-    .default;
+  DateField = (
+    await loader.import<typeof DateFieldModule>(`${baseRealm.url}date`)
+  ).default;
 
-  _datetime = (
+  DatetimeField = (
     await loader.import<typeof DatetimeFieldModule>(`${baseRealm.url}datetime`)
   ).default;
 
-  _base64Image = (
+  Base64ImageField = (
     await loader.import<typeof Base64ImageFieldModule>(
       `${baseRealm.url}base64-image`,
     )
   ).Base64ImageField;
 
-  _codeRef = (
+  CodeRefField = (
     await loader.import<typeof CodeRefModule>(`${baseRealm.url}code-ref`)
   ).default;
 
-  _bigInteger = (
+  BigIntegerField = (
     await loader.import<typeof BigIntegerModule>(`${baseRealm.url}big-integer`)
   ).default;
 
-  _ethereumAddress = (
+  EthereumAddressField = (
     await loader.import<typeof EthereumAddressModule>(
       `${baseRealm.url}ethereum-address`,
     )
   ).default;
 
-  _boolean = (
+  BooleanField = (
     await loader.import<typeof BooleanFieldModule>(`${baseRealm.url}boolean`)
   ).default;
 
-  _markdown = (
+  MarkdownField = (
     await loader.import<typeof MarkdownFieldModule>(`${baseRealm.url}markdown`)
   ).default;
 
-  _textarea = (
+  TextAreaField = (
     await loader.import<typeof TextAreaFieldModule>(`${baseRealm.url}text-area`)
   ).default;
 
@@ -136,17 +158,17 @@ export async function setupBaseRealm(hooks: NestedHooks) {
 }
 
 export {
-  _string as StringField,
-  _number as NumberField,
-  _date as DateField,
-  _datetime as DatetimeField,
-  _base64Image as Base64ImageField,
-  _codeRef as CodeRefField,
-  _bigInteger as BigIntegerField,
-  _ethereumAddress as EthereumAddressField,
-  _boolean as BooleanField,
-  _markdown as MarkdownField,
-  _textarea as TextAreaField,
+  StringField,
+  NumberField,
+  DateField,
+  DatetimeField,
+  Base64ImageField,
+  CodeRefField,
+  BigIntegerField,
+  EthereumAddressField,
+  BooleanField,
+  MarkdownField,
+  TextAreaField,
   field,
   CardDef,
   Component,
