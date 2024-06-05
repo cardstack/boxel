@@ -12,13 +12,10 @@ import { modifier } from 'ember-modifier';
 import { trackedFunction } from 'ember-resources/util/function';
 
 import { Button } from '@cardstack/boxel-ui/components';
-import { eq, or } from '@cardstack/boxel-ui/helpers';
+import { bool } from '@cardstack/boxel-ui/helpers';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
-import {
-  markdownToHtml,
-  codeRefWithAbsoluteURL,
-} from '@cardstack/runtime-common';
+import { markdownToHtml } from '@cardstack/runtime-common';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
@@ -29,18 +26,14 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-import {
-  type MessageField,
-  PatchObject,
-  SearchObject,
-} from 'https://cardstack.com/base/room';
+import { type MessageField } from 'https://cardstack.com/base/room';
 
 import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
-// import { RealmPaths } from '@cardstack/runtime-common/paths';
+import { PatchObject } from 'https://cardstack.com/base/patch-command';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -113,23 +106,15 @@ export default class RoomMessage extends Component<Signature> {
         @errorMessage={{this.errorMessage}}
         @isStreaming={{@isStreaming}}
         @retryAction={{if
-          (or
-            (eq @message.command.commandType 'patchCard')
-            (eq @message.command.commandType 'searchCard')
-          )
-          (perform this.handleCommands)
+          (bool this.isCommand)
+          (perform this.handleCommand)
           @retryAction
         }}
         @isPending={{@isPending}}
         data-test-boxel-message-from={{@message.author.name}}
         ...attributes
       >
-        {{#if
-          (or
-            (eq @message.command.commandType 'patchCard')
-            (eq @message.command.commandType 'searchCard')
-          )
-        }}
+        {{#if (bool this.isCommand)}}
           <div
             class='patch-button-bar'
             data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
@@ -145,7 +130,7 @@ export default class RoomMessage extends Component<Signature> {
             </Button>
             <ApplyButton
               @state={{this.applyButtonState}}
-              {{on 'click' (perform this.handleCommands)}}
+              {{on 'click' (perform this.handleCommand)}}
               data-test-command-apply={{this.applyButtonState}}
             />
           </div>
@@ -326,23 +311,48 @@ export default class RoomMessage extends Component<Signature> {
       .join(', ');
   }
 
-  private handleCommands = task(async () => {
-    let { payload, eventId } = this.args.message.command;
+  get isCommand() {
+    if (!this.args.message.command) {
+      return false;
+    }
+    return (
+      this.args.message.command.commandType === 'patchCard' ||
+      this.args.message.command.commandType === 'searchCard'
+    );
+  }
+
+  get commandIsRunning() {
+    return this.handleCommand.isRunning;
+  }
+
+  private handleCommand = task(async () => {
+    let { eventId } = this.args.message.command;
     try {
       let res: any;
       this.matrixService.failedCommandState.delete(eventId);
       if (this.args.message.command.commandType === 'patchCard') {
-        res = await this.patchCard.perform(eventId, payload as PatchObject);
+        //TODO: patchCard uses a lot of services so it is not easy to decouple
+        res = await this.patchCard.perform(
+          eventId,
+          this.args.message.command.payload as PatchObject,
+        );
       } else if (this.args.message.command.commandType === 'searchCard') {
-        res = await this.searchCard.perform(payload as SearchObject);
-      } else {
-        throw new Error('Unknown command type');
+        let resource = await this.args.message.command.run();
+        await resource.loaded;
+        res = resource.instances.map(({ id }) => id);
+      }
+      if (res) {
+        await this.matrixService.sendCommandResultMessage(
+          this.args.roomId,
+          eventId,
+          res,
+        );
+        debugger;
       }
       await this.matrixService.sendReactionEvent(
         this.args.roomId,
         eventId,
         'applied',
-        res,
       );
     } catch (e) {
       let error =
@@ -367,27 +377,6 @@ export default class RoomMessage extends Component<Signature> {
     );
   });
 
-  private searchCard = task(async (payload: SearchObject) => {
-    let query = payload.search;
-    let adoptsFrom = {
-      name: query.filter.type.name,
-      module: query.filter.type.module,
-    };
-    //If ai returns a relative module path, we make it absolute
-    let maybeCodeRef = codeRefWithAbsoluteURL(
-      adoptsFrom,
-      new URL(query.card_id), //relative to the attached card id shared
-    );
-    if ('name' in maybeCodeRef && 'module' in maybeCodeRef) {
-      query.filter.type = maybeCodeRef;
-    }
-    let searchResults = await this.cardService.search(
-      { filter: query.filter },
-      new URL(this.cardService.realmURLs[0]), //search in drafts only for now
-    );
-    return searchResults.map((c) => c.id);
-  });
-
   private get previewCommandCode() {
     let { commandType, payload } = this.args.message.command;
     return JSON.stringify({ commandType, payload }, null, 2);
@@ -401,10 +390,6 @@ export default class RoomMessage extends Component<Signature> {
     return this.matrixService.failedCommandState.get(
       this.args.message.command.eventId,
     );
-  }
-
-  get commandIsRunning() {
-    return this.handleCommands.isRunning;
   }
 
   @cached

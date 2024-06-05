@@ -154,6 +154,10 @@ Common issues are:
         if (event.getContent().msgtype === 'org.boxel.cardFragment') {
           return; // don't respond to card fragments, we just gather these in our history
         }
+
+        if (event.getContent().msgtype === 'org.boxel.commandResult') {
+          return; //don't responsd to command results
+        }
         if (event.getSender() === aiBotUserId) {
           return;
         }
@@ -237,33 +241,47 @@ Common issues are:
     }
   });
 
-  //handle reactions from commands
+  // handle reactions from commands
+  // client.on(RoomEvent.Timeline, async function (event, room) {
+  //   if (!room) {
+  //     return;
+  //   }
+  //   if (!isCommandReactionEvent(event)) {
+  //     return;
+  //   }
+  //   log.info(
+  //     '(%s) (Room: "%s" %s) (Message: %s %s)',
+  //     event.getType(),
+  //     room?.name,
+  //     room?.roomId,
+  //     event.getSender(),
+  //     undefined,
+  //   );
+  //   try {
+  //     let content = event.getContent();
+  //     let searchMessage = content.result.join('\n\n');
+  //     await sendMessage(client, room, searchMessage, undefined, {
+  //       isStreamingFinished: true,
+  //     });
+  //   } catch (e) {
+  //     log.error(e);
+  //     Sentry.captureException(e);
+  //     return;
+  //   }
+  // });
+
   client.on(RoomEvent.Timeline, async function (event, room) {
-    if (!room) {
+    if (event.getType() !== 'm.room.message') {
       return;
     }
-    if (!isCommandReactionEvent(event)) {
+    if (event.getContent().msgtype !== 'org.boxel.commandResult') {
       return;
     }
-    log.info(
-      '(%s) (Room: "%s" %s) (Message: %s %s)',
-      event.getType(),
-      room?.name,
-      room?.roomId,
-      event.getSender(),
-      undefined,
-    );
-    try {
-      let content = event.getContent();
-      let searchMessage = content.result.join('\n\n');
-      await sendMessage(client, room, searchMessage, undefined, {
-        isStreamingFinished: true,
-      });
-    } catch (e) {
-      log.error(e);
-      Sentry.captureException(e);
-      return;
-    }
+
+    let content = event.getContent();
+    // await sendMessage(client, room, searchMessage, undefined, {
+    //   isStreamingFinished: true,
+    // });
   });
 
   //handle debug events

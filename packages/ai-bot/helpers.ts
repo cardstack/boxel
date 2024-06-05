@@ -314,11 +314,3 @@ export function isPatchCommandEvent(
     isCommandEvent(event) && event.content.data.command.type === 'patchCard'
   );
 }
-
-export function isSearchCommandEvent(
-  event: DiscreteMatrixEvent,
-): event is CommandEvent {
-  return (
-    isCommandEvent(event) && event.content.data.command.type === 'searchCard'
-  );
-}
