@@ -2553,6 +2553,8 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
   instance: BaseInstanceType<T>,
   doc: LooseSingleCardDocument,
 ): Promise<BaseInstanceType<T>> {
+  // TODO: we should crawl all the fields for cards and populate the
+  // identityContext with them instead of creating a brand new one
   let identityContext = new IdentityContext();
   identityContexts.set(instance, identityContext);
   if (!instance[relativeTo] && doc.data.id) {

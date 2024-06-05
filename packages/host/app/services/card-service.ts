@@ -258,30 +258,16 @@ export default class CardService extends Service {
     patchData: PatchData,
   ): Promise<CardDef | undefined> {
     let api = await this.getAPI();
-    let initialDoc = await this.serializeCard(card);
-    let updatedCard = await api.updateFromSerialized<typeof CardDef>(card, doc);
     let linkedCards = await this.loadPatchedCards(patchData, new URL(card.id));
+    debugger;
+    let updatedCard = await api.updateFromSerialized<typeof CardDef>(card, doc);
+
     for (let [field, value] of Object.entries(linkedCards)) {
       // TODO this triggers a save which is not ideal. perhaps instead we could
       // introduce a new option to updateFromSerialized to accept a list of
       // fields to pre-load? which in this case would be any relationships that
       // were patched in
       (updatedCard as any)[field] = value;
-    }
-    let updatedCardDoc = await this.serializeCard(updatedCard);
-
-    // TODO: update isPatchApplied to handle relationships
-    if (
-      patchData.attributes &&
-      Object.keys(patchData.attributes).length &&
-      !this.isPatchApplied(
-        updatedCardDoc.data.attributes,
-        patchData.attributes,
-        card.id,
-      )
-    ) {
-      await api.updateFromSerialized<typeof CardDef>(card, initialDoc);
-      throw new Error('Patch failed.');
     }
 
     // TODO setting `this` as an owner until we can have a better solution here...
@@ -331,56 +317,6 @@ export default class CardService extends Service {
       }),
     );
     return result;
-  }
-
-  // TODO let's use better types for cardData and patchData here
-  private isPatchApplied(
-    cardData: Record<string, any> | undefined,
-    patchData: Record<string, any>,
-    relativeTo: string,
-  ): boolean {
-    if (!cardData || !patchData) {
-      return false;
-    }
-    if (isEqual(cardData, patchData)) {
-      return true;
-    }
-    if (!Object.keys(patchData).length) {
-      return false;
-    }
-    for (let [key, patchValue] of Object.entries(patchData)) {
-      if (!(key in cardData)) {
-        return false;
-      }
-      let cardValue = cardData[key];
-      if (cardValue?.links?.self === null && isEqual(patchValue, [])) {
-        return true;
-      }
-      if (
-        !isEqual(cardValue, patchValue) &&
-        typeof cardValue === 'object' &&
-        typeof patchValue === 'object'
-      ) {
-        if (key === 'attributes' && !Object.keys(patchValue).length) {
-          continue;
-        }
-        if (!this.isPatchApplied(cardValue, patchValue, relativeTo)) {
-          return false;
-        }
-      } else if (!isEqual(cardValue, patchValue)) {
-        try {
-          if (
-            new URL(cardValue, relativeTo).href ===
-            new URL(patchValue, relativeTo).href
-          ) {
-            return true;
-          }
-        } catch (e) {
-          return false;
-        }
-      }
-    }
-    return true;
   }
 
   private async saveCardDocument(
