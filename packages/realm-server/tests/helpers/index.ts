@@ -113,7 +113,7 @@ export async function createRealm({
   dir,
   fileSystem = {},
   realmURL = testRealm,
-  permissions = { '*': ['read', 'write'] },
+  permissions = { '*': ['read'] },
   virtualNetwork,
   queue,
   dbAdapter,
@@ -228,7 +228,7 @@ export async function runTestRealmServer({
   queue,
   dbAdapter,
   matrixConfig,
-  permissions = { '*': ['read', 'write'] },
+  permissions = { '*': ['read'] },
 }: {
   dir: string;
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
