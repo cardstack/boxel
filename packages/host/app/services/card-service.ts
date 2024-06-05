@@ -1,7 +1,5 @@
 import Service, { service } from '@ember/service';
 
-import isEqual from 'lodash/isEqual';
-
 import { stringify } from 'qs';
 
 import { v4 as uuidv4 } from 'uuid';
