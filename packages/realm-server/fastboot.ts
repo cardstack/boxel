@@ -8,6 +8,7 @@ import {
 } from '@cardstack/runtime-common/worker';
 import { JSDOM } from 'jsdom';
 import { type ErrorReporter } from '@cardstack/runtime-common/realm';
+import { performance } from 'perf_hooks';
 
 const appName = '@cardstack/host';
 export async function makeFastBootIndexRunner(
@@ -33,6 +34,7 @@ export async function makeFastBootIndexRunner(
           Request: globalThis.Request,
           Response: globalThis.Response,
           btoa,
+          performance,
           getRunnerOpts,
           _logDefinitions: (globalThis as any)._logDefinitions,
           jsdom: new JSDOM(''),
@@ -51,6 +53,7 @@ export async function makeFastBootIndexRunner(
           Request: globalThis.Request,
           Response: globalThis.Response,
           btoa,
+          performance,
           getRunnerOpts,
           _logDefinitions: (globalThis as any)._logDefinitions,
           jsdom: new JSDOM(''),

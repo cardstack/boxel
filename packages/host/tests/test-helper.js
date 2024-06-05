@@ -4,10 +4,10 @@ import * as QUnit from 'qunit';
 import { setApplication } from '@ember/test-helpers';
 import { logger } from '@cardstack/runtime-common';
 import { setup } from 'qunit-dom';
-import { start } from 'ember-qunit';
 import { getTimes } from '@cardstack/runtime-common/helpers/time';
 
 import setupOperatorModeParametersMatchAssertion from '@cardstack/host/tests/helpers/operator-mode-parameters-match';
+import start from 'ember-exam/test-support/start';
 
 const log = logger('current-run');
 

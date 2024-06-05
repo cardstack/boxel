@@ -563,9 +563,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
       panelContexts.forEach((panelContext) => {
         let panelRatio = this.panelRatios[panelContext.id];
         if (!panelRatio || !newContainerSize) {
-          console.warn(
-            'Expected panelRatio and newContainerSize to be defined',
-          );
           return;
         }
         let proportionalSize = panelRatio * newContainerSize;

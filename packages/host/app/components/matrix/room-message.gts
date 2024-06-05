@@ -233,6 +233,9 @@ export default class RoomMessage extends Component<Signature> {
     wordWrap: 'on',
     wrappingIndent: 'indent',
     fontWeight: 'bold',
+    scrollbar: {
+      alwaysConsumeMouseWheel: false,
+    },
   };
 
   @service private declare operatorModeStateService: OperatorModeStateService;

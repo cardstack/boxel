@@ -40,7 +40,9 @@ if (process.env.CI) {
       ReporterClass: XunitReporter,
       args: [
         false,
-        fs.createWriteStream('../../junit/host.xml'),
+        fs.createWriteStream(
+          `../../junit/host-${process.env.HOST_TEST_PARTITION}.xml`,
+        ),
         { get: () => false },
       ],
     },

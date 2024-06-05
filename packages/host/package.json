@@ -24,9 +24,9 @@
     "start": "NODE_OPTIONS='--max-old-space-size=8192' FASTBOOT_DISABLED=true OWN_REALM_URL=http://localhost:4201/drafts/ OTHER_REALM_URLS=http://localhost:4201/published/ ember serve",
     "start:build": "NODE_OPTIONS='--max-old-space-size=8192' FASTBOOT_DISABLED=true ember build --watch",
     "test": "concurrently \"pnpm:lint\" \"pnpm:test:*\" --names \"lint,test:\"",
-    "test-with-percy": "percy exec -- pnpm test:wait-for-servers",
+    "test-with-percy": "percy exec --parallel -- pnpm test:wait-for-servers",
     "test:wait-for-servers": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run wait' 'http-get://localhost:4201/base/fields/boolean-field?acceptHeader=application%2Fvnd.card%2Bjson|http-get://localhost:4202/test/hassan?acceptHeader=application%2Fvnd.card%2Bjson|http://localhost:8008|http://localhost:5001' 'ember-test-pre-built'",
-    "ember-test-pre-built": "ember test --path ./dist",
+    "ember-test-pre-built": "ember exam --path ./dist --split $HOST_TEST_PARTITION_COUNT --partition $HOST_TEST_PARTITION --preserve-test-name",
     "wait": "sleep 10000000"
   },
   "devDependencies": {
@@ -108,6 +108,7 @@
     "ember-concurrency": "^3.1.1",
     "ember-css-url": "^1.0.0",
     "ember-elsewhere": "^2.0.0",
+    "ember-exam": "^9.0.0",
     "ember-focus-trap": "^1.0.1",
     "ember-freestyle": "^0.20.0",
     "ember-keyboard": "^8.2.1",
@@ -121,7 +122,7 @@
     "ember-resources": "^6.3.1",
     "ember-route-template": "^1.0.3",
     "ember-source": "~5.4.0",
-    "ember-template-imports": "^3.0.1",
+    "ember-template-imports": "^4.1.1",
     "ember-template-lint": "^5.11.2",
     "ember-test-selectors": "^6.0.0",
     "ember-velcro": "^2.1.3",
