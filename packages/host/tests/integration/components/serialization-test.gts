@@ -2747,9 +2747,12 @@ module('Integration | serialization', function (hooks) {
 
   test('can serialize a card with primitive fields', async function (assert) {
     class Post extends CardDef {
-      @field title = contains(StringField);
-      @field created = contains(DateField);
-      @field published = contains(DatetimeField);
+      @newContains(DateField) declare created: BaseInstanceType<
+        typeof DateField
+      >;
+      @newContains(DatetimeField) declare published: BaseInstanceType<
+        typeof DateField
+      >;
     }
     await setupIntegrationTestRealm({
       loader,
@@ -2765,7 +2768,6 @@ module('Integration | serialization', function (hooks) {
       description: 'Introductory post',
       thumbnailURL: './intro.png',
     });
-    await recompute(firstPost);
     let payload = serializeCard(firstPost, { includeUnrenderedFields: true });
     assert.deepEqual(
       payload,

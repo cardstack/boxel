@@ -330,6 +330,7 @@ export interface Field<
   ): Promise<
     BaseInstanceType<CardT> | BaseInstanceType<CardT>[] | undefined | void
   >;
+  newFieldMigration?: true;
 }
 
 function callSerializeHook(
@@ -1635,15 +1636,19 @@ export function newContains<FieldT extends FieldDefConstructor>(
         },
       };
     }
-    (result.get as any)[isField] = new Contains(
+    let fieldInstance: Field = new Contains(
       cardThunk(field),
-      () => {
-        throw new Error(`todo: this will become just a boolean`);
-      },
+      isComputed
+        ? () => {
+            throw new Error(`todo: this will become just a boolean`);
+          }
+        : undefined,
       key,
       options?.description,
       options?.isUsed,
     );
+    fieldInstance.newFieldMigration = true;
+    (result.get as any)[isField] = fieldInstance;
     return result;
   };
   return decorator as unknown as PropertyDecorator;
@@ -2460,7 +2465,13 @@ function serializedGet<CardT extends BaseDefConstructor>(
       `tried to serializedGet field ${fieldName} which does not exist in card ${model.constructor.name}`,
     );
   }
-  return field.serialize(peekAtField(model, fieldName), doc, visited, opts);
+  let value: any;
+  if (field.newFieldMigration) {
+    value = (model as any)[fieldName];
+  } else {
+    value = peekAtField(model, fieldName);
+  }
+  return field.serialize(value, doc, visited, opts);
 }
 
 async function getDeserializedValue<CardT extends BaseDefConstructor>({
@@ -2518,6 +2529,7 @@ function serializeCardResource(
   if (!adoptsFrom) {
     throw new Error(`bug: could not identify card: ${model.constructor.name}`);
   }
+  debugger;
   let { includeUnrenderedFields: remove, ...fieldOpts } = opts ?? {};
   let { id: removedIdField, ...fields } = getFields(model, {
     ...fieldOpts,
@@ -2838,7 +2850,11 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
       ) {
         applySubscribersToInstanceValue(instance, field, existingValue, value);
       }
-      deserialized.set(field.name as string, value);
+      if (field.newFieldMigration) {
+        (instance as any)[field.name] = value;
+      } else {
+        deserialized.set(field.name as string, value);
+      }
       logger.log(recompute(instance));
     }
     if (isCardInstance(instance) && resource.id != null) {
