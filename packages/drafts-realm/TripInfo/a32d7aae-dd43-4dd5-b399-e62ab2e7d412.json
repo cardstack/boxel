@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "traveler": {
+        "name": "Mickey"
+      },
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "destinations": {
+        "links": {
+          "self": null
+        }
+      },
+      "traveler.countryOfOrigin": {
+        "links": {
+          "self": "http://localhost:4201/drafts/Country/1"
+        }
+      },
+      "traveler.countriesVisited": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../trip-info",
+        "name": "TripInfo"
+      }
+    }
+  }
+}
