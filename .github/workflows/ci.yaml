@@ -185,7 +185,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: host-test-report-${{ matrix.shardIndex }}
+          name: host-test-report-${{ matrix.browser }}-${{ matrix.shardIndex }}
           path: junit/host-${{ matrix.shardIndex }}.xml
           retention-days: 30
 
@@ -194,6 +194,10 @@ jobs:
     if: always()
     needs: host-test
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: ["Chrome", "Firefox"]
 
     steps:
       - uses: actions/checkout@v4
@@ -210,7 +214,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: all-host-reports
-          pattern: host-test-report-*
+          pattern: host-test-report-${{ matrix.browser }}-*
           merge-multiple: true
 
       - run: ls
@@ -223,7 +227,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: host-test-report-merged
+          name: host-test-report-merged-${{ matrix.browser }}
           path: host.xml
           retention-days: 30
 
@@ -232,7 +236,7 @@ jobs:
         if: always()
         with:
           junit_files: host.xml
-          check_name: Host Test Results
+          check_name: Host Test Results (${{ matrix.browser }})
 
   matrix-client-test:
     name: Matrix Client Tests
