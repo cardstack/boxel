@@ -391,6 +391,13 @@ export class Realm {
         SupportedMimeType.RealmInfo,
         this.readinessCheck.bind(this),
       );
+    Object.values(SupportedMimeType).forEach((mimeType) => {
+      this.#router.head('/.*', mimeType as SupportedMimeType, async () =>
+        createResponse(this, null, {
+          status: 200,
+        }),
+      );
+    });
 
     this.#deferStartup = opts?.deferStartUp ?? false;
     if (!opts?.deferStartUp) {

@@ -11,7 +11,7 @@ export enum AuthenticationErrorMessages {
 }
 
 type Handler = (request: Request) => Promise<Response>;
-export type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+export type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'HEAD';
 export enum SupportedMimeType {
   CardJson = 'application/vnd.card+json',
   CardSource = 'application/vnd.card+source',
@@ -21,13 +21,14 @@ export enum SupportedMimeType {
   EventStream = 'text/event-stream',
   HTML = 'text/html',
   JSONAPI = 'application/vnd.api+json',
+  All = '*/*',
 }
 
 function isHTTPMethod(method: unknown): method is Method {
   if (typeof method !== 'string') {
     return false;
   }
-  return ['GET', 'POST', 'PATCH', 'DELETE'].includes(method);
+  return ['GET', 'POST', 'PATCH', 'DELETE', 'HEAD'].includes(method);
 }
 
 export function extractSupportedMimeType(
@@ -112,6 +113,10 @@ export class Router {
   }
   delete(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
     this.setRoute(mimeType, 'DELETE', path, handler);
+    return this;
+  }
+  head(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
+    this.setRoute(mimeType, 'HEAD', path, handler);
     return this;
   }
 
