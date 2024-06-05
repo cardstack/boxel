@@ -23,6 +23,16 @@
         "links": {
           "self": null
         }
+      },
+      "startLocation": {
+        "links": {
+          "self": null
+        }
+      },
+      "endLocation": {
+        "links": {
+          "self": "../Country/2"
+        }
       }
     },
     "meta": {

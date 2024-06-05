@@ -924,7 +924,7 @@ module('Integration | operator-mode', function (hooks) {
             command: {
               type: 'patchCard',
               id: `${testRealmURL}Person/fadhlan`,
-              patch: { attributes: { pet: null } },
+              patch: { relationships: { pet: null } }, // this will error
               eventId: 'room2-event1',
             },
           }),
@@ -1244,143 +1244,6 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom(`${stackCard} [data-test-country="Indonesia"]`).exists();
     });
 
-    test('it will throw error when patch code refers to nonexistent or incorrect field', async function (assert) {
-      let id = `${testRealmURL}Person/fadhlan`;
-      await setCardInOperatorModeState(id);
-      await renderComponent(
-        class TestDriver extends GlimmerComponent {
-          <template>
-            <OperatorMode @onClose={{noop}} />
-            <CardPrerender />
-          </template>
-        },
-      );
-      await waitFor('[data-test-person="Fadhlan"]');
-
-      let roomId = await openAiAssistant();
-      await addRoomEvent(matrixService, {
-        event_id: 'event1',
-        room_id: roomId,
-        state_key: 'state',
-        type: 'm.room.message',
-        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-        sender: '@aibot:localhost',
-        content: {
-          msgtype: 'org.boxel.command',
-          formatted_body: 'Removing pet from person card',
-          format: 'org.matrix.custom.html',
-          data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id,
-              patch: { attributes: { pet: null } },
-              eventId: 'patch1',
-            },
-          }),
-          'm.relates_to': {
-            rel_type: 'm.replace',
-            event_id: 'patch1',
-          },
-        },
-        status: null,
-      });
-      await waitFor('[data-test-command-apply="ready"]');
-      await click('[data-test-command-apply]');
-      await waitFor('[data-test-patch-card-idle]');
-      assert.dom('[data-test-apply-state="failed"]').exists();
-      assert
-        .dom(`[data-test-card-error]`)
-        .hasText(`Failed to apply changes. Patch failed.`);
-
-      await addRoomEvent(matrixService, {
-        event_id: 'event3',
-        room_id: roomId,
-        state_key: 'state',
-        type: 'm.room.message',
-        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-        sender: '@aibot:localhost',
-        content: {
-          msgtype: 'org.boxel.command',
-          formatted_body:
-            "Adding 'Indonesia' to the list of countries visited in the trips attribute.",
-          format: 'org.matrix.custom.html',
-          data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id,
-              patch: {
-                attributes: {
-                  trips: {
-                    countriesVisited: ['Indonesia'],
-                  },
-                },
-              },
-              eventId: 'patch3',
-            },
-          }),
-          'm.relates_to': {
-            rel_type: 'm.replace',
-            event_id: 'patch3',
-          },
-        },
-        status: null,
-      });
-      await waitFor('[data-test-command-apply="ready"]');
-      await click('[data-test-command-apply]');
-      await waitFor('[data-test-message-idx="1"] [data-test-patch-card-idle]');
-      assert
-        .dom('[data-test-message-idx="1"] [data-test-apply-state="failed"]')
-        .exists();
-      assert
-        .dom(`[data-test-message-idx="1"] [data-test-card-error]`)
-        .hasText(`Failed to apply changes. Patch failed.`);
-      assert.dom('[data-test-trips]').hasText('');
-
-      await addRoomEvent(matrixService, {
-        event_id: 'event4',
-        room_id: roomId,
-        state_key: 'state',
-        type: 'm.room.message',
-        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-        sender: '@aibot:localhost',
-        content: {
-          msgtype: 'org.boxel.command',
-          formatted_body: 'Change preferred carrier',
-          format: 'org.matrix.custom.html',
-          data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id,
-              patch: {
-                attributes: {
-                  address: { shippingInfo: { carrier: 'UPS' } },
-                },
-              },
-              eventId: 'patch4',
-            },
-          }),
-          'm.relates_to': {
-            rel_type: 'm.replace',
-            event_id: 'patch4',
-          },
-        },
-        status: null,
-      });
-
-      await waitFor('[data-test-command-apply="ready"]');
-      assert.dom('[data-test-preferredcarrier="DHL"]').exists();
-
-      await click('[data-test-command-apply]');
-      await waitFor('[data-test-message-idx="1"] [data-test-patch-card-idle]');
-      assert
-        .dom('[data-test-message-idx="1"] [data-test-apply-state="failed"]')
-        .exists();
-      assert
-        .dom(`[data-test-message-idx="1"] [data-test-card-error]`)
-        .hasText(`Failed to apply changes. Patch failed.`);
-      assert.dom('[data-test-preferredcarrier="DHL"]').exists();
-    });
-
     test('button states only apply to a single button in a chat room', async function (assert) {
       let id = `${testRealmURL}Person/fadhlan`;
       await setCardInOperatorModeState(id);
@@ -1430,13 +1293,13 @@ module('Integration | operator-mode', function (hooks) {
         sender: '@aibot:localhost',
         content: {
           msgtype: 'org.boxel.command',
-          formatted_body: 'Change first name to Dave',
+          formatted_body: 'Incorrect patch command',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
               type: 'patchCard',
               id,
-              patch: { attributes: { pet: 'Harry' } },
+              patch: { relationships: { pet: null } }, // this will error
               eventId: 'event2',
             },
           }),
@@ -1456,7 +1319,7 @@ module('Integration | operator-mode', function (hooks) {
         sender: '@aibot:localhost',
         content: {
           msgtype: 'org.boxel.command',
-          formatted_body: 'Change first name to Dave',
+          formatted_body: 'Change first name to Jackie',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
