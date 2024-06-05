@@ -31,6 +31,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type {
   BaseDef,
+  BaseInstanceType,
   SignatureFor,
 } from 'https://cardstack.com/base/card-api';
 
@@ -62,6 +63,7 @@ import {
   linksTo,
   linksToMany,
   MarkdownField,
+  newContains,
   NumberField,
   queryableValue,
   setupBaseRealm,
@@ -92,16 +94,35 @@ module('Integration | card-basics', function (hooks) {
   module('cards are read-only', function (_hooks) {
     test('input fields are disabled', async function (assert) {
       class Person extends CardDef {
-        @field string = contains(StringField);
-        @field number = contains(NumberField);
-        @field bigInt = contains(BigIntegerField);
-        @field boolean = contains(BooleanField);
-        @field base64 = contains(Base64ImageField);
-        @field date = contains(DateField);
-        @field datetime = contains(DatetimeField);
-        @field ethereumAddress = contains(EthereumAddressField);
-        @field markdown = contains(MarkdownField);
-        @field textArea = contains(TextAreaField);
+        @newContains(StringField) declare string: BaseInstanceType<
+          typeof StringField
+        >;
+        @newContains(NumberField) declare number: BaseInstanceType<
+          typeof NumberField
+        >;
+        @newContains(BigIntegerField) declare bigInt: BaseInstanceType<
+          typeof BigIntegerField
+        >;
+        @newContains(BooleanField) declare boolean: BaseInstanceType<
+          typeof BooleanField
+        >;
+        @newContains(Base64ImageField) declare base64: BaseInstanceType<
+          typeof Base64ImageField
+        >;
+        @newContains(DateField) declare date: BaseInstanceType<
+          typeof DateField
+        >;
+        @newContains(DatetimeField) declare datetime: BaseInstanceType<
+          typeof DatetimeField
+        >;
+        @newContains(EthereumAddressField)
+        declare ethereumAddress: BaseInstanceType<typeof EthereumAddressField>;
+        @newContains(MarkdownField) declare markdown: BaseInstanceType<
+          typeof MarkdownField
+        >;
+        @newContains(TextAreaField) declare textArea: BaseInstanceType<
+          typeof TextAreaField
+        >;
       }
       let person = new Person();
       await renderCard(loader, person, 'edit');

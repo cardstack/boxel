@@ -1619,9 +1619,26 @@ export function newContains<FieldT extends FieldDefConstructor>(
     }
     let isComputed = Boolean(desc.get);
     let result: PropertyDescriptor;
+    let fieldInstance: Field = new Contains(
+      cardThunk(field),
+      isComputed
+        ? () => {
+            throw new Error(`todo: this will become just a boolean`);
+          }
+        : undefined,
+      key,
+      options?.description,
+      options?.isUsed,
+    );
     if (isComputed) {
       result = desc;
     } else {
+      if (!desc.initializer) {
+        desc.initializer = function (this: BaseDef) {
+          return fieldInstance.emptyValue(this);
+        };
+      }
+
       const trackedDesc = tracked(target, key, desc)!;
 
       if (!isTrackedDescriptor(trackedDesc)) {
@@ -1636,19 +1653,9 @@ export function newContains<FieldT extends FieldDefConstructor>(
         },
       };
     }
-    let fieldInstance: Field = new Contains(
-      cardThunk(field),
-      isComputed
-        ? () => {
-            throw new Error(`todo: this will become just a boolean`);
-          }
-        : undefined,
-      key,
-      options?.description,
-      options?.isUsed,
-    );
     fieldInstance.newFieldMigration = true;
     (result.get as any)[isField] = fieldInstance;
+    result.enumerable = true;
     return result;
   };
   return decorator as unknown as PropertyDecorator;
@@ -2529,7 +2536,6 @@ function serializeCardResource(
   if (!adoptsFrom) {
     throw new Error(`bug: could not identify card: ${model.constructor.name}`);
   }
-  debugger;
   let { includeUnrenderedFields: remove, ...fieldOpts } = opts ?? {};
   let { id: removedIdField, ...fields } = getFields(model, {
     ...fieldOpts,
