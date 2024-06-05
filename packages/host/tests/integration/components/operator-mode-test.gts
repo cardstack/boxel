@@ -1044,7 +1044,7 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-command-apply]').doesNotExist();
       assert.dom('[data-test-person]').hasText('Fadhlan');
 
-      await waitFor('[data-test-card-format="embedded"]');
+      await waitFor('[data-test-overlay-card-display-name="Pet"]');
       await percySnapshot(
         'Integration | operator-mode > matrix | it only applies changes from the chat if the stack contains a card with that ID | error',
       );
@@ -1062,8 +1062,9 @@ module('Integration | operator-mode', function (hooks) {
 
       await waitUntil(
         () =>
-          document.querySelectorAll('[data-test-card-format="embedded"]')
-            .length === 4,
+          document.querySelectorAll(
+            '[data-test-overlay-card-display-name="Pet"]',
+          ).length === 2,
       );
       await percySnapshot(
         'Integration | operator-mode > matrix | it only applies changes from the chat if the stack contains a card with that ID | error fixed',
