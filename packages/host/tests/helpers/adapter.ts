@@ -183,10 +183,6 @@ export class TestRealmAdapter implements RealmAdapter {
       if (typeof value === 'string') {
         fileRefContent = value;
       } else {
-        let moduleURLString = `${this.#paths.url}${path.replace(/\.gts$/, '')}`;
-
-        this.#loader.shimModule(moduleURLString, value as object);
-
         fileRefContent = shimmedModuleIndicator;
       }
     } else {

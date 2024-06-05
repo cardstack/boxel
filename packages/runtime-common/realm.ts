@@ -237,8 +237,11 @@ export class Realm {
   #router: Router;
   #deferStartup: boolean;
   #useTestingDomain = false;
+  // TODO remove this after we serve transpiled js from index
   #transpileCache = new Map<string, string>();
   #log = logger('realm');
+  #perfLog = logger('perf');
+  #startTime = Date.now();
   #getIndexHTML: () => Promise<string>;
   #updateItems: UpdateItem[] = [];
   #flushUpdateEvents: Promise<void> | undefined;
@@ -391,6 +394,13 @@ export class Realm {
         SupportedMimeType.RealmInfo,
         this.readinessCheck.bind(this),
       );
+
+    Object.values(SupportedMimeType).forEach((mimeType) => {
+      this.#router.head('/.*', mimeType as SupportedMimeType, async () => {
+        let requestContext = await this.createRequestContext();
+        return createResponse({ init: { status: 200 }, requestContext });
+      });
+    });
 
     this.#deferStartup = opts?.deferStartUp ?? false;
     if (!opts?.deferStartUp) {
@@ -548,14 +558,19 @@ export class Realm {
 
   async #startup() {
     await Promise.resolve();
+    // TODO remove this after we serve transpiled js from index
     await this.#warmUpCache();
     await this.#searchIndex.run(this.#onIndexer);
     this.sendServerEvent({ type: 'index', data: { type: 'full' } });
+    this.#perfLog.debug(
+      `realm server startup in ${Date.now() - this.#startTime}ms`,
+    );
   }
 
   // Take advantage of the fact that the base realm modules are static (for now)
   // and cache the transpiled js for all the base realm modules so that all
   // consuming realms can benefit from this work
+  // TODO remove this after we serve transpiled js from index
   async #warmUpCache() {
     if (this.url !== baseRealm.url) {
       return;
@@ -892,40 +907,45 @@ export class Realm {
   // of directly hitting the filesystem--especially the TS transpilation
   // involved in making JS.
   async fallbackHandle(request: Request, requestContext: RequestContext) {
+    let start = Date.now();
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
 
-    let maybeFileRef = await this.getFileWithFallbacks(
-      localPath,
-      executableExtensions,
-    );
-
-    if (!maybeFileRef) {
-      return notFound(request, requestContext, `${request.url} not found`);
-    }
-
-    let fileRef = maybeFileRef;
-
-    if (
-      executableExtensions.some((extension) =>
-        fileRef.path.endsWith(extension),
-      ) &&
-      !localPath.startsWith(assetsDir)
-    ) {
-      let response = this.makeJS(
-        await fileContentToText(fileRef),
-        fileRef.path,
-        requestContext,
+    try {
+      let maybeFileRef = await this.getFileWithFallbacks(
+        localPath,
+        executableExtensions,
       );
 
-      if (fileRef[Symbol.for('shimmed-module')]) {
-        (response as any)[Symbol.for('shimmed-module')] =
-          fileRef[Symbol.for('shimmed-module')];
+      if (!maybeFileRef) {
+        return notFound(request, requestContext, `${request.url} not found`);
       }
 
-      return response;
-    } else {
-      return await this.serveLocalFile(fileRef, requestContext);
+      let fileRef = maybeFileRef;
+
+      if (
+        executableExtensions.some((extension) =>
+          fileRef.path.endsWith(extension),
+        ) &&
+        !localPath.startsWith(assetsDir)
+      ) {
+        let response = this.makeJS(
+          await fileContentToText(fileRef),
+          fileRef.path,
+          requestContext,
+        );
+
+        if (fileRef[Symbol.for('shimmed-module')]) {
+          (response as any)[Symbol.for('shimmed-module')] =
+            fileRef[Symbol.for('shimmed-module')];
+        }
+
+        return response;
+      } else {
+        return await this.serveLocalFile(fileRef, requestContext);
+      }
+    } finally {
+      this.#logRequestPerformance(request, start);
     }
   }
 
@@ -1146,21 +1166,28 @@ export class Realm {
       ...executableExtensions,
       '.json',
     ]);
-    if (!handle) {
-      return notFound(request, requestContext, `${localName} not found`);
-    }
+    let start = Date.now();
+    try {
+      if (!handle) {
+        return notFound(request, requestContext, `${localName} not found`);
+      }
 
-    if (handle.path !== localName) {
-      return createResponse({
-        body: null,
-        init: {
-          status: 302,
-          headers: { Location: `${new URL(this.url).pathname}${handle.path}` },
-        },
-        requestContext,
-      });
+      if (handle.path !== localName) {
+        return createResponse({
+          body: null,
+          init: {
+            status: 302,
+            headers: {
+              Location: `${new URL(this.url).pathname}${handle.path}`,
+            },
+          },
+          requestContext,
+        });
+      }
+      return await this.serveLocalFile(handle, requestContext);
+    } finally {
+      this.#logRequestPerformance(request, start);
     }
-    return await this.serveLocalFile(handle, requestContext);
   }
 
   private async removeCardSource(
@@ -1477,42 +1504,46 @@ export class Realm {
       loadLinks: true,
       useWorkInProgressIndex,
     });
-    if (!maybeError) {
-      return notFound(request, requestContext);
-    }
-    if (maybeError.type === 'error') {
-      return systemError(
-        requestContext,
-        `cannot return card from index: ${maybeError.error.title} - ${maybeError.error.detail}`,
-        CardError.fromSerializableError(maybeError.error),
-      );
-    }
-    let { doc: card } = maybeError;
-    card.data.links = { self: url.href };
+    let start = Date.now();
+    try {
+      if (!maybeError) {
+        return notFound(request, requestContext);
+      }
+      if (maybeError.type === 'error') {
+        return systemError(
+          requestContext,
+          `cannot return card from index: ${maybeError.error.title} - ${maybeError.error.detail}`,
+          CardError.fromSerializableError(maybeError.error),
+        );
+      }
+      let { doc: card } = maybeError;
+      card.data.links = { self: url.href };
 
-    let foundPath = this.paths.local(url);
-    if (localPath !== foundPath) {
+      let foundPath = this.paths.local(url);
+      if (localPath !== foundPath) {
+        return createResponse({
+          requestContext,
+          body: null,
+          init: {
+            status: 302,
+            headers: { Location: `${new URL(this.url).pathname}${foundPath}` },
+          },
+        });
+      }
+
       return createResponse({
-        body: null,
+        body: JSON.stringify(card, null, 2),
         init: {
-          status: 302,
-          headers: { Location: `${new URL(this.url).pathname}${foundPath}` },
+          headers: {
+            'content-type': SupportedMimeType.CardJson,
+            ...lastModifiedHeader(card),
+          },
         },
         requestContext,
       });
+    } finally {
+      this.#logRequestPerformance(request, start);
     }
-
-    return createResponse({
-      body: JSON.stringify(card, null, 2),
-      init: {
-        headers: {
-          'last-modified': formatRFC7231(card.data.meta.lastModified!),
-          'content-type': SupportedMimeType.CardJson,
-          ...lastModifiedHeader(card),
-        },
-      },
-      requestContext,
-    });
   }
 
   private async removeCard(
@@ -1859,6 +1890,14 @@ export class Realm {
       realm: this,
       permissions,
     };
+  }
+
+  #logRequestPerformance(request: Request, startTime: number) {
+    this.#perfLog.debug(
+      `serve time: ${Date.now() - startTime}ms - ${request.method} ${
+        request.url
+      } ${request.headers.get('Accept') ?? ''}`,
+    );
   }
 }
 
