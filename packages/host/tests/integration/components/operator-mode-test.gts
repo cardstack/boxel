@@ -227,20 +227,28 @@ module('Integration | operator-mode', function (hooks) {
       });
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          <address>
-            <@fields.name />
-          </address>
+          <@fields.name />
         </template>
       };
     }
     class Trips extends FieldDef {
       static displayName = 'Trips';
+      @field tripTitle = contains(StringField);
+      @field homeCountry = linksTo(Country);
       @field countriesVisited = linksToMany(Country);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          <address>
+          {{#if @model.tripTitle}}
+            <h3 data-test-tripTitle><@fields.tripTitle /></h3>
+          {{/if}}
+          <div>
+            Home Country:
+            <@fields.homeCountry />
+          </div>
+          <div>
+            Countries Visited:
             <@fields.countriesVisited />
-          </address>
+          </div>
         </template>
       };
     }
@@ -397,6 +405,7 @@ module('Integration | operator-mode', function (hooks) {
         'friend.gts': { Friend },
         'publishing-packet.gts': { PublishingPacket },
         'pet-room.gts': { PetRoom },
+        'country.gts': { Country },
         'Pet/mango.json': {
           data: {
             type: 'card',
@@ -503,6 +512,61 @@ module('Integration | operator-mode', function (hooks) {
               'friends.1': {
                 links: {
                   self: `${testRealmURL}Pet/woody`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'Country/usa.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Country/usa`,
+            attributes: {
+              name: 'USA',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}country`,
+                name: 'Country',
+              },
+            },
+          },
+        },
+        'Country/japan.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Country/japan`,
+            attributes: {
+              name: 'Japan',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}country`,
+                name: 'Country',
+              },
+            },
+          },
+        },
+        'Person/mickey.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Person/mickey`,
+            attributes: {
+              firstName: 'Mickey',
+              trips: {
+                tripTitle: 'Summer Vacation',
+              },
+            },
+            relationships: {
+              'trips.homeCountry': {
+                links: {
+                  self: `${testRealmURL}Country/usa`,
                 },
               },
             },
@@ -1242,6 +1306,57 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom(`${stackCard} [data-test-pet="Mango"]`).exists();
       assert.dom(`${stackCard} [data-test-city="Bandung"]`).exists();
       assert.dom(`${stackCard} [data-test-country="Indonesia"]`).exists();
+    });
+
+    test('it does not crash when applying change to a card with preexisting nested linked card', async function (assert) {
+      let id = `${testRealmURL}Person/mickey`;
+      await setCardInOperatorModeState(id);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      await waitFor('[data-test-person="Mickey"]');
+      assert.dom('[data-test-tripTitle]').hasText('Summer Vacation');
+
+      let roomId = await openAiAssistant();
+      await addRoomEvent(matrixService, {
+        event_id: 'event1',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: 'org.boxel.command',
+          formatted_body: 'Change tripTitle to Trip to Japan',
+          format: 'org.matrix.custom.html',
+          data: JSON.stringify({
+            command: {
+              type: 'patchCard',
+              id,
+              patch: {
+                attributes: { trips: { tripTitle: 'Trip to Japan' } },
+              },
+              eventId: 'event1',
+            },
+          }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'event1',
+          },
+        },
+        status: null,
+      });
+
+      await waitFor('[data-test-command-apply="ready"]');
+      await click('[data-test-command-apply]');
+      await waitFor('[data-test-patch-card-idle]');
+      assert.dom('[data-test-apply-state="applied"]').exists();
+      assert.dom('[data-test-tripTitle]').hasText('Trip to Japan');
     });
 
     test('button states only apply to a single button in a chat room', async function (assert) {
