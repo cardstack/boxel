@@ -259,9 +259,7 @@ export default class CardService extends Service {
   ): Promise<CardDef | undefined> {
     let api = await this.getAPI();
     let linkedCards = await this.loadPatchedCards(patchData, new URL(card.id));
-    debugger;
     let updatedCard = await api.updateFromSerialized<typeof CardDef>(card, doc);
-
     for (let [field, value] of Object.entries(linkedCards)) {
       // TODO this triggers a save which is not ideal. perhaps instead we could
       // introduce a new option to updateFromSerialized to accept a list of
@@ -269,7 +267,6 @@ export default class CardService extends Service {
       // were patched in
       (updatedCard as any)[field] = value;
     }
-
     // TODO setting `this` as an owner until we can have a better solution here...
     // (currently only used by the AI bot to patch cards from chat)
     return await this.saveModel(this, updatedCard);
