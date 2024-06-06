@@ -174,8 +174,7 @@ jobs:
         run: pnpm test-with-percy
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
-          PERCY_COMMIT: ${{ github.run_id }}${{ github.run_attempt }}
-          PERCY_PARALLEL_NONCE: ${{ matrix.shardIndex}}-${{ github.run_attempt }}
+          PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
         working-directory: packages/host
@@ -202,7 +201,7 @@ jobs:
         working-directory: packages/host
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
-          PERCY_COMMIT: ${{ github.run_id }}${{ github.run_attempt }}
+          PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Download JUnit reports from GitHub Actions Artifacts
         uses: actions/download-artifact@v4
