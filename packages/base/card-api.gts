@@ -531,7 +531,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     doc: CardDocument,
     relationships: JSONAPIResource['relationships'] | undefined,
     fieldMeta: CardFields[string] | undefined,
-    _identityContext: undefined,
+    identityContext: undefined,
     instancePromise: Promise<BaseDef>,
     _loadedValue: any,
     relativeTo: URL | undefined,
@@ -569,7 +569,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
               entry,
               relativeTo,
               doc,
-              _identityContext,
+              identityContext,
             );
           } else {
             let meta = metas[index];
@@ -596,7 +596,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
             }
             return (
               await cardClassFromResource(resource, this.card, relativeTo)
-            )[deserialize](resource, relativeTo, doc, _identityContext);
+            )[deserialize](resource, relativeTo, doc, identityContext);
           }
         }),
       ),
@@ -731,7 +731,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     doc: CardDocument,
     relationships: JSONAPIResource['relationships'] | undefined,
     fieldMeta: CardFields[string] | undefined,
-    _identityContext: undefined,
+    identityContext: undefined,
     _instancePromise: Promise<BaseDef>,
     _loadedValue: any,
     relativeTo: URL | undefined,
@@ -765,7 +765,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     }
     return (await cardClassFromResource(resource, this.card, relativeTo))[
       deserialize
-    ](resource, relativeTo, doc, _identityContext);
+    ](resource, relativeTo, doc, identityContext);
   }
 
   emptyValue(_instance: BaseDef) {
