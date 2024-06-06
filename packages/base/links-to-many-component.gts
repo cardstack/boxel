@@ -29,9 +29,16 @@ import {
   getPlural,
   CardContextName,
 } from '@cardstack/runtime-common';
-import { IconMinusCircle, IconX } from '@cardstack/boxel-ui/icons';
+import { IconMinusCircle, IconX, FourLines } from '@cardstack/boxel-ui/icons';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { consume } from 'ember-provide-consume-context';
+import {
+  SortableGroupModifier as sortableGroup,
+  SortableHandleModifier as sortableHandle,
+  SortableItemModifier as sortableItem,
+} from '@cardstack/boxel-ui/modifiers';
+
+import { action } from '@ember/object';
 
 interface Signature {
   Args: {
@@ -122,13 +129,33 @@ interface LinksToManyStandardEditorSignature {
 class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEditorSignature> {
   @consume(CardContextName) declare cardContext: CardContext;
 
+  @action
+  reorderItems(items: any) {
+    (this.args.model.value as any)[this.args.field.name] = items;
+  }
+
   <template>
     <RealmSessionConsumer as |realmSession|>
       {{#if @arrayField.children.length}}
-        <ul class='list'>
+        <ul class='list' {{sortableGroup onChange=(fn this.reorderItems)}}>
           {{#each @arrayField.children as |boxedElement i|}}
-            <li class='editor' data-test-item={{i}}>
+            <li
+              class='editor'
+              data-test-item={{i}}
+              {{sortableItem model=boxedElement.value}}
+            >
               {{#if realmSession.canWrite}}
+                <IconButton
+                  {{sortableHandle}}
+                  @variant='primary'
+                  @icon={{FourLines}}
+                  @width='18px'
+                  @height='18px'
+                  class='sort'
+                  aria-label='Sort'
+                  data-test-sort-card
+                  data-test-sort={{i}}
+                />
                 <IconButton
                   @variant='primary'
                   @icon={{IconMinusCircle}}
@@ -203,6 +230,11 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       }
       .add-new {
         width: calc(100% - var(--boxel-icon-lg));
+      }
+      .sort {
+        position: absolute;
+        top: 0;
+        left: calc(-1 * var(--boxel-sp-xxl));
       }
     </style>
   </template>

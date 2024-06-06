@@ -2751,6 +2751,7 @@ module(`Integration | search-index`, function (hooks) {
         'https://packages/@cardstack/boxel-ui/components',
         'https://packages/@cardstack/boxel-ui/helpers',
         'https://packages/@cardstack/boxel-ui/icons',
+        'https://packages/@cardstack/boxel-ui/modifiers',
         'https://packages/@cardstack/runtime-common',
         'https://packages/@ember/component',
         'https://packages/@ember/component/template-only',

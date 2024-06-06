@@ -457,6 +457,21 @@ module('Integration | operator-mode', function (hooks) {
             },
           },
         },
+        'Pet/buzz.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Pet/buzz`,
+            attributes: {
+              name: 'Buzz',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
+              },
+            },
+          },
+        },
         'Person/fadhlan.json': {
           data: {
             type: 'card',
@@ -503,6 +518,11 @@ module('Integration | operator-mode', function (hooks) {
               'friends.1': {
                 links: {
                   self: `${testRealmURL}Pet/woody`,
+                },
+              },
+              'friends.2': {
+                links: {
+                  self: `${testRealmURL}Pet/buzz`,
                 },
               },
             },
@@ -2971,7 +2991,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
     assert
       .dom('[data-test-field="friends"]')
-      .containsText('Jackie Woody Mango');
+      .containsText('Jackie Woody Buzz Mango');
   });
 
   test('can add a card to a linksTo field creating a loop', async function (assert) {
@@ -3176,12 +3196,15 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/burcu"]`);
-    assert.dom(`[data-test-plural-view-item]`).exists({ count: 2 });
+    assert.dom(`[data-test-plural-view-item]`).exists({ count: 3 });
     await click('[data-test-edit-button]');
     assert.dom('[data-test-field="friends"]').containsText('Jackie Woody');
 
     await click(
       '[data-test-links-to-many="friends"] [data-test-item="1"] [data-test-remove-card]',
+    );
+    await click(
+      '[data-test-links-to-many="friends"] [data-test-item="0"] [data-test-remove-card]',
     );
     await click(
       '[data-test-links-to-many="friends"] [data-test-item="0"] [data-test-remove-card]',
@@ -4459,5 +4482,83 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card]`);
     assert.dom(`[data-test-stack-card]`).exists({ count: 1 });
     assert.dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`).exists();
+  });
+
+  test('can reorder linksToMany cards in edit view', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await waitFor(`[data-test-cards-grid-item]`);
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/burcu"]`);
+    assert.dom(`[data-test-plural-view-item]`).exists({ count: 3 });
+    assert.dom(`[data-test-plural-view-item="0"]`).hasText('Jackie');
+    assert.dom(`[data-test-plural-view-item="1"]`).hasText('Woody');
+    assert.dom(`[data-test-plural-view-item="2"]`).hasText('Buzz');
+
+    await click(
+      `[data-test-stack-card="${testRealmURL}Person/burcu"] [data-test-edit-button]`,
+    );
+
+    assert.dom(`[data-test-item]`).exists({ count: 3 });
+    assert.dom(`[data-test-item="0"]`).hasText('Jackie');
+    assert.dom(`[data-test-item="1"]`).hasText('Woody');
+    assert.dom(`[data-test-item="2"]`).hasText('Buzz');
+
+    let dragAndDrop = async (itemSelector: string, targetSelector: string) => {
+      const itemElement = document.querySelector(itemSelector);
+      const targetElement = document.querySelector(targetSelector);
+
+      if (!itemElement || !targetElement) {
+        throw new Error('Item or target element not found');
+      }
+
+      const itemRect = itemElement.getBoundingClientRect();
+      const targetRect = targetElement.getBoundingClientRect();
+
+      // Simulate mousedown on the item to drag
+      await triggerEvent(itemElement, 'mousedown', {
+        clientX: itemRect.left + itemRect.width / 2,
+        clientY: itemRect.top + itemRect.height / 2,
+      });
+
+      await triggerEvent(document, 'mousemove', {
+        clientX: itemRect.left + 1,
+        clientY: itemRect.top + 1,
+      });
+      await triggerEvent(document, 'mousemove', {
+        clientX: targetRect.left + targetRect.width / 2,
+        clientY: targetRect.top - 100,
+      });
+
+      // Simulate mouseup on the target to drop
+      await triggerEvent(itemElement, 'mouseup', {
+        clientX: targetRect.left + targetRect.width / 2,
+        clientY: targetRect.top - 100,
+      });
+    };
+
+    await dragAndDrop('[data-test-sort="1"]', '[data-test-sort="0"]');
+    await dragAndDrop('[data-test-sort="2"]', '[data-test-sort="1"]');
+    assert.dom(`[data-test-item]`).exists({ count: 3 });
+    assert.dom(`[data-test-item="0"]`).hasText('Woody');
+    assert.dom(`[data-test-item="1"]`).hasText('Buzz');
+    assert.dom(`[data-test-item="2"]`).hasText('Jackie');
+
+    await click(
+      `[data-test-stack-card="${testRealmURL}Person/burcu"] [data-test-edit-button]`,
+    );
+    assert.dom(`[data-test-plural-view-item="0"]`).hasText('Woody');
+    assert.dom(`[data-test-plural-view-item="1"]`).hasText('Buzz');
+    assert.dom(`[data-test-plural-view-item="2"]`).hasText('Jackie');
   });
 });
