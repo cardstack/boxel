@@ -75,6 +75,5 @@ export class TripInfo extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
-
   */
 }

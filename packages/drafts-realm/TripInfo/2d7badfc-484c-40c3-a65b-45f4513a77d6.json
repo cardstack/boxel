@@ -24,7 +24,12 @@
           "self": "http://localhost:4201/drafts/Country/4"
         }
       },
-      "traveler.countriesVisited.1": {
+      "startLocation": {
+        "links": {
+          "self": "../Country/3"
+        }
+      },
+      "endLocation": {
         "links": {
           "self": null
         }
