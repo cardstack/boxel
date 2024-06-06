@@ -429,7 +429,7 @@ export default class MatrixService extends Service {
             type: 'function',
             function: {
               name: 'patchCard',
-              description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property to null. Ensure the description explains what change you are making`,
+              description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property to null. When adding a link to a relationship array, do not remove the other links from the array, unless instructed to do so. When suggesting a patch, use the current state of the card and the most recent request by the user. Ensure the description explains what change you are making.`,
               parameters: {
                 type: 'object',
                 properties: {
