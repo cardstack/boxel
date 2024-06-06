@@ -49,6 +49,7 @@ import type {
   CardMessageContent,
   CardFragmentContent,
   ReactionEventContent,
+  CommandResultContent,
 } from 'https://cardstack.com/base/room';
 
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
@@ -393,6 +394,97 @@ export default class MatrixService extends Service {
     }
   }
 
+  async sendCommandResultMessage(roomId: string, eventId: string, result: any) {
+    let body = `Command Results from command event ${eventId}`;
+    let html = markdownToHtml(body);
+    let content: CommandResultContent = {
+      'm.relates_to': {
+        event_id: eventId,
+        rel_type: 'm.annotation',
+        key: 'applied', //this is aggregated key. All annotations must have one. This identifies the reaction event.
+      },
+      body,
+      formatted_body: html,
+      msgtype: 'org.boxel.commandResult',
+      result,
+    };
+    try {
+      return await this.sendEvent(roomId, 'm.room.message', content);
+    } catch (e) {
+      throw new Error(
+        `Error sending reaction event: ${
+          'message' in (e as Error) ? (e as Error).message : e
+        }`,
+      );
+    }
+  }
+
+  private addTools = (attachedOpenCard: CardDef, patchSpec: any) => {
+    let tools = [];
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'patchCard',
+        description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.`,
+        parameters: {
+          type: 'object',
+          properties: {
+            card_id: {
+              type: 'string',
+              const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
+            },
+            description: {
+              type: 'string',
+            },
+            ...patchSpec,
+          },
+          required: ['card_id', 'attributes', 'description'],
+        },
+      },
+    });
+    //need to make sure filter object is returned
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'searchCard',
+        description: `Propose a query to search for a card instance related to module it was from. 
+        Always prioritise search based upon the card that was last shared. 
+        Ensure that you find the correct "module" and "name" from the OUTERMOST "adoptsFrom" field from the card data that is shared`,
+        parameters: {
+          type: 'object',
+          properties: {
+            card_id: {
+              type: 'string',
+              const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
+            },
+            filter: {
+              type: 'object',
+              properties: {
+                type: {
+                  //resolved code ref essentially
+                  type: 'object',
+                  properties: {
+                    module: {
+                      type: 'string',
+                      description: `the absolute path of the module`,
+                    },
+                    name: {
+                      type: 'string',
+                      description: 'the name of the module',
+                    },
+                  },
+                  required: ['module', 'name'],
+                },
+              },
+            },
+          },
+          required: ['card_id', 'filter'],
+        },
+      },
+    });
+    return tools;
+  };
+
   async sendMessage(
     roomId: string,
     body: string | undefined,
@@ -425,27 +517,7 @@ export default class MatrixService extends Service {
         });
         await realmSession.loaded;
         if (realmSession.canWrite) {
-          tools.push({
-            type: 'function',
-            function: {
-              name: 'patchCard',
-              description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.`,
-              parameters: {
-                type: 'object',
-                properties: {
-                  card_id: {
-                    type: 'string',
-                    const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
-                  },
-                  description: {
-                    type: 'string',
-                  },
-                  ...patchSpec,
-                },
-                required: ['card_id', 'attributes', 'description'],
-              },
-            },
-          });
+          tools.push(...this.addTools(attachedOpenCard, patchSpec));
         }
       }
     }

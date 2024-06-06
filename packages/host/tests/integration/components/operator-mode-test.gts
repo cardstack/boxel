@@ -903,7 +903,7 @@ module('Integration | operator-mode', function (hooks) {
         assert.strictEqual(json.data.attributes?.firstName, 'Dave');
       });
       await click('[data-test-command-apply]');
-      await waitFor('[data-test-patch-card-idle]');
+      await waitFor('[data-test-command-card-idle]');
 
       assert.dom('[data-test-person]').hasText('Dave');
     });
@@ -1004,7 +1004,7 @@ module('Integration | operator-mode', function (hooks) {
       await waitFor('[data-test-room-name="test room 1"]');
       await waitFor('[data-test-message-idx="1"] [data-test-command-apply]');
       await click('[data-test-message-idx="1"] [data-test-command-apply]');
-      await waitFor('[data-test-patch-card-idle]');
+      await waitFor('[data-test-command-card-idle]');
 
       assert
         .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
@@ -1018,7 +1018,7 @@ module('Integration | operator-mode', function (hooks) {
       await waitFor('[data-test-room-name="test room 2"]');
       await waitFor('[data-test-command-apply]');
       await click('[data-test-command-apply]');
-      await waitFor('[data-test-patch-card-idle]');
+      await waitFor('[data-test-command-card-idle]');
       assert
         .dom('[data-test-message-idx="0"] [data-test-apply-state="failed"]')
         .exists();
@@ -1097,7 +1097,7 @@ module('Integration | operator-mode', function (hooks) {
       await waitFor('[data-test-command-apply="ready"]');
       await click('[data-test-command-apply]');
 
-      await waitFor('[data-test-patch-card-idle]');
+      await waitFor('[data-test-command-card-idle]');
       assert
         .dom('[data-test-card-error]')
         .containsText(
@@ -1118,7 +1118,7 @@ module('Integration | operator-mode', function (hooks) {
       await click('[data-test-ai-bot-retry-button]'); // retry the command with correct card
       assert.dom('[data-test-apply-state="applying"]').exists();
 
-      await waitFor('[data-test-patch-card-idle]');
+      await waitFor('[data-test-command-card-idle]');
       assert.dom('[data-test-apply-state="applied"]').exists();
       assert.dom('[data-test-person]').hasText('Dave');
       assert.dom('[data-test-command-apply]').doesNotExist();
@@ -1198,7 +1198,7 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-code-editor]').doesNotExist();
 
       await click('[data-test-command-apply="ready"]');
-      await waitFor('[data-test-patch-card-idle]');
+      await waitFor('[data-test-command-card-idle]');
       assert.dom('[data-test-apply-state="applied"]').exists();
       assert.dom('[data-test-person]').hasText('Joy');
       assert.dom(`[data-test-preferredcarrier]`).hasText('UPS');
@@ -1261,7 +1261,7 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom(`${stackCard} [data-test-pet="Mango"]`).exists();
 
       await click('[data-test-command-apply]');
-      await waitFor('[data-test-patch-card-idle]');
+      await waitFor('[data-test-command-card-idle]');
       assert.dom('[data-test-apply-state="applied"]').exists();
       assert.dom(`${stackCard} [data-test-preferredcarrier="Fedex"]`).exists();
       assert.dom(`${stackCard} [data-test-pet="Mango"]`).doesNotExist();
@@ -1306,7 +1306,9 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom(`${stackCard} [data-test-pet]`).doesNotExist();
 
       await click('[data-test-command-apply]');
-      await waitFor('[data-test-message-idx="1"] [data-test-patch-card-idle]');
+      await waitFor(
+        '[data-test-message-idx="1"] [data-test-command-card-idle]',
+      );
       assert
         .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
         .exists();
@@ -1362,7 +1364,7 @@ module('Integration | operator-mode', function (hooks) {
 
       await waitFor('[data-test-command-apply="ready"]');
       await click('[data-test-command-apply]');
-      await waitFor('[data-test-patch-card-idle]');
+      await waitFor('[data-test-command-card-idle]');
       assert.dom('[data-test-apply-state="applied"]').exists();
       assert.dom('[data-test-tripTitle]').hasText('Trip to Japan');
     });
@@ -1468,7 +1470,9 @@ module('Integration | operator-mode', function (hooks) {
         .dom('[data-test-message-idx="2"] [data-test-apply-state="applying"]')
         .exists();
 
-      await waitFor('[data-test-message-idx="2"] [data-test-patch-card-idle]');
+      await waitFor(
+        '[data-test-message-idx="2"] [data-test-command-card-idle]',
+      );
       assert.dom('[data-test-apply-state="applied"]').exists({ count: 1 });
       assert
         .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
@@ -1477,7 +1481,9 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-person]').hasText('Jackie');
 
       await click('[data-test-message-idx="1"] [data-test-command-apply]');
-      await waitFor('[data-test-message-idx="1"] [data-test-patch-card-idle]');
+      await waitFor(
+        '[data-test-message-idx="1"] [data-test-command-card-idle]',
+      );
       assert.dom('[data-test-apply-state="failed"]').exists({ count: 1 });
       assert
         .dom('[data-test-message-idx="1"] [data-test-apply-state="failed"]')
@@ -1537,7 +1543,9 @@ module('Integration | operator-mode', function (hooks) {
         .dom('[data-test-message-idx="0"] [data-test-apply-state="applying"]')
         .exists();
 
-      await waitFor('[data-test-message-idx="0"] [data-test-patch-card-idle]');
+      await waitFor(
+        '[data-test-message-idx="0"] [data-test-command-card-idle]',
+      );
       assert.dom('[data-test-apply-state="applied"]').exists({ count: 1 });
       assert
         .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')

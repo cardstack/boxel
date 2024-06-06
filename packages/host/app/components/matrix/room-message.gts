@@ -12,7 +12,7 @@ import { modifier } from 'ember-modifier';
 import { trackedFunction } from 'ember-resources/util/function';
 
 import { Button } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { bool } from '@cardstack/boxel-ui/helpers';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
@@ -24,8 +24,9 @@ import type MonacoService from '@cardstack/host/services/monaco-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import { BaseDef, type CardDef } from 'https://cardstack.com/base/card-api';
 import { type MessageField } from 'https://cardstack.com/base/room';
+import { PatchObject } from 'https://cardstack.com/base/patch-command';
 
 import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
@@ -49,6 +50,10 @@ interface Signature {
 }
 
 const STREAMING_TIMEOUT_MS = 60000;
+
+function getComponent(cardOrField: BaseDef) {
+  return cardOrField.constructor.getComponent(cardOrField);
+}
 
 export default class RoomMessage extends Component<Signature> {
   constructor(owner: unknown, args: Signature['Args']) {
@@ -104,18 +109,18 @@ export default class RoomMessage extends Component<Signature> {
         @errorMessage={{this.errorMessage}}
         @isStreaming={{@isStreaming}}
         @retryAction={{if
-          (eq @message.command.commandType 'patchCard')
-          (perform this.patchCard)
+          (bool this.isCommand)
+          (perform this.handleCommand)
           @retryAction
         }}
         @isPending={{@isPending}}
         data-test-boxel-message-from={{@message.author.name}}
         ...attributes
       >
-        {{#if (eq @message.command.commandType 'patchCard')}}
+        {{#if (bool this.isCommand)}}
           <div
-            class='patch-button-bar'
-            data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
+            class='command-button-bar'
+            data-test-command-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
           >
             <Button
               class='view-code-button'
@@ -126,11 +131,18 @@ export default class RoomMessage extends Component<Signature> {
             >
               {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
             </Button>
+
             <ApplyButton
               @state={{this.applyButtonState}}
-              {{on 'click' (perform this.patchCard)}}
+              {{on 'click' (perform this.handleCommand)}}
               data-test-command-apply={{this.applyButtonState}}
             />
+
+            <div>
+              {{#let (getComponent this.args.message) as |Component|}}
+                <Component @format='embedded' />
+              {{/let}}
+            </div>
           </div>
           {{#if this.isDisplayingCode}}
             <div class='preview-code'>
@@ -153,7 +165,7 @@ export default class RoomMessage extends Component<Signature> {
                 class='monaco-container'
                 {{this.scrollBottomIntoView}}
                 {{monacoModifier
-                  content=this.previewPatchCode
+                  content=this.previewCommandCode
                   contentChanged=undefined
                   monacoSDK=@monacoSDK
                   language='json'
@@ -179,7 +191,7 @@ export default class RoomMessage extends Component<Signature> {
         background: var(--boxel-200);
         color: var(--boxel-500);
       }
-      .patch-button-bar {
+      .command-button-bar {
         display: flex;
         justify-content: flex-end;
         gap: var(--boxel-sp-xs);
@@ -245,7 +257,7 @@ export default class RoomMessage extends Component<Signature> {
   @tracked private isDisplayingCode = false;
 
   private copyToClipboard = task(async () => {
-    await navigator.clipboard.writeText(this.previewPatchCode);
+    await navigator.clipboard.writeText(this.previewCommandCode);
   });
 
   private loadMessageResources = trackedFunction(this, async () => {
@@ -308,23 +320,46 @@ export default class RoomMessage extends Component<Signature> {
       .join(', ');
   }
 
-  private patchCard = task(async () => {
-    if (this.operatorModeStateService.patchCard.isRunning) {
-      return;
+  get isCommand() {
+    if (!this.args.message.command) {
+      return false;
     }
-    let { payload, eventId } = this.args.message.command;
-    this.matrixService.failedCommandState.delete(eventId);
+    return (
+      this.args.message.command.commandType === 'patchCard' ||
+      this.args.message.command.commandType === 'searchCard'
+    );
+  }
+
+  get commandIsRunning() {
+    return this.handleCommand.isRunning;
+  }
+
+  private handleCommand = task(async () => {
+    let { eventId } = this.args.message.command;
     try {
-      await this.operatorModeStateService.patchCard.perform(
-        payload.id,
-        payload.patch,
-      );
-      //here is reaction event
+      let res: any;
+      this.matrixService.failedCommandState.delete(eventId);
+      if (this.args.message.command.commandType === 'patchCard') {
+        //TODO: patchCard uses a lot of services so it is not easy to decouple
+        res = await this.patchCard.perform(
+          eventId,
+          this.args.message.command.payload as PatchObject,
+        );
+      } else if (this.args.message.command.commandType === 'searchCard') {
+        res = this.args.message.command.result;
+      }
       await this.matrixService.sendReactionEvent(
         this.args.roomId,
         eventId,
         'applied',
       );
+      if (res) {
+        await this.matrixService.sendCommandResultMessage(
+          this.args.roomId,
+          eventId,
+          res,
+        );
+      }
     } catch (e) {
       let error =
         typeof e === 'string'
@@ -336,7 +371,20 @@ export default class RoomMessage extends Component<Signature> {
     }
   });
 
-  private get previewPatchCode() {
+  //TODO: To be removed and included inside of card
+  private patchCard = task(async (eventId: string, payload: PatchObject) => {
+    if (this.operatorModeStateService.patchCard.isRunning) {
+      return;
+    }
+    //TODO: The discriminant doesn't interact with at the field level
+    this.matrixService.failedCommandState.delete(eventId);
+    return await this.operatorModeStateService.patchCard.perform(
+      payload.id,
+      payload.patch,
+    );
+  });
+
+  private get previewCommandCode() {
     let { commandType, payload } = this.args.message.command;
     return JSON.stringify({ commandType, payload }, null, 2);
   }
@@ -353,7 +401,7 @@ export default class RoomMessage extends Component<Signature> {
 
   @cached
   private get applyButtonState(): ApplyButtonState {
-    if (this.patchCard.isRunning) {
+    if (this.commandIsRunning) {
       return 'applying';
     }
     if (this.failedCommandState) {

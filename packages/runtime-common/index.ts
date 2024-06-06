@@ -188,6 +188,7 @@ export interface CardSearch {
     instances: CardDef[];
     ready: Promise<void>;
     isLoading: boolean;
+    loaded?: Promise<void>;
   };
   getCard(
     url: URL,

@@ -13,6 +13,9 @@ import DateTimeField from './datetime';
 import NumberField from './number';
 import MarkdownField from './markdown';
 import Modifier from 'ember-modifier';
+import { CommandField, CommandMessageContent } from './command';
+import { PatchCommandField } from './patch-command';
+import { SearchCommandField } from './search-command';
 import { type Schema } from '@cardstack/runtime-common/helpers/ai';
 import {
   Loader,
@@ -185,10 +188,6 @@ class ScrollIntoView extends Modifier {
   }
 }
 
-function getCardComponent(card: CardDef) {
-  return card.constructor.getComponent(card);
-}
-
 class EmbeddedMessageField extends Component<typeof MessageField> {
   <template>
     <div
@@ -197,24 +196,12 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
       data-test-message-cards
     >
       <div>
-        {{@fields.message}}
-      </div>
-
-      {{#each @model.attachedResources as |cardResource|}}
-        {{#if cardResource.cardError}}
-          <div data-test-card-error={{cardResource.cardError.id}} class='error'>
-            Error: cannot render card
-            {{cardResource.cardError.id}}:
-            {{cardResource.cardError.error.message}}
-          </div>
-        {{else if cardResource.card}}
-          {{#let (getCardComponent cardResource.card) as |CardComponent|}}
-            <div data-test-attached-card={{cardResource.card.id}}>
-              <CardComponent @format='atom' />
-            </div>
-          {{/let}}
+        {{#if @fields.command}}
+          <@fields.command @format='embedded' />
+        {{else}}
+          {{@fields.message}}
         {{/if}}
-      {{/each}}
+      </div>
     </div>
 
     <style>
@@ -231,34 +218,6 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
     }
     return this.args.model.created.getTime();
   }
-}
-
-type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
-
-type JSONObject = { [x: string]: JSONValue };
-
-type PatchObject = { patch: { attributes: JSONObject }; id: string };
-
-class PatchObjectField extends FieldDef {
-  static [primitive]: PatchObject;
-}
-
-class CommandType extends FieldDef {
-  static [primitive]: 'patchCard';
-}
-
-type CommandStatus = 'applied' | 'ready';
-
-class CommandStatusField extends FieldDef {
-  static [primitive]: CommandStatus;
-}
-
-// Subclass, add a validator that checks the fields required?
-class PatchField extends FieldDef {
-  @field commandType = contains(CommandType);
-  @field payload = contains(PatchObjectField);
-  @field eventId = contains(StringField);
-  @field status = contains(CommandStatusField);
 }
 
 // A map from a hash of roomId + card document to the first card fragment event id.
@@ -285,7 +244,7 @@ export class MessageField extends FieldDef {
   @field attachedCardIds = containsMany(StringField);
   @field index = contains(NumberField);
   @field transactionId = contains(StringField);
-  @field command = contains(PatchField);
+  @field command = contains(CommandField);
   @field isStreamingFinished = contains(BooleanField);
   @field errorMessage = contains(StringField);
   // ID from the client and can be used by client
@@ -554,6 +513,9 @@ export class RoomField extends FieldDef {
           if (!fragments.has(event_id)) {
             fragments.set(event_id, event.content);
           }
+        } else if (event.content.msgtype === 'org.boxel.commandResult') {
+          //don't display it in the room!
+          //don't do anything with message contents
         } else if (event.content.msgtype === 'org.boxel.message') {
           // Safely skip over cases that don't have attached cards or a data type
           let cardDocs = event.content.data?.attachedCardsEventIds
@@ -589,15 +551,23 @@ export class RoomField extends FieldDef {
                 (command.eventId ?? event_id),
           ) as ReactionEvent | undefined;
 
+          let resultEvent = this.events.find(
+            (e) =>
+              e.type === 'm.room.message' &&
+              e.content.msgtype === 'org.boxel.commandResult' &&
+              e.content['m.relates_to']?.rel_type === 'm.annotation' &&
+              e.content['m.relates_to'].event_id === command.eventId,
+          ) as CommandResultEvent;
+          let result = resultEvent?.content?.result;
+          let commandField = toCommandField(
+            event,
+            annotation?.content['m.relates_to'].key ?? 'ready',
+            result,
+          );
           messageField = new MessageField({
             ...cardArgs,
-            formattedMessage: `<p class="patch-message">${event.content.formatted_body}</p>`,
-            command: new PatchField({
-              eventId: event_id,
-              commandType: command.type,
-              payload: command,
-              status: annotation?.content['m.relates_to'].key ?? 'ready',
-            }),
+            formattedMessage: `<p class="command-message">${event.content.formatted_body}</p>`,
+            command: commandField,
             isStreamingFinished: true,
           });
         } else {
@@ -692,6 +662,17 @@ export class RoomField extends FieldDef {
       <div>Cannot edit room card</div>
     </template>
   };
+}
+
+export function isCommandEvent(event: MatrixEvent): event is CommandEvent {
+  return (
+    event.type === 'm.room.message' &&
+    typeof event.content === 'object' &&
+    event.content.msgtype === 'org.boxel.command' &&
+    event.content.format === 'org.matrix.custom.html' &&
+    typeof event.content.data === 'object' &&
+    typeof event.content.data.command === 'object'
+  );
 }
 
 interface BaseMatrixEvent {
@@ -812,24 +793,34 @@ export interface CommandEvent extends BaseMatrixEvent {
   };
 }
 
-interface CommandMessageContent {
-  'm.relates_to'?: {
-    rel_type: string;
-    event_id: string;
-  };
-  msgtype: 'org.boxel.command';
-  format: 'org.matrix.custom.html';
-  body: string;
-  formatted_body: string;
-  data: {
-    command: {
-      type: 'patchCard';
-      payload: PatchObject;
-      eventId: string;
-    };
+export interface CommandResultEvent extends BaseMatrixEvent {
+  type: 'm.room.message';
+  content: CommandResultContent;
+  unsigned: {
+    age: number;
+    transaction_id: string;
+    prev_content?: any;
+    prev_sender?: string;
   };
 }
 
+export interface CommandResultContent {
+  'm.relates_to'?: {
+    rel_type: 'm.annotation';
+    key: string;
+    event_id: string;
+    'm.in_reply_to'?: {
+      event_id: string;
+    };
+  };
+  formatted_body: string;
+  body: string;
+  msgtype: 'org.boxel.commandResult';
+  result: any;
+}
+
+// difference Command result and reaction event is that reaction event requires
+// user interaction and command result delivers a payload
 export interface ReactionEvent extends BaseMatrixEvent {
   type: 'm.reaction';
   content: ReactionEventContent;
@@ -851,6 +842,15 @@ interface CardMessageEvent extends BaseMatrixEvent {
     transaction_id: string;
     prev_content?: any;
     prev_sender?: string;
+  };
+}
+
+interface Tools {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: Schema;
   };
 }
 
@@ -877,15 +877,8 @@ export interface CardMessageContent {
     attachedCards?: LooseSingleCardDocument[];
     context: {
       openCardIds?: string[];
-      tools: {
-        type: 'function';
-        function: {
-          name: string;
-          description: string;
-          parameters: Schema;
-        };
-      }[];
       submode: string | undefined;
+      tools: Tools[];
     };
   };
 }
@@ -914,6 +907,7 @@ export type MatrixEvent =
   | RoomPowerLevels
   | MessageEvent
   | CommandEvent
+  | CommandResultEvent
   | ReactionEvent
   | CardMessageEvent
   | RoomNameEvent
@@ -921,3 +915,34 @@ export type MatrixEvent =
   | InviteEvent
   | JoinEvent
   | LeaveEvent;
+
+// <FunctionToolCall> --(sendOption + toMatrixMessageContent)--> <Matrix Event> --(toCommandField)--> <CommandField>
+// TODO: We can make inverse of this.
+const toCommandField = (
+  event: MatrixEvent,
+  status: string | undefined,
+  result: any,
+): CommandField | undefined => {
+  if (isCommandEvent(event)) {
+    let payload = event.content.data.command;
+    let { eventId, type } = payload;
+    let commandType = type;
+    if (commandType === 'searchCard') {
+      return new SearchCommandField({
+        eventId,
+        commandType,
+        payload,
+        status,
+        result,
+      });
+    } else if (commandType === 'patchCard') {
+      return new PatchCommandField({
+        eventId,
+        commandType,
+        payload,
+        status,
+      });
+    }
+  }
+  return;
+};
