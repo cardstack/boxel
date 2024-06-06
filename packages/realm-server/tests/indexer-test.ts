@@ -67,4 +67,8 @@ module('indexer db client', function (hooks) {
   test('can perform invalidations for an instance with deps more than a thousand', async function (assert) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
+
+  test('can get compiled module when requested with file extension', async function (assert) {
+    await runSharedTest(indexerTests, assert, { indexer, adapter });
+  });
 });

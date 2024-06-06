@@ -101,6 +101,7 @@ export type TestIndexRow =
 //
 // the realm version table will default to version 1 of the testRealmURL if no
 // value is supplied
+export async function setupIndex(client: Indexer): Promise<void>;
 export async function setupIndex(
   client: Indexer,
   indexRows: TestIndexRow[],
@@ -112,7 +113,7 @@ export async function setupIndex(
 ): Promise<void>;
 export async function setupIndex(
   client: Indexer,
-  maybeVersionRows: RealmVersionsTable[] | TestIndexRow[],
+  maybeVersionRows: RealmVersionsTable[] | TestIndexRow[] = [],
   indexRows?: TestIndexRow[],
 ): Promise<void> {
   let versionRows: RealmVersionsTable[];

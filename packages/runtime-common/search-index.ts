@@ -9,7 +9,7 @@ import {
   type DBAdapter,
   type Queue,
   type QueryOptions,
-  type SearchCardResult,
+  type IndexedInstance,
   type FromScratchArgs,
   type FromScratchResult,
   type IncrementalArgs,
@@ -208,7 +208,7 @@ export class SearchIndex {
       return maybeCard;
     }
     doc = {
-      data: { ...maybeCard.card, ...{ links: { self: url.href } } },
+      data: { ...maybeCard.instance, ...{ links: { self: url.href } } },
     };
     if (!doc) {
       throw new Error(
@@ -232,7 +232,7 @@ export class SearchIndex {
   }
 
   // this is meant for tests only
-  async searchEntry(url: URL): Promise<SearchCardResult | undefined> {
+  async searchEntry(url: URL): Promise<IndexedInstance | undefined> {
     let result = await this.#indexer.getCard(url);
     if (result?.type === 'error') {
       return undefined;
@@ -282,7 +282,7 @@ export class SearchIndex {
       if (realmPath.inRealm(linkURL)) {
         let maybeResult = await this.#indexer.getCard(linkURL, opts);
         linkResource =
-          maybeResult?.type === 'card' ? maybeResult.card : undefined;
+          maybeResult?.type === 'instance' ? maybeResult.instance : undefined;
       } else {
         let response = await this.loader.fetch(linkURL, {
           headers: { Accept: SupportedMimeType.CardJson },

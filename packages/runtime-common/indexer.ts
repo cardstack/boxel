@@ -12,6 +12,7 @@ import {
   trimExecutableExtension,
   RealmPaths,
 } from './index';
+import { transpileJS } from './transpile';
 import {
   type PgPrimitive,
   type Expression,
@@ -69,6 +70,8 @@ export interface BoxelIndexTable {
   // `types` is the adoption chain for card where each code ref is serialized
   // using `internalKeyFor()`
   types: string[] | null;
+  transpiled_code: string | null;
+  source: string | null;
   embedded_html: string | null;
   isolated_html: string | null;
   indexed_at: number | null;
@@ -80,9 +83,15 @@ export interface RealmVersionsTable {
   current_version: number;
 }
 
-export interface SearchCardResult {
-  type: 'card';
-  card: CardResource;
+interface IndexedModule {
+  type: 'module';
+  executableCode: string;
+  // TODO source
+}
+
+export interface IndexedInstance {
+  type: 'instance';
+  instance: CardResource;
   isolatedHtml: string | null;
   searchDoc: Record<string, any> | null;
   types: string[] | null;
@@ -90,12 +99,15 @@ export interface SearchCardResult {
   realmVersion: number;
   realmURL: string;
   indexedAt: number | null;
+  // TODO source
 }
-interface SearchErrorResult {
+interface IndexedError {
   type: 'error';
   error: SerializedError;
 }
-export type SearchResult = SearchCardResult | SearchErrorResult;
+
+export type IndexedInstanceOrError = IndexedInstance | IndexedError;
+export type IndexedModuleOrError = IndexedModule | IndexedError;
 
 type GetEntryOptions = WIPOptions;
 export type QueryOptions = WIPOptions;
@@ -146,10 +158,53 @@ export class Indexer {
     return this.query(await this.makeExpression(query, loader));
   }
 
+  async getModule(
+    url: URL,
+    opts?: GetEntryOptions,
+  ): Promise<IndexedModuleOrError | undefined> {
+    let result = (await this.query([
+      `SELECT i.* 
+       FROM boxel_index as i
+       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
+       WHERE`,
+      ...every([
+        any([
+          [`i.url =`, param(url.href)],
+          [`i.file_alias =`, param(url.href)],
+        ]),
+        realmVersionExpression(opts),
+        any([
+          ['i.type =', param('module')],
+          ['i.type =', param('error')],
+        ]),
+      ]),
+    ] as Expression)) as unknown as BoxelIndexTable[];
+    let maybeResult: BoxelIndexTable | undefined = result[0];
+    if (!maybeResult) {
+      return undefined;
+    }
+    if (maybeResult.is_deleted) {
+      return undefined;
+    }
+
+    if (maybeResult.error_doc) {
+      return { type: 'error', error: maybeResult.error_doc };
+    }
+    let { transpiled_code: executableCode } = maybeResult;
+    if (!executableCode) {
+      throw new Error(
+        `bug: index entry for ${url.href} with opts: ${JSON.stringify(
+          opts,
+        )} has neither an error_doc nor transpiled_code`,
+      );
+    }
+    return { type: 'module', executableCode };
+  }
+
   async getCard(
     url: URL,
     opts?: GetEntryOptions,
-  ): Promise<SearchResult | undefined> {
+  ): Promise<IndexedInstanceOrError | undefined> {
     let href = assertURLEndsWithJSON(url).href;
     let result = (await this.query([
       `SELECT i.* 
@@ -177,7 +232,7 @@ export class Indexer {
       return { type: 'error', error: maybeResult.error_doc };
     }
     let {
-      pristine_doc: card,
+      pristine_doc: instance,
       isolated_html: isolatedHtml,
       search_doc: searchDoc,
       realm_version: realmVersion,
@@ -186,7 +241,7 @@ export class Indexer {
       types,
       deps,
     } = maybeResult;
-    if (!card) {
+    if (!instance) {
       throw new Error(
         `bug: index entry for ${href} with opts: ${JSON.stringify(
           opts,
@@ -194,9 +249,9 @@ export class Indexer {
       );
     }
     return {
-      type: 'card',
+      type: 'instance',
       realmURL,
-      card,
+      instance,
       isolatedHtml,
       searchDoc,
       types,
@@ -828,17 +883,33 @@ export class Indexer {
   }
 }
 
-export interface SearchEntry {
-  resource: CardResource;
-  searchData: Record<string, any>;
-  isolatedHtml?: string;
-  types: string[];
-  deps: Set<string>;
+export type IndexEntry = InstanceEntry | ModuleEntry | ErrorEntry;
+
+// TODO why is this type so special?
+export type InstanceEntryWithErrors = InstanceEntry | ErrorEntry;
+
+export interface InstanceEntry {
+  type: 'instance';
+  instance: {
+    resource: CardResource;
+    searchData: Record<string, any>;
+    isolatedHtml?: string;
+    types: string[];
+    deps: Set<string>;
+  };
 }
 
-export type SearchEntryWithErrors =
-  | { type: 'entry'; entry: SearchEntry }
-  | { type: 'error'; error: SerializedError };
+interface ErrorEntry {
+  type: 'error';
+  error: SerializedError;
+}
+interface ModuleEntry {
+  type: 'module';
+  module: {
+    deps: Set<string>;
+    source: string;
+  };
+}
 
 export class Batch {
   readonly ready: Promise<void>;
@@ -853,17 +924,7 @@ export class Batch {
     this.ready = this.setNextRealmVersion();
   }
 
-  async updateEntry(
-    url: URL,
-    entry:
-      | SearchEntryWithErrors
-      | {
-          type: 'module';
-          module: {
-            deps: Set<string>;
-          };
-        },
-  ): Promise<void> {
+  async updateEntry(url: URL, entry: IndexEntry): Promise<void> {
     if (!new RealmPaths(this.realmURL).inRealm(url)) {
       // TODO this is a workaround for CS-6886. after we have solved that issue we can
       // drop this band-aid
@@ -879,21 +940,23 @@ export class Batch {
         realm_url: this.realmURL.href,
         is_deleted: false,
         indexed_at: Date.now(),
-        ...(entry.type === 'entry'
+        ...(entry.type === 'instance'
           ? {
               // TODO in followup PR we need to alter the SearchEntry type to use
               // a document instead of a resource
               type: 'instance',
-              pristine_doc: entry.entry.resource,
-              search_doc: entry.entry.searchData,
-              isolated_html: entry.entry.isolatedHtml,
-              deps: [...entry.entry.deps],
-              types: entry.entry.types,
+              pristine_doc: entry.instance.resource,
+              search_doc: entry.instance.searchData,
+              isolated_html: entry.instance.isolatedHtml,
+              deps: [...entry.instance.deps],
+              types: entry.instance.types,
             }
           : entry.type === 'module'
           ? {
               type: 'module',
               deps: [...entry.module.deps],
+              source: entry.module.source,
+              transpiled_code: transpileJS(entry.module.source, href),
             }
           : {
               type: 'error',

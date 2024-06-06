@@ -4,12 +4,15 @@ import {
   baseCardRef,
   type LooseCardResource,
   type DBAdapter,
-  type SearchCardResult,
+  type IndexedInstance,
   type BoxelIndexTable,
 } from '../index';
+import { cardSrc, compiledCard } from '../etc/test-fixtures';
 import { type SharedTests } from '../helpers';
 import { setupIndex } from '../helpers/indexer';
 import { testRealmURL } from '../helpers/const';
+import stripScopedCSSGlimmerAttributes from '../helpers/strip-scoped-css-glimmer-attributes';
+import '../helpers/code-equality-assertion';
 
 const testRealmURL2 = `http://test-realm/test2/`;
 
@@ -458,8 +461,8 @@ const tests = Object.freeze({
     let batch = await indexer.createBatch(new URL(testRealmURL));
     await batch.invalidate(new URL(`${testRealmURL}1.json`));
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
-      type: 'entry',
-      entry: {
+      type: 'instance',
+      instance: {
         resource: {
           id: `${testRealmURL}1.json`,
           type: 'card',
@@ -694,8 +697,8 @@ const tests = Object.freeze({
 
     // in this next generation only 1 card happened to be visited
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
-      type: 'entry',
-      entry: {
+      type: 'instance',
+      instance: {
         resource: {
           id: `${testRealmURL}1.json`,
           type: 'card',
@@ -809,8 +812,8 @@ const tests = Object.freeze({
     let batch = await indexer.createBatch(new URL(testRealmURL));
     await batch.invalidate(new URL(`${testRealmURL}1.json`));
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
-      type: 'entry',
-      entry: {
+      type: 'instance',
+      instance: {
         resource: {
           id: `${testRealmURL}1.json`,
           type: 'card',
@@ -831,12 +834,12 @@ const tests = Object.freeze({
     });
 
     let entry = await indexer.getCard(new URL(`${testRealmURL}1`));
-    if (entry?.type === 'card') {
+    if (entry?.type === 'instance') {
       assert.deepEqual(entry, {
-        type: 'card',
+        type: 'instance',
         realmVersion: 1,
         realmURL: testRealmURL,
-        card: {
+        instance: {
           id: `${testRealmURL}1`,
           type: 'card',
           attributes: {
@@ -887,8 +890,8 @@ const tests = Object.freeze({
     let batch = await indexer.createBatch(new URL(testRealmURL));
     await batch.invalidate(new URL(`${testRealmURL}1.json`));
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
-      type: 'entry',
-      entry: {
+      type: 'instance',
+      instance: {
         resource: {
           id: `${testRealmURL}1.json`,
           type: 'card',
@@ -911,14 +914,14 @@ const tests = Object.freeze({
     let entry = await indexer.getCard(new URL(`${testRealmURL}1`), {
       useWorkInProgressIndex: true,
     });
-    if (entry?.type === 'card') {
+    if (entry?.type === 'instance') {
       assert.ok(entry?.indexedAt, 'the indexed_at field was set');
-      delete (entry as Partial<SearchCardResult>)?.indexedAt;
-      assert.deepEqual(entry as Omit<SearchCardResult, 'indexedAt'>, {
-        type: 'card',
+      delete (entry as Partial<IndexedInstance>)?.indexedAt;
+      assert.deepEqual(entry as Omit<IndexedInstance, 'indexedAt'>, {
+        type: 'instance',
         realmVersion: 2,
         realmURL: testRealmURL,
-        card: {
+        instance: {
           id: `${testRealmURL}1.json`,
           type: 'card',
           attributes: {
@@ -1032,6 +1035,35 @@ const tests = Object.freeze({
         'the "production" realm versions are correct',
       );
     },
+  'can get compiled module when requested with file extension': async (
+    assert,
+    { indexer },
+  ) => {
+    await setupIndex(indexer);
+    let batch = await indexer.createBatch(new URL(testRealmURL));
+    await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
+      type: 'module',
+      module: {
+        deps: new Set(),
+        source: cardSrc,
+      },
+    });
+    await batch.done();
+
+    let result = await indexer.getModule(new URL(`${testRealmURL}person.gts`));
+    if (result?.type === 'module') {
+      let { executableCode } = result;
+      assert.codeEqual(
+        stripScopedCSSGlimmerAttributes(executableCode),
+        compiledCard(),
+        'compiled card is correct',
+      );
+    } else {
+      assert.ok(false, `expected module not to be an error document`);
+    }
+  },
+  // TODO can get compiled module when request without file extension
+  // TODO can get compiled module for WIP index
 } as SharedTests<{ indexer: Indexer; adapter: DBAdapter }>);
 
 export default tests;

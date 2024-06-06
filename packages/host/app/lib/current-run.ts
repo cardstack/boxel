@@ -22,7 +22,7 @@ import {
   identifyCard,
   isBaseDef,
   moduleFrom,
-  type SearchEntryWithErrors,
+  type InstanceEntryWithErrors,
   type CodeRef,
   type RealmInfo,
   type IndexResults,
@@ -277,21 +277,22 @@ export class CurrentRun {
     }
     let start = Date.now();
     log.debug(`begin visiting file ${url.href}`);
+    let localPath = this.#realmPaths.local(url);
+
+    let fileRef = await this.#reader.readFileAsText(localPath, {});
+    if (!fileRef) {
+      let error = new CardError(`missing file ${url.href}`, { status: 404 });
+      error.deps = [url.href];
+      throw error;
+    }
+    let { content, lastModified } = fileRef;
     if (
       hasExecutableExtension(url.href) ||
       // handle modules with no extension too
       !url.href.split('/').pop()!.includes('.')
     ) {
-      await this.indexCardSource(url);
+      await this.indexCardSource(url, content);
     } else {
-      let localPath = this.#realmPaths.local(url);
-
-      let fileRef = await this.#reader.readFileAsText(localPath, {});
-      if (!fileRef) {
-        let error = new CardError(`missing file ${url.href}`, { status: 404 });
-        error.deps = [url.href];
-        throw error;
-      }
       if (!identityContext) {
         let api = await this.#loader.import<typeof CardAPI>(
           `${baseRealm.url}card-api`,
@@ -300,7 +301,6 @@ export class CurrentRun {
         identityContext = new IdentityContext();
       }
 
-      let { content, lastModified } = fileRef;
       if (url.href.endsWith('.json')) {
         let resource;
 
@@ -324,7 +324,7 @@ export class CurrentRun {
     log.debug(`completed visiting file ${url.href} in ${Date.now() - start}ms`);
   }
 
-  private async indexCardSource(url: URL): Promise<void> {
+  private async indexCardSource(url: URL, source: string): Promise<void> {
     let module: Record<string, unknown>;
     try {
       module = await this.loader.import(url.href);
@@ -362,9 +362,11 @@ export class CurrentRun {
       .filter((maybeCard) => isBaseDef(maybeCard))
       .map((card) => identifyCard(card))
       .filter(Boolean) as CodeRef[];
+    // TODO why do we iterate over this? it seems unnecessary to rebuild the
+    // module for each export in the module--once should do it...
     for (let ref of refs) {
       if (!('type' in ref)) {
-        await this.buildModule(ref.module, url);
+        await this.buildModule(ref.module, url, source);
       }
     }
   }
@@ -476,8 +478,8 @@ export class CurrentRun {
     }
     if (searchData && doc && typesMaybeError?.type === 'types') {
       await this.updateEntry(instanceURL, {
-        type: 'entry',
-        entry: {
+        type: 'instance',
+        instance: {
           resource: doc.data,
           searchData,
           isolatedHtml,
@@ -489,7 +491,7 @@ export class CurrentRun {
         },
       });
     } else if (uncaughtError || typesMaybeError?.type === 'error') {
-      let error: SearchEntryWithErrors;
+      let error: InstanceEntryWithErrors;
       if (uncaughtError) {
         error = {
           type: 'error',
@@ -519,9 +521,9 @@ export class CurrentRun {
     deferred.fulfill();
   }
 
-  private async updateEntry(instanceURL: URL, entry: SearchEntryWithErrors) {
+  private async updateEntry(instanceURL: URL, entry: InstanceEntryWithErrors) {
     await this.batch.updateEntry(assertURLEndsWithJSON(instanceURL), entry);
-    if (entry.type === 'entry') {
+    if (entry.type === 'instance') {
       this.stats.instancesIndexed++;
     } else {
       this.stats.instanceErrors++;
@@ -531,6 +533,7 @@ export class CurrentRun {
   public async buildModule(
     moduleIdentifier: string,
     relativeTo = this.#realmURL,
+    source: string,
   ): Promise<void> {
     let url = new URL(moduleIdentifier, relativeTo).href;
     let existing = this.#modules.get(url);
@@ -570,6 +573,7 @@ export class CurrentRun {
         deps: new Set(
           consumes.map((d) => trimExecutableExtension(new URL(d)).href),
         ),
+        source,
       },
     });
     this.#modules.set(url, { type: 'module', module });

@@ -16,6 +16,8 @@
    isolated_html TEXT,
    indexed_at,
    is_deleted BOOLEAN,
+   source TEXT,
+   transpiled_code TEXT,
    PRIMARY KEY ( url, realm_version, realm_url ) 
 );
 
