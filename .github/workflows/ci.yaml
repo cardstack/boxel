@@ -150,6 +150,8 @@ jobs:
       matrix:
         shardIndex: [1, 2, 3, 4, 5, 6]
         shardTotal: [6]
+    env:
+      PERCY_PARALLEL_NONCE: ${{ github.run_attempt }}
     concurrency:
       group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
       cancel-in-progress: true
@@ -190,6 +192,8 @@ jobs:
     if: always()
     needs: host-test
     runs-on: ubuntu-latest
+    env:
+      PERCY_PARALLEL_NONCE: ${{ github.run_attempt }}
 
     steps:
       - uses: actions/checkout@v4
