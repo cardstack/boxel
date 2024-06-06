@@ -166,12 +166,19 @@ module('Integration | card-basics', function (hooks) {
 
     test('primitive field type checking', async function (assert) {
       class Person extends CardDef {
-        @field firstName = contains(StringField);
-        @field title = contains(StringField);
-        @field number = contains(NumberField);
+        @newContains(StringField) declare firstName: BaseInstanceType<
+          typeof StringField
+        >;
+        @newContains(NumberField) declare number: BaseInstanceType<
+          typeof NumberField
+        >;
         @field languagesSpoken = containsMany(StringField);
-        @field ref = contains(CodeRefField);
-        @field boolean = contains(BooleanField);
+        @newContains(CodeRefField) declare ref: BaseInstanceType<
+          typeof CodeRefField
+        >;
+        @newContains(BooleanField) declare boolean: BaseInstanceType<
+          typeof BooleanField
+        >;
 
         static isolated = class Isolated extends Component<typeof this> {
           <template>
@@ -210,15 +217,20 @@ module('Integration | card-basics', function (hooks) {
 
     test('access @model for primitive and composite fields', async function (assert) {
       class Person extends FieldDef {
-        @field firstName = contains(StringField);
-        @field subscribers = contains(NumberField);
+        @newContains(StringField) declare firstName: BaseInstanceType<
+          typeof StringField
+        >;
+        @newContains(NumberField) declare subscribers: BaseInstanceType<
+          typeof NumberField
+        >;
         @field languagesSpoken = containsMany(StringField);
-        @field isCool = contains(BooleanField);
+        @newContains(BooleanField) declare isCool: BaseInstanceType<
+          typeof BooleanField
+        >;
       }
 
       class Post extends CardDef {
-        @field title = contains(StringField);
-        @field author = contains(Person);
+        @newContains(Person) declare author: BaseInstanceType<typeof Person>;
         @field languagesSpoken = containsMany(StringField);
         static isolated = class Isolated extends Component<typeof this> {
           <template>
@@ -274,8 +286,12 @@ module('Integration | card-basics', function (hooks) {
       }
 
       class Person extends CardDef {
-        @field firstName = contains(EmphasizedString);
-        @field number = contains(StrongNumber);
+        @newContains(EmphasizedString) declare firstName: BaseInstanceType<
+          typeof EmphasizedString
+        >;
+        @newContains(StrongNumber) declare number: BaseInstanceType<
+          typeof StrongNumber
+        >;
 
         static embedded = class Embedded extends Component<typeof this> {
           <template>
@@ -321,8 +337,11 @@ module('Integration | card-basics', function (hooks) {
       }
 
       class Guest extends FieldDef {
-        @field name = contains(EmphasizedString);
-        @field additionalGuestCount = contains(StrongNumber);
+        @newContains(EmphasizedString) declare name: BaseInstanceType<
+          typeof EmphasizedString
+        >;
+        @newContains(StrongNumber)
+        declare additionalGuestCount: BaseInstanceType<typeof StrongNumber>;
         @field title = contains(StringField, {
           computeVia: function (this: Guest) {
             return `${this.name} - ${this.additionalGuestCount}`;
@@ -331,9 +350,13 @@ module('Integration | card-basics', function (hooks) {
       }
 
       class Person extends CardDef {
-        @field firstName = contains(EmphasizedString);
-        @field number = contains(StrongNumber);
-        @field guest = contains(Guest);
+        @newContains(EmphasizedString) declare firstName: BaseInstanceType<
+          typeof EmphasizedString
+        >;
+        @newContains(StrongNumber) declare number: BaseInstanceType<
+          typeof StrongNumber
+        >;
+        @newContains(Guest) declare guest: BaseInstanceType<typeof Guest>;
         @field specialGuest = contains(Guest, {
           computeVia(this: Person) {
             return new Guest({
