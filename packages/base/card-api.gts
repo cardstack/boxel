@@ -531,7 +531,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     doc: CardDocument,
     relationships: JSONAPIResource['relationships'] | undefined,
     fieldMeta: CardFields[string] | undefined,
-    _identityContext: undefined,
+    identityContext: IdentityContext,
     instancePromise: Promise<BaseDef>,
     _loadedValue: any,
     relativeTo: URL | undefined,
@@ -569,7 +569,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
               entry,
               relativeTo,
               doc,
-              _identityContext,
+              identityContext,
             );
           } else {
             let meta = metas[index];
@@ -596,7 +596,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
             }
             return (
               await cardClassFromResource(resource, this.card, relativeTo)
-            )[deserialize](resource, relativeTo, doc, _identityContext);
+            )[deserialize](resource, relativeTo, doc, identityContext);
           }
         }),
       ),
@@ -731,13 +731,13 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     doc: CardDocument,
     relationships: JSONAPIResource['relationships'] | undefined,
     fieldMeta: CardFields[string] | undefined,
-    _identityContext: undefined,
+    identityContext: IdentityContext,
     _instancePromise: Promise<BaseDef>,
     _loadedValue: any,
     relativeTo: URL | undefined,
   ): Promise<BaseInstanceType<CardT>> {
     if (primitive in this.card) {
-      return this.card[deserialize](value, relativeTo, doc, _identityContext);
+      return this.card[deserialize](value, relativeTo, doc, identityContext);
     }
     if (fieldMeta && Array.isArray(fieldMeta)) {
       throw new Error(
@@ -765,7 +765,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     }
     return (await cardClassFromResource(resource, this.card, relativeTo))[
       deserialize
-    ](resource, relativeTo, doc, _identityContext);
+    ](resource, relativeTo, doc, identityContext);
   }
 
   emptyValue(_instance: BaseDef) {
@@ -2565,7 +2565,6 @@ function buildIdentityContext(
   }
   visited.add(instance);
   let fields = getFields(instance);
-
   for (let fieldName of Object.keys(fields)) {
     let value = peekAtField(instance, fieldName);
     if (value == null) {

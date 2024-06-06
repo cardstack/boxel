@@ -1,7 +1,5 @@
 import Service, { service } from '@ember/service';
 
-import isEqual from 'lodash/isEqual';
-
 import { stringify } from 'qs';
 
 import { v4 as uuidv4 } from 'uuid';
@@ -45,7 +43,7 @@ export type CardSaveSubscriber = (
   content: SingleCardDocument | string,
 ) => void;
 
-const { ownRealmURL, otherRealmURLs } = ENV;
+const { ownRealmURL, otherRealmURLs, environment } = ENV;
 
 export default class CardService extends Service {
   @service private declare loaderService: LoaderService;
@@ -259,14 +257,18 @@ export default class CardService extends Service {
   ): Promise<CardDef | undefined> {
     let api = await this.getAPI();
     let linkedCards = await this.loadPatchedCards(patchData, new URL(card.id));
-    let updatedCard = await api.updateFromSerialized<typeof CardDef>(card, doc);
     for (let [field, value] of Object.entries(linkedCards)) {
-      // TODO this triggers a save which is not ideal. perhaps instead we could
+      if (field.includes('.') || Array.isArray(value)) {
+        // TODO [wip] linksToMany and nested linksTo
+        throw new Error('Not implemented.');
+      }
+      // TODO perhaps instead we could
       // introduce a new option to updateFromSerialized to accept a list of
       // fields to pre-load? which in this case would be any relationships that
       // were patched in
-      (updatedCard as any)[field] = value;
+      (card as any)[field] = value;
     }
+    let updatedCard = await api.updateFromSerialized<typeof CardDef>(card, doc);
     // TODO setting `this` as an owner until we can have a better solution here...
     // (currently only used by the AI bot to patch cards from chat)
     return await this.saveModel(this, updatedCard);
@@ -374,31 +376,38 @@ export default class CardService extends Service {
       );
     }
     let collectionDoc = json;
-    return (
-      await Promise.all(
-        collectionDoc.data.map(async (doc) => {
-          try {
-            return await this.createFromSerialized(
-              doc,
-              collectionDoc,
-              new URL(doc.id),
-            );
-          } catch (e) {
-            console.warn(
-              `Skipping ${
-                doc.id
-              }. Encountered error deserializing from search result for query ${JSON.stringify(
-                query,
-                null,
-                2,
-              )} against realm ${realmURL}`,
-              e,
-            );
-            return undefined;
-          }
-        }),
-      )
-    ).filter(Boolean) as CardDef[];
+    try {
+      console.time('search deserialization');
+      return (
+        await Promise.all(
+          collectionDoc.data.map(async (doc) => {
+            try {
+              return await this.createFromSerialized(
+                doc,
+                collectionDoc,
+                new URL(doc.id),
+              );
+            } catch (e) {
+              console.warn(
+                `Skipping ${
+                  doc.id
+                }. Encountered error deserializing from search result for query ${JSON.stringify(
+                  query,
+                  null,
+                  2,
+                )} against realm ${realmURL}`,
+                e,
+              );
+              return undefined;
+            }
+          }),
+        )
+      ).filter(Boolean) as CardDef[];
+    } finally {
+      if (environment !== 'test') {
+        console.timeEnd('search deserialization');
+      }
+    }
   }
 
   async getFields(

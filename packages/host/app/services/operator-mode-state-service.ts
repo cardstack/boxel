@@ -13,8 +13,8 @@ import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 import {
   mergeRelationships,
   type PatchData,
-  type ResolvedCodeRef,
   RealmPaths,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
@@ -117,17 +117,11 @@ export default class OperatorModeStateService extends Service {
       if ('card' in item && item.card.id == id) {
         let document = await this.cardService.serializeCard(item.card);
         if (patch.attributes) {
-          for (let key of Object.keys(patch.attributes)) {
-            if (!(key in item.card)) {
-              throw new Error(`Attribute "${key}" does not exist in card`);
-            }
-          }
           document.data.attributes = mergeWith(
             document.data.attributes,
             patch.attributes,
           );
         }
-
         if (patch.relationships) {
           let mergedRel = mergeRelationships(
             document.data.relationships,
@@ -137,7 +131,6 @@ export default class OperatorModeStateService extends Service {
             document.data.relationships = mergedRel;
           }
         }
-
         await this.cardService.patchCard(item.card, document, patch);
       }
     }
@@ -557,4 +550,17 @@ export default class OperatorModeStateService extends Service {
       },
     }));
   });
+
+  async openCardInInteractMode(card: CardDef) {
+    this.clearStacks();
+    let newItem = new StackItem({
+      card,
+      stackIndex: 0,
+      owner: this, // We need to think for better owner
+      format: 'isolated',
+    });
+    await newItem.ready();
+    this.addItemToStack(newItem);
+    this.updateSubmode(Submodes.Interact);
+  }
 }

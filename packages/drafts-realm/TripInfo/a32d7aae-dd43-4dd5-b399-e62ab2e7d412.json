@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "traveler": {
+        "name": "Mickey"
+      },
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "destinations": {
+        "links": {
+          "self": null
+        }
+      },
+      "traveler.countryOfOrigin": {
+        "links": {
+          "self": "http://localhost:4201/drafts/Country/1"
+        }
+      },
+      "traveler.countriesVisited": {
+        "links": {
+          "self": null
+        }
+      },
+      "startLocation": {
+        "links": {
+          "self": null
+        }
+      },
+      "endLocation": {
+        "links": {
+          "self": "../Country/2"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../trip-info",
+        "name": "TripInfo"
+      }
+    }
+  }
+}
