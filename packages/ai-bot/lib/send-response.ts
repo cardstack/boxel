@@ -1,6 +1,12 @@
 import { cleanContent } from '../helpers';
 import { logger } from '@cardstack/runtime-common';
-import { MatrixClient, sendError, sendMessage, sendOption } from './matrix';
+import {
+  MatrixClient,
+  sendError,
+  sendMessage,
+  sendOption,
+  type FunctionToolCall,
+} from './matrix';
 
 import * as Sentry from '@sentry/node';
 import { OpenAIError } from 'openai/error';
@@ -81,7 +87,7 @@ export class Responder {
 
   async onMessage(msg: {
     role: string;
-    tool_calls?: { function: { name: string; arguments: string } }[];
+    tool_calls?: { function: FunctionToolCall }[];
   }) {
     if (msg.role === 'assistant') {
       await this.handleFunctionToolCalls(msg);
@@ -90,7 +96,7 @@ export class Responder {
 
   async handleFunctionToolCalls(msg: {
     role: string;
-    tool_calls?: { function: { name: string; arguments: string } }[];
+    tool_calls?: { function: FunctionToolCall }[];
   }) {
     for (const toolCall of msg.tool_calls || []) {
       const functionCall = toolCall.function;

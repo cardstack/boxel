@@ -67,7 +67,7 @@ export async function sendMessage(
   );
 }
 
-export interface FunctionCall {
+export interface FunctionToolCall {
   name: 'searchCard' | 'patchCard';
   arguments: any;
 }
@@ -78,7 +78,7 @@ export interface FunctionCall {
 export async function sendOption(
   client: MatrixClient,
   roomId: string,
-  functionCall: FunctionCall,
+  functionCall: FunctionToolCall,
   eventToUpdate: string | undefined,
 ) {
   let messageObject = toMatrixMessageObject(functionCall, eventToUpdate);
@@ -123,7 +123,7 @@ export async function sendError(
 }
 
 export const toMatrixMessageObject = (
-  functionCall: FunctionCall,
+  functionCall: FunctionToolCall,
   eventToUpdate: string | undefined,
 ): IContent | undefined => {
   let { arguments: payload } = functionCall;

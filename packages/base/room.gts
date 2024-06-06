@@ -851,12 +851,10 @@ export interface CommandResultContent {
   'm.relates_to'?: {
     rel_type: 'm.annotation';
     key: string;
-    event_id: string; //relate to the CommandEvent
-    //TODO:
-    // 'm.in_reply_to'?: {
-    //   event_id: string; //if we chain commands.
-    //   //we should associate this result with another
-    // };
+    event_id: string;
+    'm.in_reply_to'?: {
+      event_id: string;
+    };
   };
   formatted_body: string;
   body: string;

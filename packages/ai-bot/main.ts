@@ -242,33 +242,43 @@ Common issues are:
   });
 
   // handle reactions from commands
-  // client.on(RoomEvent.Timeline, async function (event, room) {
-  //   if (!room) {
-  //     return;
-  //   }
-  //   if (!isCommandReactionEvent(event)) {
-  //     return;
-  //   }
-  //   log.info(
-  //     '(%s) (Room: "%s" %s) (Message: %s %s)',
-  //     event.getType(),
-  //     room?.name,
-  //     room?.roomId,
-  //     event.getSender(),
-  //     undefined,
-  //   );
-  //   try {
-  //     let content = event.getContent();
-  //     let searchMessage = content.result.join('\n\n');
-  //     await sendMessage(client, room, searchMessage, undefined, {
-  //       isStreamingFinished: true,
-  //     });
-  //   } catch (e) {
-  //     log.error(e);
-  //     Sentry.captureException(e);
-  //     return;
-  //   }
-  // });
+  client.on(RoomEvent.Timeline, async function (event, room) {
+    if (!room) {
+      return;
+    }
+    if (!isCommandReactionEvent(event)) {
+      return;
+    }
+    log.info(
+      '(%s) (Room: "%s" %s) (Message: %s %s)',
+      event.getType(),
+      room?.name,
+      room?.roomId,
+      event.getSender(),
+      undefined,
+    );
+    try {
+      // let roomRelations = room.relations.relations;
+      // let content = event.getContent();
+      // let resultEventId = content.m.relates_to;
+      // let relation = event.getRelation();
+      let initial = await client.roomInitialSync(room!.roomId, 1000);
+      let eventList = (initial!.messages?.chunk || []) as DiscreteMatrixEvent[];
+      let history: DiscreteMatrixEvent[] = constructHistory(eventList);
+      let content = event.getContent();
+
+      // <commandMessageWithArgs> <commandResultEvent> <reactionEvent>
+
+      // let commandResult = content.result.join('\n\n');
+      // await sendMessage(client, room, commandResult, undefined, {
+      //   isStreamingFinished: true,
+      // });
+    } catch (e) {
+      log.error(e);
+      Sentry.captureException(e);
+      return;
+    }
+  });
 
   client.on(RoomEvent.Timeline, async function (event, room) {
     if (event.getType() !== 'm.room.message') {
@@ -278,7 +288,11 @@ Common issues are:
       return;
     }
 
+    let initial = await client.roomInitialSync(room!.roomId, 1000);
+    let eventList = (initial!.messages?.chunk || []) as DiscreteMatrixEvent[];
+    let history: DiscreteMatrixEvent[] = constructHistory(eventList);
     let content = event.getContent();
+    let relation = event.getRelation();
     // await sendMessage(client, room, searchMessage, undefined, {
     //   isStreamingFinished: true,
     // });
