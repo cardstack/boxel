@@ -206,7 +206,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
         links: {
           type: 'object',
           properties: {
-            self: { type: 'null' },
+            self: { type: 'string' },
           },
           required: ['self'],
         },
@@ -443,7 +443,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
             links: {
               type: 'object',
               properties: {
-                self: { type: 'null' },
+                self: { type: 'string' },
               },
               required: ['self'],
             },
@@ -457,7 +457,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
             links: {
               type: 'object',
               properties: {
-                self: { type: 'null' },
+                self: { type: 'string' },
               },
               required: ['self'],
             },
