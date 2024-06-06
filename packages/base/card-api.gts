@@ -731,7 +731,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     doc: CardDocument,
     relationships: JSONAPIResource['relationships'] | undefined,
     fieldMeta: CardFields[string] | undefined,
-    identityContext: undefined,
+    identityContext: IdentityContext,
     _instancePromise: Promise<BaseDef>,
     _loadedValue: any,
     relativeTo: URL | undefined,
