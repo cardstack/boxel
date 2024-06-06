@@ -956,7 +956,10 @@ export class Batch {
               type: 'module',
               deps: [...entry.module.deps],
               source: entry.module.source,
-              transpiled_code: transpileJS(entry.module.source, href),
+              transpiled_code: transpileJS(
+                entry.module.source,
+                new RealmPaths(this.realmURL).local(url),
+              ),
             }
           : {
               type: 'error',

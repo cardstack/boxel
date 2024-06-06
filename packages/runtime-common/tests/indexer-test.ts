@@ -1055,7 +1055,7 @@ const tests = Object.freeze({
       let { executableCode } = result;
       assert.codeEqual(
         stripScopedCSSGlimmerAttributes(executableCode),
-        compiledCard(),
+        compiledCard('vMk8eQ+O', '/person.gts'),
         'compiled card is correct',
       );
     } else {
