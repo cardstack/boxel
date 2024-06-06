@@ -24,11 +24,9 @@ import {
   isSingleCardDocument,
   isRelationship,
   isNotLoadedError,
-  isNotReadyError,
   CardError,
   CardContextName,
   NotLoaded,
-  NotReady,
   getField,
   isField,
   primitive,
@@ -136,27 +134,6 @@ function isNotLoadedValue(val: any): val is NotLoadedValue {
     return false;
   }
   return type === 'not-loaded';
-}
-
-interface NotReadyValue {
-  type: 'not-ready';
-  instance: BaseDef;
-  fieldName: string;
-}
-
-function isNotReadyValue(value: any): value is NotReadyValue {
-  if (value && typeof value === 'object') {
-    return (
-      'type' in value &&
-      value.type === 'not-ready' &&
-      'instance' in value &&
-      isCardOrField(value.instance) &&
-      'fieldName' in value &&
-      typeof value.fieldName === 'string'
-    );
-  } else {
-    return false;
-  }
 }
 
 interface StaleValue {
@@ -2976,7 +2953,7 @@ export async function recompute(
           undefined,
           opts,
         );
-        if (!isNotReadyValue(value) && !isStaleValue(value)) {
+        if (!isStaleValue(value)) {
           pendingFields.delete(fieldName);
           if (recomputePromises.get(card) !== recomputePromise) {
             return;
@@ -3011,7 +2988,7 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
   fieldName: K,
   compute: () => T[K] | Promise<T[K]> = () => instance[fieldName],
   opts?: RecomputeOptions,
-): Promise<T[K] | T[K][] | NotReadyValue | StaleValue | undefined> {
+): Promise<T[K] | T[K][] | StaleValue | undefined> {
   let result: T[K] | T[K][] | undefined;
   let deserialized = getDataBucket(instance);
   let maybeStale = deserialized.get(fieldName as string);
@@ -3056,11 +3033,6 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
         | T[K]
         | T[K][]
         | undefined;
-    } else if (isNotReadyError(e)) {
-      let { instance: depModel, computeVia, fieldName: depField } = e;
-      let nestedCompute = computeVia.bind(depModel);
-      await getIfReady(depModel, depField, nestedCompute, opts);
-      return { type: 'not-ready', instance, fieldName: fieldName as string };
     } else {
       throw e;
     }
