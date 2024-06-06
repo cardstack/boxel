@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "opportunityName": "Opportunity Name",
+      "closeDate": "2024-06-13",
+      "amount": {
+        "currency": "RM",
+        "totalAmount": 123131
+      },
+      "description": "This opportunity involves a partnership with Cardstack Malaysia to provide our Cloud Storage solution, which addresses their need for scalable, secure, and cost-effective data storage. This deal has the potential to significantly enhance their data management and accessibility.",
+      "stage": "Closed Won",
+      "percentage": 100.7,
+      "forecastCategory": "Best Case",
+      "title": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "accountName": {
+        "links": {
+          "self": "../CrmAccount/4802eeed-bec6-4d7a-8f05-6370866edd40"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../opportunity-form",
+        "name": "OpportunityForm"
+      }
+    }
+  }
+}
