@@ -86,7 +86,7 @@ export interface RealmVersionsTable {
 interface IndexedModule {
   type: 'module';
   executableCode: string;
-  // TODO source
+  source: string;
 }
 
 export interface IndexedInstance {
@@ -99,7 +99,7 @@ export interface IndexedInstance {
   realmVersion: number;
   realmURL: string;
   indexedAt: number | null;
-  // TODO source
+  // TODO source (cs-6897)
 }
 interface IndexedError {
   type: 'error';
@@ -190,15 +190,15 @@ export class Indexer {
     if (maybeResult.error_doc) {
       return { type: 'error', error: maybeResult.error_doc };
     }
-    let { transpiled_code: executableCode } = maybeResult;
-    if (!executableCode) {
+    let { transpiled_code: executableCode, source } = maybeResult;
+    if (!executableCode || !source) {
       throw new Error(
         `bug: index entry for ${url.href} with opts: ${JSON.stringify(
           opts,
-        )} has neither an error_doc nor transpiled_code`,
+        )} has neither an error_doc nor transpiled_code/source`,
       );
     }
-    return { type: 'module', executableCode };
+    return { type: 'module', executableCode, source };
   }
 
   async getCard(
@@ -890,13 +890,12 @@ export type InstanceEntryWithErrors = InstanceEntry | ErrorEntry;
 
 export interface InstanceEntry {
   type: 'instance';
-  instance: {
-    resource: CardResource;
-    searchData: Record<string, any>;
-    isolatedHtml?: string;
-    types: string[];
-    deps: Set<string>;
-  };
+  source: string;
+  resource: CardResource;
+  searchData: Record<string, any>;
+  isolatedHtml?: string;
+  types: string[];
+  deps: Set<string>;
 }
 
 interface ErrorEntry {
@@ -905,10 +904,8 @@ interface ErrorEntry {
 }
 interface ModuleEntry {
   type: 'module';
-  module: {
-    deps: Set<string>;
-    source: string;
-  };
+  source: string;
+  deps: Set<string>;
 }
 
 export class Batch {
@@ -945,19 +942,20 @@ export class Batch {
               // TODO in followup PR we need to alter the SearchEntry type to use
               // a document instead of a resource
               type: 'instance',
-              pristine_doc: entry.instance.resource,
-              search_doc: entry.instance.searchData,
-              isolated_html: entry.instance.isolatedHtml,
-              deps: [...entry.instance.deps],
-              types: entry.instance.types,
+              pristine_doc: entry.resource,
+              search_doc: entry.searchData,
+              isolated_html: entry.isolatedHtml,
+              deps: [...entry.deps],
+              types: entry.types,
+              source: entry.source,
             }
           : entry.type === 'module'
           ? {
               type: 'module',
-              deps: [...entry.module.deps],
-              source: entry.module.source,
+              deps: [...entry.deps],
+              source: entry.source,
               transpiled_code: transpileJS(
-                entry.module.source,
+                entry.source,
                 new RealmPaths(this.realmURL).local(url),
               ),
             }

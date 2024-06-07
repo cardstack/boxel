@@ -20,7 +20,6 @@ import {
   Batch,
   loadCard,
   identifyCard,
-  isBaseDef,
   moduleFrom,
   type InstanceEntryWithErrors,
   type CodeRef,
@@ -279,18 +278,14 @@ export class CurrentRun {
     log.debug(`begin visiting file ${url.href}`);
     let localPath = this.#realmPaths.local(url);
 
-    let fileRef = await this.#reader.readFileAsText(localPath, {});
+    let fileRef = await this.#reader.readFileAsText(localPath);
     if (!fileRef) {
       let error = new CardError(`missing file ${url.href}`, { status: 404 });
       error.deps = [url.href];
       throw error;
     }
     let { content, lastModified } = fileRef;
-    if (
-      hasExecutableExtension(url.href) ||
-      // handle modules with no extension too
-      !url.href.split('/').pop()!.includes('.')
-    ) {
+    if (hasExecutableExtension(url.href)) {
       await this.indexCardSource(url, content);
     } else {
       if (!identityContext) {
@@ -312,12 +307,13 @@ export class CurrentRun {
         }
 
         if (resource && isCardResource(resource)) {
-          await this.indexCard(
-            localPath,
+          await this.indexCard({
+            path: localPath,
+            source: content,
             lastModified,
             resource,
             identityContext,
-          );
+          });
         }
       }
     }
@@ -325,9 +321,8 @@ export class CurrentRun {
   }
 
   private async indexCardSource(url: URL, source: string): Promise<void> {
-    let module: Record<string, unknown>;
     try {
-      module = await this.loader.import(url.href);
+      await this.loader.import(url.href);
     } catch (err: any) {
       this.stats.moduleErrors++;
       log.warn(
@@ -358,25 +353,22 @@ export class CurrentRun {
       return;
     }
 
-    let refs = Object.values(module)
-      .filter((maybeCard) => isBaseDef(maybeCard))
-      .map((card) => identifyCard(card))
-      .filter(Boolean) as CodeRef[];
-    // TODO why do we iterate over this? it seems unnecessary to rebuild the
-    // module for each export in the module--once should do it...
-    for (let ref of refs) {
-      if (!('type' in ref)) {
-        await this.buildModule(ref.module, url, source);
-      }
-    }
+    await this.buildModule(url, source);
   }
 
-  private async indexCard(
-    path: LocalPath,
-    lastModified: number,
-    resource: LooseCardResource,
-    identityContext: IdentityContextType,
-  ): Promise<void> {
+  private async indexCard({
+    path,
+    source,
+    lastModified,
+    resource,
+    identityContext,
+  }: {
+    path: LocalPath;
+    source: string;
+    lastModified: number;
+    resource: LooseCardResource;
+    identityContext: IdentityContextType;
+  }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
     let indexingInstance = this.#indexingInstances.get(fileURL);
     if (indexingInstance) {
@@ -479,16 +471,15 @@ export class CurrentRun {
     if (searchData && doc && typesMaybeError?.type === 'types') {
       await this.updateEntry(instanceURL, {
         type: 'instance',
-        instance: {
-          resource: doc.data,
-          searchData,
-          isolatedHtml,
-          types: typesMaybeError.types,
-          deps: new Set([
-            moduleURL,
-            ...(await this.loader.getConsumedModules(moduleURL)),
-          ]),
-        },
+        source,
+        resource: doc.data,
+        searchData,
+        isolatedHtml,
+        types: typesMaybeError.types,
+        deps: new Set([
+          moduleURL,
+          ...(await this.loader.getConsumedModules(moduleURL)),
+        ]),
       });
     } else if (uncaughtError || typesMaybeError?.type === 'error') {
       let error: InstanceEntryWithErrors;
@@ -530,53 +521,44 @@ export class CurrentRun {
     }
   }
 
-  public async buildModule(
-    moduleIdentifier: string,
-    relativeTo = this.#realmURL,
-    source: string,
-  ): Promise<void> {
-    let url = new URL(moduleIdentifier, relativeTo).href;
-    let existing = this.#modules.get(url);
+  public async buildModule(url: URL, source: string): Promise<void> {
+    let href = url.href;
+    let existing = this.#modules.get(href);
     if (existing?.type === 'error') {
       throw new Error(
-        `bug: card definition has errors which should never happen since the card already executed successfully: ${url}`,
+        `bug: card definition has errors which should never happen since the card already executed successfully: ${href}`,
       );
     }
     if (existing) {
       return;
     }
 
-    let working = this.#moduleWorkingCache.get(url);
+    let working = this.#moduleWorkingCache.get(href);
     if (working) {
       await working;
       return;
     }
 
     let deferred = new Deferred<Module>();
-    this.#moduleWorkingCache.set(url, deferred.promise);
-    let m = await this.#loader.import<Record<string, any>>(moduleIdentifier);
+    this.#moduleWorkingCache.set(href, deferred.promise);
+    let m = await this.#loader.import<Record<string, any>>(href);
     if (m) {
       for (let exportName of Object.keys(m)) {
         m[exportName];
       }
     }
-    let consumes = (await this.loader.getConsumedModules(url)).filter(
-      (u) => u !== url,
+    let consumes = (await this.loader.getConsumedModules(href)).filter(
+      (u) => u !== href,
     );
-    let module: Module = {
-      url,
-      consumes,
-    };
-    await this.batch.updateEntry(new URL(url), {
+    let module: Module = { url: href, consumes };
+    await this.batch.updateEntry(new URL(href), {
       type: 'module',
-      module: {
-        deps: new Set(
-          consumes.map((d) => trimExecutableExtension(new URL(d)).href),
-        ),
-        source,
-      },
+      source,
+      deps: new Set(
+        consumes.map((d) => trimExecutableExtension(new URL(d)).href),
+      ),
     });
-    this.#modules.set(url, { type: 'module', module });
+    this.#modules.set(href, { type: 'module', module });
     deferred.fulfill(module);
   }
 

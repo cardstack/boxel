@@ -6,6 +6,7 @@ import {
   type DBAdapter,
   type IndexedInstance,
   type BoxelIndexTable,
+  type CardResource,
 } from '../index';
 import { cardSrc, compiledCard } from '../etc/test-fixtures';
 import { type SharedTests } from '../helpers';
@@ -458,32 +459,32 @@ const tests = Object.freeze({
       ],
     );
 
+    let resource: CardResource = {
+      id: `${testRealmURL}1.json`,
+      type: 'card',
+      attributes: {
+        name: 'Van Gogh',
+      },
+      meta: {
+        adoptsFrom: {
+          module: `./fancy-person`,
+          name: 'FancyPerson',
+        },
+      },
+    };
     let batch = await indexer.createBatch(new URL(testRealmURL));
     await batch.invalidate(new URL(`${testRealmURL}1.json`));
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance',
-      instance: {
-        resource: {
-          id: `${testRealmURL}1.json`,
-          type: 'card',
-          attributes: {
-            name: 'Van Gogh',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `./fancy-person`,
-              name: 'FancyPerson',
-            },
-          },
-        },
-        searchData: { name: 'Van Gogh' },
-        deps: new Set([`${testRealmURL}fancy-person`]),
-        types: [
-          { module: `./fancy-person`, name: 'FancyPerson' },
-          { module: `./person`, name: 'Person' },
-          baseCardRef,
-        ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
-      },
+      resource,
+      source: JSON.stringify(resource),
+      searchData: { name: 'Van Gogh' },
+      deps: new Set([`${testRealmURL}fancy-person`]),
+      types: [
+        { module: `./fancy-person`, name: 'FancyPerson' },
+        { module: `./person`, name: 'Person' },
+        baseCardRef,
+      ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
     });
 
     let versions = await adapter.execute(
@@ -695,27 +696,27 @@ const tests = Object.freeze({
       'the WIP next generation index entries have been added',
     );
 
+    let resource: CardResource = {
+      id: `${testRealmURL}1.json`,
+      type: 'card',
+      attributes: {
+        name: 'Van Gogh',
+      },
+      meta: {
+        adoptsFrom: {
+          module: `./person`,
+          name: 'Person',
+        },
+      },
+    };
     // in this next generation only 1 card happened to be visited
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance',
-      instance: {
-        resource: {
-          id: `${testRealmURL}1.json`,
-          type: 'card',
-          attributes: {
-            name: 'Van Gogh',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `./person`,
-              name: 'Person',
-            },
-          },
-        },
-        searchData: { name: 'Van Gogh' },
-        deps: new Set(),
-        types: [],
-      },
+      resource,
+      source: JSON.stringify(resource),
+      searchData: { name: 'Van Gogh' },
+      deps: new Set(),
+      types: [],
     });
 
     await batch.done();
@@ -809,28 +810,28 @@ const tests = Object.freeze({
       ],
     );
 
+    let resource: CardResource = {
+      id: `${testRealmURL}1.json`,
+      type: 'card',
+      attributes: {
+        name: 'Van Gogh',
+      },
+      meta: {
+        adoptsFrom: {
+          module: `./person`,
+          name: 'Person',
+        },
+      },
+    };
     let batch = await indexer.createBatch(new URL(testRealmURL));
     await batch.invalidate(new URL(`${testRealmURL}1.json`));
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance',
-      instance: {
-        resource: {
-          id: `${testRealmURL}1.json`,
-          type: 'card',
-          attributes: {
-            name: 'Van Gogh',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `./person`,
-              name: 'Person',
-            },
-          },
-        },
-        searchData: { name: 'Van Gogh' },
-        deps: new Set(),
-        types: [],
-      },
+      resource,
+      source: JSON.stringify(resource),
+      searchData: { name: 'Van Gogh' },
+      deps: new Set(),
+      types: [],
     });
 
     let entry = await indexer.getCard(new URL(`${testRealmURL}1`));
@@ -887,28 +888,28 @@ const tests = Object.freeze({
       ],
     );
 
+    let resource: CardResource = {
+      id: `${testRealmURL}1.json`,
+      type: 'card',
+      attributes: {
+        name: 'Van Gogh',
+      },
+      meta: {
+        adoptsFrom: {
+          module: `./person`,
+          name: 'Person',
+        },
+      },
+    };
     let batch = await indexer.createBatch(new URL(testRealmURL));
     await batch.invalidate(new URL(`${testRealmURL}1.json`));
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance',
-      instance: {
-        resource: {
-          id: `${testRealmURL}1.json`,
-          type: 'card',
-          attributes: {
-            name: 'Van Gogh',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `./person`,
-              name: 'Person',
-            },
-          },
-        },
-        searchData: { name: 'Van Gogh' },
-        deps: new Set(),
-        types: [],
-      },
+      resource,
+      source: JSON.stringify(resource),
+      searchData: { name: 'Van Gogh' },
+      deps: new Set(),
+      types: [],
     });
 
     let entry = await indexer.getCard(new URL(`${testRealmURL}1`), {
@@ -1035,35 +1036,41 @@ const tests = Object.freeze({
         'the "production" realm versions are correct',
       );
     },
-  'can get compiled module when requested with file extension': async (
-    assert,
-    { indexer },
-  ) => {
-    await setupIndex(indexer);
-    let batch = await indexer.createBatch(new URL(testRealmURL));
-    await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
-      type: 'module',
-      module: {
-        deps: new Set(),
+  'can get compiled module and source when requested with file extension':
+    async (assert, { indexer }) => {
+      await setupIndex(indexer);
+      let batch = await indexer.createBatch(new URL(testRealmURL));
+      await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
+        type: 'module',
         source: cardSrc,
-      },
-    });
-    await batch.done();
+        deps: new Set(),
+      });
+      await batch.done();
 
-    let result = await indexer.getModule(new URL(`${testRealmURL}person.gts`));
-    if (result?.type === 'module') {
-      let { executableCode } = result;
-      assert.codeEqual(
-        stripScopedCSSGlimmerAttributes(executableCode),
-        compiledCard('vMk8eQ+O', '/person.gts'),
-        'compiled card is correct',
+      let result = await indexer.getModule(
+        new URL(`${testRealmURL}person.gts`),
       );
-    } else {
-      assert.ok(false, `expected module not to be an error document`);
-    }
-  },
+      if (result?.type === 'module') {
+        let { executableCode, source } = result;
+        assert.codeEqual(
+          stripModuleDebugInfo(stripScopedCSSGlimmerAttributes(executableCode)),
+          stripModuleDebugInfo(compiledCard()),
+          'compiled card is correct',
+        );
+        assert.strictEqual(cardSrc, source, 'source code is correct');
+      } else {
+        assert.ok(false, `expected module not to be an error document`);
+      }
+    },
   // TODO can get compiled module when request without file extension
   // TODO can get compiled module for WIP index
+  // TODO can get error doc for compiled module
 } as SharedTests<{ indexer: Indexer; adapter: DBAdapter }>);
 
 export default tests;
+
+function stripModuleDebugInfo(code: string) {
+  return code
+    .replace(/\s*"id": [^\n]+,\n/m, '')
+    .replace(/\s*"moduleName": [^\n]+,\n/m, '');
+}

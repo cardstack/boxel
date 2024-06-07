@@ -68,7 +68,7 @@ module('indexer db client', function (hooks) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
 
-  test('can get compiled module when requested with file extension', async function (assert) {
+  test('can get compiled module and source when requested with file extension', async function (assert) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
 });
