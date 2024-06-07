@@ -46,6 +46,7 @@ export interface OperatorModeState {
   fileView?: FileView;
   openDirs: Map<string, string[]>;
   codeSelection?: string;
+  assistant: boolean;
 }
 
 interface CardItem {
@@ -65,6 +66,7 @@ export type SerializedState = {
   fileView?: FileView;
   openDirs?: Record<string, string[]>;
   codeSelection?: string;
+  assistant: boolean;
 };
 
 interface OpenFileSubscriber {
@@ -77,6 +79,7 @@ export default class OperatorModeStateService extends Service {
     submode: Submodes.Interact,
     codePath: null,
     openDirs: new TrackedMap<string, string[]>(),
+    assistant: false,
   });
 
   private cachedRealmURL: URL | null = null;
@@ -279,6 +282,11 @@ export default class OperatorModeStateService extends Service {
     }
   }
 
+  updateAssistant(assistant: boolean) {
+    this.state.assistant = assistant;
+    this.schedulePersist();
+  }
+
   get codePathRelativeToRealm() {
     if (this.state.codePath && this.realmURL) {
       let realmPath = new RealmPaths(this.realmURL);
@@ -387,6 +395,7 @@ export default class OperatorModeStateService extends Service {
       fileView: this.state.fileView?.toString() as FileView,
       openDirs: Object.fromEntries(this.state.openDirs.entries()),
       codeSelection: this.state.codeSelection,
+      assistant: this.state.assistant,
     };
 
     for (let stack of this.state.stacks) {
@@ -430,6 +439,7 @@ export default class OperatorModeStateService extends Service {
       fileView: rawState.fileView ?? 'inspector',
       openDirs,
       codeSelection: rawState.codeSelection,
+      assistant: rawState.assistant,
     });
 
     let stackIndex = 0;

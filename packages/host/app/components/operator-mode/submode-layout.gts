@@ -104,6 +104,7 @@ export default class SubmodeLayout extends Component<Signature> {
   @action
   private toggleChat() {
     this.isAiAssistantVisible = !this.isAiAssistantVisible;
+    this.operatorModeStateService.updateAssistant(this.isAiAssistantVisible);
   }
 
   @action private closeSearchSheet() {
