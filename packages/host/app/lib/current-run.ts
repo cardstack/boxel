@@ -50,22 +50,11 @@ import { type RenderCard } from '../services/render-service';
 
 const log = logger('current-run');
 
-interface Module {
-  url: string;
-  consumes: string[];
-}
-
-type ModuleWithErrors =
-  | { type: 'module'; module: Module }
-  | { type: 'error'; moduleURL: string; error: SerializedError };
-
 type TypesWithErrors =
   | { type: 'types'; types: string[] }
   | { type: 'error'; error: SerializedError };
 
 export class CurrentRun {
-  #modules = new Map<string, ModuleWithErrors>();
-  #moduleWorkingCache = new Map<string, Promise<Module>>();
   #typesCache = new WeakMap<typeof CardDef, Promise<TypesWithErrors>>();
   #indexingInstances = new Map<string, Promise<void>>();
   #reader: Reader;
@@ -217,10 +206,6 @@ export class CurrentRun {
     return this.#batch;
   }
 
-  get modules() {
-    return this.#modules;
-  }
-
   get ignoreData() {
     return this.#ignoreData;
   }
@@ -286,7 +271,7 @@ export class CurrentRun {
     }
     let { content, lastModified } = fileRef;
     if (hasExecutableExtension(url.href)) {
-      await this.indexCardSource(url, content);
+      await this.indexModule(url, content);
     } else {
       if (!identityContext) {
         let api = await this.#loader.import<typeof CardAPI>(
@@ -320,9 +305,10 @@ export class CurrentRun {
     log.debug(`completed visiting file ${url.href} in ${Date.now() - start}ms`);
   }
 
-  private async indexCardSource(url: URL, source: string): Promise<void> {
+  private async indexModule(url: URL, source: string): Promise<void> {
+    let module: Record<string, unknown>;
     try {
-      await this.loader.import(url.href);
+      module = await this.loader.import(url.href);
     } catch (err: any) {
       this.stats.moduleErrors++;
       log.warn(
@@ -340,20 +326,24 @@ export class CurrentRun {
           deps,
         },
       });
-      this.#modules.set(url.href, {
-        type: 'error',
-        moduleURL: url.href,
-        error: {
-          status: 500,
-          detail: `encountered error loading module "${url.href}": ${err.message}`,
-          additionalErrors: null,
-          deps,
-        },
-      });
       return;
     }
 
-    await this.buildModule(url, source);
+    if (module) {
+      for (let exportName of Object.keys(module)) {
+        module[exportName];
+      }
+    }
+    let consumes = (await this.loader.getConsumedModules(url.href)).filter(
+      (u) => u !== url.href,
+    );
+    await this.batch.updateEntry(new URL(url.href), {
+      type: 'module',
+      source,
+      deps: new Set(
+        consumes.map((d) => trimExecutableExtension(new URL(d)).href),
+      ),
+    });
   }
 
   private async indexCard({
@@ -519,47 +509,6 @@ export class CurrentRun {
     } else {
       this.stats.instanceErrors++;
     }
-  }
-
-  public async buildModule(url: URL, source: string): Promise<void> {
-    let href = url.href;
-    let existing = this.#modules.get(href);
-    if (existing?.type === 'error') {
-      throw new Error(
-        `bug: card definition has errors which should never happen since the card already executed successfully: ${href}`,
-      );
-    }
-    if (existing) {
-      return;
-    }
-
-    let working = this.#moduleWorkingCache.get(href);
-    if (working) {
-      await working;
-      return;
-    }
-
-    let deferred = new Deferred<Module>();
-    this.#moduleWorkingCache.set(href, deferred.promise);
-    let m = await this.#loader.import<Record<string, any>>(href);
-    if (m) {
-      for (let exportName of Object.keys(m)) {
-        m[exportName];
-      }
-    }
-    let consumes = (await this.loader.getConsumedModules(href)).filter(
-      (u) => u !== href,
-    );
-    let module: Module = { url: href, consumes };
-    await this.batch.updateEntry(new URL(href), {
-      type: 'module',
-      source,
-      deps: new Set(
-        consumes.map((d) => trimExecutableExtension(new URL(d)).href),
-      ),
-    });
-    this.#modules.set(href, { type: 'module', module });
-    deferred.fulfill(module);
   }
 
   private async getTypes(card: typeof CardDef): Promise<TypesWithErrors> {

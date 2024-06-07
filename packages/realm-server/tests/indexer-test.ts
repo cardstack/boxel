@@ -1,26 +1,23 @@
-import { module, test, skip } from 'qunit';
-
+import { module, test } from 'qunit';
+import { prepareTestDB } from './helpers';
 import { Indexer } from '@cardstack/runtime-common';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
-// eslint-disable-next-line ember/no-test-import-export
+import PgAdapter from '../pg-adapter';
 import indexerTests from '@cardstack/runtime-common/tests/indexer-test';
 
-import type SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
-
-import { getDbAdapter } from '../helpers';
-
-module('Unit | indexer', function (hooks) {
-  let adapter: SQLiteAdapter;
+module('indexer db client', function (hooks) {
+  let adapter: PgAdapter;
   let indexer: Indexer;
 
-  hooks.before(async function () {
-    adapter = await getDbAdapter();
-  });
-
   hooks.beforeEach(async function () {
-    await adapter.reset();
+    prepareTestDB();
+    adapter = new PgAdapter();
     indexer = new Indexer(adapter);
     await indexer.ready();
+  });
+
+  hooks.afterEach(async function () {
+    await indexer.teardown();
   });
 
   test('can perform invalidations for a instance entry', async function (assert) {
@@ -90,6 +87,4 @@ module('Unit | indexer', function (hooks) {
   test('returns undefined when getting a deleted module', async function (assert) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
-
-  skip('TODO: cross realm invalidation');
 });
