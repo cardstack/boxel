@@ -762,6 +762,7 @@ const tests = Object.freeze({
         url: `${testRealmURL}1.json`,
         realm_version: 1,
         realm_url: testRealmURL,
+        type: 'error',
         error_doc: {
           detail: 'test error',
           status: 500,
@@ -864,7 +865,7 @@ const tests = Object.freeze({
     }
   },
 
-  'can get work in progress index entry': async (assert, { indexer }) => {
+  'can get work in progress card': async (assert, { indexer }) => {
     await setupIndex(
       indexer,
       [{ realm_url: testRealmURL, current_version: 1 }],
@@ -945,7 +946,7 @@ const tests = Object.freeze({
     }
   },
 
-  'returns undefined when getting a deleted entry': async (
+  'returns undefined when getting a deleted card': async (
     assert,
     { indexer },
   ) => {
@@ -1036,6 +1037,7 @@ const tests = Object.freeze({
         'the "production" realm versions are correct',
       );
     },
+
   'can get compiled module and source when requested with file extension':
     async (assert, { indexer }) => {
       await setupIndex(indexer);
@@ -1062,9 +1064,115 @@ const tests = Object.freeze({
         assert.ok(false, `expected module not to be an error document`);
       }
     },
-  // TODO can get compiled module when request without file extension
-  // TODO can get compiled module for WIP index
-  // TODO can get error doc for compiled module
+
+  'can get compiled module and source when requested without file extension':
+    async (assert, { indexer }) => {
+      await setupIndex(indexer);
+      let batch = await indexer.createBatch(new URL(testRealmURL));
+      await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
+        type: 'module',
+        source: cardSrc,
+        deps: new Set(),
+      });
+      await batch.done();
+
+      let result = await indexer.getModule(new URL(`${testRealmURL}person`));
+      if (result?.type === 'module') {
+        let { executableCode, source } = result;
+        assert.codeEqual(
+          stripModuleDebugInfo(stripScopedCSSGlimmerAttributes(executableCode)),
+          stripModuleDebugInfo(compiledCard()),
+          'compiled card is correct',
+        );
+        assert.strictEqual(cardSrc, source, 'source code is correct');
+      } else {
+        assert.ok(false, `expected module not to be an error document`);
+      }
+    },
+
+  'can get compiled module and source from WIP index': async (
+    assert,
+    { indexer },
+  ) => {
+    await setupIndex(indexer);
+    let batch = await indexer.createBatch(new URL(testRealmURL));
+    await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
+      type: 'module',
+      source: cardSrc,
+      deps: new Set(),
+    });
+
+    let result = await indexer.getModule(new URL(`${testRealmURL}person.gts`), {
+      useWorkInProgressIndex: true,
+    });
+    if (result?.type === 'module') {
+      let { executableCode, source } = result;
+      assert.codeEqual(
+        stripModuleDebugInfo(stripScopedCSSGlimmerAttributes(executableCode)),
+        stripModuleDebugInfo(compiledCard()),
+        'compiled card is correct',
+      );
+      assert.strictEqual(cardSrc, source, 'source code is correct');
+    } else {
+      assert.ok(false, `expected module not to be an error document`);
+    }
+
+    let noResult = await indexer.getModule(
+      new URL(`${testRealmURL}person.gts`),
+    );
+    assert.strictEqual(
+      noResult,
+      undefined,
+      'module does not exist in production index',
+    );
+  },
+
+  'can get error doc for module': async (assert, { indexer }) => {
+    await setupIndex(indexer, [
+      {
+        url: `${testRealmURL}person.gts`,
+        realm_version: 1,
+        realm_url: testRealmURL,
+        type: 'error',
+        error_doc: {
+          detail: 'test error',
+          status: 500,
+          additionalErrors: [],
+        },
+      },
+    ]);
+    let result = await indexer.getModule(new URL(`${testRealmURL}person.gts`));
+    if (result?.type === 'error') {
+      assert.deepEqual(result, {
+        type: 'error',
+        error: {
+          detail: 'test error',
+          status: 500,
+          additionalErrors: [],
+        },
+      });
+    } else {
+      assert.ok(false, `expected an error document`);
+    }
+  },
+
+  'returns undefined when getting a deleted module': async (
+    assert,
+    { indexer },
+  ) => {
+    await setupIndex(indexer, [
+      {
+        url: `${testRealmURL}person.gts`,
+        type: 'module',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        is_deleted: true,
+      },
+    ]);
+
+    let entry = await indexer.getCard(new URL(`${testRealmURL}person.gts`));
+    assert.strictEqual(entry, undefined, 'deleted modules return undefined');
+  },
 } as SharedTests<{ indexer: Indexer; adapter: DBAdapter }>);
 
 export default tests;

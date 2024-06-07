@@ -1,23 +1,26 @@
-import { module, test } from 'qunit';
-import { prepareTestDB } from './helpers';
+import { module, test, skip } from 'qunit';
+
 import { Indexer } from '@cardstack/runtime-common';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
-import PgAdapter from '../pg-adapter';
+// eslint-disable-next-line ember/no-test-import-export
 import indexerTests from '@cardstack/runtime-common/tests/indexer-test';
 
-module('indexer db client', function (hooks) {
-  let adapter: PgAdapter;
+import type SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
+
+import { getDbAdapter } from '../helpers';
+
+module('Unit | indexer', function (hooks) {
+  let adapter: SQLiteAdapter;
   let indexer: Indexer;
 
-  hooks.beforeEach(async function () {
-    prepareTestDB();
-    adapter = new PgAdapter();
-    indexer = new Indexer(adapter);
-    await indexer.ready();
+  hooks.before(async function () {
+    adapter = await getDbAdapter();
   });
 
-  hooks.afterEach(async function () {
-    await indexer.teardown();
+  hooks.beforeEach(async function () {
+    await adapter.reset();
+    indexer = new Indexer(adapter);
+    await indexer.ready();
   });
 
   test('can perform invalidations for a instance entry', async function (assert) {
@@ -56,11 +59,11 @@ module('indexer db client', function (hooks) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
 
-  test('can get work in progress index entry', async function (assert) {
+  test('can get work in progress card', async function (assert) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
 
-  test('returns undefined when getting a deleted entry', async function (assert) {
+  test('returns undefined when getting a deleted card', async function (assert) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
 
@@ -71,4 +74,22 @@ module('indexer db client', function (hooks) {
   test('can get compiled module and source when requested with file extension', async function (assert) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
+
+  test('can get compiled module and source when requested without file extension', async function (assert) {
+    await runSharedTest(indexerTests, assert, { indexer, adapter });
+  });
+
+  test('can get compiled module and source from WIP index', async function (assert) {
+    await runSharedTest(indexerTests, assert, { indexer, adapter });
+  });
+
+  test('can get error doc for module', async function (assert) {
+    await runSharedTest(indexerTests, assert, { indexer, adapter });
+  });
+
+  test('returns undefined when getting a deleted module', async function (assert) {
+    await runSharedTest(indexerTests, assert, { indexer, adapter });
+  });
+
+  skip('TODO: cross realm invalidation');
 });
