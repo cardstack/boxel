@@ -214,7 +214,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       }
       .remove {
         --icon-color: var(--boxel-light);
-        align-self: center;
+        align-self: auto;
         outline: 0;
       }
       .remove:focus,
@@ -235,6 +235,19 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         position: absolute;
         top: 0;
         left: calc(-1 * var(--boxel-sp-xxl));
+
+        cursor: move;
+        cursor: grab;
+        cursor: -moz-grab;
+        cursor: -webkit-grab;
+      }
+      .sort:active {
+        cursor: grabbing;
+        cursor: -moz-grabbing;
+        cursor: -webkit-grabbing;
+      }
+      :deep(.is-dragging) {
+        z-index: 99;
       }
     </style>
   </template>
