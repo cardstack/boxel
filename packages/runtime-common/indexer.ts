@@ -885,9 +885,6 @@ export class Indexer {
 
 export type IndexEntry = InstanceEntry | ModuleEntry | ErrorEntry;
 
-// TODO why is this type so special?
-export type InstanceEntryWithErrors = InstanceEntry | ErrorEntry;
-
 export interface InstanceEntry {
   type: 'instance';
   source: string;
@@ -898,10 +895,11 @@ export interface InstanceEntry {
   deps: Set<string>;
 }
 
-interface ErrorEntry {
+export interface ErrorEntry {
   type: 'error';
   error: SerializedError;
 }
+
 interface ModuleEntry {
   type: 'module';
   source: string;

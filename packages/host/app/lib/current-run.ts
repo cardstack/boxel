@@ -21,7 +21,8 @@ import {
   loadCard,
   identifyCard,
   moduleFrom,
-  type InstanceEntryWithErrors,
+  type InstanceEntry,
+  type ErrorEntry,
   type CodeRef,
   type RealmInfo,
   type IndexResults,
@@ -472,7 +473,7 @@ export class CurrentRun {
         ]),
       });
     } else if (uncaughtError || typesMaybeError?.type === 'error') {
-      let error: InstanceEntryWithErrors;
+      let error: ErrorEntry;
       if (uncaughtError) {
         error = {
           type: 'error',
@@ -502,7 +503,10 @@ export class CurrentRun {
     deferred.fulfill();
   }
 
-  private async updateEntry(instanceURL: URL, entry: InstanceEntryWithErrors) {
+  private async updateEntry(
+    instanceURL: URL,
+    entry: InstanceEntry | ErrorEntry,
+  ) {
     await this.batch.updateEntry(assertURLEndsWithJSON(instanceURL), entry);
     if (entry.type === 'instance') {
       this.stats.instancesIndexed++;
