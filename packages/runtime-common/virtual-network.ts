@@ -100,6 +100,10 @@ export class VirtualNetwork {
     this.handlers.push(handler);
   }
 
+  unmount(handler: Handler) {
+    this.handlers = this.handlers.filter((h) => h !== handler);
+  }
+
   fetch: typeof fetch = async (
     urlOrRequest: string | URL | Request,
     init?: RequestInit,
