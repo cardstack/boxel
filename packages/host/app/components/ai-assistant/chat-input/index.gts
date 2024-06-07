@@ -107,9 +107,8 @@ export default class AiAssistantChatInput extends Component<Signature> {
     this.args.onSend(this.args.value);
   }
 
-  @action insertNewLine(ev: Event) {
-    ev.preventDefault();
-    this.args.onInput(`${this.args.value}\n`);
+  @action insertNewLine() {
+    this.args.onInput(`${this.args.value}\n\n`);
   }
 
   get height() {

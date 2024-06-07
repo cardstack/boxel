@@ -43,6 +43,16 @@ test.describe('Room messages', () => {
     await expect(page.locator('[data-test-send-message-btn]')).toBeDisabled();
     await assertMessages(page, []);
 
+    await page.locator('[data-test-message-field]').click();
+    await expect(page.locator('[data-test-send-message-btn]')).toBeDisabled();
+    await page.keyboard.press('Enter');
+    await assertMessages(page, []);
+
+    await page.keyboard.press('Shift+Enter');
+    await expect(page.locator('[data-test-send-message-btn]')).toBeDisabled();
+    await page.keyboard.press('Enter');
+    await assertMessages(page, []);
+
     await writeMessage(page, room1, 'Message 1');
     await page.locator('[data-test-send-message-btn]').click();
 
@@ -50,17 +60,29 @@ test.describe('Room messages', () => {
     await expect(page.locator('[data-test-new-session]')).toHaveCount(0);
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
 
+    await writeMessage(page, room1, 'Message 2');
+    await page.keyboard.press('Shift+Enter');
+    await page.keyboard.type('Hello World!');
+    await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
+
+    await page.keyboard.press('Enter');
+    const messages = [
+      { from: 'user1', message: 'Message 1' },
+      { from: 'user1', message: 'Message 2\n\nHello World!' },
+    ];
+    await assertMessages(page, messages);
+
     let room2 = await createRoom(page);
     await openRoom(page, room1);
 
     await reloadAndOpenAiAssistant(page);
     await openRoom(page, room1);
-    await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
+    await assertMessages(page, messages);
 
     await logout(page);
     await login(page, 'user1', 'pass');
     await openRoom(page, room1);
-    await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
+    await assertMessages(page, messages);
 
     // make sure that room state doesn't leak
     await openRoom(page, room2);
@@ -68,7 +90,7 @@ test.describe('Room messages', () => {
     await assertMessages(page, []);
 
     await openRoom(page, room1);
-    await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
+    await assertMessages(page, messages);
   });
 
   test(`it can load all events back to beginning of timeline for timelines that truncated`, async ({
