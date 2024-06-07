@@ -202,7 +202,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         margin: 0 0 var(--boxel-sp);
       }
       .list > li + li {
-        margin-top: var(--boxel-sp);
+        padding-top: var(--boxel-sp);
       }
       .editor {
         position: relative;
@@ -241,6 +241,9 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         cursor: -moz-grab;
         cursor: -webkit-grab;
       }
+      .list > li + li > .sort {
+        top: var(--boxel-sp);
+      }
       .sort:active {
         cursor: grabbing;
         cursor: -moz-grabbing;
@@ -248,6 +251,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       }
       :deep(.is-dragging) {
         z-index: 99;
+        transform: translateY(var(--boxel-sp));
       }
     </style>
   </template>

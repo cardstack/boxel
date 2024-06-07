@@ -2,6 +2,7 @@ import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -69,6 +70,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
           data-test-overlay-selected={{if isSelected card.id}}
           data-test-overlay-card={{card.id}}
           data-test-overlay-card-display-name={{cardTypeDisplayName card}}
+          style={{this.zIndexStyle renderedCard.element}}
         >
           {{#if (this.isIncludeHeader renderedCard)}}
             <OperatorModeOverlayItemHeader
@@ -220,15 +222,6 @@ export default class OperatorModeOverlays extends Component<Signature> {
       floating.style.width = width + 'px';
       floating.style.height = height + 'px';
       floating.style.position = 'absolute';
-
-      // These following lines handle the reordering action in LinksToManyStandardEditor.
-      // We update the overlays' z-index to match the z-index of the .is-dragging class applied to linksToMany items.
-      let parentElement = (reference as Element)!.parentElement!;
-      floating.style.zIndex = Array.from(parentElement.classList).includes(
-        'is-dragging',
-      )
-        ? '100'
-        : 'auto';
       return {
         x: rects.reference.x,
         y: rects.reference.y,
@@ -340,4 +333,16 @@ export default class OperatorModeOverlays extends Component<Signature> {
     }
     this.realmSessionByCard.set(card, resource);
   });
+
+  private zIndexStyle(element: HTMLElement) {
+    let parentElement = element.parentElement!;
+    let zIndexParentElement = window
+      .getComputedStyle(parentElement)
+      .getPropertyValue('z-index');
+    let zIndex =
+      zIndexParentElement === 'auto'
+        ? zIndexParentElement
+        : String(Number(zIndexParentElement) + 1);
+    return htmlSafe(`z-index: ${zIndex}`);
+  }
 }

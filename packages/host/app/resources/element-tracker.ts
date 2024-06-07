@@ -9,21 +9,41 @@ export default class ElementTracker<Meta = unknown> {
 
   get trackElement(): typeof Modifier<{ Args: { Named: Meta } }> {
     const tracker = this;
+    let observers = new Map<HTMLElement, MutationObserver>();
     return class TrackElement extends Modifier<{ Args: { Named: Meta } }> {
       modify(element: HTMLElement, _pos: unknown, meta: Meta) {
         // Without scheduling this after render, this produces the "attempted to update value, but it had already been used previously in the same computation" type error
         schedule('afterRender', () => {
-          let found = tracker.elements.find((e) => e.element === element);
-          if (found) {
-            tracker.elements.splice(tracker.elements.indexOf(found), 1, {
-              element,
-              meta: { ...meta },
+          let updateTracker = () => {
+            let found = tracker.elements.find((e) => e.element === element);
+            if (found) {
+              console.log(found);
+              tracker.elements.splice(tracker.elements.indexOf(found), 1, {
+                element,
+                meta: { ...meta },
+              });
+            } else {
+              tracker.elements.push({
+                element,
+                meta: { ...meta },
+              });
+            }
+          };
+          updateTracker();
+
+          // This observer is currently used to track the activity of dragging an item
+          // within the linksToMany field for reordering purposes.
+          let parentElement = element.parentElement;
+          if (
+            parentElement &&
+            Array.from(parentElement.classList).includes('sortable-item')
+          ) {
+            let observer = new MutationObserver(updateTracker);
+            observer.observe(element.parentElement!, {
+              attributes: true,
+              attributeFilter: ['class'],
             });
-          } else {
-            tracker.elements.push({
-              element,
-              meta: { ...meta },
-            });
+            observers.set(element, observer);
           }
         });
 
@@ -32,6 +52,7 @@ export default class ElementTracker<Meta = unknown> {
           if (found) {
             tracker.elements.splice(tracker.elements.indexOf(found), 1);
           }
+          Array.from(observers.values()).forEach((v) => v.disconnect());
         });
       }
     };
