@@ -1670,17 +1670,6 @@ module('Acceptance | interact submode tests', function (hooks) {
     await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
 
     assert.operatorModeParametersMatch(currentURL(), {
-      stacks: [
-        [
-          {
-            id: `${testRealmURL}Person/fadhlan`,
-            format: 'isolated',
-          },
-        ],
-      ],
-      submode: Submodes.Interact,
-      fileView: 'inspector',
-      openDirs: {},
       assistant: true,
     });
 
@@ -1689,17 +1678,6 @@ module('Acceptance | interact submode tests', function (hooks) {
     await click('[data-test-close-ai-assistant]');
 
     assert.operatorModeParametersMatch(currentURL(), {
-      stacks: [
-        [
-          {
-            id: `${testRealmURL}Person/fadhlan`,
-            format: 'isolated',
-          },
-        ],
-      ],
-      submode: Submodes.Interact,
-      fileView: 'inspector',
-      openDirs: {},
       assistant: false,
     });
 

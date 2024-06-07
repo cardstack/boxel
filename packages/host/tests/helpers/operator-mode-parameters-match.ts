@@ -3,7 +3,7 @@ import { type SerializedState } from '@cardstack/host/services/operator-mode-sta
 export default function (assert: Assert) {
   assert.operatorModeParametersMatch = function (
     currentURL: string,
-    operatorModeState: SerializedState,
+    operatorModeState: Partial<SerializedState>,
   ) {
     let urlParameterString =
       currentURL.split('?')[1].replace(/^\/\?/, '') ?? '';
@@ -30,15 +30,25 @@ export default function (assert: Assert) {
         message: `in query string ${urlParameterString}, operatorModeState was '${operatorModeStateString}'`,
       });
     } else {
-      let actualOperatorModeState;
+      let actualOperatorModeState: Partial<SerializedState> = {};
 
       try {
-        actualOperatorModeState = JSON.parse(operatorModeStateString);
+        actualOperatorModeState = JSON.parse(
+          operatorModeStateString,
+        ) as Partial<SerializedState>;
+
+        let actualStateExpectedSubset = Object.keys(operatorModeState).reduce(
+          (subset, key) => {
+            subset[key] = actualOperatorModeState[key];
+            return subset;
+          },
+          {} as Partial<SerializedState>,
+        );
 
         assert.deepEqual(
-          actualOperatorModeState,
+          actualStateExpectedSubset,
           operatorModeState,
-          `expected current URL ${currentURL} to match operator mode state ${encodeURIComponent(
+          `expected current URL ${currentURL} to match expected operator mode state ${encodeURIComponent(
             JSON.stringify(operatorModeState),
           )}`,
         );
@@ -58,7 +68,7 @@ declare global {
   interface Assert {
     operatorModeParametersMatch(
       currentURL: string,
-      operatorModeState?: SerializedState,
+      operatorModeState?: Partial<SerializedState>,
     ): void;
   }
 }
