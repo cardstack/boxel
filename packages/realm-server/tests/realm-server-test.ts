@@ -1663,9 +1663,9 @@ module('Realm Server', function (hooks) {
       });
     });
   });
-
   module('various other realm tests', function (hooks) {
     let testRealmServer2: Server;
+    let testRealm2: Realm;
 
     hooks.beforeEach(async function () {
       shimExternals(virtualNetwork);
@@ -1677,15 +1677,17 @@ module('Realm Server', function (hooks) {
 
     setupDB(hooks, {
       beforeEach: async (dbAdapter, queue) => {
-        testRealmServer2 = (
+        if (testRealm2) {
+          virtualNetwork.unmount(testRealm2.maybeExternalHandle);
+        }
+        ({ testRealm: testRealm2, testRealmServer: testRealmServer2 } =
           await runTestRealmServer({
             virtualNetwork,
             dir: dir.name,
             realmURL: testRealm2URL,
             dbAdapter,
             queue,
-          })
-        ).testRealmServer;
+          }));
       },
       afterEach: async () => {
         testRealmServer2.close();
@@ -2211,11 +2213,6 @@ module('Realm server serving multiple realms', function (hooks) {
   const basePath = resolve(join(__dirname, '..', '..', 'base'));
   shimExternals(virtualNetwork);
 
-  setupCardLogs(
-    hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
-  );
-
   hooks.beforeEach(async function () {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
@@ -2259,6 +2256,11 @@ module('Realm server serving multiple realms', function (hooks) {
       testRealmServer.close();
     },
   });
+
+  setupCardLogs(
+    hooks,
+    async () => await loader.import(`${baseRealm.url}card-api`),
+  );
 
   test(`Can perform full indexing multiple times on a server that runs multiple realms`, async function (assert) {
     {
