@@ -597,14 +597,5 @@ export class MortgageCalculator extends CardDef {
     <template></template>
   }
 
-
-
-
-
-
-
-
-
-
   */
 }
