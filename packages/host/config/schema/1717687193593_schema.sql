@@ -21,6 +21,14 @@
    PRIMARY KEY ( url, realm_version, realm_url ) 
 );
 
+ CREATE TABLE IF NOT EXISTS realm_user_permissions (
+   realm_url TEXT NOT NULL,
+   username TEXT NOT NULL,
+   read BOOLEAN NOT NULL,
+   write BOOLEAN NOT NULL,
+   PRIMARY KEY ( realm_url, username, read, write ) 
+);
+
  CREATE TABLE IF NOT EXISTS realm_versions (
    realm_url TEXT NOT NULL,
    current_version INTEGER NOT NULL,

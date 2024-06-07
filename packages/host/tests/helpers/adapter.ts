@@ -10,7 +10,7 @@ import {
 import {
   FileRef,
   Kind,
-  Realm,
+  RequestContext,
   TokenClaims,
   UpdateEventData,
 } from '@cardstack/runtime-common/realm';
@@ -183,10 +183,6 @@ export class TestRealmAdapter implements RealmAdapter {
       if (typeof value === 'string') {
         fileRefContent = value;
       } else {
-        let moduleURLString = `${this.#paths.url}${path.replace(/\.gts$/, '')}`;
-
-        this.#loader.shimModule(moduleURLString, value as object);
-
         fileRefContent = shimmedModuleIndicator;
       }
     } else {
@@ -287,13 +283,17 @@ export class TestRealmAdapter implements RealmAdapter {
   }
 
   createStreamingResponse(
-    realm: Realm,
     _request: Request,
+    requestContext: RequestContext,
     responseInit: ResponseInit,
     cleanup: () => void,
   ) {
     let s = new WebMessageStream();
-    let response = createResponse(realm, s.readable, responseInit);
+    let response = createResponse({
+      body: s.readable,
+      init: responseInit,
+      requestContext,
+    });
     messageCloseHandler(s.readable, cleanup);
     return { response, writable: s.writable };
   }

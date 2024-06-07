@@ -26,7 +26,7 @@ export type RelationshipSchema = {
     links: {
       type: 'object';
       properties: {
-        self: { type: 'null' | 'string' };
+        self: { type: 'string' | 'null' };
       };
       required: ['self'];
     };
@@ -215,7 +215,7 @@ function generatePatchCallSpecification(
             links: {
               type: 'object',
               properties: {
-                self: { type: 'null' || 'string' },
+                self: { type: 'string' },
               },
               required: ['self'],
             },

@@ -28,24 +28,22 @@ module('loader', function (hooks) {
 
   setupBaseRealmServer(hooks, virtualNetwork);
 
-  hooks.beforeEach(async function () {
+  hooks.before(async function () {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
   });
 
   setupDB(hooks, {
-    beforeEach: async (dbAdapter, queue) => {
-      testRealmServer = (
-        await runTestRealmServer({
-          virtualNetwork,
-          dir: dir.name,
-          realmURL: testRealmURL,
-          dbAdapter,
-          queue,
-        })
-      ).testRealmServer;
+    before: async (dbAdapter, queue) => {
+      ({ testRealmServer } = await runTestRealmServer({
+        virtualNetwork,
+        dir: dir.name,
+        realmURL: testRealmURL,
+        dbAdapter,
+        queue,
+      }));
     },
-    afterEach: async () => {
+    after: async () => {
       testRealmServer.close();
     },
   });
@@ -174,8 +172,15 @@ module('loader', function (hooks) {
   module('with a different realm', function (hooks) {
     let loader2: Loader;
     let realm: Realm;
+
+    hooks.before(async function () {
+      dir = dirSync();
+      copySync(join(__dirname, 'cards'), dir.name);
+      shimExternals(virtualNetwork);
+    });
+
     setupDB(hooks, {
-      beforeEach: async (dbAdapter, queue) => {
+      before: async (dbAdapter, queue) => {
         loader2 = virtualNetwork.createLoader();
         realm = await createRealm({
           dir: dir.name,
