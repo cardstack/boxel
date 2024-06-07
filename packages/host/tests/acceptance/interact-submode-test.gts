@@ -1669,7 +1669,6 @@ module('Acceptance | interact submode tests', function (hooks) {
 
     await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
 
-    // The stack should be updated in the URL
     assert.operatorModeParametersMatch(currentURL(), {
       stacks: [
         [
@@ -1689,7 +1688,6 @@ module('Acceptance | interact submode tests', function (hooks) {
 
     await click('[data-test-close-ai-assistant]');
 
-    // The stack should be updated in the URL
     assert.operatorModeParametersMatch(currentURL(), {
       stacks: [
         [
