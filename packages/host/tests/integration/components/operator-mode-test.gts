@@ -4381,7 +4381,8 @@ module('Integration | operator-mode', function (hooks) {
     await click(`[data-test-card-catalog-create-new-button]`);
     await waitFor('[data-test-stack-card-index="1"]');
 
-    await click('[data-test-edit-button]');
+    await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
+
     await waitFor('[data-test-isolated-author]');
     assert.dom('[data-test-isolated-author]').exists();
   });
