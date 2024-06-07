@@ -257,18 +257,26 @@ export default class CardService extends Service {
   ): Promise<CardDef | undefined> {
     let api = await this.getAPI();
     let linkedCards = await this.loadPatchedCards(patchData, new URL(card.id));
-    let updatedCard = await api.updateFromSerialized<typeof CardDef>(card, doc);
     for (let [field, value] of Object.entries(linkedCards)) {
       if (field.includes('.')) {
-        // TODO nested linksTo [cs-6799]
-        throw new Error('Not implemented.');
+        let parts = field.split('.');
+        let maybeIndex = Number(parts.pop());
+        if (isNaN(maybeIndex) || parts.length > 1) {
+          // TODO nested linksTo or nested linksToMany [cs-6799]
+          throw new Error('Not implemented.');
+        } else {
+          let fieldName = parts.join('.');
+          (card as any)[fieldName][maybeIndex] = value;
+        }
+      } else {
+        // TODO this could trigger a save. perhaps instead we could
+        // introduce a new option to updateFromSerialized to accept a list of
+        // fields to pre-load? which in this case would be any relationships that
+        // were patched in
+        (card as any)[field] = value;
       }
-      // TODO perhaps instead we could
-      // introduce a new option to updateFromSerialized to accept a list of
-      // fields to pre-load? which in this case would be any relationships that
-      // were patched in
-      (updatedCard as any)[field] = value;
     }
+    let updatedCard = await api.updateFromSerialized<typeof CardDef>(card, doc);
     // TODO setting `this` as an owner until we can have a better solution here...
     // (currently only used by the AI bot to patch cards from chat)
     return await this.saveModel(this, updatedCard);
