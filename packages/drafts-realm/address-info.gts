@@ -206,7 +206,6 @@ class Edit extends Component<typeof AddressInfo> {
 
   @action
   updateCity(type: CitySignature) {
-    console.log(type);
     this.selectedCityType = type;
     this.args.model.city = type.name;
   }

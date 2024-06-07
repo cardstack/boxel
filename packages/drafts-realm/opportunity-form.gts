@@ -22,6 +22,7 @@ import NumberField from '../base/number';
 
 interface CategorySignature {
   name: string;
+  percentage?: number;
 }
 
 const formatNumber = (val: number) => {
@@ -34,7 +35,7 @@ const formatNumber = (val: number) => {
 
 /* Amount */
 class EditSecForAmount extends Component<typeof AmountField> {
-  @tracked currencyOptions = ['Select', 'RM', 'USD'];
+  @tracked currencyOptions = ['Select', 'RM'];
   get selectedCurrency() {
     return this.args.model.currency || this.currencyOptions[0] || 'Select';
   }
@@ -276,17 +277,18 @@ class EditSecForOpportunityForm extends Component<typeof OpportunityForm> {
   }
 
   @tracked stageCategoryOptions = [
-    { name: 'None' },
-    { name: 'Qualification' },
-    { name: 'Needs Analysis' },
-    { name: 'Proposal' },
-    { name: 'Negotiation' },
-    { name: 'Closed Won' },
-    { name: 'Closed Lost' },
-  ] as Array<CategorySignature>;
+    { name: 'None', percentage: 0 },
+    { name: 'Qualification', percentage: 10 },
+    { name: 'Needs Analysis', percentage: 25 },
+    { name: 'Proposal', percentage: 50 },
+    { name: 'Negotiation', percentage: 75 },
+    { name: 'Closed Won', percentage: 100 },
+    { name: 'Closed Lost', percentage: 100 },
+  ] as unknown as Array<CategorySignature>;
 
-  @action updateStageCategory(type: { name: string }) {
+  @action updateStageCategory(type: { name: string; percentage: number }) {
     this.args.model.stage = type.name;
+    this.args.model.percentage = type.percentage;
   }
 
   /* Percentage */
