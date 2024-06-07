@@ -933,7 +933,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         }' cannot deserialize non-relationship value ${JSON.stringify(value)}`,
       );
     }
-    if (value?.links?.self == null) {
+    if (value?.links?.self == null || value.links.self === '') {
       return null;
     }
     let loader = Loader.getLoaderFor(this.card)!;

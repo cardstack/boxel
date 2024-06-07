@@ -17,6 +17,7 @@ import {
   type RealmInfo,
   type Loader,
   type PatchData,
+  type Relationship,
 } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 
@@ -257,15 +258,23 @@ export default class CardService extends Service {
     let api = await this.getAPI();
     let linkedCards = await this.loadPatchedCards(patchData, new URL(card.id));
     for (let [field, value] of Object.entries(linkedCards)) {
-      if (field.includes('.') || Array.isArray(value)) {
-        // TODO [wip] linksToMany and nested linksTo
-        throw new Error('Not implemented.');
+      if (field.includes('.')) {
+        let parts = field.split('.');
+        let maybeIndex = Number(parts.pop());
+        if (isNaN(maybeIndex) || parts.length > 1) {
+          // TODO nested linksTo or nested linksToMany [cs-6799]
+          throw new Error('Not implemented.');
+        } else {
+          let fieldName = parts.join('.');
+          (card as any)[fieldName][maybeIndex] = value;
+        }
+      } else {
+        // TODO this could trigger a save. perhaps instead we could
+        // introduce a new option to updateFromSerialized to accept a list of
+        // fields to pre-load? which in this case would be any relationships that
+        // were patched in
+        (card as any)[field] = value;
       }
-      // TODO perhaps instead we could
-      // introduce a new option to updateFromSerialized to accept a list of
-      // fields to pre-load? which in this case would be any relationships that
-      // were patched in
-      (card as any)[field] = value;
     }
     let updatedCard = await api.updateFromSerialized<typeof CardDef>(card, doc);
     // TODO setting `this` as an owner until we can have a better solution here...
@@ -273,27 +282,47 @@ export default class CardService extends Service {
     return await this.saveModel(this, updatedCard);
   }
 
+  private async loadRelationshipCard(rel: Relationship, relativeTo: URL) {
+    if (!rel.links.self) {
+      return;
+    }
+    let id = rel.links.self;
+    let cardResource = getCard(this, () => new URL(id, relativeTo).href);
+    await cardResource.loaded;
+    if (!cardResource.card && cardResource.cardError) {
+      throw cardResource.cardError;
+    }
+    return cardResource.card;
+  }
+
   private async loadPatchedCards(
     patchData: PatchData,
     relativeTo: URL,
   ): Promise<{
-    [fieldName: string]: CardDef;
+    [fieldName: string]: CardDef | CardDef[];
   }> {
     if (!patchData?.relationships) {
       return {};
     }
-    let result: { [fieldName: string]: CardDef } = {};
+    let result: { [fieldName: string]: CardDef | CardDef[] } = {};
     await Promise.all(
       Object.entries(patchData.relationships).map(async ([fieldName, rel]) => {
-        if (!rel.links.self) {
-          return;
-        }
-
-        let id = rel.links.self;
-        let cardResource = getCard(this, () => new URL(id, relativeTo).href);
-        await cardResource.loaded;
-        if (cardResource.card) {
-          result[fieldName] = cardResource.card;
+        if (Array.isArray(rel)) {
+          let cards: CardDef[] = [];
+          await Promise.all(
+            rel.map(async (r) => {
+              let card = await this.loadRelationshipCard(r, relativeTo);
+              if (card) {
+                cards.push(card);
+              }
+            }),
+          );
+          result[fieldName] = cards;
+        } else {
+          let card = await this.loadRelationshipCard(rel, relativeTo);
+          if (card) {
+            result[fieldName] = card;
+          }
         }
       }),
     );

@@ -224,6 +224,59 @@ module('Unit | ai-function-generation-test', function (hooks) {
     assert.deepEqual(schema, { attributes, relationships });
   });
 
+  test(`should support linksToMany`, async function (assert) {
+    let { field, contains, linksToMany, CardDef } = cardApi;
+    let { default: StringField } = string;
+    class OtherCard extends CardDef {
+      @field innerStringField = contains(StringField);
+    }
+    class TestCard extends CardDef {
+      static displayName = 'TestCard';
+      @field simpleField = contains(StringField);
+      @field linkedCards = linksToMany(OtherCard);
+    }
+
+    let schema = generateCardPatchCallSpecification(
+      TestCard,
+      cardApi,
+      mappings,
+    );
+
+    let attributes: ObjectSchema = {
+      type: 'object',
+      properties: {
+        simpleField: { type: 'string' },
+        title: { type: 'string' },
+        description: { type: 'string' },
+        thumbnailURL: { type: 'string' },
+      },
+    };
+    let linksToManyRelationship: RelationshipSchema = {
+      type: 'object',
+      properties: {
+        links: {
+          type: 'object',
+          properties: {
+            self: { type: 'string' },
+          },
+          required: ['self'],
+        },
+      },
+      required: ['links'],
+    };
+    let relationships: RelationshipsSchema = {
+      type: 'object',
+      properties: {
+        linkedCards: {
+          type: 'array',
+          items: linksToManyRelationship,
+        },
+      },
+      required: ['linkedCards'],
+    };
+    assert.deepEqual(schema, { attributes, relationships });
+  });
+
   test(`skips over fields that can't be recognised`, async function (assert) {
     let { field, contains, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;
@@ -466,6 +519,62 @@ module('Unit | ai-function-generation-test', function (hooks) {
         },
       },
       required: ['linkedCard', 'linkedCard2'],
+    };
+    assert.deepEqual(schema, { attributes, relationships });
+  });
+
+  test(`supports descriptions in linksToMany`, async function (assert) {
+    let { field, contains, linksToMany, CardDef } = cardApi;
+    let { default: StringField } = string;
+    class OtherCard extends CardDef {
+      @field innerStringField = contains(StringField);
+    }
+
+    class TestCard extends CardDef {
+      static displayName = 'TestCard';
+      @field simpleField = contains(StringField);
+      @field linkedCards = linksToMany(OtherCard, {
+        description: 'linked cards',
+      });
+    }
+
+    let schema = generateCardPatchCallSpecification(
+      TestCard,
+      cardApi,
+      mappings,
+    );
+
+    let attributes: ObjectSchema = {
+      type: 'object',
+      properties: {
+        simpleField: { type: 'string' },
+        title: { type: 'string' },
+        description: { type: 'string' },
+        thumbnailURL: { type: 'string' },
+      },
+    };
+    let relationships: RelationshipsSchema = {
+      type: 'object',
+      properties: {
+        linkedCards: {
+          type: 'array',
+          description: 'linked cards',
+          items: {
+            type: 'object',
+            properties: {
+              links: {
+                type: 'object',
+                properties: {
+                  self: { type: 'string' },
+                },
+                required: ['self'],
+              },
+            },
+            required: ['links'],
+          },
+        },
+      },
+      required: ['linkedCards'],
     };
     assert.deepEqual(schema, { attributes, relationships });
   });
