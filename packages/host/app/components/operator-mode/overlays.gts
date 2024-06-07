@@ -223,11 +223,11 @@ export default class OperatorModeOverlays extends Component<Signature> {
 
       // These following lines handle the reordering action in LinksToManyStandardEditor.
       // We update the overlays' z-index to match the z-index of the .is-dragging class applied to linksToMany items.
-      let parentElement = (reference as Element)!.parentElement;
+      let parentElement = (reference as Element)!.parentElement!;
       floating.style.zIndex = Array.from(parentElement.classList).includes(
         'is-dragging',
       )
-        ? 100
+        ? '100'
         : 'auto';
       return {
         x: rects.reference.x,
