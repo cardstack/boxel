@@ -27,7 +27,9 @@ export interface Reader {
   readFileAsText: (
     path: LocalPath,
     opts?: { withFallbacks?: true },
-  ) => Promise<{ content: string; lastModified: number } | undefined>;
+  ) => Promise<
+    { content: string; lastModified: number; path: string } | undefined
+  >;
   readdir: (
     path: string,
   ) => AsyncGenerator<{ name: string; path: string; kind: Kind }, void>;
@@ -171,7 +173,9 @@ export class Worker {
   private async readFileAsText(
     path: LocalPath,
     opts: { withFallbacks?: true } = {},
-  ): Promise<{ content: string; lastModified: number } | undefined> {
+  ): Promise<
+    { content: string; lastModified: number; path: string } | undefined
+  > {
     return readFileAsText(
       path,
       this.#realmAdapter.openFile.bind(this.#realmAdapter),

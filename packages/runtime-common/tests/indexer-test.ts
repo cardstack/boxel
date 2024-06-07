@@ -4,12 +4,16 @@ import {
   baseCardRef,
   type LooseCardResource,
   type DBAdapter,
-  type SearchCardResult,
+  type IndexedInstance,
   type BoxelIndexTable,
+  type CardResource,
 } from '../index';
+import { cardSrc, compiledCard } from '../etc/test-fixtures';
 import { type SharedTests } from '../helpers';
 import { setupIndex } from '../helpers/indexer';
 import { testRealmURL } from '../helpers/const';
+import stripScopedCSSGlimmerAttributes from '../helpers/strip-scoped-css-glimmer-attributes';
+import '../helpers/code-equality-assertion';
 
 const testRealmURL2 = `http://test-realm/test2/`;
 
@@ -455,32 +459,32 @@ const tests = Object.freeze({
       ],
     );
 
+    let resource: CardResource = {
+      id: `${testRealmURL}1.json`,
+      type: 'card',
+      attributes: {
+        name: 'Van Gogh',
+      },
+      meta: {
+        adoptsFrom: {
+          module: `./fancy-person`,
+          name: 'FancyPerson',
+        },
+      },
+    };
     let batch = await indexer.createBatch(new URL(testRealmURL));
     await batch.invalidate(new URL(`${testRealmURL}1.json`));
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
-      type: 'entry',
-      entry: {
-        resource: {
-          id: `${testRealmURL}1.json`,
-          type: 'card',
-          attributes: {
-            name: 'Van Gogh',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `./fancy-person`,
-              name: 'FancyPerson',
-            },
-          },
-        },
-        searchData: { name: 'Van Gogh' },
-        deps: new Set([`${testRealmURL}fancy-person`]),
-        types: [
-          { module: `./fancy-person`, name: 'FancyPerson' },
-          { module: `./person`, name: 'Person' },
-          baseCardRef,
-        ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
-      },
+      type: 'instance',
+      resource,
+      source: JSON.stringify(resource),
+      searchData: { name: 'Van Gogh' },
+      deps: new Set([`${testRealmURL}fancy-person`]),
+      types: [
+        { module: `./fancy-person`, name: 'FancyPerson' },
+        { module: `./person`, name: 'Person' },
+        baseCardRef,
+      ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
     });
 
     let versions = await adapter.execute(
@@ -692,27 +696,27 @@ const tests = Object.freeze({
       'the WIP next generation index entries have been added',
     );
 
+    let resource: CardResource = {
+      id: `${testRealmURL}1.json`,
+      type: 'card',
+      attributes: {
+        name: 'Van Gogh',
+      },
+      meta: {
+        adoptsFrom: {
+          module: `./person`,
+          name: 'Person',
+        },
+      },
+    };
     // in this next generation only 1 card happened to be visited
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
-      type: 'entry',
-      entry: {
-        resource: {
-          id: `${testRealmURL}1.json`,
-          type: 'card',
-          attributes: {
-            name: 'Van Gogh',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `./person`,
-              name: 'Person',
-            },
-          },
-        },
-        searchData: { name: 'Van Gogh' },
-        deps: new Set(),
-        types: [],
-      },
+      type: 'instance',
+      resource,
+      source: JSON.stringify(resource),
+      searchData: { name: 'Van Gogh' },
+      deps: new Set(),
+      types: [],
     });
 
     await batch.done();
@@ -758,6 +762,7 @@ const tests = Object.freeze({
         url: `${testRealmURL}1.json`,
         realm_version: 1,
         realm_url: testRealmURL,
+        type: 'error',
         error_doc: {
           detail: 'test error',
           status: 500,
@@ -806,37 +811,37 @@ const tests = Object.freeze({
       ],
     );
 
+    let resource: CardResource = {
+      id: `${testRealmURL}1.json`,
+      type: 'card',
+      attributes: {
+        name: 'Van Gogh',
+      },
+      meta: {
+        adoptsFrom: {
+          module: `./person`,
+          name: 'Person',
+        },
+      },
+    };
     let batch = await indexer.createBatch(new URL(testRealmURL));
     await batch.invalidate(new URL(`${testRealmURL}1.json`));
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
-      type: 'entry',
-      entry: {
-        resource: {
-          id: `${testRealmURL}1.json`,
-          type: 'card',
-          attributes: {
-            name: 'Van Gogh',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `./person`,
-              name: 'Person',
-            },
-          },
-        },
-        searchData: { name: 'Van Gogh' },
-        deps: new Set(),
-        types: [],
-      },
+      type: 'instance',
+      resource,
+      source: JSON.stringify(resource),
+      searchData: { name: 'Van Gogh' },
+      deps: new Set(),
+      types: [],
     });
 
     let entry = await indexer.getCard(new URL(`${testRealmURL}1`));
-    if (entry?.type === 'card') {
+    if (entry?.type === 'instance') {
       assert.deepEqual(entry, {
-        type: 'card',
+        type: 'instance',
         realmVersion: 1,
         realmURL: testRealmURL,
-        card: {
+        instance: {
           id: `${testRealmURL}1`,
           type: 'card',
           attributes: {
@@ -860,7 +865,7 @@ const tests = Object.freeze({
     }
   },
 
-  'can get work in progress index entry': async (assert, { indexer }) => {
+  'can get work in progress card': async (assert, { indexer }) => {
     await setupIndex(
       indexer,
       [{ realm_url: testRealmURL, current_version: 1 }],
@@ -884,41 +889,41 @@ const tests = Object.freeze({
       ],
     );
 
+    let resource: CardResource = {
+      id: `${testRealmURL}1.json`,
+      type: 'card',
+      attributes: {
+        name: 'Van Gogh',
+      },
+      meta: {
+        adoptsFrom: {
+          module: `./person`,
+          name: 'Person',
+        },
+      },
+    };
     let batch = await indexer.createBatch(new URL(testRealmURL));
     await batch.invalidate(new URL(`${testRealmURL}1.json`));
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
-      type: 'entry',
-      entry: {
-        resource: {
-          id: `${testRealmURL}1.json`,
-          type: 'card',
-          attributes: {
-            name: 'Van Gogh',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `./person`,
-              name: 'Person',
-            },
-          },
-        },
-        searchData: { name: 'Van Gogh' },
-        deps: new Set(),
-        types: [],
-      },
+      type: 'instance',
+      resource,
+      source: JSON.stringify(resource),
+      searchData: { name: 'Van Gogh' },
+      deps: new Set(),
+      types: [],
     });
 
     let entry = await indexer.getCard(new URL(`${testRealmURL}1`), {
       useWorkInProgressIndex: true,
     });
-    if (entry?.type === 'card') {
+    if (entry?.type === 'instance') {
       assert.ok(entry?.indexedAt, 'the indexed_at field was set');
-      delete (entry as Partial<SearchCardResult>)?.indexedAt;
-      assert.deepEqual(entry as Omit<SearchCardResult, 'indexedAt'>, {
-        type: 'card',
+      delete (entry as Partial<IndexedInstance>)?.indexedAt;
+      assert.deepEqual(entry as Omit<IndexedInstance, 'indexedAt'>, {
+        type: 'instance',
         realmVersion: 2,
         realmURL: testRealmURL,
-        card: {
+        instance: {
           id: `${testRealmURL}1.json`,
           type: 'card',
           attributes: {
@@ -941,7 +946,7 @@ const tests = Object.freeze({
     }
   },
 
-  'returns undefined when getting a deleted entry': async (
+  'returns undefined when getting a deleted card': async (
     assert,
     { indexer },
   ) => {
@@ -1032,6 +1037,148 @@ const tests = Object.freeze({
         'the "production" realm versions are correct',
       );
     },
+
+  'can get compiled module and source when requested with file extension':
+    async (assert, { indexer }) => {
+      await setupIndex(indexer);
+      let batch = await indexer.createBatch(new URL(testRealmURL));
+      await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
+        type: 'module',
+        source: cardSrc,
+        deps: new Set(),
+      });
+      await batch.done();
+
+      let result = await indexer.getModule(
+        new URL(`${testRealmURL}person.gts`),
+      );
+      if (result?.type === 'module') {
+        let { executableCode, source } = result;
+        assert.codeEqual(
+          stripModuleDebugInfo(stripScopedCSSGlimmerAttributes(executableCode)),
+          stripModuleDebugInfo(compiledCard()),
+          'compiled card is correct',
+        );
+        assert.strictEqual(cardSrc, source, 'source code is correct');
+      } else {
+        assert.ok(false, `expected module not to be an error document`);
+      }
+    },
+
+  'can get compiled module and source when requested without file extension':
+    async (assert, { indexer }) => {
+      await setupIndex(indexer);
+      let batch = await indexer.createBatch(new URL(testRealmURL));
+      await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
+        type: 'module',
+        source: cardSrc,
+        deps: new Set(),
+      });
+      await batch.done();
+
+      let result = await indexer.getModule(new URL(`${testRealmURL}person`));
+      if (result?.type === 'module') {
+        let { executableCode, source } = result;
+        assert.codeEqual(
+          stripModuleDebugInfo(stripScopedCSSGlimmerAttributes(executableCode)),
+          stripModuleDebugInfo(compiledCard()),
+          'compiled card is correct',
+        );
+        assert.strictEqual(cardSrc, source, 'source code is correct');
+      } else {
+        assert.ok(false, `expected module not to be an error document`);
+      }
+    },
+
+  'can get compiled module and source from WIP index': async (
+    assert,
+    { indexer },
+  ) => {
+    await setupIndex(indexer);
+    let batch = await indexer.createBatch(new URL(testRealmURL));
+    await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
+      type: 'module',
+      source: cardSrc,
+      deps: new Set(),
+    });
+
+    let result = await indexer.getModule(new URL(`${testRealmURL}person.gts`), {
+      useWorkInProgressIndex: true,
+    });
+    if (result?.type === 'module') {
+      let { executableCode, source } = result;
+      assert.codeEqual(
+        stripModuleDebugInfo(stripScopedCSSGlimmerAttributes(executableCode)),
+        stripModuleDebugInfo(compiledCard()),
+        'compiled card is correct',
+      );
+      assert.strictEqual(cardSrc, source, 'source code is correct');
+    } else {
+      assert.ok(false, `expected module not to be an error document`);
+    }
+
+    let noResult = await indexer.getModule(
+      new URL(`${testRealmURL}person.gts`),
+    );
+    assert.strictEqual(
+      noResult,
+      undefined,
+      'module does not exist in production index',
+    );
+  },
+
+  'can get error doc for module': async (assert, { indexer }) => {
+    await setupIndex(indexer, [
+      {
+        url: `${testRealmURL}person.gts`,
+        realm_version: 1,
+        realm_url: testRealmURL,
+        type: 'error',
+        error_doc: {
+          detail: 'test error',
+          status: 500,
+          additionalErrors: [],
+        },
+      },
+    ]);
+    let result = await indexer.getModule(new URL(`${testRealmURL}person.gts`));
+    if (result?.type === 'error') {
+      assert.deepEqual(result, {
+        type: 'error',
+        error: {
+          detail: 'test error',
+          status: 500,
+          additionalErrors: [],
+        },
+      });
+    } else {
+      assert.ok(false, `expected an error document`);
+    }
+  },
+
+  'returns undefined when getting a deleted module': async (
+    assert,
+    { indexer },
+  ) => {
+    await setupIndex(indexer, [
+      {
+        url: `${testRealmURL}person.gts`,
+        type: 'module',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        is_deleted: true,
+      },
+    ]);
+
+    let entry = await indexer.getCard(new URL(`${testRealmURL}person.gts`));
+    assert.strictEqual(entry, undefined, 'deleted modules return undefined');
+  },
 } as SharedTests<{ indexer: Indexer; adapter: DBAdapter }>);
 
 export default tests;
+
+function stripModuleDebugInfo(code: string) {
+  return code
+    .replace(/\s*"id": [^\n]+,\n/m, '')
+    .replace(/\s*"moduleName": [^\n]+,\n/m, '');
+}

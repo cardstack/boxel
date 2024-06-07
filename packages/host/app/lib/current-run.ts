@@ -20,9 +20,9 @@ import {
   Batch,
   loadCard,
   identifyCard,
-  isBaseDef,
   moduleFrom,
-  type SearchEntryWithErrors,
+  type InstanceEntry,
+  type ErrorEntry,
   type CodeRef,
   type RealmInfo,
   type IndexResults,
@@ -51,22 +51,11 @@ import { type RenderCard } from '../services/render-service';
 
 const log = logger('current-run');
 
-interface Module {
-  url: string;
-  consumes: string[];
-}
-
-type ModuleWithErrors =
-  | { type: 'module'; module: Module }
-  | { type: 'error'; moduleURL: string; error: SerializedError };
-
 type TypesWithErrors =
   | { type: 'types'; types: string[] }
   | { type: 'error'; error: SerializedError };
 
 export class CurrentRun {
-  #modules = new Map<string, ModuleWithErrors>();
-  #moduleWorkingCache = new Map<string, Promise<Module>>();
   #typesCache = new WeakMap<typeof CardDef, Promise<TypesWithErrors>>();
   #indexingInstances = new Map<string, Promise<void>>();
   #reader: Reader;
@@ -218,10 +207,6 @@ export class CurrentRun {
     return this.#batch;
   }
 
-  get modules() {
-    return this.#modules;
-  }
-
   get ignoreData() {
     return this.#ignoreData;
   }
@@ -277,21 +262,18 @@ export class CurrentRun {
     }
     let start = Date.now();
     log.debug(`begin visiting file ${url.href}`);
-    if (
-      hasExecutableExtension(url.href) ||
-      // handle modules with no extension too
-      !url.href.split('/').pop()!.includes('.')
-    ) {
-      await this.indexCardSource(url);
-    } else {
-      let localPath = this.#realmPaths.local(url);
+    let localPath = this.#realmPaths.local(url);
 
-      let fileRef = await this.#reader.readFileAsText(localPath, {});
-      if (!fileRef) {
-        let error = new CardError(`missing file ${url.href}`, { status: 404 });
-        error.deps = [url.href];
-        throw error;
-      }
+    let fileRef = await this.#reader.readFileAsText(localPath);
+    if (!fileRef) {
+      let error = new CardError(`missing file ${url.href}`, { status: 404 });
+      error.deps = [url.href];
+      throw error;
+    }
+    let { content, lastModified } = fileRef;
+    if (hasExecutableExtension(url.href)) {
+      await this.indexModule(url, content);
+    } else {
       if (!identityContext) {
         let api = await this.#loader.import<typeof CardAPI>(
           `${baseRealm.url}card-api`,
@@ -300,7 +282,6 @@ export class CurrentRun {
         identityContext = new IdentityContext();
       }
 
-      let { content, lastModified } = fileRef;
       if (url.href.endsWith('.json')) {
         let resource;
 
@@ -312,19 +293,20 @@ export class CurrentRun {
         }
 
         if (resource && isCardResource(resource)) {
-          await this.indexCard(
-            localPath,
+          await this.indexCard({
+            path: localPath,
+            source: content,
             lastModified,
             resource,
             identityContext,
-          );
+          });
         }
       }
     }
     log.debug(`completed visiting file ${url.href} in ${Date.now() - start}ms`);
   }
 
-  private async indexCardSource(url: URL): Promise<void> {
+  private async indexModule(url: URL, source: string): Promise<void> {
     let module: Record<string, unknown>;
     try {
       module = await this.loader.import(url.href);
@@ -345,36 +327,39 @@ export class CurrentRun {
           deps,
         },
       });
-      this.#modules.set(url.href, {
-        type: 'error',
-        moduleURL: url.href,
-        error: {
-          status: 500,
-          detail: `encountered error loading module "${url.href}": ${err.message}`,
-          additionalErrors: null,
-          deps,
-        },
-      });
       return;
     }
 
-    let refs = Object.values(module)
-      .filter((maybeCard) => isBaseDef(maybeCard))
-      .map((card) => identifyCard(card))
-      .filter(Boolean) as CodeRef[];
-    for (let ref of refs) {
-      if (!('type' in ref)) {
-        await this.buildModule(ref.module, url);
+    if (module) {
+      for (let exportName of Object.keys(module)) {
+        module[exportName];
       }
     }
+    let consumes = (await this.loader.getConsumedModules(url.href)).filter(
+      (u) => u !== url.href,
+    );
+    await this.batch.updateEntry(new URL(url.href), {
+      type: 'module',
+      source,
+      deps: new Set(
+        consumes.map((d) => trimExecutableExtension(new URL(d)).href),
+      ),
+    });
   }
 
-  private async indexCard(
-    path: LocalPath,
-    lastModified: number,
-    resource: LooseCardResource,
-    identityContext: IdentityContextType,
-  ): Promise<void> {
+  private async indexCard({
+    path,
+    source,
+    lastModified,
+    resource,
+    identityContext,
+  }: {
+    path: LocalPath;
+    source: string;
+    lastModified: number;
+    resource: LooseCardResource;
+    identityContext: IdentityContextType;
+  }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
     let indexingInstance = this.#indexingInstances.get(fileURL);
     if (indexingInstance) {
@@ -476,20 +461,19 @@ export class CurrentRun {
     }
     if (searchData && doc && typesMaybeError?.type === 'types') {
       await this.updateEntry(instanceURL, {
-        type: 'entry',
-        entry: {
-          resource: doc.data,
-          searchData,
-          isolatedHtml,
-          types: typesMaybeError.types,
-          deps: new Set([
-            moduleURL,
-            ...(await this.loader.getConsumedModules(moduleURL)),
-          ]),
-        },
+        type: 'instance',
+        source,
+        resource: doc.data,
+        searchData,
+        isolatedHtml,
+        types: typesMaybeError.types,
+        deps: new Set([
+          moduleURL,
+          ...(await this.loader.getConsumedModules(moduleURL)),
+        ]),
       });
     } else if (uncaughtError || typesMaybeError?.type === 'error') {
-      let error: SearchEntryWithErrors;
+      let error: ErrorEntry;
       if (uncaughtError) {
         error = {
           type: 'error',
@@ -519,61 +503,16 @@ export class CurrentRun {
     deferred.fulfill();
   }
 
-  private async updateEntry(instanceURL: URL, entry: SearchEntryWithErrors) {
+  private async updateEntry(
+    instanceURL: URL,
+    entry: InstanceEntry | ErrorEntry,
+  ) {
     await this.batch.updateEntry(assertURLEndsWithJSON(instanceURL), entry);
-    if (entry.type === 'entry') {
+    if (entry.type === 'instance') {
       this.stats.instancesIndexed++;
     } else {
       this.stats.instanceErrors++;
     }
-  }
-
-  public async buildModule(
-    moduleIdentifier: string,
-    relativeTo = this.#realmURL,
-  ): Promise<void> {
-    let url = new URL(moduleIdentifier, relativeTo).href;
-    let existing = this.#modules.get(url);
-    if (existing?.type === 'error') {
-      throw new Error(
-        `bug: card definition has errors which should never happen since the card already executed successfully: ${url}`,
-      );
-    }
-    if (existing) {
-      return;
-    }
-
-    let working = this.#moduleWorkingCache.get(url);
-    if (working) {
-      await working;
-      return;
-    }
-
-    let deferred = new Deferred<Module>();
-    this.#moduleWorkingCache.set(url, deferred.promise);
-    let m = await this.#loader.import<Record<string, any>>(moduleIdentifier);
-    if (m) {
-      for (let exportName of Object.keys(m)) {
-        m[exportName];
-      }
-    }
-    let consumes = (await this.loader.getConsumedModules(url)).filter(
-      (u) => u !== url,
-    );
-    let module: Module = {
-      url,
-      consumes,
-    };
-    await this.batch.updateEntry(new URL(url), {
-      type: 'module',
-      module: {
-        deps: new Set(
-          consumes.map((d) => trimExecutableExtension(new URL(d)).href),
-        ),
-      },
-    });
-    this.#modules.set(url, { type: 'module', module });
-    deferred.fulfill(module);
   }
 
   private async getTypes(card: typeof CardDef): Promise<TypesWithErrors> {
