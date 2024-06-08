@@ -51,7 +51,6 @@ interface Signature {
 }
 
 export default class SubmodeLayout extends Component<Signature> {
-  @tracked private isAiAssistantVisible = false;
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSettingsOpened = false;
   @tracked private profileSummaryOpened = false;
@@ -101,10 +100,15 @@ export default class SubmodeLayout extends Component<Signature> {
     this.operatorModeStateService.updateSubmode(submode);
   }
 
+  get isAiAssistantVisible() {
+    return this.operatorModeStateService.state.assistant;
+  }
+
   @action
   private toggleChat() {
-    this.isAiAssistantVisible = !this.isAiAssistantVisible;
-    this.operatorModeStateService.updateAssistant(this.isAiAssistantVisible);
+    this.operatorModeStateService.updateAssistant(
+      !this.operatorModeStateService.state.assistant,
+    );
   }
 
   @action private closeSearchSheet() {
