@@ -4,12 +4,7 @@ import { AddressInfo } from './address-info';
 import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
-import {
-  FieldContainer,
-  CardContainer,
-  IconButton,
-} from '@cardstack/boxel-ui/components';
-import { Sparkle } from '@cardstack/boxel-ui/icons';
+import { FieldContainer, CardContainer } from '@cardstack/boxel-ui/components';
 
 class Isolated extends Component<typeof ContactForm> {
   get hasTitleField() {
@@ -25,15 +20,6 @@ class Isolated extends Component<typeof ContactForm> {
       {{/if}}
 
       <div class='card-form-display'>
-        <IconButton
-          @icon={{Sparkle}}
-          @width='22px'
-          @height='22px'
-          @variant='undefined'
-          class='icon-profile'
-          aria-label='Profile'
-        />
-
         <div class='contact-form-details'>
 
           <div class='field-input'>
@@ -149,14 +135,6 @@ class Isolated extends Component<typeof ContactForm> {
 class View extends Component<typeof ContactForm> {
   <template>
     <CardContainer @displayBoundaries={{true}} class='container'>
-      <IconButton
-        @icon={{Sparkle}}
-        @width='22px'
-        @height='22px'
-        @variant='undefined'
-        class='icon-profile'
-        aria-label='Profile'
-      />
       <div class='content'>
         <label>User</label>
         <h2><@fields.name /></h2>
@@ -200,7 +178,9 @@ class Edit extends Component<typeof ContactForm> {
         <@fields.name />
       </FieldContainer>
 
-      <@fields.email />
+      <FieldContainer @tag='label' @label='Email' @vertical={{true}}>
+        <@fields.email />
+      </FieldContainer>
 
       <FieldContainer @tag='label' @label='Phone' @vertical={{true}}>
         <@fields.phone />
