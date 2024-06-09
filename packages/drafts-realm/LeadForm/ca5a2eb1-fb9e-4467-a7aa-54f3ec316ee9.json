@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": {
+        "salutation": "Mr.",
+        "firstName": "Loo",
+        "lastName": "Mok Sun"
+      },
+      "company": "Loo Holding",
+      "title": "Title Here",
+      "website": "www.loobholding.com",
+      "description": "Description Here",
+      "leadStatus": "New",
+      "phone": "0109090000",
+      "email": "loobholding@xxxx.com",
+      "addressInfo": {
+        "address": "14, Jalan Teknologi, Taman Sains",
+        "zip": "47810",
+        "city": "Petaling Jaya",
+        "state": "Selangor",
+        "country": "Malaysia",
+        "countryCode": "MY",
+        "stateCode": "10"
+      },
+      "noOfEmployees": 500.5,
+      "annualRevenue": {
+        "currency": "RM",
+        "totalAmount": 150300
+      },
+      "leadSource": "Advertisement",
+      "industry": "Banking",
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../lead-form",
+        "name": "LeadForm"
+      }
+    }
+  }
+}
