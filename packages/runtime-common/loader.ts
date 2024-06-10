@@ -482,7 +482,7 @@ export class Loader {
         urlOrRequest instanceof Request
           ? urlOrRequest.url
           : String(urlOrRequest);
-      this.log.error(`fetch failed for ${url}`, err);
+      this.log.error(`fetch failed for '${url}'`, err);
 
       return new Response(`fetch failed for ${url}`, {
         status: 500,
