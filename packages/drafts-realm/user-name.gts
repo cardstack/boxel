@@ -87,18 +87,11 @@ class Edit extends Component<typeof UserName> {
         padding: 2rem 1rem;
         display: grid;
         gap: var(--boxel-sp-sm);
-        grid-template-columns: 1fr;
         background-color: #eeeeee50;
       }
       .select {
         padding: var(--boxel-sp-xs);
         background-color: white;
-      }
-
-      @media (min-width: 768px) {
-        .container {
-          grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        }
       }
     </style>
   </template>
