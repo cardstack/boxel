@@ -27,12 +27,11 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import { AuthenticationErrorMessages } from '@cardstack/runtime-common/router';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
+import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import { claimsFromRawToken } from '@cardstack/host/resources/realm-session';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
-
-import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 
 import {
   createJWT,
