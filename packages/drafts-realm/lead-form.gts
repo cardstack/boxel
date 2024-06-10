@@ -109,7 +109,6 @@ class IsolatedSecForLeadForm extends Component<typeof LeadForm> {
         display: grid;
         gap: var(--boxel-sp-lg);
         overflow: hidden;
-        box-shadow: 0px !important;
       }
       section {
         overflow: hidden;
@@ -157,24 +156,88 @@ class IsolatedSecForLeadForm extends Component<typeof LeadForm> {
 
 class ViewSecForLeadForm extends Component<typeof LeadForm> {
   <template>
-    <CardContainer @displayBoundaries={{true}} class='container'>
-      <div class='content'>
-        <div class='field-name'><@fields.name /></div>
-        <@fields.company />
-      </div>
-    </CardContainer>
+    <div class='container'>
+      <section>
+        <div class='field-group-title'>About</div>
+        <div class='field-input-group'>
+          <label>Full Name</label>
+          <@fields.name @format='edit' />
+
+          <label>Company Name</label>
+          <@fields.company @format='edit' />
+
+          <label>Title</label>
+          <@fields.title @format='edit' />
+
+          <label>Website</label>
+          <@fields.website @format='edit' />
+
+          <label>Description</label>
+          <@fields.description @format='edit' />
+
+          <label>Lead Status</label>
+          <@fields.leadStatus @format='edit' />
+        </div>
+      </section>
+
+      <section>
+        <div class='field-group-title'>Get In Touch</div>
+        <div class='field-input-group'>
+          <label>Phone</label>
+          <@fields.phone @format='edit' />
+
+          <label>Email</label>
+          <@fields.email @format='edit' />
+
+          <label>Address</label>
+          <@fields.addressInfo @format='edit' />
+        </div>
+      </section>
+
+      <section>
+        <div class='field-group-title'>Segment</div>
+        <div class='field-input-group'>
+          <label>No. of Employees</label>
+          <@fields.noOfEmployees @format='edit' />
+
+          <label>Annual Revenue</label>
+          <@fields.annualRevenue @format='edit' />
+
+          <label>Lead Source</label>
+          <@fields.leadSource @format='edit' />
+
+          <label>Industry</label>
+          <@fields.industry @format='edit' />
+        </div>
+      </section>
+    </div>
 
     <style>
       .container {
-        padding: var(--boxel-sp);
         display: grid;
-        gap: var(--boxel-sp);
+        gap: var(--boxel-sp-lg);
+        overflow: hidden;
       }
-      .field-name {
-        font-size: var(--boxel-font-size-med);
+      section {
+        overflow: hidden;
+      }
+      .field-group-title {
+        font-size: var(--boxel-font-size);
         font-weight: 800;
-        color: var(--boxel-700);
         margin-bottom: var(--boxel-sp-xs);
+      }
+      .field-input-group {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-evenly;
+        gap: var(--boxel-sp);
+        background-color: #fbfbfb;
+        border: 1px solid var(--boxel-300);
+        border-radius: var(--boxel-border-radius);
+        padding: var(--boxel-sp);
+      }
+      label {
+        font-weight: 700;
       }
     </style>
   </template>
