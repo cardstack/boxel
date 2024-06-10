@@ -130,14 +130,14 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
   @consume(CardContextName) declare cardContext: CardContext;
 
   @action
-  reorderItems(items: any) {
+  setItems(items: any) {
     (this.args.model.value as any)[this.args.field.name] = items;
   }
 
   <template>
     <RealmSessionConsumer as |realmSession|>
       {{#if @arrayField.children.length}}
-        <ul class='list' {{sortableGroup onChange=(fn this.reorderItems)}}>
+        <ul class='list' {{sortableGroup onChange=(fn this.setItems)}}>
           {{#each @arrayField.children as |boxedElement i|}}
             <li
               class='editor'
@@ -238,16 +238,12 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
 
         cursor: move;
         cursor: grab;
-        cursor: -moz-grab;
-        cursor: -webkit-grab;
       }
       .list > li + li > .sort {
         top: var(--boxel-sp);
       }
       .sort:active {
         cursor: grabbing;
-        cursor: -moz-grabbing;
-        cursor: -webkit-grabbing;
       }
       :deep(.is-dragging) {
         z-index: 99;

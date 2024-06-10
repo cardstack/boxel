@@ -17,7 +17,6 @@ export default class ElementTracker<Meta = unknown> {
           let updateTracker = () => {
             let found = tracker.elements.find((e) => e.element === element);
             if (found) {
-              console.log(found);
               tracker.elements.splice(tracker.elements.indexOf(found), 1, {
                 element,
                 meta: { ...meta },
@@ -42,6 +41,9 @@ export default class ElementTracker<Meta = unknown> {
             observer.observe(element.parentElement!, {
               attributes: true,
               attributeFilter: ['class'],
+              childList: true,
+              subtree: true,
+              characterData: true,
             });
             observers.set(element, observer);
           }

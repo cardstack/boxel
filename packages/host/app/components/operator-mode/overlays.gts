@@ -238,6 +238,9 @@ export default class OperatorModeOverlays extends Component<Signature> {
   private get renderedCardsForOverlayActionsWithEvents() {
     let renderedCards = this.args.renderedCardsForOverlayActions;
     for (const renderedCard of renderedCards) {
+      if (!this.realmSessionByCard.get(renderedCard.card)) {
+        this.loadRealmSession.perform(renderedCard.card);
+      }
       if (boundRenderedCardElement.has(renderedCard.element)) {
         continue;
       }
@@ -264,7 +267,6 @@ export default class OperatorModeOverlays extends Component<Signature> {
         );
       });
       renderedCard.element.style.cursor = 'pointer';
-      this.loadRealmSession.perform(renderedCard.card);
     }
 
     return renderedCards;

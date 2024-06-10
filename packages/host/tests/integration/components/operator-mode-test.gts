@@ -4515,17 +4515,16 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-item="2"]`).hasText('Buzz');
 
     let dragAndDrop = async (itemSelector: string, targetSelector: string) => {
-      const itemElement = document.querySelector(itemSelector);
-      const targetElement = document.querySelector(targetSelector);
+      let itemElement = document.querySelector(itemSelector);
+      let targetElement = document.querySelector(targetSelector);
 
       if (!itemElement || !targetElement) {
         throw new Error('Item or target element not found');
       }
 
-      const itemRect = itemElement.getBoundingClientRect();
-      const targetRect = targetElement.getBoundingClientRect();
+      let itemRect = itemElement.getBoundingClientRect();
+      let targetRect = targetElement.getBoundingClientRect();
 
-      // Simulate mousedown on the item to drag
       await triggerEvent(itemElement, 'mousedown', {
         clientX: itemRect.left + itemRect.width / 2,
         clientY: itemRect.top + itemRect.height / 2,
@@ -4540,7 +4539,6 @@ module('Integration | operator-mode', function (hooks) {
         clientY: targetRect.top - 100,
       });
 
-      // Simulate mouseup on the target to drop
       await triggerEvent(itemElement, 'mouseup', {
         clientX: targetRect.left + targetRect.width / 2,
         clientY: targetRect.top - 100,
@@ -4553,6 +4551,27 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-item="0"]`).hasText('Woody');
     assert.dom(`[data-test-item="1"]`).hasText('Buzz');
     assert.dom(`[data-test-item="2"]`).hasText('Jackie');
+
+    let itemElement = document.querySelector('[data-test-item="0"]');
+    let overlayButtonElements = document.querySelectorAll(
+      `[data-test-overlay-card="${testRealmURL}Pet/woody"]`,
+    );
+    if (
+      !itemElement ||
+      !overlayButtonElements ||
+      overlayButtonElements.length === 0
+    ) {
+      throw new Error('Item or overlay button element not found');
+    }
+
+    let itemRect = itemElement.getBoundingClientRect();
+    let overlayButtonRect =
+      overlayButtonElements[
+        overlayButtonElements.length - 1
+      ].getBoundingClientRect();
+
+    assert.strictEqual(itemRect.top, overlayButtonRect.top);
+    assert.strictEqual(itemRect.left, overlayButtonRect.left);
 
     await click(
       `[data-test-stack-card="${testRealmURL}Person/burcu"] [data-test-edit-button]`,
