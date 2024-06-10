@@ -139,7 +139,6 @@ export const toMatrixMessageContent = (
         command: {
           type: functionCall.name,
           id: id,
-          //TODO: maybe this should just return the payload but it might interfere with burcus work
           patch: {
             attributes: payload['attributes'],
             relationships: payload['relationships'],

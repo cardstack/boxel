@@ -31,6 +31,10 @@ import {
   generateCardPatchCallSpecification,
 } from '@cardstack/runtime-common/helpers/ai';
 
+import {
+  getPatchTool,
+  getSearchTool,
+} from '@cardstack/runtime-common/helpers/ai';
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
 import { Submode } from '@cardstack/host/components/submode-switcher';
@@ -362,7 +366,11 @@ export default class MatrixService extends Service {
   private async sendEvent(
     roomId: string,
     eventType: string,
-    content: CardMessageContent | CardFragmentContent | ReactionEventContent,
+    content:
+      | CardMessageContent
+      | CardFragmentContent
+      | ReactionEventContent
+      | CommandResultContent,
   ) {
     if ('data' in content) {
       const encodedContent = {
@@ -420,69 +428,10 @@ export default class MatrixService extends Service {
   }
 
   private addTools = (attachedOpenCard: CardDef, patchSpec: any) => {
-    let tools = [];
-    tools.push({
-      type: 'function',
-      function: {
-        name: 'patchCard',
-        description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.`,
-        parameters: {
-          type: 'object',
-          properties: {
-            card_id: {
-              type: 'string',
-              const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
-            },
-            description: {
-              type: 'string',
-            },
-            ...patchSpec,
-          },
-          required: ['card_id', 'attributes', 'description'],
-        },
-      },
-    });
-    //need to make sure filter object is returned
-    tools.push({
-      type: 'function',
-      function: {
-        name: 'searchCard',
-        description: `Propose a query to search for a card instance related to module it was from. 
-        Always prioritise search based upon the card that was last shared. 
-        Ensure that you find the correct "module" and "name" from the OUTERMOST "adoptsFrom" field from the card data that is shared`,
-        parameters: {
-          type: 'object',
-          properties: {
-            card_id: {
-              type: 'string',
-              const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
-            },
-            filter: {
-              type: 'object',
-              properties: {
-                type: {
-                  //resolved code ref essentially
-                  type: 'object',
-                  properties: {
-                    module: {
-                      type: 'string',
-                      description: `the absolute path of the module`,
-                    },
-                    name: {
-                      type: 'string',
-                      description: 'the name of the module',
-                    },
-                  },
-                  required: ['module', 'name'],
-                },
-              },
-            },
-          },
-          required: ['card_id', 'filter'],
-        },
-      },
-    });
-    return tools;
+    return [
+      getPatchTool(attachedOpenCard, patchSpec),
+      getSearchTool(attachedOpenCard),
+    ];
   };
 
   async sendMessage(

@@ -1524,7 +1524,7 @@ module('Integration | operator-mode', function (hooks) {
               type: 'patchCard',
               id,
               patch: { attributes: { firstName: 'Dave' } },
-              eventId: undefined,
+              eventId: 'event1',
             },
           }),
           'm.relates_to': {
@@ -1536,7 +1536,6 @@ module('Integration | operator-mode', function (hooks) {
       });
 
       await waitFor('[data-test-command-apply="ready"]', { count: 1 });
-
       await click('[data-test-message-idx="0"] [data-test-command-apply]');
       assert.dom('[data-test-apply-state="applying"]').exists({ count: 1 });
       assert

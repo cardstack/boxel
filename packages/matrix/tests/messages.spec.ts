@@ -285,49 +285,47 @@ test.describe('Room messages', () => {
     let message = (await getRoomEvents()).pop()!;
     expect(message.content.msgtype).toStrictEqual('org.boxel.message');
     let boxelMessageData = JSON.parse(message.content.data);
-    expect(boxelMessageData.context.tools).toMatchObject([
-      {
-        type: 'function',
-        function: {
-          name: 'patchCard',
-          description:
-            'Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.',
-          parameters: {
-            type: 'object',
-            properties: {
-              description: {
-                type: 'string',
-              },
-              card_id: {
-                type: 'string',
-                const: `${testHost}/mango`,
-              },
-              attributes: {
-                type: 'object',
-                properties: {
-                  firstName: {
-                    type: 'string',
-                  },
-                  lastName: {
-                    type: 'string',
-                  },
-                  email: {
-                    type: 'string',
-                  },
-                  posts: {
-                    type: 'number',
-                  },
-                  thumbnailURL: {
-                    type: 'string',
-                  },
+    expect(boxelMessageData.context.tools[0]).toMatchObject({
+      type: 'function',
+      function: {
+        name: 'patchCard',
+        description:
+          'Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.',
+        parameters: {
+          type: 'object',
+          properties: {
+            description: {
+              type: 'string',
+            },
+            card_id: {
+              type: 'string',
+              const: `${testHost}/mango`,
+            },
+            attributes: {
+              type: 'object',
+              properties: {
+                firstName: {
+                  type: 'string',
+                },
+                lastName: {
+                  type: 'string',
+                },
+                email: {
+                  type: 'string',
+                },
+                posts: {
+                  type: 'number',
+                },
+                thumbnailURL: {
+                  type: 'string',
                 },
               },
             },
-            required: ['card_id', 'attributes', 'description'],
           },
+          required: ['card_id', 'attributes', 'description'],
         },
       },
-    ]);
+    });
   });
 
   test(`it does not include patch tool in message event for an open card that is not attached`, async ({
@@ -352,7 +350,7 @@ test.describe('Room messages', () => {
     let message = (await getRoomEvents()).pop()!;
     expect(message.content.msgtype).toStrictEqual('org.boxel.message');
     let boxelMessageData = JSON.parse(message.content.data);
-    expect(boxelMessageData.context.tools).toMatchObject([]);
+    expect(boxelMessageData.context.tools.length).toEqual(0);
   });
 
   test(`it does not include patch tool in message event when top-most card is read-only`, async ({
@@ -375,7 +373,7 @@ test.describe('Room messages', () => {
     let message = (await getRoomEvents()).pop()!;
     expect(message.content.msgtype).toStrictEqual('org.boxel.message');
     let boxelMessageData = JSON.parse(message.content.data);
-    expect(boxelMessageData.context.tools).toMatchObject([]);
+    expect(boxelMessageData.context.tools.length).toEqual(0);
   });
 
   test('can send only a card as a message', async ({ page }) => {

@@ -12,7 +12,7 @@ import { modifier } from 'ember-modifier';
 import { trackedFunction } from 'ember-resources/util/function';
 
 import { Button } from '@cardstack/boxel-ui/components';
-import { bool } from '@cardstack/boxel-ui/helpers';
+import { and, bool } from '@cardstack/boxel-ui/helpers';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
@@ -25,8 +25,8 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { BaseDef, type CardDef } from 'https://cardstack.com/base/card-api';
-import { type MessageField } from 'https://cardstack.com/base/room';
 import { PatchObject } from 'https://cardstack.com/base/patch-command';
+import { type MessageField } from 'https://cardstack.com/base/room';
 
 import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
@@ -120,7 +120,10 @@ export default class RoomMessage extends Component<Signature> {
         {{#if (bool this.isCommand)}}
           <div
             class='command-button-bar'
-            data-test-command-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
+            data-test-command-card-idle={{(and
+              this.operatorModeStateService.patchCard.isIdle
+              this.handleCommand.isIdle
+            )}}
           >
             <Button
               class='view-code-button'
@@ -139,7 +142,7 @@ export default class RoomMessage extends Component<Signature> {
             />
 
             <div>
-              {{#let (getComponent this.args.message) as |Component|}}
+              {{#let (getComponent @message) as |Component|}}
                 <Component @format='embedded' />
               {{/let}}
             </div>
@@ -330,10 +333,6 @@ export default class RoomMessage extends Component<Signature> {
     );
   }
 
-  get commandIsRunning() {
-    return this.handleCommand.isRunning;
-  }
-
   private handleCommand = task(async () => {
     let { eventId } = this.args.message.command;
     try {
@@ -401,7 +400,7 @@ export default class RoomMessage extends Component<Signature> {
 
   @cached
   private get applyButtonState(): ApplyButtonState {
-    if (this.commandIsRunning) {
+    if (this.handleCommand.isRunning) {
       return 'applying';
     }
     if (this.failedCommandState) {

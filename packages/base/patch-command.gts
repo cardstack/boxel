@@ -1,5 +1,4 @@
 import { CommandField } from './command';
-import { action } from '@ember/object';
 
 type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
 
@@ -12,14 +11,4 @@ export interface PatchCardPayload {
   eventId: string;
 }
 
-export class PatchCommandField extends CommandField {
-  //Runs functions available to host
-  get hostCommandArgs() {
-    return this.payload;
-  }
-
-  @action
-  run() {
-    this.hostCommand();
-  }
-}
+export class PatchCommandField extends CommandField {}
