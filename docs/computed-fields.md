@@ -15,16 +15,6 @@ export class Person extends CardDef {
   …
 ```
 
-You can also specify the name of the computation function on the class as a string instead of inlining it:
-
-```typescript
-@field fullName = contains(StringCard, { computeVia: 'getFullName' });
-
-getFullName() {
-  return `${this.firstName} ${this.lastName}`;
-}
-```
-
 The field can be used in a template like any other:
 
 ```handlebars

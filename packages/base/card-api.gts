@@ -24,11 +24,9 @@ import {
   isSingleCardDocument,
   isRelationship,
   isNotLoadedError,
-  isNotReadyError,
   CardError,
   CardContextName,
   NotLoaded,
-  NotReady,
   getField,
   isField,
   primitive,
@@ -95,7 +93,7 @@ export type FieldType = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
 type Setter = (value: any) => void;
 
 interface Options {
-  computeVia?: string | (() => unknown);
+  computeVia?: () => unknown;
   description?: string;
   // there exists cards that we only ever run in the host without
   // the isolated renderer (RoomField), which means that we cannot
@@ -136,27 +134,6 @@ function isNotLoadedValue(val: any): val is NotLoadedValue {
     return false;
   }
   return type === 'not-loaded';
-}
-
-interface NotReadyValue {
-  type: 'not-ready';
-  instance: BaseDef;
-  fieldName: string;
-}
-
-function isNotReadyValue(value: any): value is NotReadyValue {
-  if (value && typeof value === 'object') {
-    return (
-      'type' in value &&
-      value.type === 'not-ready' &&
-      'instance' in value &&
-      isCardOrField(value.instance) &&
-      'fieldName' in value &&
-      typeof value.fieldName === 'string'
-    );
-  } else {
-    return false;
-  }
 }
 
 interface StaleValue {
@@ -293,7 +270,7 @@ export interface Field<
   card: CardT;
   name: string;
   fieldType: FieldType;
-  computeVia: undefined | string | (() => unknown);
+  computeVia: undefined | (() => unknown);
   description: undefined | string;
   // there exists cards that we only ever run in the host without
   // the isolated renderer (RoomField), which means that we cannot
@@ -393,19 +370,9 @@ function getter<CardT extends BaseDefConstructor>(
     let value = deserialized.get(field.name);
     if (isStaleValue(value)) {
       value = value.staleValue;
-    } else if (
-      !deserialized.has(field.name) &&
-      typeof field.computeVia === 'function' &&
-      field.computeVia.constructor.name !== 'AsyncFunction'
-    ) {
+    } else if (!deserialized.has(field.name)) {
       value = field.computeVia.bind(instance)();
       deserialized.set(field.name, value);
-    } else if (
-      !deserialized.has(field.name) &&
-      (typeof field.computeVia === 'string' ||
-        typeof field.computeVia === 'function')
-    ) {
-      throw new NotReady(instance, field.name, field.computeVia);
     }
     return value;
   } else {
@@ -424,7 +391,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
   readonly fieldType = 'containsMany';
   constructor(
     private cardThunk: () => FieldT,
-    readonly computeVia: undefined | string | (() => unknown),
+    readonly computeVia: undefined | (() => unknown),
     readonly name: string,
     readonly description: string | undefined,
     readonly isUsed: undefined | true,
@@ -658,7 +625,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   readonly fieldType = 'contains';
   constructor(
     private cardThunk: () => CardT,
-    readonly computeVia: undefined | string | (() => unknown),
+    readonly computeVia: undefined | (() => unknown),
     readonly name: string,
     readonly description: string | undefined,
     readonly isUsed: undefined | true,
@@ -804,7 +771,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   readonly fieldType = 'linksTo';
   constructor(
     private cardThunk: () => CardT,
-    readonly computeVia: undefined | string | (() => unknown),
+    readonly computeVia: undefined | (() => unknown),
     readonly name: string,
     readonly description: string | undefined,
     readonly isUsed: undefined | true,
@@ -1121,7 +1088,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
   readonly fieldType = 'linksToMany';
   constructor(
     private cardThunk: () => FieldT,
-    readonly computeVia: undefined | string | (() => unknown),
+    readonly computeVia: undefined | (() => unknown),
     readonly name: string,
     readonly description: string | undefined,
     readonly isUsed: undefined | true,
@@ -2986,7 +2953,7 @@ export async function recompute(
           undefined,
           opts,
         );
-        if (!isNotReadyValue(value) && !isStaleValue(value)) {
+        if (!isStaleValue(value)) {
           pendingFields.delete(fieldName);
           if (recomputePromises.get(card) !== recomputePromise) {
             return;
@@ -3021,7 +2988,7 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
   fieldName: K,
   compute: () => T[K] | Promise<T[K]> = () => instance[fieldName],
   opts?: RecomputeOptions,
-): Promise<T[K] | T[K][] | NotReadyValue | StaleValue | undefined> {
+): Promise<T[K] | T[K][] | StaleValue | undefined> {
   let result: T[K] | T[K][] | undefined;
   let deserialized = getDataBucket(instance);
   let maybeStale = deserialized.get(fieldName as string);
@@ -3045,11 +3012,8 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
         }`,
       );
     }
-    let computeVia = _computeVia as (() => T[K] | Promise<T[K]>) | string;
-    compute =
-      typeof computeVia === 'function'
-        ? computeVia.bind(instance)
-        : () => (instance as any)[computeVia as string]();
+    let computeVia = _computeVia as () => T[K] | Promise<T[K]>;
+    compute = computeVia.bind(instance);
   }
   try {
     //To avoid race conditions,
@@ -3069,14 +3033,6 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
         | T[K]
         | T[K][]
         | undefined;
-    } else if (isNotReadyError(e)) {
-      let { instance: depModel, computeVia, fieldName: depField } = e;
-      let nestedCompute =
-        typeof computeVia === 'function'
-          ? computeVia.bind(depModel)
-          : () => depModel[computeVia as string]();
-      await getIfReady(depModel, depField, nestedCompute, opts);
-      return { type: 'not-ready', instance, fieldName: fieldName as string };
     } else {
       throw e;
     }
