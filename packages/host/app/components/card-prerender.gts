@@ -152,7 +152,9 @@ export default class CardPrerender extends Component {
     function readFileAsText(
       path: LocalPath,
       opts?: { withFallbacks?: true },
-    ): Promise<{ content: string; lastModified: number } | undefined> {
+    ): Promise<
+      { content: string; lastModified: number; path: string } | undefined
+    > {
       return _readFileAsText(
         path,
         self.localIndexer.adapter.openFile.bind(self.localIndexer.adapter),

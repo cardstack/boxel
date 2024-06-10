@@ -55,7 +55,9 @@ export async function readFileAsText(
   path: LocalPath,
   openFile: (path: string) => Promise<FileRef | undefined>,
   opts: { withFallbacks?: true } = {},
-): Promise<{ content: string; lastModified: number } | undefined> {
+): Promise<
+  { content: string; lastModified: number; path: string } | undefined
+> {
   let ref: FileRef | undefined;
   if (opts.withFallbacks) {
     ref = await getFileWithFallbacks(path, openFile, executableExtensions);
@@ -68,6 +70,7 @@ export async function readFileAsText(
   return {
     content: await fileContentToText(ref),
     lastModified: ref.lastModified,
+    path: ref.path,
   };
 }
 // we bother with this because typescript is picky about allowing you to use
@@ -80,6 +83,10 @@ export async function getFileWithFallbacks(
   let result = await openFile(path);
   if (result) {
     return result;
+  }
+  // if there is already an extension on the path, don't try fallbacks
+  if (path.split('/').pop()!.includes('.')) {
+    return undefined;
   }
 
   for (let extension of fallbackExtensions) {

@@ -43,26 +43,7 @@ import {
   writeToStream,
   waitForClose,
 } from './stream';
-import { preprocessEmbeddedTemplates } from '@cardstack/ember-template-imports/lib/preprocess-embedded-templates';
-import * as babel from '@babel/core';
-//@ts-ignore type import requires a newer Typescript with node16 moduleResolution
-import makeEmberTemplatePlugin from 'babel-plugin-ember-template-compilation/browser';
-import type { Options as EmberTemplatePluginOptions } from 'babel-plugin-ember-template-compilation/src/plugin';
-import type { EmberTemplateCompiler } from 'babel-plugin-ember-template-compilation/src/ember-template-compiler';
-import type { ExtendedPluginBuilder } from 'babel-plugin-ember-template-compilation/src/js-utils';
-//@ts-ignore no types are available
-import * as etc from 'ember-source/dist/ember-template-compiler';
-import { loaderPlugin } from './loader-plugin';
-//@ts-ignore no types are available
-import glimmerTemplatePlugin from '@cardstack/ember-template-imports/src/babel-plugin';
-//@ts-ignore no types are available
-import decoratorsProposalPlugin from '@babel/plugin-proposal-decorators';
-//@ts-ignore no types are available
-import classPropertiesProposalPlugin from '@babel/plugin-proposal-class-properties';
-//@ts-ignore ironically no types are available
-import typescriptPlugin from '@babel/plugin-transform-typescript';
-//@ts-ignore no types are available
-import emberConcurrencyAsyncPlugin from 'ember-concurrency-async-plugin';
+import { transpileJS } from './transpile';
 import {
   AuthenticationError,
   AuthenticationErrorMessages,
@@ -80,7 +61,6 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
 import type { LoaderType } from 'https://cardstack.com/base/card-api';
-import scopedCSSTransform from 'glimmer-scoped-css/ast-transform';
 import { MatrixClient, waitForMatrixMessage } from './matrix-client';
 import { Sha256 } from '@aws-crypto/sha256-js';
 
@@ -1222,34 +1202,7 @@ export class Realm {
     if (cached) {
       return cached;
     }
-    content = preprocessEmbeddedTemplates(content, {
-      relativePath: debugFilename,
-      getTemplateLocals: etc._GlimmerSyntax.getTemplateLocals,
-      templateTag: 'template',
-      templateTagReplacement: '__GLIMMER_TEMPLATE',
-      includeSourceMaps: true,
-      includeTemplateTokens: true,
-    }).output;
-
-    let templateOptions: EmberTemplatePluginOptions = {
-      compiler: etc as unknown as EmberTemplateCompiler,
-      transforms: [scopedCSSTransform as ExtendedPluginBuilder],
-    };
-
-    let src = babel.transformSync(content, {
-      filename: debugFilename,
-      compact: false, // this helps for readability when debugging
-      plugins: [
-        glimmerTemplatePlugin,
-        emberConcurrencyAsyncPlugin,
-        [typescriptPlugin, { allowDeclareFields: true }],
-        [decoratorsProposalPlugin, { legacy: true }],
-        classPropertiesProposalPlugin,
-        [makeEmberTemplatePlugin, templateOptions],
-        loaderPlugin,
-      ],
-      highlightCode: false, // Do not output ANSI color codes in error messages so that the client can display them plainly
-    })?.code;
+    let src = transpileJS(content, debugFilename);
     if (!src) {
       throw new Error('bug: should never get here');
     }
