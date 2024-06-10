@@ -4,12 +4,7 @@ import { AddressInfo } from './address-info';
 import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
-import {
-  FieldContainer,
-  CardContainer,
-  IconButton,
-} from '@cardstack/boxel-ui/components';
-import { Sparkle } from '@cardstack/boxel-ui/icons';
+import { FieldContainer, CardContainer } from '@cardstack/boxel-ui/components';
 
 class Isolated extends Component<typeof ContactForm> {
   get hasTitleField() {
@@ -19,21 +14,12 @@ class Isolated extends Component<typeof ContactForm> {
   <template>
     <div class='decorative-header'></div>
 
-    <CardContainer @displayBoundaries={{false}} class='card-container'>
+    <CardContainer @displayBoundaries={{false}} class='container'>
       {{#if this.hasTitleField}}
         <h2><@fields.title /></h2>
       {{/if}}
 
       <div class='card-form-display'>
-        <IconButton
-          @icon={{Sparkle}}
-          @width='22px'
-          @height='22px'
-          @variant='undefined'
-          class='icon-profile'
-          aria-label='Profile'
-        />
-
         <div class='contact-form-details'>
 
           <div class='field-input'>
@@ -77,18 +63,16 @@ class Isolated extends Component<typeof ContactForm> {
         font-size: 2.2rem;
         margin: 0;
       }
-      .card-container {
+      .container {
         width: 100%;
         padding: 1rem;
         display: grid;
         margin: auto;
         gap: var(--boxel-sp-lg);
       }
-
       .card-form-display {
         position: relative;
       }
-
       .icon-profile {
         position: absolute;
         top: 1px;
@@ -96,7 +80,6 @@ class Isolated extends Component<typeof ContactForm> {
         width: 50px;
         height: 50px;
       }
-
       .contact-form-details {
         border: 1px solid var(--boxel-300);
         border-radius: var(--boxel-border-radius-xl);
@@ -118,11 +101,9 @@ class Isolated extends Component<typeof ContactForm> {
         flex-wrap: wrap;
         min-width: 280px;
       }
-
       .field-input > label {
         font-weight: 700;
       }
-
       .decorative-header {
         background-image: url(https://i.imgur.com/PQuDAEo.jpg);
         height: var(--boxel-sp-xl);
@@ -135,12 +116,10 @@ class Isolated extends Component<typeof ContactForm> {
         margin: 0px;
         text-align: center;
       }
-
       @media (min-width: 767px) {
         .contact-form-details {
           gap: var(--boxel-sp-lg);
         }
-
         .field-input {
           display: flex;
           gap: var(--boxel-sp);
@@ -155,15 +134,7 @@ class Isolated extends Component<typeof ContactForm> {
 
 class View extends Component<typeof ContactForm> {
   <template>
-    <CardContainer @displayBoundaries={{true}} class='card-container'>
-      <IconButton
-        @icon={{Sparkle}}
-        @width='22px'
-        @height='22px'
-        @variant='undefined'
-        class='icon-profile'
-        aria-label='Profile'
-      />
+    <CardContainer @displayBoundaries={{true}} class='container'>
       <div class='content'>
         <label>User</label>
         <h2><@fields.name /></h2>
@@ -171,7 +142,7 @@ class View extends Component<typeof ContactForm> {
     </CardContainer>
 
     <style>
-      .card-container {
+      .container {
         padding: var(--boxel-sp-lg);
         display: grid;
         gap: var(--boxel-sp);
@@ -196,7 +167,7 @@ class View extends Component<typeof ContactForm> {
 
 class Edit extends Component<typeof ContactForm> {
   <template>
-    <CardContainer @displayBoundaries={{true}} class='card-container'>
+    <CardContainer @displayBoundaries={{true}} class='container'>
       <FieldContainer
         @tag='label'
         @label='Title'
@@ -207,7 +178,9 @@ class Edit extends Component<typeof ContactForm> {
         <@fields.name />
       </FieldContainer>
 
-      <@fields.email />
+      <FieldContainer @tag='label' @label='Email' @vertical={{true}}>
+        <@fields.email />
+      </FieldContainer>
 
       <FieldContainer @tag='label' @label='Phone' @vertical={{true}}>
         <@fields.phone />
@@ -228,7 +201,7 @@ class Edit extends Component<typeof ContactForm> {
     </CardContainer>
 
     <style>
-      .card-container {
+      .container {
         padding: var(--boxel-sp-lg);
         display: grid;
         gap: var(--boxel-sp);
@@ -241,26 +214,21 @@ export class ContactForm extends CardDef {
   @field title = contains(StringField, {
     description: `Contact Form Title`,
   });
-
   @field name = contains(UserName, {
     description: `User's Full Name`,
   });
-
   @field email = contains(UserEmail, {
     description: `User's Email`,
   });
-
   @field phone = contains(StringField, {
     description: `User's phone number`,
   });
-
   @field fax = contains(StringField, {
     description: `User's Fax Number`,
   });
   @field department = contains(StringField, {
     description: `User's Department`,
   });
-
   @field addressInfo = contains(AddressInfo, {
     description: `User's AddressInfo`,
   });

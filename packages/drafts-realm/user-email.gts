@@ -11,7 +11,7 @@ import {
   StringField,
 } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
-import { BoxelInput, FieldContainer } from '@cardstack/boxel-ui/components';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from '../base/text-input-validator';
 
 function isValidEmail(email: string): boolean {
@@ -74,24 +74,12 @@ class View extends Component<typeof UserEmail> {
 
 class Edit extends Component<typeof UserEmail> {
   <template>
-    <FieldContainer @tag='label' @label='Email' @vertical={{true}}>
-      <BoxelInput
-        @value={{this.textInputValidator.asString}}
-        @onInput={{this.textInputValidator.onInput}}
-        @errorMessage={{this.textInputValidator.errorMessage}}
-        @state={{if this.textInputValidator.isInvalid 'invalid' 'none'}}
-      />
-    </FieldContainer>
-
-    <style>
-      .card-container {
-        padding: 2rem 1rem;
-        display: grid;
-        gap: var(--boxel-sp-sm);
-        grid-template-columns: 1fr;
-        background-color: #eeeeee50;
-      }
-    </style>
+    <BoxelInput
+      @value={{this.textInputValidator.asString}}
+      @onInput={{this.textInputValidator.onInput}}
+      @errorMessage={{this.textInputValidator.errorMessage}}
+      @state={{if this.textInputValidator.isInvalid 'invalid' 'none'}}
+    />
   </template>
 
   textInputValidator: TextInputValidator<string> = new TextInputValidator(

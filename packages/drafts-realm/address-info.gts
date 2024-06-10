@@ -206,7 +206,6 @@ class Edit extends Component<typeof AddressInfo> {
 
   @action
   updateCity(type: CitySignature) {
-    console.log(type);
     this.selectedCityType = type;
     this.args.model.city = type.name;
   }
@@ -363,7 +362,6 @@ class Edit extends Component<typeof AddressInfo> {
         padding: 2rem 1rem;
         display: grid;
         gap: var(--boxel-sp-sm);
-        grid-template-columns: 1fr;
         background-color: #eeeeee50;
       }
       .select {
@@ -438,12 +436,6 @@ class Edit extends Component<typeof AddressInfo> {
       .option-item.selected,
       .option-item:hover {
         background-color: #e5e7eb;
-      }
-
-      @media (min-width: 768px) {
-        .card-container {
-          grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        }
       }
     </style>
   </template>
