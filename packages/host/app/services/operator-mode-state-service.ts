@@ -66,7 +66,7 @@ export type SerializedState = {
   fileView?: FileView;
   openDirs?: Record<string, string[]>;
   codeSelection?: string;
-  assistant: boolean;
+  assistant?: boolean;
 };
 
 interface OpenFileSubscriber {
