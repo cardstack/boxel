@@ -11,7 +11,6 @@ import { action } from '@ember/object';
 import {
   BoxelInput,
   BoxelSelect,
-  CardContainer,
   FieldContainer,
 } from '@cardstack/boxel-ui/components';
 
@@ -58,7 +57,7 @@ class EditSecForAmount extends Component<typeof CurrencyAmount> {
   }
 
   <template>
-    <CardContainer @displayBoundaries={{false}} class='container'>
+    <div class='container'>
       <div class='form-row-full'>
         <FieldContainer @tag='label' @vertical={{true}} class='left-input'>
           <BoxelSelect
@@ -82,25 +81,37 @@ class EditSecForAmount extends Component<typeof CurrencyAmount> {
         </FieldContainer>
       </div>
 
-    </CardContainer>
+    </div>
 
     <style>
+      .container {
+        container-type: inline-size;
+      }
       .form-row-full {
-        display: flex;
         width: 100%;
+        display: flex;
+        flex-wrap: wrap;
         gap: var(--boxel-sp-xs);
       }
       .left-input {
         display: inline-block;
         min-width: 100px;
+        flex: auto;
       }
       .right-input {
         display: inline-block;
         flex-grow: 1;
+        width: 100%;
       }
       .select {
         padding: var(--boxel-sp-xxs);
         background-color: white;
+      }
+
+      @container (min-width: 640px) {
+        .form-row-full {
+          flex-wrap: nowrap;
+        }
       }
     </style>
   </template>

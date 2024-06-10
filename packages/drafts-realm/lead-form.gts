@@ -1,10 +1,5 @@
 import MarkdownField from 'https://cardstack.com/base/markdown';
-import {
-  BaseDefComponent,
-  CardDef,
-  contains,
-  field,
-} from 'https://cardstack.com/base/card-api';
+import { CardDef, contains, field } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import { UserName } from './user-name';
@@ -160,54 +155,65 @@ class ViewSecForLeadForm extends Component<typeof LeadForm> {
       <section>
         <div class='field-group-title'>About</div>
         <div class='field-input-group'>
-          <label>Full Name</label>
-          <@fields.name @format='edit' />
-
-          <label>Company Name</label>
-          <@fields.company @format='edit' />
-
-          <label>Title</label>
-          <@fields.title @format='edit' />
-
-          <label>Website</label>
-          <@fields.website @format='edit' />
-
-          <label>Description</label>
-          <@fields.description @format='edit' />
-
-          <label>Lead Status</label>
-          <@fields.leadStatus @format='edit' />
+          <FieldContainer @tag='label' @label='User' @vertical={{true}}>
+            <@fields.name @format='edit' />
+          </FieldContainer>
+          <FieldContainer @tag='label' @label='Company' @vertical={{true}}>
+            <@fields.company @format='edit' />
+          </FieldContainer>
+          <FieldContainer @tag='label' @label='Title' @vertical={{true}}>
+            <@fields.title @format='edit' />
+          </FieldContainer>
+          <FieldContainer @tag='label' @label='Website' @vertical={{true}}>
+            <@fields.website @format='edit' />
+          </FieldContainer>
+          <FieldContainer @tag='label' @label='Description' @vertical={{true}}>
+            <@fields.description @format='edit' />
+          </FieldContainer>
+          <FieldContainer @tag='label' @label='Lead Status' @vertical={{true}}>
+            <@fields.leadStatus @format='edit' />
+          </FieldContainer>
         </div>
       </section>
 
       <section>
         <div class='field-group-title'>Get In Touch</div>
         <div class='field-input-group'>
-          <label>Phone</label>
-          <@fields.phone @format='edit' />
-
-          <label>Email</label>
-          <@fields.email @format='edit' />
-
-          <label>Address</label>
-          <@fields.addressInfo @format='edit' />
+          <FieldContainer @tag='label' @label='Phone' @vertical={{true}}>
+            <@fields.phone @format='edit' />
+          </FieldContainer>
+          <FieldContainer @tag='label' @label='Email' @vertical={{true}}>
+            <@fields.email @format='edit' />
+          </FieldContainer>
+          <FieldContainer @tag='label' @label='Address' @vertical={{true}}>
+            <@fields.addressInfo @format='edit' />
+          </FieldContainer>
         </div>
       </section>
 
       <section>
         <div class='field-group-title'>Segment</div>
         <div class='field-input-group'>
-          <label>No. of Employees</label>
-          <@fields.noOfEmployees @format='edit' />
-
-          <label>Annual Revenue</label>
-          <@fields.annualRevenue @format='edit' />
-
-          <label>Lead Source</label>
-          <@fields.leadSource @format='edit' />
-
-          <label>Industry</label>
-          <@fields.industry @format='edit' />
+          <FieldContainer
+            @tag='label'
+            @label='No. of Employees'
+            @vertical={{true}}
+          >
+            <@fields.noOfEmployees @format='edit' />
+          </FieldContainer>
+          <FieldContainer
+            @tag='label'
+            @label='Annual Revenue'
+            @vertical={{true}}
+          >
+            <@fields.annualRevenue @format='edit' />
+          </FieldContainer>
+          <FieldContainer @tag='label' @label='Lead Source' @vertical={{true}}>
+            <@fields.leadSource @format='edit' />
+          </FieldContainer>
+          <FieldContainer @tag='label' @label='Industry' @vertical={{true}}>
+            <@fields.industry @format='edit' />
+          </FieldContainer>
         </div>
       </section>
     </div>
@@ -235,9 +241,6 @@ class ViewSecForLeadForm extends Component<typeof LeadForm> {
         border: 1px solid var(--boxel-300);
         border-radius: var(--boxel-border-radius);
         padding: var(--boxel-sp);
-      }
-      label {
-        font-weight: 700;
       }
     </style>
   </template>
