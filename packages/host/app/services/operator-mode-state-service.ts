@@ -439,7 +439,7 @@ export default class OperatorModeStateService extends Service {
       fileView: rawState.fileView ?? 'inspector',
       openDirs,
       codeSelection: rawState.codeSelection,
-      assistant: rawState.assistant,
+      assistant: rawState.assistant ?? false,
     });
 
     let stackIndex = 0;
