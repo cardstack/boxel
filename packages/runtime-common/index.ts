@@ -49,6 +49,7 @@ export * from './db';
 export * from './worker';
 export * from './stream';
 export * from './realm';
+export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
 export { RealmPaths, Loader, type LocalPath, type Query };
 export { NotLoaded, isNotLoadedError } from './not-loaded';
@@ -58,6 +59,8 @@ export { maybeRelativeURL, maybeURL, relativeURL } from './url';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';
+
+export * from './realm-permission-queries';
 
 // From https://github.com/iliakan/detect-node
 export const isNode =
