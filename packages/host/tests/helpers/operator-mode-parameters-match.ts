@@ -37,12 +37,10 @@ export default function (assert: Assert) {
           operatorModeStateString,
         ) as Partial<SerializedState>;
 
-        let actualStateExpectedSubset = Object.keys(operatorModeState).reduce(
-          (subset, key) => {
-            subset[key] = actualOperatorModeState[key];
-            return subset;
-          },
+        let actualStateExpectedSubset = copyPropertyValues(
+          actualOperatorModeState,
           {} as Partial<SerializedState>,
+          Object.keys(operatorModeState) as (keyof SerializedState)[],
         );
 
         assert.deepEqual(
@@ -62,6 +60,16 @@ export default function (assert: Assert) {
       }
     }
   };
+}
+
+// Copied from https://stackoverflow.com/a/69995318
+function copyPropertyValues<T, K extends keyof T>(
+  s: Pick<T, K>,
+  d: T,
+  ks: K[],
+) {
+  ks.forEach((k) => (d[k] = s[k]));
+  return d;
 }
 
 declare global {
