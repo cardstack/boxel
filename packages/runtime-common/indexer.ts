@@ -92,6 +92,7 @@ interface IndexedModule {
 export interface IndexedInstance {
   type: 'instance';
   instance: CardResource;
+  source: string;
   isolatedHtml: string | null;
   searchDoc: Record<string, any> | null;
   types: string[] | null;
@@ -99,7 +100,6 @@ export interface IndexedInstance {
   realmVersion: number;
   realmURL: string;
   indexedAt: number | null;
-  // TODO source (cs-6897)
 }
 interface IndexedError {
   type: 'error';
@@ -238,14 +238,15 @@ export class Indexer {
       realm_version: realmVersion,
       realm_url: realmURL,
       indexed_at: indexedAt,
+      source,
       types,
       deps,
     } = maybeResult;
-    if (!instance) {
+    if (!instance || !source) {
       throw new Error(
         `bug: index entry for ${href} with opts: ${JSON.stringify(
           opts,
-        )} has neither an error_doc nor a pristine_doc`,
+        )} has neither an error_doc nor a pristine_doc/source`,
       );
     }
     return {
@@ -256,6 +257,7 @@ export class Indexer {
       searchDoc,
       types,
       indexedAt,
+      source,
       deps,
       realmVersion,
     };
