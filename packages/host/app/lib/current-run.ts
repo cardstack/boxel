@@ -261,7 +261,7 @@ export class CurrentRun {
       return;
     }
     let start = Date.now();
-    log.debug(`begin visiting file ${url.href}`);
+    log.info(`begin visiting file ${url.href}`);
     let localPath = this.#realmPaths.local(url);
 
     let fileRef = await this.#reader.readFileAsText(localPath);
@@ -303,7 +303,7 @@ export class CurrentRun {
         }
       }
     }
-    log.debug(`completed visiting file ${url.href} in ${Date.now() - start}ms`);
+    log.info(`completed visiting file ${url.href} in ${Date.now() - start}ms`);
   }
 
   private async indexModule(url: URL, source: string): Promise<void> {
