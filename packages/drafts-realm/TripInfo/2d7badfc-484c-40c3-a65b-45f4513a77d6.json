@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "traveler": {
+        "name": "Marcelius Wilde"
+      },
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "destinations.0": {
+        "links": {
+          "self": "../Country/2"
+        }
+      },
+      "traveler.countryOfOrigin": {
+        "links": {
+          "self": "http://localhost:4201/drafts/Country/1"
+        }
+      },
+      "traveler.countriesVisited.0": {
+        "links": {
+          "self": "http://localhost:4201/drafts/Country/4"
+        }
+      },
+      "startLocation": {
+        "links": {
+          "self": "../Country/3"
+        }
+      },
+      "endLocation": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../trip-info",
+        "name": "TripInfo"
+      }
+    }
+  }
+}

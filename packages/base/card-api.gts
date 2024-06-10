@@ -531,7 +531,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     doc: CardDocument,
     relationships: JSONAPIResource['relationships'] | undefined,
     fieldMeta: CardFields[string] | undefined,
-    _identityContext: undefined,
+    identityContext: IdentityContext,
     instancePromise: Promise<BaseDef>,
     _loadedValue: any,
     relativeTo: URL | undefined,
@@ -565,7 +565,12 @@ class ContainsMany<FieldT extends FieldDefConstructor>
       await Promise.all(
         value.map(async (entry, index) => {
           if (primitive in this.card) {
-            return this.card[deserialize](entry, relativeTo, doc);
+            return this.card[deserialize](
+              entry,
+              relativeTo,
+              doc,
+              identityContext,
+            );
           } else {
             let meta = metas[index];
             let resource: LooseCardResource = {
@@ -591,7 +596,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
             }
             return (
               await cardClassFromResource(resource, this.card, relativeTo)
-            )[deserialize](resource, relativeTo, doc);
+            )[deserialize](resource, relativeTo, doc, identityContext);
           }
         }),
       ),
@@ -726,13 +731,13 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     doc: CardDocument,
     relationships: JSONAPIResource['relationships'] | undefined,
     fieldMeta: CardFields[string] | undefined,
-    _identityContext: undefined,
+    identityContext: IdentityContext,
     _instancePromise: Promise<BaseDef>,
     _loadedValue: any,
     relativeTo: URL | undefined,
   ): Promise<BaseInstanceType<CardT>> {
     if (primitive in this.card) {
-      return this.card[deserialize](value, relativeTo, doc);
+      return this.card[deserialize](value, relativeTo, doc, identityContext);
     }
     if (fieldMeta && Array.isArray(fieldMeta)) {
       throw new Error(
@@ -760,7 +765,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     }
     return (await cardClassFromResource(resource, this.card, relativeTo))[
       deserialize
-    ](resource, relativeTo, doc);
+    ](resource, relativeTo, doc, identityContext);
   }
 
   emptyValue(_instance: BaseDef) {
@@ -928,7 +933,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         }' cannot deserialize non-relationship value ${JSON.stringify(value)}`,
       );
     }
-    if (value?.links?.self == null) {
+    if (value?.links?.self == null || value.links.self === '') {
       return null;
     }
     let loader = Loader.getLoaderFor(this.card)!;
@@ -2549,11 +2554,51 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   );
 }
 
+// Crawls all fields for cards and populates the identityContext
+function buildIdentityContext(
+  instance: CardDef | FieldDef,
+  identityContext: IdentityContext = new IdentityContext(),
+  visited: WeakSet<CardDef | FieldDef> = new WeakSet(),
+) {
+  if (instance == null || visited.has(instance)) {
+    return identityContext;
+  }
+  visited.add(instance);
+  let fields = getFields(instance);
+  for (let fieldName of Object.keys(fields)) {
+    let value = peekAtField(instance, fieldName);
+    if (value == null) {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      for (let item of value) {
+        if (value == null) {
+          continue;
+        }
+        if (isCard(item)) {
+          identityContext.identities.set(item.id, item);
+        }
+        if (isCardOrField(item)) {
+          buildIdentityContext(item, identityContext, visited);
+        }
+      }
+    } else {
+      if (isCard(value) && value.id) {
+        identityContext.identities.set(value.id, value);
+      }
+      if (isCardOrField(value)) {
+        buildIdentityContext(value, identityContext, visited);
+      }
+    }
+  }
+  return identityContext;
+}
+
 export async function updateFromSerialized<T extends BaseDefConstructor>(
   instance: BaseInstanceType<T>,
   doc: LooseSingleCardDocument,
 ): Promise<BaseInstanceType<T>> {
-  let identityContext = new IdentityContext();
+  let identityContext = buildIdentityContext(instance);
   identityContexts.set(instance, identityContext);
   if (!instance[relativeTo] && doc.data.id) {
     instance[relativeTo] = new URL(doc.data.id);

@@ -19,14 +19,14 @@ export type ObjectSchema = {
   };
 };
 
-export type RelationshipSchema = {
+type LinksToSchema = {
   type: 'object';
   description?: string;
   properties: {
     links: {
       type: 'object';
       properties: {
-        self: { type: 'null' | 'string' };
+        self: { type: 'string' | 'null' };
       };
       required: ['self'];
     };
@@ -34,11 +34,19 @@ export type RelationshipSchema = {
   required: ['links'];
 };
 
+type LinksToManySchema = {
+  type: 'array';
+  description?: string;
+  items: LinksToSchema;
+};
+
+export type RelationshipSchema = LinksToSchema | LinksToManySchema;
+
 export type RelationshipsSchema = {
   type: 'object';
   description?: string;
   properties: {
-    [fieldName: string]: RelationshipSchema;
+    [fieldName: string]: LinksToSchema | LinksToManySchema;
   };
   required: string[]; // fieldName array;
 };
@@ -172,8 +180,7 @@ function generatePatchCallSpecification(
   def: typeof CardAPI.BaseDef,
   cardApi: typeof CardAPI,
   mappings: Map<typeof CardAPI.FieldDef, Schema>,
-  relationshipsOnly = false,
-): Schema | RelationshipsSchema | undefined {
+): Schema | undefined {
   // If we're looking at a primitive field we can get the schema
   if (primitive in def) {
     return getPrimitiveType(def, mappings);
@@ -181,19 +188,10 @@ function generatePatchCallSpecification(
 
   // If it's not a primitive, it contains other fields
   // and should be represented by an object
-  let schema: ObjectSchema | RelationshipsSchema;
-  if (relationshipsOnly) {
-    schema = {
-      type: 'object',
-      properties: {},
-      required: [],
-    };
-  } else {
-    schema = {
-      type: 'object',
-      properties: {},
-    };
-  }
+  let schema: ObjectSchema = {
+    type: 'object',
+    properties: {},
+  };
 
   const { id: _removedIdField, ...fields } = cardApi.getFields(def, {
     usedFieldsOnly: false,
@@ -201,58 +199,83 @@ function generatePatchCallSpecification(
 
   for (let [fieldName, field] of Object.entries(fields)) {
     // We're generating patch data, so computeds should be skipped
-    // Currently also skipping linksToMany fields
+    // We'll be handling relationships separately in `generatePatchCallRelationshipsSpecification`
     if (
       field.computeVia ||
       field.fieldType == 'linksTo' ||
       field.fieldType == 'linksToMany'
     ) {
-      if (relationshipsOnly && field.fieldType == 'linksTo') {
-        (schema as RelationshipsSchema).required.push(fieldName);
-        schema.properties[fieldName] = {
-          type: 'object',
-          properties: {
-            links: {
-              type: 'object',
-              properties: {
-                self: { type: 'null' || 'string' },
-              },
-              required: ['self'],
-            },
-          },
-          required: ['links'],
-        };
-        if (field.description) {
-          schema.properties[fieldName].description = field.description;
-        }
-      } else {
-        continue;
-      }
+      continue;
     }
 
-    if (!relationshipsOnly) {
-      let fieldSchemaForSingleItem = generatePatchCallSpecification(
-        field.card,
-        cardApi,
-        mappings,
-      ) as Schema | undefined;
-      // This happens when we have no known schema for the field type
-      if (fieldSchemaForSingleItem == undefined) {
-        continue;
-      }
+    let fieldSchemaForSingleItem = generatePatchCallSpecification(
+      field.card,
+      cardApi,
+      mappings,
+    ) as Schema | undefined;
+    // This happens when we have no known schema for the field type
+    if (fieldSchemaForSingleItem == undefined) {
+      continue;
+    }
 
-      if (field.fieldType == 'containsMany') {
-        schema.properties[fieldName] = {
-          type: 'array',
-          items: fieldSchemaForSingleItem,
-        };
-      } else if (field.fieldType == 'contains') {
-        schema.properties[fieldName] = fieldSchemaForSingleItem;
-      }
+    if (field.fieldType == 'containsMany') {
+      schema.properties[fieldName] = {
+        type: 'array',
+        items: fieldSchemaForSingleItem,
+      };
+    } else if (field.fieldType == 'contains') {
+      schema.properties[fieldName] = fieldSchemaForSingleItem;
+    }
 
-      if (field.description) {
-        schema.properties[fieldName].description = field.description;
-      }
+    if (field.description) {
+      schema.properties[fieldName].description = field.description;
+    }
+  }
+  return schema;
+}
+
+function generatePatchCallRelationshipsSpecification(
+  def: typeof CardAPI.BaseDef,
+  cardApi: typeof CardAPI,
+): RelationshipsSchema | undefined {
+  const { id: _removedIdField, ...fields } = cardApi.getFields(def, {
+    usedFieldsOnly: false,
+  });
+  let schema: RelationshipsSchema | undefined;
+  for (let [fieldName, field] of Object.entries(fields)) {
+    if (field.fieldType !== 'linksTo' && field.fieldType !== 'linksToMany') {
+      continue;
+    }
+    if (!schema) {
+      schema = {
+        type: 'object',
+        properties: {},
+        required: [],
+      };
+    }
+    let linkedItemSchema: LinksToSchema = {
+      type: 'object',
+      properties: {
+        links: {
+          type: 'object',
+          properties: {
+            self: { type: 'string' },
+          },
+          required: ['self'],
+        },
+      },
+      required: ['links'],
+    };
+    schema.required.push(fieldName);
+    schema.properties[fieldName] =
+      field.fieldType === 'linksTo'
+        ? linkedItemSchema
+        : {
+            type: 'array',
+            items: linkedItemSchema,
+          };
+    if (field.description) {
+      schema.properties[fieldName].description = field.description;
     }
   }
   return schema;
@@ -288,11 +311,9 @@ export function generateCardPatchCallSpecification(
       },
     };
   } else {
-    let relationships = generatePatchCallSpecification(
+    let relationships = generatePatchCallRelationshipsSpecification(
       def,
       cardApi,
-      mappings,
-      true,
     );
     if (
       !relationships ||

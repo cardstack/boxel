@@ -26,6 +26,7 @@ import {
   type IndexRunner,
   type IndexResults,
   assetsDir,
+  insertPermissions,
 } from '@cardstack/runtime-common';
 
 import {
@@ -540,13 +541,13 @@ async function setupTestRealm({
   };
 
   let dbAdapter = await getDbAdapter();
+  await insertPermissions(dbAdapter, new URL(realmURL), permissions);
   realm = new Realm({
     url: realmURL,
     adapter,
     getIndexHTML: async () =>
       `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
     matrix: testMatrix,
-    permissions,
     realmSecretSeed: testRealmSecretSeed,
     virtualNetwork,
     dbAdapter,

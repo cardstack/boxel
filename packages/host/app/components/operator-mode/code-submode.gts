@@ -975,7 +975,7 @@ export default class CodeSubmode extends Component<Signature> {
         height: 100%;
       }
 
-      .recent-files {
+      .inner-container.recent-files {
         background-color: var(--boxel-200);
       }
 
