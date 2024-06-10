@@ -1147,7 +1147,7 @@ module('Integration | operator-mode', function (hooks) {
       await waitUntil(
         () =>
           document.querySelectorAll('[data-test-embedded-card-options-button]')
-            .length === 2,
+            .length === 3,
       );
       await percySnapshot(
         'Integration | operator-mode > matrix | it only applies changes from the chat if the stack contains a card with that ID | error fixed',
