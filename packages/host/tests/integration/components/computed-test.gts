@@ -74,26 +74,6 @@ module('Integration | computeds', function (hooks) {
     assert.strictEqual(root.textContent!.trim(), 'Mango Abdel-Rahman');
   });
 
-  test('can render a synchronous computed field (using a string in `computeVia`)', async function (assert) {
-    class Person extends CardDef {
-      @field firstName = contains(StringField);
-      @field lastName = contains(StringField);
-      @field fullName = contains(StringField, { computeVia: 'getFullName' });
-      getFullName() {
-        return `${this.firstName} ${this.lastName}`;
-      }
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <@fields.fullName />
-        </template>
-      };
-    }
-
-    let mango = new Person({ firstName: 'Mango', lastName: 'Abdel-Rahman' });
-    let root = await renderCard(loader, mango, 'isolated');
-    assert.strictEqual(root.textContent!.trim(), 'Mango Abdel-Rahman');
-  });
-
   test('can render a computed that consumes a nested property', async function (assert) {
     class Person extends FieldDef {
       @field firstName = contains(StringField);
@@ -435,12 +415,11 @@ module('Integration | computeds', function (hooks) {
       @field author = linksTo(Person);
       @field factCheckers = linksToMany(Pet);
       @field collaborators = linksToMany(Pet, {
-        computeVia: 'findCollaborators',
+        computeVia(this: Post) {
+          let mango = this.author.pets.find((p) => p.name === 'Mango');
+          return [mango, ...this.factCheckers];
+        },
       });
-      findCollaborators(this: Post) {
-        let mango = this.author.pets.find((p) => p.name === 'Mango');
-        return [mango, ...this.factCheckers];
-      }
     }
 
     let p1 = new Pet({ id: `${testRealmURL}mango`, name: 'Mango' });

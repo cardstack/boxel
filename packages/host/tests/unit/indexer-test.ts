@@ -59,15 +59,35 @@ module('Unit | indexer', function (hooks) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
 
-  test('can get work in progress index entry', async function (assert) {
+  test('can get work in progress card', async function (assert) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
 
-  test('returns undefined when getting a deleted entry', async function (assert) {
+  test('returns undefined when getting a deleted card', async function (assert) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
 
   test('can perform invalidations for an instance with deps more than a thousand', async function (assert) {
+    await runSharedTest(indexerTests, assert, { indexer, adapter });
+  });
+
+  test('can get compiled module and source when requested with file extension', async function (assert) {
+    await runSharedTest(indexerTests, assert, { indexer, adapter });
+  });
+
+  test('can get compiled module and source when requested without file extension', async function (assert) {
+    await runSharedTest(indexerTests, assert, { indexer, adapter });
+  });
+
+  test('can get compiled module and source from WIP index', async function (assert) {
+    await runSharedTest(indexerTests, assert, { indexer, adapter });
+  });
+
+  test('can get error doc for module', async function (assert) {
+    await runSharedTest(indexerTests, assert, { indexer, adapter });
+  });
+
+  test('returns undefined when getting a deleted module', async function (assert) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
 
