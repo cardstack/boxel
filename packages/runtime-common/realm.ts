@@ -902,7 +902,7 @@ export class Realm {
       ) {
         if (fileRef[Symbol.for('shimmed-module')]) {
           // this response is ultimately thrown away and only the symbol value
-          // is preserved so what is inside this response is not important
+          // is preserved. so what is inside this response is not important
           let response = createResponse({ requestContext });
           (response as any)[Symbol.for('shimmed-module')] =
             fileRef[Symbol.for('shimmed-module')];
