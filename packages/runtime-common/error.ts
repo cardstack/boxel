@@ -85,14 +85,8 @@ export class CardError extends Error implements SerializedError {
       } catch (err) {
         /* it's ok if we can't parse it*/
       }
-      if (
-        maybeErrorJSON &&
-        typeof maybeErrorJSON === 'object' &&
-        'errors' in maybeErrorJSON &&
-        Array.isArray(maybeErrorJSON.errors) &&
-        maybeErrorJSON.errors.length > 0
-      ) {
-        return CardError.fromSerializableError(maybeErrorJSON.errors[0]);
+      if (maybeErrorJSON && typeof maybeErrorJSON === 'object') {
+        return CardError.fromSerializableError(maybeErrorJSON);
       }
       return new CardError(
         `unable to fetch ${url}${!maybeErrorJSON ? ': ' + text : ''}`,

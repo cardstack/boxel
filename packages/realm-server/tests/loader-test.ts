@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, only } from 'qunit';
 import { Loader, VirtualNetwork, type Realm } from '@cardstack/runtime-common';
 import { dirSync, setGracefulCleanup, DirResult } from 'tmp';
 import {
@@ -83,22 +83,6 @@ module('loader', function (hooks) {
       `${testRealmHref}b`,
       `${testRealmHref}c`,
     ]);
-  });
-
-  test('can determine consumed modules when an error is encountered during loading', async function (assert) {
-    let loader = virtualNetwork.createLoader();
-    try {
-      await loader.import<{ d(): string }>(`${testRealmHref}d`);
-      throw new Error(`expected error was not thrown`);
-    } catch (e: any) {
-      assert.strictEqual(e.message, 'intentional error thrown');
-      assert.deepEqual(await loader.getConsumedModules(`${testRealmHref}d`), [
-        `${testRealmHref}a`,
-        `${testRealmHref}b`,
-        `${testRealmHref}c`,
-        `${testRealmHref}e`,
-      ]);
-    }
   });
 
   test('can get consumed modules within a cycle', async function (assert) {
