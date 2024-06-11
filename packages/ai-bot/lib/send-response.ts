@@ -1,6 +1,12 @@
 import { cleanContent } from '../helpers';
 import { logger } from '@cardstack/runtime-common';
-import { MatrixClient, sendError, sendMessage, sendOption } from './matrix';
+import {
+  MatrixClient,
+  sendError,
+  sendMessage,
+  sendOption,
+  type FunctionToolCall,
+} from './matrix';
 
 import * as Sentry from '@sentry/node';
 import { OpenAIError } from 'openai/error';
@@ -81,38 +87,47 @@ export class Responder {
 
   async onMessage(msg: {
     role: string;
-    tool_calls?: { function: { name: string; arguments: string } }[];
+    tool_calls?: { function: FunctionToolCall }[];
   }) {
     if (msg.role === 'assistant') {
-      for (const toolCall of msg.tool_calls || []) {
-        const functionCall = toolCall.function;
-        log.debug('[Room Timeline] Function call', toolCall);
-        let args;
-        try {
-          args = JSON.parse(functionCall.arguments);
-        } catch (error) {
-          Sentry.captureException(error);
-          this.initialMessageReplaced = true;
-          let errorPromise = sendError(
-            this.client,
-            this.roomId,
-            error,
-            this.initialMessageReplaced ? undefined : this.initialMessageId,
-          );
-          this.messagePromises.push(errorPromise);
-          await errorPromise;
-        }
-        if (functionCall.name === 'patchCard') {
+      await this.handleFunctionToolCalls(msg);
+    }
+  }
+
+  async handleFunctionToolCalls(msg: {
+    role: string;
+    tool_calls?: { function: FunctionToolCall }[];
+  }) {
+    for (const toolCall of msg.tool_calls || []) {
+      const functionCall = toolCall.function;
+      log.debug('[Room Timeline] Function call', toolCall);
+      try {
+        functionCall.arguments = JSON.parse(functionCall.arguments);
+        if (
+          functionCall.name === 'patchCard' ||
+          functionCall.name === 'searchCard'
+        ) {
           let optionPromise = sendOption(
             this.client,
             this.roomId,
-            args,
+            functionCall,
             this.initialMessageReplaced ? undefined : this.initialMessageId,
           );
           this.messagePromises.push(optionPromise);
           await optionPromise;
           this.initialMessageReplaced = true;
         }
+      } catch (error) {
+        Sentry.captureException(error);
+        this.initialMessageReplaced = true;
+        let errorPromise = sendError(
+          this.client,
+          this.roomId,
+          error,
+          this.initialMessageReplaced ? undefined : this.initialMessageId,
+        );
+        this.messagePromises.push(errorPromise);
+        await errorPromise;
       }
     }
   }

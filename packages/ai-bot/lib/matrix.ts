@@ -67,42 +67,32 @@ export async function sendMessage(
   );
 }
 
+export interface FunctionToolCall {
+  name: 'searchCard' | 'patchCard';
+  arguments: any;
+}
+
 // TODO we might want to think about how to handle patches that are larger than
 // 65KB (the maximum matrix event size), such that we split them into fragments
 // like we split cards into fragments
 export async function sendOption(
   client: MatrixClient,
   roomId: string,
-  patch: any,
+  functionCall: FunctionToolCall,
   eventToUpdate: string | undefined,
 ) {
-  log.debug('sending option', patch);
-  const id = patch['card_id'];
-  const body = patch['description'] || "Here's the change:";
-  let messageObject = {
-    body: body,
-    msgtype: 'org.boxel.command',
-    formatted_body: body,
-    format: 'org.matrix.custom.html',
-    data: {
-      command: {
-        type: 'patchCard',
-        id: id,
-        patch: {
-          attributes: patch['attributes'],
-          relationships: patch['relationships'],
-        },
-        eventId: eventToUpdate,
-      },
-    },
-  };
-  return await sendEvent(
-    client,
-    roomId,
-    'm.room.message',
-    messageObject,
-    eventToUpdate,
-  );
+  let messageObject = toMatrixMessageContent(functionCall, eventToUpdate);
+
+  if (messageObject !== undefined) {
+    return await sendEvent(
+      client,
+      roomId,
+      'm.room.message',
+      messageObject,
+      eventToUpdate,
+    );
+  }
+  return;
 }
 
 export async function sendError(
@@ -131,6 +121,54 @@ export async function sendError(
     Sentry.captureException(e);
   }
 }
+
+export const toMatrixMessageContent = (
+  functionCall: FunctionToolCall,
+  eventToUpdate: string | undefined,
+): IContent | undefined => {
+  let { arguments: payload } = functionCall;
+  if (functionCall.name === 'patchCard') {
+    const id = payload['card_id'];
+    const body = payload['description'] || "Here's the change:";
+    let messageObject: IContent = {
+      body: body,
+      msgtype: 'org.boxel.command',
+      formatted_body: body,
+      format: 'org.matrix.custom.html',
+      data: {
+        command: {
+          type: functionCall.name,
+          id: id,
+          patch: {
+            attributes: payload['attributes'],
+            relationships: payload['relationships'],
+          },
+          eventId: eventToUpdate,
+          toolCall: functionCall,
+        },
+      },
+    };
+    return messageObject;
+  } else if (functionCall.name === 'searchCard') {
+    const body = payload['description'] || "Here's the query:";
+    let messageObject = {
+      body: body,
+      msgtype: 'org.boxel.command',
+      formatted_body: body,
+      format: 'org.matrix.custom.html',
+      data: {
+        command: {
+          type: functionCall.name,
+          search: { ...payload },
+          eventId: eventToUpdate,
+          toolCall: functionCall,
+        },
+      },
+    };
+    return messageObject;
+  }
+  return;
+};
 
 function getErrorMessage(error: any): string {
   if (error instanceof OpenAIError) {
