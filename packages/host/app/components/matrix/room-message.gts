@@ -12,7 +12,7 @@ import { modifier } from 'ember-modifier';
 import { trackedFunction } from 'ember-resources/util/function';
 
 import { Button } from '@cardstack/boxel-ui/components';
-import { bool, eq } from '@cardstack/boxel-ui/helpers';
+import { bool } from '@cardstack/boxel-ui/helpers';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
