@@ -144,6 +144,7 @@ export const toMatrixMessageContent = (
             relationships: payload['relationships'],
           },
           eventId: eventToUpdate,
+          toolCall: functionCall,
         },
       },
     };
@@ -160,6 +161,7 @@ export const toMatrixMessageContent = (
           type: functionCall.name,
           search: { ...payload },
           eventId: eventToUpdate,
+          toolCall: functionCall,
         },
       },
     };

@@ -402,7 +402,12 @@ export default class MatrixService extends Service {
     }
   }
 
-  async sendCommandResultMessage(roomId: string, eventId: string, result: any) {
+  async sendCommandResultMessage(
+    roomId: string,
+    eventId: string,
+    result: any,
+    toolCall: any,
+  ) {
     let body = `Command Results from command event ${eventId}`;
     let html = markdownToHtml(body);
     let content: CommandResultContent = {
@@ -415,6 +420,7 @@ export default class MatrixService extends Service {
       formatted_body: html,
       msgtype: 'org.boxel.commandResult',
       result,
+      toolCall,
     };
     try {
       return await this.sendEvent(roomId, 'm.room.message', content);

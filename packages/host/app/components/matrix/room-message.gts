@@ -334,7 +334,7 @@ export default class RoomMessage extends Component<Signature> {
   }
 
   private handleCommand = task(async () => {
-    let { eventId } = this.args.message.command;
+    let { eventId, payload } = this.args.message.command;
     try {
       let res: any;
       this.matrixService.failedCommandState.delete(eventId);
@@ -357,6 +357,7 @@ export default class RoomMessage extends Component<Signature> {
           this.args.roomId,
           eventId,
           res,
+          (payload as any).toolCall,
         );
       }
     } catch (e) {

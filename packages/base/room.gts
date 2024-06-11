@@ -817,6 +817,7 @@ export interface CommandResultContent {
   body: string;
   msgtype: 'org.boxel.commandResult';
   result: any;
+  toolCall: any;
 }
 
 // difference Command result and reaction event is that reaction event requires
@@ -941,6 +942,7 @@ const toCommandField = (
         commandType,
         payload,
         status,
+        result,
       });
     }
   }
