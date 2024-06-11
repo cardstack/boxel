@@ -31,6 +31,10 @@ import {
   generateCardPatchCallSpecification,
 } from '@cardstack/runtime-common/helpers/ai';
 
+import {
+  getPatchTool,
+  getSearchTool,
+} from '@cardstack/runtime-common/helpers/ai';
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
 import { Submode } from '@cardstack/host/components/submode-switcher';
@@ -393,6 +397,13 @@ export default class MatrixService extends Service {
     }
   }
 
+  private addTools = (attachedOpenCard: CardDef, patchSpec: any) => {
+    return [
+      getPatchTool(attachedOpenCard, patchSpec),
+      getSearchTool(attachedOpenCard),
+    ];
+  };
+
   async sendMessage(
     roomId: string,
     body: string | undefined,
@@ -425,27 +436,7 @@ export default class MatrixService extends Service {
         });
         await realmSession.loaded;
         if (realmSession.canWrite) {
-          tools.push({
-            type: 'function',
-            function: {
-              name: 'patchCard',
-              description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.`,
-              parameters: {
-                type: 'object',
-                properties: {
-                  card_id: {
-                    type: 'string',
-                    const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
-                  },
-                  description: {
-                    type: 'string',
-                  },
-                  ...patchSpec,
-                },
-                required: ['card_id', 'attributes', 'description'],
-              },
-            },
-          });
+          tools.push(...this.addTools(attachedOpenCard, patchSpec));
         }
       }
     }

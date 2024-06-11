@@ -12,7 +12,7 @@ import { modifier } from 'ember-modifier';
 import { trackedFunction } from 'ember-resources/util/function';
 
 import { Button } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { bool, eq } from '@cardstack/boxel-ui/helpers';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
@@ -104,7 +104,7 @@ export default class RoomMessage extends Component<Signature> {
         @errorMessage={{this.errorMessage}}
         @isStreaming={{@isStreaming}}
         @retryAction={{if
-          (eq @message.command.commandType 'patchCard')
+          (bool this.isCommand)
           (perform this.patchCard)
           @retryAction
         }}
@@ -112,7 +112,7 @@ export default class RoomMessage extends Component<Signature> {
         data-test-boxel-message-from={{@message.author.name}}
         ...attributes
       >
-        {{#if (eq @message.command.commandType 'patchCard')}}
+        {{#if (bool this.isCommand)}}
           <div
             class='patch-button-bar'
             data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
@@ -153,7 +153,7 @@ export default class RoomMessage extends Component<Signature> {
                 class='monaco-container'
                 {{this.scrollBottomIntoView}}
                 {{monacoModifier
-                  content=this.previewPatchCode
+                  content=this.previewCommandCode
                   contentChanged=undefined
                   monacoSDK=@monacoSDK
                   language='json'
@@ -179,7 +179,7 @@ export default class RoomMessage extends Component<Signature> {
         background: var(--boxel-200);
         color: var(--boxel-500);
       }
-      .patch-button-bar {
+      .command-button-bar {
         display: flex;
         justify-content: flex-end;
         gap: var(--boxel-sp-xs);
@@ -245,7 +245,7 @@ export default class RoomMessage extends Component<Signature> {
   @tracked private isDisplayingCode = false;
 
   private copyToClipboard = task(async () => {
-    await navigator.clipboard.writeText(this.previewPatchCode);
+    await navigator.clipboard.writeText(this.previewCommandCode);
   });
 
   private loadMessageResources = trackedFunction(this, async () => {
@@ -308,6 +308,16 @@ export default class RoomMessage extends Component<Signature> {
       .join(', ');
   }
 
+  get isCommand() {
+    if (!this.args.message.command) {
+      return false;
+    }
+    return (
+      this.args.message.command.commandType === 'patchCard' ||
+      this.args.message.command.commandType === 'searchCard'
+    );
+  }
+
   private patchCard = task(async () => {
     if (this.operatorModeStateService.patchCard.isRunning) {
       return;
@@ -336,7 +346,7 @@ export default class RoomMessage extends Component<Signature> {
     }
   });
 
-  private get previewPatchCode() {
+  private get previewCommandCode() {
     let { commandType, payload } = this.args.message.command;
     return JSON.stringify({ commandType, payload }, null, 2);
   }
