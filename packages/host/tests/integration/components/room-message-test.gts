@@ -33,6 +33,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
       currentEditor: {},
       setCurrentMonacoContainer: null,
       maybeRetryAction: null,
+      runCommand: () => {},
     };
 
     return testScenario;
@@ -48,6 +49,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
         @currentEditor={{testScenario.currentEditor}}
         @setCurrentEditor={{testScenario.setCurrentMonacoContainer}}
         @retryAction={{testScenario.maybeRetryAction}}
+        @runCommand={{testScenario.runCommand}}
         data-test-message-idx='1'
       />
     </template>);

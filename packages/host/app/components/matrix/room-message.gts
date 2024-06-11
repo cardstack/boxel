@@ -1,3 +1,4 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -12,7 +13,7 @@ import { modifier } from 'ember-modifier';
 import { trackedFunction } from 'ember-resources/util/function';
 
 import { Button } from '@cardstack/boxel-ui/components';
-import { and, bool } from '@cardstack/boxel-ui/helpers';
+import { bool, not } from '@cardstack/boxel-ui/helpers';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
@@ -25,7 +26,6 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { BaseDef, type CardDef } from 'https://cardstack.com/base/card-api';
-import { PatchObject } from 'https://cardstack.com/base/patch-command';
 import { type MessageField } from 'https://cardstack.com/base/room';
 
 import ApplyButton from '../ai-assistant/apply-button';
@@ -46,6 +46,8 @@ interface Signature {
     setCurrentEditor: (editor: number | undefined) => void;
     retryAction?: () => void;
     isPending?: boolean;
+    commandIsRunning?: boolean;
+    runCommand: (message: MessageField) => void;
   };
 }
 
@@ -110,7 +112,7 @@ export default class RoomMessage extends Component<Signature> {
         @isStreaming={{@isStreaming}}
         @retryAction={{if
           (bool this.isCommand)
-          (perform this.handleCommand)
+          (fn @runCommand @message)
           @retryAction
         }}
         @isPending={{@isPending}}
@@ -120,10 +122,7 @@ export default class RoomMessage extends Component<Signature> {
         {{#if (bool this.isCommand)}}
           <div
             class='command-button-bar'
-            data-test-command-card-idle={{(and
-              this.operatorModeStateService.patchCard.isIdle
-              this.handleCommand.isIdle
-            )}}
+            data-test-command-card-idle={{(not @commandIsRunning)}}
           >
             <Button
               class='view-code-button'
@@ -137,7 +136,7 @@ export default class RoomMessage extends Component<Signature> {
 
             <ApplyButton
               @state={{this.applyButtonState}}
-              {{on 'click' (perform this.handleCommand)}}
+              {{on 'click' (fn @runCommand @message)}}
               data-test-command-apply={{this.applyButtonState}}
             />
 
@@ -333,57 +332,6 @@ export default class RoomMessage extends Component<Signature> {
     );
   }
 
-  private handleCommand = task(async () => {
-    let { eventId, payload } = this.args.message.command;
-    try {
-      let res: any;
-      this.matrixService.failedCommandState.delete(eventId);
-      if (this.args.message.command.commandType === 'patchCard') {
-        //TODO: patchCard uses a lot of services so it is not easy to decouple
-        res = await this.patchCard.perform(
-          eventId,
-          this.args.message.command.payload as PatchObject,
-        );
-      } else if (this.args.message.command.commandType === 'searchCard') {
-        res = this.args.message.command.result;
-      }
-      await this.matrixService.sendReactionEvent(
-        this.args.roomId,
-        eventId,
-        'applied',
-      );
-      if (res) {
-        await this.matrixService.sendCommandResultMessage(
-          this.args.roomId,
-          eventId,
-          res,
-          (payload as any).toolCall,
-        );
-      }
-    } catch (e) {
-      let error =
-        typeof e === 'string'
-          ? new Error(e)
-          : e instanceof Error
-          ? e
-          : new Error('Patch failed.');
-      this.matrixService.failedCommandState.set(eventId, error);
-    }
-  });
-
-  //TODO: To be removed and included inside of card
-  private patchCard = task(async (eventId: string, payload: PatchObject) => {
-    if (this.operatorModeStateService.patchCard.isRunning) {
-      return;
-    }
-    //TODO: The discriminant doesn't interact with at the field level
-    this.matrixService.failedCommandState.delete(eventId);
-    return await this.operatorModeStateService.patchCard.perform(
-      payload.id,
-      payload.patch,
-    );
-  });
-
   private get previewCommandCode() {
     let { commandType, payload } = this.args.message.command;
     return JSON.stringify({ commandType, payload }, null, 2);
@@ -401,7 +349,7 @@ export default class RoomMessage extends Component<Signature> {
 
   @cached
   private get applyButtonState(): ApplyButtonState {
-    if (this.handleCommand.isRunning) {
+    if (this.args.commandIsRunning) {
       return 'applying';
     }
     if (this.failedCommandState) {

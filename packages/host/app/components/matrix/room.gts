@@ -4,7 +4,13 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
+import {
+  enqueueTask,
+  restartableTask,
+  timeout,
+  all,
+  task,
+} from 'ember-concurrency';
 
 import { v4 as uuidv4 } from 'uuid';
 
@@ -19,6 +25,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
+import { PatchObject } from 'https://cardstack.com/base/patch-command';
 import type { MessageField } from 'https://cardstack.com/base/room';
 
 import AiAssistantCardPicker from '../ai-assistant/card-picker';
@@ -57,6 +64,8 @@ export default class Room extends Component<Signature> {
               @currentEditor={{this.currentMonacoContainer}}
               @setCurrentEditor={{this.setCurrentMonacoContainer}}
               @retryAction={{this.maybeRetryAction i message}}
+              @runCommand={{this.runCommand}}
+              @commandIsRunning={{this.commandIsRunning}}
               data-test-message-idx={{i}}
             />
           {{/each}}
@@ -129,6 +138,66 @@ export default class Room extends Component<Signature> {
     super(owner, args);
     this.doMatrixEventFlush.perform();
   }
+
+  @action runCommand(message: MessageField) {
+    this.handleCommand.perform(message);
+  }
+
+  get commandIsRunning() {
+    return this.handleCommand.isRunning;
+  }
+
+  private handleCommand = task(async (message: MessageField) => {
+    let { eventId, payload } = message.command;
+    try {
+      let res: any;
+      this.matrixService.failedCommandState.delete(eventId);
+      if (message.command.commandType === 'patchCard') {
+        //TODO: patchCard uses a lot of services so it is not easy to decouple
+        res = await this.patchCard.perform(
+          eventId,
+          message.command.payload as PatchObject,
+        );
+      } else if (message.command.commandType === 'searchCard') {
+        res = message.command.result;
+      }
+      if (res) {
+        await this.matrixService.sendCommandResultMessage(
+          this.args.roomId,
+          eventId,
+          res,
+          (payload as any).toolCall,
+        );
+        console.log('finish command result');
+      }
+      await this.matrixService.sendReactionEvent(
+        this.args.roomId,
+        eventId,
+        'applied',
+      );
+    } catch (e) {
+      let error =
+        typeof e === 'string'
+          ? new Error(e)
+          : e instanceof Error
+          ? e
+          : new Error('Patch failed.');
+      this.matrixService.failedCommandState.set(eventId, error);
+    }
+  });
+
+  //TODO: To be removed and included inside of card
+  private patchCard = task(async (eventId: string, payload: PatchObject) => {
+    if (this.operatorModeStateService.patchCard.isRunning) {
+      return;
+    }
+    //TODO: The discriminant doesn't interact with at the field level
+    this.matrixService.failedCommandState.delete(eventId);
+    return await this.operatorModeStateService.patchCard.perform(
+      payload.id,
+      payload.patch,
+    );
+  });
 
   maybeRetryAction = (messageIndex: number, message: MessageField) => {
     if (this.isLastMessage(messageIndex) && message.isRetryable) {
