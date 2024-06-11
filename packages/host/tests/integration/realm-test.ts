@@ -206,6 +206,8 @@ module('Integration | realm', function (hooks) {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
+            fullName: 'Hassan Abdel-Rahman',
+            description: 'Person',
           },
           meta: {
             adoptsFrom: {
@@ -314,6 +316,8 @@ module('Integration | realm', function (hooks) {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
+            fullName: 'Hassan Abdel-Rahman',
+            description: 'Person',
           },
           meta: {
             adoptsFrom: {
@@ -558,6 +562,8 @@ module('Integration | realm', function (hooks) {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
+            fullName: 'Hassan Abdel-Rahman',
+            description: 'Person',
           },
           meta: {
             adoptsFrom: {
@@ -836,10 +842,12 @@ module('Integration | realm', function (hooks) {
           hosts: [
             {
               firstName: 'Hassan',
+              fullName: 'Hassan ',
               lastName: null,
               title: 'Hassan ',
               email: null,
               posts: null,
+              description: 'Person',
             },
           ],
           sponsors: ['Burton'],
@@ -1038,6 +1046,8 @@ module('Integration | realm', function (hooks) {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
+            fullName: 'Hassan Abdel-Rahman',
+            description: 'Person',
           },
           meta: {
             adoptsFrom: {
@@ -1857,7 +1867,9 @@ module('Integration | realm', function (hooks) {
             firstName: 'Mariko',
             lastName: 'Abdel-Rahman',
             title: 'Mariko Abdel-Rahman',
+            fullName: 'Mariko Abdel-Rahman',
             email: null,
+            description: 'Person',
             posts: null,
             thumbnailURL: null,
           },
@@ -2409,6 +2421,8 @@ module('Integration | realm', function (hooks) {
             firstName: 'Mariko',
             lastName: 'Abdel-Rahman',
             title: 'Mariko Abdel-Rahman',
+            fullName: 'Mariko Abdel-Rahman',
+            description: 'Person',
             email: null,
             posts: null,
             thumbnailURL: null,
@@ -2475,6 +2489,8 @@ module('Integration | realm', function (hooks) {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
+            description: 'Person',
+            fullName: 'Hassan Abdel-Rahman',
           },
           meta: {
             adoptsFrom: {

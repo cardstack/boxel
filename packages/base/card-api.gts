@@ -367,14 +367,13 @@ function getter<CardT extends BaseDefConstructor>(
   cardTracking.get(instance);
 
   if (field.computeVia) {
-    let value = deserialized.get(field.name);
-    if (isStaleValue(value)) {
-      value = value.staleValue;
-    } else if (!deserialized.has(field.name)) {
-      value = field.computeVia.bind(instance)();
-      deserialized.set(field.name, value);
+    let result = field.computeVia.bind(instance)() as unknown as
+      | undefined
+      | BaseInstanceType<CardT>;
+    if (result !== undefined) {
+      return result;
     }
-    return value;
+    return field.emptyValue(instance);
   } else {
     if (deserialized.has(field.name)) {
       return deserialized.get(field.name);
@@ -787,9 +786,21 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     cardTracking.get(instance);
     let maybeNotLoaded = deserialized.get(this.name);
     if (isNotLoadedValue(maybeNotLoaded)) {
-      throw new NotLoaded(instance, maybeNotLoaded.reference, this.name);
+      return this.emptyValue(instance) as unknown as BaseInstanceType<CardT>;
+      // throw new NotLoaded(instance, maybeNotLoaded.reference, this.name);
     }
     return getter(instance, this);
+  }
+
+  getRelationshipMeta(instance: CardDef) {
+    let deserialized = getDataBucket(instance);
+    let maybeNotLoaded = deserialized.get(this.name);
+
+    if (isNotLoadedValue(maybeNotLoaded)) {
+      return { type: 'not-loaded', reference: maybeNotLoaded.reference };
+    } else {
+      return { type: 'loaded', card: maybeNotLoaded ?? null };
+    }
   }
 
   queryableValue(instance: any, stack: CardDef[]): any {
@@ -1099,22 +1110,40 @@ class LinksToMany<FieldT extends CardDefConstructor>
   }
 
   getter(instance: CardDef): BaseInstanceType<FieldT> {
-    let deserialized = getDataBucket(instance);
-    cardTracking.get(instance);
-    let maybeNotLoaded = deserialized.get(this.name);
-    if (maybeNotLoaded) {
-      let notLoadedRefs: string[] = [];
-      for (let entry of maybeNotLoaded) {
-        if (isNotLoadedValue(entry)) {
-          notLoadedRefs = [...notLoadedRefs, entry.reference];
-        }
-      }
-      if (notLoadedRefs.length > 0) {
-        throw new NotLoaded(instance, notLoadedRefs, this.name);
-      }
-    }
+    // let deserialized = getDataBucket(instance);
+    // cardTracking.get(instance);
+    // let maybeNotLoaded = deserialized.get(this.name);
+    // if (maybeNotLoaded) {
+    //   let notLoadedRefs: string[] = [];
+    //   for (let entry of maybeNotLoaded) {
+    //     if (isNotLoadedValue(entry)) {
+    //       notLoadedRefs = [...notLoadedRefs, entry.reference];
+    //     }
+    //   }
+    //   if (notLoadedRefs.length > 0) {
+    //     throw new NotLoaded(instance, notLoadedRefs, this.name);
+    //   }
+    // }
 
     return getter(instance, this);
+  }
+
+  getRelationshipMeta(instance: CardDef) {
+    let deserialized = getDataBucket(instance);
+    let maybeNotLoaded = deserialized.get(this.name);
+
+    if (!Array.isArray(maybeNotLoaded)) {
+      throw new Error(
+        `expected ${this.name} to be an array but was ${typeof maybeNotLoaded}`,
+      );
+    }
+    return maybeNotLoaded.map((rel) => {
+      if (isNotLoadedValue(rel)) {
+        return { type: 'not-loaded', reference: rel.reference };
+      } else {
+        return { type: 'loaded', card: rel ?? null };
+      }
+    });
   }
 
   queryableValue(instances: any[] | null, stack: CardDef[]): any[] | null {
@@ -2318,27 +2347,7 @@ export function relationshipMeta(
   if (!(field.fieldType === 'linksTo' || field.fieldType === 'linksToMany')) {
     return undefined;
   }
-  let related = getter(instance, field) as CardDef; // only compound cards can be linksTo fields
-  if (field.fieldType === 'linksToMany') {
-    if (!Array.isArray(related)) {
-      throw new Error(
-        `expected ${fieldName} to be an array but was ${typeof related}`,
-      );
-    }
-    return related.map((rel) => {
-      if (isNotLoadedValue(rel)) {
-        return { type: 'not-loaded', reference: rel.reference };
-      } else {
-        return { type: 'loaded', card: rel ?? null };
-      }
-    });
-  }
-
-  if (isNotLoadedValue(related)) {
-    return { type: 'not-loaded', reference: related.reference };
-  } else {
-    return { type: 'loaded', card: related ?? null };
-  }
+  return field.getRelationshipMeta(instance);
 }
 
 function serializedGet<CardT extends BaseDefConstructor>(
@@ -2855,7 +2864,7 @@ function makeDescriptor<
         }
       }
       notifySubscribers(this, field.name, value);
-      logger.log(recompute(this));
+      cardTracking.set(this, true);
     };
   }
   if (field.description) {
@@ -3092,7 +3101,8 @@ export function getFields(
         if (
           opts?.usedFieldsOnly &&
           !usedFields.includes(maybeFieldName) &&
-          !maybeField.isUsed
+          !maybeField.isUsed &&
+          !maybeField.computeVia
         ) {
           return [];
         }

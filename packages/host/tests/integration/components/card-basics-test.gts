@@ -20,6 +20,7 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 
 import {
   baseRealm,
+  LooseSingleCardDocument,
   primitive,
   RealmSessionContextName,
 } from '@cardstack/runtime-common';
@@ -41,6 +42,8 @@ import {
   setupCardLogs,
   saveCard,
   provideConsumeContext,
+  setupIntegrationTestRealm,
+  setupLocalIndexing,
 } from '../../helpers';
 import {
   Base64ImageField,
@@ -51,6 +54,7 @@ import {
   Component,
   contains,
   containsMany,
+  createFromSerialized,
   DateField,
   DatetimeField,
   EthereumAddressField,
@@ -64,6 +68,7 @@ import {
   MarkdownField,
   NumberField,
   queryableValue,
+  relationshipMeta,
   setupBaseRealm,
   StringField,
   subscribeToChanges,
@@ -78,6 +83,7 @@ let loader: Loader;
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
+  setupLocalIndexing(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
@@ -1144,6 +1150,65 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-person]').containsText('Hassan');
       assert.dom('[data-test-pet="Mango"]').containsText('Mango');
       assert.dom('[data-test-pet="Van Gogh"]').containsText('Van Gogh');
+    });
+
+    test('can load a linksTo relationship on demand', async function (assert) {
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <div data-test-firstName><@fields.firstName /></div>
+          </template>
+        };
+      }
+      class Person extends CardDef {
+        @field pet = linksTo(Pet);
+      }
+
+      await setupIntegrationTestRealm({
+        loader,
+        contents: {
+          'test-cards.gts': { Person, Pet },
+          'Pet/ringo.json': new Pet({ firstName: 'Ringo' }),
+        },
+      });
+
+      let doc: LooseSingleCardDocument = {
+        data: {
+          type: 'card',
+          relationships: {
+            pet: {
+              links: {
+                self: `${testRealmURL}Pet/ringo`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}test-cards`,
+              name: 'Person',
+            },
+          },
+        },
+      };
+
+      let hassan = await createFromSerialized<typeof Person>(
+        doc.data,
+        doc,
+        undefined,
+        loader,
+      );
+
+      let relationship = relationshipMeta(hassan, 'pet');
+      assert.deepEqual(relationship, {
+        type: 'not-loaded',
+        reference: `${testRealmURL}Pet/ringo`,
+      });
+
+      await renderCard(loader, hassan, 'isolated');
+
+      await waitFor('[data-test-firstName]');
+      assert.dom('[data-test-firstName]').containsText('Ringo');
     });
 
     test('render whole composite field', async function (assert) {

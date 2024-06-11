@@ -1697,7 +1697,6 @@ module('Integration | operator-mode', function (hooks) {
       await waitFor(`[data-test-open-ai-assistant]`);
       await click('[data-test-open-ai-assistant]');
       await waitFor(`[data-room-settled]`);
-
       assert
         .dom(`[data-test-room="${room3Id}"]`)
         .exists(

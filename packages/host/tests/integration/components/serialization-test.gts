@@ -881,31 +881,13 @@ module('Integration | serialization', function (hooks) {
       loader,
     );
 
-    try {
-      hassan.pet;
-      throw new Error(`expected error not thrown`);
-    } catch (err: any) {
-      assert.ok(err instanceof NotLoaded, 'NotLoaded error thrown');
-      assert.strictEqual(
-        'The field Person.pet refers to the card instance http://test-realm/test/Pet/mango which is not loaded',
-        err.message,
-        'NotLoaded error describes field not loaded',
-      );
-    }
+    assert.strictEqual(hassan.pet, null, 'relationship returns empty value');
 
     let relationship = relationshipMeta(hassan, 'pet');
-    if (Array.isArray(relationship)) {
-      assert.ok(
-        false,
-        'relationshipMeta should not be an array for linksTo relationship',
-      );
-    } else {
-      if (relationship?.type === 'not-loaded') {
-        assert.strictEqual(relationship.reference, `${testRealmURL}Pet/mango`);
-      } else {
-        assert.ok(false, 'relationship type was not "not-loaded"');
-      }
-    }
+    assert.deepEqual(relationship, {
+      type: 'not-loaded',
+      reference: `${testRealmURL}Pet/mango`,
+    });
 
     let payload = serializeCard(hassan, { includeUnrenderedFields: true });
     assert.deepEqual(payload, {
@@ -2534,17 +2516,7 @@ module('Integration | serialization', function (hooks) {
         loader,
       );
 
-      try {
-        card.friendPet;
-        throw new Error(`expected error not thrown`);
-      } catch (err: any) {
-        assert.ok(err instanceof NotLoaded, 'NotLoaded error thrown');
-        assert.strictEqual(
-          `The field Person.friendPet refers to the card instance ${testRealmURL}Pet/mango which is not loaded`,
-          err.message,
-          'NotLoaded error describes field not loaded',
-        );
-      }
+      assert.deepEqual(card.friendPet, null);
       let friendRel = relationshipMeta(card, 'friend');
       assert.deepEqual(friendRel, {
         type: 'not-loaded',
@@ -5255,29 +5227,24 @@ module('Integration | serialization', function (hooks) {
         loader,
       );
 
-      try {
-        card.friend;
-        throw new Error(`expected error not thrown`);
-      } catch (err: any) {
-        assert.ok(err instanceof NotLoaded, 'NotLoaded error thrown');
-        assert.strictEqual(
-          err.message,
-          `The field Person.friend refers to the card instance ${testRealmURL}Friend/hassan which is not loaded`,
-          'NotLoaded error describes field not loaded',
-        );
-      }
+      assert.deepEqual(card.friend, null);
+      assert.deepEqual(relationshipMeta(card, 'friend'), {
+        reference: `${testRealmURL}Friend/hassan`,
+        type: 'not-loaded',
+      });
 
-      try {
-        card.friendPets;
-        throw new Error(`expected error not thrown`);
-      } catch (err: any) {
-        assert.ok(err instanceof NotLoaded, 'NotLoaded error thrown');
-        assert.strictEqual(
-          err.message,
-          `The field Person.friendPets refers to the card instance ${testRealmURL}Pet/vanGogh which is not loaded`,
-          'NotLoaded error describes field not loaded',
-        );
-      }
+      assert.deepEqual(card.friendPets, []);
+
+      // TODO: in the test, we have serialized the friendPets relationship, but it is a computed linksToMany, so our
+      // current code is ignoring that stored value in favor of recomputing from scratch. As a result, we can't be
+      // sure whether we have not-loaded data or not. We probably should have a way to specify that the whole relationship
+      // is not loaded yet?
+      assert.deepEqual(relationshipMeta(card, 'friendPets'), [
+        {
+          reference: `${testRealmURL}Pet/vanGogh`,
+          type: 'not-loaded',
+        },
+      ]);
 
       let relationships = relationshipMeta(card, 'friendPets');
       if (!Array.isArray(relationships)) {

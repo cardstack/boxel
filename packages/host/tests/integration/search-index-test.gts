@@ -529,6 +529,7 @@ module(`Integration | search-index`, function (hooks) {
         attributes: {
           title: 'Person Card',
           description: 'Catalog entry for Person card',
+          thumbnailURL: null,
           moduleHref: `${testRealmURL}person`,
           realmName: 'Unnamed Workspace',
           isField: false,
@@ -1348,8 +1349,10 @@ module(`Integration | search-index`, function (hooks) {
       entry?.searchDoc,
       {
         id: `${testRealmURL}Person/hassan`,
+        description: 'Person',
         firstName: 'Hassan',
         lastName: 'Abdel-Rahman',
+        fullName: 'Hassan Abdel-Rahman',
         email: 'hassan@cardstack.com',
         posts: 100,
         title: 'Hassan Abdel-Rahman',
@@ -1412,6 +1415,8 @@ module(`Integration | search-index`, function (hooks) {
         sponsors: null,
         title: null,
         venue: null,
+        description: null,
+        thumbnailURL: null,
       },
       description: 'Catalog entry for Booking',
       isField: false,
@@ -1419,6 +1424,7 @@ module(`Integration | search-index`, function (hooks) {
       realmName: 'Unnamed Workspace',
       ref: 'http://localhost:4202/test/booking/Booking',
       title: 'Booking',
+      thumbnailURL: null,
     });
     // we should be able to perform a structured clone of the search doc (this
     // emulates the limitations of the postMessage used to communicate between
@@ -1760,6 +1766,8 @@ module(`Integration | search-index`, function (hooks) {
         attributes: {
           title: 'PetPerson',
           description: 'Catalog entry for PetPerson',
+          thumbnailURL: null,
+
           ref: {
             module: `${testModuleRealm}pet-person`,
             name: 'PetPerson',
@@ -1859,9 +1867,13 @@ module(`Integration | search-index`, function (hooks) {
         id: `${testRealmURL}pet-person-catalog-entry`,
         title: 'PetPerson',
         description: 'Catalog entry for PetPerson',
+        thumbnailURL: null,
         ref: `${testModuleRealm}pet-person/PetPerson`,
         demo: {
           firstName: 'Hassan',
+          description: 'A person with pets',
+          thumbnailURL: null,
+          title: 'Hassan Pet Person',
           pets: [
             {
               id: `${testRealmURL}Pet/mango`,
@@ -2289,6 +2301,7 @@ module(`Integration | search-index`, function (hooks) {
             id: `${testRealmURL}Friend/mango`,
           },
           description: 'Dog owner',
+          title: 'Hassan',
         },
       });
     } else {
@@ -2458,6 +2471,7 @@ module(`Integration | search-index`, function (hooks) {
             {
               id: vanGoghID,
               firstName: 'Van Gogh',
+              title: 'Van Gogh',
               friends: [{ id: hassanID }],
             },
           ],
@@ -2570,11 +2584,13 @@ module(`Integration | search-index`, function (hooks) {
             {
               id: hassanID,
               firstName: 'Hassan',
+              title: 'Hassan',
               friends: [
                 { id: mangoID },
                 {
                   id: vanGoghID,
                   firstName: 'Van Gogh',
+                  title: 'Van Gogh',
                   friends: [{ id: hassanID }],
                 },
               ],

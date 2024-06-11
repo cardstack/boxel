@@ -375,7 +375,9 @@ export default class AiAssistantPanel extends Component<Signature> {
   @cached
   private get aiSessionRooms() {
     let rooms: RoomField[] = [];
-    for (let resource of this.roomResources.values()) {
+    let roomResources = this.roomResources.values();
+    console.log('roomResources', roomResources);
+    for (let resource of roomResources) {
       if (!resource.room) {
         continue;
       }
@@ -385,12 +387,18 @@ export default class AiAssistantPanel extends Component<Signature> {
         // rooms don't immediately have a created date
         room.created = new Date();
       }
+      console.log('this.matrixService.userId', this.matrixService.userId);
+      console.log('room.invitedMembers', room.invitedMembers);
+      console.log('room.joinedMembers', room.joinedMembers);
       if (
         (room.invitedMembers.find((m) => aiBotUserId === m.userId) ||
           room.joinedMembers.find((m) => aiBotUserId === m.userId)) &&
         room.joinedMembers.find((m) => this.matrixService.userId === m.userId)
       ) {
+        console.log('pushing room to result set', room);
         rooms.push(room);
+      } else {
+        console.log('excluding room from result set', room);
       }
     }
     // sort in reverse chronological order of last activity

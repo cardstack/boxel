@@ -330,12 +330,6 @@ interface RoomState {
   created?: number;
 }
 
-// in addition to acting as a cache, this also ensures we have
-// triple equal equivalence for the interior cards of RoomField
-const eventCache = initSharedState(
-  'eventCache',
-  () => new WeakMap<RoomField, Map<string, MatrixEvent>>(),
-);
 const messageCache = initSharedState(
   'messageCache',
   () => new WeakMap<RoomField, Map<string, MessageField>>(),
@@ -353,6 +347,19 @@ const fragmentCache = initSharedState(
   () => new WeakMap<RoomField, Map<string, CardFragmentContent>>(),
 );
 
+function newEvents(events: () => MatrixEvent[]): () => MatrixEvent[] {
+  let seen = new Set<string>();
+  return function () {
+    return events().filter((e) => {
+      if (seen.has(e.event_id)) {
+        return false;
+      }
+      seen.add(e.event_id);
+      return true;
+    });
+  };
+}
+
 export class RoomField extends FieldDef {
   static displayName = 'Room';
 
@@ -360,31 +367,13 @@ export class RoomField extends FieldDef {
   // All other fields should derive from the "events" field.
   @field events = containsMany(MatrixEventField);
 
-  // This works well for synchronous computeds only
-  @field newEvents = containsMany(MatrixEventField, {
-    computeVia: function (this: RoomField) {
-      let cache = eventCache.get(this);
-      if (!cache) {
-        cache = new Map();
-        eventCache.set(this, cache);
-      }
-      let newEvents = new Map<string, MatrixEvent>();
-      for (let event of this.events) {
-        if (cache.has(event.event_id)) {
-          continue;
-        }
-        cache.set(event.event_id, event);
-        newEvents.set(event.event_id, event);
-      }
-      return [...newEvents.values()];
-    },
-  });
-
   @field roomId = contains(StringField, {
     computeVia: function (this: RoomField) {
       return this.events.length > 0 ? this.events[0].room_id : undefined;
     },
   });
+
+  private nameEvents = newEvents(() => this.events);
 
   @field name = contains(StringField, {
     computeVia: function (this: RoomField) {
@@ -394,9 +383,7 @@ export class RoomField extends FieldDef {
         roomStateCache.set(this, roomState);
       }
 
-      // Read from this.events instead of this.newEvents to avoid a race condition bug where
-      // newEvents never returns the m.room.name while the event is present in events
-      let events = this.events
+      let events = this.nameEvents()
         .filter((e) => e.type === 'm.room.name')
         .sort(
           (a, b) => a.origin_server_ts - b.origin_server_ts,
@@ -409,6 +396,8 @@ export class RoomField extends FieldDef {
     },
   });
 
+  private creatorEvents = newEvents(() => this.events);
+
   @field creator = contains(RoomMemberField, {
     computeVia: function (this: RoomField) {
       let roomState = roomStateCache.get(this);
@@ -420,9 +409,9 @@ export class RoomField extends FieldDef {
       if (creator) {
         return creator;
       }
-      let event = this.newEvents.find((e) => e.type === 'm.room.create') as
-        | RoomCreateEvent
-        | undefined;
+      let event = this.creatorEvents().find(
+        (e) => e.type === 'm.room.create',
+      ) as RoomCreateEvent | undefined;
       if (event) {
         roomState.creator = upsertRoomMember({
           room: this,
@@ -432,6 +421,8 @@ export class RoomField extends FieldDef {
       return roomState.creator;
     },
   });
+
+  private createdEvents = newEvents(() => this.events);
 
   @field created = contains(DateTimeField, {
     computeVia: function (this: RoomField) {
@@ -444,9 +435,9 @@ export class RoomField extends FieldDef {
       if (created != null) {
         return new Date(created);
       }
-      let event = this.newEvents.find((e) => e.type === 'm.room.create') as
-        | RoomCreateEvent
-        | undefined;
+      let event = this.createdEvents().find(
+        (e) => e.type === 'm.room.create',
+      ) as RoomCreateEvent | undefined;
       if (event) {
         roomState.created = event.origin_server_ts;
       }
@@ -456,19 +447,23 @@ export class RoomField extends FieldDef {
     },
   });
 
+  private roomMemberEvents = newEvents(() => this.events);
+
   @field roomMembers = containsMany(RoomMemberField, {
     computeVia: function (this: RoomField) {
+      console.log('computing roomMembers');
       let roomMembers = roomMemberCache.get(this);
       if (!roomMembers) {
         roomMembers = new Map();
         roomMemberCache.set(this, roomMembers);
       }
 
-      for (let event of this.newEvents) {
+      for (let event of this.roomMemberEvents()) {
         if (event.type !== 'm.room.member') {
           continue;
         }
         let userId = event.state_key;
+        console.log('upsertRoomMember');
         upsertRoomMember({
           room: this,
           userId,
@@ -481,6 +476,8 @@ export class RoomField extends FieldDef {
       return [...roomMembers.values()];
     },
   });
+
+  private messageEvents = newEvents(() => this.events);
 
   @field messages = containsMany(MessageField, {
     // since we are rendering this card without the isolated renderer, we cannot use
@@ -502,8 +499,7 @@ export class RoomField extends FieldDef {
         messageCache.set(this, cache);
       }
       let index = cache.size;
-      let newMessages = new Map<string, MessageField>();
-      for (let event of this.events) {
+      for (let event of this.messageEvents()) {
         if (event.type !== 'm.room.message') {
           continue;
         }
@@ -611,24 +607,15 @@ export class RoomField extends FieldDef {
         if (messageField) {
           // if the message is a replacement for other messages,
           // use `created` from the oldest one.
-          if (newMessages.has(event_id)) {
-            messageField.created = newMessages.get(event_id)!.created;
+          if (cache.has(event_id)) {
+            messageField.created = cache.get(event_id)!.created;
           }
-          newMessages.set(
+          cache.set(
             (event.content as CardMessageContent).clientGeneratedId ?? event_id,
             messageField,
           );
           index++;
         }
-      }
-
-      // update the cache with the new messages
-      for (let [id, message] of newMessages) {
-        // The `id` can either be an `eventId` or `clientGeneratedId`.
-        // For messages sent by the user, we prefer to use `clientGeneratedId`
-        // because `eventId` can change in certain scenarios,
-        // such as when resending a failed message or updating its status from sending to sent.
-        cache.set(id, message);
       }
 
       // this sort should hopefully be very optimized since events will
@@ -641,12 +628,16 @@ export class RoomField extends FieldDef {
 
   @field joinedMembers = containsMany(RoomMemberField, {
     computeVia: function (this: RoomField) {
+      console.log('computing joinedMembers');
+      console.log('this.roomMembers', this.roomMembers);
       return this.roomMembers.filter((m) => m.membership === 'join');
     },
   });
 
   @field invitedMembers = containsMany(RoomMemberField, {
     computeVia: function (this: RoomField) {
+      console.log('computing invitedMembers');
+      console.log('this.roomMembers', this.roomMembers);
       return this.roomMembers.filter((m) => m.membership === 'invite');
     },
   });
