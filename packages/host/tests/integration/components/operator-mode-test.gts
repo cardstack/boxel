@@ -4047,9 +4047,8 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom('[data-test-card-url-bar-error]')
       .containsText('This resource does not exist');
-    // Percy is failing to capture this snapshot for some
-    // reason. creating issue for this CS-6780
-    // await percySnapshot(assert);
+
+    await percySnapshot(assert);
 
     await fillIn('[data-test-card-url-bar-input]', `Wrong URL`);
     await triggerKeyEvent(
