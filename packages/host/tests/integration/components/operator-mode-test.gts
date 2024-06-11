@@ -868,7 +868,7 @@ module('Integration | operator-mode', function (hooks) {
       return roomId;
     }
 
-    test<TestContextWithSave>('it allows chat commands to change cards in the stack', async function (assert) {
+    test<TestContextWithSave>('it allows patch command to change cards in the stack', async function (assert) {
       assert.expect(4);
       await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
       await renderComponent(
@@ -926,6 +926,80 @@ module('Integration | operator-mode', function (hooks) {
       await waitFor('[data-test-command-idle]');
 
       assert.dom('[data-test-person]').hasText('Dave');
+    });
+
+    test<TestContextWithSave>('shows search command message in chat', async function (assert) {
+      assert.expect(4);
+      await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+
+      await waitFor('[data-test-person]');
+      assert.dom('[data-test-boxel-header-title]').hasText('Person');
+      assert.dom('[data-test-person]').hasText('Fadhlan');
+
+      let roomId = await openAiAssistant();
+      await addRoomEvent(matrixService, {
+        event_id: 'event1',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+        sender: '@aibot:localhost',
+        content: {
+          body: "Here's the query",
+          msgtype: 'org.boxel.command',
+          formatted_body: "Here's the query",
+          format: 'org.matrix.custom.html',
+          data: JSON.stringify({
+            command: {
+              type: 'searchCard',
+              card_id: `${testRealmURL}Person/fadhlan`,
+              filter: {
+                type: {
+                  module: `${testRealmURL}person`,
+                  name: 'Person',
+                },
+              },
+              eventId: 'search1',
+            },
+          }),
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'search1',
+          },
+        },
+        status: null,
+      });
+
+      assert.dom('[data-test-command-apply]').doesNotExist();
+      await waitFor('[data-test-view-code-button]');
+      await click('[data-test-view-code-button]');
+      await waitForCodeEditor();
+      assert.deepEqual(
+        JSON.parse(getMonacoContent()),
+        {
+          commandType: 'searchCard',
+          payload: {
+            card_id: 'http://test-realm/test/Person/fadhlan',
+            eventId: 'search1',
+            filter: {
+              type: {
+                module: 'http://test-realm/test/person',
+                name: 'Person',
+              },
+            },
+            type: 'searchCard',
+          },
+        },
+        'it can preview code when a change is proposed',
+      );
     });
 
     test('it maintains status of apply buttons during a session when switching between rooms', async function (assert) {
