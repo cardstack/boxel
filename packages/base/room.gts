@@ -591,7 +591,7 @@ export class RoomField extends FieldDef {
 
           messageField = new MessageField({
             ...cardArgs,
-            formattedMessage: `<p class="patch-message">${event.content.formatted_body}</p>`,
+            formattedMessage: `<p class="command-message">${event.content.formatted_body}</p>`,
             command: new PatchField({
               eventId: event_id,
               commandType: command.type,

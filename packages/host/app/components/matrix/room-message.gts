@@ -114,8 +114,8 @@ export default class RoomMessage extends Component<Signature> {
       >
         {{#if (bool this.isCommand)}}
           <div
-            class='patch-button-bar'
-            data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
+            class='command-button-bar'
+            data-test-command-idle={{this.operatorModeStateService.patchCard.isIdle}}
           >
             <Button
               class='view-code-button'
