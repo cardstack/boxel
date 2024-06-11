@@ -104,7 +104,7 @@ export default class RoomMessage extends Component<Signature> {
         @errorMessage={{this.errorMessage}}
         @isStreaming={{@isStreaming}}
         @retryAction={{if
-          (bool this.isCommand)
+          (bool this.isPatchCommand)
           (perform this.patchCard)
           @retryAction
         }}
@@ -126,11 +126,13 @@ export default class RoomMessage extends Component<Signature> {
             >
               {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
             </Button>
-            <ApplyButton
-              @state={{this.applyButtonState}}
-              {{on 'click' (perform this.patchCard)}}
-              data-test-command-apply={{this.applyButtonState}}
-            />
+            {{#if (bool this.isPatchCommand)}}
+              <ApplyButton
+                @state={{this.applyButtonState}}
+                {{on 'click' (perform this.patchCard)}}
+                data-test-command-apply={{this.applyButtonState}}
+              />
+            {{/if}}
           </div>
           {{#if this.isDisplayingCode}}
             <div class='preview-code'>
@@ -306,6 +308,14 @@ export default class RoomMessage extends Component<Signature> {
     return this.resources.errors
       .map((e: { id: string; error: Error }) => `${e.id}: ${e.error.message}`)
       .join(', ');
+  }
+
+  //TODO: Will remove this
+  get isPatchCommand() {
+    if (!this.args.message.command) {
+      return false;
+    }
+    return this.args.message.command.commandType === 'patchCard';
   }
 
   get isCommand() {
