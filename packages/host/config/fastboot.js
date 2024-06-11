@@ -16,6 +16,7 @@ module.exports = function () {
         Request: globalThis.Request,
         fetch: globalThis.fetch,
         btoa,
+        performance: globalThis.performance,
       });
     },
   };

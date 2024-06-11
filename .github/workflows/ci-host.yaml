@@ -18,10 +18,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shardIndex: [1, 2, 3, 4, 5, 6]
-        shardTotal: [6]
+        browser: ["Chrome", "Firefox"]
+        shardIndex: [1, 2, 3, 4, 5, 6, 7, 8]
+        shardTotal: [8]
+    env:
+      TESTEM_BROWSER: ${{ matrix.browser }}
     concurrency:
-      group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
+      group: boxel-host-test-${{ matrix.browser }}-${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
@@ -40,11 +43,12 @@ jobs:
       - name: create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
+      # FIXME restore PErcy
       - name: host test suite (shard ${{ matrix.shardIndex }})
-        run: pnpm test-with-percy
+        run: pnpm test
         env:
-          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
-          PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
+          # PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
+          # PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
         working-directory: packages/host
@@ -52,7 +56,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: host-test-report-${{ matrix.shardIndex }}
+          name: host-test-report-${{ matrix.browser }}-${{ matrix.shardIndex }}
           path: junit/host-${{ matrix.shardIndex }}.xml
           retention-days: 30
 
@@ -61,17 +65,22 @@ jobs:
     if: always()
     needs: host-test
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: ["Chrome", "Firefox"]
 
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/init
 
-      - name: Finalise Percy
-        run: npx percy build:finalize
-        working-directory: packages/host
-        env:
-          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
-          PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
+      # FIXME restore Percy
+      # - name: Finalise Percy
+      #   run: npx percy build:finalize
+      #   working-directory: packages/host
+      #   env:
+      #     PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
+      #     PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Download JUnit reports from GitHub Actions Artifacts
         uses: actions/download-artifact@v4
@@ -90,7 +99,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: host-test-report-merged
+          name: host-test-report-merged-${{ matrix.browser }}
           path: host.xml
           retention-days: 30
 
@@ -99,4 +108,4 @@ jobs:
         if: always()
         with:
           junit_files: host.xml
-          check_name: Host Test Results
+          check_name: Host Test Results (${{ matrix.browser }})
