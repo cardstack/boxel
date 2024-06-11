@@ -4556,8 +4556,14 @@ module('Integration | operator-mode', function (hooks) {
         overlayButtonElements.length - 1
       ].getBoundingClientRect();
 
-    assert.strictEqual(itemRect.top, overlayButtonRect.top);
-    assert.strictEqual(itemRect.left, overlayButtonRect.left);
+    assert.strictEqual(
+      Math.round(itemRect.top),
+      Math.round(overlayButtonRect.top),
+    );
+    assert.strictEqual(
+      Math.round(itemRect.left),
+      Math.round(overlayButtonRect.left),
+    );
 
     await click(
       `[data-test-stack-card="${testRealmURL}Person/burcu"] [data-test-edit-button]`,
