@@ -39,6 +39,7 @@ import {
   getFileWithFallbacks,
   writeToStream,
   waitForClose,
+  type TextFileRef,
 } from './stream';
 import { transpileJS } from './transpile';
 import {
@@ -1570,7 +1571,7 @@ export class Realm {
   private async readFileAsText(
     path: LocalPath,
     opts: { withFallbacks?: true } = {},
-  ): Promise<{ content: string; lastModified: number } | undefined> {
+  ): Promise<TextFileRef | undefined> {
     return readFileAsText(
       path,
       this.#adapter.openFile.bind(this.#adapter),
