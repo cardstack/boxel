@@ -25,7 +25,6 @@ import { Realm } from '@cardstack/runtime-common/realm';
 
 import { AuthenticationErrorMessages } from '@cardstack/runtime-common/router';
 
-import { Submodes } from '@cardstack/host/components/submode-switcher';
 import { claimsFromRawToken } from '@cardstack/host/resources/realm-session';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -565,7 +564,6 @@ module('Acceptance | interact submode tests', function (hooks) {
       // Remove mango (the dog) from the stack
       await click('[data-test-stack-card-index="1"] [data-test-close-button]');
 
-      // The stack should be updated in the URL
       assert.operatorModeParametersMatch(currentURL(), {
         stacks: [
           [
@@ -575,9 +573,6 @@ module('Acceptance | interact submode tests', function (hooks) {
             },
           ],
         ],
-        submode: Submodes.Interact,
-        fileView: 'inspector',
-        openDirs: {},
       });
 
       await waitFor('[data-test-operator-mode-stack] [data-test-pet="Mango"]');
@@ -1405,7 +1400,6 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-operator-mode-stack="1"]').doesNotExist();
       assert.dom('[data-test-operator-mode-stack="0"]').includesText('Fadhlan');
 
-      // The stack should be updated in the URL
       assert.operatorModeParametersMatch(currentURL(), {
         stacks: [
           [
@@ -1415,9 +1409,6 @@ module('Acceptance | interact submode tests', function (hooks) {
             },
           ],
         ],
-        submode: Submodes.Interact,
-        fileView: 'inspector',
-        openDirs: {},
       });
 
       // Close the last card in the last stack that is left - should get the empty state
