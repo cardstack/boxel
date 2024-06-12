@@ -32,6 +32,8 @@ import { type ApplyButtonState } from '../ai-assistant/apply-button';
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
+import CommandService from '@cardstack/host/services/command-service';
+import { fn } from '@ember/helper';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -105,7 +107,7 @@ export default class RoomMessage extends Component<Signature> {
         @isStreaming={{@isStreaming}}
         @retryAction={{if
           (eq @message.command.commandType 'patchCard')
-          (perform this.patchCard)
+          (fn (perform this.run) @message.command @roomId)
           @retryAction
         }}
         @isPending={{@isPending}}
@@ -128,7 +130,7 @@ export default class RoomMessage extends Component<Signature> {
             </Button>
             <ApplyButton
               @state={{this.applyButtonState}}
-              {{on 'click' (perform this.patchCard)}}
+              {{on 'click' (fn (perform this.run) @message.command @roomId)}}
               data-test-command-apply={{this.applyButtonState}}
             />
           </div>
@@ -241,6 +243,7 @@ export default class RoomMessage extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
   @service private declare monacoService: MonacoService;
+  @service declare commandService: CommandService;
 
   @tracked private isDisplayingCode = false;
 
@@ -308,34 +311,6 @@ export default class RoomMessage extends Component<Signature> {
       .join(', ');
   }
 
-  private patchCard = task(async () => {
-    if (this.operatorModeStateService.patchCard.isRunning) {
-      return;
-    }
-    let { payload, eventId } = this.args.message.command;
-    this.matrixService.failedCommandState.delete(eventId);
-    try {
-      await this.operatorModeStateService.patchCard.perform(
-        payload.id,
-        payload.patch,
-      );
-      //here is reaction event
-      await this.matrixService.sendReactionEvent(
-        this.args.roomId,
-        eventId,
-        'applied',
-      );
-    } catch (e) {
-      let error =
-        typeof e === 'string'
-          ? new Error(e)
-          : e instanceof Error
-          ? e
-          : new Error('Patch failed.');
-      this.matrixService.failedCommandState.set(eventId, error);
-    }
-  });
-
   private get previewPatchCode() {
     let { commandType, payload } = this.args.message.command;
     return JSON.stringify({ commandType, payload }, null, 2);
@@ -351,9 +326,13 @@ export default class RoomMessage extends Component<Signature> {
     );
   }
 
+  run = task(async (command: any, roomId: string) => {
+    return this.commandService.run.perform(command, roomId);
+  });
+
   @cached
   private get applyButtonState(): ApplyButtonState {
-    if (this.patchCard.isRunning) {
+    if (this.run.isRunning) {
       return 'applying';
     }
     if (this.failedCommandState) {
