@@ -786,6 +786,20 @@ const tests = Object.freeze({
   },
 
   'can get "production" index entry': async (assert, { indexer }) => {
+    let originalResource: LooseCardResource = {
+      id: `${testRealmURL}1`,
+      type: 'card',
+      attributes: {
+        name: 'Mango',
+      },
+      meta: {
+        adoptsFrom: {
+          module: `./person`,
+          name: 'Person',
+        },
+      },
+    };
+    let originalSource = JSON.stringify(originalResource);
     await setupIndex(
       indexer,
       [{ realm_url: testRealmURL, current_version: 1 }],
@@ -794,19 +808,8 @@ const tests = Object.freeze({
           url: `${testRealmURL}1.json`,
           realm_version: 1,
           realm_url: testRealmURL,
-          pristine_doc: {
-            id: `${testRealmURL}1`,
-            type: 'card',
-            attributes: {
-              name: 'Mango',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `./person`,
-                name: 'Person',
-              },
-            },
-          } as LooseCardResource,
+          pristine_doc: originalResource,
+          source: originalSource,
         },
       ],
     );
@@ -854,6 +857,7 @@ const tests = Object.freeze({
             },
           },
         },
+        source: originalSource,
         searchDoc: null,
         deps: null,
         types: null,
@@ -902,12 +906,13 @@ const tests = Object.freeze({
         },
       },
     };
+    let source = JSON.stringify(resource);
     let batch = await indexer.createBatch(new URL(testRealmURL));
     await batch.invalidate(new URL(`${testRealmURL}1.json`));
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance',
       resource,
-      source: JSON.stringify(resource),
+      source,
       searchData: { name: 'Van Gogh' },
       deps: new Set(),
       types: [],
@@ -936,6 +941,7 @@ const tests = Object.freeze({
             },
           },
         },
+        source,
         searchDoc: { name: 'Van Gogh' },
         deps: [],
         types: [],
