@@ -478,6 +478,7 @@ const tests = Object.freeze({
       type: 'instance',
       resource,
       source: JSON.stringify(resource),
+      lastModified: Date.now(),
       searchData: { name: 'Van Gogh' },
       deps: new Set([`${testRealmURL}fancy-person`]),
       types: [
@@ -714,6 +715,7 @@ const tests = Object.freeze({
       type: 'instance',
       resource,
       source: JSON.stringify(resource),
+      lastModified: Date.now(),
       searchData: { name: 'Van Gogh' },
       deps: new Set(),
       types: [],
@@ -786,6 +788,7 @@ const tests = Object.freeze({
   },
 
   'can get "production" index entry': async (assert, { indexer }) => {
+    let originalModified = Date.now();
     let originalResource: LooseCardResource = {
       id: `${testRealmURL}1`,
       type: 'card',
@@ -810,6 +813,7 @@ const tests = Object.freeze({
           realm_url: testRealmURL,
           pristine_doc: originalResource,
           source: originalSource,
+          last_modified: originalModified,
         },
       ],
     );
@@ -833,6 +837,7 @@ const tests = Object.freeze({
       type: 'instance',
       resource,
       source: JSON.stringify(resource),
+      lastModified: Date.now(),
       searchData: { name: 'Van Gogh' },
       deps: new Set(),
       types: [],
@@ -858,6 +863,7 @@ const tests = Object.freeze({
           },
         },
         source: originalSource,
+        lastModified: originalModified,
         searchDoc: null,
         deps: null,
         types: null,
@@ -908,11 +914,13 @@ const tests = Object.freeze({
     };
     let source = JSON.stringify(resource);
     let batch = await indexer.createBatch(new URL(testRealmURL));
+    let now = Date.now();
     await batch.invalidate(new URL(`${testRealmURL}1.json`));
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance',
       resource,
       source,
+      lastModified: now,
       searchData: { name: 'Van Gogh' },
       deps: new Set(),
       types: [],
@@ -942,6 +950,7 @@ const tests = Object.freeze({
           },
         },
         source,
+        lastModified: now,
         searchDoc: { name: 'Van Gogh' },
         deps: [],
         types: [],
@@ -1048,9 +1057,11 @@ const tests = Object.freeze({
     async (assert, { indexer }) => {
       await setupIndex(indexer);
       let batch = await indexer.createBatch(new URL(testRealmURL));
+      let now = Date.now();
       await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
         type: 'module',
         source: cardSrc,
+        lastModified: now,
         deps: new Set(),
       });
       await batch.done();
@@ -1059,13 +1070,14 @@ const tests = Object.freeze({
         new URL(`${testRealmURL}person.gts`),
       );
       if (result?.type === 'module') {
-        let { executableCode, source } = result;
+        let { executableCode, source, lastModified } = result;
         assert.codeEqual(
           stripModuleDebugInfo(stripScopedCSSGlimmerAttributes(executableCode)),
           stripModuleDebugInfo(compiledCard()),
           'compiled card is correct',
         );
         assert.strictEqual(cardSrc, source, 'source code is correct');
+        assert.strictEqual(lastModified, now, 'lastModified is correct');
       } else {
         assert.ok(false, `expected module not to be an error document`);
       }
@@ -1075,22 +1087,25 @@ const tests = Object.freeze({
     async (assert, { indexer }) => {
       await setupIndex(indexer);
       let batch = await indexer.createBatch(new URL(testRealmURL));
+      let now = Date.now();
       await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
         type: 'module',
         source: cardSrc,
+        lastModified: now,
         deps: new Set(),
       });
       await batch.done();
 
       let result = await indexer.getModule(new URL(`${testRealmURL}person`));
       if (result?.type === 'module') {
-        let { executableCode, source } = result;
+        let { executableCode, source, lastModified } = result;
         assert.codeEqual(
           stripModuleDebugInfo(stripScopedCSSGlimmerAttributes(executableCode)),
           stripModuleDebugInfo(compiledCard()),
           'compiled card is correct',
         );
         assert.strictEqual(cardSrc, source, 'source code is correct');
+        assert.strictEqual(lastModified, now, 'lastModified is correct');
       } else {
         assert.ok(false, `expected module not to be an error document`);
       }
@@ -1102,9 +1117,11 @@ const tests = Object.freeze({
   ) => {
     await setupIndex(indexer);
     let batch = await indexer.createBatch(new URL(testRealmURL));
+    let now = Date.now();
     await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
       type: 'module',
       source: cardSrc,
+      lastModified: now,
       deps: new Set(),
     });
 
@@ -1112,13 +1129,14 @@ const tests = Object.freeze({
       useWorkInProgressIndex: true,
     });
     if (result?.type === 'module') {
-      let { executableCode, source } = result;
+      let { executableCode, source, lastModified } = result;
       assert.codeEqual(
         stripModuleDebugInfo(stripScopedCSSGlimmerAttributes(executableCode)),
         stripModuleDebugInfo(compiledCard()),
         'compiled card is correct',
       );
       assert.strictEqual(cardSrc, source, 'source code is correct');
+      assert.strictEqual(lastModified, now, 'lastModified is correct');
     } else {
       assert.ok(false, `expected module not to be an error document`);
     }

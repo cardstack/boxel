@@ -75,6 +75,7 @@ export interface BoxelIndexTable {
   embedded_html: string | null;
   isolated_html: string | null;
   indexed_at: number | null;
+  last_modified: number | null;
   is_deleted: boolean | null;
 }
 
@@ -87,12 +88,14 @@ interface IndexedModule {
   type: 'module';
   executableCode: string;
   source: string;
+  lastModified: number;
 }
 
 export interface IndexedInstance {
   type: 'instance';
   instance: CardResource;
   source: string;
+  lastModified: number;
   isolatedHtml: string | null;
   searchDoc: Record<string, any> | null;
   types: string[] | null;
@@ -190,15 +193,20 @@ export class Indexer {
     if (maybeResult.error_doc) {
       return { type: 'error', error: maybeResult.error_doc };
     }
-    let { transpiled_code: executableCode, source } = maybeResult;
-    if (!executableCode || !source) {
+    let moduleEntry = assertIndexEntrySource(maybeResult);
+    let {
+      transpiled_code: executableCode,
+      source,
+      last_modified: lastModified,
+    } = moduleEntry;
+    if (!executableCode) {
       throw new Error(
         `bug: index entry for ${url.href} with opts: ${JSON.stringify(
           opts,
-        )} has neither an error_doc nor transpiled_code/source`,
+        )} has neither an error_doc nor transpiled_code`,
       );
     }
-    return { type: 'module', executableCode, source };
+    return { type: 'module', executableCode, source, lastModified };
   }
 
   async getCard(
@@ -231,6 +239,7 @@ export class Indexer {
     if (maybeResult.error_doc) {
       return { type: 'error', error: maybeResult.error_doc };
     }
+    let instanceEntry = assertIndexEntrySource(maybeResult);
     let {
       pristine_doc: instance,
       isolated_html: isolatedHtml,
@@ -238,15 +247,16 @@ export class Indexer {
       realm_version: realmVersion,
       realm_url: realmURL,
       indexed_at: indexedAt,
+      last_modified: lastModified,
       source,
       types,
       deps,
-    } = maybeResult;
-    if (!instance || !source) {
+    } = instanceEntry;
+    if (!instance) {
       throw new Error(
         `bug: index entry for ${href} with opts: ${JSON.stringify(
           opts,
-        )} has neither an error_doc nor a pristine_doc/source`,
+        )} has neither an error_doc nor a pristine_doc`,
       );
     }
     return {
@@ -259,6 +269,7 @@ export class Indexer {
       indexedAt,
       source,
       deps,
+      lastModified,
       realmVersion,
     };
   }
@@ -890,6 +901,7 @@ export type IndexEntry = InstanceEntry | ModuleEntry | ErrorEntry;
 export interface InstanceEntry {
   type: 'instance';
   source: string;
+  lastModified: number;
   resource: CardResource;
   searchData: Record<string, any>;
   isolatedHtml?: string;
@@ -905,6 +917,7 @@ export interface ErrorEntry {
 interface ModuleEntry {
   type: 'module';
   source: string;
+  lastModified: number;
   deps: Set<string>;
 }
 
@@ -948,12 +961,14 @@ export class Batch {
               deps: [...entry.deps],
               types: entry.types,
               source: entry.source,
+              last_modified: entry.lastModified,
             }
           : entry.type === 'module'
           ? {
               type: 'module',
               deps: [...entry.deps],
               source: entry.source,
+              last_modified: entry.lastModified,
               transpiled_code: transpileJS(
                 entry.source,
                 new RealmPaths(this.realmURL).local(url),
@@ -1276,6 +1291,27 @@ function assertURLEndsWithJSON(url: URL): URL {
     return new URL(`${url}.json`);
   }
   return url;
+}
+
+function assertIndexEntrySource(obj: BoxelIndexTable): Omit<
+  BoxelIndexTable,
+  'source' | 'last_modified'
+> & {
+  source: string;
+  last_modified: number;
+} {
+  if (!('source' in obj) || typeof obj.source !== 'string') {
+    throw new Error(`expected index entry to have "source" string property`);
+  }
+  if (!('last_modified' in obj) || typeof obj.last_modified !== 'number') {
+    throw new Error(
+      `expected index entry to have "last_modified" number property`,
+    );
+  }
+  return obj as Omit<BoxelIndexTable, 'source' | 'last_modified'> & {
+    source: string;
+    last_modified: number;
+  };
 }
 
 function assertNever(value: never) {

@@ -1136,6 +1136,27 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<ResponseWithNodeStream> {
+    let useWorkInProgressIndex = Boolean(
+      request.headers.get('X-Boxel-Use-WIP-Index'),
+    );
+    let module = await this.#searchIndex.module(new URL(request.url), {
+      useWorkInProgressIndex,
+    });
+    if (module?.type === 'module') {
+      return createResponse({
+        body: module.source,
+        init: {
+          headers: {
+            'last-modified': formatRFC7231(module.lastModified),
+          },
+        },
+        requestContext,
+      });
+    }
+    // TODO we also need to handle instance source in upcoming PR
+
+    // fallback to file system if there is an error document or this is the
+    // first time index
     let localName = this.paths.local(new URL(request.url));
     let handle = await this.getFileWithFallbacks(localName, [
       ...executableExtensions,
