@@ -9,7 +9,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../chess",
+        "module": "../chess-game",
         "name": "Chess"
       }
     }
