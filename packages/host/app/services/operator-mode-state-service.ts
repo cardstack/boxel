@@ -1,4 +1,6 @@
 import { getOwner } from '@ember/application';
+import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { scheduleOnce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
@@ -6,6 +8,8 @@ import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
+import window from 'ember-window-mock';
+
 import { mergeWith } from 'lodash';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
@@ -35,6 +39,8 @@ import { type Stack } from '../components/operator-mode/interact-submode';
 
 import type CardService from '../services/card-service';
 
+export const ASSISTANT_PANEL_OPEN_KEY = 'aiSessionOpen';
+
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
 // This is because we don't have a way to serialize a stack configuration of linked cards that have not been saved yet.
@@ -46,7 +52,6 @@ export interface OperatorModeState {
   fileView?: FileView;
   openDirs: Map<string, string[]>;
   codeSelection?: string;
-  assistant: boolean;
 }
 
 interface CardItem {
@@ -66,7 +71,6 @@ export type SerializedState = {
   fileView?: FileView;
   openDirs?: Record<string, string[]>;
   codeSelection?: string;
-  assistant?: boolean;
 };
 
 interface OpenFileSubscriber {
@@ -79,8 +83,9 @@ export default class OperatorModeStateService extends Service {
     submode: Submodes.Interact,
     codePath: null,
     openDirs: new TrackedMap<string, string[]>(),
-    assistant: false,
   });
+
+  @tracked assistantSidebarIsOpen: boolean = false;
 
   private cachedRealmURL: URL | null = null;
 
@@ -94,8 +99,22 @@ export default class OperatorModeStateService extends Service {
 
   private openFileSubscribers: OpenFileSubscriber[] = [];
 
+  constructor(owner: Owner) {
+    super(owner);
+    this.assistantSidebarIsOpen =
+      window.localStorage.getItem(ASSISTANT_PANEL_OPEN_KEY) === 'true';
+  }
+
   async restore(rawState: SerializedState) {
     this.state = await this.deserialize(rawState);
+  }
+
+  @action toggleAssistantSidebar() {
+    window.localStorage.setItem(
+      ASSISTANT_PANEL_OPEN_KEY,
+      !this.assistantSidebarIsOpen ? 'true' : 'false',
+    );
+    this.assistantSidebarIsOpen = !this.assistantSidebarIsOpen;
   }
 
   addItemToStack(item: StackItem) {
@@ -282,11 +301,6 @@ export default class OperatorModeStateService extends Service {
     }
   }
 
-  updateAssistant(assistant: boolean) {
-    this.state.assistant = assistant;
-    this.schedulePersist();
-  }
-
   get codePathRelativeToRealm() {
     if (this.state.codePath && this.realmURL) {
       let realmPath = new RealmPaths(this.realmURL);
@@ -395,7 +409,6 @@ export default class OperatorModeStateService extends Service {
       fileView: this.state.fileView?.toString() as FileView,
       openDirs: Object.fromEntries(this.state.openDirs.entries()),
       codeSelection: this.state.codeSelection,
-      assistant: this.state.assistant,
     };
 
     for (let stack of this.state.stacks) {
@@ -439,7 +452,6 @@ export default class OperatorModeStateService extends Service {
       fileView: rawState.fileView ?? 'inspector',
       openDirs,
       codeSelection: rawState.codeSelection,
-      assistant: rawState.assistant ?? false,
     });
 
     let stackIndex = 0;

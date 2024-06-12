@@ -101,14 +101,11 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   get isAiAssistantVisible() {
-    return this.operatorModeStateService.state.assistant;
+    return this.operatorModeStateService.assistantSidebarIsOpen;
   }
 
-  @action
-  private toggleChat() {
-    this.operatorModeStateService.updateAssistant(
-      !this.operatorModeStateService.state.assistant,
-    );
+  @action private toggleChat() {
+    this.operatorModeStateService.toggleAssistantSidebar();
   }
 
   @action private closeSearchSheet() {
