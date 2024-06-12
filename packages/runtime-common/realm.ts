@@ -855,81 +855,76 @@ export class Realm {
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
 
-    try {
-      if (!localPath.startsWith(assetsDir)) {
-        let cacheStart = Date.now();
-        try {
-          let useWorkInProgressIndex = Boolean(
-            request.headers.get('X-Boxel-Use-WIP-Index'),
-          );
-          let module = await this.#searchIndex.module(url, {
-            useWorkInProgressIndex,
-          });
-          if (module?.type === 'module') {
-            return createResponse({
-              body: module.executableCode,
-              init: {
-                status: 200,
-                headers: { 'content-type': 'text/javascript' },
-              },
-              requestContext,
-            });
-          }
-          if (module?.type === 'error') {
-            // using "Not Acceptable" here because no text/javascript representation
-            // can be made and we're sending text/html error page instead
-            return createResponse({
-              body: JSON.stringify(module.error, null, 2),
-              init: {
-                status: 406,
-                headers: { 'content-type': 'text/html' },
-              },
-              requestContext,
-            });
-          }
-        } finally {
-          this.#logRequestPerformance(request, cacheStart, 'cache hit');
-        }
-      }
-
+    if (!localPath.startsWith(assetsDir)) {
       try {
-        let maybeFileRef = await this.getFileWithFallbacks(
-          localPath,
-          executableExtensions,
+        let useWorkInProgressIndex = Boolean(
+          request.headers.get('X-Boxel-Use-WIP-Index'),
         );
-        if (!maybeFileRef) {
-          return notFound(request, requestContext, `${request.url} not found`);
-        }
-
-        let fileRef = maybeFileRef;
-        if (
-          hasExecutableExtension(fileRef.path) &&
-          !localPath.startsWith(assetsDir)
-        ) {
-          if (fileRef[Symbol.for('shimmed-module')]) {
-            // this response is ultimately thrown away and only the symbol value
-            // is preserved. so what is inside this response is not important
-            let response = createResponse({ requestContext });
-            (response as any)[Symbol.for('shimmed-module')] =
-              fileRef[Symbol.for('shimmed-module')];
-            return response;
-          }
-          // fallback to the file system only after trying the index. during the
-          // initial index we need to use the API to run the indexer whose modules
-          // would otherwise live in index (this conundrum would go away if the
-          // API could be statically loaded and not come from the base realm.)
-          return this.makeJS(
-            await fileContentToText(fileRef),
-            fileRef.path,
+        let module = await this.#searchIndex.module(url, {
+          useWorkInProgressIndex,
+        });
+        if (module?.type === 'module') {
+          return createResponse({
+            body: module.executableCode,
+            init: {
+              status: 200,
+              headers: { 'content-type': 'text/javascript' },
+            },
             requestContext,
-          );
+          });
         }
-        return await this.serveLocalFile(fileRef, requestContext);
+        if (module?.type === 'error') {
+          // using "Not Acceptable" here because no text/javascript representation
+          // can be made and we're sending text/html error page instead
+          return createResponse({
+            body: JSON.stringify(module.error, null, 2),
+            init: {
+              status: 406,
+              headers: { 'content-type': 'text/html' },
+            },
+            requestContext,
+          });
+        }
       } finally {
-        this.#logRequestPerformance(request, start, 'cache miss');
+        this.#logRequestPerformance(request, start, 'cache hit');
       }
+    }
+
+    try {
+      let maybeFileRef = await this.getFileWithFallbacks(
+        localPath,
+        executableExtensions,
+      );
+      if (!maybeFileRef) {
+        return notFound(request, requestContext, `${request.url} not found`);
+      }
+
+      let fileRef = maybeFileRef;
+      if (
+        hasExecutableExtension(fileRef.path) &&
+        !localPath.startsWith(assetsDir)
+      ) {
+        if (fileRef[Symbol.for('shimmed-module')]) {
+          // this response is ultimately thrown away and only the symbol value
+          // is preserved. so what is inside this response is not important
+          let response = createResponse({ requestContext });
+          (response as any)[Symbol.for('shimmed-module')] =
+            fileRef[Symbol.for('shimmed-module')];
+          return response;
+        }
+        // fallback to the file system only after trying the index. during the
+        // initial index we need to use the API to run the indexer whose modules
+        // would otherwise live in index (this conundrum would go away if the
+        // API could be statically loaded and not come from the base realm.)
+        return this.makeJS(
+          await fileContentToText(fileRef),
+          fileRef.path,
+          requestContext,
+        );
+      }
+      return await this.serveLocalFile(fileRef, requestContext);
     } finally {
-      this.#logRequestPerformance(request, start);
+      this.#logRequestPerformance(request, start, 'cache miss');
     }
   }
 
