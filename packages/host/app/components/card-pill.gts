@@ -7,10 +7,11 @@ import { cn } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
-import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import Pill from '@cardstack/host/components/pill';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
+import { service } from '@ember/service';
+import RealmService from '../services/realm';
 
 interface CardPillSignature {
   Element: HTMLDivElement;
@@ -22,6 +23,8 @@ interface CardPillSignature {
 }
 
 export default class CardPill extends Component<CardPillSignature> {
+  @service declare realm: RealmService;
+
   get component() {
     return this.args.card.constructor.getComponent(this.args.card);
   }
@@ -34,16 +37,14 @@ export default class CardPill extends Component<CardPillSignature> {
       data-test-autoattached-card={{@isAutoAttachedCard}}
     >
       <:icon>
-        <RealmInfoProvider @fileURL={{@card.id}}>
-          <:ready as |realmInfo|>
-            <RealmIcon
-              @realmIconURL={{realmInfo.iconURL}}
-              @realmName={{realmInfo.name}}
-              width='18'
-              height='18'
-            />
-          </:ready>
-        </RealmInfoProvider>
+        {{#let (this.realm.info @card.id) as |realmInfo|}}
+          <RealmIcon
+            @realmIconURL={{realmInfo.iconURL}}
+            @realmName={{realmInfo.name}}
+            width='18'
+            height='18'
+          />
+        {{/let}}
       </:icon>
       <:default>
         <div class='card-content' title={{@card.title}}>
