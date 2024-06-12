@@ -7,17 +7,14 @@ import { cached } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { TrackedMap } from 'tracked-built-ins';
 
-import {
-  RealmInfo,
-  SupportedMimeType,
-  RealmPaths,
-} from '@cardstack/runtime-common';
+import { RealmInfo, RealmPaths } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
-import { getRealmSession } from '@cardstack/host/resources/realm-session';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
+
+import RealmService from './realm';
 
 const waiter = buildWaiter('realm-info-service:waiter');
 const { ownRealmURL } = ENV;
@@ -30,6 +27,8 @@ type RealmInfoWithPermissions = RealmInfo & {
 export default class RealmInfoService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
+  @service declare realm: RealmService;
+
   cachedRealmURLsForURL: Map<string, string> = new Map(); // Has the file url already been resolved to a realm url?
   cachedRealmInfos: TrackedMap<string, RealmInfoWithPermissions> =
     new TrackedMap(); // Has the realm url already been resolved to a realm info?
@@ -84,50 +83,18 @@ export default class RealmInfoService extends Service {
   async fetchRealmInfo(params: {
     realmURL?: URL;
     fileURL?: string;
-  }): Promise<RealmInfo> {
+  }): Promise<RealmInfoWithPermissions> {
     let { realmURL, fileURL } = params;
-    if (!realmURL && !fileURL) {
+    let url = realmURL?.href ?? fileURL;
+    if (!url) {
       throw new Error("Must provide either 'realmUrl' or 'fileUrl'");
     }
-
-    let token = waiter.beginAsync();
-    try {
-      let realmURLString = realmURL
-        ? realmURL.href
-        : (await this.fetchRealmURL(fileURL!))?.href;
-      if (!realmURLString) {
-        throw new Error(
-          'Could not find realm URL in response headers (x-boxel-realm-url)',
-        );
-      }
-
-      if (this.cachedRealmInfos.has(realmURLString)) {
-        return this.cachedRealmInfos.get(realmURLString)!;
-      } else {
-        let realmInfoResponse = await this.cachedFetch(
-          `${realmURLString}_info`,
-          {
-            headers: { Accept: SupportedMimeType.RealmInfo },
-          },
-        );
-
-        //The usage of `clone()` is to avoid the `json already read` error.
-        let realmInfo = (await realmInfoResponse.clone().json())?.data
-          ?.attributes as RealmInfo;
-        let realmSession = getRealmSession(this, {
-          realmURL: () => new URL(realmURLString!),
-        });
-        await realmSession.loaded;
-        this.cachedRealmInfos.set(realmURLString, {
-          ...realmInfo,
-          canRead: !!realmSession.canRead,
-          canWrite: !!realmSession.canWrite,
-        });
-        return realmInfo;
-      }
-    } finally {
-      waiter.endAsync(token);
-    }
+    let info = this.realm.info(url);
+    return {
+      ...info,
+      canRead: this.realm.canRead(url),
+      canWrite: this.realm.canWrite(url),
+    };
   }
 
   fetchAllKnownRealmInfos = restartableTask(async () => {
@@ -163,16 +130,5 @@ export default class RealmInfoService extends Service {
       let [path, info] = writeableRealms[0];
       return { path, info };
     }
-  }
-
-  private cachedFetch(url: string, init: RequestInit): Promise<Response> {
-    let fetchTaskKey = url + init.method;
-    let fetchTask = this.cachedFetchTasks.get(fetchTaskKey);
-    if (fetchTask) {
-      return fetchTask;
-    }
-    fetchTask = this.loaderService.loader.fetch(url, init);
-    this.cachedFetchTasks.set(fetchTaskKey, fetchTask);
-    return fetchTask;
   }
 }

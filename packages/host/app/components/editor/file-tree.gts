@@ -15,10 +15,8 @@ import {
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
-import {
-  type RealmSessionResource,
-  getRealmSession,
-} from '@cardstack/host/resources/realm-session';
+
+import RealmService from '@cardstack/host/services/realm';
 
 import Directory from './directory';
 
@@ -45,7 +43,7 @@ export default class FileTree extends Component<Signature> {
               title={{realmTitle}}
             >{{realmTitle}}</span>
           {{/let}}
-          {{#if this.canWrite}}
+          {{#if (this.realm.canWrite @realmURL.href)}}
             <Tooltip @placement='top' class='editability-icon'>
               <:trigger>
                 <IconPencilNotCrossedOut
@@ -132,16 +130,13 @@ export default class FileTree extends Component<Signature> {
   </template>
 
   @service private declare router: RouterService;
-  @tracked private showMask = true;
+  @service private declare realm: RealmService;
 
-  private realmSession: RealmSessionResource | undefined;
+  @tracked private showMask = true;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.hideMask.perform();
-    this.realmSession = getRealmSession(this, {
-      realmURL: () => this.args.realmURL,
-    });
   }
 
   private hideMask = restartableTask(async () => {
@@ -149,8 +144,4 @@ export default class FileTree extends Component<Signature> {
     await timeout(300);
     this.showMask = false;
   });
-
-  get canWrite() {
-    return this.realmSession?.canWrite;
-  }
 }

@@ -21,7 +21,7 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 import {
   baseRealm,
   primitive,
-  RealmSessionContextName,
+  PermissionsContextName,
 } from '@cardstack/runtime-common';
 
 import { cardTypeDisplayName, type CodeRef } from '@cardstack/runtime-common';
@@ -140,7 +140,7 @@ module('Integration | card-basics', function (hooks) {
 
   module('cards allowed to be edited', function (hooks) {
     hooks.beforeEach(function () {
-      provideConsumeContext(RealmSessionContextName, {
+      provideConsumeContext(PermissionsContextName, {
         canWrite: true,
       });
     });

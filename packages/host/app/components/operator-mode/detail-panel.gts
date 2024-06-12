@@ -63,6 +63,7 @@ import Selector from './detail-panel-selector';
 import { SelectorItem, selectorItemFunc } from './detail-panel-selector';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import RealmService from '@cardstack/host/services/realm';
 
 interface Signature {
   Element: HTMLElement;
@@ -90,6 +91,8 @@ interface Signature {
 
 export default class DetailPanel extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare realm: RealmService;
+
   private lastModified = lastModifiedDate(this, () => this.args.readyFile);
 
   @use private cardInstanceType = resource(() => {
@@ -197,7 +200,7 @@ export default class DetailPanel extends Component<Signature> {
         icon: Copy,
         handler: this.duplicateInstance,
       },
-      ...(this.args.readyFile.realmSession.canWrite
+      ...(this.realm.canWrite(this.args.readyFile.url)
         ? [
             {
               label: 'Delete',
@@ -210,7 +213,7 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   private get miscFileActions() {
-    if (this.args.readyFile.realmSession.canWrite) {
+    if (this.realm.canWrite(this.args.readyFile.url)) {
       return [
         {
           label: 'Delete',
@@ -371,7 +374,7 @@ export default class DetailPanel extends Component<Signature> {
                 data-test-current-module-name={{@readyFile.name}}
               >
                 <:actions>
-                  {{#if @readyFile.realmSession.canWrite}}
+                  {{#if (this.realm.canWrite @readyFile.url)}}
                     <IconButton
                       @icon={{IconTrash}}
                       @width='18'

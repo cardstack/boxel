@@ -4,7 +4,6 @@ import { service } from '@ember/service';
 import ENV from '@cardstack/host/config/environment';
 
 import type CardService from '../services/card-service';
-import type RealmService from '../services/realm';
 
 interface Model {
   isFastBoot: boolean;
@@ -13,7 +12,6 @@ interface Model {
 export default class Application extends Route<Model> {
   @service declare fastboot: { isFastBoot: boolean };
   @service declare cardService: CardService;
-  @service declare realm: RealmService;
 
   async beforeModel(transition: any): Promise<void> {
     // Override the matrix URL for testing
@@ -25,9 +23,6 @@ export default class Application extends Route<Model> {
           ENV.matrixURL,
         );
       }
-    }
-    for (let url of this.cardService.realmURLs) {
-      await this.realm.ensureRealmReady(url);
     }
   }
 

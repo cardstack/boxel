@@ -47,7 +47,8 @@ import {
   type Actions,
   cardTypeDisplayName,
   CardContextName,
-  RealmSessionContextName,
+  PermissionsContextName,
+  type Permissions,
   Deferred,
 } from '@cardstack/runtime-common';
 
@@ -57,10 +58,6 @@ import config from '@cardstack/host/config/environment';
 
 import { type StackItem } from '@cardstack/host/lib/stack-item';
 
-import {
-  type RealmSessionResource,
-  getRealmSession,
-} from '@cardstack/host/resources/realm-session';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 
 import type {
@@ -75,6 +72,7 @@ import Preview from '../preview';
 import OperatorModeOverlays from './overlays';
 
 import type CardService from '../../services/card-service';
+import RealmService from '@cardstack/host/services/realm';
 
 interface Signature {
   Args: {
@@ -106,6 +104,8 @@ export interface RenderedCardForOverlayActions {
 export default class OperatorModeStackItem extends Component<Signature> {
   @service private declare cardService: CardService;
   @service private declare environmentService: EnvironmentService;
+  @service private declare realm: RealmService;
+
   @tracked private selectedCards = new TrackedArray<CardDef>([]);
   @tracked private isHoverOnRealmIcon = false;
   @tracked private isSaving = false;
@@ -116,9 +116,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private contentEl: HTMLElement | undefined;
   private containerEl: HTMLElement | undefined;
 
-  @provide(RealmSessionContextName)
-  private realmSession: RealmSessionResource | undefined;
-
+  @provide(PermissionsContextName)
+  get permissions(): Permissions {
+    return this.realm.permissions(this.card.id);
+  }
   cardTracker = new ElementTracker<{
     card: CardDef;
     format: Format | 'data';
@@ -252,10 +253,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
       : cardTypeDisplayName(this.card);
   }
 
-  private get canWrite() {
-    return this.realmSession?.canWrite;
-  }
-
   private get moreOptionsMenuItems() {
     let menuItems: MenuItem[] = [
       new MenuItem('Copy Card URL', 'action', {
@@ -264,7 +261,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         disabled: !this.card.id,
       }),
     ];
-    if (this.canWrite) {
+    if (this.realm.canWrite(this.card.id)) {
       menuItems.push(
         new MenuItem('Delete', 'action', {
           action: () => this.args.publicAPI.delete(this.card),
@@ -284,10 +281,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private loadCard = restartableTask(async () => {
     await this.args.item.ready();
-    this.realmSession = getRealmSession(this, {
-      card: () => this.card,
-    });
-    await this.realmSession.loaded;
   });
 
   private subscribeToCard = task(async () => {
@@ -435,7 +428,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               {{/if}}
             </:icon>
             <:actions>
-              {{#if this.canWrite}}
+              {{#if (this.realm.canWrite this.card.id)}}
                 {{#if (eq @item.format 'isolated')}}
                   <Tooltip @placement='top'>
                     <:trigger>

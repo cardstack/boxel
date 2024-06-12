@@ -3,29 +3,44 @@ import Service from '@ember/service';
 
 import { service } from '@ember/service';
 
-import { SupportedMimeType, type RealmInfo } from '@cardstack/runtime-common';
+import {
+  Permissions,
+  SupportedMimeType,
+  type RealmInfo,
+} from '@cardstack/runtime-common';
+
+import {
+  RealmSessionResource,
+  getRealmSession,
+} from '../resources/realm-session';
 
 import type LoaderService from './loader-service';
+import { buildWaiter } from '@ember/test-waiters';
 
-interface ReadyState {
-  type: 'ready';
-  info: RealmInfo;
-}
+const waiter = buildWaiter('realm-service');
 
 class RealmResource {
+  type = 'ready' as const;
+  constructor(
+    readonly info: RealmInfo,
+    readonly session: RealmSessionResource,
+  ) {}
+}
+
+class InitialRealmResource {
   @service declare loaderService: LoaderService;
 
   #state:
     | {
         type: 'initializing';
+        session: RealmSessionResource;
       }
-    | ReadyState = { type: 'initializing' };
+    | RealmResource = {
+    type: 'initializing',
+    session: getRealmSession(this, { realmURL: () => new URL(this.url) }),
+  };
 
   constructor(readonly url: string) {}
-
-  isReady(): this is ReadyRealmResource {
-    return this.#state.type === 'ready';
-  }
 
   get state() {
     return this.#state;
@@ -35,58 +50,75 @@ class RealmResource {
     let response = await this.loaderService.loader.fetch(`${this.url}_info`, {
       headers: { Accept: SupportedMimeType.RealmInfo },
     });
-    this.#state = {
-      type: 'ready',
-      info: (await response.json()).data.attributes as RealmInfo,
-    };
+    await this.#state.session.loaded;
+    this.#state = new RealmResource(
+      (await response.json()).data.attributes as RealmInfo,
+      this.#state.session,
+    );
   }
 }
-
-type ReadyRealmResource = RealmResource & { state: ReadyState };
 
 export default class RealmService extends Service {
   @service declare loaderService: LoaderService;
 
   async ensureRealmReady(url: string): Promise<void> {
-    let realmURL = this.toRealmURL(url);
-    if (!realmURL) {
-      realmURL = await this.fetchRealmURL(url);
+    let token = waiter.beginAsync();
+    try {
+      let realmURL = this.toRealmURL(url);
+      if (!realmURL) {
+        realmURL = await this.fetchRealmURL(url);
+      }
+      let resource = this.realms.get(realmURL);
+      if (!resource) {
+        resource = new InitialRealmResource(realmURL);
+        setOwner(resource, getOwner(this)!);
+        this.realms.set(realmURL, resource);
+      }
+      await resource.initialize();
+    } finally {
+      waiter.endAsync(token);
     }
-    let resource = this.realms.get(realmURL);
-    if (!resource) {
-      resource = new RealmResource(realmURL);
-      setOwner(resource, getOwner(this)!);
-      this.realms.set(realmURL, resource);
-    }
-    await resource.initialize();
   }
 
   info = (url: string): RealmInfo => {
-    return this.realm(url).state.info;
+    return this.realm(url).info;
   };
 
-  canRead(_url: string): boolean {
-    throw new Error('unimplemented');
-  }
+  canRead = (url: string): boolean => {
+    return this.realm(url).session.canRead;
+  };
 
-  canWrite(_url: string): boolean {
-    throw new Error('unimplemented');
-  }
+  canWrite = (url: string): boolean => {
+    return this.realm(url).session.canWrite;
+  };
 
-  token(_url: string): string | undefined {
-    throw new Error('unimplemented');
-  }
+  permissions = (url: string): Permissions => {
+    let self = this;
+    return {
+      get canRead() {
+        return self.canRead(url);
+      },
+      get canWrite() {
+        return self.canWrite(url);
+      },
+    };
+  };
 
-  private realm(url: string): ReadyRealmResource {
+  token = (url: string): string | undefined => {
+    return this.realm(url).session.rawRealmToken;
+  };
+
+  private realm(url: string): RealmResource {
     let realmURL = this.toRealmURL(url);
     if (!realmURL) {
       throw new Error(`Failed to ensureRealmReady for ${url}`);
     }
     let r = this.realms.get(realmURL);
-    if (!r?.isReady()) {
+    let s = r?.state;
+    if (s?.type !== 'ready') {
       throw new Error(`Failed to await ensureRealmReady for ${realmURL}`);
     }
-    return r;
+    return s;
   }
 
   private toRealmURL(url: string): string | undefined {
@@ -105,13 +137,15 @@ export default class RealmService extends Service {
     let realmURL = response.headers.get('x-boxel-realm-url');
     if (!realmURL) {
       throw new Error(
-        `Could not find realm URL in response headers (x-boxel-realm-url) for ${url}`,
+        `Could not find realm URL in response headers (x-boxel-realm-url) for ${url} ${response.status}`,
       );
     }
     return realmURL;
   }
 
-  async refreshToken(_realmURL: string): Promise<void> {}
+  async refreshToken(url: string): Promise<void> {
+    await this.realm(url).session.refreshToken();
+  }
 
-  private realms: Map<string, RealmResource> = new Map();
+  private realms: Map<string, InitialRealmResource> = new Map();
 }

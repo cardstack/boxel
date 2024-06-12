@@ -15,8 +15,8 @@ import {
 import {
   CardContextName,
   DefaultFormatContextName,
-  RealmSession,
-  RealmSessionContextName,
+  type Permissions,
+  PermissionsContextName,
   getField,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
@@ -89,17 +89,15 @@ export class DefaultFormatProvider extends Component<DefaultFormatProviderSignat
   }
 }
 
-interface RealmSessionConsumerSignature {
-  Blocks: { default: [RealmSession | undefined] };
+interface PermissionsConsumerSignature {
+  Blocks: { default: [Permissions | undefined] };
 }
 
-export class RealmSessionConsumer extends Component<RealmSessionConsumerSignature> {
-  @consume(RealmSessionContextName) declare realmSession:
-    | RealmSession
-    | undefined;
+export class PermissionsConsumer extends Component<PermissionsConsumerSignature> {
+  @consume(PermissionsContextName) declare permissions: Permissions | undefined;
 
   <template>
-    {{yield this.realmSession}}
+    {{yield this.permissions}}
   </template>
 }
 
@@ -164,7 +162,7 @@ export function getBoxComponent(
     Args: { format?: Format; displayContainer?: boolean };
   }> = <template>
     <CardContextConsumer as |context|>
-      <RealmSessionConsumer as |realmSession|>
+      <PermissionsConsumer as |realmSession|>
         <DefaultFormatConsumer as |defaultFormat|>
           {{#let (determineFormat @format defaultFormat) as |effectiveFormat|}}
             {{#let
@@ -236,7 +234,7 @@ export function getBoxComponent(
             {{/let}}
           {{/let}}
         </DefaultFormatConsumer>
-      </RealmSessionConsumer>
+      </PermissionsConsumer>
     </CardContextConsumer>
     <style>
       .field-component-card.isolated-format {

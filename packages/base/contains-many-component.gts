@@ -14,7 +14,7 @@ import {
   type BoxComponentSignature,
   getBoxComponent,
   DefaultFormatConsumer,
-  RealmSessionConsumer,
+  PermissionsConsumer,
 } from './field-component';
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
 import { getPlural } from '@cardstack/runtime-common';
@@ -35,7 +35,7 @@ interface ContainsManyEditorSignature {
 
 class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
   <template>
-    <RealmSessionConsumer as |realmSession|>
+    <PermissionsConsumer as |realmSession|>
       <div class='contains-many-editor' data-test-contains-many={{@field.name}}>
         {{#if @arrayField.children.length}}
           <ul class='list'>
@@ -78,7 +78,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
           </AddButton>
         {{/if}}
       </div>
-    </RealmSessionConsumer>
+    </PermissionsConsumer>
     <style>
       .contains-many-editor {
         --remove-icon-size: var(--boxel-icon-lg);

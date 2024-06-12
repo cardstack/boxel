@@ -10,25 +10,20 @@ import {
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import config from '@cardstack/host/config/environment';
-import {
-  type RealmSessionResource,
-  getRealmSession,
-} from '@cardstack/host/resources/realm-session';
 import MatrixService from '@cardstack/host/services/matrix-service';
 import RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import { shimExternals } from '../lib/externals';
 
+import RealmService from './realm';
+
 export default class LoaderService extends Service {
   @service declare fastboot: { isFastBoot: boolean };
   @service private declare matrixService: MatrixService;
   @service declare realmInfoService: RealmInfoService;
+  @service declare realm: RealmService;
 
   @tracked loader = this.makeInstance();
-  // This resources all have the same owner, it's safe to reuse cache.
-  // The owner is the service, which stays around for the whole lifetime of the host app,
-  // which in turn assures the resources will not get torn down.
-  private realmSessions: Map<string, RealmSessionResource> = new Map();
 
   virtualNetwork = new VirtualNetwork();
 
@@ -56,7 +51,7 @@ export default class LoaderService extends Service {
       addAuthorizationHeader(loader, {
         realmURL: undefined,
         getJWT: async (realmURL: string) => {
-          return (await this.getRealmSession(new URL(realmURL))).rawRealmToken!;
+          return this.realm.token(realmURL);
         },
         getRealmInfo: async (url: string) => {
           let realmURL = await this.realmInfoService.fetchRealmURL(url);
@@ -72,26 +67,12 @@ export default class LoaderService extends Service {
           };
         },
         resetAuth: async (realmURL: string) => {
-          return (await this.getRealmSession(new URL(realmURL))).refreshToken();
+          return await this.realm.refreshToken(realmURL);
         },
       } as IRealmAuthDataSource),
     ]);
     shimExternals(this.virtualNetwork);
 
     return loader;
-  }
-
-  private async getRealmSession(realmURL: URL) {
-    let realmURLString = realmURL.href;
-    let realmSession = this.realmSessions.get(realmURLString);
-
-    if (!realmSession) {
-      realmSession = getRealmSession(this, {
-        realmURL: () => realmURL,
-      });
-      await realmSession.loaded;
-      this.realmSessions.set(realmURLString, realmSession);
-    }
-    return realmSession;
   }
 }

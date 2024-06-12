@@ -6,7 +6,7 @@ import {
 } from 'ember-concurrency';
 import {
   DefaultFormatProvider,
-  RealmSessionConsumer,
+  PermissionsConsumer,
   getBoxComponent,
 } from './field-component';
 import {
@@ -38,7 +38,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
   @consume(CardContextName) declare cardContext: CardContext;
 
   <template>
-    <RealmSessionConsumer as |realmSession|>
+    <PermissionsConsumer as |realmSession|>
       <div class='links-to-editor' data-test-links-to-editor={{@field.name}}>
         {{#if (and realmSession.canWrite this.isEmpty)}}
           <AddButton
@@ -70,7 +70,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
           </DefaultFormatProvider>
         {{/if}}
       </div>
-    </RealmSessionConsumer>
+    </PermissionsConsumer>
     <style>
       .links-to-editor {
         --remove-icon-size: var(--boxel-icon-lg);

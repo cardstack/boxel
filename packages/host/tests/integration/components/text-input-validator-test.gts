@@ -12,7 +12,11 @@ import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
-import { RealmSessionContextName, baseRealm } from '@cardstack/runtime-common';
+import {
+  PermissionsContextName,
+  type Permissions,
+  baseRealm,
+} from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 
@@ -67,9 +71,11 @@ module('Integration | text-input-validator', function (hooks) {
   }
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
-    provideConsumeContext(RealmSessionContextName, {
+    let permissions: Permissions = {
       canWrite: true,
-    });
+      canRead: true,
+    };
+    provideConsumeContext(PermissionsContextName, permissions);
 
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;

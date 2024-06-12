@@ -29,7 +29,7 @@ import {
   hasExecutableExtension,
   RealmPaths,
   type ResolvedCodeRef,
-  RealmSessionContextName,
+  PermissionsContextName,
 } from '@cardstack/runtime-common';
 import { SerializedError } from '@cardstack/runtime-common/error';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
@@ -70,6 +70,7 @@ import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
 import SubmodeLayout from './submode-layout';
+import RealmService from '@cardstack/host/services/realm';
 
 interface Signature {
   Args: {
@@ -120,6 +121,7 @@ export default class CodeSubmode extends Component<Signature> {
   @service private declare recentFilesService: RecentFilesService;
   @service private declare environmentService: EnvironmentService;
   @service private declare realmInfoService: RealmInfoService;
+  @service private declare realm: RealmService;
 
   @tracked private loadFileError: string | null = null;
   @tracked private userHasDismissedURLError = false;
@@ -664,12 +666,12 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   get isReadOnly() {
-    return !this.readyFile.realmSession.canWrite;
+    return !this.realm.canWrite(this.readyFile.url);
   }
 
-  @provide(RealmSessionContextName)
-  get realmSession() {
-    return this.readyFile.realmSession;
+  @provide(PermissionsContextName)
+  get permissions() {
+    return this.realm.permissions(this.readyFile.url);
   }
 
   <template>

@@ -37,7 +37,6 @@ import { Submode } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
-import { getRealmSession } from '@cardstack/host/resources/realm-session';
 
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
@@ -55,6 +54,8 @@ import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
 import { importResource } from '../resources/import';
 
 import { clearAllRealmSessions } from '../resources/realm-session';
+
+import RealmService from './realm';
 
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
@@ -76,6 +77,8 @@ export type OperatorModeContext = {
 export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
+  @service declare realm: RealmService;
+
   @service declare router: RouterService;
   @tracked private _client: MatrixClient | undefined;
   private realmSessionTasks: Map<string, Promise<string>> = new Map(); // key: realmURL, value: promise for JWT
@@ -420,11 +423,7 @@ export default class MatrixService extends Service {
           this.cardAPI,
           mappings,
         );
-        let realmSession = getRealmSession(this, {
-          card: () => attachedOpenCard,
-        });
-        await realmSession.loaded;
-        if (realmSession.canWrite) {
+        if (this.realm.canWrite(attachedOpenCard.id)) {
           tools.push({
             type: 'function',
             function: {

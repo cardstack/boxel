@@ -19,6 +19,7 @@ import RealmInfoService from '@cardstack/host/services/realm-info-service';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
 import type CardService from '../services/card-service';
+import RealmService from '../services/realm';
 
 const { ownRealmURL, loginMessageTimeoutMs } = ENV;
 
@@ -48,6 +49,8 @@ export default class RenderCard extends Route<Model | null> {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare matrixService: MatrixService;
   @service declare realmInfoService: RealmInfoService;
+  @service declare realm: RealmService;
+
   hasLoadMatrixBeenExecuted = false;
 
   async model(params: {
@@ -63,6 +66,11 @@ export default class RenderCard extends Route<Model | null> {
 
     try {
       await this.loadMatrix.perform();
+
+      for (let url of this.cardService.realmURLs) {
+        await this.realm.ensureRealmReady(url);
+      }
+
       let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
         new URL(ownRealmURL),
       );
