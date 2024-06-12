@@ -1677,25 +1677,22 @@ module('Acceptance | interact submode tests', function (hooks) {
       window.localStorage.getItem(ASSISTANT_PANEL_OPEN_KEY),
       'false',
     );
+  });
 
-    await visit('/');
+  test('it restores chat panel state', async function (assert) {
+    window.localStorage.setItem(ASSISTANT_PANEL_OPEN_KEY, 'true'),
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
 
-    // await visitOperatorMode({
-    //   stacks: [
-    //     [
-    //       {
-    //         id: `${testRealmURL}Person/fadhlan`,
-    //         format: 'isolated',
-    //       },
-    //     ],
-    //   ],
-    //   submode: Submodes.Interact,
-    //   fileView: 'inspector',
-    //   openDirs: {},
-    //   assistant: true,
-    // });
-
-    // await this.pauseTest();
-    // assert.dom('[data-test-room]').exists();
+    await waitFor('[data-test-room-settled]');
+    assert.dom('[data-test-room]').exists();
   });
 });
