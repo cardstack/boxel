@@ -21,8 +21,13 @@ import {
 
 //@ts-ignore
 import { action } from '@ember/object';
+
 //@ts-ignore
-import { Chess as ChessJS } from 'https://cdn.jsdelivr.net/npm/chess.js/+esm';
+import { Chess as _ChessJS } from 'https://cdn.jsdelivr.net/npm/chess.js/+esm';
+import type { Chess as _ChessJSType } from 'chess.js';
+type ChessJS = _ChessJSType;
+const ChessJS: typeof _ChessJSType = _ChessJS;
+
 //@ts-ignore
 import {
   MARKER_TYPE,
@@ -124,6 +129,7 @@ class ChessboardModifier extends Modifier<ChessboardModifierSignature> {
         }
         return result;
       }
+      return undefined;
     }
     if (this.chessboard === undefined) {
       this.chessboard = new Chessboard(element, {
@@ -157,9 +163,9 @@ interface ChessJSResourceArgs {
 }
 
 class ChessJSResource extends Resource<ChessJSResourceArgs> {
-  game: ChessJS;
-  snapshot: ChessJS;
-  private future: any[] = [];
+  game!: ChessJS;
+  snapshot!: ChessJS;
+  private future: string[] = [];
   @tracked snapshotPgn: string | undefined;
 
   modify(_positional: never[], named: ChessJSResourceArgs['named']) {
@@ -171,7 +177,7 @@ class ChessJSResource extends Resource<ChessJSResourceArgs> {
 
     if (this.snapshotPgn) {
       this.snapshot.loadPgn(this.snapshotPgn);
-    } else {
+    } else if (named.pgn) {
       this.snapshot.loadPgn(named.pgn);
     }
   }
@@ -343,10 +349,7 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
   }
 
   get notAtMostCurrentMove() {
-    return (
-      !this.args.analysis &&
-      !(this.pgnDisplay === this.game.pgn({ strict: true }))
-    );
+    return !this.args.analysis && !(this.pgnDisplay === this.game.pgn());
   }
 
   //Game state
@@ -354,7 +357,7 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
     return this.chessJSResource.game;
   }
   get pgnDisplay() {
-    return this.snapshot.pgn({ strict: true });
+    return this.snapshot.pgn();
   }
 
   get isGameOver() {
@@ -362,7 +365,7 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
   }
 
   get moves() {
-    return this.game.history({ verbose: true }).map((move: any) => move.san);
+    return this.game.history({ verbose: true }).map((move) => move.san);
   }
 
   @action
@@ -379,7 +382,7 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
     return this.snapshot.history({ verbose: true });
   }
   get snapshotMoves() {
-    return this.snapshotHistory.map((move: any) => move.san);
+    return this.snapshotHistory.map((move) => move.san);
   }
 
   get fen() {
