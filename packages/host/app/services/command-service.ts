@@ -1,7 +1,9 @@
 import Service, { service } from '@ember/service';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
 import { task } from 'ember-concurrency';
+
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 export default class CommandService extends Service {
   @service declare operatorModeStateService: OperatorModeStateService;

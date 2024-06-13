@@ -1,3 +1,4 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -19,6 +20,7 @@ import { markdownToHtml } from '@cardstack/runtime-common';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
+import CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -32,8 +34,6 @@ import { type ApplyButtonState } from '../ai-assistant/apply-button';
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
-import CommandService from '@cardstack/host/services/command-service';
-import { fn } from '@ember/helper';
 
 interface Signature {
   Element: HTMLDivElement;
