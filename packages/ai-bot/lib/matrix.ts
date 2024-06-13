@@ -69,7 +69,7 @@ export async function sendMessage(
 
 export interface FunctionToolCall {
   name: string;
-  arguments: any;
+  arguments: { [key: string]: any };
 }
 
 // TODO we might want to think about how to handle patches that are larger than
