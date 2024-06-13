@@ -25,7 +25,7 @@ const AiAssistantPastSessionsList: TemplateOnlyComponent<Signature> = <template>
     ...attributes
   >
     <:header>
-      Past Sessions
+      All Sessions
       <IconButton
         @icon={{DropdownArrowFilled}}
         @width='12px'
