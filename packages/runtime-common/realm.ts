@@ -856,14 +856,14 @@ export class Realm {
     let localPath = this.paths.local(url);
 
     if (!localPath.startsWith(assetsDir)) {
-      try {
-        let useWorkInProgressIndex = Boolean(
-          request.headers.get('X-Boxel-Use-WIP-Index'),
-        );
-        let module = await this.#searchIndex.module(url, {
-          useWorkInProgressIndex,
-        });
-        if (module?.type === 'module') {
+      let useWorkInProgressIndex = Boolean(
+        request.headers.get('X-Boxel-Use-WIP-Index'),
+      );
+      let module = await this.#searchIndex.module(url, {
+        useWorkInProgressIndex,
+      });
+      if (module?.type === 'module') {
+        try {
           return createResponse({
             body: module.executableCode,
             init: {
@@ -872,8 +872,12 @@ export class Realm {
             },
             requestContext,
           });
+        } finally {
+          this.#logRequestPerformance(request, start, 'cache hit');
         }
-        if (module?.type === 'error') {
+      }
+      if (module?.type === 'error') {
+        try {
           // using "Not Acceptable" here because no text/javascript representation
           // can be made and we're sending text/html error page instead
           return createResponse({
@@ -884,9 +888,9 @@ export class Realm {
             },
             requestContext,
           });
+        } finally {
+          this.#logRequestPerformance(request, start, 'cache hit');
         }
-      } finally {
-        this.#logRequestPerformance(request, start, 'cache hit');
       }
     }
 
