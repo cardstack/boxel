@@ -48,10 +48,7 @@ export default class CardURLBar extends Component<Signature> {
         <RealmInfoProvider @realmURL={{@realmURL}}>
           <:ready as |realmInfo|>
             <div class='realm-icon'>
-              <RealmIcon
-                @realmIconURL={{realmInfo.iconURL}}
-                @realmName={{realmInfo.name}}
-              />
+              <RealmIcon @realmInfo={{realmInfo}} />
             </div>
             <span>in {{realmInfo.name}}</span>
           </:ready>

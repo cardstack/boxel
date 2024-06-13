@@ -260,10 +260,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                 <:icon>
                   <RealmInfoProvider @fileURL={{@cardType.module}}>
                     <:ready as |realmInfo|>
-                      <RealmIcon
-                        @realmIconURL={{realmInfo.iconURL}}
-                        @realmName={{realmInfo.name}}
-                      />
+                      <RealmIcon @realmInfo={{realmInfo}} />
                     </:ready>
                   </RealmInfoProvider>
                 </:icon>
@@ -362,10 +359,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                               {{/if}}
                               <RealmInfoProvider @fileURL={{moduleUrl}}>
                                 <:ready as |realmInfo|>
-                                  <RealmIcon
-                                    @realmIconURL={{realmInfo.iconURL}}
-                                    @realmName={{realmInfo.name}}
-                                  />
+                                  <RealmIcon @realmInfo={{realmInfo}} />
                                 </:ready>
                               </RealmInfoProvider>
                             </:icon>

@@ -54,10 +54,7 @@ const BaseDefinitionContainer: TemplateOnlyComponent<BaseSignature> = <template>
           <RealmInfoProvider @fileURL={{@fileURL}}>
             <:ready as |realmInfo|>
               <div class='realm-info'>
-                <RealmIcon
-                  @realmIconURL={{realmInfo.iconURL}}
-                  @realmName={{realmInfo.name}}
-                />
+                <RealmIcon @realmInfo={{realmInfo}} />
                 <Label class='realm-name' data-test-definition-realm-name>in
                   {{realmInfo.name}}</Label>
               </div>

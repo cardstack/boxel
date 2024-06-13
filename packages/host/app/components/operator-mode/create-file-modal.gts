@@ -765,10 +765,7 @@ const SelectedTypePill: TemplateOnlyComponent<{
     <:icon>
       <RealmInfoProvider @fileURL={{@entry.id}}>
         <:ready as |realmInfo|>
-          <RealmIcon
-            @realmIconURL={{realmInfo.iconURL}}
-            @realmName={{realmInfo.name}}
-          />
+          <RealmIcon @realmInfo={{realmInfo}} />
         </:ready>
       </RealmInfoProvider>
     </:icon>

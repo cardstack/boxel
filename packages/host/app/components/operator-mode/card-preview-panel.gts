@@ -90,11 +90,7 @@ export default class CardPreviewPanel extends Component<Signature> {
       <div class='header-icon'>
         <RealmInfoProvider @realmURL={{@realmURL}}>
           <:ready as |realmInfo|>
-            <RealmIcon
-              @realmIconURL={{realmInfo.iconURL}}
-              @realmName={{realmInfo.name}}
-              class='icon'
-            />
+            <RealmIcon @realmInfo={{realmInfo}} class='icon' />
           </:ready>
         </RealmInfoProvider>
       </div>

@@ -222,11 +222,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.selectedCards.splice(0, this.selectedCards.length);
   };
 
-  @cached
-  private get iconURL() {
-    return this.fetchRealmInfo.value?.iconURL;
-  }
-
   private get realmName() {
     return this.fetchRealmInfo.value?.name;
   }
@@ -238,14 +233,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @action
   private hoverOnRealmIcon() {
     this.isHoverOnRealmIcon = !this.isHoverOnRealmIcon;
-  }
-
-  private get headerIcon() {
-    return {
-      URL: this.iconURL,
-      onMouseEnter: this.hoverOnRealmIcon,
-      onMouseLeave: this.hoverOnRealmIcon,
-    };
   }
 
   private get headerTitle() {
@@ -417,16 +404,17 @@ export default class OperatorModeStackItem extends Component<Signature> {
             data-test-stack-card-header
           >
             <:icon>
-              {{#if this.headerIcon.URL}}
-                <RealmIcon
-                  @realmIconURL={{this.headerIcon.URL}}
-                  @realmName={{this.realmName}}
-                  class='header-icon'
-                  data-test-boxel-header-icon={{this.headerIcon.URL}}
-                  {{on 'mouseenter' this.headerIcon.onMouseEnter}}
-                  {{on 'mouseleave' this.headerIcon.onMouseLeave}}
-                />
-              {{/if}}
+              {{#let (this.realm.info this.card.id) as |realmInfo|}}
+                {{#if realmInfo.iconURL}}
+                  <RealmIcon
+                    @realmInfo={{realmInfo}}
+                    class='header-icon'
+                    data-test-boxel-header-icon={{realmInfo.iconURL}}
+                    {{on 'mouseenter' this.hoverOnRealmIcon}}
+                    {{on 'mouseleave' this.hoverOnRealmIcon}}
+                  />
+                {{/if}}
+              {{/let}}
             </:icon>
             <:actions>
               {{#if (this.realm.canWrite this.card.id)}}

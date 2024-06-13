@@ -81,11 +81,7 @@ class File extends Component<FileArgs> {
       >
         <RealmInfoProvider @realmURL={{@recentFile.realmURL}}>
           <:ready as |realmInfo|>
-            <RealmIcon
-              @realmIconURL={{realmInfo.iconURL}}
-              @realmName={{realmInfo.name}}
-              class='icon'
-            />
+            <RealmIcon @realmInfo={{realmInfo}} class='icon' />
           </:ready>
         </RealmInfoProvider>
         {{@recentFile.filePath}}

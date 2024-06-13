@@ -31,11 +31,7 @@ export default class FileTree extends Component<Signature> {
     <div class='realm-info'>
       <RealmInfoProvider @realmURL={{@realmURL}}>
         <:ready as |realmInfo|>
-          <RealmIcon
-            @realmIconURL={{realmInfo.iconURL}}
-            @realmName={{realmInfo.name}}
-            class='icon'
-          />
+          <RealmIcon @realmInfo={{realmInfo}} class='icon' />
           {{#let (concat 'In ' realmInfo.name) as |realmTitle|}}
             <span
               class='realm-title'
