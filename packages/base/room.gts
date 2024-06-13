@@ -580,6 +580,7 @@ export class RoomField extends FieldDef {
           event.content.msgtype === 'org.boxel.command' &&
         ) {
           // We only handle patches for now
+          let commandEvent = event as CommandEvent;
           let command = event.content.data.toolCall;
           let annotation = this.events.find(
             (e) =>
@@ -588,7 +589,7 @@ export class RoomField extends FieldDef {
               e.content['m.relates_to']?.event_id ===
                 // If the message is a replacement message, eventId in command payload will be undefined.
                 // Because it will not refer to any other events, so we can use event_id of the message itself.
-                (event.content.data.eventId ?? event_id),
+                (commandEvent.content.data.eventId ?? event_id),
           ) as ReactionEvent | undefined;
 
           messageField = new MessageField({
@@ -803,6 +804,11 @@ interface MessageEvent extends BaseMatrixEvent {
   };
 }
 
+export interface FunctionToolCall {
+  name: string;
+  arguments: any;
+}
+
 export interface CommandEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: CommandMessageContent;
@@ -824,11 +830,8 @@ interface CommandMessageContent {
   body: string;
   formatted_body: string;
   data: {
-    command: {
-      type: string;
-      payload: CommandObject;
-      eventId: string;
-    };
+    toolCall: FunctionToolCall;
+    eventId: string;
   };
 }
 

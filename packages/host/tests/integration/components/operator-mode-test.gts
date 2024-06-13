@@ -898,14 +898,14 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'A patch',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id: `${testRealmURL}Person/fadhlan`,
-              patch: {
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: `${testRealmURL}Person/fadhlan`,
                 attributes: { firstName: 'Dave' },
               },
-              eventId: 'patch1',
             },
+            eventId: 'patch1',
           }),
           'm.relates_to': {
             rel_type: 'm.replace',
@@ -953,12 +953,14 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'Changing first name to Evie',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id: `${testRealmURL}Person/fadhlan`,
-              patch: { attributes: { firstName: 'Evie' } },
-              eventId: 'room1-event1',
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: `${testRealmURL}Person/fadhlan`,
+                attributes: { firstName: 'Evie' },
+              },
             },
+            eventId: 'room1-event1',
           }),
           'm.relates_to': {
             rel_type: 'm.replace',
@@ -979,12 +981,14 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'Changing first name to Jackie',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id: `${testRealmURL}Person/fadhlan`,
-              patch: { attributes: { firstName: 'Jackie' } },
-              eventId: 'room1-event2',
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: `${testRealmURL}Person/fadhlan`,
+                attributes: { firstName: 'Jackie' },
+              },
             },
+            eventId: 'room1-event2',
           }),
           'm.relates_to': {
             rel_type: 'm.replace',
@@ -1005,12 +1009,14 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'Incorrect command',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id: `${testRealmURL}Person/fadhlan`,
-              patch: { relationships: { pet: null } }, // this will error
-              eventId: 'room2-event1',
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: `${testRealmURL}Person/fadhlan`,
+                relationships: { pet: null }, // this will error
+              },
             },
+            eventId: 'room2-event1',
           }),
           'm.relates_to': {
             rel_type: 'm.replace',
@@ -1097,14 +1103,14 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'A patch',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id: otherCardID,
-              patch: {
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: otherCardID,
                 attributes: { firstName: 'Dave' },
               },
-              eventId: 'event1',
             },
+            eventId: 'event1',
           }),
           'm.relates_to': {
             rel_type: 'm.replace',
@@ -1169,16 +1175,13 @@ module('Integration | operator-mode', function (hooks) {
 
       let roomId = await openAiAssistant();
       let payload = {
-        type: 'patchCard',
-        id: `${testRealmURL}Person/fadhlan`,
-        patch: {
-          attributes: {
-            firstName: 'Joy',
-            address: { shippingInfo: { preferredCarrier: 'UPS' } },
-          },
+        card_id: `${testRealmURL}Person/fadhlan`,
+        attributes: {
+          firstName: 'Joy',
+          address: { shippingInfo: { preferredCarrier: 'UPS' } },
         },
-        eventId: 'event1',
       };
+
       await addRoomEvent(matrixService, {
         event_id: 'event1',
         room_id: roomId,
@@ -1191,7 +1194,13 @@ module('Integration | operator-mode', function (hooks) {
           msgtype: 'org.boxel.command',
           formatted_body: 'A patch',
           format: 'org.matrix.custom.html',
-          data: JSON.stringify({ command: payload }),
+          data: JSON.stringify({
+            toolCall: {
+              name: 'patchCard',
+              arguments: payload,
+            },
+            eventId: 'event1',
+          }),
           'm.relates_to': {
             rel_type: 'm.replace',
             event_id: 'event1',
@@ -1252,10 +1261,10 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'Removing pet and changing preferred carrier',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id,
-              patch: {
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: id,
                 attributes: {
                   address: { shippingInfo: { preferredCarrier: 'Fedex' } },
                 },
@@ -1263,8 +1272,8 @@ module('Integration | operator-mode', function (hooks) {
                   pet: { links: { self: null } },
                 },
               },
-              eventId: 'patch0',
             },
+            eventId: 'patch0',
           }),
           'm.relates_to': {
             rel_type: 'm.replace',
@@ -1298,10 +1307,10 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'Link to pet and change preferred carrier',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id,
-              patch: {
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: id,
                 attributes: {
                   address: { shippingInfo: { preferredCarrier: 'UPS' } },
                 },
@@ -1311,8 +1320,8 @@ module('Integration | operator-mode', function (hooks) {
                   },
                 },
               },
-              eventId: 'patch1',
             },
+            eventId: 'patch1',
           }),
           'm.relates_to': {
             rel_type: 'm.replace',
@@ -1365,10 +1374,10 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'Change tripTitle to Trip to Japan',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id,
-              patch: {
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: id,
                 attributes: { trips: { tripTitle: 'Trip to Japan' } },
               },
               eventId: 'event1',
@@ -1415,12 +1424,14 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'Change first name to Dave',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id,
-              patch: { attributes: { firstName: 'Dave' } },
-              eventId: 'event1',
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: id,
+                attributes: { firstName: 'Dave' },
+              },
             },
+            eventId: 'event1',
           }),
           'm.relates_to': {
             rel_type: 'm.replace',
@@ -1441,12 +1452,14 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'Incorrect patch command',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id,
-              patch: { relationships: { pet: null } }, // this will error
-              eventId: 'event2',
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: id,
+                relationships: { pet: null }, // this will error
+              },
             },
+            eventId: 'event2',
           }),
           'm.relates_to': {
             rel_type: 'm.replace',
@@ -1467,12 +1480,14 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'Change first name to Jackie',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id,
-              patch: { attributes: { firstName: 'Jackie' } },
-              eventId: 'event3',
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: id,
+                attributes: { firstName: 'Jackie' },
+              },
             },
+            eventId: 'event3',
           }),
           'm.relates_to': {
             rel_type: 'm.replace',
@@ -1540,12 +1555,14 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'Change first name to Dave',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id,
-              patch: { attributes: { firstName: 'Dave' } },
-              eventId: undefined,
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: id,
+                attributes: { firstName: 'Dave' },
+              },
             },
+            eventId: undefined,
           }),
           'm.relates_to': {
             rel_type: 'm.replace',
@@ -2183,14 +2200,14 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'A patch',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id: `${testRealmURL}Person/fadhlan`,
-              patch: {
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: `${testRealmURL}Person/fadhlan`,
                 attributes: { firstName: 'Dave' },
               },
-              eventId: 'patch1',
             },
+            eventId: 'patch1',
           }),
           'm.relates_to': {
             rel_type: 'm.replace',

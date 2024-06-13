@@ -2,6 +2,8 @@ import Service, { service } from '@ember/service';
 
 import { task } from 'ember-concurrency';
 
+import { PatchData } from '@cardstack/runtime-common';
+
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 

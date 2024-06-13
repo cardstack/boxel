@@ -116,7 +116,9 @@ export default class RoomMessage extends Component<Signature> {
         {{#if this.hasCommandField}}
           <div
             class='command-button-bar'
-            data-test-command-card-idle={{this.run.isIdle}}
+            {{! In test, if we change this isIdle check to the task running locally on this component, it will fail because roomMessages get destroyed during re-indexing. 
+            Since services are long-lived so it we will not have this issue. I think this will go away when we convert our room field into a room component }}
+            data-test-command-card-idle={{this.commandService.run.isIdle}}
           >
             <Button
               class='view-code-button'
