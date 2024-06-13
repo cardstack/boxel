@@ -576,9 +576,11 @@ export class RoomField extends FieldDef {
             ...cardArgs,
             attachedCardIds,
           });
-        } else if (event.content.msgtype === 'org.boxel.command') {
+        } else if (
+          event.content.msgtype === 'org.boxel.command' &&
+        ) {
           // We only handle patches for now
-          let command = event.content.data.command;
+          let command = event.content.data.toolCall;
           let annotation = this.events.find(
             (e) =>
               e.type === 'm.reaction' &&
@@ -586,7 +588,7 @@ export class RoomField extends FieldDef {
               e.content['m.relates_to']?.event_id ===
                 // If the message is a replacement message, eventId in command payload will be undefined.
                 // Because it will not refer to any other events, so we can use event_id of the message itself.
-                (command.eventId ?? event_id),
+                (event.content.data.eventId ?? event_id),
           ) as ReactionEvent | undefined;
 
           messageField = new MessageField({
@@ -594,8 +596,8 @@ export class RoomField extends FieldDef {
             formattedMessage: `<p class="patch-message">${event.content.formatted_body}</p>`,
             command: new PatchField({
               eventId: event_id,
-              commandType: command.type,
-              payload: command,
+              commandType: command.name,
+              payload: command.arguments,
               status: annotation?.content['m.relates_to'].key ?? 'ready',
             }),
             isStreamingFinished: true,

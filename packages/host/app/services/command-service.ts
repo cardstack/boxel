@@ -15,8 +15,11 @@ export default class CommandService extends Service {
       this.matrixService.failedCommandState.delete(eventId);
       if (command.commandType === 'patchCard') {
         await this.operatorModeStateService.patchCard.perform(
-          payload.id,
-          payload.patch, //extracting patch here
+          payload.card_id,
+          {
+            attributes: payload.attributes,
+            relationships: payload.relationships,
+          } as PatchData, //extracting patch here
         );
       }
       await this.matrixService.sendReactionEvent(roomId, eventId, 'applied');
