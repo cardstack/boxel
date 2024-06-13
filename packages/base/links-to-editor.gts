@@ -38,9 +38,9 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
   @consume(CardContextName) declare cardContext: CardContext;
 
   <template>
-    <PermissionsConsumer as |realmSession|>
+    <PermissionsConsumer as |permissions|>
       <div class='links-to-editor' data-test-links-to-editor={{@field.name}}>
-        {{#if (and realmSession.canWrite this.isEmpty)}}
+        {{#if (and permissions.canWrite this.isEmpty)}}
           <AddButton
             class='add-new'
             @variant='full-width'
@@ -52,7 +52,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
             {{@field.card.displayName}}
           </AddButton>
         {{else}}
-          {{#if realmSession.canWrite}}
+          {{#if permissions.canWrite}}
             <IconButton
               @variant='primary'
               @icon={{IconMinusCircle}}

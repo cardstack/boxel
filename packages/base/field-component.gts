@@ -162,7 +162,7 @@ export function getBoxComponent(
     Args: { format?: Format; displayContainer?: boolean };
   }> = <template>
     <CardContextConsumer as |context|>
-      <PermissionsConsumer as |realmSession|>
+      <PermissionsConsumer as |permissions|>
         <DefaultFormatConsumer as |defaultFormat|>
           {{#let (determineFormat @format defaultFormat) as |effectiveFormat|}}
             {{#let
@@ -197,7 +197,7 @@ export function getBoxComponent(
                       @set={{model.set}}
                       @fieldName={{model.name}}
                       @context={{context}}
-                      @canEdit={{realmSession.canWrite}}
+                      @canEdit={{permissions.canWrite}}
                     />
                   </CardContainer>
                 {{else if (isCompoundField model.value)}}
@@ -215,7 +215,7 @@ export function getBoxComponent(
                       @set={{model.set}}
                       @fieldName={{model.name}}
                       @context={{context}}
-                      @canEdit={{realmSession.canWrite}}
+                      @canEdit={{permissions.canWrite}}
                     />
                   </div>
                 {{else}}
@@ -227,7 +227,7 @@ export function getBoxComponent(
                     @set={{model.set}}
                     @fieldName={{model.name}}
                     @context={{context}}
-                    @canEdit={{realmSession.canWrite}}
+                    @canEdit={{permissions.canWrite}}
                   />
                 {{/if}}
               </DefaultFormatProvider>
