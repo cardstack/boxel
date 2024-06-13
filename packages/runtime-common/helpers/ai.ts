@@ -19,7 +19,7 @@ export type ObjectSchema = {
   };
 };
 
-type LinksToSchema = {
+export type LinksToSchema = {
   type: 'object';
   description?: string;
   properties: {
@@ -242,18 +242,39 @@ function generatePatchCallRelationshipsSpecification(
     usedFieldsOnly: false,
   });
   let schema: RelationshipsSchema | undefined;
+  let relationships: {
+    fullFieldName: string;
+    fieldType: 'linksTo' | 'linksToMany';
+    description?: string;
+  }[] = [];
   for (let [fieldName, field] of Object.entries(fields)) {
     if (field.fieldType !== 'linksTo' && field.fieldType !== 'linksToMany') {
-      continue;
+      let rels = generateNestedRelationshipsSpecification(
+        fieldName,
+        field.card,
+        cardApi,
+      );
+      relationships.push(...rels);
+    } else {
+      relationships.push({
+        fullFieldName: fieldName,
+        fieldType: field.fieldType,
+        description: field.description,
+      });
     }
-    if (!schema) {
-      schema = {
-        type: 'object',
-        properties: {},
-        required: [],
-      };
-    }
-    let linkedItemSchema: LinksToSchema = {
+  }
+  if (!relationships.length) {
+    return;
+  }
+  if (!schema) {
+    schema = {
+      type: 'object',
+      properties: {},
+      required: [],
+    };
+  }
+  for (let rel of relationships) {
+    let relSchema: LinksToSchema = {
       type: 'object',
       properties: {
         links: {
@@ -266,19 +287,54 @@ function generatePatchCallRelationshipsSpecification(
       },
       required: ['links'],
     };
-    schema.required.push(fieldName);
-    schema.properties[fieldName] =
-      field.fieldType === 'linksTo'
-        ? linkedItemSchema
+    schema.properties[rel.fullFieldName] =
+      rel.fieldType === 'linksTo'
+        ? relSchema
         : {
             type: 'array',
-            items: linkedItemSchema,
+            items: relSchema,
           };
-    if (field.description) {
-      schema.properties[fieldName].description = field.description;
+    schema.required.push(rel.fullFieldName);
+    if (rel.description) {
+      schema.properties[rel.fullFieldName].description = rel.description;
     }
   }
   return schema;
+}
+
+function generateNestedRelationshipsSpecification(
+  outerName: string,
+  def: typeof CardAPI.BaseDef,
+  cardApi: typeof CardAPI,
+  rels: {
+    fullFieldName: string;
+    fieldType: 'linksTo' | 'linksToMany';
+    description?: string;
+  }[] = [],
+) {
+  const { id: _removedIdField, ...fields } = cardApi.getFields(def, {
+    usedFieldsOnly: false,
+  });
+  let relationships = rels;
+  for (let [fName, fValue] of Object.entries(fields)) {
+    let fullFieldName = `${outerName}\.${fName}`;
+    if (fValue.fieldType !== 'linksTo' && fValue.fieldType !== 'linksToMany') {
+      let r = generateNestedRelationshipsSpecification(
+        fullFieldName,
+        fValue.card,
+        cardApi,
+        relationships,
+      );
+      relationships = relationships.concat(r);
+    } else {
+      relationships.push({
+        fullFieldName,
+        fieldType: fValue.fieldType,
+        description: fValue.description,
+      });
+    }
+  }
+  return relationships;
 }
 
 /**
