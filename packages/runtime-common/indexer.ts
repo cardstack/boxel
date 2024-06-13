@@ -74,8 +74,8 @@ export interface BoxelIndexTable {
   source: string | null;
   embedded_html: string | null;
   isolated_html: string | null;
-  indexed_at: number | null;
-  last_modified: number | null;
+  indexed_at: string | null; // pg represents big integers as strings in javascript
+  last_modified: string | null; // pg represents big integers as strings in javascript
   is_deleted: boolean | null;
 }
 
@@ -206,7 +206,12 @@ export class Indexer {
         )} has neither an error_doc nor transpiled_code`,
       );
     }
-    return { type: 'module', executableCode, source, lastModified };
+    return {
+      type: 'module',
+      executableCode,
+      source,
+      lastModified: parseInt(lastModified),
+    };
   }
 
   async getCard(
@@ -266,10 +271,10 @@ export class Indexer {
       isolatedHtml,
       searchDoc,
       types,
-      indexedAt,
+      indexedAt: indexedAt != null ? parseInt(indexedAt) : null,
       source,
       deps,
-      lastModified,
+      lastModified: parseInt(lastModified),
       realmVersion,
     };
   }
@@ -979,7 +984,13 @@ export class Batch {
               error_doc: entry.error,
               deps: entry.error.deps,
             }),
-      } as BoxelIndexTable,
+      } as Omit<BoxelIndexTable, 'last_modified' | 'indexed_at'> & {
+        // we do this because pg automatically casts big ints into strings, so
+        // we unwind that to accurately type the structure that we want to pass
+        // _in_ to the DB
+        last_modified: number;
+        indexed_at: number;
+      },
       {
         jsonFields: [
           'pristine_doc',
@@ -1298,19 +1309,19 @@ function assertIndexEntrySource(obj: BoxelIndexTable): Omit<
   'source' | 'last_modified'
 > & {
   source: string;
-  last_modified: number;
+  last_modified: string;
 } {
   if (!('source' in obj) || typeof obj.source !== 'string') {
     throw new Error(`expected index entry to have "source" string property`);
   }
-  if (!('last_modified' in obj) || typeof obj.last_modified !== 'number') {
+  if (!('last_modified' in obj) || typeof obj.last_modified !== 'string') {
     throw new Error(
       `expected index entry to have "last_modified" number property`,
     );
   }
   return obj as Omit<BoxelIndexTable, 'source' | 'last_modified'> & {
     source: string;
-    last_modified: number;
+    last_modified: string;
   };
 }
 
