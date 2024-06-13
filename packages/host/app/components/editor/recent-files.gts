@@ -72,6 +72,7 @@ class File extends Component<FileArgs> {
 
   <template>
     {{#unless this.isSelected}}
+      {{! template-lint-disable require-presentational-children }}
       <li
         class='recent-file'
         data-test-recent-file={{this.fullUrl.href}}

@@ -5,12 +5,10 @@ import {
   VirtualNetwork,
   baseRealm,
   addAuthorizationHeader,
-  IRealmAuthDataSource,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import config from '@cardstack/host/config/environment';
-import MatrixService from '@cardstack/host/services/matrix-service';
 import RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import { shimExternals } from '../lib/externals';
@@ -19,7 +17,6 @@ import RealmService from './realm';
 
 export default class LoaderService extends Service {
   @service declare fastboot: { isFastBoot: boolean };
-  @service private declare matrixService: MatrixService;
   @service declare realmInfoService: RealmInfoService;
   @service declare realm: RealmService;
 
@@ -49,27 +46,20 @@ export default class LoaderService extends Service {
     );
     loader.prependURLHandlers([
       addAuthorizationHeader(loader, {
-        realmURL: undefined,
-        getJWT: async (realmURL: string) => {
-          return this.realm.token(realmURL);
-        },
-        getRealmInfo: async (url: string) => {
-          let realmURL = await this.realmInfoService.fetchRealmURL(url);
-          if (!realmURL) {
-            return null;
+        getToken: async (url: string, httpMethod: string) => {
+          try {
+            return this.realm.token(url, httpMethod);
+          } catch (e: any) {
+            if (e.code === 'RealmNotReady') {
+              return undefined;
+            }
+            throw e;
           }
-          let isPublicReadable = await this.realmInfoService.isPublicReadable(
-            realmURL,
-          );
-          return {
-            url: realmURL.href,
-            isPublicReadable,
-          };
         },
-        resetAuth: async (realmURL: string) => {
-          return await this.realm.refreshToken(realmURL);
+        resetToken: async (url: string) => {
+          return await this.realm.refreshToken(url);
         },
-      } as IRealmAuthDataSource),
+      }),
     ]);
     shimExternals(this.virtualNetwork);
 

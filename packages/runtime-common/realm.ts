@@ -79,6 +79,7 @@ export type RealmInfo = {
   name: string;
   backgroundURL: string | null;
   iconURL: string | null;
+  url: string;
 };
 
 export interface FileRef {
@@ -1657,7 +1658,7 @@ export class Realm {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
     let realmConfig = await this.readFileAsText(localPath, undefined);
-    let realmInfo: RealmInfo = {
+    let realmInfo = {
       name: 'Unnamed Workspace',
       backgroundURL: null,
       iconURL: null,
@@ -1676,7 +1677,7 @@ export class Realm {
     }
     let doc = {
       data: {
-        id: this.paths.url.toString(),
+        id: this.url,
         type: 'realm-info',
         attributes: realmInfo,
       },

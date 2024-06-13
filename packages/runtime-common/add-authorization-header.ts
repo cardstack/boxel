@@ -1,9 +1,12 @@
 import { AuthenticationErrorMessages } from './router';
 import { baseRealm } from './index';
 import { PACKAGES_FAKE_ORIGIN } from './package-shim-handler';
-import { IRealmAuthDataSource } from './realm-auth-data-source';
 import { Loader, RequestHandler } from './loader';
 
+export interface IRealmAuthDataSource {
+  getToken(url: string, httpMethod: string): Promise<string | undefined>;
+  resetToken(url: string): void;
+}
 export function addAuthorizationHeader(
   loader: Loader,
   realmAuthDataSource: IRealmAuthDataSource,
@@ -28,38 +31,25 @@ export function addAuthorizationHeader(
       return null;
     }
 
-    let realmInfo = await realmAuthDataSource.getRealmInfo(request.url);
-    if (!realmInfo) {
+    let token = await realmAuthDataSource.getToken(request.url, request.method);
+    if (!token) {
       return null;
     }
+    request.headers.set('Authorization', token);
+    let response = await loader.fetch(request);
 
-    let isRequestToItself = realmInfo.url === realmAuthDataSource.realmURL; // Could be a request to itself when indexing its own cards
-    if (
-      isRequestToItself ||
-      (realmInfo.isPublicReadable && request.method === 'GET')
-    ) {
-      return null;
-    } else {
-      request.headers.set(
-        'Authorization',
-        await realmAuthDataSource.getJWT(realmInfo.url),
-      );
+    if (response.status === 401 && retryOnAuthFail) {
+      let errorMessage = await response.text();
+      if (
+        errorMessage === AuthenticationErrorMessages.PermissionMismatch ||
+        errorMessage === AuthenticationErrorMessages.TokenExpired
+      ) {
+        realmAuthDataSource.resetToken(request.url);
+        request.headers.delete('Authorization');
 
-      let response = await loader.fetch(request);
-
-      if (response.status === 401 && retryOnAuthFail) {
-        let errorMessage = await response.text();
-        if (
-          errorMessage === AuthenticationErrorMessages.PermissionMismatch ||
-          errorMessage === AuthenticationErrorMessages.TokenExpired
-        ) {
-          realmAuthDataSource.resetAuth(realmInfo.url);
-          request.headers.delete('Authorization');
-
-          return requestHandler(request, false);
-        }
+        return requestHandler(request, false);
       }
-      return response;
     }
+    return response;
   };
 }
