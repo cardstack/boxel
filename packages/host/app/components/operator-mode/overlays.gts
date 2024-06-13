@@ -8,7 +8,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { dropTask, task } from 'ember-concurrency';
 import { velcro } from 'ember-velcro';
-import { type TrackedArray, TrackedWeakMap } from 'tracked-built-ins';
+import { type TrackedArray, TrackedMap } from 'tracked-built-ins';
 
 import {
   BoxelDropdown,
@@ -206,10 +206,10 @@ export default class OperatorModeOverlays extends Component<Signature> {
   @service private declare cardService: CardService;
   @tracked private currentlyHoveredCard: RenderedCardForOverlayActions | null =
     null;
-  @tracked private realmSessionByCard: TrackedWeakMap<
-    CardDef,
+  @tracked private realmSessionByCard: TrackedMap<
+    string,
     RealmSessionResource
-  > = new TrackedWeakMap();
+  > = new TrackedMap();
   private realmSessions: Map<string, RealmSessionResource> = new Map();
 
   private offset = {
@@ -238,9 +238,6 @@ export default class OperatorModeOverlays extends Component<Signature> {
   private get renderedCardsForOverlayActionsWithEvents() {
     let renderedCards = this.args.renderedCardsForOverlayActions;
     for (const renderedCard of renderedCards) {
-      if (!this.realmSessionByCard.get(renderedCard.card)) {
-        this.loadRealmSession.perform(renderedCard.card);
-      }
       if (boundRenderedCardElement.has(renderedCard.element)) {
         continue;
       }
@@ -267,6 +264,10 @@ export default class OperatorModeOverlays extends Component<Signature> {
         );
       });
       renderedCard.element.style.cursor = 'pointer';
+
+      if (!this.realmSessionByCard.get(renderedCard.card.id)) {
+        this.loadRealmSession.perform(renderedCard.card);
+      }
     }
 
     return renderedCards;
@@ -309,7 +310,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
   }
 
   @action private canWrite(card: CardDef) {
-    return !!this.realmSessionByCard.get(card)?.canWrite;
+    return !!this.realmSessionByCard.get(card.id)?.canWrite;
   }
 
   private viewCard = dropTask(
@@ -333,7 +334,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
       await resource.loaded;
       this.realmSessions.set(realmURL.href, resource);
     }
-    this.realmSessionByCard.set(card, resource);
+    this.realmSessionByCard.set(card.id, resource);
   });
 
   private zIndexStyle(element: HTMLElement) {
