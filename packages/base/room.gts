@@ -579,7 +579,6 @@ export class RoomField extends FieldDef {
         } else if (event.content.msgtype === 'org.boxel.command') {
           // We only handle patches for now
           let command = event.content.data.command;
-          //TODO: This is here for backward compatibility reasons
           let annotation = this.events.find(
             (e) =>
               e.type === 'm.reaction' &&
