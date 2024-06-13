@@ -578,6 +578,7 @@ export class RoomField extends FieldDef {
           });
         } else if (
           event.content.msgtype === 'org.boxel.command' &&
+          event.content.data.toolCall
         ) {
           // We only handle patches for now
           let commandEvent = event as CommandEvent;
