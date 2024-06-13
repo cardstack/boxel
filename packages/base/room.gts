@@ -237,14 +237,14 @@ type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
 
 type JSONObject = { [x: string]: JSONValue };
 
-type PatchObject = { patch: { attributes: JSONObject }; id: string };
+type CommandObject = JSONObject;
 
-class PatchObjectField extends FieldDef {
-  static [primitive]: PatchObject;
+class CommandObjectField extends FieldDef {
+  static [primitive]: CommandObject;
 }
 
 class CommandType extends FieldDef {
-  static [primitive]: 'patchCard';
+  static [primitive]: string;
 }
 
 type CommandStatus = 'applied' | 'ready';
@@ -254,9 +254,9 @@ class CommandStatusField extends FieldDef {
 }
 
 // Subclass, add a validator that checks the fields required?
-class PatchField extends FieldDef {
+class CommandField extends FieldDef {
   @field commandType = contains(CommandType);
-  @field payload = contains(PatchObjectField);
+  @field payload = contains(CommandObjectField);
   @field eventId = contains(StringField);
   @field status = contains(CommandStatusField);
 }
@@ -285,7 +285,7 @@ export class MessageField extends FieldDef {
   @field attachedCardIds = containsMany(StringField);
   @field index = contains(NumberField);
   @field transactionId = contains(StringField);
-  @field command = contains(PatchField);
+  @field command = contains(CommandField);
   @field isStreamingFinished = contains(BooleanField);
   @field errorMessage = contains(StringField);
   // ID from the client and can be used by client
@@ -593,8 +593,8 @@ export class RoomField extends FieldDef {
 
           messageField = new MessageField({
             ...cardArgs,
-            formattedMessage: `<p class="patch-message">${event.content.formatted_body}</p>`,
-            command: new PatchField({
+            formattedMessage: `<p class="command-message">${event.content.formatted_body}</p>`,
+            command: new CommandField({
               eventId: event_id,
               commandType: command.name,
               payload: command.arguments,
@@ -825,8 +825,8 @@ interface CommandMessageContent {
   formatted_body: string;
   data: {
     command: {
-      type: 'patchCard';
-      payload: PatchObject;
+      type: string;
+      payload: CommandObject;
       eventId: string;
     };
   };

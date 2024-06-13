@@ -29,7 +29,7 @@ export default class CommandService extends Service {
           ? new Error(e)
           : e instanceof Error
           ? e
-          : new Error('Patch failed.');
+          : new Error('Command failed.');
       this.matrixService.failedCommandState.set(eventId, error);
     }
   });
