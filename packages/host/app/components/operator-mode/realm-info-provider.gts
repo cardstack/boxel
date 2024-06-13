@@ -8,7 +8,7 @@ import { TrackedObject } from 'tracked-built-ins';
 
 import { type RealmInfo } from '@cardstack/runtime-common';
 
-import type RealmInfoService from '@cardstack/host/services/realm-info-service';
+import type RealmService from '@cardstack/host/services/realm';
 
 const waiter = buildWaiter('realm-info-provider:load-waiter');
 
@@ -31,7 +31,7 @@ export interface Signature {
 }
 
 export default class RealmInfoProvider extends Component<Signature> {
-  @service declare realmInfoService: RealmInfoService;
+  @service declare realm: RealmService;
   cachedRealmInfo: RealmInfo | null = null;
 
   @use private realmInfoResource = resource(() => {
@@ -57,7 +57,11 @@ export default class RealmInfoProvider extends Component<Signature> {
         state.isLoading = true;
         let token = waiter.beginAsync();
         try {
-          let realmInfo = await this.realmInfoService.fetchRealmInfo(this.args);
+          let url = this.args.realmURL?.href ?? this.args.fileURL;
+          if (!url) {
+            throw new Error('No realmURL or fileURL provided');
+          }
+          let realmInfo = this.realm.info(url);
 
           state.value = realmInfo;
           this.cachedRealmInfo = realmInfo;

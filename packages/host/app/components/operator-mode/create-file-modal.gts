@@ -1,4 +1,3 @@
-import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -38,6 +37,8 @@ import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common/code-ref';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
+import type RealmService from '@cardstack/host/services/realm';
+
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
@@ -47,7 +48,6 @@ import Pill from '../pill';
 import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
 
 import RealmIcon from './realm-icon';
-import RealmInfoProvider from './realm-info-provider';
 
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
@@ -754,32 +754,36 @@ export function convertToClassName(input: string) {
   return className;
 }
 
-const SelectedTypePill: TemplateOnlyComponent<{
-  entry: CatalogEntry;
-}> = <template>
-  <Pill
-    @inert={{true}}
-    class='selected-type'
-    data-test-selected-type={{@entry.title}}
-  >
-    <:icon>
-      <RealmInfoProvider @fileURL={{@entry.id}}>
-        <:ready as |realmInfo|>
-          <RealmIcon @realmInfo={{realmInfo}} />
-        </:ready>
-      </RealmInfoProvider>
-    </:icon>
-    <:default>
-      {{@entry.title}}
-    </:default>
-  </Pill>
-  <style>
-    .selected-type {
-      padding: var(--boxel-sp-xxxs);
-      gap: var(--boxel-sp-xxxs);
-    }
-    .selected-type :deep(.icon) {
-      margin-right: 0;
-    }
-  </style>
-</template>;
+interface SelectedTypePillSignature {
+  Args: {
+    entry: CatalogEntry;
+  };
+}
+
+class SelectedTypePill extends Component<SelectedTypePillSignature> {
+  @service private declare realm: RealmService;
+
+  <template>
+    <Pill
+      @inert={{true}}
+      class='selected-type'
+      data-test-selected-type={{@entry.title}}
+    >
+      <:icon>
+        <RealmIcon @realmInfo={{this.realm.info @entry.id}} />
+      </:icon>
+      <:default>
+        {{@entry.title}}
+      </:default>
+    </Pill>
+    <style>
+      .selected-type {
+        padding: var(--boxel-sp-xxxs);
+        gap: var(--boxel-sp-xxxs);
+      }
+      .selected-type :deep(.icon) {
+        margin-right: 0;
+      }
+    </style>
+  </template>
+}

@@ -36,7 +36,6 @@ import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analy
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode/code-submode/editor-indicator';
-import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
@@ -675,14 +674,12 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   <template>
-    <RealmInfoProvider @realmURL={{this.realmURL}}>
-      <:ready as |realmInfo|>
-        <div
-          class='code-mode-background'
-          style={{this.backgroundURLStyle realmInfo.backgroundURL}}
-        ></div>
-      </:ready>
-    </RealmInfoProvider>
+    {{#let (this.realm.info this.realmURL.href) as |realmInfo|}}
+      <div
+        class='code-mode-background'
+        style={{this.backgroundURLStyle realmInfo.backgroundURL}}
+      ></div>
+    {{/let}}
     <SubmodeLayout
       @onCardSelectFromSearch={{this.openSearchResultInEditor}}
       @hideAiAssistant={{true}}

@@ -6,7 +6,7 @@ import Component from '@glimmer/component';
 import { RealmPaths } from '@cardstack/runtime-common';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
-import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import RealmService from '@cardstack/host/services/realm';
 import { RecentFile } from '@cardstack/host/services/recent-files-service';
 
 import type CardService from '../../services/card-service';
@@ -47,6 +47,7 @@ interface FileArgs {
 class File extends Component<FileArgs> {
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
+  @service declare realm: RealmService;
 
   @action
   openFile() {
@@ -71,19 +72,16 @@ class File extends Component<FileArgs> {
 
   <template>
     {{#unless this.isSelected}}
-      {{! RealmInfoProvider and :ready do not produce children elements }}
-      {{! template-lint-disable require-presentational-children }}
       <li
         class='recent-file'
         data-test-recent-file={{this.fullUrl.href}}
         role='button'
         {{on 'click' this.openFile}}
       >
-        <RealmInfoProvider @realmURL={{@recentFile.realmURL}}>
-          <:ready as |realmInfo|>
-            <RealmIcon @realmInfo={{realmInfo}} class='icon' />
-          </:ready>
-        </RealmInfoProvider>
+        <RealmIcon
+          @realmInfo={{this.realm.info @recentFile.realmURL.href}}
+          class='icon'
+        />
         {{@recentFile.filePath}}
       </li>
     {{/unless}}

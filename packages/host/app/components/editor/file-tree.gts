@@ -14,7 +14,6 @@ import {
 } from '@cardstack/boxel-ui/icons';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
-import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 
 import RealmService from '@cardstack/host/services/realm';
 
@@ -29,48 +28,46 @@ interface Signature {
 export default class FileTree extends Component<Signature> {
   <template>
     <div class='realm-info'>
-      <RealmInfoProvider @realmURL={{@realmURL}}>
-        <:ready as |realmInfo|>
-          <RealmIcon @realmInfo={{realmInfo}} class='icon' />
-          {{#let (concat 'In ' realmInfo.name) as |realmTitle|}}
-            <span
-              class='realm-title'
-              data-test-realm-name={{realmInfo.name}}
-              title={{realmTitle}}
-            >{{realmTitle}}</span>
-          {{/let}}
-          {{#if (this.realm.canWrite @realmURL.href)}}
-            <Tooltip @placement='top' class='editability-icon'>
-              <:trigger>
-                <IconPencilNotCrossedOut
-                  width='18px'
-                  height='18px'
-                  aria-label='Can edit files in this workspace'
-                  data-test-realm-writable
-                />
-              </:trigger>
-              <:content>
-                Can edit files in this workspace
-              </:content>
-            </Tooltip>
-          {{else}}
-            <Tooltip @placement='top' class='editability-icon'>
-              <:trigger>
-                <IconPencilCrossedOut
-                  width='18px'
-                  height='18px'
-                  aria-label='Cannot edit files in this workspace'
-                  data-test-realm-not-writable
-                />
-              </:trigger>
-              <:content>
-                Cannot edit files in this workspace
-              </:content>
-            </Tooltip>
+      {{#let (this.realm.info @realmURL.href) as |realmInfo|}}
+        <RealmIcon @realmInfo={{realmInfo}} class='icon' />
+        {{#let (concat 'In ' realmInfo.name) as |realmTitle|}}
+          <span
+            class='realm-title'
+            data-test-realm-name={{realmInfo.name}}
+            title={{realmTitle}}
+          >{{realmTitle}}</span>
+        {{/let}}
+        {{#if (this.realm.canWrite @realmURL.href)}}
+          <Tooltip @placement='top' class='editability-icon'>
+            <:trigger>
+              <IconPencilNotCrossedOut
+                width='18px'
+                height='18px'
+                aria-label='Can edit files in this workspace'
+                data-test-realm-writable
+              />
+            </:trigger>
+            <:content>
+              Can edit files in this workspace
+            </:content>
+          </Tooltip>
+        {{else}}
+          <Tooltip @placement='top' class='editability-icon'>
+            <:trigger>
+              <IconPencilCrossedOut
+                width='18px'
+                height='18px'
+                aria-label='Cannot edit files in this workspace'
+                data-test-realm-not-writable
+              />
+            </:trigger>
+            <:content>
+              Cannot edit files in this workspace
+            </:content>
+          </Tooltip>
 
-          {{/if}}
-        </:ready>
-      </RealmInfoProvider>
+        {{/if}}
+      {{/let}}
     </div>
     <nav>
       <Directory @relativePath='' @realmURL={{@realmURL}} />
