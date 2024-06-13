@@ -3,6 +3,8 @@ import Service from '@ember/service';
 
 import { service } from '@ember/service';
 
+import { buildWaiter } from '@ember/test-waiters';
+
 import {
   Permissions,
   SupportedMimeType,
@@ -15,7 +17,6 @@ import {
 } from '../resources/realm-session';
 
 import type LoaderService from './loader-service';
-import { buildWaiter } from '@ember/test-waiters';
 
 const waiter = buildWaiter('realm-service');
 

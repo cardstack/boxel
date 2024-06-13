@@ -29,13 +29,14 @@ import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import type CardService from '@cardstack/host/services/card-service';
 
+import RealmService from '@cardstack/host/services/realm';
+
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import OperatorModeOverlayItemHeader from './overlay-item-header';
 import { RenderedCardForOverlayActions } from './stack-item';
 
 import type { MiddlewareState } from '@floating-ui/dom';
-import RealmService from '@cardstack/host/services/realm';
 
 interface Signature {
   Args: {
@@ -104,8 +105,8 @@ export default class OperatorModeOverlays extends Component<Signature> {
               @icon={{EyeIcon}}
               aria-label='preview card'
             />
-            {{! Since there is just one item in the drop down, if that one item 
-                  cannot be shown then we just don't show the drop down. This should 
+            {{! Since there is just one item in the drop down, if that one item
+                  cannot be shown then we just don't show the drop down. This should
                   change if we add more items in the dropdown }}
             {{#if canWrite}}
               <BoxelDropdown>

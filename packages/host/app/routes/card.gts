@@ -18,8 +18,9 @@ import RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
-import type CardService from '../services/card-service';
 import RealmService from '../services/realm';
+
+import type CardService from '../services/card-service';
 
 const { ownRealmURL, loginMessageTimeoutMs } = ENV;
 

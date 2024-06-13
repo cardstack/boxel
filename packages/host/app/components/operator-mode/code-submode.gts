@@ -52,6 +52,7 @@ import type CardService from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import RealmService from '@cardstack/host/services/realm';
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
@@ -70,7 +71,6 @@ import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
 import SubmodeLayout from './submode-layout';
-import RealmService from '@cardstack/host/services/realm';
 
 interface Signature {
   Args: {

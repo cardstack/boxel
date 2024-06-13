@@ -60,6 +60,8 @@ import { type StackItem } from '@cardstack/host/lib/stack-item';
 
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 
+import RealmService from '@cardstack/host/services/realm';
+
 import type {
   CardDef,
   Format,
@@ -72,7 +74,6 @@ import Preview from '../preview';
 import OperatorModeOverlays from './overlays';
 
 import type CardService from '../../services/card-service';
-import RealmService from '@cardstack/host/services/realm';
 
 interface Signature {
   Args: {

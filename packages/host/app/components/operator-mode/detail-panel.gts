@@ -42,6 +42,8 @@ import {
   isReexportCardOrField,
 } from '@cardstack/host/resources/module-contents';
 
+import RealmService from '@cardstack/host/services/realm';
+
 import {
   type CardDef,
   type BaseDef,
@@ -63,7 +65,6 @@ import Selector from './detail-panel-selector';
 import { SelectorItem, selectorItemFunc } from './detail-panel-selector';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import RealmService from '@cardstack/host/services/realm';
 
 interface Signature {
   Element: HTMLElement;

@@ -1,5 +1,6 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { IconButton } from '@cardstack/boxel-ui/components';
@@ -10,7 +11,7 @@ import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import Pill from '@cardstack/host/components/pill';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-import { service } from '@ember/service';
+
 import RealmService from '../services/realm';
 
 interface CardPillSignature {
