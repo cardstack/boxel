@@ -103,20 +103,15 @@ export class Responder {
       log.debug('[Room Timeline] Function call', toolCall);
       try {
         functionCall.arguments = JSON.parse(functionCall.arguments);
-        if (
-          functionCall.name === 'patchCard' ||
-          functionCall.name === 'searchCard'
-        ) {
-          let optionPromise = sendOption(
-            this.client,
-            this.roomId,
-            functionCall,
-            this.initialMessageReplaced ? undefined : this.initialMessageId,
-          );
-          this.messagePromises.push(optionPromise);
-          await optionPromise;
-          this.initialMessageReplaced = true;
-        }
+        let optionPromise = sendOption(
+          this.client,
+          this.roomId,
+          functionCall,
+          this.initialMessageReplaced ? undefined : this.initialMessageId,
+        );
+        this.messagePromises.push(optionPromise);
+        await optionPromise;
+        this.initialMessageReplaced = true;
       } catch (error) {
         Sentry.captureException(error);
         this.initialMessageReplaced = true;

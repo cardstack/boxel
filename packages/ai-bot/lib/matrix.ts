@@ -68,7 +68,7 @@ export async function sendMessage(
 }
 
 export interface FunctionToolCall {
-  name: 'searchCard' | 'patchCard';
+  name: string;
   arguments: any;
 }
 
@@ -81,7 +81,10 @@ export async function sendOption(
   functionCall: FunctionToolCall,
   eventToUpdate: string | undefined,
 ) {
-  let messageObject = toMatrixMessageContent(functionCall, eventToUpdate);
+  let messageObject = toMatrixMessageCommandContent(
+    functionCall,
+    eventToUpdate,
+  );
 
   if (messageObject !== undefined) {
     return await sendEvent(
@@ -122,52 +125,23 @@ export async function sendError(
   }
 }
 
-export const toMatrixMessageContent = (
+export const toMatrixMessageCommandContent = (
   functionCall: FunctionToolCall,
   eventToUpdate: string | undefined,
 ): IContent | undefined => {
   let { arguments: payload } = functionCall;
-  if (functionCall.name === 'patchCard') {
-    const id = payload['card_id'];
-    const body = payload['description'] || "Here's the change:";
-    let messageObject: IContent = {
-      body: body,
-      msgtype: 'org.boxel.command',
-      formatted_body: body,
-      format: 'org.matrix.custom.html',
-      data: {
-        command: {
-          type: functionCall.name,
-          id: id,
-          patch: {
-            attributes: payload['attributes'],
-            relationships: payload['relationships'],
-          },
-          eventId: eventToUpdate,
-          toolCall: functionCall,
-        },
-      },
-    };
-    return messageObject;
-  } else if (functionCall.name === 'searchCard') {
-    const body = payload['description'] || "Here's the query:";
-    let messageObject = {
-      body: body,
-      msgtype: 'org.boxel.command',
-      formatted_body: body,
-      format: 'org.matrix.custom.html',
-      data: {
-        command: {
-          type: functionCall.name,
-          search: { ...payload },
-          eventId: eventToUpdate,
-          toolCall: functionCall,
-        },
-      },
-    };
-    return messageObject;
-  }
-  return;
+  const body = payload['description'] || "Here's the change:";
+  let messageObject: IContent = {
+    body: body,
+    msgtype: 'org.boxel.command',
+    formatted_body: body,
+    format: 'org.matrix.custom.html',
+    data: {
+      eventId: eventToUpdate,
+      toolCall: functionCall,
+    },
+  };
+  return messageObject;
 };
 
 function getErrorMessage(error: any): string {

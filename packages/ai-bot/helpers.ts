@@ -9,6 +9,7 @@ import type {
 } from 'https://cardstack.com/base/room';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
 
+//TODO: Move patchCard system message out of ai bot
 const MODIFY_SYSTEM_MESSAGE =
   '\
 The user is using an application called Boxel, where they are working on editing "Cards" which are data models representable as JSON. \
