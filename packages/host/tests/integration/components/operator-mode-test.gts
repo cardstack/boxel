@@ -16,7 +16,7 @@ import { setupRenderingTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { EventStatus } from 'matrix-js-sdk';
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 
@@ -3257,8 +3257,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-create-new-card-button]`).isNotVisible();
   });
 
-  // Flaky test: CS-6842
-  skip(`displays recently accessed card`, async function (assert) {
+  test(`displays recently accessed card`, async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -3293,7 +3292,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
-    assert.dom(`[data-test-stack-card-index="1"]`).exists();
+    await waitFor(`[data-test-stack-card-index="1"]`);
 
     await focus(`[data-test-search-field]`);
     assert.dom(`[data-test-search-sheet-recent-card]`).exists({ count: 2 });

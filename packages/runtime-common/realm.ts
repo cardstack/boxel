@@ -855,15 +855,15 @@ export class Realm {
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
 
-    try {
-      if (!localPath.startsWith(assetsDir)) {
-        let useWorkInProgressIndex = Boolean(
-          request.headers.get('X-Boxel-Use-WIP-Index'),
-        );
-        let module = await this.#searchIndex.module(url, {
-          useWorkInProgressIndex,
-        });
-        if (module?.type === 'module') {
+    if (!localPath.startsWith(assetsDir)) {
+      let useWorkInProgressIndex = Boolean(
+        request.headers.get('X-Boxel-Use-WIP-Index'),
+      );
+      let module = await this.#searchIndex.module(url, {
+        useWorkInProgressIndex,
+      });
+      if (module?.type === 'module') {
+        try {
           return createResponse({
             body: module.executableCode,
             init: {
@@ -872,8 +872,12 @@ export class Realm {
             },
             requestContext,
           });
+        } finally {
+          this.#logRequestPerformance(request, start, 'cache hit');
         }
-        if (module?.type === 'error') {
+      }
+      if (module?.type === 'error') {
+        try {
           // using "Not Acceptable" here because no text/javascript representation
           // can be made and we're sending text/html error page instead
           return createResponse({
@@ -884,9 +888,13 @@ export class Realm {
             },
             requestContext,
           });
+        } finally {
+          this.#logRequestPerformance(request, start, 'cache hit');
         }
       }
+    }
 
+    try {
       let maybeFileRef = await this.getFileWithFallbacks(
         localPath,
         executableExtensions,
@@ -920,7 +928,7 @@ export class Realm {
       }
       return await this.serveLocalFile(fileRef, requestContext);
     } finally {
-      this.#logRequestPerformance(request, start);
+      this.#logRequestPerformance(request, start, 'cache miss');
     }
   }
 
@@ -1819,9 +1827,13 @@ export class Realm {
     };
   }
 
-  #logRequestPerformance(request: Request, startTime: number) {
+  #logRequestPerformance(
+    request: Request,
+    startTime: number,
+    prefix = 'serve time',
+  ) {
     this.#perfLog.debug(
-      `serve time: ${Date.now() - startTime}ms - ${request.method} ${
+      `${prefix}: ${Date.now() - startTime}ms - ${request.method} ${
         request.url
       } ${request.headers.get('Accept') ?? ''}`,
     );
