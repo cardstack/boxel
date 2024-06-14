@@ -24,7 +24,7 @@ jobs:
     env:
       TESTEM_BROWSER: ${{ matrix.browser }}
     concurrency:
-      group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
+      group: boxel-host-test${{ github.head_ref || github.run_id }}-${{ matrix.browser }}-shard${{ matrix.shardIndex }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
