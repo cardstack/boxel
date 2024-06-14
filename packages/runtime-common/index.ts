@@ -49,15 +49,17 @@ export * from './db';
 export * from './worker';
 export * from './stream';
 export * from './realm';
+export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
 export { RealmPaths, Loader, type LocalPath, type Query };
 export { NotLoaded, isNotLoadedError } from './not-loaded';
-export { NotReady, isNotReadyError } from './not-ready';
 export { cardTypeDisplayName } from './helpers/card-type-display-name';
 export { maybeRelativeURL, maybeURL, relativeURL } from './url';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';
+
+export * from './realm-permission-queries';
 
 // From https://github.com/iliakan/detect-node
 export const isNode =
@@ -188,7 +190,7 @@ export interface CardSearch {
   };
   getCard(
     url: URL,
-    opts?: { cachedOnly?: true; loader?: Loader; isLive?: boolean },
+    opts?: { loader?: Loader; isLive?: boolean },
   ): {
     card: CardDef | undefined;
     loaded: Promise<void> | undefined;
@@ -213,7 +215,7 @@ export function getCards(query: Query, realms?: string[]) {
 
 export function getCard(
   url: URL,
-  opts?: { cachedOnly?: true; loader?: Loader; isLive?: boolean },
+  opts?: { loader?: Loader; isLive?: boolean },
 ) {
   let here = globalThis as any;
   if (!here._CARDSTACK_CARD_SEARCH) {

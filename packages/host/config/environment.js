@@ -113,7 +113,7 @@ function getLatestSchemaFile() {
     ['development', 'test'].includes(process.env.EMBER_ENV)
   ) {
     throw new Error(
-      `The sqlite schema file is out of date--please regenerate the sqlite schema file`,
+      `The sqlite schema file is out of date--please regenerate the sqlite schema file using \`pnpm make-schema\` in the realm server`,
     );
   }
   return path.join(schemaDir, latestSchemaFile);

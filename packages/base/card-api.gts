@@ -24,11 +24,9 @@ import {
   isSingleCardDocument,
   isRelationship,
   isNotLoadedError,
-  isNotReadyError,
   CardError,
   CardContextName,
   NotLoaded,
-  NotReady,
   getField,
   isField,
   primitive,
@@ -95,7 +93,7 @@ export type FieldType = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
 type Setter = (value: any) => void;
 
 interface Options {
-  computeVia?: string | (() => unknown);
+  computeVia?: () => unknown;
   description?: string;
   // there exists cards that we only ever run in the host without
   // the isolated renderer (RoomField), which means that we cannot
@@ -136,27 +134,6 @@ function isNotLoadedValue(val: any): val is NotLoadedValue {
     return false;
   }
   return type === 'not-loaded';
-}
-
-interface NotReadyValue {
-  type: 'not-ready';
-  instance: BaseDef;
-  fieldName: string;
-}
-
-function isNotReadyValue(value: any): value is NotReadyValue {
-  if (value && typeof value === 'object') {
-    return (
-      'type' in value &&
-      value.type === 'not-ready' &&
-      'instance' in value &&
-      isCardOrField(value.instance) &&
-      'fieldName' in value &&
-      typeof value.fieldName === 'string'
-    );
-  } else {
-    return false;
-  }
 }
 
 interface StaleValue {
@@ -293,7 +270,7 @@ export interface Field<
   card: CardT;
   name: string;
   fieldType: FieldType;
-  computeVia: undefined | string | (() => unknown);
+  computeVia: undefined | (() => unknown);
   description: undefined | string;
   // there exists cards that we only ever run in the host without
   // the isolated renderer (RoomField), which means that we cannot
@@ -393,19 +370,9 @@ function getter<CardT extends BaseDefConstructor>(
     let value = deserialized.get(field.name);
     if (isStaleValue(value)) {
       value = value.staleValue;
-    } else if (
-      !deserialized.has(field.name) &&
-      typeof field.computeVia === 'function' &&
-      field.computeVia.constructor.name !== 'AsyncFunction'
-    ) {
+    } else if (!deserialized.has(field.name)) {
       value = field.computeVia.bind(instance)();
       deserialized.set(field.name, value);
-    } else if (
-      !deserialized.has(field.name) &&
-      (typeof field.computeVia === 'string' ||
-        typeof field.computeVia === 'function')
-    ) {
-      throw new NotReady(instance, field.name, field.computeVia);
     }
     return value;
   } else {
@@ -424,7 +391,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
   readonly fieldType = 'containsMany';
   constructor(
     private cardThunk: () => FieldT,
-    readonly computeVia: undefined | string | (() => unknown),
+    readonly computeVia: undefined | (() => unknown),
     readonly name: string,
     readonly description: string | undefined,
     readonly isUsed: undefined | true,
@@ -531,7 +498,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     doc: CardDocument,
     relationships: JSONAPIResource['relationships'] | undefined,
     fieldMeta: CardFields[string] | undefined,
-    _identityContext: undefined,
+    identityContext: IdentityContext,
     instancePromise: Promise<BaseDef>,
     _loadedValue: any,
     relativeTo: URL | undefined,
@@ -565,7 +532,12 @@ class ContainsMany<FieldT extends FieldDefConstructor>
       await Promise.all(
         value.map(async (entry, index) => {
           if (primitive in this.card) {
-            return this.card[deserialize](entry, relativeTo, doc);
+            return this.card[deserialize](
+              entry,
+              relativeTo,
+              doc,
+              identityContext,
+            );
           } else {
             let meta = metas[index];
             let resource: LooseCardResource = {
@@ -591,7 +563,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
             }
             return (
               await cardClassFromResource(resource, this.card, relativeTo)
-            )[deserialize](resource, relativeTo, doc);
+            )[deserialize](resource, relativeTo, doc, identityContext);
           }
         }),
       ),
@@ -653,7 +625,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   readonly fieldType = 'contains';
   constructor(
     private cardThunk: () => CardT,
-    readonly computeVia: undefined | string | (() => unknown),
+    readonly computeVia: undefined | (() => unknown),
     readonly name: string,
     readonly description: string | undefined,
     readonly isUsed: undefined | true,
@@ -726,13 +698,13 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     doc: CardDocument,
     relationships: JSONAPIResource['relationships'] | undefined,
     fieldMeta: CardFields[string] | undefined,
-    _identityContext: undefined,
+    identityContext: IdentityContext,
     _instancePromise: Promise<BaseDef>,
     _loadedValue: any,
     relativeTo: URL | undefined,
   ): Promise<BaseInstanceType<CardT>> {
     if (primitive in this.card) {
-      return this.card[deserialize](value, relativeTo, doc);
+      return this.card[deserialize](value, relativeTo, doc, identityContext);
     }
     if (fieldMeta && Array.isArray(fieldMeta)) {
       throw new Error(
@@ -760,7 +732,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     }
     return (await cardClassFromResource(resource, this.card, relativeTo))[
       deserialize
-    ](resource, relativeTo, doc);
+    ](resource, relativeTo, doc, identityContext);
   }
 
   emptyValue(_instance: BaseDef) {
@@ -799,7 +771,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   readonly fieldType = 'linksTo';
   constructor(
     private cardThunk: () => CardT,
-    readonly computeVia: undefined | string | (() => unknown),
+    readonly computeVia: undefined | (() => unknown),
     readonly name: string,
     readonly description: string | undefined,
     readonly isUsed: undefined | true,
@@ -928,7 +900,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         }' cannot deserialize non-relationship value ${JSON.stringify(value)}`,
       );
     }
-    if (value?.links?.self == null) {
+    if (value?.links?.self == null || value.links.self === '') {
       return null;
     }
     let loader = Loader.getLoaderFor(this.card)!;
@@ -1116,7 +1088,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
   readonly fieldType = 'linksToMany';
   constructor(
     private cardThunk: () => FieldT,
-    readonly computeVia: undefined | string | (() => unknown),
+    readonly computeVia: undefined | (() => unknown),
     readonly name: string,
     readonly description: string | undefined,
     readonly isUsed: undefined | true,
@@ -2549,11 +2521,51 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   );
 }
 
+// Crawls all fields for cards and populates the identityContext
+function buildIdentityContext(
+  instance: CardDef | FieldDef,
+  identityContext: IdentityContext = new IdentityContext(),
+  visited: WeakSet<CardDef | FieldDef> = new WeakSet(),
+) {
+  if (instance == null || visited.has(instance)) {
+    return identityContext;
+  }
+  visited.add(instance);
+  let fields = getFields(instance);
+  for (let fieldName of Object.keys(fields)) {
+    let value = peekAtField(instance, fieldName);
+    if (value == null) {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      for (let item of value) {
+        if (value == null) {
+          continue;
+        }
+        if (isCard(item)) {
+          identityContext.identities.set(item.id, item);
+        }
+        if (isCardOrField(item)) {
+          buildIdentityContext(item, identityContext, visited);
+        }
+      }
+    } else {
+      if (isCard(value) && value.id) {
+        identityContext.identities.set(value.id, value);
+      }
+      if (isCardOrField(value)) {
+        buildIdentityContext(value, identityContext, visited);
+      }
+    }
+  }
+  return identityContext;
+}
+
 export async function updateFromSerialized<T extends BaseDefConstructor>(
   instance: BaseInstanceType<T>,
   doc: LooseSingleCardDocument,
 ): Promise<BaseInstanceType<T>> {
-  let identityContext = new IdentityContext();
+  let identityContext = buildIdentityContext(instance);
   identityContexts.set(instance, identityContext);
   if (!instance[relativeTo] && doc.data.id) {
     instance[relativeTo] = new URL(doc.data.id);
@@ -2941,7 +2953,7 @@ export async function recompute(
           undefined,
           opts,
         );
-        if (!isNotReadyValue(value) && !isStaleValue(value)) {
+        if (!isStaleValue(value)) {
           pendingFields.delete(fieldName);
           if (recomputePromises.get(card) !== recomputePromise) {
             return;
@@ -2976,7 +2988,7 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
   fieldName: K,
   compute: () => T[K] | Promise<T[K]> = () => instance[fieldName],
   opts?: RecomputeOptions,
-): Promise<T[K] | T[K][] | NotReadyValue | StaleValue | undefined> {
+): Promise<T[K] | T[K][] | StaleValue | undefined> {
   let result: T[K] | T[K][] | undefined;
   let deserialized = getDataBucket(instance);
   let maybeStale = deserialized.get(fieldName as string);
@@ -3000,11 +3012,8 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
         }`,
       );
     }
-    let computeVia = _computeVia as (() => T[K] | Promise<T[K]>) | string;
-    compute =
-      typeof computeVia === 'function'
-        ? computeVia.bind(instance)
-        : () => (instance as any)[computeVia as string]();
+    let computeVia = _computeVia as () => T[K] | Promise<T[K]>;
+    compute = computeVia.bind(instance);
   }
   try {
     //To avoid race conditions,
@@ -3024,14 +3033,6 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
         | T[K]
         | T[K][]
         | undefined;
-    } else if (isNotReadyError(e)) {
-      let { instance: depModel, computeVia, fieldName: depField } = e;
-      let nestedCompute =
-        typeof computeVia === 'function'
-          ? computeVia.bind(depModel)
-          : () => depModel[computeVia as string]();
-      await getIfReady(depModel, depField, nestedCompute, opts);
-      return { type: 'not-ready', instance, fieldName: fieldName as string };
     } else {
       throw e;
     }

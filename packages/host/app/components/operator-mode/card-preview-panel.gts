@@ -2,6 +2,7 @@ import { registerDestructor } from '@ember/destroyable';
 import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
@@ -19,13 +20,15 @@ import {
 } from '@cardstack/boxel-ui/components';
 
 import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
-import { IconLink, ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
+import { IconLink, Eye, ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import Preview from '@cardstack/host/components/preview';
+
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
@@ -42,6 +45,7 @@ interface Signature {
 
 export default class CardPreviewPanel extends Component<Signature> {
   @tracked footerWidthPx = 0;
+  @service private declare operatorModeStateService: OperatorModeStateService;
 
   private scrollPositions = new Map<string, number>();
   private copyToClipboard = task(async () => {
@@ -72,6 +76,10 @@ export default class CardPreviewPanel extends Component<Signature> {
     }
     return null;
   }
+
+  openInInteractMode = task(async () => {
+    await this.operatorModeStateService.openCardInInteractMode(this.args.card);
+  });
 
   <template>
     <div
@@ -119,6 +127,16 @@ export default class CardPreviewPanel extends Component<Signature> {
               @items={{array
                 (menuItem
                   'Copy Card URL' (perform this.copyToClipboard) icon=IconLink
+                )
+              }}
+            />
+            <BoxelMenu
+              @closeMenu={{dd.close}}
+              @items={{array
+                (menuItem
+                  'Open in Interact Mode'
+                  (perform this.openInInteractMode)
+                  icon=Eye
                 )
               }}
             />

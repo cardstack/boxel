@@ -26,6 +26,7 @@ import {
   setupLocalIndexing,
   type CardDocFiles,
   setupIntegrationTestRealm,
+  getDbAdapter,
 } from '../helpers';
 
 const paths = new RealmPaths(new URL(testRealmURL));
@@ -666,6 +667,7 @@ module(`Integration | search-index`, function (hooks) {
 
     {
       // perform a new index to assert that render stack is still consistent
+      (await getDbAdapter()).reset();
       let cardApi: typeof import('https://cardstack.com/base/card-api');
       let string: typeof import('https://cardstack.com/base/string');
       cardApi = await loader.import(`${baseRealm.url}card-api`);
@@ -2751,6 +2753,7 @@ module(`Integration | search-index`, function (hooks) {
         'https://packages/@cardstack/boxel-ui/components',
         'https://packages/@cardstack/boxel-ui/helpers',
         'https://packages/@cardstack/boxel-ui/icons',
+        'https://packages/@cardstack/boxel-ui/modifiers',
         'https://packages/@cardstack/runtime-common',
         'https://packages/@ember/component',
         'https://packages/@ember/component/template-only',

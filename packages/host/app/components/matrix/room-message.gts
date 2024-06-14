@@ -331,7 +331,7 @@ export default class RoomMessage extends Component<Signature> {
           ? new Error(e)
           : e instanceof Error
           ? e
-          : new Error('Unknown error.');
+          : new Error('Patch failed.');
       this.matrixService.failedCommandState.set(eventId, error);
     }
   });

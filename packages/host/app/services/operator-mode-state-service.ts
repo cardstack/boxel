@@ -6,12 +6,16 @@ import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
-import { merge } from 'lodash';
+import { mergeWith } from 'lodash';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
-import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
-import { RealmPaths } from '@cardstack/runtime-common/paths';
+import {
+  mergeRelationships,
+  type PatchData,
+  RealmPaths,
+  type ResolvedCodeRef,
+} from '@cardstack/runtime-common';
 
 import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
 import { StackItem } from '@cardstack/host/lib/stack-item';
@@ -101,7 +105,7 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
-  patchCard = task({ enqueue: true }, async (id: string, patch: any) => {
+  patchCard = task({ enqueue: true }, async (id: string, patch: PatchData) => {
     let stackItems = this.state?.stacks.flat() ?? [];
     if (
       !stackItems.length ||
@@ -112,7 +116,21 @@ export default class OperatorModeStateService extends Service {
     for (let item of stackItems) {
       if ('card' in item && item.card.id == id) {
         let document = await this.cardService.serializeCard(item.card);
-        document.data = merge(document.data, patch);
+        if (patch.attributes) {
+          document.data.attributes = mergeWith(
+            document.data.attributes,
+            patch.attributes,
+          );
+        }
+        if (patch.relationships) {
+          let mergedRel = mergeRelationships(
+            document.data.relationships,
+            patch.relationships,
+          );
+          if (mergedRel && Object.keys(mergedRel).length !== 0) {
+            document.data.relationships = mergedRel;
+          }
+        }
         await this.cardService.patchCard(item.card, document, patch);
       }
     }
@@ -532,4 +550,17 @@ export default class OperatorModeStateService extends Service {
       },
     }));
   });
+
+  async openCardInInteractMode(card: CardDef) {
+    this.clearStacks();
+    let newItem = new StackItem({
+      card,
+      stackIndex: 0,
+      owner: this, // We need to think for better owner
+      format: 'isolated',
+    });
+    await newItem.ready();
+    this.addItemToStack(newItem);
+    this.updateSubmode(Submodes.Interact);
+  }
 }

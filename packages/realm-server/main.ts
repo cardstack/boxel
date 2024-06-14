@@ -7,6 +7,8 @@ import {
   RunnerOptionsManager,
   baseRealm,
   assetsDir,
+  permissionsExist,
+  insertPermissions,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
@@ -15,13 +17,10 @@ import { resolve, join } from 'path';
 import { makeFastBootIndexRunner } from './fastboot';
 import { readFileSync } from 'fs-extra';
 import { shimExternals } from './lib/externals';
-import { type RealmPermissions as RealmPermissionsInterface } from '@cardstack/runtime-common/realm';
 import * as Sentry from '@sentry/node';
 import { setErrorReporter } from '@cardstack/runtime-common/realm';
 import PgAdapter from './pg-adapter';
 import PgQueue from './pg-queue';
-
-import fs from 'fs';
 
 let log = logger('main');
 
@@ -179,6 +178,9 @@ if (distURL) {
 
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
+
+    await seedRealmPermissions(dbAdapter, new URL(url));
+
     let manager = new RunnerOptionsManager();
     let matrixURL = String(matrixURLs[i]);
     if (matrixURL.length === 0) {
@@ -200,7 +202,6 @@ if (distURL) {
       manager.getOptions.bind(manager),
     );
 
-    let realmPermissions = getRealmPermissions(url);
     let realmAdapter = new NodeAdapter(resolve(String(path)));
     let realm = new Realm(
       {
@@ -210,7 +211,6 @@ if (distURL) {
           readFileSync(join(distPath, 'index.html')).toString(),
         matrix: { url: new URL(matrixURL), username, password },
         realmSecretSeed: REALM_SECRET_SEED,
-        permissions: realmPermissions.users,
         virtualNetwork,
         dbAdapter,
         queue,
@@ -283,50 +283,18 @@ if (distURL) {
   process.exit(1);
 });
 
-function getRealmPermissions(realmUrl: string) {
-  let userPermissions = {} as {
-    [realmUrl: string]: { users: RealmPermissionsInterface };
-  };
-  let userPermissionsjsonContent;
-
-  if (['development', 'test'].includes(process.env.NODE_ENV || '')) {
-    userPermissionsjsonContent = fs.readFileSync(
-      `.realms.json.${process.env.NODE_ENV}`,
-      'utf-8',
-    );
-  } else {
-    userPermissionsjsonContent = process.env.REALM_USER_PERMISSIONS;
-    if (!userPermissionsjsonContent) {
-      throw new Error(
-        `REALM_USER_PERMISSIONS env var is blank. It should have a JSON string value that looks like this:
-          {
-            "https://realm-url-1/": {
-              "users":{
-                "*":["read"],
-                "@hassan:boxel.ai":["read", "write"],
-                ...
-              }
-            },
-            "https://realm-url-2/": { ... }
-          }
-        `,
-      );
+// In case there are no permissions in the database, seed the realm with default permissions:
+// Base realm: read permissions for everyone
+// Other realms: read permissions for everyone, read/write permissions for signed up users
+async function seedRealmPermissions(dbAdapter: PgAdapter, realmURL: URL) {
+  if (!(await permissionsExist(dbAdapter, realmURL))) {
+    if (realmURL.href === 'https://cardstack.com/base/') {
+      await insertPermissions(dbAdapter, realmURL, { '*': ['read'] });
+    } else {
+      await insertPermissions(dbAdapter, realmURL, {
+        '*': ['read'],
+        users: ['read', 'write'],
+      });
     }
   }
-
-  try {
-    userPermissions = JSON.parse(userPermissionsjsonContent);
-  } catch (error: any) {
-    throw new Error(
-      `Error while JSON parsing user permissions: ${userPermissionsjsonContent}`,
-    );
-  }
-
-  if (!userPermissions[realmUrl]) {
-    throw new Error(
-      `Missing permissions for realm ${realmUrl} in config ${userPermissionsjsonContent}`,
-    );
-  }
-
-  return userPermissions[realmUrl];
 }

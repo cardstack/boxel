@@ -29,8 +29,8 @@ export default class AiAssistantChatInputUsage extends Component {
         'textarea' with a send button. This component accepts all arguments that
         are accepted by 'BoxelInput' component in addition to an 'onSend'
         argument for action to take when message is submitted. A message can be
-        submitted via pressing 'cmd+Enter' or 'ctrl+Enter' keys or by clicking
-        on the send button.
+        submitted via pressing the 'Enter' key or by clicking on the send
+        button.
       </:description>
       <:example>
         <AiAssistantChatInput

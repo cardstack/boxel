@@ -30,6 +30,7 @@ import * as tracked from 'tracked-built-ins';
 import * as boxelUiComponents from '@cardstack/boxel-ui/components';
 import * as boxelUiHelpers from '@cardstack/boxel-ui/helpers';
 import * as boxelUiIcons from '@cardstack/boxel-ui/icons';
+import * as boxelUiModifiers from '@cardstack/boxel-ui/modifiers';
 
 import * as runtime from '@cardstack/runtime-common';
 import { VirtualNetwork } from '@cardstack/runtime-common';
@@ -42,6 +43,7 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   );
   virtualNetwork.shimModule('@cardstack/boxel-ui/helpers', boxelUiHelpers);
   virtualNetwork.shimModule('@cardstack/boxel-ui/icons', boxelUiIcons);
+  virtualNetwork.shimModule('@cardstack/boxel-ui/modifiers', boxelUiModifiers);
   virtualNetwork.shimModule('@glimmer/component', glimmerComponent);
   virtualNetwork.shimModule('@ember/component', emberComponent);
   virtualNetwork.shimModule(

@@ -1,5 +1,5 @@
 import { notFound, CardError, responseWithError } from './error';
-import { Realm, RealmPaths, logger } from './index';
+import { RealmPaths, RequestContext, logger } from './index';
 
 export class AuthenticationError extends Error {}
 export class AuthorizationError extends Error {}
@@ -10,8 +10,12 @@ export enum AuthenticationErrorMessages {
   TokenInvalid = 'Token invalid',
 }
 
-type Handler = (request: Request) => Promise<Response>;
-export type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+type Handler = (
+  request: Request,
+  requestContext: RequestContext,
+) => Promise<Response>;
+
+export type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'HEAD';
 export enum SupportedMimeType {
   CardJson = 'application/vnd.card+json',
   CardSource = 'application/vnd.card+source',
@@ -21,13 +25,14 @@ export enum SupportedMimeType {
   EventStream = 'text/event-stream',
   HTML = 'text/html',
   JSONAPI = 'application/vnd.api+json',
+  All = '*/*',
 }
 
 function isHTTPMethod(method: unknown): method is Method {
   if (typeof method !== 'string') {
     return false;
   }
-  return ['GET', 'POST', 'PATCH', 'DELETE'].includes(method);
+  return ['GET', 'POST', 'PATCH', 'DELETE', 'HEAD'].includes(method);
 }
 
 export function extractSupportedMimeType(
@@ -114,6 +119,10 @@ export class Router {
     this.setRoute(mimeType, 'DELETE', path, handler);
     return this;
   }
+  head(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
+    this.setRoute(mimeType, 'HEAD', path, handler);
+    return this;
+  }
 
   private setRoute(
     mimeType: SupportedMimeType,
@@ -138,16 +147,19 @@ export class Router {
     return !!this.lookupHandler(request);
   }
 
-  async handle(realm: Realm, request: Request): Promise<Response> {
+  async handle(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
     let handler = this.lookupHandler(request);
     if (!handler) {
-      return notFound(realm, request);
+      return notFound(request, requestContext);
     }
     try {
-      return await handler(request);
+      return await handler(request, requestContext);
     } catch (err) {
       if (err instanceof CardError) {
-        return responseWithError(realm, err);
+        return responseWithError(err, requestContext);
       }
 
       this.log.error(err);

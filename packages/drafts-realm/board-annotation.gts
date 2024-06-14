@@ -5,6 +5,7 @@ import {
   primitive,
 } from 'https://cardstack.com/base/card-api';
 import { concat, fn } from '@ember/helper';
+import { htmlSafe } from '@ember/template';
 import { Component } from 'https://cardstack.com/base/card-api';
 import { RadioInput } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
@@ -136,10 +137,12 @@ export class BoardAnnotation extends FieldDef {
     }
     get positionStyle() {
       let stanceFactor = this.stance === 'regular' ? -1 : 1;
-      return `transform: rotate(${stanceFactor * this.positionDegrees}deg)`;
+      return htmlSafe(
+        `transform: rotate(${stanceFactor * this.positionDegrees}deg)`,
+      );
     }
     get edgeRayStyle() {
-      return `transform: rotate(${-1 * this.edgeAngleDegrees}deg)`;
+      return htmlSafe(`transform: rotate(${-1 * this.edgeAngleDegrees}deg)`);
     }
     <template>
       {{#if this.hasBoard}}

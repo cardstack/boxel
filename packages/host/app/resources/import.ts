@@ -33,12 +33,15 @@ export class ImportResource extends Resource<Args> {
     try {
       let m = await loader.import<object>(url);
       this.module = m;
-    } catch (err) {
+    } catch (err: any) {
       let errResponse = await loader.fetch(url, {
         headers: { 'content-type': 'text/javascript' },
       });
       if (!errResponse.ok) {
-        this.error = { type: 'compile', message: await errResponse.text() };
+        this.error = {
+          type: 'compile',
+          message: err.responseText ?? (await errResponse.text()),
+        };
       } else {
         this.error = {
           type: 'runtime',

@@ -18,6 +18,11 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@cardstack/boxel-ui/icons', {
     default() {},
   });
+  virtualNetwork.shimModule('@cardstack/boxel-ui/modifiers', {
+    setCssVar: class {},
+    SortableGroupModifier: class {},
+    SortableItemModifier: class {},
+  });
   // import * as glimmerComponent from "@glimmer/component";
   virtualNetwork.shimModule('@glimmer/component', {
     default: class {},

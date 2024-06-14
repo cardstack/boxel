@@ -125,6 +125,7 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
 
     <style>
       .overlay-item-header {
+        background-color: var(--boxel-light);
         border-bottom: 1px solid var(--boxel-200);
         height: var(--overlay-embedded-card-header-height);
         display: flex;

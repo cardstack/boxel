@@ -102,7 +102,7 @@ export default class CardURLBar extends Component<Signature> {
 
         background-color: var(--boxel-dark);
         border-radius: var(--boxel-border-radius-xl);
-        padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
 
         width: var(--card-url-bar-width);
         height: var(--card-url-bar-height);
@@ -159,6 +159,7 @@ export default class CardURLBar extends Component<Signature> {
         outline: none;
         padding: 0;
         min-height: 0;
+        text-overflow: ellipsis;
 
         color: var(--boxel-light);
       }

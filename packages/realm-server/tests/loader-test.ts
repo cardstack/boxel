@@ -28,24 +28,22 @@ module('loader', function (hooks) {
 
   setupBaseRealmServer(hooks, virtualNetwork);
 
-  hooks.beforeEach(async function () {
+  hooks.before(async function () {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
   });
 
   setupDB(hooks, {
-    beforeEach: async (dbAdapter, queue) => {
-      testRealmServer = (
-        await runTestRealmServer({
-          virtualNetwork,
-          dir: dir.name,
-          realmURL: testRealmURL,
-          dbAdapter,
-          queue,
-        })
-      ).testRealmServer;
+    before: async (dbAdapter, queue) => {
+      ({ testRealmServer } = await runTestRealmServer({
+        virtualNetwork,
+        dir: dir.name,
+        realmURL: testRealmURL,
+        dbAdapter,
+        queue,
+      }));
     },
-    afterEach: async () => {
+    after: async () => {
       testRealmServer.close();
     },
   });
@@ -85,22 +83,6 @@ module('loader', function (hooks) {
       `${testRealmHref}b`,
       `${testRealmHref}c`,
     ]);
-  });
-
-  test('can determine consumed modules when an error is encountered during loading', async function (assert) {
-    let loader = virtualNetwork.createLoader();
-    try {
-      await loader.import<{ d(): string }>(`${testRealmHref}d`);
-      throw new Error(`expected error was not thrown`);
-    } catch (e: any) {
-      assert.strictEqual(e.message, 'intentional error thrown');
-      assert.deepEqual(await loader.getConsumedModules(`${testRealmHref}d`), [
-        `${testRealmHref}a`,
-        `${testRealmHref}b`,
-        `${testRealmHref}c`,
-        `${testRealmHref}e`,
-      ]);
-    }
   });
 
   test('can get consumed modules within a cycle', async function (assert) {
@@ -174,8 +156,15 @@ module('loader', function (hooks) {
   module('with a different realm', function (hooks) {
     let loader2: Loader;
     let realm: Realm;
+
+    hooks.before(async function () {
+      dir = dirSync();
+      copySync(join(__dirname, 'cards'), dir.name);
+      shimExternals(virtualNetwork);
+    });
+
     setupDB(hooks, {
-      beforeEach: async (dbAdapter, queue) => {
+      before: async (dbAdapter, queue) => {
         loader2 = virtualNetwork.createLoader();
         realm = await createRealm({
           dir: dir.name,
