@@ -1488,8 +1488,9 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       // Click on a recent search
       await click(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`);
-      // There is some additional thing we are waiting on here, probably the
-      // card to load in the card resource, but I'm not too sure so using waitUntil instead
+
+      // We have to wait untill there is only one stack item in rightmost stack,
+      // because that's the expected behaviour when we open a card from card search.
       await waitUntil(
         () =>
           document.querySelectorAll(
