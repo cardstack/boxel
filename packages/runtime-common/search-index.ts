@@ -14,6 +14,7 @@ import {
   type FromScratchResult,
   type IncrementalArgs,
   type IncrementalResult,
+  type IndexedModuleOrError,
 } from '.';
 import { Realm } from './realm';
 import { RealmPaths } from './paths';
@@ -198,6 +199,10 @@ export class SearchIndex {
     return isIgnored(this.realmURL, this.ignoreMap, url);
   }
 
+  // TODO we should probably return the IndexedInstance type here so that we
+  // have access to both the serialized card instance and the source for the
+  // instance
+  // TODO rename to "instance" for consistency
   async card(url: URL, opts?: Options): Promise<SearchResult | undefined> {
     let doc: SingleCardDocument | undefined;
     let maybeCard = await this.#indexer.getCard(url, opts);
@@ -229,6 +234,13 @@ export class SearchIndex {
       }
     }
     return { type: 'doc', doc };
+  }
+
+  async module(
+    url: URL,
+    opts?: Options,
+  ): Promise<IndexedModuleOrError | undefined> {
+    return await this.#indexer.getModule(url, opts);
   }
 
   // this is meant for tests only
