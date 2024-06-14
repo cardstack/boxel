@@ -789,7 +789,7 @@ module('Realm Server', function (hooks) {
           'true',
           'realm is public readable',
         );
-        let result = response.body.toString().trim();
+        let result = response.text.trim();
         assert.strictEqual(result, cardSrc, 'the card source is correct');
         assert.ok(
           response.headers['last-modified'],

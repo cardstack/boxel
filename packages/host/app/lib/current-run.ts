@@ -346,6 +346,7 @@ export class CurrentRun {
     await this.batch.updateEntry(new URL(url.href), {
       type: 'module',
       source: ref.content,
+      lastModified: ref.lastModified,
       deps: new Set(
         consumes.map((d) => trimExecutableExtension(new URL(d)).href),
       ),
@@ -471,6 +472,7 @@ export class CurrentRun {
         resource: doc.data,
         searchData,
         isolatedHtml,
+        lastModified,
         types: typesMaybeError.types,
         deps: new Set([
           moduleURL,

@@ -18,6 +18,7 @@
    is_deleted BOOLEAN,
    source TEXT,
    transpiled_code TEXT,
+   last_modified,
    PRIMARY KEY ( url, realm_version, realm_url ) 
 );
 

@@ -1,7 +1,7 @@
 import { type PgPrimitive } from './index';
 
 export interface TypeCoercion {
-  [column: string]: 'BOOLEAN' | 'JSON';
+  [column: string]: 'BOOLEAN' | 'JSON' | 'VARCHAR';
 }
 
 export interface ExecuteOptions {

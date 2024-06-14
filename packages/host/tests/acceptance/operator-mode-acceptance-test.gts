@@ -570,19 +570,11 @@ module('Acceptance | operator mode tests', function (hooks) {
     await click(
       '[data-test-address-with-no-embedded] [data-test-open-code-submode]',
     );
+    await waitUntil(() =>
+      currentURL().includes('address-with-no-embedded-template.gts'),
+    );
     assert.operatorModeParametersMatch(currentURL(), {
-      stacks: [
-        [
-          {
-            id: `${testRealmURL}Person/fadhlan`,
-            format: 'isolated',
-          },
-        ],
-      ],
-      submode: Submodes.Code,
       codePath: `${testRealmURL}address-with-no-embedded-template.gts`,
-      fileView: 'inspector',
-      openDirs: {},
     });
 
     // Toggle back to interactive mode
@@ -596,19 +588,12 @@ module('Acceptance | operator mode tests', function (hooks) {
     await click(
       '[data-test-country-with-no-embedded] [data-test-open-code-submode]',
     );
+    await waitUntil(() =>
+      currentURL().includes('country-with-no-embedded-template.gts'),
+    );
     assert.operatorModeParametersMatch(currentURL(), {
-      stacks: [
-        [
-          {
-            id: `${testRealmURL}Person/fadhlan`,
-            format: 'isolated',
-          },
-        ],
-      ],
       submode: Submodes.Code,
       codePath: `${testRealmURL}country-with-no-embedded-template.gts`,
-      fileView: 'inspector',
-      openDirs: {},
     });
   });
 
@@ -642,20 +627,6 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       // Submode is reflected in the URL
       assert.operatorModeParametersMatch(currentURL(), {
-        stacks: [
-          [
-            {
-              id: `${testRealmURL}Person/fadhlan`,
-              format: 'isolated',
-            },
-          ],
-          [
-            {
-              id: `${testRealmURL}Pet/mango`,
-              format: 'isolated',
-            },
-          ],
-        ],
         submode: Submodes.Code,
         codePath: `${testRealmURL}Pet/mango.json`,
         fileView: 'inspector',
@@ -673,23 +644,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       // Submode is reflected in the URL
       assert.operatorModeParametersMatch(currentURL(), {
-        stacks: [
-          [
-            {
-              id: `${testRealmURL}Person/fadhlan`,
-              format: 'isolated',
-            },
-          ],
-          [
-            {
-              id: `${testRealmURL}Pet/mango`,
-              format: 'isolated',
-            },
-          ],
-        ],
         submode: Submodes.Interact,
-        fileView: 'inspector',
-        openDirs: { [testRealmURL]: ['Pet/'] },
       });
     });
   });

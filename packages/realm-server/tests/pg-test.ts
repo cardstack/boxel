@@ -36,6 +36,7 @@ module('Postgres', function (hooks) {
         'is_deleted',
         'source',
         'transpiled_code',
+        'last_modified',
       ]);
     }
     {
