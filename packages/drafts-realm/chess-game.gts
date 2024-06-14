@@ -1,6 +1,13 @@
 import {
+  BaseDefConstructor,
+  BaseInstanceType,
   Component as BoxelComponent,
   CardDef,
+  FieldDef,
+  deserialize,
+  primitive,
+  serialize,
+  queryableValue,
 } from 'https://cardstack.com/base/card-api';
 import Component from '@glimmer/component';
 import StringCard from 'https://cardstack.com/base/string';
@@ -40,6 +47,7 @@ import { Resource } from 'ember-resources';
 
 import BooleanField from 'https://cardstack.com/base/boolean';
 import { tracked } from '@glimmer/tracking';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 
 type ChessboardModifierSignature = {
   Args: {
@@ -59,7 +67,6 @@ class ChessboardModifier extends Modifier<ChessboardModifierSignature> {
     { game, updatePgn }: ChessboardModifierSignature['Args']['Named'],
   ) {
     function inputHandler(event: any) {
-      console.log(event);
       if (event.type === INPUT_EVENT_TYPE.movingOverSquare) {
         return; // ignore this event
       }
@@ -158,7 +165,7 @@ class ChessboardModifier extends Modifier<ChessboardModifierSignature> {
 
 interface ChessJSResourceArgs {
   named: {
-    pgn?: string;
+    pgn?: ChessJS;
   };
 }
 
@@ -169,16 +176,19 @@ class ChessJSResource extends Resource<ChessJSResourceArgs> {
   @tracked snapshotPgn: string | undefined;
 
   modify(_positional: never[], named: ChessJSResourceArgs['named']) {
+    if (!named.pgn) {
+      return;
+    }
+
+    let pgnString = named.pgn.pgn();
     this.game = new ChessJS();
     this.snapshot = new ChessJS();
-    if (named.pgn) {
-      this.game.loadPgn(named.pgn);
-    }
+    this.game.loadPgn(pgnString);
 
     if (this.snapshotPgn) {
       this.snapshot.loadPgn(this.snapshotPgn);
-    } else if (named.pgn) {
-      this.snapshot.loadPgn(named.pgn);
+    } else {
+      this.snapshot.loadPgn(pgnString);
     }
   }
 
@@ -216,7 +226,7 @@ class ChessJSResource extends Resource<ChessJSResourceArgs> {
   }
 }
 
-function getChessJS(parent: object, pgn: () => string | undefined) {
+function getChessJS(parent: object, pgn: () => ChessJS | undefined) {
   return ChessJSResource.from(parent, () => ({
     named: {
       pgn: pgn(),
@@ -226,7 +236,7 @@ function getChessJS(parent: object, pgn: () => string | undefined) {
 
 interface ChessGameComponentSignature {
   Args: {
-    pgn?: string;
+    pgn: ChessJS;
     updatePgn?: (pgn: string) => void;
     analysis?: boolean;
   };
@@ -340,11 +350,11 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
   @tracked selectedMoveIndex: number | undefined;
 
   @action
-  updatePgn(pgn: string) {
+  updatePgn(pgnString: string) {
     if (this.args.analysis) {
-      this.chessJSResource.updatePgn(pgn);
+      this.chessJSResource.updatePgn(pgnString);
     } else {
-      this.args.updatePgn!(pgn);
+      this.args.updatePgn!(pgnString);
     }
   }
 
@@ -430,7 +440,8 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
 class Isolated extends BoxelComponent<typeof Chess> {
   @action
   updatePgn(pgn: string): void {
-    this.args.model.pgn = pgn;
+    this.args.model.pgn?.loadPgn(pgn);
+    this.args.model.pgn = this.args.model.pgn;
   }
 
   // have to toggle between analysis and play mode
@@ -445,11 +456,13 @@ class Isolated extends BoxelComponent<typeof Chess> {
           {{this.mode}}
         </h1>
       </div>
-      <ChessGameComponent
-        @pgn={{this.args.model.pgn}}
-        @updatePgn={{this.updatePgn}}
-        @analysis={{this.args.model.analysis}}
-      />
+      {{#if this.args.model.pgn}}
+        <ChessGameComponent
+          @pgn={{this.args.model.pgn}}
+          @updatePgn={{this.updatePgn}}
+          @analysis={{this.args.model.analysis}}
+        />
+      {{/if}}
     </div>
     <style>
       .main {
@@ -465,9 +478,70 @@ class Isolated extends BoxelComponent<typeof Chess> {
   </template>
 }
 
+class PgnFieldView extends BoxelComponent<typeof PgnField> {
+  <template>
+    {{this.value}}
+  </template>
+  get value() {
+    if (this.args.model == null) {
+      return '';
+    }
+    return this.args.model.pgn();
+  }
+}
+
+class PgnField extends FieldDef {
+  static [primitive]: ChessJS;
+  static [serialize](pgn: ChessJS) {
+    return pgn.pgn();
+  }
+  static displayName = 'PGN';
+
+  static async [deserialize]<T extends BaseDefConstructor>(
+    this: T,
+    pgnString: any,
+  ): Promise<BaseInstanceType<T>> {
+    if (pgnString == null) {
+      return pgnString;
+    }
+    let pgn = new ChessJS();
+    pgn.loadPgn(pgnString);
+    return pgn as BaseInstanceType<T>;
+  }
+
+  static [queryableValue](pgn: ChessJS | undefined) {
+    if (pgn) {
+      return pgn.pgn();
+    }
+    return undefined;
+  }
+
+  static embedded = PgnFieldView;
+  static atom = PgnFieldView;
+
+  static edit = class Edit extends BoxelComponent<typeof this> {
+    <template>
+      <BoxelInput
+        type='date'
+        @value={{this.value}}
+        @onInput={{@set}}
+        @max='9999-12-31'
+        @disabled={{not @canEdit}}
+      />
+    </template>
+
+    get value() {
+      if (this.args.model == null) {
+        return '';
+      }
+      return this.args.model.pgn();
+    }
+  };
+}
+
 export class Chess extends CardDef {
   static displayName = 'Chess';
-  @field pgn = contains(StringCard);
+  @field pgn = contains(PgnField);
   @field analysis = contains(BooleanField);
 
   @field title = contains(StringCard, {
