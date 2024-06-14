@@ -470,12 +470,6 @@ class Isolated extends BoxelComponent<typeof Chess> {
   </template>
 }
 
-class PgnFieldView extends BoxelComponent<typeof PgnField> {
-  <template>
-    {{@model}}
-  </template>
-}
-
 class PgnField extends FieldDef {
   static [primitive]: string;
   static displayName = 'PGN';
@@ -493,16 +487,11 @@ class PgnField extends FieldDef {
     return pgn as BaseInstanceType<T>;
   }
 
-  static embedded = PgnFieldView;
-  static atom = PgnFieldView;
-
   static edit = class Edit extends BoxelComponent<typeof this> {
     <template>
       <BoxelInput
-        type='date'
         @value={{@model}}
         @onInput={{@set}}
-        @max='9999-12-31'
         @disabled={{not @canEdit}}
       />
     </template>
