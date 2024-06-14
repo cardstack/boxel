@@ -88,6 +88,7 @@ interface IndexedModule {
   type: 'module';
   executableCode: string;
   source: string;
+  canonicalURL: string;
   lastModified: number;
 }
 
@@ -137,6 +138,8 @@ const coerceTypes = Object.freeze({
   error_doc: 'JSON',
   search_doc: 'JSON',
   is_deleted: 'BOOLEAN',
+  last_modified: 'VARCHAR',
+  indexed_at: 'VARCHAR',
 });
 
 export class Indexer {
@@ -197,6 +200,7 @@ export class Indexer {
     let {
       transpiled_code: executableCode,
       source,
+      url: canonicalURL,
       last_modified: lastModified,
     } = moduleEntry;
     if (!executableCode) {
@@ -208,6 +212,7 @@ export class Indexer {
     }
     return {
       type: 'module',
+      canonicalURL,
       executableCode,
       source,
       lastModified: parseInt(lastModified),

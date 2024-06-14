@@ -813,7 +813,7 @@ const tests = Object.freeze({
           realm_url: testRealmURL,
           pristine_doc: originalResource,
           source: originalSource,
-          last_modified: originalModified,
+          last_modified: String(originalModified),
         },
       ],
     );

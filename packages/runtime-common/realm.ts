@@ -1151,6 +1151,20 @@ export class Realm {
       useWorkInProgressIndex,
     });
     if (module?.type === 'module') {
+      if (request.url !== module.canonicalURL) {
+        return createResponse({
+          body: null,
+          init: {
+            status: 302,
+            headers: {
+              Location: `${new URL(this.url).pathname}${this.paths.local(
+                new URL(module.canonicalURL),
+              )}`,
+            },
+          },
+          requestContext,
+        });
+      }
       return createResponse({
         body: module.source,
         init: {

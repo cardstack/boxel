@@ -154,7 +154,7 @@ export async function setupIndex(
           : row.url;
       row.file_alias = trimExecutableExtension(new URL(row.url)).href;
       row.type = row.type ?? 'instance';
-      row.last_modified = row.last_modified ?? now;
+      row.last_modified = String(row.last_modified ?? now);
       return asExpressions(
         { ...defaultIndexEntry, ...row },
         {
