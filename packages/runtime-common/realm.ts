@@ -1175,7 +1175,6 @@ export class Realm {
         requestContext,
       });
     }
-    // TODO we also need to handle instance source in upcoming PR
 
     // fallback to file system if there is an error document or this is the
     // first time index
