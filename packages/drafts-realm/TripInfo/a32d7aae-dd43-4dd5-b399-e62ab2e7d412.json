@@ -3,7 +3,10 @@
     "type": "card",
     "attributes": {
       "traveler": {
-        "name": "Mickey"
+        "name": "Mickey",
+        "nextTravelGoal": {
+          "goalTitle": null
+        }
       },
       "description": null,
       "thumbnailURL": null
@@ -22,6 +25,21 @@
       "traveler.countriesVisited": {
         "links": {
           "self": null
+        }
+      },
+      "traveler.nextTravelGoal.country": {
+        "links": {
+          "self": "http://localhost:4201/drafts/Country/2"
+        }
+      },
+      "traveler.nextTravelGoal.alternateTrips.0": {
+        "links": {
+          "self": "http://localhost:4201/drafts/Country/argentina"
+        }
+      },
+      "traveler.nextTravelGoal.alternateTrips.1": {
+        "links": {
+          "self": "http://localhost:4201/drafts/Country/brazil"
         }
       },
       "startLocation": {

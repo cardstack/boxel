@@ -29,7 +29,17 @@
       },
       "traveler.nextTravelGoal.country": {
         "links": {
+          "self": "http://localhost:4201/drafts/Country/argentina"
+        }
+      },
+      "traveler.nextTravelGoal.alternateTrips.0": {
+        "links": {
           "self": "http://localhost:4201/drafts/Country/brazil"
+        }
+      },
+      "traveler.nextTravelGoal.alternateTrips.1": {
+        "links": {
+          "self": "http://localhost:4201/drafts/Country/2"
         }
       },
       "startLocation": {

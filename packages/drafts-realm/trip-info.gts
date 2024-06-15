@@ -15,14 +15,18 @@ class TravelGoal extends FieldDef {
   static displayName = 'Travel Goal';
   @field goalTitle = contains(StringField);
   @field country = linksTo(Country);
+  @field alternateTrips = linksToMany(Country);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer class="container">
+      <CardContainer class='container'>
         <FieldContainer @label='Goal Title'>
           <@fields.goalTitle />
         </FieldContainer>
         <FieldContainer @label='Country'>
           <@fields.country />
+        </FieldContainer>
+        <FieldContainer @label='Alternate Trips'>
+          <@fields.alternateTrips />
         </FieldContainer>
       </CardContainer>
       <style>
@@ -35,7 +39,7 @@ class TravelGoal extends FieldDef {
         }
       </style>
     </template>
-  }
+  };
 }
 
 class Traveler extends FieldDef {
@@ -92,7 +96,6 @@ export class TripInfo extends CardDef {
   });
   @field startLocation = linksTo(Country);
   @field endLocation = linksTo(Country);
-
   /*
   static isolated = class Isolated extends Component<typeof this> {
     <template></template>

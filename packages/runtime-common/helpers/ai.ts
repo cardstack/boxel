@@ -295,7 +295,7 @@ function generateRelationshipFieldsInfo(
     usedFieldsOnly: false,
   });
   for (let [fName, fValue] of Object.entries(fields)) {
-    let flatFieldName = fieldName ? `${fieldName}\.${fName}` : fName;
+    let flatFieldName = fieldName ? `${fieldName}.${fName}` : fName;
     if (fValue.computeVia) {
       continue;
     } else if (
