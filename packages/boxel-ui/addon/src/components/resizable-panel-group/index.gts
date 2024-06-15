@@ -6,7 +6,7 @@ import { tracked } from '@glimmer/tracking';
 import type { WithBoundArgs } from '@glint/template';
 import { nodeFor } from 'ember-ref-bucket';
 import didResizeModifier from 'ember-resize-modifier/modifiers/did-resize';
-import { TrackedMap } from 'tracked-built-ins';
+import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
 import type { PanelContext } from './panel.gts';
 import ResizablePanel from './panel.gts';
@@ -19,7 +19,6 @@ function sumArray(array: number[]) {
   return array.reduce((partialSum, a) => partialSum + a, 0);
 }
 
-const resizablePanelElIdPrefix = 'resizable-panel';
 const ResizeHandleElIdPrefix = 'resize-handler';
 
 interface Signature {
@@ -73,17 +72,14 @@ export default class ResizablePanelGroup extends Component<Signature> {
             orientation=@orientation
             registerPanel=this.registerPanel
             unregisterPanel=this.unregisterPanel
-            panelContext=this.panelContext
             isLastPanel=this.isLastPanel
             panelGroupComponent=this
-            resizablePanelElId=this.panelElId
           )
           (component
             ResizeHandle
             orientation=@orientation
             registerResizeHandle=this.registerResizeHandle
             unRegisterResizeHandle=this.unRegisterResizeHandle
-            panelContext=this.panelContext
             isLastPanel=this.isLastPanel
             onResizeHandleMouseDown=this.onResizeHandleMouseDown
             onResizeHandleDblClick=this.onResizeHandleDblClick
@@ -185,28 +181,32 @@ export default class ResizablePanelGroup extends Component<Signature> {
   }
 
   @tracked hideHandles = false;
-  @tracked totalResizeHandle = 0;
   minimumLengthToShowHandles = 30;
 
   resizablePanelIdCache = new WeakMap<ResizablePanel, number>();
-  listPanelContext = new TrackedMap<number, PanelContext>();
+  panelContexts = new TrackedArray<PanelContext>();
+  resizeHandles = new TrackedArray<ResizeHandle>();
+
   currentResizeHandle: {
-    id: string;
+    handle: ResizeHandle;
     initialPosition: number;
-    nextPanelEl?: HTMLElement | null;
-    prevPanelEl?: HTMLElement | null;
+    nextPanelContext?: PanelContext | null;
+    prevPanelContext?: PanelContext | null;
   } | null = null;
   panelRatios: number[] = [];
 
   @action
-  registerPanel(context: {
-    collapsible: boolean | undefined;
-    defaultLengthFraction: number | undefined;
-    isHidden: boolean | undefined;
-    lengthPx: number | undefined;
-    minLengthPx: number | undefined;
-  }) {
-    let id = Number(this.listPanelContext.size);
+  registerPanel(panel: ResizablePanel) {
+    let context = new TrackedObject({
+      panel,
+      defaultLengthFraction: panel.args.defaultLengthFraction,
+      lengthPx: panel.args.lengthPx,
+      initialMinLengthPx: panel.args.minLengthPx,
+      minLengthPx: panel.args.minLengthPx,
+      collapsible:
+        panel.args.collapsible == undefined ? true : panel.args.collapsible,
+      isHidden: panel.args.isHidden,
+    }) as PanelContext;
 
     if (context.lengthPx === undefined) {
       if (
@@ -221,30 +221,26 @@ export default class ResizablePanelGroup extends Component<Signature> {
           context.defaultLengthFraction * this.panelGroupLengthPx;
       }
     }
-    this.listPanelContext.set(id, {
-      id,
-      defaultLengthFraction: context.defaultLengthFraction,
-      lengthPx: context.lengthPx,
-      initialMinLengthPx: context.minLengthPx,
-      minLengthPx: context.minLengthPx,
-      collapsible:
-        context.collapsible == undefined ? true : context.collapsible,
-      isHidden: context.isHidden,
-    });
 
+    this.panelContexts.push(context);
+    panel.setPanelContext(context);
     this.calculatePanelRatio();
-
-    return id;
   }
 
   @action
-  unregisterPanel(id: number) {
-    this.listPanelContext.delete(id);
-    this.calculatePanelRatio();
+  unregisterPanel(panel: ResizablePanel) {
+    let panelContextIndex = this.panelContexts.findIndex(
+      (context) => context.panel === panel,
+    );
+
+    if (panelContextIndex > -1) {
+      this.panelContexts.splice(panelContextIndex, 1);
+      this.calculatePanelRatio();
+    }
   }
 
   calculatePanelRatio() {
-    let panelLengths = Array.from(this.listPanelContext.values()).map(
+    let panelLengths = this.panelContexts.map(
       (panelContext) => panelContext.lengthPx,
     );
 
@@ -259,44 +255,52 @@ export default class ResizablePanelGroup extends Component<Signature> {
   }
 
   @action
-  panelContext(panelId: number) {
-    return this.listPanelContext.get(panelId);
+  isLastPanel(panel: ResizablePanel) {
+    return this.panelContexts[this.panelContexts.length - 1]?.panel === panel;
   }
 
   @action
-  isLastPanel(panelId: number) {
-    return panelId === this.listPanelContext.size - 1;
+  registerResizeHandle(handle: ResizeHandle) {
+    this.resizeHandles.push(handle);
   }
 
   @action
-  registerResizeHandle() {
-    let id = Number(this.totalResizeHandle);
-    this.totalResizeHandle++;
-    return id;
+  unRegisterResizeHandle(handle: ResizeHandle) {
+    let handleIndex = this.resizeHandles.indexOf(handle);
+    if (handleIndex > -1) {
+      this.resizeHandles.splice(handleIndex, 1);
+    }
   }
 
-  @action
-  unRegisterResizeHandle() {
-    this.totalResizeHandle--;
+  get totalResizeHandle() {
+    return this.resizeHandles.length;
   }
 
   @action
   onResizeHandleMouseDown(event: MouseEvent) {
-    let buttonId = (event.target as HTMLElement).id;
-    if (this.currentResizeHandle || !buttonId) {
+    let button = event.target as HTMLElement;
+
+    let handle = this.resizeHandles.find(
+      (handle) => handle.element === button.parentNode,
+    );
+
+    console.log('handle mouse down', button, handle);
+
+    if (this.currentResizeHandle || !handle) {
       return;
     }
 
-    let { prevPanelEl, nextPanelEl } = this.findPanelsByResizeHandle(buttonId);
-    if (!prevPanelEl || !nextPanelEl) {
-      console.warn('Expected prevPanelEl and nextPanelEl are required');
+    let { prevPanelContext, nextPanelContext } =
+      this.findPanelsByResizeHandle(handle);
+    if (!prevPanelContext || !nextPanelContext) {
+      console.warn('prevPanelEl and nextPanelEl are required');
       return undefined;
     }
     this.currentResizeHandle = {
-      id: buttonId,
+      handle,
       initialPosition: event[this.clientPositionProperty],
-      prevPanelEl: prevPanelEl,
-      nextPanelEl: nextPanelEl,
+      prevPanelContext: prevPanelContext,
+      nextPanelContext: nextPanelContext,
     };
   }
 
@@ -309,8 +313,8 @@ export default class ResizablePanelGroup extends Component<Signature> {
   onResizeHandleMouseMove(event: MouseEvent) {
     if (
       !this.currentResizeHandle ||
-      !this.currentResizeHandle.prevPanelEl ||
-      !this.currentResizeHandle.nextPanelEl
+      !this.currentResizeHandle.prevPanelContext ||
+      !this.currentResizeHandle.nextPanelContext
     ) {
       return;
     }
@@ -319,17 +323,28 @@ export default class ResizablePanelGroup extends Component<Signature> {
       event[this.clientPositionProperty] -
       this.currentResizeHandle.initialPosition;
     if (delta === 0) {
+      console.log('delta is 0, returning early!');
       return;
     }
 
+    console.log(`delta is non-zero ${delta}`);
+
     let newPrevPanelElLength =
-      this.currentResizeHandle.prevPanelEl[this.clientLengthProperty] + delta;
+      this.currentResizeHandle.prevPanelContext.panel.element[
+        this.clientLengthProperty
+      ] + delta;
     let newNextPanelElLength =
-      this.currentResizeHandle.nextPanelEl[this.clientLengthProperty] - delta;
-    let prevPanelElId = this.panelId(this.currentResizeHandle.prevPanelEl?.id);
-    let nextPanelElId = this.panelId(this.currentResizeHandle.nextPanelEl?.id);
-    let prevPanelElContext = this.listPanelContext.get(Number(prevPanelElId));
-    let nextPanelElContext = this.listPanelContext.get(Number(nextPanelElId));
+      this.currentResizeHandle.nextPanelContext.panel.element[
+        this.clientLengthProperty
+      ] - delta;
+    let prevPanelElContext = this.currentResizeHandle.prevPanelContext;
+    let nextPanelElContext = this.currentResizeHandle.nextPanelContext;
+
+    console.log('newPrevPanelElLength', newPrevPanelElLength);
+    console.log('newNextPanelElLength', newNextPanelElLength);
+    console.log('prevPanelElContext', prevPanelElContext);
+    console.log('nextPanelElContext', nextPanelElContext);
+
     if (!prevPanelElContext || !nextPanelElContext) {
       console.warn(
         'Expected prevPanelElContext && nextPanelElContext to be defined',
@@ -377,9 +392,10 @@ export default class ResizablePanelGroup extends Component<Signature> {
       newNextPanelElLength = 0;
     }
 
-    this.setSiblingPanelContexts(
-      prevPanelElId,
-      nextPanelElId,
+    console.log(
+      'calling setSiblingPanelContexts in mouseMove',
+      prevPanelElContext,
+      nextPanelElContext,
       newPrevPanelElLength,
       newNextPanelElLength,
       (prevPanelElContext.initialMinLengthPx &&
@@ -394,8 +410,33 @@ export default class ResizablePanelGroup extends Component<Signature> {
         : 0,
     );
 
+    this.setSiblingPanelContexts(
+      prevPanelElContext,
+      nextPanelElContext,
+      newPrevPanelElLength,
+      newNextPanelElLength,
+      (prevPanelElContext.initialMinLengthPx &&
+        newPrevPanelElLength >= prevPanelElContext.initialMinLengthPx) ||
+        !prevPanelElContext.collapsible
+        ? prevPanelElContext.initialMinLengthPx
+        : 0,
+      (nextPanelElContext.initialMinLengthPx &&
+        newNextPanelElLength >= nextPanelElContext.initialMinLengthPx) ||
+        !nextPanelElContext.collapsible
+        ? nextPanelElContext.initialMinLengthPx
+        : 0,
+    );
+
+    console.log(
+      'currentResizeHandle initialPosition was ' +
+        this.currentResizeHandle.initialPosition,
+    );
     this.currentResizeHandle.initialPosition =
       event[this.clientPositionProperty];
+    console.log(
+      'currentResizeHandle initialPosition is ' +
+        this.currentResizeHandle.initialPosition,
+    );
 
     this.calculatePanelRatio();
   }
@@ -407,91 +448,77 @@ export default class ResizablePanelGroup extends Component<Signature> {
   onResizeHandleDblClick(event: MouseEvent) {
     let buttonId = (event.target as HTMLElement).id;
     let isFirstButton = buttonId.includes('0');
-    let isLastButton = buttonId.includes(
-      String(this.listPanelContext.size - 2),
-    );
+    let isLastButton = buttonId.includes(String(this.panelContexts.length - 2));
     let panelGroupLengthPx = this.panelGroupLengthWithoutResizeHandlePx;
     if (panelGroupLengthPx === undefined) {
       console.warn('Expected panelGroupLengthPx to be defined');
       return undefined;
     }
 
-    let { prevPanelEl: prevPanelEl, nextPanelEl: nextPanelEl } =
+    let { prevPanelContext, nextPanelContext } =
       this.findPanelsByResizeHandle(buttonId);
-    if (!prevPanelEl || !nextPanelEl) {
-      console.warn('Expected prevPanelEl and nextPanelEl are required');
+    if (!prevPanelContext || !nextPanelContext) {
+      console.warn('prevPanelContext and nextPanelContext are required');
       return undefined;
     }
 
-    let prevPanelElContext = this.listPanelContext.get(
-      this.panelId(prevPanelEl.id),
-    );
-    let nextPanelElContext = this.listPanelContext.get(
-      this.panelId(nextPanelEl.id),
-    );
-    if (!prevPanelElContext || !nextPanelElContext) {
-      console.warn(
-        'Expected prevPanelElContext && nextPanelElContext to be defined',
-      );
-      return undefined;
-    }
-    let prevPanelElLength = prevPanelElContext.lengthPx;
-    let nextPanelElLength = nextPanelElContext.lengthPx;
+    let prevPanelElLength = prevPanelContext.lengthPx;
+    let nextPanelElLength = nextPanelContext.lengthPx;
 
     if (
       isFirstButton &&
       prevPanelElLength > 0 &&
       !this.args.reverseCollapse &&
-      prevPanelElContext.collapsible
+      prevPanelContext.collapsible
     ) {
       this.setSiblingPanelContexts(
-        this.panelId(prevPanelEl.id),
-        this.panelId(nextPanelEl.id),
+        prevPanelContext,
+        nextPanelContext,
         0,
         prevPanelElLength + nextPanelElLength,
         0,
-        nextPanelElContext.initialMinLengthPx,
+        nextPanelContext.initialMinLengthPx,
       );
     } else if (isFirstButton && prevPanelElLength <= 0) {
       this.setSiblingPanelContexts(
-        this.panelId(prevPanelEl.id),
-        this.panelId(nextPanelEl.id),
-        prevPanelElContext.defaultLengthFraction
-          ? panelGroupLengthPx * prevPanelElContext.defaultLengthFraction
-          : prevPanelElContext.lengthPx,
-        prevPanelElContext.defaultLengthFraction
+        prevPanelContext,
+        nextPanelContext,
+        prevPanelContext.defaultLengthFraction
+          ? panelGroupLengthPx * prevPanelContext.defaultLengthFraction
+          : prevPanelContext.lengthPx,
+        prevPanelContext.defaultLengthFraction
           ? nextPanelElLength -
-              panelGroupLengthPx * prevPanelElContext.defaultLengthFraction
+              panelGroupLengthPx * prevPanelContext.defaultLengthFraction
           : panelGroupLengthPx - nextPanelElLength,
-        prevPanelElContext.initialMinLengthPx,
-        nextPanelElContext.initialMinLengthPx,
+        prevPanelContext.initialMinLengthPx,
+        nextPanelContext.initialMinLengthPx,
       );
     } else if (
       isLastButton &&
       nextPanelElLength > 0 &&
-      nextPanelElContext.collapsible
+      nextPanelContext.collapsible
     ) {
       this.setSiblingPanelContexts(
-        this.panelId(prevPanelEl.id),
-        this.panelId(nextPanelEl.id),
+        prevPanelContext,
+        nextPanelContext,
         prevPanelElLength + nextPanelElLength,
         0,
-        prevPanelElContext.initialMinLengthPx,
+        prevPanelContext.initialMinLengthPx,
         0,
       );
     } else if (isLastButton && nextPanelElLength <= 0) {
       this.setSiblingPanelContexts(
-        this.panelId(prevPanelEl.id),
-        this.panelId(nextPanelEl.id),
-        nextPanelElContext.defaultLengthFraction
+        prevPanelContext,
+        nextPanelContext,
+        nextPanelContext.defaultLengthFraction
           ? prevPanelElLength -
-              panelGroupLengthPx * nextPanelElContext.defaultLengthFraction
+              panelGroupLengthPx * nextPanelContext.defaultLengthFraction
           : panelGroupLengthPx - prevPanelElLength,
-        nextPanelElContext.defaultLengthFraction
-          ? panelGroupLengthPx * nextPanelElContext.defaultLengthFraction
-          : nextPanelElContext.lengthPx,
-        prevPanelElContext.initialMinLengthPx,
-        nextPanelElContext.initialMinLengthPx,
+        nextPanelContext.defaultLengthFraction
+          ? panelGroupLengthPx * nextPanelContext.defaultLengthFraction
+          : nextPanelContext.lengthPx,
+        prevPanelContext.initialMinLengthPx,
+        nextPanelContext.initialMinLengthPx,
       );
     }
 
@@ -500,34 +527,32 @@ export default class ResizablePanelGroup extends Component<Signature> {
 
   @action
   setSiblingPanelContexts(
-    prevPanelElId: number,
-    nextPanelElId: number,
+    leftPanelContext: PanelContext,
+    rightPanelContext: PanelContext,
     newPrevPanelElLength: number,
     newNextPanelElLength: number,
     newPrevPanelElMinLength?: number,
     newNextPanelElMinLength?: number,
   ) {
-    let leftPanelContext = this.listPanelContext.get(prevPanelElId);
+    // FIXME left/right should be before/after
     if (leftPanelContext) {
-      this.listPanelContext.set(prevPanelElId, {
-        ...leftPanelContext,
-        lengthPx: newPrevPanelElLength,
-        minLengthPx: newPrevPanelElMinLength,
-      });
+      console.log(
+        `leftPanelContext updates length: ${newPrevPanelElLength}, min: ${newPrevPanelElMinLength}`,
+      );
+      console.log('lpc is', leftPanelContext);
+      leftPanelContext.lengthPx = newPrevPanelElLength;
+      leftPanelContext.minLengthPx = newPrevPanelElMinLength;
     }
 
-    let rightPanelContext = this.listPanelContext.get(nextPanelElId);
     if (rightPanelContext) {
-      this.listPanelContext.set(nextPanelElId, {
-        ...rightPanelContext,
-        lengthPx: newNextPanelElLength,
-        minLengthPx: newNextPanelElMinLength,
-      });
+      console.log(
+        `rightPanelContext updates length: ${newNextPanelElLength}, min: ${newNextPanelElMinLength}`,
+      );
+      rightPanelContext.lengthPx = newNextPanelElLength;
+      rightPanelContext.minLengthPx = newNextPanelElMinLength;
     }
 
-    this.args.onListPanelContextChange?.(
-      Array.from(this.listPanelContext, ([_name, value]) => value),
-    );
+    this.args.onListPanelContextChange?.(this.panelContexts);
   }
 
   @action
@@ -544,9 +569,11 @@ export default class ResizablePanelGroup extends Component<Signature> {
       this.panelGroupElement[this.perpendicularLengthProperty] <
       this.minimumLengthToShowHandles;
 
-    let panelLengths: number[] = Array.from(this.listPanelContext.values()).map(
+    let panelLengths: number[] = this.panelContexts.map(
       (panelContext) => panelContext.lengthPx,
     );
+
+    console.log('panelLengths', panelLengths);
 
     let newContainerSize = this.panelGroupLengthWithoutResizeHandlePx;
     if (newContainerSize == undefined) {
@@ -556,12 +583,12 @@ export default class ResizablePanelGroup extends Component<Signature> {
 
     let remainingContainerSize = newContainerSize;
     let calculateLengthsOfPanelWithMinLegth = () => {
-      let panelContexts = Array.from(this.listPanelContext)
-        .map((panelContextTuple) => panelContextTuple[1])
-        .filter((panelContext) => panelContext.initialMinLengthPx);
+      let panelContexts = this.panelContexts.filter(
+        (panelContext) => panelContext.initialMinLengthPx,
+      );
 
-      panelContexts.forEach((panelContext) => {
-        let panelRatio = this.panelRatios[panelContext.id];
+      panelContexts.forEach((panelContext, index) => {
+        let panelRatio = this.panelRatios[index];
         if (!panelRatio || !newContainerSize) {
           return;
         }
@@ -571,19 +598,18 @@ export default class ResizablePanelGroup extends Component<Signature> {
             ? Math.max(proportionalSize, panelContext.initialMinLengthPx)
             : proportionalSize,
         );
-        panelLengths[panelContext.id] = actualSize;
+        panelLengths[index] = actualSize;
         remainingContainerSize = remainingContainerSize - actualSize;
       });
     };
     calculateLengthsOfPanelWithMinLegth();
 
     let calculateLengthsOfPanelWithoutMinLength = () => {
-      let panelContexts = Array.from(this.listPanelContext)
-        .map((panelContextTuple) => panelContextTuple[1])
-        .filter((panelContext) => !panelContext.initialMinLengthPx);
-      let panelContextIds = panelContexts.map(
-        (panelContext) => panelContext.id,
+      let panelContexts = this.panelContexts.filter(
+        (panelContext) => !panelContext.initialMinLengthPx,
       );
+      // FIXME probably removable?
+      let panelContextIds = panelContexts.map((_panelContext, index) => index);
       let newPanelRatios = this.panelRatios.filter((_panelRatio, index) =>
         panelContextIds.includes(index),
       );
@@ -595,7 +621,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
         (panelRatio) => panelRatio / totalNewPanelRatio,
       );
 
-      panelContexts.forEach((panelContext, index) => {
+      panelContexts.forEach((_panelContext, index) => {
         let panelRatio = newPanelRatios[index];
         if (!panelRatio) {
           console.warn('Expected panelRatio to be defined');
@@ -603,15 +629,15 @@ export default class ResizablePanelGroup extends Component<Signature> {
         }
         let proportionalSize = panelRatio * remainingContainerSize;
         let actualSize = Math.round(proportionalSize);
-        panelLengths[panelContext.id] = actualSize;
+        panelLengths[index] = actualSize;
       });
     };
     calculateLengthsOfPanelWithoutMinLength();
 
-    for (let index = 0; index <= this.listPanelContext.size; index++) {
-      let panelContext = this.listPanelContext.get(index);
+    for (let index = 0; index <= this.panelContexts.length; index++) {
+      let panelContext = this.panelContexts[index];
       if (panelContext) {
-        this.listPanelContext.set(index, {
+        this.panelContexts[index] = new TrackedObject({
           ...panelContext,
           lengthPx: panelLengths[index] || 0,
         });
@@ -619,37 +645,26 @@ export default class ResizablePanelGroup extends Component<Signature> {
     }
   }
 
-  private findPanelsByResizeHandle(ResizeHandleId: string) {
-    let idArr = ResizeHandleId.split('-');
-    let ResizeHandleIdNumber = Number(idArr[idArr.length - 1]);
-    if (ResizeHandleIdNumber == undefined) {
+  private findPanelsByResizeHandle(handle: ResizeHandle) {
+    let handleIndex = this.resizeHandles.indexOf(handle);
+    if (handleIndex === -1) {
       return {
-        prevPanelEl: undefined,
-        nextPanelEl: undefined,
+        prevPanelContext: undefined,
+        nextPanelContext: undefined,
       };
     }
-    let prevPanelEl = this.getHtmlElement(this.panelElId(ResizeHandleIdNumber));
-    let nextPanelEl = this.getHtmlElement(
-      this.panelElId(ResizeHandleIdNumber + 1),
-    );
+
+    let prevPanelContext = this.panelContexts[handleIndex];
+    let nextPanelContext = this.panelContexts[handleIndex + 1];
+
     return {
-      prevPanelEl,
-      nextPanelEl,
+      prevPanelContext,
+      nextPanelContext,
     };
   }
 
   private getHtmlElement(id: string): HTMLElement {
     return nodeFor(this, id);
-  }
-
-  @action
-  private panelElId(id: number | undefined): string {
-    return `${resizablePanelElIdPrefix}-${this.args.orientation}-${id}`;
-  }
-
-  private panelId(elId: string): number {
-    let idArr = elId.split('-');
-    return Number(idArr[idArr.length - 1]);
   }
 
   @action

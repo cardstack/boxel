@@ -1,9 +1,9 @@
 import { registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import { scheduleOnce } from '@ember/runloop';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
-import createRef from 'ember-ref-bucket/modifiers/create-ref';
+import { modifier } from 'ember-modifier';
 
 import type ResizablePanelGroup from './index.gts';
 
@@ -24,7 +24,7 @@ interface Signature {
     orientation: 'horizontal' | 'vertical';
     panelContext: (panelId: number) => PanelContext | undefined;
     panelGroupComponent: ResizablePanelGroup;
-    registerResizeHandle: () => number;
+    registerResizeHandle: (handle: ResizeHandle) => number;
     resizeHandleElId: (id: number | undefined) => string;
     reverseHandlerArrow: boolean;
     unRegisterResizeHandle: () => void;
@@ -35,9 +35,18 @@ interface Signature {
   Element: HTMLDivElement;
 }
 
+let registerHandle = modifier((element, [handle]: [ResizeHandle]) => {
+  handle.element = element as HTMLDivElement;
+  scheduleOnce('afterRender', handle, handle.registerHandle);
+});
+
 export default class ResizeHandle extends Component<Signature> {
   <template>
-    <div class='separator-{{@orientation}}' ...attributes>
+    <div
+      class='separator-{{@orientation}}'
+      {{registerHandle this}}
+      ...attributes
+    >
       <button
         id={{(@resizeHandleElId this.id)}}
         class='resize-handler {{@orientation}} {{if @hideHandle "hidden"}}'
@@ -45,7 +54,6 @@ export default class ResizeHandle extends Component<Signature> {
         data-test-resize-handler={{(@resizeHandleElId this.id)}}
         {{on 'mousedown' @onResizeHandleMouseDown}}
         {{on 'dblclick' @onResizeHandleDblClick}}
-        {{createRef (@resizeHandleElId this.id) bucket=@panelGroupComponent}}
       ><div class={{this.arrowResizeHandleClass}} /></button>
     </div>
     <style>
@@ -171,6 +179,7 @@ export default class ResizeHandle extends Component<Signature> {
           var(--boxel-panel-resize-handler-background-color);
       }
 
+      /* FIXME handler -> handle */
       .resize-handler:hover .arrow.bottom {
         border-top-color: var(
           --boxel-panel-resize-handler-hover-background-color
@@ -179,34 +188,39 @@ export default class ResizeHandle extends Component<Signature> {
     </style>
   </template>
 
-  @tracked id: number | undefined;
+  element!: HTMLDivElement;
 
   constructor(owner: any, args: any) {
     super(owner, args);
-    scheduleOnce('afterRender', this, this.registerResizeHandle);
+    // FIMXE move into modifier? also, unregister
     registerDestructor(this, this.args.unRegisterResizeHandle);
   }
 
-  private registerResizeHandle() {
-    this.id = this.args.registerResizeHandle();
+  @action registerHandle() {
+    this.args.registerResizeHandle(this);
   }
 
   get arrowResizeHandleClass() {
     let horizontal = this.args.orientation === 'horizontal';
     let reverse = this.args.reverseHandlerArrow;
 
-    if (this.id == undefined) {
+    let id = this.args.panelGroupComponent.resizeHandles.indexOf(this);
+    console.log('id', id, this.args.panelGroupComponent.resizeHandles.length);
+
+    if (id == undefined) {
       return '';
     }
 
     let toward: string | null = null;
 
-    let isFirstPanel = this.id === 0;
-    let isCollapsed = this.args.panelContext(this.id)?.lengthPx === 0;
+    let groupComponent = this.args.panelGroupComponent;
 
-    let nextPanelIsLast = this.args.isLastPanel(this.id + 1);
+    let isFirstPanel = id === 0;
+    let isCollapsed = groupComponent.panelContexts[id]?.lengthPx === 0;
+
+    let nextPanelIsLast = groupComponent.resizeHandles.length - 1 === id;
     let nextPanelIsCollapsed =
-      this.args.panelContext(this.id + 1)?.lengthPx === 0;
+      groupComponent.panelContexts[id + 1]?.lengthPx === 0;
 
     if (isFirstPanel && !isCollapsed) {
       if (nextPanelIsLast && nextPanelIsCollapsed) {
