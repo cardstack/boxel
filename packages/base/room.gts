@@ -243,10 +243,6 @@ class CommandObjectField extends FieldDef {
   static [primitive]: CommandObject;
 }
 
-class CommandType extends FieldDef {
-  static [primitive]: string;
-}
-
 type CommandStatus = 'applied' | 'ready';
 
 class CommandStatusField extends FieldDef {
@@ -255,7 +251,7 @@ class CommandStatusField extends FieldDef {
 
 // Subclass, add a validator that checks the fields required?
 class CommandField extends FieldDef {
-  @field commandType = contains(CommandType);
+  @field name = contains(StringField);
   @field payload = contains(CommandObjectField);
   @field eventId = contains(StringField);
   @field status = contains(CommandStatusField);
@@ -598,7 +594,7 @@ export class RoomField extends FieldDef {
             formattedMessage: `<p class="command-message">${event.content.formatted_body}</p>`,
             command: new CommandField({
               eventId: event_id,
-              commandType: command.name,
+              name: command.name,
               payload: command.arguments,
               status: annotation?.content['m.relates_to'].key ?? 'ready',
             }),

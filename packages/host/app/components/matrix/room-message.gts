@@ -317,8 +317,8 @@ export default class RoomMessage extends Component<Signature> {
   }
 
   private get previewCommandCode() {
-    let { commandType, payload } = this.args.message.command;
-    return JSON.stringify({ commandType, payload }, null, 2);
+    let { name, payload } = this.args.message.command;
+    return JSON.stringify({ name, payload }, null, 2);
   }
 
   @cached

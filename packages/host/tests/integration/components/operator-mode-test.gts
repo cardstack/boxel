@@ -1216,7 +1216,7 @@ module('Integration | operator-mode', function (hooks) {
       assert.deepEqual(
         JSON.parse(getMonacoContent()),
         {
-          commandType: 'patchCard',
+          name: 'patchCard',
           payload,
         },
         'it can preview code when a change is proposed',

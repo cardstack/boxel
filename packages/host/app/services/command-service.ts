@@ -15,7 +15,7 @@ export default class CommandService extends Service {
     let { payload, eventId } = command;
     try {
       this.matrixService.failedCommandState.delete(eventId);
-      if (command.commandType === 'patchCard') {
+      if (command.name === 'patchCard') {
         await this.operatorModeStateService.patchCard.perform(
           payload.card_id,
           {
