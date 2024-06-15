@@ -287,7 +287,7 @@ export function isCommandEvent(
     event.content.msgtype === 'org.boxel.command' &&
     event.content.format === 'org.matrix.custom.html' &&
     typeof event.content.data === 'object' &&
-    typeof event.content.data.command === 'object'
+    typeof event.content.data.toolCall === 'object'
   );
 }
 
@@ -295,6 +295,6 @@ export function isPatchCommandEvent(
   event: DiscreteMatrixEvent,
 ): event is CommandEvent {
   return (
-    isCommandEvent(event) && event.content.data.command.type === 'patchCard'
+    isCommandEvent(event) && event.content.data.toolCall.name === 'patchCard'
   );
 }
