@@ -2,29 +2,13 @@ import {
   LooseCardResource,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
+import { MODIFY_SYSTEM_MESSAGE } from '@cardstack/runtime-common/helpers/ai';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardFragmentContent,
   CommandEvent,
 } from 'https://cardstack.com/base/room';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
-
-const MODIFY_SYSTEM_MESSAGE =
-  '\
-The user is using an application called Boxel, where they are working on editing "Cards" which are data models representable as JSON. \
-The user may be non-technical and should not need to understand the inner workings of Boxel. \
-The user may be asking questions about the contents of the cards rather than help editing them. Use your world knowledge to help them. \
-If the user wants the data they see edited, AND the patchCard function is available, you MUST use the "patchCard" function to make the change. \
-If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you \
-If you do not call patchCard, the user will not see the change. \
-You can ONLY modify cards shared with you, if there is no patchCard function or tool then the user hasn\'t given you access \
-NEVER tell the user to use patchCard, you should always do it for them. \
-If the user request is unclear, you may ask clarifying questions. \
-You may make multiple function calls, all calls are gated by the user so multiple options can be explored.\
-If a user asks you about things in the world, use your existing knowledge to help them. Only if necessary, add a *small* caveat at the end of your message to explain that you do not have live external data. \
-\
-If you need access to the cards the user can see, you can ask them to attach the cards. \
-If you encounter JSON structures, please enclose them within backticks to ensure they are displayed stylishly in Markdown.';
 
 type CommandMessage = {
   type: 'command';
@@ -303,7 +287,7 @@ export function isCommandEvent(
     event.content.msgtype === 'org.boxel.command' &&
     event.content.format === 'org.matrix.custom.html' &&
     typeof event.content.data === 'object' &&
-    typeof event.content.data.command === 'object'
+    typeof event.content.data.toolCall === 'object'
   );
 }
 
@@ -311,6 +295,6 @@ export function isPatchCommandEvent(
   event: DiscreteMatrixEvent,
 ): event is CommandEvent {
   return (
-    isCommandEvent(event) && event.content.data.command.type === 'patchCard'
+    isCommandEvent(event) && event.content.data.toolCall.name === 'patchCard'
   );
 }
