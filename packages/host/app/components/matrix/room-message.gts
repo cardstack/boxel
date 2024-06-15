@@ -326,7 +326,7 @@ export default class RoomMessage extends Component<Signature> {
     );
   }
 
-  run = task(async (command: any, roomId: string) => {
+  run = task(async (command: Record<string, any>, roomId: string) => {
     return this.commandService.run.perform(command, roomId);
   });
 

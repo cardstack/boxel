@@ -9,7 +9,7 @@ export default class CommandService extends Service {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
 
-  run = task(async (command: any, roomId: string) => {
+  run = task(async (command: Record<string, any>, roomId: string) => {
     let { payload, eventId } = command;
     try {
       this.matrixService.failedCommandState.delete(eventId);
