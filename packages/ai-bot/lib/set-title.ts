@@ -99,8 +99,8 @@ export const getLatestPatchApplyMessage = (
       return [];
     }
     if (isPatchCommandEvent(commandEvent)) {
-      let patchMessage = JSON.stringify(commandEvent.content.data.command);
-      let content = `Applying patchCard with the payload ${patchMessage}. The patch being made is applied to the following ${attachedCardsToMessage(
+      let patchMessage = JSON.stringify(commandEvent.content.data.toolCall);
+      let content = `Applying patchCard with args${patchMessage}. The patch being made is applied to the following ${attachedCardsToMessage(
         history,
         aiBotUserId,
       )}`;

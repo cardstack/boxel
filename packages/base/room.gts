@@ -237,14 +237,10 @@ type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
 
 type JSONObject = { [x: string]: JSONValue };
 
-type PatchObject = { patch: { attributes: JSONObject }; id: string };
+type CommandObject = JSONObject;
 
-class PatchObjectField extends FieldDef {
-  static [primitive]: PatchObject;
-}
-
-class CommandType extends FieldDef {
-  static [primitive]: 'patchCard';
+class CommandObjectField extends FieldDef {
+  static [primitive]: CommandObject;
 }
 
 type CommandStatus = 'applied' | 'ready';
@@ -254,9 +250,9 @@ class CommandStatusField extends FieldDef {
 }
 
 // Subclass, add a validator that checks the fields required?
-class PatchField extends FieldDef {
-  @field commandType = contains(CommandType);
-  @field payload = contains(PatchObjectField);
+class CommandField extends FieldDef {
+  @field name = contains(StringField);
+  @field payload = contains(CommandObjectField);
   @field eventId = contains(StringField);
   @field status = contains(CommandStatusField);
 }
@@ -285,7 +281,7 @@ export class MessageField extends FieldDef {
   @field attachedCardIds = containsMany(StringField);
   @field index = contains(NumberField);
   @field transactionId = contains(StringField);
-  @field command = contains(PatchField);
+  @field command = contains(CommandField);
   @field isStreamingFinished = contains(BooleanField);
   @field errorMessage = contains(StringField);
   // ID from the client and can be used by client
@@ -576,9 +572,13 @@ export class RoomField extends FieldDef {
             ...cardArgs,
             attachedCardIds,
           });
-        } else if (event.content.msgtype === 'org.boxel.command') {
+        } else if (
+          event.content.msgtype === 'org.boxel.command' &&
+          event.content.data.toolCall
+        ) {
           // We only handle patches for now
-          let command = event.content.data.command;
+          let commandEvent = event as CommandEvent;
+          let command = event.content.data.toolCall;
           let annotation = this.events.find(
             (e) =>
               e.type === 'm.reaction' &&
@@ -586,16 +586,16 @@ export class RoomField extends FieldDef {
               e.content['m.relates_to']?.event_id ===
                 // If the message is a replacement message, eventId in command payload will be undefined.
                 // Because it will not refer to any other events, so we can use event_id of the message itself.
-                (command.eventId ?? event_id),
+                (commandEvent.content.data.eventId ?? event_id),
           ) as ReactionEvent | undefined;
 
           messageField = new MessageField({
             ...cardArgs,
-            formattedMessage: `<p class="patch-message">${event.content.formatted_body}</p>`,
-            command: new PatchField({
+            formattedMessage: `<p class="command-message">${event.content.formatted_body}</p>`,
+            command: new CommandField({
               eventId: event_id,
-              commandType: command.type,
-              payload: command,
+              name: command.name,
+              payload: command.arguments,
               status: annotation?.content['m.relates_to'].key ?? 'ready',
             }),
             isStreamingFinished: true,
@@ -801,6 +801,11 @@ interface MessageEvent extends BaseMatrixEvent {
   };
 }
 
+export interface FunctionToolCall {
+  name: string;
+  arguments: any;
+}
+
 export interface CommandEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: CommandMessageContent;
@@ -822,11 +827,8 @@ interface CommandMessageContent {
   body: string;
   formatted_body: string;
   data: {
-    command: {
-      type: 'patchCard';
-      payload: PatchObject;
-      eventId: string;
-    };
+    toolCall: FunctionToolCall;
+    eventId: string;
   };
 }
 

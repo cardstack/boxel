@@ -13,7 +13,6 @@ import { modifier } from 'ember-modifier';
 import { trackedFunction } from 'ember-resources/util/function';
 
 import { Button } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
@@ -106,7 +105,7 @@ export default class RoomMessage extends Component<Signature> {
         @errorMessage={{this.errorMessage}}
         @isStreaming={{@isStreaming}}
         @retryAction={{if
-          (eq @message.command.commandType 'patchCard')
+          this.hasCommandField
           (fn (perform this.run) @message.command @roomId)
           @retryAction
         }}
@@ -114,10 +113,12 @@ export default class RoomMessage extends Component<Signature> {
         data-test-boxel-message-from={{@message.author.name}}
         ...attributes
       >
-        {{#if (eq @message.command.commandType 'patchCard')}}
+        {{#if this.hasCommandField}}
           <div
-            class='patch-button-bar'
-            data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
+            class='command-button-bar'
+            {{! In test, if we change this isIdle check to the task running locally on this component, it will fail because roomMessages get destroyed during re-indexing. 
+            Since services are long-lived so it we will not have this issue. I think this will go away when we convert our room field into a room component }}
+            data-test-command-card-idle={{this.commandService.run.isIdle}}
           >
             <Button
               class='view-code-button'
@@ -155,7 +156,7 @@ export default class RoomMessage extends Component<Signature> {
                 class='monaco-container'
                 {{this.scrollBottomIntoView}}
                 {{monacoModifier
-                  content=this.previewPatchCode
+                  content=this.previewCommandCode
                   contentChanged=undefined
                   monacoSDK=@monacoSDK
                   language='json'
@@ -181,7 +182,7 @@ export default class RoomMessage extends Component<Signature> {
         background: var(--boxel-200);
         color: var(--boxel-500);
       }
-      .patch-button-bar {
+      .command-button-bar {
         display: flex;
         justify-content: flex-end;
         gap: var(--boxel-sp-xs);
@@ -248,7 +249,7 @@ export default class RoomMessage extends Component<Signature> {
   @tracked private isDisplayingCode = false;
 
   private copyToClipboard = task(async () => {
-    await navigator.clipboard.writeText(this.previewPatchCode);
+    await navigator.clipboard.writeText(this.previewCommandCode);
   });
 
   private loadMessageResources = trackedFunction(this, async () => {
@@ -311,9 +312,13 @@ export default class RoomMessage extends Component<Signature> {
       .join(', ');
   }
 
-  private get previewPatchCode() {
-    let { commandType, payload } = this.args.message.command;
-    return JSON.stringify({ commandType, payload }, null, 2);
+  get hasCommandField() {
+    return Boolean(this.args.message.command);
+  }
+
+  private get previewCommandCode() {
+    let { name, payload } = this.args.message.command;
+    return JSON.stringify({ name, payload }, null, 2);
   }
 
   @cached

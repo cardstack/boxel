@@ -2,6 +2,8 @@ import Service, { service } from '@ember/service';
 
 import { task } from 'ember-concurrency';
 
+import { PatchData } from '@cardstack/runtime-common';
+
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -13,10 +15,13 @@ export default class CommandService extends Service {
     let { payload, eventId } = command;
     try {
       this.matrixService.failedCommandState.delete(eventId);
-      if (command.commandType === 'patchCard') {
+      if (command.name === 'patchCard') {
         await this.operatorModeStateService.patchCard.perform(
-          payload.id,
-          payload.patch, //extracting patch here
+          payload.card_id,
+          {
+            attributes: payload.attributes,
+            relationships: payload.relationships,
+          } as PatchData, //extracting patch here
         );
       }
       await this.matrixService.sendReactionEvent(roomId, eventId, 'applied');
@@ -26,7 +31,7 @@ export default class CommandService extends Service {
           ? new Error(e)
           : e instanceof Error
           ? e
-          : new Error('Patch failed.');
+          : new Error('Command failed.');
       this.matrixService.failedCommandState.set(eventId, error);
     }
   });
