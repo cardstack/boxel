@@ -24,6 +24,7 @@ import { initSharedState } from './shared-state';
 import BooleanField from './boolean';
 import { md5 } from 'super-fast-md5';
 import { EventStatus, MatrixError } from 'matrix-js-sdk';
+import { CommandField } from './command';
 
 const ErrorMessage: Record<string, string> = {
   ['M_TOO_LARGE']: 'Message is too large',
@@ -231,30 +232,6 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
     }
     return this.args.model.created.getTime();
   }
-}
-
-type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
-
-type JSONObject = { [x: string]: JSONValue };
-
-type CommandObject = JSONObject;
-
-class CommandObjectField extends FieldDef {
-  static [primitive]: CommandObject;
-}
-
-type CommandStatus = 'applied' | 'ready';
-
-class CommandStatusField extends FieldDef {
-  static [primitive]: CommandStatus;
-}
-
-// Subclass, add a validator that checks the fields required?
-export class CommandField extends FieldDef {
-  @field name = contains(StringField);
-  @field payload = contains(CommandObjectField);
-  @field eventId = contains(StringField);
-  @field status = contains(CommandStatusField);
 }
 
 // A map from a hash of roomId + card document to the first card fragment event id.
