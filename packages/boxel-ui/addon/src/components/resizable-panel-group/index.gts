@@ -128,6 +128,23 @@ export default class ResizablePanelGroup extends Component<Signature> {
     </style>
   </template>
 
+  @tracked private panelGroupElement: HTMLDivElement | undefined;
+
+  @tracked hideHandles = false;
+  minimumLengthToShowHandles = 30;
+
+  resizablePanelIdCache = new WeakMap<ResizablePanel, number>();
+  panelContexts = new TrackedArray<PanelContext>();
+  resizeHandles = new TrackedArray<ResizeHandle>();
+
+  currentResizeHandle: {
+    handle: ResizeHandle;
+    initialPosition: number;
+    nextPanelContext?: PanelContext | null;
+    prevPanelContext?: PanelContext | null;
+  } | null = null;
+  panelRatios: number[] = [];
+
   constructor(args: any, owner: any) {
     super(args, owner);
 
@@ -139,8 +156,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
       document.removeEventListener('mousedown', this.onResizeHandleMouseMove);
     });
   }
-
-  @tracked private panelGroupElement: HTMLDivElement | undefined;
 
   private get isHorizontal() {
     return this.args.orientation === 'horizontal';
@@ -199,21 +214,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
     }
     return panelGroupLengthPx - totalResizeHandleLength;
   }
-
-  @tracked hideHandles = false;
-  minimumLengthToShowHandles = 30;
-
-  resizablePanelIdCache = new WeakMap<ResizablePanel, number>();
-  panelContexts = new TrackedArray<PanelContext>();
-  resizeHandles = new TrackedArray<ResizeHandle>();
-
-  currentResizeHandle: {
-    handle: ResizeHandle;
-    initialPosition: number;
-    nextPanelContext?: PanelContext | null;
-    prevPanelContext?: PanelContext | null;
-  } | null = null;
-  panelRatios: number[] = [];
 
   @action
   registerPanel(panel: ResizablePanel) {
