@@ -1,7 +1,7 @@
 import { Deferred } from './deferred';
 import { SearchIndex } from './search-index';
 import { type SingleCardDocument } from './card-document';
-import { Loader } from './loader';
+import { Loader, followRedirections } from './loader';
 import { RealmPaths, LocalPath, join } from './paths';
 import {
   systemError,
@@ -296,12 +296,12 @@ export class Realm {
           : new Request(urlOrRequest, init);
       let response = await this.maybeHandle(request);
       if (response) {
-        return response;
+        return await followRedirections(request, response, fetch);
       }
 
       response = await authHandler(request);
       if (response) {
-        return response;
+        return await followRedirections(request, response, fetch);
       }
 
       return virtualNetwork.fetch(request);
@@ -517,7 +517,7 @@ export class Realm {
     });
   }
 
-  get loader() {
+  private get loader() {
     // the current loader used by the search index will contain the latest
     // module updates as we obtain a new loader for each indexing run.
     if (isNode) {
