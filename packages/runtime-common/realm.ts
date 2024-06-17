@@ -1,7 +1,7 @@
 import { Deferred } from './deferred';
 import { SearchIndex } from './search-index';
 import { type SingleCardDocument } from './card-document';
-import { Loader, followRedirections } from './loader';
+import { Loader } from './loader';
 import { RealmPaths, LocalPath, join } from './paths';
 import {
   systemError,
@@ -67,6 +67,7 @@ import RealmPermissionChecker from './realm-permission-checker';
 import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
 
 import { RealmAuthDataSource } from './realm-auth-data-source';
+import { fetcher } from './fetcher';
 
 export interface RealmSession {
   canRead: boolean;
@@ -289,28 +290,21 @@ export class Realm {
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
     this.#assetsURL = assetsURL;
 
-    let fetch: typeof globalThis.fetch = async (urlOrRequest, init) => {
-      let request =
-        urlOrRequest instanceof Request
-          ? urlOrRequest
-          : new Request(urlOrRequest, init);
-      let response = await this.maybeHandle(request);
-      if (response) {
-        return await followRedirections(request, response, fetch);
-      }
-
-      response = await authHandler(request);
-      if (response) {
-        return await followRedirections(request, response, fetch);
-      }
-
-      return virtualNetwork.fetch(request);
-    };
-
-    let authHandler = addAuthorizationHeader(
-      fetch,
-      new RealmAuthDataSource(this.#matrixClient, fetch, this.url),
-    );
+    let maybeHandle = this.maybeHandle.bind(this);
+    let fetch = fetcher(virtualNetwork.fetch, [
+      async (request, next) => {
+        let response = await maybeHandle(request);
+        return response || next();
+      },
+      async (request, next) => {
+        let authHandler = addAuthorizationHeader(
+          fetch,
+          new RealmAuthDataSource(this.#matrixClient, fetch, this.url),
+        );
+        let response = await authHandler(request);
+        return response || next();
+      },
+    ]);
 
     let loader = new Loader(fetch, virtualNetwork.resolveImport);
     adapter.setLoader?.(loader);

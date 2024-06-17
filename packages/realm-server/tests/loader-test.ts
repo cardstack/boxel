@@ -22,8 +22,6 @@ module('loader', function (hooks) {
   let testRealmServer: Server;
 
   let virtualNetwork = new VirtualNetwork();
-  let loader = virtualNetwork.createLoader();
-
   shimExternals(virtualNetwork);
 
   setupBaseRealmServer(hooks, virtualNetwork);
