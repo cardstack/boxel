@@ -112,20 +112,18 @@ module('realm-auth-handler-test', function () {
 
   test('it does not add authorization header to the request for target realms that are publicly readable', async function (assert) {
     let requestsMade: Request[] = [];
-    let loader = {
-      fetch: async (request: Request, init?: RequestInit) => {
-        request = new Request(request, init);
-        requestsMade.push(request);
+    let fetch: typeof globalThis.fetch = async (request, init?) => {
+      request = new Request(request, init);
+      requestsMade.push(request);
 
-        return new Response(null, {
-          status: 200,
-          headers: {
-            'x-boxel-realm-url': 'http://another-test-realm/',
-            'x-boxel-realm-public-readable': 'true',
-          },
-        });
-      },
-    } as unknown as Loader;
+      return new Response(null, {
+        status: 200,
+        headers: {
+          'x-boxel-realm-url': 'http://another-test-realm/',
+          'x-boxel-realm-public-readable': 'true',
+        },
+      });
+    };
 
     let realmAuthDataSource = new RealmAuthDataSource(
       matrixClient,
@@ -145,19 +143,17 @@ module('realm-auth-handler-test', function () {
 
   test('it does not add authorization header to the request when the realm is making requests to itself', async function (assert) {
     let requestsMade: Request[] = [];
-    let loader = {
-      fetch: async (request: Request, init?: RequestInit) => {
-        request = new Request(request, init);
-        requestsMade.push(request);
+    let fetch: typeof globalThis.fetch = async (request, init) => {
+      request = new Request(request, init);
+      requestsMade.push(request);
 
-        return new Response(null, {
-          status: 200,
-          headers: {
-            'x-boxel-realm-url': 'http://test-realm/',
-          },
-        });
-      },
-    } as unknown as Loader;
+      return new Response(null, {
+        status: 200,
+        headers: {
+          'x-boxel-realm-url': 'http://test-realm/',
+        },
+      });
+    };
 
     let realmAuthDataSource = new RealmAuthDataSource(
       matrixClient,
@@ -177,19 +173,17 @@ module('realm-auth-handler-test', function () {
 
   test('retries once when the permissions in the token are outdated (could happen if the user permissions were changed during the life of the JWT)', async function (assert) {
     let requestsMade: Request[] = [];
-    let loader = {
-      fetch: async (request: Request, init?: RequestInit) => {
-        request = new Request(request, init);
-        requestsMade.push(request);
+    let fetch: typeof globalThis.fetch = async (request, init) => {
+      request = new Request(request, init);
+      requestsMade.push(request);
 
-        return new Response(AuthenticationErrorMessages.PermissionMismatch, {
-          status: 401,
-          headers: {
-            'x-boxel-realm-url': 'http://another-test-realm/',
-          },
-        });
-      },
-    } as unknown as Loader;
+      return new Response(AuthenticationErrorMessages.PermissionMismatch, {
+        status: 401,
+        headers: {
+          'x-boxel-realm-url': 'http://another-test-realm/',
+        },
+      });
+    };
 
     let realmAuthDataSource = new RealmAuthDataSource(
       matrixClient,
@@ -232,19 +226,17 @@ module('realm-auth-handler-test', function () {
 
   test('retries once when the token expired', async function (assert) {
     let requestsMade: Request[] = [];
-    let loader = {
-      fetch: async (request: Request, init?: RequestInit) => {
-        request = new Request(request, init);
-        requestsMade.push(request);
+    let fetch: typeof globalThis.fetch = async (request, init) => {
+      request = new Request(request, init);
+      requestsMade.push(request);
 
-        return new Response(AuthenticationErrorMessages.TokenExpired, {
-          status: 401,
-          headers: {
-            'x-boxel-realm-url': 'http://another-test-realm/',
-          },
-        });
-      },
-    } as unknown as Loader;
+      return new Response(AuthenticationErrorMessages.TokenExpired, {
+        status: 401,
+        headers: {
+          'x-boxel-realm-url': 'http://another-test-realm/',
+        },
+      });
+    };
 
     let realmAuthDataSource = new RealmAuthDataSource(
       matrixClient,
@@ -288,19 +280,17 @@ module('realm-auth-handler-test', function () {
 
   test('does not retry on 401 error when the token is invalid', async function (assert) {
     let requestsMade: Request[] = [];
-    let loader = {
-      fetch: async (request: Request, init?: RequestInit) => {
-        request = new Request(request, init);
-        requestsMade.push(request);
+    let fetch: typeof globalThis.fetch = async (request, init) => {
+      request = new Request(request, init);
+      requestsMade.push(request);
 
-        return new Response(AuthenticationErrorMessages.TokenInvalid, {
-          status: 401,
-          headers: {
-            'x-boxel-realm-url': 'http://another-test-realm/',
-          },
-        });
-      },
-    } as unknown as Loader;
+      return new Response(AuthenticationErrorMessages.TokenInvalid, {
+        status: 401,
+        headers: {
+          'x-boxel-realm-url': 'http://another-test-realm/',
+        },
+      });
+    };
 
     let realmAuthDataSource = new RealmAuthDataSource(
       matrixClient,
@@ -341,19 +331,17 @@ module('realm-auth-handler-test', function () {
 
   test('does not retry on 401 error when the auth header is missing', async function (assert) {
     let requestsMade: Request[] = [];
-    let loader = {
-      fetch: async (request: Request, init?: RequestInit) => {
-        request = new Request(request, init);
-        requestsMade.push(request);
+    let fetch: typeof globalThis.fetch = async (request, init) => {
+      request = new Request(request, init);
+      requestsMade.push(request);
 
-        return new Response(AuthenticationErrorMessages.MissingAuthHeader, {
-          status: 401,
-          headers: {
-            'x-boxel-realm-url': 'http://another-test-realm/',
-          },
-        });
-      },
-    } as unknown as Loader;
+      return new Response(AuthenticationErrorMessages.MissingAuthHeader, {
+        status: 401,
+        headers: {
+          'x-boxel-realm-url': 'http://another-test-realm/',
+        },
+      });
+    };
 
     let realmAuthDataSource = new RealmAuthDataSource(
       matrixClient,
