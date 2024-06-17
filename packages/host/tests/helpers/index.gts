@@ -530,7 +530,7 @@ async function setupTestRealm({
         waiter.endAsync(token);
       }
 
-      return realm.maybeHandle(req);
+      return null;
     });
   }
 
