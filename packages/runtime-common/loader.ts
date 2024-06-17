@@ -128,10 +128,6 @@ export class Loader {
     return clone;
   }
 
-  registerURLHandler(handler: RequestHandler) {
-    this.urlHandlers.push(handler);
-  }
-
   prependURLHandlers(handlers: RequestHandler[]) {
     this.urlHandlers = [...handlers, ...this.urlHandlers];
   }
