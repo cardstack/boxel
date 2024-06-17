@@ -4,7 +4,7 @@ import Component from '@glimmer/component';
 
 import { didCancel, enqueueTask, restartableTask } from 'ember-concurrency';
 
-import { type Indexer } from '@cardstack/runtime-common';
+import { type Indexer, type TextFileRef } from '@cardstack/runtime-common';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
 import {
@@ -152,9 +152,7 @@ export default class CardPrerender extends Component {
     function readFileAsText(
       path: LocalPath,
       opts?: { withFallbacks?: true },
-    ): Promise<
-      { content: string; lastModified: number; path: string } | undefined
-    > {
+    ): Promise<TextFileRef | undefined> {
       return _readFileAsText(
         path,
         self.localIndexer.adapter.openFile.bind(self.localIndexer.adapter),
