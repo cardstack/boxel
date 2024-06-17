@@ -179,7 +179,7 @@ module('loader', function (hooks) {
           dbAdapter,
           queue,
         });
-        loader2.registerURLHandler(realm.maybeHandle.bind(realm));
+        virtualNetwork.mount(realm.maybeHandle.bind(realm));
         await realm.ready;
       },
     });
