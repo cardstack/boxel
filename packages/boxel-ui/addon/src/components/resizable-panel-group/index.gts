@@ -558,29 +558,21 @@ export default class ResizablePanelGroup extends Component<Signature> {
 
   @action
   setSiblingPanelContexts(
-    leftPanelContext: PanelContext,
-    rightPanelContext: PanelContext,
+    prevPanelContext: PanelContext,
+    nextPanelContext: PanelContext,
     newPrevPanelElLength: number,
     newNextPanelElLength: number,
     newPrevPanelElMinLength?: number,
     newNextPanelElMinLength?: number,
   ) {
-    // FIXME left/right should be before/after
-    if (leftPanelContext) {
-      console.log(
-        `leftPanelContext updates length: ${newPrevPanelElLength}, min: ${newPrevPanelElMinLength}`,
-      );
-      console.log('lpc is', leftPanelContext);
-      leftPanelContext.lengthPx = newPrevPanelElLength;
-      leftPanelContext.minLengthPx = newPrevPanelElMinLength;
+    if (prevPanelContext) {
+      prevPanelContext.lengthPx = newPrevPanelElLength;
+      prevPanelContext.minLengthPx = newPrevPanelElMinLength;
     }
 
-    if (rightPanelContext) {
-      console.log(
-        `rightPanelContext updates length: ${newNextPanelElLength}, min: ${newNextPanelElMinLength}`,
-      );
-      rightPanelContext.lengthPx = newNextPanelElLength;
-      rightPanelContext.minLengthPx = newNextPanelElMinLength;
+    if (nextPanelContext) {
+      nextPanelContext.lengthPx = newNextPanelElLength;
+      nextPanelContext.minLengthPx = newNextPanelElMinLength;
     }
 
     this.args.onListPanelContextChange?.(this.panelContexts);
