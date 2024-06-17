@@ -1,6 +1,5 @@
 import {
   addAuthorizationHeader,
-  Loader,
   RealmAuthDataSource,
 } from '@cardstack/runtime-common';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
