@@ -466,9 +466,20 @@ export default class ResizablePanelGroup extends Component<Signature> {
   // In this scenario, the minimum length of the panel will be disregarded.
   @action
   onResizeHandleDblClick(event: MouseEvent) {
-    let buttonId = (event.target as HTMLElement).id;
-    let isFirstButton = buttonId.includes('0');
-    let isLastButton = buttonId.includes(String(this.panelContexts.length - 2));
+    let handleElement = event.target as HTMLElement;
+    let handle = this.resizeHandles.find(
+      (handle) => handle.element === handleElement.parentNode,
+    );
+
+    if (!handle) {
+      console.warn('Could not find handle');
+      return;
+    }
+
+    let isFirstButton = this.resizeHandles.indexOf(handle) === 0;
+    let isLastButton =
+      this.resizeHandles.indexOf(handle) === this.totalResizeHandle - 1;
+
     let panelGroupLengthPx = this.panelGroupLengthWithoutResizeHandlePx;
     if (panelGroupLengthPx === undefined) {
       console.warn('Expected panelGroupLengthPx to be defined');
@@ -476,7 +487,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
     }
 
     let { prevPanelContext, nextPanelContext } =
-      this.findPanelsByResizeHandle(buttonId);
+      this.findPanelsByResizeHandle(handle);
     if (!prevPanelContext || !nextPanelContext) {
       console.warn('prevPanelContext and nextPanelContext are required');
       return undefined;
