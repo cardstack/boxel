@@ -6,9 +6,9 @@ import { tracked } from '@glimmer/tracking';
 import type { WithBoundArgs } from '@glint/template';
 import { nodeFor } from 'ember-ref-bucket';
 import didResizeModifier from 'ember-resize-modifier/modifiers/did-resize';
-import { TrackedArray, TrackedObject } from 'tracked-built-ins';
+import { TrackedArray } from 'tracked-built-ins';
 
-import type { PanelContext } from './panel.gts';
+import type { PanelContext as PanelContextType } from './panel.gts';
 import ResizablePanel from './panel.gts';
 import ResizeHandle from './resize-handler.gts';
 
@@ -20,6 +20,26 @@ function sumArray(array: number[]) {
 }
 
 const ResizeHandleElIdPrefix = 'resize-handler';
+
+class PanelContext implements PanelContextType {
+  @tracked collapsible = false;
+  @tracked defaultLengthFraction?: number;
+  @tracked initialMinLengthPx?: number;
+  @tracked isHidden?: boolean;
+  @tracked lengthPx = 0;
+  @tracked minLengthPx?: number;
+  @tracked panel?: ResizablePanel | undefined;
+
+  constructor(args: PanelContextType) {
+    this.collapsible = args.collapsible;
+    this.defaultLengthFraction = args.defaultLengthFraction;
+    this.initialMinLengthPx = args.initialMinLengthPx;
+    this.isHidden = args.isHidden;
+    this.lengthPx = args.lengthPx;
+    this.minLengthPx = args.minLengthPx;
+    this.panel = args.panel;
+  }
+}
 
 interface Signature {
   Args: {
@@ -197,7 +217,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
 
   @action
   registerPanel(panel: ResizablePanel) {
-    let context = new TrackedObject({
+    let context = new PanelContext({
       panel,
       defaultLengthFraction: panel.args.defaultLengthFraction,
       lengthPx: panel.args.lengthPx,
@@ -313,8 +333,8 @@ export default class ResizablePanelGroup extends Component<Signature> {
   onResizeHandleMouseMove(event: MouseEvent) {
     if (
       !this.currentResizeHandle ||
-      !this.currentResizeHandle.prevPanelContext ||
-      !this.currentResizeHandle.nextPanelContext
+      !this.currentResizeHandle.prevPanelContext?.panel ||
+      !this.currentResizeHandle.nextPanelContext?.panel
     ) {
       return;
     }
@@ -637,10 +657,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
     for (let index = 0; index <= this.panelContexts.length; index++) {
       let panelContext = this.panelContexts[index];
       if (panelContext) {
-        this.panelContexts[index] = new TrackedObject({
-          ...panelContext,
-          lengthPx: panelLengths[index] || 0,
-        });
+        panelContext.lengthPx = panelLengths[index] || 0;
       }
     }
   }

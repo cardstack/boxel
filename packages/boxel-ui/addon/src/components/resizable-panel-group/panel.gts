@@ -17,7 +17,7 @@ export type PanelContext = {
   isHidden?: boolean;
   lengthPx: number;
   minLengthPx?: number;
-  panel: Panel;
+  panel?: Panel;
 };
 
 interface Signature {
