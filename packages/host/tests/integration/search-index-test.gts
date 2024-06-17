@@ -17,8 +17,6 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { SearchIndex } from '@cardstack/runtime-common/search-index';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
-
 import {
   testRealmURL,
   testRealmInfo,
@@ -29,6 +27,7 @@ import {
   type CardDocFiles,
   setupIntegrationTestRealm,
   getDbAdapter,
+  lookupLoaderService,
 } from '../helpers';
 
 const paths = new RealmPaths(new URL(testRealmURL));
@@ -40,8 +39,7 @@ module(`Integration | search-index`, function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    loader = lookupLoaderService().loader;
   });
 
   setupLocalIndexing(hooks);

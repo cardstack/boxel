@@ -26,7 +26,6 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import { AuthenticationErrorMessages } from '@cardstack/runtime-common/router';
 
 import { claimsFromRawToken } from '@cardstack/host/resources/realm-session';
-import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 
@@ -42,6 +41,7 @@ import {
   type TestContextWithSave,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  lookupLoaderService,
 } from '../helpers';
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
 
@@ -50,25 +50,6 @@ let realmPermissions: { [realmURL: string]: ('read' | 'write')[] };
 
 module('Acceptance | interact submode tests', function (hooks) {
   let realm: Realm;
-  let onFetch: ((req: Request, body: string) => Response | null) | undefined;
-  function wrappedOnFetch() {
-    return async (req: Request) => {
-      if (!onFetch) {
-        return Promise.resolve({
-          req,
-          res: null,
-        });
-      }
-
-      let body = await req.clone().text();
-      let res = onFetch(req, body) ?? null;
-
-      return {
-        req,
-        res,
-      };
-    };
-  }
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -83,8 +64,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       [testRealm2URL]: ['read', 'write'],
     };
 
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    let loader = lookupLoaderService().loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
     let catalogEntry: typeof import('https://cardstack.com/base/catalog-entry');
@@ -249,7 +229,6 @@ module('Acceptance | interact submode tests', function (hooks) {
     let mangoPet = new Pet({ name: 'Mango' });
 
     ({ realm } = await setupAcceptanceTestRealm({
-      onFetch: wrappedOnFetch(),
       contents: {
         'address.gts': { Address },
         'person.gts': { Person },
@@ -1192,23 +1171,25 @@ module('Acceptance | interact submode tests', function (hooks) {
             ],
           });
 
-          // Mock `Authentication` error response from the server.
-          onFetch = (req, _body) => {
-            if (
-              req.method !== 'GET' &&
-              req.method !== 'HEAD' &&
-              req.headers.get('Authorization') === token
-            ) {
-              return new Response(
-                AuthenticationErrorMessages.PermissionMismatch,
-                {
-                  status: 401,
-                },
-              );
-            }
-
-            return null;
-          };
+          lookupLoaderService().virtualNetwork.mount(
+            async (req) => {
+              // Mock `Authentication` error response from the server.
+              if (
+                req.method !== 'GET' &&
+                req.method !== 'HEAD' &&
+                req.headers.get('Authorization') === token
+              ) {
+                return new Response(
+                  AuthenticationErrorMessages.PermissionMismatch,
+                  {
+                    status: 401,
+                  },
+                );
+              }
+              return null;
+            },
+            { prepend: true },
+          );
           assert
             .dom('[data-test-operator-mode-stack] [data-test-edit-button]')
             .exists();
@@ -1259,18 +1240,22 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
         ],
       });
-      onFetch = (req, _body) => {
-        if (req.method !== 'GET' && req.method !== 'HEAD') {
-          let token = req.headers.get('Authorization');
-          assert.notStrictEqual(token, null);
 
-          let claims = claimsFromRawToken(token!);
-          assert.deepEqual(claims.user, '@testuser:staging');
-          assert.strictEqual(claims.realm, 'http://test-realm/test2/');
-          assert.deepEqual(claims.permissions, ['read', 'write']);
-        }
-        return null;
-      };
+      lookupLoaderService().virtualNetwork.mount(
+        async (req) => {
+          if (req.method !== 'GET' && req.method !== 'HEAD') {
+            let token = req.headers.get('Authorization');
+            assert.notStrictEqual(token, null);
+
+            let claims = claimsFromRawToken(token!);
+            assert.deepEqual(claims.user, '@testuser:staging');
+            assert.strictEqual(claims.realm, 'http://test-realm/test2/');
+            assert.deepEqual(claims.permissions, ['read', 'write']);
+          }
+          return null;
+        },
+        { prepend: true },
+      );
 
       assert
         .dom('[data-test-operator-mode-stack="0"] [data-test-edit-button]')

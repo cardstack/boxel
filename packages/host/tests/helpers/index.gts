@@ -6,7 +6,6 @@ import {
   settled,
 } from '@ember/test-helpers';
 import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
-import { buildWaiter } from '@ember/test-waiters';
 import GlimmerComponent from '@glimmer/component';
 
 import ms from 'ms';
@@ -64,7 +63,6 @@ export * from '@cardstack/runtime-common/helpers';
 export * from '@cardstack/runtime-common/helpers/indexer';
 
 const { sqlSchema } = ENV;
-const waiter = buildWaiter('@cardstack/host/test/helpers/index:onFetch-waiter');
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 const testMatrix = {
@@ -436,21 +434,15 @@ interface RealmContents {
 export async function setupAcceptanceTestRealm({
   contents,
   realmURL,
-  onFetch,
   permissions,
 }: {
   contents: RealmContents;
   realmURL?: string;
-  onFetch?: (req: Request) => Promise<{
-    req: Request;
-    res: Response | null;
-  }>;
   permissions?: RealmPermissions;
 }) {
   return await setupTestRealm({
     contents,
     realmURL,
-    onFetch,
     isAcceptanceTest: true,
     permissions,
   });
@@ -459,45 +451,37 @@ export async function setupAcceptanceTestRealm({
 export async function setupIntegrationTestRealm({
   contents,
   realmURL,
-  onFetch,
 }: {
   loader: Loader;
   contents: RealmContents;
   realmURL?: string;
-  onFetch?: (req: Request) => Promise<{
-    req: Request;
-    res: Response | null;
-  }>;
 }) {
   return await setupTestRealm({
     contents,
     realmURL,
-    onFetch,
     isAcceptanceTest: false,
   });
+}
+
+export function lookupLoaderService(): LoaderService {
+  let owner = (getContext() as TestContext).owner;
+  return owner.lookup('service:loader-service') as LoaderService;
 }
 
 export const testRealmSecretSeed = "shhh! it's a secret";
 async function setupTestRealm({
   contents,
   realmURL,
-  onFetch,
   isAcceptanceTest,
   permissions = { '*': ['read', 'write'] },
 }: {
   contents: RealmContents;
   realmURL?: string;
-  onFetch?: (req: Request) => Promise<{
-    req: Request;
-    res: Response | null;
-  }>;
   isAcceptanceTest?: boolean;
   permissions?: RealmPermissions;
 }) {
   let owner = (getContext() as TestContext).owner;
-  let { loader, virtualNetwork } = owner.lookup(
-    'service:loader-service',
-  ) as LoaderService;
+  let { loader, virtualNetwork } = lookupLoaderService();
   let { queue } = owner.lookup('service:queue') as QueueService;
 
   realmURL = realmURL ?? testRealmURL;
@@ -515,24 +499,6 @@ async function setupTestRealm({
     'service:local-indexer',
   ) as unknown as MockLocalIndexer;
   let realm: Realm;
-  if (onFetch) {
-    // we need to register this before the realm is created so
-    // that it is in prime position in the url handlers list
-    loader.registerURLHandler(async (req: Request) => {
-      let token = waiter.beginAsync();
-      try {
-        let { req: newReq, res } = await onFetch(req);
-        if (res) {
-          return res;
-        }
-        req = newReq;
-      } finally {
-        waiter.endAsync(token);
-      }
-
-      return null;
-    });
-  }
 
   let adapter = new TestRealmAdapter(contents, new URL(realmURL));
   let indexRunner: IndexRunner = async (optsId) => {

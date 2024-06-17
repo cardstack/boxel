@@ -27,8 +27,6 @@ import {
 import { cardTypeDisplayName, type CodeRef } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
-
 import type {
   BaseDef,
   SignatureFor,
@@ -41,6 +39,7 @@ import {
   setupCardLogs,
   saveCard,
   provideConsumeContext,
+  lookupLoaderService,
 } from '../../helpers';
 import {
   Base64ImageField,
@@ -80,8 +79,7 @@ module('Integration | card-basics', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    loader = lookupLoaderService().loader;
   });
 
   setupCardLogs(
