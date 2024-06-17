@@ -438,10 +438,10 @@ export class Loader {
     return new Request(urlOrRequest, init);
   }
 
-  async fetch(
+  fetch = async (
     urlOrRequest: string | URL | Request,
     init?: RequestInit,
-  ): Promise<Response> {
+  ): Promise<Response> => {
     let mergedHeaders: HeadersInit =
       urlOrRequest instanceof Request
         ? headersFromRequest(urlOrRequest)
@@ -489,7 +489,7 @@ export class Loader {
         statusText: err.message,
       });
     }
-  }
+  };
 
   private getModule(moduleIdentifier: string): Module | undefined {
     return this.modules.get(trimModuleIdentifier(moduleIdentifier));

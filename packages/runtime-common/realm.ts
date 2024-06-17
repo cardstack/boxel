@@ -289,21 +289,33 @@ export class Realm {
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
     this.#assetsURL = assetsURL;
 
-    let loader = virtualNetwork.createLoader();
+    let fetch: typeof globalThis.fetch = async (urlOrRequest, init) => {
+      let request =
+        urlOrRequest instanceof Request
+          ? urlOrRequest
+          : new Request(urlOrRequest, init);
+      let response = await this.maybeHandle(request);
+      if (response) {
+        return response;
+      }
+
+      response = await authHandler(request);
+      if (response) {
+        return response;
+      }
+
+      return virtualNetwork.fetch(request);
+    };
+
+    let authHandler = addAuthorizationHeader(
+      fetch,
+      new RealmAuthDataSource(this.#matrixClient, fetch, this.url),
+    );
+
+    let loader = new Loader(fetch, virtualNetwork.resolveImport);
     adapter.setLoader?.(loader);
 
     this.loaderTemplate = loader;
-    this.loaderTemplate.registerURLHandler(
-      addAuthorizationHeader(
-        loader,
-        new RealmAuthDataSource(
-          this.#matrixClient,
-          this.loaderTemplate,
-          this.url,
-        ),
-      ),
-    );
-    this.loaderTemplate.registerURLHandler(this.maybeHandle.bind(this));
 
     this.#adapter = adapter;
     this.#onIndexer = onIndexer;

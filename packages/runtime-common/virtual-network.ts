@@ -33,7 +33,7 @@ export class VirtualNetwork {
   private handlers: Handler[] = [];
   private urlMappings: [string, string][] = [];
 
-  private resolveImport = (moduleIdentifier: string) => {
+  resolveImport = (moduleIdentifier: string) => {
     if (!isUrlLike(moduleIdentifier)) {
       moduleIdentifier = new URL(moduleIdentifier, PACKAGES_FAKE_ORIGIN).href;
     }
