@@ -570,6 +570,9 @@ module('Acceptance | operator mode tests', function (hooks) {
     await click(
       '[data-test-address-with-no-embedded] [data-test-open-code-submode]',
     );
+    await waitUntil(() =>
+      currentURL().includes('address-with-no-embedded-template.gts'),
+    );
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}address-with-no-embedded-template.gts`,
     });
@@ -584,6 +587,9 @@ module('Acceptance | operator mode tests', function (hooks) {
     );
     await click(
       '[data-test-country-with-no-embedded] [data-test-open-code-submode]',
+    );
+    await waitUntil(() =>
+      currentURL().includes('country-with-no-embedded-template.gts'),
     );
     assert.operatorModeParametersMatch(currentURL(), {
       submode: Submodes.Code,
