@@ -35,6 +35,7 @@ import {
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
+import { buildWaiter } from '@ember/test-waiters';
 
 const testRealm2URL = `http://test-realm/test2/`;
 let loader: Loader;
@@ -794,10 +795,14 @@ module('Integration | card-copy', function (hooks) {
       },
     );
 
+    let waiter = buildWaiter('body-interception-middleware');
+
     lookupLoaderService().virtualNetwork.mount(
       async (req) => {
         if (req.method !== 'GET' && req.method !== 'HEAD') {
+          let token = waiter.beginAsync();
           let json = JSON.parse(await req.clone().text());
+          waiter.endAsync(token);
           assert.strictEqual(json.data.attributes.firstName, 'Hassan');
           assert.strictEqual(
             json.included,
@@ -918,10 +923,14 @@ module('Integration | card-copy', function (hooks) {
       },
     );
 
+    let waiter = buildWaiter('body-interception-middleware');
+
     lookupLoaderService().virtualNetwork.mount(
       async (req) => {
         if (req.method !== 'GET' && req.method !== 'HEAD') {
+          let token = waiter.beginAsync();
           let json = JSON.parse(await req.clone().text());
+          waiter.endAsync(token);
           assert.strictEqual(json.data.attributes.firstName, 'Sakura');
           assert.strictEqual(
             json.included,
