@@ -169,90 +169,6 @@ module('Unit | ai-function-generation-test', function (hooks) {
     });
   });
 
-  test(`generates correct schema for complex nested card`, async function (assert) {
-    let { field, contains, linksTo, linksToMany, CardDef, FieldDef } = cardApi;
-    let { default: StringField } = string;
-    class Country extends CardDef {
-      @field name = contains(StringField);
-    }
-    class TravelGoal extends FieldDef {
-      @field goalTitle = contains(StringField);
-      @field country = linksTo(Country);
-    }
-    class Traveler extends FieldDef {
-      @field name = contains(StringField);
-      @field countryOfOrigin = linksTo(Country);
-      @field countriesVisited = linksToMany(Country);
-      @field nextTravelGoal = contains(TravelGoal);
-    }
-    class TripInfo extends CardDef {
-      @field traveler = contains(Traveler);
-    }
-
-    let schema = generateCardPatchCallSpecification(
-      TripInfo,
-      cardApi,
-      mappings,
-    );
-    const links: LinksToSchema['properties']['links'] = {
-      type: 'object',
-      properties: {
-        self: { type: 'string' },
-      },
-      required: ['self'],
-    };
-    assert.deepEqual(schema, {
-      attributes: {
-        type: 'object',
-        properties: {
-          thumbnailURL: { type: 'string' },
-          title: { type: 'string' },
-          description: { type: 'string' },
-          traveler: {
-            type: 'object',
-            properties: {
-              name: { type: 'string' },
-              nextTravelGoal: {
-                type: 'object',
-                properties: {
-                  goalTitle: { type: 'string' },
-                },
-              },
-            },
-          },
-        },
-      },
-      relationships: {
-        type: 'object',
-        properties: {
-          'traveler.countryOfOrigin': {
-            type: 'object',
-            properties: { links },
-            required: ['links'],
-          },
-          'traveler.countriesVisited': {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: { links },
-              required: ['links'],
-            },
-          },
-          'traveler.nextTravelGoal.country': {
-            type: 'object',
-            properties: { links },
-            required: ['links'],
-          },
-        },
-        required: [
-          'traveler.countryOfOrigin',
-          'traveler.countriesVisited',
-          'traveler.nextTravelGoal.country',
-        ],
-      },
-    });
-  });
-
   test(`should support contains many`, async function (assert) {
     let { field, contains, containsMany, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;
@@ -463,6 +379,90 @@ module('Unit | ai-function-generation-test', function (hooks) {
     assert.deepEqual(schema, {
       attributes,
       relationships,
+    });
+  });
+
+  test(`generates correct schema for nested linksTo and linksToMany fields`, async function (assert) {
+    let { field, contains, linksTo, linksToMany, CardDef, FieldDef } = cardApi;
+    let { default: StringField } = string;
+    class Country extends CardDef {
+      @field name = contains(StringField);
+    }
+    class TravelGoal extends FieldDef {
+      @field goalTitle = contains(StringField);
+      @field country = linksTo(Country);
+    }
+    class Traveler extends FieldDef {
+      @field name = contains(StringField);
+      @field countryOfOrigin = linksTo(Country);
+      @field countriesVisited = linksToMany(Country);
+      @field nextTravelGoal = contains(TravelGoal);
+    }
+    class TripInfo extends CardDef {
+      @field traveler = contains(Traveler);
+    }
+
+    let schema = generateCardPatchCallSpecification(
+      TripInfo,
+      cardApi,
+      mappings,
+    );
+    const links: LinksToSchema['properties']['links'] = {
+      type: 'object',
+      properties: {
+        self: { type: 'string' },
+      },
+      required: ['self'],
+    };
+    assert.deepEqual(schema, {
+      attributes: {
+        type: 'object',
+        properties: {
+          thumbnailURL: { type: 'string' },
+          title: { type: 'string' },
+          description: { type: 'string' },
+          traveler: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              nextTravelGoal: {
+                type: 'object',
+                properties: {
+                  goalTitle: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+      relationships: {
+        type: 'object',
+        properties: {
+          'traveler.countryOfOrigin': {
+            type: 'object',
+            properties: { links },
+            required: ['links'],
+          },
+          'traveler.countriesVisited': {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: { links },
+              required: ['links'],
+            },
+          },
+          'traveler.nextTravelGoal.country': {
+            type: 'object',
+            properties: { links },
+            required: ['links'],
+          },
+        },
+        required: [
+          'traveler.countryOfOrigin',
+          'traveler.countriesVisited',
+          'traveler.nextTravelGoal.country',
+        ],
+      },
     });
   });
 
