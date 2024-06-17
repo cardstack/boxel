@@ -216,11 +216,10 @@ export default class ResizeHandle extends Component<Signature> {
     let groupComponent = this.args.panelGroupComponent;
 
     let isFirstPanel = id === 0;
-    let isCollapsed = groupComponent.panelContexts[id]?.lengthPx === 0;
+    let isCollapsed = groupComponent.panels[id]?.lengthPx === 0;
 
     let nextPanelIsLast = groupComponent.resizeHandles.length - 1 === id;
-    let nextPanelIsCollapsed =
-      groupComponent.panelContexts[id + 1]?.lengthPx === 0;
+    let nextPanelIsCollapsed = groupComponent.panels[id + 1]?.lengthPx === 0;
 
     if (isFirstPanel && !isCollapsed) {
       if (nextPanelIsLast && nextPanelIsCollapsed) {

@@ -8,7 +8,6 @@ import { nodeFor } from 'ember-ref-bucket';
 import didResizeModifier from 'ember-resize-modifier/modifiers/did-resize';
 import { TrackedArray } from 'tracked-built-ins';
 
-import type { PanelContext as PanelContextType } from './panel.gts';
 import ResizablePanel from './panel.gts';
 import ResizeHandle from './resize-handler.gts';
 
@@ -21,29 +20,9 @@ function sumArray(array: number[]) {
 
 const ResizeHandleElIdPrefix = 'resize-handler';
 
-class PanelContext implements PanelContextType {
-  @tracked collapsible = false;
-  @tracked defaultLengthFraction?: number;
-  @tracked initialMinLengthPx?: number;
-  @tracked isHidden?: boolean;
-  @tracked lengthPx = 0;
-  @tracked minLengthPx?: number;
-  @tracked panel?: ResizablePanel | undefined;
-
-  constructor(args: PanelContextType) {
-    this.collapsible = args.collapsible;
-    this.defaultLengthFraction = args.defaultLengthFraction;
-    this.initialMinLengthPx = args.initialMinLengthPx;
-    this.isHidden = args.isHidden;
-    this.lengthPx = args.lengthPx;
-    this.minLengthPx = args.minLengthPx;
-    this.panel = args.panel;
-  }
-}
-
 interface Signature {
   Args: {
-    onListPanelContextChange?: (listPanelContext: PanelContext[]) => void;
+    onListPanelContextChange?: (listPanelContext: ResizablePanel[]) => void;
     orientation: 'horizontal' | 'vertical';
     reverseCollapse?: boolean;
   };
@@ -134,14 +113,14 @@ export default class ResizablePanelGroup extends Component<Signature> {
   minimumLengthToShowHandles = 30;
 
   resizablePanelIdCache = new WeakMap<ResizablePanel, number>();
-  panelContexts = new TrackedArray<PanelContext>();
+  panels = new TrackedArray<ResizablePanel>();
   resizeHandles = new TrackedArray<ResizeHandle>();
 
   currentResizeHandle: {
     handle: ResizeHandle;
     initialPosition: number;
-    nextPanelContext?: PanelContext | null;
-    prevPanelContext?: PanelContext | null;
+    nextPanel?: ResizablePanel | null;
+    prevPanel?: ResizablePanel | null;
   } | null = null;
   panelRatios: number[] = [];
 
@@ -217,53 +196,47 @@ export default class ResizablePanelGroup extends Component<Signature> {
 
   @action
   registerPanel(panel: ResizablePanel) {
-    let context = new PanelContext({
-      panel,
-      defaultLengthFraction: panel.args.defaultLengthFraction,
-      lengthPx: panel.args.lengthPx,
-      initialMinLengthPx: panel.args.minLengthPx,
-      minLengthPx: panel.args.minLengthPx,
-      collapsible:
-        panel.args.collapsible == undefined ? true : panel.args.collapsible,
-      isHidden: panel.args.isHidden,
-    }) as PanelContext;
-
-    if (context.lengthPx === undefined) {
+    console.log('registerPanel', panel, panel.lengthPx);
+    console.log('isHidden?', panel.isHidden);
+    if (panel.lengthPx === undefined) {
       if (
         this.panelGroupLengthPx === undefined ||
-        context.defaultLengthFraction === undefined
+        panel.defaultLengthFraction === undefined
       ) {
-        context.lengthPx = -1;
-      } else if (context.isHidden) {
-        context.lengthPx = 0;
+        panel.lengthPx = -1;
+      } else if (panel.isHidden) {
+        panel.lengthPx = 0;
       } else {
-        context.lengthPx =
-          context.defaultLengthFraction * this.panelGroupLengthPx;
+        console.log(
+          'else',
+          panel.defaultLengthFraction,
+          this.panelGroupLengthPx,
+          panel.defaultLengthFraction * this.panelGroupLengthPx,
+        );
+        panel.lengthPx = panel.defaultLengthFraction * this.panelGroupLengthPx;
       }
     }
 
-    this.panelContexts.push(context);
-    panel.setPanelContext(context);
+    console.log('lengthpx now', panel.lengthPx);
+
+    this.panels.push(panel);
     this.calculatePanelRatio();
   }
 
   @action
   unregisterPanel(panel: ResizablePanel) {
-    let panelContextIndex = this.panelContexts.findIndex(
-      (context) => context.panel === panel,
-    );
+    let panelIndex = this.panels.findIndex((p) => p === panel);
 
-    if (panelContextIndex > -1) {
-      this.panelContexts.splice(panelContextIndex, 1);
+    if (panelIndex > -1) {
+      this.panels.splice(panelIndex, 1);
       this.calculatePanelRatio();
     }
   }
 
   calculatePanelRatio() {
-    let panelLengths = this.panelContexts.map(
-      (panelContext) => panelContext.lengthPx,
-    );
+    let panelLengths = this.panels.map((panel) => panel.lengthPx);
 
+    console.log('panelLengths', ...panelLengths);
     this.panelRatios = [];
     for (let index = 0; index < panelLengths.length; index++) {
       let panelLength = panelLengths[index];
@@ -272,11 +245,13 @@ export default class ResizablePanelGroup extends Component<Signature> {
       }
       this.panelRatios[index] = panelLength / sumArray(panelLengths);
     }
+
+    console.log('calculatePanelRatio', ...this.panelRatios);
   }
 
   @action
   isLastPanel(panel: ResizablePanel) {
-    return this.panelContexts[this.panelContexts.length - 1]?.panel === panel;
+    return this.panels[this.panels.length - 1] === panel;
   }
 
   @action
@@ -310,17 +285,16 @@ export default class ResizablePanelGroup extends Component<Signature> {
       return;
     }
 
-    let { prevPanelContext, nextPanelContext } =
-      this.findPanelsByResizeHandle(handle);
-    if (!prevPanelContext || !nextPanelContext) {
+    let { prevPanel, nextPanel } = this.findPanelsByResizeHandle(handle);
+    if (!prevPanel || !nextPanel) {
       console.warn('prevPanelEl and nextPanelEl are required');
       return undefined;
     }
     this.currentResizeHandle = {
       handle,
       initialPosition: event[this.clientPositionProperty],
-      prevPanelContext: prevPanelContext,
-      nextPanelContext: nextPanelContext,
+      prevPanel: prevPanel,
+      nextPanel: nextPanel,
     };
   }
 
@@ -333,8 +307,8 @@ export default class ResizablePanelGroup extends Component<Signature> {
   onResizeHandleMouseMove(event: MouseEvent) {
     if (
       !this.currentResizeHandle ||
-      !this.currentResizeHandle.prevPanelContext?.panel ||
-      !this.currentResizeHandle.nextPanelContext?.panel
+      !this.currentResizeHandle.prevPanel ||
+      !this.currentResizeHandle.nextPanel
     ) {
       return;
     }
@@ -350,25 +324,21 @@ export default class ResizablePanelGroup extends Component<Signature> {
     console.log(`delta is non-zero ${delta}`);
 
     let newPrevPanelElLength =
-      this.currentResizeHandle.prevPanelContext.panel.element[
-        this.clientLengthProperty
-      ] + delta;
+      this.currentResizeHandle.prevPanel.element[this.clientLengthProperty] +
+      delta;
     let newNextPanelElLength =
-      this.currentResizeHandle.nextPanelContext.panel.element[
-        this.clientLengthProperty
-      ] - delta;
-    let prevPanelElContext = this.currentResizeHandle.prevPanelContext;
-    let nextPanelElContext = this.currentResizeHandle.nextPanelContext;
+      this.currentResizeHandle.nextPanel.element[this.clientLengthProperty] -
+      delta;
+    let prevPanelEl = this.currentResizeHandle.prevPanel;
+    let nextPanelEl = this.currentResizeHandle.nextPanel;
 
     console.log('newPrevPanelElLength', newPrevPanelElLength);
     console.log('newNextPanelElLength', newNextPanelElLength);
-    console.log('prevPanelElContext', prevPanelElContext);
-    console.log('nextPanelElContext', nextPanelElContext);
+    console.log('prevPanelElContext', prevPanelEl);
+    console.log('nextPanelElContext', nextPanelEl);
 
-    if (!prevPanelElContext || !nextPanelElContext) {
-      console.warn(
-        'Expected prevPanelElContext && nextPanelElContext to be defined',
-      );
+    if (!prevPanelEl || !nextPanelEl) {
+      console.warn('Expected prevPanelEl && nextPanelEl to be defined');
       return;
     }
 
@@ -379,34 +349,34 @@ export default class ResizablePanelGroup extends Component<Signature> {
       newPrevPanelElLength = newPrevPanelElLength + newNextPanelElLength;
       newNextPanelElLength = 0;
     } else if (
-      prevPanelElContext.initialMinLengthPx &&
-      newPrevPanelElLength < prevPanelElContext.initialMinLengthPx &&
-      newPrevPanelElLength > prevPanelElContext.lengthPx
+      prevPanelEl.initialMinLengthPx &&
+      newPrevPanelElLength < prevPanelEl.initialMinLengthPx &&
+      newPrevPanelElLength > prevPanelEl.lengthPx
     ) {
       newNextPanelElLength =
         newNextPanelElLength -
-        (prevPanelElContext.initialMinLengthPx - newPrevPanelElLength);
-      newPrevPanelElLength = prevPanelElContext.initialMinLengthPx;
+        (prevPanelEl.initialMinLengthPx - newPrevPanelElLength);
+      newPrevPanelElLength = prevPanelEl.initialMinLengthPx;
     } else if (
-      nextPanelElContext.initialMinLengthPx &&
-      newNextPanelElLength < nextPanelElContext.initialMinLengthPx &&
-      newNextPanelElLength > nextPanelElContext.lengthPx
+      nextPanelEl.initialMinLengthPx &&
+      newNextPanelElLength < nextPanelEl.initialMinLengthPx &&
+      newNextPanelElLength > nextPanelEl.lengthPx
     ) {
       newPrevPanelElLength =
         newPrevPanelElLength +
-        (nextPanelElContext.initialMinLengthPx - newNextPanelElLength);
-      newNextPanelElLength = nextPanelElContext.initialMinLengthPx;
+        (nextPanelEl.initialMinLengthPx - newNextPanelElLength);
+      newNextPanelElLength = nextPanelEl.initialMinLengthPx;
     } else if (
-      prevPanelElContext.initialMinLengthPx &&
-      newPrevPanelElLength < prevPanelElContext.initialMinLengthPx &&
-      newPrevPanelElLength < prevPanelElContext.lengthPx
+      prevPanelEl.initialMinLengthPx &&
+      newPrevPanelElLength < prevPanelEl.initialMinLengthPx &&
+      newPrevPanelElLength < prevPanelEl.lengthPx
     ) {
       newNextPanelElLength = newNextPanelElLength + newPrevPanelElLength;
       newPrevPanelElLength = 0;
     } else if (
-      nextPanelElContext.initialMinLengthPx &&
-      newNextPanelElLength < nextPanelElContext.initialMinLengthPx &&
-      newNextPanelElLength < nextPanelElContext.lengthPx
+      nextPanelEl.initialMinLengthPx &&
+      newNextPanelElLength < nextPanelEl.initialMinLengthPx &&
+      newNextPanelElLength < nextPanelEl.lengthPx
     ) {
       newPrevPanelElLength = newPrevPanelElLength + newNextPanelElLength;
       newNextPanelElLength = 0;
@@ -414,36 +384,37 @@ export default class ResizablePanelGroup extends Component<Signature> {
 
     console.log(
       'calling setSiblingPanelContexts in mouseMove',
-      prevPanelElContext,
-      nextPanelElContext,
+      prevPanelEl,
+      nextPanelEl,
       newPrevPanelElLength,
       newNextPanelElLength,
-      (prevPanelElContext.initialMinLengthPx &&
-        newPrevPanelElLength >= prevPanelElContext.initialMinLengthPx) ||
-        !prevPanelElContext.collapsible
-        ? prevPanelElContext.initialMinLengthPx
+      (prevPanelEl.initialMinLengthPx &&
+        newPrevPanelElLength >= prevPanelEl.initialMinLengthPx) ||
+        !prevPanelEl.collapsible
+        ? prevPanelEl.initialMinLengthPx
         : 0,
-      (nextPanelElContext.initialMinLengthPx &&
-        newNextPanelElLength >= nextPanelElContext.initialMinLengthPx) ||
-        !nextPanelElContext.collapsible
-        ? nextPanelElContext.initialMinLengthPx
+      (nextPanelEl.initialMinLengthPx &&
+        newNextPanelElLength >= nextPanelEl.initialMinLengthPx) ||
+        !nextPanelEl.collapsible
+        ? nextPanelEl.initialMinLengthPx
         : 0,
     );
 
+    // FIXME remove “context” everywhere
     this.setSiblingPanelContexts(
-      prevPanelElContext,
-      nextPanelElContext,
+      prevPanelEl,
+      nextPanelEl,
       newPrevPanelElLength,
       newNextPanelElLength,
-      (prevPanelElContext.initialMinLengthPx &&
-        newPrevPanelElLength >= prevPanelElContext.initialMinLengthPx) ||
-        !prevPanelElContext.collapsible
-        ? prevPanelElContext.initialMinLengthPx
+      (prevPanelEl.initialMinLengthPx &&
+        newPrevPanelElLength >= prevPanelEl.initialMinLengthPx) ||
+        !prevPanelEl.collapsible
+        ? prevPanelEl.initialMinLengthPx
         : 0,
-      (nextPanelElContext.initialMinLengthPx &&
-        newNextPanelElLength >= nextPanelElContext.initialMinLengthPx) ||
-        !nextPanelElContext.collapsible
-        ? nextPanelElContext.initialMinLengthPx
+      (nextPanelEl.initialMinLengthPx &&
+        newNextPanelElLength >= nextPanelEl.initialMinLengthPx) ||
+        !nextPanelEl.collapsible
+        ? nextPanelEl.initialMinLengthPx
         : 0,
     );
 
@@ -486,70 +457,66 @@ export default class ResizablePanelGroup extends Component<Signature> {
       return undefined;
     }
 
-    let { prevPanelContext, nextPanelContext } =
-      this.findPanelsByResizeHandle(handle);
-    if (!prevPanelContext || !nextPanelContext) {
-      console.warn('prevPanelContext and nextPanelContext are required');
+    let { prevPanel, nextPanel } = this.findPanelsByResizeHandle(handle);
+    if (!prevPanel || !nextPanel) {
+      // FIXME required where?
+      console.warn('prevPanel and nextPanel are required');
       return undefined;
     }
 
-    let prevPanelElLength = prevPanelContext.lengthPx;
-    let nextPanelElLength = nextPanelContext.lengthPx;
+    let prevPanelElLength = prevPanel.lengthPx;
+    let nextPanelElLength = nextPanel.lengthPx;
 
     if (
       isFirstButton &&
       prevPanelElLength > 0 &&
       !this.args.reverseCollapse &&
-      prevPanelContext.collapsible
+      prevPanel.collapsible
     ) {
       this.setSiblingPanelContexts(
-        prevPanelContext,
-        nextPanelContext,
+        prevPanel,
+        nextPanel,
         0,
         prevPanelElLength + nextPanelElLength,
         0,
-        nextPanelContext.initialMinLengthPx,
+        nextPanel.initialMinLengthPx,
       );
     } else if (isFirstButton && prevPanelElLength <= 0) {
       this.setSiblingPanelContexts(
-        prevPanelContext,
-        nextPanelContext,
-        prevPanelContext.defaultLengthFraction
-          ? panelGroupLengthPx * prevPanelContext.defaultLengthFraction
-          : prevPanelContext.lengthPx,
-        prevPanelContext.defaultLengthFraction
+        prevPanel,
+        nextPanel,
+        prevPanel.defaultLengthFraction
+          ? panelGroupLengthPx * prevPanel.defaultLengthFraction
+          : prevPanel.lengthPx,
+        prevPanel.defaultLengthFraction
           ? nextPanelElLength -
-              panelGroupLengthPx * prevPanelContext.defaultLengthFraction
+              panelGroupLengthPx * prevPanel.defaultLengthFraction
           : panelGroupLengthPx - nextPanelElLength,
-        prevPanelContext.initialMinLengthPx,
-        nextPanelContext.initialMinLengthPx,
+        prevPanel.initialMinLengthPx,
+        nextPanel.initialMinLengthPx,
       );
-    } else if (
-      isLastButton &&
-      nextPanelElLength > 0 &&
-      nextPanelContext.collapsible
-    ) {
+    } else if (isLastButton && nextPanelElLength > 0 && nextPanel.collapsible) {
       this.setSiblingPanelContexts(
-        prevPanelContext,
-        nextPanelContext,
+        prevPanel,
+        nextPanel,
         prevPanelElLength + nextPanelElLength,
         0,
-        prevPanelContext.initialMinLengthPx,
+        prevPanel.initialMinLengthPx,
         0,
       );
     } else if (isLastButton && nextPanelElLength <= 0) {
       this.setSiblingPanelContexts(
-        prevPanelContext,
-        nextPanelContext,
-        nextPanelContext.defaultLengthFraction
+        prevPanel,
+        nextPanel,
+        nextPanel.defaultLengthFraction
           ? prevPanelElLength -
-              panelGroupLengthPx * nextPanelContext.defaultLengthFraction
+              panelGroupLengthPx * nextPanel.defaultLengthFraction
           : panelGroupLengthPx - prevPanelElLength,
-        nextPanelContext.defaultLengthFraction
-          ? panelGroupLengthPx * nextPanelContext.defaultLengthFraction
-          : nextPanelContext.lengthPx,
-        prevPanelContext.initialMinLengthPx,
-        nextPanelContext.initialMinLengthPx,
+        nextPanel.defaultLengthFraction
+          ? panelGroupLengthPx * nextPanel.defaultLengthFraction
+          : nextPanel.lengthPx,
+        prevPanel.initialMinLengthPx,
+        nextPanel.initialMinLengthPx,
       );
     }
 
@@ -558,24 +525,24 @@ export default class ResizablePanelGroup extends Component<Signature> {
 
   @action
   setSiblingPanelContexts(
-    prevPanelContext: PanelContext,
-    nextPanelContext: PanelContext,
-    newPrevPanelElLength: number,
-    newNextPanelElLength: number,
-    newPrevPanelElMinLength?: number,
-    newNextPanelElMinLength?: number,
+    prevPanel: ResizablePanel,
+    nextPanel: ResizablePanel,
+    newPrevLength: number,
+    newNextLength: number,
+    newPrevMinLength?: number,
+    newNextMinLength?: number,
   ) {
-    if (prevPanelContext) {
-      prevPanelContext.lengthPx = newPrevPanelElLength;
-      prevPanelContext.minLengthPx = newPrevPanelElMinLength;
+    if (prevPanel) {
+      prevPanel.lengthPx = newPrevLength;
+      prevPanel.minLengthPx = newPrevMinLength;
     }
 
-    if (nextPanelContext) {
-      nextPanelContext.lengthPx = newNextPanelElLength;
-      nextPanelContext.minLengthPx = newNextPanelElMinLength;
+    if (nextPanel) {
+      nextPanel.lengthPx = newNextLength;
+      nextPanel.minLengthPx = newNextMinLength;
     }
 
-    this.args.onListPanelContextChange?.(this.panelContexts);
+    this.args.onListPanelContextChange?.(this.panels);
   }
 
   @action
@@ -592,9 +559,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
       this.panelGroupElement[this.perpendicularLengthProperty] <
       this.minimumLengthToShowHandles;
 
-    let panelLengths: number[] = this.panelContexts.map(
-      (panelContext) => panelContext.lengthPx,
-    );
+    let panelLengths: number[] = this.panels.map((panel) => panel.lengthPx);
 
     console.log('panelLengths', panelLengths);
 
@@ -606,36 +571,36 @@ export default class ResizablePanelGroup extends Component<Signature> {
 
     let remainingContainerSize = newContainerSize;
     let calculateLengthsOfPanelWithMinLegth = () => {
-      let panelContexts = this.panelContexts.filter(
-        (panelContext) => panelContext.initialMinLengthPx,
-      );
+      let panels = this.panels.filter((panel) => panel.initialMinLengthPx);
 
-      panelContexts.forEach((panelContext, index) => {
+      panels.forEach((panel, index) => {
         let panelRatio = this.panelRatios[index];
         if (!panelRatio || !newContainerSize) {
           return;
         }
         let proportionalSize = panelRatio * newContainerSize;
         let actualSize = Math.round(
-          panelContext?.initialMinLengthPx
-            ? Math.max(proportionalSize, panelContext.initialMinLengthPx)
+          panel?.initialMinLengthPx
+            ? Math.max(proportionalSize, panel.initialMinLengthPx)
             : proportionalSize,
         );
         panelLengths[index] = actualSize;
         remainingContainerSize = remainingContainerSize - actualSize;
       });
     };
+
+    // FIXME spelling
     calculateLengthsOfPanelWithMinLegth();
 
     let calculateLengthsOfPanelWithoutMinLength = () => {
-      let panelContexts = this.panelContexts.filter(
-        (panelContext) => !panelContext.initialMinLengthPx,
-      );
+      let panels = this.panels.filter((panel) => !panel.initialMinLengthPx);
       // FIXME probably removable?
-      let panelContextIds = panelContexts.map((_panelContext, index) => index);
+      let panelIds = panels.map((_panelContext, index) => index);
+      console.log('current panel ratios', ...this.panelRatios);
       let newPanelRatios = this.panelRatios.filter((_panelRatio, index) =>
-        panelContextIds.includes(index),
+        panelIds.includes(index),
       );
+      console.log('new panel ratios', ...newPanelRatios);
       let totalNewPanelRatio = newPanelRatios.reduce(
         (prevValue, currentValue) => prevValue + currentValue,
         0,
@@ -644,7 +609,9 @@ export default class ResizablePanelGroup extends Component<Signature> {
         (panelRatio) => panelRatio / totalNewPanelRatio,
       );
 
-      panelContexts.forEach((_panelContext, index) => {
+      console.log('new panel ratios', newPanelRatios);
+
+      panels.forEach((_panel, index) => {
         let panelRatio = newPanelRatios[index];
         if (!panelRatio) {
           console.warn('Expected panelRatio to be defined');
@@ -657,10 +624,10 @@ export default class ResizablePanelGroup extends Component<Signature> {
     };
     calculateLengthsOfPanelWithoutMinLength();
 
-    for (let index = 0; index <= this.panelContexts.length; index++) {
-      let panelContext = this.panelContexts[index];
-      if (panelContext) {
-        panelContext.lengthPx = panelLengths[index] || 0;
+    for (let index = 0; index <= this.panels.length; index++) {
+      let panel = this.panels[index];
+      if (panel) {
+        panel.lengthPx = panelLengths[index] || 0;
       }
     }
   }
@@ -669,17 +636,17 @@ export default class ResizablePanelGroup extends Component<Signature> {
     let handleIndex = this.resizeHandles.indexOf(handle);
     if (handleIndex === -1) {
       return {
-        prevPanelContext: undefined,
-        nextPanelContext: undefined,
+        prevPanel: undefined,
+        nextPanel: undefined,
       };
     }
 
-    let prevPanelContext = this.panelContexts[handleIndex];
-    let nextPanelContext = this.panelContexts[handleIndex + 1];
+    let prevPanel = this.panels[handleIndex];
+    let nextPanel = this.panels[handleIndex + 1];
 
     return {
-      prevPanelContext,
-      nextPanelContext,
+      prevPanel,
+      nextPanel,
     };
   }
 

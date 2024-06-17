@@ -10,16 +10,6 @@ import cssVars from '../../helpers/css-var.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
 import type ResizablePanelGroup from './index.gts';
 
-export type PanelContext = {
-  collapsible: boolean;
-  defaultLengthFraction?: number;
-  initialMinLengthPx?: number;
-  isHidden?: boolean;
-  lengthPx: number;
-  minLengthPx?: number;
-  panel?: Panel;
-};
-
 interface Signature {
   Args: {
     collapsible?: boolean; //default true
@@ -88,11 +78,29 @@ export default class Panel extends Component<Signature> {
   </template>
 
   element!: HTMLDivElement;
-  @tracked panelContext: PanelContext | undefined;
 
-  constructor(owner: any, args: any) {
+  @tracked lengthPx: number | undefined = 0;
+  @tracked minLengthPx: number | undefined = 0;
+  initialMinLengthPx: number;
+
+  @tracked collapsible: boolean;
+
+  constructor(owner: any, args: Signature['Args']) {
     super(owner, args);
+    this.lengthPx = args.lengthPx;
+    this.minLengthPx = args.minLengthPx || 0;
+    this.collapsible = args.collapsible ?? true;
+    this.initialMinLengthPx = this.args.minLengthPx || 0;
+
     registerDestructor(this, this.unregisterPanel);
+  }
+
+  get isHidden() {
+    return this.args.isHidden;
+  }
+
+  get defaultLengthFraction() {
+    return this.args.defaultLengthFraction;
   }
 
   @action
@@ -105,15 +113,11 @@ export default class Panel extends Component<Signature> {
     this.args.unregisterPanel(this);
   }
 
-  @action setPanelContext(context: PanelContext) {
-    this.panelContext = context;
-  }
-
   get minLengthCssValue() {
     if (this.args.isHidden) {
       return htmlSafe('0px');
-    } else if (this.panelContext?.minLengthPx !== undefined) {
-      return htmlSafe(`${this.panelContext.minLengthPx}px`);
+    } else if (this.minLengthPx !== undefined) {
+      return htmlSafe(`${this.minLengthPx}px`);
     } else if (this.args.minLengthPx !== undefined) {
       return htmlSafe(`${this.args.minLengthPx}px`);
     }
@@ -121,9 +125,8 @@ export default class Panel extends Component<Signature> {
   }
 
   get lengthCssValue() {
-    console.log('panelContext hmm', this.panelContext);
-    let lengthPx = this.panelContext?.lengthPx;
-    let defaultLengthFraction = this.panelContext?.defaultLengthFraction;
+    let lengthPx = this.lengthPx;
+    let defaultLengthFraction = this.args.defaultLengthFraction;
     console.log(
       'lengthPx',
       lengthPx,
