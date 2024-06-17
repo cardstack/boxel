@@ -1,5 +1,6 @@
 import { waitUntil, waitFor, click } from '@ember/test-helpers';
 
+import { buildWaiter } from '@ember/test-waiters';
 import GlimmerComponent from '@glimmer/component';
 
 import { setupRenderingTest } from 'ember-qunit';
@@ -35,7 +36,6 @@ import {
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
-import { buildWaiter } from '@ember/test-waiters';
 
 const testRealm2URL = `http://test-realm/test2/`;
 let loader: Loader;
