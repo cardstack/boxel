@@ -527,6 +527,8 @@ export class RoomField extends FieldDef {
           if (!fragments.has(event_id)) {
             fragments.set(event_id, event.content);
           }
+        } else if (event.content.msgtype === 'org.boxel.commandResult') {
+          //don't display command result in the room as a message
         } else if (event.content.msgtype === 'org.boxel.message') {
           // Safely skip over cases that don't have attached cards or a data type
           let cardDocs = event.content.data?.attachedCardsEventIds
@@ -809,6 +811,32 @@ interface CommandMessageContent {
   };
 }
 
+export interface CommandResultEvent {
+  type: 'm.room.message';
+  content: CommandResultContent;
+  unsigned: {
+    age: number;
+    transaction_id: string;
+    prev_content?: any;
+    prev_sender?: string;
+  };
+}
+
+export interface CommandResultContent {
+  'm.relates_to'?: {
+    rel_type: 'm.annotation';
+    key: string;
+    event_id: string;
+    'm.in_reply_to'?: {
+      event_id: string;
+    };
+  };
+  formatted_body: string;
+  body: string;
+  msgtype: 'org.boxel.commandResult';
+  result: any;
+}
+
 export interface ReactionEvent extends BaseMatrixEvent {
   type: 'm.reaction';
   content: ReactionEventContent;
@@ -893,6 +921,7 @@ export type MatrixEvent =
   | RoomPowerLevels
   | MessageEvent
   | CommandEvent
+  | CommandResultEvent
   | ReactionEvent
   | CardMessageEvent
   | RoomNameEvent

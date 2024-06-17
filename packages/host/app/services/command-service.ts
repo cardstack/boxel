@@ -15,6 +15,7 @@ export default class CommandService extends Service {
 
   run = task(async (command: CommandField, roomId: string) => {
     let { payload, eventId } = command;
+    let res: any;
     try {
       this.matrixService.failedCommandState.delete(eventId);
       if (command.name === 'patchCard') {
@@ -23,12 +24,18 @@ export default class CommandService extends Service {
             "Patch command can't run because it doesn't have all the fields in payload",
           );
         }
-        await this.operatorModeStateService.patchCard.perform(payload.card_id, {
-          attributes: payload.attributes,
-          relationships: payload.relationships,
-        });
+        res = await this.operatorModeStateService.patchCard.perform(
+          payload.card_id,
+          {
+            attributes: payload.attributes,
+            relationships: payload.relationships,
+          },
+        );
       }
       await this.matrixService.sendReactionEvent(roomId, eventId, 'applied');
+      if (res) {
+        await this.matrixService.sendCommandResultMessage(roomId, eventId, res);
+      }
     } catch (e) {
       let error =
         typeof e === 'string'
