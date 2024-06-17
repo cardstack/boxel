@@ -250,7 +250,7 @@ class CommandStatusField extends FieldDef {
 }
 
 // Subclass, add a validator that checks the fields required?
-class CommandField extends FieldDef {
+export class CommandField extends FieldDef {
   @field name = contains(StringField);
   @field payload = contains(CommandObjectField);
   @field eventId = contains(StringField);
