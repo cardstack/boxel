@@ -8,7 +8,6 @@ import { type Loader } from '@cardstack/runtime-common/loader';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
-import type LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
@@ -18,6 +17,7 @@ import {
   testRealmURL,
   setupIntegrationTestRealm,
   provideConsumeContext,
+  lookupLoaderService,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent, renderCard } from '../../helpers/render-component';
@@ -51,8 +51,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     provideConsumeContext(RealmSessionContextName, {
       canWrite: true,
     });
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    loader = lookupLoaderService().loader;
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     number = await loader.import(`${baseRealm.url}number`);

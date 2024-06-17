@@ -21,7 +21,6 @@ import CardEditor from '@cardstack/host/components/card-editor';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
-import type LoaderService from '@cardstack/host/services/loader-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -32,6 +31,7 @@ import {
   saveCard,
   setupIntegrationTestRealm,
   provideConsumeContext,
+  lookupLoaderService,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
@@ -71,8 +71,7 @@ module('Integration | text-input-validator', function (hooks) {
       canWrite: true,
     });
 
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    loader = lookupLoaderService().loader;
 
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     let bigInteger: typeof import('https://cardstack.com/base/big-integer');

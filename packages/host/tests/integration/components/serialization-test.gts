@@ -14,8 +14,6 @@ import {
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
-
 import { type CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 
 import {
@@ -27,6 +25,7 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
+  lookupLoaderService,
 } from '../../helpers';
 
 import {
@@ -68,8 +67,7 @@ module('Integration | serialization', function (hooks) {
       canWrite: true,
     });
 
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    loader = lookupLoaderService().loader;
   });
   setupLocalIndexing(hooks);
   setupCardLogs(

@@ -96,8 +96,12 @@ export class VirtualNetwork {
     return undefined;
   }
 
-  mount(handler: Handler) {
-    this.handlers.push(handler);
+  mount(handler: Handler, opts?: { prepend: boolean }) {
+    if (opts?.prepend) {
+      this.handlers.unshift(handler);
+    } else {
+      this.handlers.push(handler);
+    }
   }
 
   unmount(handler: Handler) {

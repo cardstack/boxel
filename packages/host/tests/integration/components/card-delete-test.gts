@@ -12,8 +12,6 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
-
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RecentCardsService from '@cardstack/host/services/recent-cards-service';
 
@@ -28,6 +26,7 @@ import {
   setupServerSentEvents,
   type TestContextWithSSE,
   setupIntegrationTestRealm,
+  lookupLoaderService,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
@@ -65,8 +64,7 @@ module('Integration | card-delete', function (hooks) {
   }
   setupRenderingTest(hooks);
   hooks.beforeEach(async function () {
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    loader = lookupLoaderService().loader;
     cardApi = await loader.import(`${baseRealm.url}card-api`);
   });
   setupLocalIndexing(hooks);
