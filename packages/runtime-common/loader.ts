@@ -2,6 +2,7 @@ import TransformModulesAmdPlugin from 'transform-modules-amd-plugin';
 import { transformSync } from '@babel/core';
 import { Deferred } from './deferred';
 import { trimExecutableExtension, logger } from './index';
+import { time, timeStart, timeEnd } from './helpers/time';
 
 import { CardError } from './error';
 import flatMap from 'lodash/flatMap';
@@ -278,7 +279,7 @@ export class Loader {
 
       outer_switch: switch (module?.state) {
         case undefined:
-          await this.fetchModule(resolvedURL);
+          await time('fetchModule', this.fetchModule(resolvedURL));
           break;
         case 'fetching':
           await module.deferred.promise;
@@ -452,16 +453,22 @@ export class Loader {
         mergedHeaders = { ...mergedHeaders, ...headersFromRequest(request) };
         setHeaders(request, mergedHeaders);
 
+        timeStart('fetch:handler');
         let result = await handler(request);
+        timeEnd('fetch:handler');
+
         // the handler is allowed to mutate the headers, so we merge any updated headers
         mergedHeaders = { ...mergedHeaders, ...headersFromRequest(request) };
 
         if (result) {
-          return await followRedirections(
+          timeStart('fetch:followRedirections');
+          let followed = await followRedirections(
             request,
             result,
             this.fetch.bind(this),
           );
+          timeEnd('fetch:followRedirections');
+          return followed;
         }
       }
 
@@ -474,9 +481,18 @@ export class Loader {
         return response;
       }
 
+      timeStart('fetch:asRequest');
       let request = this.asRequest(urlOrRequest, init);
+      timeEnd('fetch:asRequest');
+
+      timeStart('fetch:setHeaders');
       setHeaders(request, mergedHeaders);
-      return await this.fetchImplementation(request);
+      timeEnd('fetch:setHeaders');
+
+      timeStart('fetch:actualFetch');
+      let actualFetch = await this.fetchImplementation(request);
+      timeEnd('fetch:actualFetch');
+      return actualFetch;
     } catch (err: any) {
       let url =
         urlOrRequest instanceof Request
@@ -539,6 +555,7 @@ export class Loader {
       | { type: 'shimmed'; module: Record<string, unknown> };
 
     try {
+      timeStart('fetchModule:load');
       loaded = await this.load(moduleURL);
     } catch (exception) {
       this.setModule(moduleIdentifier, {
@@ -547,6 +564,8 @@ export class Loader {
         consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
       });
       throw exception;
+    } finally {
+      timeEnd('fetchModule:load');
     }
 
     if (loaded.type === 'shimmed') {
@@ -566,6 +585,7 @@ export class Loader {
 
     let src: string | null | undefined = loaded.source;
 
+    timeStart('fetchModule:transformSync');
     src = transformSync(src, {
       plugins: [
         [
@@ -576,6 +596,7 @@ export class Loader {
       sourceMaps: 'inline',
       filename: moduleIdentifier,
     })?.code;
+    timeEnd('fetchModule:transformSync');
     if (!src) {
       throw new Error(`bug: should never get here`);
     }
@@ -605,6 +626,7 @@ export class Loader {
       implementation = impl;
     };
 
+    timeStart('fetchModule:eval');
     try {
       eval(src); // + "\n//# sourceURL=" + moduleIdentifier);
     } catch (exception) {
@@ -614,6 +636,8 @@ export class Loader {
         consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
       });
       throw exception;
+    } finally {
+      timeEnd('fetchModule:eval');
     }
 
     let registeredModule: RegisteredModule = {
@@ -698,6 +722,7 @@ export class Loader {
     | { type: 'shimmed'; module: Record<string, unknown> }
   > {
     let response: Response;
+    timeStart('load:fetch');
     try {
       response = await this.fetch(moduleURL);
     } catch (err) {
@@ -706,6 +731,8 @@ export class Loader {
       // "broken" state, since the server hosting the module is likely down. it
       // might be a good idea to be able to try again in this case...
       throw err;
+    } finally {
+      timeEnd('load:fetch');
     }
     if (!response.ok) {
       let error = await CardError.fromFetchResponse(moduleURL.href, response);
