@@ -48,7 +48,7 @@ module('Integration | text-input-validator', function (hooks) {
 
   async function loadCard(url: string): Promise<CardDef> {
     let { createFromSerialized, recompute } = cardApi;
-    let result = await realm.searchIndex.card(new URL(url));
+    let result = await realm.searchIndex.cardDocument(new URL(url));
     if (!result || result.type === 'error') {
       throw new Error(
         `cannot get instance ${url} from the index: ${
