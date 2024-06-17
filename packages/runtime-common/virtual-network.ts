@@ -1,11 +1,12 @@
 import { RealmPaths } from './paths';
-import { Loader, followRedirections } from './loader';
+import { Loader } from './loader';
 import type { RunnerOpts } from './worker';
 import {
   PackageShimHandler,
   PACKAGES_FAKE_ORIGIN,
 } from './package-shim-handler';
 import type { Readable } from 'stream';
+import { followRedirections } from './fetcher';
 export interface ResponseWithNodeStream extends Response {
   nodeStream?: Readable;
 }
