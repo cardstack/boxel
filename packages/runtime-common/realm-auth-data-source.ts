@@ -1,6 +1,5 @@
 import { MatrixClient } from './matrix-client';
 import { RealmAuthClient } from './realm-auth-client';
-import { Loader } from './loader';
 
 type RealmInfo = {
   isPublicReadable: boolean;
@@ -20,12 +19,16 @@ export class RealmAuthDataSource implements IRealmAuthDataSource {
   // Cached realm info and session to avoid fetching it multiple times for the same realm
   private visitedRealms = new Map<string, RealmInfoAndAuth>();
   private matrixClient: MatrixClient;
-  private loader: Loader;
+  private fetch: typeof globalThis.fetch;
   realmURL: string;
 
-  constructor(matrixClient: MatrixClient, loader: Loader, realmURL: string) {
+  constructor(
+    matrixClient: MatrixClient,
+    fetch: typeof globalThis.fetch,
+    realmURL: string,
+  ) {
     this.matrixClient = matrixClient;
-    this.loader = loader;
+    this.fetch = fetch;
     this.realmURL = realmURL;
   }
 
@@ -56,7 +59,7 @@ export class RealmAuthDataSource implements IRealmAuthDataSource {
     if (visitedRealmURL) {
       targetRealm = this.visitedRealms.get(visitedRealmURL)!;
     } else {
-      let targetRealmHeadResponse = await this.loader.fetch(url, {
+      let targetRealmHeadResponse = await this.fetch(url, {
         method: 'HEAD',
       });
 
@@ -77,7 +80,7 @@ export class RealmAuthDataSource implements IRealmAuthDataSource {
         realmAuthClient: this.createRealmAuthClient(
           new URL(targetRealmURL),
           this.matrixClient,
-          this.loader,
+          this.fetch,
         ),
       };
 
@@ -94,8 +97,8 @@ export class RealmAuthDataSource implements IRealmAuthDataSource {
   private createRealmAuthClient(
     targetRealmURL: URL,
     matrixClient: MatrixClient,
-    loader: Loader,
+    fetch: typeof globalThis.fetch,
   ) {
-    return new RealmAuthClient(targetRealmURL, matrixClient, loader);
+    return new RealmAuthClient(targetRealmURL, matrixClient, fetch);
   }
 }

@@ -2,10 +2,10 @@ import { AuthenticationErrorMessages } from './router';
 import { baseRealm } from './index';
 import { PACKAGES_FAKE_ORIGIN } from './package-shim-handler';
 import { IRealmAuthDataSource } from './realm-auth-data-source';
-import { Loader, RequestHandler } from './loader';
+import { RequestHandler } from './loader';
 
 export function addAuthorizationHeader(
-  loader: Loader,
+  fetch: typeof globalThis.fetch,
   realmAuthDataSource: IRealmAuthDataSource,
 ): RequestHandler {
   return async function requestHandler(
@@ -45,7 +45,7 @@ export function addAuthorizationHeader(
         await realmAuthDataSource.getJWT(realmInfo.url),
       );
 
-      let response = await loader.fetch(request);
+      let response = await fetch(request);
 
       if (response.status === 401 && retryOnAuthFail) {
         let errorMessage = await response.text();

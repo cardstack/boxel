@@ -481,7 +481,7 @@ async function setupTestRealm({
   permissions?: RealmPermissions;
 }) {
   let owner = (getContext() as TestContext).owner;
-  let { loader, virtualNetwork } = lookupLoaderService();
+  let { virtualNetwork } = lookupLoaderService();
   let { queue } = owner.lookup('service:queue') as QueueService;
 
   realmURL = realmURL ?? testRealmURL;
