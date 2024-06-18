@@ -772,7 +772,7 @@ const tests = Object.freeze({
         },
       },
     ]);
-    let entry = await indexer.getCard(new URL(`${testRealmURL}1`));
+    let entry = await indexer.getInstance(new URL(`${testRealmURL}1`));
     if (entry?.type === 'error') {
       assert.deepEqual(entry, {
         type: 'error',
@@ -843,12 +843,13 @@ const tests = Object.freeze({
       types: [],
     });
 
-    let entry = await indexer.getCard(new URL(`${testRealmURL}1`));
+    let entry = await indexer.getInstance(new URL(`${testRealmURL}1`));
     if (entry?.type === 'instance') {
       assert.deepEqual(entry, {
         type: 'instance',
         realmVersion: 1,
         realmURL: testRealmURL,
+        canonicalURL: `${testRealmURL}1.json`,
         instance: {
           id: `${testRealmURL}1`,
           type: 'card',
@@ -926,7 +927,7 @@ const tests = Object.freeze({
       types: [],
     });
 
-    let entry = await indexer.getCard(new URL(`${testRealmURL}1`), {
+    let entry = await indexer.getInstance(new URL(`${testRealmURL}1`), {
       useWorkInProgressIndex: true,
     });
     if (entry?.type === 'instance') {
@@ -936,6 +937,7 @@ const tests = Object.freeze({
         type: 'instance',
         realmVersion: 2,
         realmURL: testRealmURL,
+        canonicalURL: `${testRealmURL}1.json`,
         instance: {
           id: `${testRealmURL}1.json`,
           type: 'card',
@@ -978,7 +980,7 @@ const tests = Object.freeze({
       ],
     );
 
-    let entry = await indexer.getCard(new URL(`${testRealmURL}1`));
+    let entry = await indexer.getInstance(new URL(`${testRealmURL}1`));
     assert.strictEqual(entry, undefined, 'deleted entries return undefined');
   },
 
@@ -1194,7 +1196,7 @@ const tests = Object.freeze({
       },
     ]);
 
-    let entry = await indexer.getCard(new URL(`${testRealmURL}person.gts`));
+    let entry = await indexer.getInstance(new URL(`${testRealmURL}person.gts`));
     assert.strictEqual(entry, undefined, 'deleted modules return undefined');
   },
 } as SharedTests<{ indexer: Indexer; adapter: DBAdapter }>);

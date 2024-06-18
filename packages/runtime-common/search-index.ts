@@ -9,12 +9,12 @@ import {
   type DBAdapter,
   type Queue,
   type QueryOptions,
-  type IndexedInstance,
   type FromScratchArgs,
   type FromScratchResult,
   type IncrementalArgs,
   type IncrementalResult,
   type IndexedModuleOrError,
+  IndexedInstanceOrError,
 } from '.';
 import { Realm } from './realm';
 import { RealmPaths } from './paths';
@@ -199,21 +199,20 @@ export class SearchIndex {
     return isIgnored(this.realmURL, this.ignoreMap, url);
   }
 
-  // TODO we should probably return the IndexedInstance type here so that we
-  // have access to both the serialized card instance and the source for the
-  // instance
-  // TODO rename to "instance" for consistency
-  async card(url: URL, opts?: Options): Promise<SearchResult | undefined> {
+  async cardDocument(
+    url: URL,
+    opts?: Options,
+  ): Promise<SearchResult | undefined> {
     let doc: SingleCardDocument | undefined;
-    let maybeCard = await this.#indexer.getCard(url, opts);
-    if (!maybeCard) {
+    let instance = await this.instance(url, opts);
+    if (!instance) {
       return undefined;
     }
-    if (maybeCard.type === 'error') {
-      return maybeCard;
+    if (instance.type === 'error') {
+      return instance;
     }
     doc = {
-      data: { ...maybeCard.instance, ...{ links: { self: url.href } } },
+      data: { ...instance.instance, ...{ links: { self: url.href } } },
     };
     if (!doc) {
       throw new Error(
@@ -243,13 +242,11 @@ export class SearchIndex {
     return await this.#indexer.getModule(url, opts);
   }
 
-  // this is meant for tests only
-  async searchEntry(url: URL): Promise<IndexedInstance | undefined> {
-    let result = await this.#indexer.getCard(url);
-    if (result?.type === 'error') {
-      return undefined;
-    }
-    return result;
+  async instance(
+    url: URL,
+    opts?: QueryOptions,
+  ): Promise<IndexedInstanceOrError | undefined> {
+    return await this.#indexer.getInstance(url, opts);
   }
 
   // TODO The caller should provide a list of fields to be included via JSONAPI
@@ -292,7 +289,7 @@ export class SearchIndex {
       );
       let linkResource: CardResource<Saved> | undefined;
       if (realmPath.inRealm(linkURL)) {
-        let maybeResult = await this.#indexer.getCard(linkURL, opts);
+        let maybeResult = await this.#indexer.getInstance(linkURL, opts);
         linkResource =
           maybeResult?.type === 'instance' ? maybeResult.instance : undefined;
       } else {

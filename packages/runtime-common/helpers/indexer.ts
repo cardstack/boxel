@@ -152,7 +152,10 @@ export async function setupIndex(
             ? `${row.url}.json`
             : row.url
           : row.url;
-      row.file_alias = trimExecutableExtension(new URL(row.url)).href;
+      row.file_alias = trimExecutableExtension(new URL(row.url)).href.replace(
+        /\.json$/,
+        '',
+      );
       row.type = row.type ?? 'instance';
       row.last_modified = String(row.last_modified ?? now);
       return asExpressions(
