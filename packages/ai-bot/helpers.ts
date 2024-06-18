@@ -6,7 +6,6 @@ import { MODIFY_SYSTEM_MESSAGE } from '@cardstack/runtime-common/helpers/ai';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardFragmentContent,
-  CommandEvent,
 } from 'https://cardstack.com/base/room';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
 
@@ -277,24 +276,3 @@ export const isCommandReactionEvent = (event?: MatrixEvent) => {
     content['m.relates_to']?.key === 'applied'
   );
 };
-
-export function isCommandEvent(
-  event: DiscreteMatrixEvent,
-): event is CommandEvent {
-  return (
-    event.type === 'm.room.message' &&
-    typeof event.content === 'object' &&
-    event.content.msgtype === 'org.boxel.command' &&
-    event.content.format === 'org.matrix.custom.html' &&
-    typeof event.content.data === 'object' &&
-    typeof event.content.data.toolCall === 'object'
-  );
-}
-
-export function isPatchCommandEvent(
-  event: DiscreteMatrixEvent,
-): event is CommandEvent {
-  return (
-    isCommandEvent(event) && event.content.data.toolCall.name === 'patchCard'
-  );
-}

@@ -3,11 +3,11 @@ import OpenAI from 'openai';
 import {
   type OpenAIPromptMessage,
   isCommandReactionEvent,
-  isPatchCommandEvent,
   attachedCardsToMessage,
 } from '../helpers';
 import { MatrixClient } from './matrix';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
+import { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
+import { isCommandEvent } from 'https://cardstack.com/base/command';
 
 const SET_TITLE_SYSTEM_MESSAGE = `You are a chat titling system, you must read the conversation and return a suggested title of no more than six words.
 Do NOT say talk or discussion or discussing or chat or chatting, this is implied by the context. 
@@ -28,7 +28,7 @@ export async function setTitle(
       content: SET_TITLE_SYSTEM_MESSAGE,
     },
     ...getStartOfConversation(history, userId),
-    ...getLatestPatchApplyMessage(history, userId, event),
+    ...getLatestCommandApplyMessage(history, userId, event),
     {
       role: 'user',
       content: 'Create a short title for this chat, limited to 6 words.',
@@ -85,7 +85,7 @@ export function getStartOfConversation(
   return messages;
 }
 
-export const getLatestPatchApplyMessage = (
+export const getLatestCommandApplyMessage = (
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
   event?: MatrixEvent,
@@ -98,9 +98,9 @@ export const getLatestPatchApplyMessage = (
     if (commandEvent === undefined) {
       return [];
     }
-    if (isPatchCommandEvent(commandEvent)) {
-      let patchMessage = JSON.stringify(commandEvent.content.data.toolCall);
-      let content = `Applying patchCard with args${patchMessage}. The patch being made is applied to the following ${attachedCardsToMessage(
+    if (isCommandEvent(commandEvent)) {
+      let args = JSON.stringify(commandEvent.content.data.toolCall);
+      let content = `Applying command with args ${args}. Cards shared are: ${attachedCardsToMessage(
         history,
         aiBotUserId,
       )}`;

@@ -29,7 +29,8 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import {
   addRoomEvent,
   updateRoomEvent,
-  getRoomEvents,
+  getCommandResultEvents,
+  getCommandReactionEvents,
 } from '@cardstack/host/lib/matrix-handlers';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -2508,9 +2509,12 @@ module('Integration | operator-mode', function (hooks) {
         },
         status: null,
       });
-      let events = await getRoomEvents(matrixService, 'room1');
+      let commandReactionEvents = await getCommandReactionEvents(
+        matrixService,
+        'room1',
+      );
       assert.equal(
-        events.filter((e) => e.room_id && e.type === 'm.reaction').length,
+        commandReactionEvents.length,
         0,
         'reaction event is not dispatched',
       );
@@ -2525,9 +2529,12 @@ module('Integration | operator-mode', function (hooks) {
         .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
         .exists();
 
-      events = await getRoomEvents(matrixService, 'room1');
+      commandReactionEvents = await getCommandReactionEvents(
+        matrixService,
+        'room1',
+      );
       assert.equal(
-        events.filter((e) => e.room_id && e.type === 'm.reaction').length,
+        commandReactionEvents.length,
         1,
         'reaction event is dispatched',
       );
@@ -2573,14 +2580,12 @@ module('Integration | operator-mode', function (hooks) {
         },
         status: null,
       });
-      let events = await getRoomEvents(matrixService, 'room1');
+      let commandResultEvents = await getCommandResultEvents(
+        matrixService,
+        'room1',
+      );
       assert.equal(
-        events.filter(
-          (e) =>
-            e.room_id &&
-            e.type === 'm.room.message' &&
-            e.content.msgtype === 'org.boxel.commandResult',
-        ).length,
+        commandResultEvents.length,
         0,
         'command result event is not dispatched',
       );
@@ -2594,17 +2599,17 @@ module('Integration | operator-mode', function (hooks) {
         .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
         .exists();
 
-      events = await getRoomEvents(matrixService, 'room1');
-      let commandResultEvent = events.filter(
-        (e) => e.room_id && e.content.msgtype === 'org.boxel.commandResult',
+      commandResultEvents = await getCommandResultEvents(
+        matrixService,
+        'room1',
       );
       assert.equal(
-        commandResultEvent.length,
+        commandResultEvents.length,
         1,
         'command result event is dispatched',
       );
       assert.equal(
-        commandResultEvent[0].content.result[0].firstName,
+        commandResultEvents[0].content.result[0].firstName,
         'Evie',
         'field has been changed',
       );
