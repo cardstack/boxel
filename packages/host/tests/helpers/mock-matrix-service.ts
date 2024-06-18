@@ -17,6 +17,7 @@ import { CardDef } from 'https://cardstack.com/base/card-api';
 import type {
   RoomField,
   ReactionEventContent,
+  CommandResultContent,
 } from 'https://cardstack.com/base/room';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -143,6 +144,31 @@ function generateMockMatrixService(
       };
       try {
         return await this.sendEvent(roomId, 'm.reaction', content);
+      } catch (e) {
+        throw new Error(
+          `Error sending reaction event: ${
+            'message' in (e as Error) ? (e as Error).message : e
+          }`,
+        );
+      }
+    }
+
+    async sendCommandResultMessage(roomId: string, eventId: string, result: any) {
+      let body = `Command Results from command event ${eventId}`;
+      let html = body;
+      let content: CommandResultContent = {
+        'm.relates_to': {
+          event_id: eventId,
+          rel_type: 'm.annotation',
+          key: 'applied', //this is aggregated key. All annotations must have one. This identifies the reaction event.
+        },
+        body,
+        formatted_body: html,
+        msgtype: 'org.boxel.commandResult',
+        result,
+      };
+      try {
+        return await this.sendEvent(roomId, 'm.room.message', content);
       } catch (e) {
         throw new Error(
           `Error sending reaction event: ${

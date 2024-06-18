@@ -811,7 +811,7 @@ interface CommandMessageContent {
   };
 }
 
-export interface CommandResultEvent {
+export interface CommandResultEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: CommandResultContent;
   unsigned: {

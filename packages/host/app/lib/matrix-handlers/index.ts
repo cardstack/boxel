@@ -11,6 +11,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type {
   RoomField,
   MatrixEvent as DiscreteMatrixEvent,
+  MessageField,
 } from 'https://cardstack.com/base/room';
 
 import type LoaderService from '../../services/loader-service';
@@ -143,4 +144,32 @@ export async function updateRoomEvent(
       event as unknown as DiscreteMatrixEvent;
     resolvedRoom.events = [...resolvedRoom.events];
   }
+}
+
+export async function getRoomEvents(
+  context: EventSendingContext,
+  roomId: string,
+): Promise<DiscreteMatrixEvent[]> {
+  if (!roomId) {
+    throw new Error(
+      `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
+    );
+  }
+  let room = context.rooms.get(roomId);
+  let resolvedRoom = await room;
+  return resolvedRoom?.events ?? [];
+}
+
+export async function getRoomMessages(
+  context: EventSendingContext,
+  roomId: string,
+): Promise<MessageField[]> {
+  if (!roomId) {
+    throw new Error(
+      `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
+    );
+  }
+  let room = context.rooms.get(roomId);
+  let resolvedRoom = await room;
+  return resolvedRoom?.messages ?? [];
 }
