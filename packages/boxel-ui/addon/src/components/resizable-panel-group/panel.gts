@@ -81,6 +81,7 @@ export default class Panel extends Component<Signature> {
 
   @tracked lengthPx: number | undefined = 0;
   @tracked minLengthPx: number | undefined = 0;
+  @tracked ratio: number | undefined;
   initialMinLengthPx: number;
 
   @tracked collapsible: boolean;

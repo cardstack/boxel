@@ -123,7 +123,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
     nextPanel?: ResizablePanel | null;
     prevPanel?: ResizablePanel | null;
   } | null = null;
-  panelRatios: number[] = [];
 
   constructor(args: any, owner: any) {
     super(args, owner);
@@ -225,19 +224,23 @@ export default class ResizablePanelGroup extends Component<Signature> {
   }
 
   calculatePanelRatio() {
-    let panelLengths = this.panels.map((panel) => panel.lengthPx);
+    let panelLengths = this.panels.map((panel) => panel.lengthPx ?? 0);
 
     console.log('panelLengths', ...panelLengths);
-    this.panelRatios = [];
+
     for (let index = 0; index < panelLengths.length; index++) {
       let panelLength = panelLengths[index];
-      if (panelLength == undefined) {
+      let panel = this.panels[index];
+      if (panelLength == undefined || !panel) {
         break;
       }
-      this.panelRatios[index] = panelLength / sumArray(panelLengths);
+      panel.ratio = panelLength / sumArray(panelLengths);
     }
 
-    console.log('calculatePanelRatio', ...this.panelRatios);
+    console.log(
+      'calculatePanelRatio',
+      ...this.panels.map((panel) => panel.ratio),
+    );
   }
 
   @action
@@ -567,7 +570,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
       let panels = this.panels.filter((panel) => panel.initialMinLengthPx);
 
       panels.forEach((panel, index) => {
-        let panelRatio = this.panelRatios[index];
+        let panelRatio = panel.ratio;
         console.log(`panel index ${index} ratio: ${panelRatio}`);
         if (!panelRatio || !newContainerSize) {
           return;
@@ -593,12 +596,12 @@ export default class ResizablePanelGroup extends Component<Signature> {
 
     let calculateLengthsOfPanelWithoutMinLength = () => {
       let panels = this.panels.filter((panel) => !panel.initialMinLengthPx);
-      // FIXME probably removable?
-      let panelIds = panels.map((_panelContext, index) => index);
-      console.log('current panel ratios', ...this.panelRatios);
-      let newPanelRatios = this.panelRatios.filter((_panelRatio, index) =>
-        panelIds.includes(index),
+      console.log(
+        'current panel ratios',
+        ...this.panels.map((panel) => panel.ratio),
       );
+      // FIXME can ?? 0 be pushed down?
+      let newPanelRatios = panels.map((panel) => panel.ratio ?? 0);
       console.log('new panel ratios v1', ...newPanelRatios);
       let totalNewPanelRatio = newPanelRatios.reduce(
         (prevValue, currentValue) => prevValue + currentValue,
