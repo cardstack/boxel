@@ -191,10 +191,14 @@ export default class Handle extends Component<Signature> {
     let horizontal = this.args.orientation === 'horizontal';
     let reverse = this.args.reverseArrow;
 
-    let id = this.args.panelGroupComponent.resizeHandles.indexOf(this);
-    console.log('id', id, this.args.panelGroupComponent.resizeHandles.length);
+    let myIndex = this.args.panelGroupComponent.resizeHandles.indexOf(this);
+    console.log(
+      'id',
+      myIndex,
+      this.args.panelGroupComponent.resizeHandles.length,
+    );
 
-    if (id == undefined) {
+    if (myIndex == undefined) {
       return '';
     }
 
@@ -202,11 +206,12 @@ export default class Handle extends Component<Signature> {
 
     let groupComponent = this.args.panelGroupComponent;
 
-    let isFirstPanel = id === 0;
-    let isCollapsed = groupComponent.panels[id]?.lengthPx === 0;
+    let isFirstPanel = myIndex === 0;
+    let isCollapsed = groupComponent.panels[myIndex]?.lengthPx === 0;
 
-    let nextPanelIsLast = groupComponent.resizeHandles.length - 1 === id;
-    let nextPanelIsCollapsed = groupComponent.panels[id + 1]?.lengthPx === 0;
+    let nextPanelIsLast = groupComponent.resizeHandles.length - 1 === myIndex;
+    let nextPanelIsCollapsed =
+      groupComponent.panels[myIndex + 1]?.lengthPx === 0;
 
     if (isFirstPanel && !isCollapsed) {
       if (nextPanelIsLast && nextPanelIsCollapsed) {
