@@ -6,7 +6,7 @@ import {
   PACKAGES_FAKE_ORIGIN,
 } from './package-shim-handler';
 import type { Readable } from 'stream';
-import { followRedirections } from './fetcher';
+import { simulateNetworkBehaviors } from './fetcher';
 export interface ResponseWithNodeStream extends Response {
   nodeStream?: Readable;
 }
@@ -193,7 +193,7 @@ export class VirtualNetwork {
     for (let handler of this.handlers) {
       let response = await handler(request);
       if (response) {
-        return await followRedirections(request, response, this.fetch);
+        return await simulateNetworkBehaviors(request, response, this.fetch);
       }
     }
 

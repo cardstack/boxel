@@ -7,7 +7,7 @@ import { CardError } from './error';
 import flatMap from 'lodash/flatMap';
 import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
 import jsEscapeString from 'js-string-escape';
-import { followRedirections } from './fetcher';
+import { simulateNetworkBehaviors } from './fetcher';
 
 type FetchingModule = {
   state: 'fetching';
@@ -454,7 +454,7 @@ export class Loader {
         mergedHeaders = { ...mergedHeaders, ...headersFromRequest(request) };
 
         if (result) {
-          return await followRedirections(
+          return await simulateNetworkBehaviors(
             request,
             result,
             this.fetch.bind(this),
