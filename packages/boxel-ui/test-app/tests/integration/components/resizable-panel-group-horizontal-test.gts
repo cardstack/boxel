@@ -1,4 +1,4 @@
-import { module, skip, test } from 'qunit';
+import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { doubleClick, render, RenderingTestContext } from '@ember/test-helpers';
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
@@ -308,9 +308,9 @@ module('Integration | ResizablePanelGroup | horizontal', function (hooks) {
     assert.hasNumericStyle('.panel-1-content', 'width', 0, 0);
   });
 
-  skip<MyTestContext>('the space is filled when a panel becomes hidden', async function (assert) {
+  test<MyTestContext>('the space is filled when a panel becomes hidden', async function (assert) {
     this.renderController.containerStyle =
-      'max-width: 100%; height: 200px; width: 218px;';
+      'max-width: 100%; height: 200px; width: 218px; background: var(--boxel-200)';
     this.renderController.panels = [
       new PanelProperties(
         { defaultLengthFraction: 0.6 },

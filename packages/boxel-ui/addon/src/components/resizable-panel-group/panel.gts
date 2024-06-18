@@ -5,6 +5,7 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
+import didResizeModifier from 'ember-resize-modifier/modifiers/did-resize';
 
 import cssVars from '../../helpers/css-var.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
@@ -13,7 +14,9 @@ interface Signature {
   Args: {
     collapsible?: boolean; //default true
     defaultLengthFraction: number;
-    isHidden?: boolean; //default false
+    didResize: (panel: Panel) => void;
+    isHidden?: boolean;
+    //default false
     lengthPx?: number;
     minLengthPx?: number;
     orientation: 'horizontal' | 'vertical';
@@ -47,6 +50,7 @@ export default class Panel extends Component<Signature> {
         )
       }}
       {{managePanelRegistration this}}
+      {{didResizeModifier this.handleResize}}
       ...attributes
     >
       {{yield}}
@@ -111,6 +115,11 @@ export default class Panel extends Component<Signature> {
     this.args.unregisterPanel(this);
   }
 
+  @action handleResize() {
+    console.log('resized!');
+    this.args.didResize(this);
+  }
+
   get minLengthCssValue() {
     if (this.args.isHidden) {
       return htmlSafe('0px');
@@ -130,6 +139,8 @@ export default class Panel extends Component<Signature> {
       lengthPx,
       'defaultLengthFraction',
       defaultLengthFraction,
+      'hidden?!!',
+      this.args.isHidden,
     );
     if (this.args.isHidden) {
       return htmlSafe('0px');

@@ -28,7 +28,7 @@ interface Signature {
       // FIXME do these still make sense?
       WithBoundArgs<
         typeof ResizablePanel,
-        'orientation' | 'registerPanel' | 'unregisterPanel'
+        'orientation' | 'registerPanel' | 'unregisterPanel' | 'didResize'
       >,
       WithBoundArgs<
         typeof ResizeHandle,
@@ -60,6 +60,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
             orientation=@orientation
             registerPanel=this.registerPanel
             unregisterPanel=this.unregisterPanel
+            didResize=this.panelDidResize
           )
           (component
             ResizeHandle
@@ -172,6 +173,11 @@ export default class ResizablePanelGroup extends Component<Signature> {
     return panelGroupLengthPx - totalResizeHandleLength;
   }
 
+  @action panelDidResize(panel: ResizablePanel) {
+    console.log('a panel resized');
+    this.onContainerResize();
+  }
+
   @action
   registerPanel(panel: ResizablePanel) {
     console.log('registerPanel', panel, panel.lengthPx);
@@ -212,7 +218,9 @@ export default class ResizablePanelGroup extends Component<Signature> {
   }
 
   calculatePanelRatio() {
-    let panelLengths = this.panels.map((panel) => panel.lengthPx ?? 0);
+    let panelLengths = this.panels.map((panel) =>
+      panel.isHidden ? 0 : panel.lengthPx ?? 0,
+    );
     let totalPanelLength = sumArray(panelLengths);
 
     console.log('panelLengths', ...panelLengths);
@@ -541,7 +549,9 @@ export default class ResizablePanelGroup extends Component<Signature> {
       this.panelGroupElement[this.perpendicularLengthProperty] <
       this.minimumLengthToShowHandles;
 
-    let panelLengths: number[] = this.panels.map((panel) => panel.lengthPx);
+    let panelLengths: number[] = this.panels.map((panel) =>
+      panel.isHidden ? 0 : panel.lengthPx,
+    );
     let panelToNewLength = new Map<ResizablePanel, number>();
 
     console.log('panelLengths', ...panelLengths);
@@ -564,6 +574,12 @@ export default class ResizablePanelGroup extends Component<Signature> {
         if (!panelRatio || !newContainerSize) {
           return;
         }
+
+        if (panel.isHidden) {
+          panelToNewLength.set(panel, 0);
+          return;
+        }
+
         let proportionalSize = panelRatio * newContainerSize;
         console.log(`panel index ${index} proportional size`, proportionalSize);
         let actualSize = Math.round(
@@ -610,6 +626,12 @@ export default class ResizablePanelGroup extends Component<Signature> {
           console.warn('Expected panelRatio to be defined');
           return;
         }
+
+        if (panel.isHidden) {
+          panelToNewLength.set(panel, 0);
+          return;
+        }
+
         let proportionalSize = panelRatio * remainingContainerSize;
         let actualSize = Math.round(proportionalSize);
         console.log(`panel index ${index} actual size`, actualSize);
