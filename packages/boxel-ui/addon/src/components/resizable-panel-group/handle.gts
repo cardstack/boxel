@@ -179,7 +179,7 @@ export default class Handle extends Component<Signature> {
 
   constructor(owner: any, args: any) {
     super(owner, args);
-    // FIMXE move into modifier? also, unregister
+
     registerDestructor(this, this.args.unregisterHandle);
   }
 
