@@ -47,12 +47,6 @@ export default class ResizablePanelUsage extends Component {
   <template>
     <FreestyleUsage @name='Horizontal ResizablePanelGroup'>
       <:example>
-        <button class='toggle' {{on 'click' this.togglePanel3Visibility}}>{{if
-            this.showPanel3
-            'Hide'
-            'Show'
-          }}
-          Panel 3</button>
         <ResizablePanelGroup
           @orientation='horizontal'
           style={{cssVar
@@ -87,6 +81,12 @@ export default class ResizablePanelUsage extends Component {
             Panel 3
           </ResizablePanel>
         </ResizablePanelGroup>
+        <button class='toggle' {{on 'click' this.togglePanel3Visibility}}>{{if
+            this.showPanel3
+            'Hide'
+            'Show'
+          }}
+          Panel 3</button>
       </:example>
       <:api as |Args|>
         <Args.Number
