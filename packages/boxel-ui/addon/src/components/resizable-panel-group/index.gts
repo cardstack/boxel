@@ -8,11 +8,11 @@ import { nodeFor } from 'ember-ref-bucket';
 import didResizeModifier from 'ember-resize-modifier/modifiers/did-resize';
 import { TrackedArray } from 'tracked-built-ins';
 
+import ResizeHandle from './handle.gts';
 import ResizablePanel from './panel.gts';
-import ResizeHandle from './resize-handler.gts';
 
+export { default as ResizeHandle } from './handle.gts';
 export { default as ResizablePanel } from './panel.gts';
-export { default as ResizeHandle } from './resize-handler.gts';
 
 function sumArray(array: number[]) {
   return array.reduce((partialSum, a) => partialSum + a, 0);
