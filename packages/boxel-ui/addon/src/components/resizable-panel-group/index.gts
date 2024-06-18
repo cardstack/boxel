@@ -671,10 +671,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
     };
   }
 
-  private getHtmlElement(id: string): HTMLElement {
-    return nodeFor(this, id);
-  }
-
   @action
   private ResizeHandleElId(id: number | undefined): string {
     return `${ResizeHandleElIdPrefix}-${this.args.orientation}-${id}`;
