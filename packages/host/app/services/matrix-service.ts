@@ -564,7 +564,7 @@ export default class MatrixService extends Service {
         await opts.onMessages(events);
       }
       messages.push(...events);
-    } while (!from);
+    } while (from);
     return messages;
   }
 
