@@ -79,75 +79,43 @@ const formatNumberWithSeparator = (
 class Isolated extends Component<typeof CampaignForm> {
   <template>
     <div class='campaign-form-isolated'>
-      <FieldContainer @label='Name' data-test-field='active' class='field'>
+      <FieldContainer @label='Name' class='field'>
         {{@model.name}}
       </FieldContainer>
-      <FieldContainer @label='Status' data-test-field='active' class='field'>
+      <FieldContainer @label='Status' class='field'>
         {{@model.status}}
       </FieldContainer>
-      <FieldContainer @label='Active' data-test-field='active' class='field'>
+      <FieldContainer @label='Active' class='field'>
         {{if @model.active 'Yes' 'No'}}
       </FieldContainer>
-      <FieldContainer @label='Type' data-test-field='active' class='field'>
+      <FieldContainer @label='Type' class='field'>
         {{@model.type}}
       </FieldContainer>
-      <FieldContainer
-        @label='Parent Campaign'
-        data-test-field='active'
-        class='field'
-      >
+      <FieldContainer @label='Parent Campaign' class='field'>
         <@fields.parent_campaign />
       </FieldContainer>
-      <FieldContainer
-        @label='Description'
-        data-test-field='active'
-        class='field'
-      >
+      <FieldContainer @label='Description' class='field'>
         {{@model.description}}
       </FieldContainer>
-      <FieldContainer
-        @label='Start Date'
-        data-test-field='active'
-        class='field'
-      >
+      <FieldContainer @label='Start Date' class='field'>
         <@fields.start_date />
       </FieldContainer>
-      <FieldContainer @label='End Date' data-test-field='active' class='field'>
+      <FieldContainer @label='End Date' class='field'>
         <@fields.end_date />
       </FieldContainer>
-      <FieldContainer
-        @label='Num Sent in Campaign'
-        data-test-field='active'
-        class='field'
-      >
+      <FieldContainer @label='Num Sent in Campaign' class='field'>
         {{formatNumberWithSeparator @model.number_sent}}
       </FieldContainer>
-      <FieldContainer
-        @label='Expected Response (%)'
-        data-test-field='active'
-        class='field'
-      >
+      <FieldContainer @label='Expected Response (%)' class='field'>
         {{formatNumberWithSeparator @model.expected_response_percentage true}}
       </FieldContainer>
-      <FieldContainer
-        @label='Expected Revenue in Campaign'
-        data-test-field='active'
-        class='field'
-      >
+      <FieldContainer @label='Expected Revenue in Campaign' class='field'>
         {{formatCurrency @model.expected_revenue}}
       </FieldContainer>
-      <FieldContainer
-        @label='Budgeted Cost in Campaign'
-        data-test-field='active'
-        class='field'
-      >
+      <FieldContainer @label='Budgeted Cost in Campaign' class='field'>
         {{formatCurrency @model.budgeted_cost}}
       </FieldContainer>
-      <FieldContainer
-        @label='Actual Cost in Campaign'
-        data-test-field='active'
-        class='field'
-      >
+      <FieldContainer @label='Actual Cost in Campaign' class='field'>
         {{formatCurrency @model.actual_cost}}
       </FieldContainer>
     </div>
@@ -335,7 +303,12 @@ class Edit extends Component<typeof CampaignForm> {
 
   <template>
     <div class='campaign-form-edit'>
-      <FieldContainer @label='Campaign Name' @tag='label' class='field'>
+      <FieldContainer
+        @label='Campaign Name'
+        data-test-field='name'
+        @tag='label'
+        class='field'
+      >
         <BoxelInput
           @value={{this.name}}
           @onInput={{this.updateName}}
@@ -374,17 +347,32 @@ class Edit extends Component<typeof CampaignForm> {
           <div>{{item.name}}</div>
         </BoxelSelect>
       </FieldContainer>
-      <FieldContainer @label='Parent Campaign' @tag='label' class='field'>
+      <FieldContainer
+        @label='Parent Campaign'
+        data-test-field='parent_campaign'
+        @tag='label'
+        class='field'
+      >
         <@fields.parent_campaign />
       </FieldContainer>
-      <FieldContainer @label='Description' @tag='label' class='field'>
+      <FieldContainer
+        @label='Description'
+        data-test-field='description'
+        @tag='label'
+        class='field'
+      >
         <BoxelInput
           @type='textarea'
           @value={{this.description}}
           @onInput={{this.updateDescription}}
         />
       </FieldContainer>
-      <FieldContainer @label='Start Date' @tag='label' class='field'>
+      <FieldContainer
+        @label='Start Date'
+        data-test-field='start_date'
+        @tag='label'
+        class='field'
+      >
         <BoxelInput
           type='date'
           @value={{this.startDateString}}
@@ -392,7 +380,12 @@ class Edit extends Component<typeof CampaignForm> {
           @max='9999-12-31'
         />
       </FieldContainer>
-      <FieldContainer @label='End Date' @tag='label' class='field'>
+      <FieldContainer
+        @label='End Date'
+        data-test-field='end_date'
+        @tag='label'
+        class='field'
+      >
         <BoxelInput
           type='date'
           @value={{this.endDateString}}
@@ -400,7 +393,12 @@ class Edit extends Component<typeof CampaignForm> {
           @max='9999-12-31'
         />
       </FieldContainer>
-      <FieldContainer @label='Num Sent in Campaign' @tag='label' class='field'>
+      <FieldContainer
+        @label='Num Sent in Campaign'
+        data-test-field='number_sent'
+        @tag='label'
+        class='field'
+      >
         <BoxelInput
           @value={{this.numberSentInputValue}}
           @onKeyPress={{this.validateOnKeyPress}}
@@ -408,7 +406,12 @@ class Edit extends Component<typeof CampaignForm> {
           @onBlur={{this.onBlurNumberSent}}
         />
       </FieldContainer>
-      <FieldContainer @label='Expected Response (%)' @tag='label' class='field'>
+      <FieldContainer
+        @label='Expected Response (%)'
+        data-test-field='expected_response_percentage'
+        @tag='label'
+        class='field'
+      >
         <BoxelInput
           @value={{this.expectedResponseInputValue}}
           @onKeyPress={{this.validateOnKeyPress}}
@@ -421,6 +424,7 @@ class Edit extends Component<typeof CampaignForm> {
       </FieldContainer>
       <FieldContainer
         @label='Expected Revenue in Campaign'
+        data-test-field='expected_revenue'
         @tag='label'
         class='field'
       >
@@ -441,6 +445,7 @@ class Edit extends Component<typeof CampaignForm> {
       </FieldContainer>
       <FieldContainer
         @label='Budgeted Cost in Campaign'
+        data-test-field='budgeted_cost'
         @tag='label'
         class='field'
       >
@@ -458,6 +463,7 @@ class Edit extends Component<typeof CampaignForm> {
       </FieldContainer>
       <FieldContainer
         @label='Actual Cost in Campaign'
+        data-test-field='actual_cost'
         @tag='label'
         class='field'
       >
