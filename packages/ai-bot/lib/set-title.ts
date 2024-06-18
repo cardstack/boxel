@@ -7,7 +7,6 @@ import {
 } from '../helpers';
 import { MatrixClient } from './matrix';
 import { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
-import { isCommandEvent } from 'https://cardstack.com/base/command';
 
 const SET_TITLE_SYSTEM_MESSAGE = `You are a chat titling system, you must read the conversation and return a suggested title of no more than six words.
 Do NOT say talk or discussion or discussing or chat or chatting, this is implied by the context. 

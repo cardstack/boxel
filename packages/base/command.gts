@@ -28,26 +28,3 @@ export class CommandField extends FieldDef {
   @field eventId = contains(StringField);
   @field status = contains(CommandStatusField);
 }
-
-export function isCommandEvent(
-  event: DiscreteMatrixEvent,
-): event is CommandEvent {
-  return (
-    event.type === 'm.room.message' &&
-    typeof event.content === 'object' &&
-    event.content.msgtype === 'org.boxel.command' &&
-    event.content.format === 'org.matrix.custom.html' &&
-    typeof event.content.data === 'object' &&
-    typeof event.content.data.toolCall === 'object'
-  );
-}
-
-export function isCommandResultEvent(
-  event: DiscreteMatrixEvent,
-): event is CommandResultEvent {
-  return (
-    event.type === 'm.room.message' &&
-    typeof event.content === 'object' &&
-    event.content.msgtype === 'org.boxel.commandResult'
-  );
-}

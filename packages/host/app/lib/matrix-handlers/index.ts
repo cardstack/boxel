@@ -13,10 +13,7 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   CommandResultEvent,
   ReactionEvent,
-} from 'https://cardstack.com/base/room';
-import {
-  isCommandReactionEvent,
-  isCommandResultEvent,
+  CommandEvent,
 } from 'https://cardstack.com/base/room';
 
 import type LoaderService from '../../services/loader-service';
@@ -179,4 +176,37 @@ export async function getCommandReactionEvents(
 ): Promise<ReactionEvent[]> {
   let events = await getRoomEvents(context, roomId);
   return events.filter((e) => isCommandReactionEvent(e)) as ReactionEvent[];
+}
+
+export function isCommandEvent(
+  event: DiscreteMatrixEvent,
+): event is CommandEvent {
+  return (
+    event.type === 'm.room.message' &&
+    typeof event.content === 'object' &&
+    event.content.msgtype === 'org.boxel.command' &&
+    event.content.format === 'org.matrix.custom.html' &&
+    typeof event.content.data === 'object' &&
+    typeof event.content.data.toolCall === 'object'
+  );
+}
+
+export const isCommandReactionEvent = (
+  event: DiscreteMatrixEvent,
+): event is ReactionEvent => {
+  return (
+    event.type === 'm.reaction' &&
+    event.content['m.relates_to']?.rel_type === 'm.annotation' &&
+    event.content['m.relates_to']?.key === 'applied'
+  );
+};
+
+export function isCommandResultEvent(
+  event: DiscreteMatrixEvent,
+): event is CommandResultEvent {
+  return (
+    event.type === 'm.room.message' &&
+    typeof event.content === 'object' &&
+    event.content.msgtype === 'org.boxel.commandResult'
+  );
 }

@@ -929,34 +929,3 @@ export type MatrixEvent =
   | InviteEvent
   | JoinEvent
   | LeaveEvent;
-
-export function isCommandEvent(event: MatrixEvent): event is CommandEvent {
-  return (
-    event.type === 'm.room.message' &&
-    typeof event.content === 'object' &&
-    event.content.msgtype === 'org.boxel.command' &&
-    event.content.format === 'org.matrix.custom.html' &&
-    typeof event.content.data === 'object' &&
-    typeof event.content.data.toolCall === 'object'
-  );
-}
-
-export const isCommandReactionEvent = (
-  event: MatrixEvent,
-): event is ReactionEvent => {
-  return (
-    event.type === 'm.reaction' &&
-    event.content['m.relates_to']?.rel_type === 'm.annotation' &&
-    event.content['m.relates_to']?.key === 'applied'
-  );
-};
-
-export function isCommandResultEvent(
-  event: MatrixEvent,
-): event is CommandResultEvent {
-  return (
-    event.type === 'm.room.message' &&
-    typeof event.content === 'object' &&
-    event.content.msgtype === 'org.boxel.commandResult'
-  );
-}
