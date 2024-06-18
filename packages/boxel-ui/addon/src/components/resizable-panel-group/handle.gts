@@ -37,10 +37,8 @@ export default class Handle extends Component<Signature> {
       ...attributes
     >
       <button
-        id={{(@resizeHandleElId this.id)}}
         class='resize-handler {{@orientation}} {{if @hide "hidden"}}'
-        aria-label={{(@resizeHandleElId this.id)}}
-        data-test-resize-handler={{(@resizeHandleElId this.id)}}
+        aria-label='Resize handle'
         {{on 'mousedown' @onMouseDown}}
         {{on 'dblclick' @onDoubleClick}}
       ><div class={{this.arrowResizeHandleClass}} /></button>
