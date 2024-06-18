@@ -18,8 +18,6 @@ function sumArray(array: number[]) {
   return array.reduce((partialSum, a) => partialSum + a, 0);
 }
 
-const ResizeHandleElIdPrefix = 'resize-handler';
-
 interface Signature {
   Args: {
     onListPanelContextChange?: (listPanelContext: ResizablePanel[]) => void;
