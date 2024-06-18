@@ -51,7 +51,7 @@ interface Signature {
         | 'registerResizeHandle'
         | 'unRegisterResizeHandle'
         | 'resizeHandleElId'
-        | 'reverseHandlerArrow'
+        | 'reverseHandleArrow'
       >,
     ];
   };
@@ -83,7 +83,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
             isLastPanel=this.isLastPanel
             onResizeHandleMouseDown=this.onResizeHandleMouseDown
             onResizeHandleDblClick=this.onResizeHandleDblClick
-            reverseHandlerArrow=@reverseCollapse
+            reverseHandleArrow=@reverseCollapse
             hideHandle=this.hideHandles
             panelGroupComponent=this
             resizeHandleElId=this.ResizeHandleElId
