@@ -9,15 +9,15 @@ import type ResizablePanelGroup from './index.gts';
 
 interface Signature {
   Args: {
-    hideHandle: boolean;
-    onResizeHandleDblClick: (event: MouseEvent) => void;
-    onResizeHandleMouseDown: (event: MouseEvent) => void;
+    hide: boolean;
+    onDoubleClick: (event: MouseEvent) => void;
+    onMouseDown: (event: MouseEvent) => void;
     orientation: 'horizontal' | 'vertical';
     panelGroupComponent: ResizablePanelGroup;
-    registerResizeHandle: (handle: Handle) => void;
+    registerHandle: (handle: Handle) => void;
     resizeHandleElId: (id: number | undefined) => string;
     reverseHandleArrow: boolean;
-    unRegisterResizeHandle: (handle: Handle) => void;
+    unregisterHandle: (handle: Handle) => void;
   };
   Blocks: {
     default: [];
@@ -39,11 +39,11 @@ export default class Handle extends Component<Signature> {
     >
       <button
         id={{(@resizeHandleElId this.id)}}
-        class='resize-handler {{@orientation}} {{if @hideHandle "hidden"}}'
+        class='resize-handler {{@orientation}} {{if @hide "hidden"}}'
         aria-label={{(@resizeHandleElId this.id)}}
         data-test-resize-handler={{(@resizeHandleElId this.id)}}
-        {{on 'mousedown' @onResizeHandleMouseDown}}
-        {{on 'dblclick' @onResizeHandleDblClick}}
+        {{on 'mousedown' @onMouseDown}}
+        {{on 'dblclick' @onDoubleClick}}
       ><div class={{this.arrowResizeHandleClass}} /></button>
     </div>
     <style>
@@ -183,11 +183,11 @@ export default class Handle extends Component<Signature> {
   constructor(owner: any, args: any) {
     super(owner, args);
     // FIMXE move into modifier? also, unregister
-    registerDestructor(this, this.args.unRegisterResizeHandle);
+    registerDestructor(this, this.args.unregisterHandle);
   }
 
   @action registerHandle() {
-    this.args.registerResizeHandle(this);
+    this.args.registerHandle(this);
   }
 
   get arrowResizeHandleClass() {

@@ -78,12 +78,12 @@ export default class ResizablePanelGroup extends Component<Signature> {
           (component
             ResizeHandle
             orientation=@orientation
-            registerResizeHandle=this.registerResizeHandle
-            unRegisterResizeHandle=this.unRegisterResizeHandle
-            onResizeHandleMouseDown=this.onResizeHandleMouseDown
-            onResizeHandleDblClick=this.onResizeHandleDblClick
+            registerHandle=this.registerHandle
+            unregisterHandle=this.unregisterHandle
+            onMouseDown=this.onHandleMouseDown
+            onDoubleClick=this.onHandleDoubleClick
             reverseHandleArrow=this.reverseCollapse
-            hideHandle=this.hideHandles
+            hide=this.hideHandles
             panelGroupComponent=this
             resizeHandleElId=this.ResizeHandleElId
           )
@@ -252,12 +252,12 @@ export default class ResizablePanelGroup extends Component<Signature> {
   }
 
   @action
-  registerResizeHandle(handle: ResizeHandle) {
+  registerHandle(handle: ResizeHandle) {
     this.resizeHandles.push(handle);
   }
 
   @action
-  unRegisterResizeHandle(handle: ResizeHandle) {
+  unregisterHandle(handle: ResizeHandle) {
     let handleIndex = this.resizeHandles.indexOf(handle);
     if (handleIndex > -1) {
       this.resizeHandles.splice(handleIndex, 1);
@@ -269,7 +269,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
   }
 
   @action
-  onResizeHandleMouseDown(event: MouseEvent) {
+  onHandleMouseDown(event: MouseEvent) {
     let button = event.target as HTMLElement;
 
     let handle = this.resizeHandles.find(
@@ -433,7 +433,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
   // When triggered, it will close either the first or last panel.
   // In this scenario, the minimum length of the panel will be disregarded.
   @action
-  onResizeHandleDblClick(event: MouseEvent) {
+  onHandleDoubleClick(event: MouseEvent) {
     let handleElement = event.target as HTMLElement;
     let handle = this.resizeHandles.find(
       (handle) => handle.element === handleElement.parentNode,
