@@ -567,7 +567,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
 
     let remainingContainerSize = newContainerSize;
     console.log('remainingContainerSize v0', remainingContainerSize);
-    let calculateLengthsOfPanelWithMinLegth = () => {
+    let calculateLengthsOfPanelsWithMinLength = () => {
       let panels = this.panels.filter((panel) => panel.initialMinLengthPx);
 
       panels.forEach((panel, index) => {
@@ -590,13 +590,13 @@ export default class ResizablePanelGroup extends Component<Signature> {
     };
 
     // FIXME spelling
-    calculateLengthsOfPanelWithMinLegth();
+    calculateLengthsOfPanelsWithMinLength();
     console.log(
       'remainingContainerSize after WithMinLength',
       remainingContainerSize,
     );
 
-    let calculateLengthsOfPanelWithoutMinLength = () => {
+    let calculateLengthsOfPanelsWithoutMinLength = () => {
       let panels = this.panels.filter((panel) => !panel.initialMinLengthPx);
       console.log(
         'current panel ratios',
@@ -630,7 +630,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
         panelToNewLength.set(panel, actualSize);
       });
     };
-    calculateLengthsOfPanelWithoutMinLength();
+    calculateLengthsOfPanelsWithoutMinLength();
     console.log(
       'remainingContainerSize after WithoutMinLength',
       remainingContainerSize,
