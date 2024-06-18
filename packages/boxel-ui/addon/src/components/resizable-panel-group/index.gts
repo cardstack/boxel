@@ -213,6 +213,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
 
   calculatePanelRatio() {
     let panelLengths = this.panels.map((panel) => panel.lengthPx ?? 0);
+    let totalPanelLength = sumArray(panelLengths);
 
     console.log('panelLengths', ...panelLengths);
 
@@ -222,7 +223,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
       if (panelLength == undefined || !panel) {
         break;
       }
-      panel.ratio = panelLength / sumArray(panelLengths);
+      panel.ratio = panelLength / totalPanelLength;
     }
 
     console.log(
