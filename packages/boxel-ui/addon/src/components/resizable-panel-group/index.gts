@@ -162,36 +162,26 @@ export default class ResizablePanelGroup extends Component<Signature> {
   }
 
   private get panelGroupLengthWithoutResizeHandlePx() {
-    let ResizeHandleSelector = `${ResizeHandleElIdPrefix}-${this.args.orientation}-0`;
-    let ResizeHandleEl = this.getHtmlElement(ResizeHandleSelector);
-
-    let resizeHandleContainer = (ResizeHandleEl as HTMLElement)?.parentElement;
-    let ResizeHandleLength = resizeHandleContainer
-      ? resizeHandleContainer[this.offsetLengthProperty]
-      : 0;
+    let totalResizeHandleLength = this.resizeHandles.reduce(
+      (prevValue, handle) => {
+        return prevValue + handle.element[this.offsetLengthProperty];
+      },
+      0,
+    );
     let panelGroupElement = this.panelGroupElement;
     if (panelGroupElement === undefined) {
       console.warn('Expected panelGroupElement to be defined');
       return undefined;
     }
-
-    let totalResizeHandle = Array.from(panelGroupElement.children).filter(
-      (node) => {
-        return (
-          node.nodeType === 1 &&
-          node.children[0] &&
-          node.children[0].id.includes(
-            `${ResizeHandleElIdPrefix}-${this.args.orientation}`,
-          )
-        );
-      },
-    ).length;
-    let totalResizeHandleLength = ResizeHandleLength * totalResizeHandle;
     let panelGroupLengthPx = this.panelGroupLengthPx;
     if (panelGroupLengthPx === undefined) {
       console.warn('Expected panelGroupLengthPx to be defined');
       return undefined;
     }
+    console.log(
+      'panelGroupLengthWithoutResizeHandlePx',
+      panelGroupLengthPx - totalResizeHandleLength,
+    );
     return panelGroupLengthPx - totalResizeHandleLength;
   }
 
