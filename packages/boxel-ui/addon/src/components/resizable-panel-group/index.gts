@@ -589,7 +589,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
       });
     };
 
-    // FIXME spelling
     calculateLengthsOfPanelsWithMinLength();
     console.log(
       'remainingContainerSize after WithMinLength',
