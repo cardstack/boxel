@@ -16,6 +16,19 @@ import {
   updateRoomEvent,
 } from './index';
 
+export function onReceipt(context: Context) {
+  return async (e: MatrixEvent) => {
+    let userId = context.client.credentials.userId!;
+    let eventIds = Object.keys(e.getContent());
+    for (let eventId of eventIds) {
+      let receipt = e.getContent()[eventId]['m.read'][userId];
+      if (receipt) {
+        context.addEventReadReceipt(eventId, { readAt: receipt.ts });
+      }
+    }
+  };
+}
+
 export function onTimeline(context: Context) {
   return (e: MatrixEvent) => {
     context.timelineQueue.push({ event: e });

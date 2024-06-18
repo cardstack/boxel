@@ -13,6 +13,7 @@ interface Signature {
   Args: {
     sessions: RoomField[];
     roomActions: RoomActions;
+    currentRoomId?: string;
     onClose: () => void;
   };
   Element: HTMLElement;
@@ -39,7 +40,11 @@ const AiAssistantPastSessionsList: TemplateOnlyComponent<Signature> = <template>
       {{#if @sessions}}
         <ul class='past-sessions'>
           {{#each @sessions as |session|}}
-            <PastSessionItem @room={{session}} @actions={{@roomActions}} />
+            <PastSessionItem
+              @room={{session}}
+              @actions={{@roomActions}}
+              @currentRoomId={{@currentRoomId}}
+            />
           {{/each}}
         </ul>
       {{else}}

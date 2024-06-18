@@ -64,14 +64,22 @@ export default class AiAssistantPanel extends Component<Signature> {
   get hasOtherActiveSessions() {
     let oneMinuteAgo = new Date(Date.now() - 60 * 1000).getTime();
 
-    return this.aiSessionRooms.some((session) => {
-      let isActive =
-        this.matrixService.getLastActiveTimestamp(session) > oneMinuteAgo;
-      if (this.currentRoom) {
-        return this.currentRoom.roomId !== session.roomId && isActive;
-      }
-      return isActive;
-    });
+    return this.aiSessionRooms
+      .filter((session) => session.roomId !== this.currentRoom?.roomId)
+      .some((session) => {
+        let isSessionActive =
+          this.matrixService.getLastActiveTimestamp(session) > oneMinuteAgo;
+
+        let lastMessageEventId =
+          session.messages[session.messages.length - 1]?.eventId;
+
+        let hasSeenLastMessage =
+          this.matrixService.currentUserEventReadReceipts.has(
+            lastMessageEventId,
+          );
+
+        return isSessionActive && !hasSeenLastMessage;
+      });
   }
 
   <template>
@@ -132,6 +140,7 @@ export default class AiAssistantPanel extends Component<Signature> {
                 @disabled={{this.displayRoomError}}
                 {{on 'click' this.displayPastSessions}}
                 data-test-past-sessions-button
+                data-test-has-active-sessions={{this.hasOtherActiveSessions}}
               >
                 All Sessions
                 <DropdownArrowFilled width='10' height='10' />
@@ -146,6 +155,7 @@ export default class AiAssistantPanel extends Component<Signature> {
             @sessions={{this.aiSessionRooms}}
             @roomActions={{this.roomActions}}
             @onClose={{this.hidePastSessions}}
+            @currentRoomId={{this.currentRoomId}}
             {{popoverVelcro.loop}}
           />
         {{else if this.roomToRename}}
