@@ -530,11 +530,11 @@ export default class ResizablePanelGroup extends Component<Signature> {
   }
 
   @action
-  onContainerResize(entry?: ResizeObserverEntry, _observer?: ResizeObserver) {
+  onContainerResize(entry?: ResizeObserverEntry, observer?: ResizeObserver) {
     if (!this.panelGroupElement) {
       if (entry) {
         this.panelGroupElement = entry.target as HTMLDivElement;
-        next(this, this.onContainerResize, entry, _observer);
+        next(this, this.onContainerResize, entry, observer);
       }
       return;
     }
