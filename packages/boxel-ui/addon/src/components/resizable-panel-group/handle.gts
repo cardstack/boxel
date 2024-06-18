@@ -7,27 +7,17 @@ import { modifier } from 'ember-modifier';
 
 import type ResizablePanelGroup from './index.gts';
 
-export type PanelContext = {
-  defaultLengthFraction?: number;
-  id: number;
-  initialMinLengthPx?: number;
-  lengthPx: number;
-  minLengthPx?: number;
-};
-
 interface Signature {
   Args: {
     hideHandle: boolean;
-    isLastPanel: (panelId: number) => boolean;
     onResizeHandleDblClick: (event: MouseEvent) => void;
     onResizeHandleMouseDown: (event: MouseEvent) => void;
     orientation: 'horizontal' | 'vertical';
-    panelContext: (panelId: number) => PanelContext | undefined;
     panelGroupComponent: ResizablePanelGroup;
-    registerResizeHandle: (handle: ResizeHandle) => number;
+    registerResizeHandle: (handle: Handle) => void;
     resizeHandleElId: (id: number | undefined) => string;
     reverseHandleArrow: boolean;
-    unRegisterResizeHandle: () => void;
+    unRegisterResizeHandle: (handle: Handle) => void;
   };
   Blocks: {
     default: [];

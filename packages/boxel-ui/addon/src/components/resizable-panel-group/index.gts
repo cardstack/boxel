@@ -80,10 +80,9 @@ export default class ResizablePanelGroup extends Component<Signature> {
             orientation=@orientation
             registerResizeHandle=this.registerResizeHandle
             unRegisterResizeHandle=this.unRegisterResizeHandle
-            isLastPanel=this.isLastPanel
             onResizeHandleMouseDown=this.onResizeHandleMouseDown
             onResizeHandleDblClick=this.onResizeHandleDblClick
-            reverseHandleArrow=@reverseCollapse
+            reverseHandleArrow=this.reverseCollapse
             hideHandle=this.hideHandles
             panelGroupComponent=this
             resizeHandleElId=this.ResizeHandleElId
@@ -134,6 +133,10 @@ export default class ResizablePanelGroup extends Component<Signature> {
       document.removeEventListener('mouseup', this.onResizeHandleMouseUp);
       document.removeEventListener('mousedown', this.onResizeHandleMouseMove);
     });
+  }
+
+  private get reverseCollapse() {
+    return this.args.reverseCollapse ?? false;
   }
 
   private get isHorizontal() {
