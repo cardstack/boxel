@@ -37,7 +37,7 @@ export default class Handle extends Component<Signature> {
       ...attributes
     >
       <button
-        class='resize-handler {{@orientation}} {{if @hide "hidden"}}'
+        class='resize-handle {{@orientation}} {{if @hide "hidden"}}'
         aria-label='Resize handle'
         {{on 'mousedown' @onMouseDown}}
         {{on 'dblclick' @onDoubleClick}}
@@ -47,10 +47,10 @@ export default class Handle extends Component<Signature> {
       .separator-horizontal {
         display: flex;
         align-items: center;
-        --boxel-panel-resize-handler-height: 100px;
-        --boxel-panel-resize-handler-width: 5px;
-        --boxel-panel-resize-handler-background-color: var(--boxel-450);
-        --boxel-panel-resize-handler-hover-background-color: var(
+        --boxel-panel-resize-handle-height: 100px;
+        --boxel-panel-resize-handle-width: 5px;
+        --boxel-panel-resize-handle-background-color: var(--boxel-450);
+        --boxel-panel-resize-handle-hover-background-color: var(
           --boxel-highlight
         );
 
@@ -60,43 +60,43 @@ export default class Handle extends Component<Signature> {
       .separator-vertical {
         display: flex;
         justify-content: center;
-        --boxel-panel-resize-handler-width: 100px;
-        --boxel-panel-resize-handler-height: 5px;
-        --boxel-panel-resize-handler-background-color: var(--boxel-450);
-        --boxel-panel-resize-handler-hover-background-color: var(
+        --boxel-panel-resize-handle-width: 100px;
+        --boxel-panel-resize-handle-height: 5px;
+        --boxel-panel-resize-handle-background-color: var(--boxel-450);
+        --boxel-panel-resize-handle-hover-background-color: var(
           --boxel-highlight
         );
 
         padding: var(--boxel-sp-xxxs);
       }
 
-      .resize-handler {
-        width: var(--boxel-panel-resize-handler-width);
-        height: var(--boxel-panel-resize-handler-height);
+      .resize-handle {
+        width: var(--boxel-panel-resize-handle-width);
+        height: var(--boxel-panel-resize-handle-height);
 
         border: none;
         border-radius: var(--boxel-border-radius-xl);
         padding: 0;
-        background-color: var(--boxel-panel-resize-handler-background-color);
+        background-color: var(--boxel-panel-resize-handle-background-color);
 
         position: relative;
       }
 
-      .resize-handler:hover {
+      .resize-handle:hover {
         background-color: var(
-          --boxel-panel-resize-handler-hover-background-color
+          --boxel-panel-resize-handle-hover-background-color
         );
       }
 
-      .resize-handler.horizontal {
+      .resize-handle.horizontal {
         cursor: col-resize;
       }
 
-      .resize-handler.vertical {
+      .resize-handle.vertical {
         cursor: row-resize;
       }
 
-      .resize-handler.hidden {
+      .resize-handle.hidden {
         visibility: hidden;
       }
 
@@ -110,66 +110,65 @@ export default class Handle extends Component<Signature> {
 
       .arrow.right {
         top: 50%;
-        right: calc(var(--boxel-panel-resize-handler-width) * -1);
+        right: calc(var(--boxel-panel-resize-handle-width) * -1);
         transform: translateY(-50%);
         border-top: 6px solid transparent;
         border-bottom: 6px solid transparent;
         border-left: 10px solid
-          var(--boxel-panel-resize-handler-background-color);
+          var(--boxel-panel-resize-handle-background-color);
       }
 
-      .resize-handler:hover .arrow.right {
+      .resize-handle:hover .arrow.right {
         border-left-color: var(
-          --boxel-panel-resize-handler-hover-background-color
+          --boxel-panel-resize-handle-hover-background-color
         );
       }
 
       .arrow.left {
         top: 50%;
-        left: calc(var(--boxel-panel-resize-handler-width) * -1);
+        left: calc(var(--boxel-panel-resize-handle-width) * -1);
         transform: translateY(-50%);
         border-top: 6px solid transparent;
         border-bottom: 6px solid transparent;
         border-right: 10px solid
-          var(--boxel-panel-resize-handler-background-color);
+          var(--boxel-panel-resize-handle-background-color);
       }
 
-      .resize-handler:hover .arrow.left {
+      .resize-handle:hover .arrow.left {
         border-right-color: var(
-          --boxel-panel-resize-handler-hover-background-color
+          --boxel-panel-resize-handle-hover-background-color
         );
       }
 
       .arrow.top {
         left: 50%;
-        top: calc(var(--boxel-panel-resize-handler-height) * -1);
+        top: calc(var(--boxel-panel-resize-handle-height) * -1);
         transform: translateX(-50%);
         border-left: 6px solid transparent;
         border-right: 6px solid transparent;
         border-bottom: 10px solid
-          var(--boxel-panel-resize-handler-background-color);
+          var(--boxel-panel-resize-handle-background-color);
       }
 
-      .resize-handler:hover .arrow.top {
+      .resize-handle:hover .arrow.top {
         border-bottom-color: var(
-          --boxel-panel-resize-handler-hover-background-color
+          --boxel-panel-resize-handle-hover-background-color
         );
       }
 
       .arrow.bottom {
         left: 50%;
-        bottom: calc(var(--boxel-panel-resize-handler-height) * -1);
+        bottom: calc(var(--boxel-panel-resize-handle-height) * -1);
         transform: translateX(-50%);
         border-left: 6px solid transparent;
         border-right: 6px solid transparent;
-        border-top: 10px solid
-          var(--boxel-panel-resize-handler-background-color);
+        border-top: 10px solid var(--boxel-panel-resize-handle-background-color);
       }
 
       /* FIXME handler -> handle */
-      .resize-handler:hover .arrow.bottom {
+      .resize-handle:hover .arrow.bottom {
         border-top-color: var(
-          --boxel-panel-resize-handler-hover-background-color
+          --boxel-panel-resize-handle-hover-background-color
         );
       }
     </style>

@@ -255,7 +255,7 @@ module('Integration | ResizablePanelGroup | horizontal', function (hooks) {
     this.renderController.panels[0].lengthPx = 50;
     this.renderController.panels[1].lengthPx = 550;
     await sleep(100); // let didResizeModifier run
-    await doubleClick('[data-test-resize-handler]'); // Double-click to hide recent
+    await doubleClick('[data-test-resize-handle]'); // Double-click to hide recent
     await sleep(100); // let onResizeHandleDblClick run
     assert.hasNumericStyle('.panel-0-content', 'width', 600, 1);
     assert.hasNumericStyle('.panel-1-content', 'width', 0, 2);
@@ -264,7 +264,7 @@ module('Integration | ResizablePanelGroup | horizontal', function (hooks) {
     await sleep(100); // let didResizeModifier run
     assert.hasNumericStyle('.panel-0-content', 'width', 300, 1);
     assert.hasNumericStyle('.panel-1-content', 'width', 0, 2);
-    await doubleClick('[data-test-resize-handler]'); // Double-click to unhide recent
+    await doubleClick('[data-test-resize-handle]'); // Double-click to unhide recent
     await sleep(100); // let onResizeHandleDblClick run
     assert.hasNumericStyle('.panel-0-content', 'width', 180, 1);
     assert.hasNumericStyle('.panel-1-content', 'width', 120, 1);
