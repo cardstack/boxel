@@ -41,16 +41,14 @@ interface Signature {
       >,
       WithBoundArgs<
         typeof ResizeHandle,
-        | 'hideHandle'
-        | 'isLastPanel'
-        | 'onResizeHandleMouseDown'
-        | 'onResizeHandleDblClick'
+        | 'hide'
+        | 'onMouseDown'
+        | 'onDoubleClick'
         | 'orientation'
-        | 'panelContext'
         | 'panelGroupComponent'
-        | 'registerResizeHandle'
-        | 'unRegisterResizeHandle'
-        | 'reverseHandleArrow'
+        | 'registerHandle'
+        | 'unregisterHandle'
+        | 'reverseArrow'
       >,
     ];
   };
