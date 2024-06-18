@@ -28,10 +28,7 @@ interface Signature {
       // FIXME do these still make sense?
       WithBoundArgs<
         typeof ResizablePanel,
-        | 'isLastPanel'
         | 'orientation'
-        | 'panelContext'
-        | 'panelGroupComponent'
         | 'registerPanel'
         | 'unregisterPanel'
         | 'resizablePanelElId'
@@ -66,8 +63,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
             orientation=@orientation
             registerPanel=this.registerPanel
             unregisterPanel=this.unregisterPanel
-            isLastPanel=this.isLastPanel
-            panelGroupComponent=this
           )
           (component
             ResizeHandle

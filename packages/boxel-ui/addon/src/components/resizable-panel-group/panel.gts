@@ -8,18 +8,15 @@ import { modifier } from 'ember-modifier';
 
 import cssVars from '../../helpers/css-var.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
-import type ResizablePanelGroup from './index.gts';
 
 interface Signature {
   Args: {
     collapsible?: boolean; //default true
     defaultLengthFraction: number;
     isHidden?: boolean; //default false
-    isLastPanel: (panel: Panel) => boolean;
     lengthPx?: number;
     minLengthPx?: number;
     orientation: 'horizontal' | 'vertical';
-    panelGroupComponent: ResizablePanelGroup;
     registerPanel: (panel: Panel) => void;
     unregisterPanel: (panel: Panel) => void;
   };
