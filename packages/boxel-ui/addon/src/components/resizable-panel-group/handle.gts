@@ -24,7 +24,7 @@ interface Signature {
   Element: HTMLDivElement;
 }
 
-let registerHandle = modifier((element, [handle]: [ResizeHandle]) => {
+let registerHandle = modifier((element, [handle]: [Handle]) => {
   handle.element = element as HTMLDivElement;
   scheduleOnce('afterRender', handle, handle.registerHandle);
 });
