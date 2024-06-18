@@ -3,6 +3,7 @@ import {
   click,
   fillIn,
   triggerKeyEvent,
+  visit,
   waitFor,
   waitUntil,
 } from '@ember/test-helpers';
@@ -26,8 +27,10 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import { AuthenticationErrorMessages } from '@cardstack/runtime-common/router';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
+import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import { claimsFromRawToken } from '@cardstack/host/resources/realm-session';
 import type LoaderService from '@cardstack/host/services/loader-service';
+import { ASSISTANT_PANEL_OPEN_KEY } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 
@@ -44,10 +47,14 @@ import {
   setupAcceptanceTestRealm,
   visitOperatorMode,
 } from '../helpers';
-import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
+import {
+  MockMatrixService,
+  setupMatrixServiceMock,
+} from '../helpers/mock-matrix-service';
 
 const testRealm2URL = `http://test-realm/test2/`;
 let realmPermissions: { [realmURL: string]: ('read' | 'write')[] };
+let matrixService: MockMatrixService;
 
 module('Acceptance | interact submode tests', function (hooks) {
   let realm: Realm;
@@ -94,6 +101,15 @@ module('Acceptance | interact submode tests', function (hooks) {
     string = await loader.import(`${baseRealm.url}string`);
     catalogEntry = await loader.import(`${baseRealm.url}catalog-entry`);
     cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
+
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    matrixService = this.owner.lookup(
+      'service:matrixService',
+    ) as MockMatrixService;
+    matrixService.cardAPI = cardApi;
+    matrixService.getRoomModule = async function () {
+      return await loader.import(`${baseRealm.url}room`);
+    };
 
     let {
       field,
@@ -1582,5 +1598,101 @@ module('Acceptance | interact submode tests', function (hooks) {
     assert
       .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
       .hasText('FadhlanXXX');
+  });
+
+  test('it persists the chat panel state', async function (assert) {
+    async function openAiAssistant(): Promise<string> {
+      await waitFor('[data-test-open-ai-assistant]');
+      await click('[data-test-open-ai-assistant]');
+      await waitFor('[data-test-room-settled]');
+      let roomId = document
+        .querySelector('[data-test-room]')
+        ?.getAttribute('data-test-room');
+      if (!roomId) {
+        throw new Error('Expected a room ID');
+      }
+      return roomId;
+    }
+
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    let roomId = await openAiAssistant();
+    await addRoomEvent(matrixService, {
+      event_id: 'event1',
+      room_id: roomId,
+      state_key: 'state',
+      type: 'm.room.message',
+      sender: '@aibot:localhost',
+      content: {
+        body: '# Dogs: they exist\n\nIt’s true!',
+        msgtype: 'm.text',
+        formatted_body: '# Dogs: they exist\n\nIt’s true!',
+        format: 'org.matrix.custom.html',
+      },
+      origin_server_ts: 1709652566421,
+      unsigned: {
+        age: 105,
+        transaction_id: '1',
+      },
+      status: null,
+    });
+
+    console.log('roomid ya', roomId);
+
+    await addRoomEvent(matrixService, {
+      event_id: 'event2',
+      room_id: 'xyz',
+      state_key: 'state',
+      type: 'm.room.message',
+      sender: '@aibot:localhost',
+      content: {
+        body: '# Dogs: they exist\n\nIt’s true!',
+        msgtype: 'm.text',
+        formatted_body: '# Dogs: they exist\n\nIt’s true!',
+        format: 'org.matrix.custom.html',
+      },
+      origin_server_ts: 1709652566423,
+      unsigned: {
+        age: 101,
+        transaction_id: '2',
+      },
+      status: null,
+    });
+
+    await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
+
+    assert.equal(window.localStorage.getItem(ASSISTANT_PANEL_OPEN_KEY), 'true');
+
+    await click('[data-test-close-ai-assistant]');
+
+    assert.equal(
+      window.localStorage.getItem(ASSISTANT_PANEL_OPEN_KEY),
+      'false',
+    );
+  });
+
+  test('it restores chat panel state', async function (assert) {
+    window.localStorage.setItem(ASSISTANT_PANEL_OPEN_KEY, 'true'),
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+    await waitFor('[data-test-room-settled]');
+    assert.dom('[data-test-room]').exists();
   });
 });
