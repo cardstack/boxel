@@ -688,6 +688,9 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'luckyNumbers');
     await click('[data-test-boxel-radio-option-id="many"]');
+    assert
+      .dom('.card-chooser-area [data-test-selected-field-realm-icon]')
+      .containsText('BigInteger');
     await saveField(this, assert, expectedEvents);
 
     await waitFor(

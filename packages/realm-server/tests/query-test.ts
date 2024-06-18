@@ -1,10 +1,12 @@
 import { module, test } from 'qunit';
 import { prepareTestDB } from './helpers';
 import {
-  type Loader,
+  Loader,
   Indexer,
   VirtualNetwork,
   baseRealm,
+  fetcher,
+  maybeHandleScopedCSSRequest,
 } from '@cardstack/runtime-common';
 import { runSharedTest, p } from '@cardstack/runtime-common/helpers';
 import { testRealmURL } from '@cardstack/runtime-common/helpers/const';
@@ -105,12 +107,17 @@ module('query', function (hooks) {
   hooks.beforeEach(async function () {
     prepareTestDB();
     let virtualNetwork = new VirtualNetwork();
-    loader = virtualNetwork.createLoader();
     virtualNetwork.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/'),
     );
     shimExternals(virtualNetwork);
+    let fetch = fetcher(virtualNetwork.fetch, [
+      async (req, next) => {
+        return (await maybeHandleScopedCSSRequest(req)) || next(req);
+      },
+    ]);
+    loader = new Loader(fetch, virtualNetwork.resolveImport);
 
     adapter = new PgAdapter();
     indexer = new Indexer(adapter);
