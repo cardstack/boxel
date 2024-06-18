@@ -1,8 +1,3 @@
-import {
-  CommandEvent,
-  CommandResultEvent,
-  MatrixEvent as DiscreteMatrixEvent,
-} from './room';
 import { FieldDef, StringField, contains, field, primitive } from './card-api';
 
 type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
