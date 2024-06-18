@@ -387,7 +387,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test('Can add an index card by URL (without "index" in path) using the add button', async function (assert) {
-      const wrongURL = 'https://cardstack.com/bas';
+      const wrongURL = 'https://example.test/this/is/a/wrong/url';
       await visitOperatorMode({});
 
       assert.dom('[data-test-operator-mode-stack]').doesNotExist();

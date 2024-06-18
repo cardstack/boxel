@@ -7,6 +7,7 @@ import {
   addAuthorizationHeader,
   IRealmAuthDataSource,
   fetcher,
+  maybeHandleScopedCSSRequest,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
@@ -30,8 +31,9 @@ export default class LoaderService extends Service {
   // The owner is the service, which stays around for the whole lifetime of the host app,
   // which in turn assures the resources will not get torn down.
   private realmSessions: Map<string, RealmSessionResource> = new Map();
+  private isIndexing = false;
 
-  virtualNetwork = new VirtualNetwork();
+  virtualNetwork = this.makeVirtualNetwork();
 
   reset() {
     if (this.loader) {
@@ -41,14 +43,38 @@ export default class LoaderService extends Service {
     }
   }
 
+  setIsIndexing(value: boolean) {
+    this.isIndexing = value;
+  }
+
+  private makeVirtualNetwork() {
+    let virtualNetwork = new VirtualNetwork();
+    if (!this.fastboot.isFastBoot) {
+      virtualNetwork.addURLMapping(
+        new URL(baseRealm.url),
+        new URL(config.resolvedBaseRealmURL),
+      );
+    }
+    shimExternals(virtualNetwork);
+    return virtualNetwork;
+  }
+
   private makeInstance() {
     if (this.fastboot.isFastBoot) {
       let loader = this.virtualNetwork.createLoader();
-      shimExternals(this.virtualNetwork);
       return loader;
     }
     let { realmInfoService, getRealmSession } = this;
     let fetch = fetcher(this.virtualNetwork.fetch, [
+      async (req, next) => {
+        if (this.isIndexing) {
+          req.headers.set('X-Boxel-Use-WIP-Index', 'true');
+        }
+        return next(req);
+      },
+      async (req, next) => {
+        return (await maybeHandleScopedCSSRequest(req)) || next(req);
+      },
       async (req, next) => {
         let handleAuth = addAuthorizationHeader(loader.fetch, {
           realmURL: undefined,
@@ -73,15 +99,10 @@ export default class LoaderService extends Service {
           },
         } as IRealmAuthDataSource);
         let response = await handleAuth(req);
-        return response || next();
+        return response || next(req);
       },
     ]);
     let loader = new Loader(fetch, this.virtualNetwork.resolveImport);
-    this.virtualNetwork.addURLMapping(
-      new URL(baseRealm.url),
-      new URL(config.resolvedBaseRealmURL),
-    );
-    shimExternals(this.virtualNetwork);
 
     return loader;
   }

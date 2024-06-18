@@ -5,9 +5,6 @@ import { trimExecutableExtension, logger } from './index';
 
 import { CardError } from './error';
 import flatMap from 'lodash/flatMap';
-import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
-import jsEscapeString from 'js-string-escape';
-import { simulateNetworkBehaviors } from './fetcher';
 
 type FetchingModule = {
   state: 'fetching';
@@ -98,7 +95,6 @@ export class Loader {
   nonce = nonce++; // the nonce is a useful debugging tool that let's us compare loaders
   private log = logger('loader');
   private modules = new Map<string, Module>();
-  private urlHandlers: RequestHandler[] = [maybeHandleScopedCSSRequest];
 
   private moduleShims = new Map<string, Record<string, any>>();
   private identities = new WeakMap<
@@ -122,15 +118,10 @@ export class Loader {
 
   static cloneLoader(loader: Loader): Loader {
     let clone = new Loader(loader.fetchImplementation, loader.resolveImport);
-    clone.urlHandlers = loader.urlHandlers;
     for (let [moduleIdentifier, module] of loader.moduleShims) {
       clone.shimModule(moduleIdentifier, module);
     }
     return clone;
-  }
-
-  prependURLHandlers(handlers: RequestHandler[]) {
-    this.urlHandlers = [...handlers, ...this.urlHandlers];
   }
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
@@ -439,29 +430,7 @@ export class Loader {
     urlOrRequest: string | URL | Request,
     init?: RequestInit,
   ): Promise<Response> => {
-    let mergedHeaders: HeadersInit =
-      urlOrRequest instanceof Request
-        ? headersFromRequest(urlOrRequest)
-        : init?.headers ?? {};
     try {
-      for (let handler of this.urlHandlers) {
-        let request = this.asRequest(urlOrRequest, init);
-        mergedHeaders = { ...mergedHeaders, ...headersFromRequest(request) };
-        setHeaders(request, mergedHeaders);
-
-        let result = await handler(request);
-        // the handler is allowed to mutate the headers, so we merge any updated headers
-        mergedHeaders = { ...mergedHeaders, ...headersFromRequest(request) };
-
-        if (result) {
-          return await simulateNetworkBehaviors(
-            request,
-            result,
-            this.fetch.bind(this),
-          );
-        }
-      }
-
       let shimmedModule = this.moduleShims.get(
         this.asRequest(urlOrRequest, init).url,
       );
@@ -472,7 +441,6 @@ export class Loader {
       }
 
       let request = this.asRequest(urlOrRequest, init);
-      setHeaders(request, mergedHeaders);
       return await this.fetchImplementation(request);
     } catch (err: any) {
       let url =
@@ -760,41 +728,4 @@ function isEvaluatable(
     return false;
   }
   return stateOrder[module.state] >= stateOrder['registered-completing-deps'];
-}
-
-function headersFromRequest(request: Request): HeadersInit {
-  let headers: HeadersInit = {};
-  for (let [header, value] of request.headers.entries()) {
-    headers[header] = value;
-  }
-  return headers;
-}
-
-function setHeaders(request: Request, headers: HeadersInit) {
-  for (let [header, value] of Object.entries(headers)) {
-    request.headers.set(header, value);
-  }
-}
-
-async function maybeHandleScopedCSSRequest(req: Request) {
-  if (isScopedCSSRequest(req.url)) {
-    // isFastBoot doesn’t work here because this runs outside FastBoot but inside Node
-    if (typeof (globalThis as any).document == 'undefined') {
-      return Promise.resolve(new Response('', { status: 200 }));
-    } else {
-      let decodedCSS = decodeScopedCSSRequest(req.url).css;
-      return Promise.resolve(
-        new Response(`
-          let styleNode = document.createElement('style');
-          let styleText = document.createTextNode('${jsEscapeString(
-            decodedCSS,
-          )}');
-          styleNode.appendChild(styleText);
-          document.head.appendChild(styleNode);
-        `),
-      );
-    }
-  } else {
-    return Promise.resolve(null);
-  }
 }

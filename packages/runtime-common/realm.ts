@@ -29,6 +29,7 @@ import {
   type Indexer,
   fetchUserPermissions,
   addAuthorizationHeader,
+  maybeHandleScopedCSSRequest,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -292,9 +293,12 @@ export class Realm {
 
     let maybeHandle = this.maybeHandle.bind(this);
     let fetch = fetcher(virtualNetwork.fetch, [
+      async (req, next) => {
+        return (await maybeHandleScopedCSSRequest(req)) || next(req);
+      },
       async (request, next) => {
         let response = await maybeHandle(request);
-        return response || next();
+        return response || next(request);
       },
       async (request, next) => {
         let authHandler = addAuthorizationHeader(
@@ -302,7 +306,7 @@ export class Realm {
           new RealmAuthDataSource(this.#matrixClient, fetch, this.url),
         );
         let response = await authHandler(request);
-        return response || next();
+        return response || next(request);
       },
     ]);
 
