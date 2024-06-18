@@ -19,7 +19,7 @@ function sumArray(array: number[]) {
 
 interface Signature {
   Args: {
-    onListPanelContextChange?: (listPanelContext: ResizablePanel[]) => void;
+    onPanelChange?: (panels: ResizablePanel[]) => void;
     orientation: 'horizontal' | 'vertical';
     reverseCollapse?: boolean;
   };
@@ -532,7 +532,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
       nextPanel.minLengthPx = newNextMinLength;
     }
 
-    this.args.onListPanelContextChange?.(this.panels);
+    this.args.onPanelChange?.(this.panels);
   }
 
   @action
