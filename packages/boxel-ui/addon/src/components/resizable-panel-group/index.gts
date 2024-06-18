@@ -28,10 +28,7 @@ interface Signature {
       // FIXME do these still make sense?
       WithBoundArgs<
         typeof ResizablePanel,
-        | 'orientation'
-        | 'registerPanel'
-        | 'unregisterPanel'
-        | 'resizablePanelElId'
+        'orientation' | 'registerPanel' | 'unregisterPanel'
       >,
       WithBoundArgs<
         typeof ResizeHandle,
