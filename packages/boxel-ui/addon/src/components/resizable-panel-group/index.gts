@@ -50,7 +50,6 @@ interface Signature {
         | 'panelGroupComponent'
         | 'registerResizeHandle'
         | 'unRegisterResizeHandle'
-        | 'resizeHandleElId'
         | 'reverseHandleArrow'
       >,
     ];
@@ -82,10 +81,9 @@ export default class ResizablePanelGroup extends Component<Signature> {
             unregisterHandle=this.unregisterHandle
             onMouseDown=this.onHandleMouseDown
             onDoubleClick=this.onHandleDoubleClick
-            reverseHandleArrow=this.reverseCollapse
+            reverseArrow=this.reverseCollapse
             hide=this.hideHandles
             panelGroupComponent=this
-            resizeHandleElId=this.ResizeHandleElId
           )
         }}
       {{/if}}
@@ -669,10 +667,5 @@ export default class ResizablePanelGroup extends Component<Signature> {
       prevPanel,
       nextPanel,
     };
-  }
-
-  @action
-  private ResizeHandleElId(id: number | undefined): string {
-    return `${ResizeHandleElIdPrefix}-${this.args.orientation}-${id}`;
   }
 }

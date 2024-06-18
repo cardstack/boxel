@@ -15,8 +15,7 @@ interface Signature {
     orientation: 'horizontal' | 'vertical';
     panelGroupComponent: ResizablePanelGroup;
     registerHandle: (handle: Handle) => void;
-    resizeHandleElId: (id: number | undefined) => string;
-    reverseHandleArrow: boolean;
+    reverseArrow: boolean;
     unregisterHandle: (handle: Handle) => void;
   };
   Blocks: {
@@ -192,7 +191,7 @@ export default class Handle extends Component<Signature> {
 
   get arrowResizeHandleClass() {
     let horizontal = this.args.orientation === 'horizontal';
-    let reverse = this.args.reverseHandleArrow;
+    let reverse = this.args.reverseArrow;
 
     let id = this.args.panelGroupComponent.resizeHandles.indexOf(this);
     console.log('id', id, this.args.panelGroupComponent.resizeHandles.length);
