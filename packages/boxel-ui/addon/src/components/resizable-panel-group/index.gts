@@ -28,6 +28,7 @@ interface Signature {
   };
   Blocks: {
     default: [
+      // FIXME do these still make sense?
       WithBoundArgs<
         typeof ResizablePanel,
         | 'isLastPanel'
