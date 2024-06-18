@@ -6,6 +6,7 @@ import {
   baseRealm,
   addAuthorizationHeader,
   IRealmAuthDataSource,
+  fetcher,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
@@ -46,42 +47,46 @@ export default class LoaderService extends Service {
       shimExternals(this.virtualNetwork);
       return loader;
     }
-
-    let loader = this.virtualNetwork.createLoader();
+    let { realmInfoService, getRealmSession } = this;
+    let fetch = fetcher(this.virtualNetwork.fetch, [
+      async (req, next) => {
+        let handleAuth = addAuthorizationHeader(loader.fetch, {
+          realmURL: undefined,
+          getJWT: async (realmURL: string) => {
+            return (await getRealmSession(new URL(realmURL))).rawRealmToken!;
+          },
+          getRealmInfo: async (url: string) => {
+            let realmURL = await realmInfoService.fetchRealmURL(url);
+            if (!realmURL) {
+              return null;
+            }
+            let isPublicReadable = await realmInfoService.isPublicReadable(
+              realmURL,
+            );
+            return {
+              url: realmURL.href,
+              isPublicReadable,
+            };
+          },
+          resetAuth: async (realmURL: string) => {
+            return (await getRealmSession(new URL(realmURL))).refreshToken();
+          },
+        } as IRealmAuthDataSource);
+        let response = await handleAuth(req);
+        return response || next();
+      },
+    ]);
+    let loader = new Loader(fetch, this.virtualNetwork.resolveImport);
     this.virtualNetwork.addURLMapping(
       new URL(baseRealm.url),
       new URL(config.resolvedBaseRealmURL),
     );
-    loader.prependURLHandlers([
-      addAuthorizationHeader(loader.fetch, {
-        realmURL: undefined,
-        getJWT: async (realmURL: string) => {
-          return (await this.getRealmSession(new URL(realmURL))).rawRealmToken!;
-        },
-        getRealmInfo: async (url: string) => {
-          let realmURL = await this.realmInfoService.fetchRealmURL(url);
-          if (!realmURL) {
-            return null;
-          }
-          let isPublicReadable = await this.realmInfoService.isPublicReadable(
-            realmURL,
-          );
-          return {
-            url: realmURL.href,
-            isPublicReadable,
-          };
-        },
-        resetAuth: async (realmURL: string) => {
-          return (await this.getRealmSession(new URL(realmURL))).refreshToken();
-        },
-      } as IRealmAuthDataSource),
-    ]);
     shimExternals(this.virtualNetwork);
 
     return loader;
   }
 
-  private async getRealmSession(realmURL: URL) {
+  private getRealmSession = async (realmURL: URL) => {
     let realmURLString = realmURL.href;
     let realmSession = this.realmSessions.get(realmURLString);
 
@@ -93,5 +98,5 @@ export default class LoaderService extends Service {
       this.realmSessions.set(realmURLString, realmSession);
     }
     return realmSession;
-  }
+  };
 }

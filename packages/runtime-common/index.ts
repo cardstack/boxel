@@ -49,6 +49,7 @@ export * from './db';
 export * from './worker';
 export * from './stream';
 export * from './realm';
+export * from './fetcher';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
 export { RealmPaths, Loader, type LocalPath, type Query };
