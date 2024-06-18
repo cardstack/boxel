@@ -368,7 +368,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
     }
 
     console.log(
-      'calling setSiblingPanelContexts in mouseMove',
+      'calling setSiblingPanelLengths in mouseMove',
       prevPanelEl,
       nextPanelEl,
       newPrevPanelElLength,
@@ -385,8 +385,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
         : 0,
     );
 
-    // FIXME remove “context” everywhere
-    this.setSiblingPanelContexts(
+    this.setSiblingPanelLengths(
       prevPanelEl,
       nextPanelEl,
       newPrevPanelElLength,
@@ -458,7 +457,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
       !this.args.reverseCollapse &&
       prevPanel.collapsible
     ) {
-      this.setSiblingPanelContexts(
+      this.setSiblingPanelLengths(
         prevPanel,
         nextPanel,
         0,
@@ -467,7 +466,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
         nextPanel.initialMinLengthPx,
       );
     } else if (isFirstButton && prevPanelElLength <= 0) {
-      this.setSiblingPanelContexts(
+      this.setSiblingPanelLengths(
         prevPanel,
         nextPanel,
         prevPanel.defaultLengthFraction
@@ -481,7 +480,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
         nextPanel.initialMinLengthPx,
       );
     } else if (isLastButton && nextPanelElLength > 0 && nextPanel.collapsible) {
-      this.setSiblingPanelContexts(
+      this.setSiblingPanelLengths(
         prevPanel,
         nextPanel,
         prevPanelElLength + nextPanelElLength,
@@ -490,7 +489,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
         0,
       );
     } else if (isLastButton && nextPanelElLength <= 0) {
-      this.setSiblingPanelContexts(
+      this.setSiblingPanelLengths(
         prevPanel,
         nextPanel,
         nextPanel.defaultLengthFraction
@@ -509,7 +508,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
   }
 
   @action
-  setSiblingPanelContexts(
+  setSiblingPanelLengths(
     prevPanel: ResizablePanel,
     nextPanel: ResizablePanel,
     newPrevLength: number,
