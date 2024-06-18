@@ -41,6 +41,7 @@ export default class Handle extends Component<Signature> {
         aria-label='Resize handle'
         {{on 'mousedown' @onMouseDown}}
         {{on 'dblclick' @onDoubleClick}}
+        data-test-resize-handle
       ><div class={{this.arrowResizeHandleClass}} /></button>
     </div>
     <style>
