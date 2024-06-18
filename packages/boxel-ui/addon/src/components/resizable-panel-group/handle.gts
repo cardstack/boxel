@@ -40,7 +40,7 @@ let registerHandle = modifier((element, [handle]: [ResizeHandle]) => {
   scheduleOnce('afterRender', handle, handle.registerHandle);
 });
 
-export default class ResizeHandle extends Component<Signature> {
+export default class Handle extends Component<Signature> {
   <template>
     <div
       class='separator-{{@orientation}}'
