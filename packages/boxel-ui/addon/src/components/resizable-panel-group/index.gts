@@ -25,7 +25,6 @@ interface Signature {
   };
   Blocks: {
     default: [
-      // FIXME do these still make sense?
       WithBoundArgs<
         typeof ResizablePanel,
         'orientation' | 'registerPanel' | 'unregisterPanel'
@@ -441,8 +440,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
 
     let { prevPanel, nextPanel } = this.findPanelsByResizeHandle(handle);
     if (!prevPanel || !nextPanel) {
-      // FIXME required where?
-      console.warn('prevPanel and nextPanel are required');
+      console.warn('prevPanel and nextPanel are required on double-click');
       return undefined;
     }
 

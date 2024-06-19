@@ -166,7 +166,6 @@ export default class Handle extends Component<Signature> {
         border-top: 10px solid var(--boxel-panel-resize-handle-background-color);
       }
 
-      /* FIXME handler -> handle */
       .resize-handle:hover .arrow.bottom {
         border-top-color: var(
           --boxel-panel-resize-handle-hover-background-color
