@@ -8,6 +8,7 @@ import { baseRealm } from '@cardstack/runtime-common';
 import {
   generateCardPatchCallSpecification,
   basicMappings,
+  type LinksToSchema,
   type RelationshipSchema,
   type RelationshipsSchema,
   type ObjectSchema,
@@ -104,11 +105,16 @@ module('Unit | ai-function-generation-test', function (hooks) {
   });
 
   test(`generates a simple compliant schema for nested types`, async function (assert) {
-    let { field, contains, CardDef, FieldDef } = cardApi;
+    let { field, contains, linksTo, linksToMany, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;
 
+    class InnerCard extends CardDef {
+      @field name = contains(StringField);
+    }
     class InternalField extends FieldDef {
       @field innerStringField = contains(StringField);
+      @field linkedCard = linksTo(InnerCard);
+      @field linkedCards = linksToMany(InnerCard);
     }
     class BasicCard extends CardDef {
       @field containerField = contains(InternalField);
@@ -119,6 +125,13 @@ module('Unit | ai-function-generation-test', function (hooks) {
       cardApi,
       mappings,
     );
+    const links: LinksToSchema['properties']['links'] = {
+      type: 'object',
+      properties: {
+        self: { type: 'string' },
+      },
+      required: ['self'],
+    };
     assert.deepEqual(schema, {
       attributes: {
         type: 'object',
@@ -133,6 +146,25 @@ module('Unit | ai-function-generation-test', function (hooks) {
             },
           },
         },
+      },
+      relationships: {
+        type: 'object',
+        properties: {
+          'containerField.linkedCard': {
+            type: 'object',
+            properties: { links },
+            required: ['links'],
+          },
+          'containerField.linkedCards': {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: { links },
+              required: ['links'],
+            },
+          },
+        },
+        required: ['containerField.linkedCard', 'containerField.linkedCards'],
       },
     });
   });
@@ -275,6 +307,163 @@ module('Unit | ai-function-generation-test', function (hooks) {
       required: ['linkedCards'],
     };
     assert.deepEqual(schema, { attributes, relationships });
+  });
+
+  test(`supports deeply nested fields`, async function (assert) {
+    let { field, contains, linksTo, CardDef, FieldDef } = cardApi;
+    let { default: StringField } = string;
+
+    class PetCard extends CardDef {
+      @field name = contains(StringField);
+    }
+    class FriendField extends FieldDef {
+      @field name = contains(StringField);
+      @field pet = linksTo(PetCard);
+    }
+    class ChildField extends FieldDef {
+      @field name = contains(StringField);
+      @field friend = contains(FriendField);
+    }
+    class ParentCard extends CardDef {
+      @field name = contains(StringField);
+      @field child = contains(ChildField);
+    }
+
+    let schema = generateCardPatchCallSpecification(
+      ParentCard,
+      cardApi,
+      mappings,
+    );
+
+    let attributes: ObjectSchema = {
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        description: { type: 'string' },
+        thumbnailURL: { type: 'string' },
+        name: { type: 'string' },
+        child: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            friend: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    };
+    let linkedRelationship: RelationshipSchema = {
+      type: 'object',
+      properties: {
+        links: {
+          type: 'object',
+          properties: {
+            self: { type: 'string' },
+          },
+          required: ['self'],
+        },
+      },
+      required: ['links'],
+    };
+    let relationships: RelationshipsSchema = {
+      type: 'object',
+      properties: {
+        'child.friend.pet': linkedRelationship,
+      },
+      required: ['child.friend.pet'],
+    };
+    assert.deepEqual(schema, {
+      attributes,
+      relationships,
+    });
+  });
+
+  test(`generates correct schema for nested linksTo and linksToMany fields`, async function (assert) {
+    let { field, contains, linksTo, linksToMany, CardDef, FieldDef } = cardApi;
+    let { default: StringField } = string;
+    class Country extends CardDef {
+      @field name = contains(StringField);
+    }
+    class TravelGoal extends FieldDef {
+      @field goalTitle = contains(StringField);
+      @field country = linksTo(Country);
+    }
+    class Traveler extends FieldDef {
+      @field name = contains(StringField);
+      @field countryOfOrigin = linksTo(Country);
+      @field countriesVisited = linksToMany(Country);
+      @field nextTravelGoal = contains(TravelGoal);
+    }
+    class TripInfo extends CardDef {
+      @field traveler = contains(Traveler);
+    }
+
+    let schema = generateCardPatchCallSpecification(
+      TripInfo,
+      cardApi,
+      mappings,
+    );
+    const links: LinksToSchema['properties']['links'] = {
+      type: 'object',
+      properties: {
+        self: { type: 'string' },
+      },
+      required: ['self'],
+    };
+    assert.deepEqual(schema, {
+      attributes: {
+        type: 'object',
+        properties: {
+          thumbnailURL: { type: 'string' },
+          title: { type: 'string' },
+          description: { type: 'string' },
+          traveler: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              nextTravelGoal: {
+                type: 'object',
+                properties: {
+                  goalTitle: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+      relationships: {
+        type: 'object',
+        properties: {
+          'traveler.countryOfOrigin': {
+            type: 'object',
+            properties: { links },
+            required: ['links'],
+          },
+          'traveler.countriesVisited': {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: { links },
+              required: ['links'],
+            },
+          },
+          'traveler.nextTravelGoal.country': {
+            type: 'object',
+            properties: { links },
+            required: ['links'],
+          },
+        },
+        required: [
+          'traveler.countryOfOrigin',
+          'traveler.countriesVisited',
+          'traveler.nextTravelGoal.country',
+        ],
+      },
+    });
   });
 
   test(`skips over fields that can't be recognised`, async function (assert) {
@@ -420,13 +609,23 @@ module('Unit | ai-function-generation-test', function (hooks) {
   });
 
   test(`supports descriptions on nested fields`, async function (assert) {
-    let { field, contains, CardDef, FieldDef } = cardApi;
+    let { field, contains, linksTo, linksToMany, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;
-
+    class InnerCard extends CardDef {
+      @field name = contains(StringField);
+    }
     class InternalField extends FieldDef {
       @field innerStringField = contains(StringField, {
         description: 'Desc #2',
       });
+      @field linkedCard = linksTo(InnerCard, {
+        description: 'Desc #3',
+      });
+      @field linkedCard2 = linksTo(InnerCard);
+      @field linkedCards = linksToMany(InnerCard, {
+        description: 'Desc #4',
+      });
+      @field linkedCards2 = linksToMany(InnerCard);
     }
     class BasicCard extends CardDef {
       @field containerField = contains(InternalField, {
@@ -439,6 +638,13 @@ module('Unit | ai-function-generation-test', function (hooks) {
       cardApi,
       mappings,
     );
+    const links: LinksToSchema['properties']['links'] = {
+      type: 'object',
+      properties: {
+        self: { type: 'string' },
+      },
+      required: ['self'],
+    };
     assert.deepEqual(schema, {
       attributes: {
         type: 'object',
@@ -454,6 +660,45 @@ module('Unit | ai-function-generation-test', function (hooks) {
             },
           },
         },
+      },
+      relationships: {
+        type: 'object',
+        properties: {
+          'containerField.linkedCard': {
+            type: 'object',
+            description: 'Desc #3',
+            properties: { links },
+            required: ['links'],
+          },
+          'containerField.linkedCard2': {
+            type: 'object',
+            properties: { links },
+            required: ['links'],
+          },
+          'containerField.linkedCards': {
+            type: 'array',
+            description: 'Desc #4',
+            items: {
+              type: 'object',
+              properties: { links },
+              required: ['links'],
+            },
+          },
+          'containerField.linkedCards2': {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: { links },
+              required: ['links'],
+            },
+          },
+        },
+        required: [
+          'containerField.linkedCard',
+          'containerField.linkedCard2',
+          'containerField.linkedCards',
+          'containerField.linkedCards2',
+        ],
       },
     });
   });

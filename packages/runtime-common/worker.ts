@@ -8,6 +8,7 @@ import {
   type Queue,
   type LocalPath,
   type RealmAdapter,
+  type TextFileRef,
 } from '.';
 import { Kind } from './realm';
 
@@ -27,9 +28,7 @@ export interface Reader {
   readFileAsText: (
     path: LocalPath,
     opts?: { withFallbacks?: true },
-  ) => Promise<
-    { content: string; lastModified: number; path: string } | undefined
-  >;
+  ) => Promise<TextFileRef | undefined>;
   readdir: (
     path: string,
   ) => AsyncGenerator<{ name: string; path: string; kind: Kind }, void>;
@@ -173,9 +172,7 @@ export class Worker {
   private async readFileAsText(
     path: LocalPath,
     opts: { withFallbacks?: true } = {},
-  ): Promise<
-    { content: string; lastModified: number; path: string } | undefined
-  > {
+  ): Promise<TextFileRef | undefined> {
     return readFileAsText(
       path,
       this.#realmAdapter.openFile.bind(this.#realmAdapter),

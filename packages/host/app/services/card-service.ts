@@ -260,14 +260,15 @@ export default class CardService extends Service {
     for (let [field, value] of Object.entries(linkedCards)) {
       if (field.includes('.')) {
         let parts = field.split('.');
-        let maybeIndex = Number(parts.pop());
-        if (isNaN(maybeIndex) || parts.length > 1) {
-          // TODO nested linksTo or nested linksToMany [cs-6799]
-          throw new Error('Not implemented.');
-        } else {
-          let fieldName = parts.join('.');
-          (card as any)[fieldName][maybeIndex] = value;
+        let leaf = parts.pop();
+        if (!leaf) {
+          throw new Error(`bug: error in field name "${field}"`);
         }
+        let inner = card;
+        for (let part of parts) {
+          inner = (inner as any)[part];
+        }
+        (inner as any)[leaf.match(/^\d+$/) ? Number(leaf) : leaf] = value;
       } else {
         // TODO this could trigger a save. perhaps instead we could
         // introduce a new option to updateFromSerialized to accept a list of

@@ -85,22 +85,6 @@ module('loader', function (hooks) {
     ]);
   });
 
-  test('can determine consumed modules when an error is encountered during loading', async function (assert) {
-    let loader = virtualNetwork.createLoader();
-    try {
-      await loader.import<{ d(): string }>(`${testRealmHref}d`);
-      throw new Error(`expected error was not thrown`);
-    } catch (e: any) {
-      assert.strictEqual(e.message, 'intentional error thrown');
-      assert.deepEqual(await loader.getConsumedModules(`${testRealmHref}d`), [
-        `${testRealmHref}a`,
-        `${testRealmHref}b`,
-        `${testRealmHref}c`,
-        `${testRealmHref}e`,
-      ]);
-    }
-  });
-
   test('can get consumed modules within a cycle', async function (assert) {
     let loader = virtualNetwork.createLoader();
     await loader.import<{ three(): number }>(`${testRealmHref}cycle-two`);

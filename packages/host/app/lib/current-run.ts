@@ -28,6 +28,7 @@ import {
   type IndexResults,
   type SingleCardDocument,
   type Relationship,
+  type TextFileRef,
 } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import {
@@ -272,7 +273,7 @@ export class CurrentRun {
     }
     let { content, lastModified } = fileRef;
     if (hasExecutableExtension(url.href)) {
-      await this.indexModule(url, content);
+      await this.indexModule(url, fileRef);
     } else {
       if (!identityContext) {
         let api = await this.#loader.import<typeof CardAPI>(
@@ -306,7 +307,7 @@ export class CurrentRun {
     log.debug(`completed visiting file ${url.href} in ${Date.now() - start}ms`);
   }
 
-  private async indexModule(url: URL, source: string): Promise<void> {
+  private async indexModule(url: URL, ref: TextFileRef): Promise<void> {
     let module: Record<string, unknown>;
     try {
       module = await this.loader.import(url.href);
@@ -332,15 +333,20 @@ export class CurrentRun {
 
     if (module) {
       for (let exportName of Object.keys(module)) {
-        module[exportName];
+        module[exportName]; // we do this so that we can allow code ref identifies to be wired up in the loader
       }
+    }
+    if (ref.isShimmed) {
+      log.debug(`skipping indexing of shimmed module ${url.href}`);
+      return;
     }
     let consumes = (await this.loader.getConsumedModules(url.href)).filter(
       (u) => u !== url.href,
     );
     await this.batch.updateEntry(new URL(url.href), {
       type: 'module',
-      source,
+      source: ref.content,
+      lastModified: ref.lastModified,
       deps: new Set(
         consumes.map((d) => trimExecutableExtension(new URL(d)).href),
       ),
@@ -466,6 +472,7 @@ export class CurrentRun {
         resource: doc.data,
         searchData,
         isolatedHtml,
+        lastModified,
         types: typesMaybeError.types,
         deps: new Set([
           moduleURL,

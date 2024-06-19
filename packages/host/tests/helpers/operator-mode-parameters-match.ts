@@ -46,7 +46,7 @@ export default function (assert: Assert) {
         assert.deepEqual(
           actualStateExpectedSubset,
           operatorModeState,
-          `expected current URL ${currentURL} to match expected operator mode state ${encodeURIComponent(
+          `expected current URL ${currentURL} to match expected operator mode state properties ${encodeURIComponent(
             JSON.stringify(operatorModeState),
           )}`,
         );
