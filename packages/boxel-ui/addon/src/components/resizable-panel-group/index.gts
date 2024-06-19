@@ -238,7 +238,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
 
     let { prevPanel, nextPanel } = this.findPanelsByResizeHandle(handle);
     if (!prevPanel || !nextPanel) {
-      console.warn('prevPanelEl and nextPanelEl are required');
+      console.warn('prevPanelEl and nextPanelEl are required on drag');
       return undefined;
     }
     this.currentResizeHandle = {
