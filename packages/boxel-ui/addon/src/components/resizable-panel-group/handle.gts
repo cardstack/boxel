@@ -191,11 +191,6 @@ export default class Handle extends Component<Signature> {
     let reverse = this.args.reverseArrow;
 
     let myIndex = this.args.panelGroupComponent.resizeHandles.indexOf(this);
-    console.log(
-      'id',
-      myIndex,
-      this.args.panelGroupComponent.resizeHandles.length,
-    );
 
     if (myIndex == undefined) {
       return '';

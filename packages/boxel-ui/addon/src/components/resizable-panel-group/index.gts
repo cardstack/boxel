@@ -164,17 +164,12 @@ export default class ResizablePanelGroup extends Component<Signature> {
       console.warn('Expected panelGroupLengthPx to be defined');
       return undefined;
     }
-    console.log(
-      'panelGroupLengthWithoutResizeHandlePx',
-      panelGroupLengthPx - totalResizeHandleLength,
-    );
+
     return panelGroupLengthPx - totalResizeHandleLength;
   }
 
   @action
   registerPanel(panel: ResizablePanel) {
-    console.log('registerPanel', panel, panel.lengthPx);
-    console.log('isHidden?', panel.isHidden);
     if (panel.lengthPx === undefined) {
       if (
         this.panelGroupLengthPx === undefined ||
@@ -184,17 +179,9 @@ export default class ResizablePanelGroup extends Component<Signature> {
       } else if (panel.isHidden) {
         panel.lengthPx = 0;
       } else {
-        console.log(
-          'else',
-          panel.defaultLengthFraction,
-          this.panelGroupLengthPx,
-          panel.defaultLengthFraction * this.panelGroupLengthPx,
-        );
         panel.lengthPx = panel.defaultLengthFraction * this.panelGroupLengthPx;
       }
     }
-
-    console.log('lengthpx now', panel.lengthPx);
 
     this.panels.push(panel);
     this.calculatePanelRatio();
@@ -214,8 +201,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
     let panelLengths = this.panels.map((panel) => panel.lengthPx ?? 0);
     let totalPanelLength = sumArray(panelLengths);
 
-    console.log('panelLengths', ...panelLengths);
-
     for (let index = 0; index < panelLengths.length; index++) {
       let panelLength = panelLengths[index];
       let panel = this.panels[index];
@@ -224,11 +209,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
       }
       panel.ratio = panelLength / totalPanelLength;
     }
-
-    console.log(
-      'calculatePanelRatio',
-      ...this.panels.map((panel) => panel.ratio),
-    );
   }
 
   @action
@@ -260,8 +240,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
     let handle = this.resizeHandles.find(
       (handle) => handle.element === button.parentNode,
     );
-
-    console.log('handle mouse down', button, handle);
 
     if (this.currentResizeHandle || !handle) {
       return;
@@ -299,11 +277,8 @@ export default class ResizablePanelGroup extends Component<Signature> {
       event[this.clientPositionProperty] -
       this.currentResizeHandle.initialPosition;
     if (delta === 0) {
-      console.log('delta is 0, returning early!');
       return;
     }
-
-    console.log(`delta is non-zero ${delta}`);
 
     let newPrevPanelElLength =
       this.currentResizeHandle.prevPanel.element[this.clientLengthProperty] +
@@ -313,11 +288,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
       delta;
     let prevPanelEl = this.currentResizeHandle.prevPanel;
     let nextPanelEl = this.currentResizeHandle.nextPanel;
-
-    console.log('newPrevPanelElLength', newPrevPanelElLength);
-    console.log('newNextPanelElLength', newNextPanelElLength);
-    console.log('prevPanelElContext', prevPanelEl);
-    console.log('nextPanelElContext', nextPanelEl);
 
     if (!prevPanelEl || !nextPanelEl) {
       console.warn('Expected prevPanelEl && nextPanelEl to be defined');
@@ -364,24 +334,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
       newNextPanelElLength = 0;
     }
 
-    console.log(
-      'calling setSiblingPanelLengths in mouseMove',
-      prevPanelEl,
-      nextPanelEl,
-      newPrevPanelElLength,
-      newNextPanelElLength,
-      (prevPanelEl.initialMinLengthPx &&
-        newPrevPanelElLength >= prevPanelEl.initialMinLengthPx) ||
-        !prevPanelEl.collapsible
-        ? prevPanelEl.initialMinLengthPx
-        : 0,
-      (nextPanelEl.initialMinLengthPx &&
-        newNextPanelElLength >= nextPanelEl.initialMinLengthPx) ||
-        !nextPanelEl.collapsible
-        ? nextPanelEl.initialMinLengthPx
-        : 0,
-    );
-
     this.setSiblingPanelLengths(
       prevPanelEl,
       nextPanelEl,
@@ -399,16 +351,8 @@ export default class ResizablePanelGroup extends Component<Signature> {
         : 0,
     );
 
-    console.log(
-      'currentResizeHandle initialPosition was ' +
-        this.currentResizeHandle.initialPosition,
-    );
     this.currentResizeHandle.initialPosition =
       event[this.clientPositionProperty];
-    console.log(
-      'currentResizeHandle initialPosition is ' +
-        this.currentResizeHandle.initialPosition,
-    );
 
     this.calculatePanelRatio();
   }
@@ -544,28 +488,25 @@ export default class ResizablePanelGroup extends Component<Signature> {
     );
     let panelToNewLength = new Map<ResizablePanel, number>();
 
-    console.log('panelLengths', ...panelLengths);
-
     let newContainerSize = this.panelGroupLengthWithoutResizeHandlePx;
-    console.log('newContainerSize', newContainerSize);
+
     if (newContainerSize == undefined) {
       console.warn('Expected newContainerSize to be defined');
       return;
     }
 
     let remainingContainerSize = newContainerSize;
-    console.log('remainingContainerSize v0', remainingContainerSize);
     let calculateLengthsOfPanelsWithMinLength = () => {
       let panels = this.panels.filter((panel) => panel.initialMinLengthPx);
 
       panels.forEach((panel, index) => {
         let panelRatio = panel.ratio;
-        console.log(`panel index ${index} ratio: ${panelRatio}`);
+
         if (!panelRatio || !newContainerSize) {
           return;
         }
         let proportionalSize = panelRatio * newContainerSize;
-        console.log(`panel index ${index} proportional size`, proportionalSize);
+
         let actualSize = Math.round(
           panel?.initialMinLengthPx
             ? Math.max(proportionalSize, panel.initialMinLengthPx)
@@ -578,20 +519,11 @@ export default class ResizablePanelGroup extends Component<Signature> {
     };
 
     calculateLengthsOfPanelsWithMinLength();
-    console.log(
-      'remainingContainerSize after WithMinLength',
-      remainingContainerSize,
-    );
 
     let calculateLengthsOfPanelsWithoutMinLength = () => {
       let panels = this.panels.filter((panel) => !panel.initialMinLengthPx);
-      console.log(
-        'current panel ratios',
-        ...this.panels.map((panel) => panel.ratio),
-      );
-      // FIXME can ?? 0 be pushed down?
+
       let newPanelRatios = panels.map((panel) => panel.ratio ?? 0);
-      console.log('new panel ratios v1', ...newPanelRatios);
       let totalNewPanelRatio = newPanelRatios.reduce(
         (prevValue, currentValue) => prevValue + currentValue,
         0,
@@ -600,28 +532,20 @@ export default class ResizablePanelGroup extends Component<Signature> {
         (panelRatio) => panelRatio / totalNewPanelRatio,
       );
 
-      console.log('new panel ratios v2', ...newPanelRatios);
-
       panels.forEach((panel, index) => {
         let panelRatio = newPanelRatios[index];
-        console.log(`panelRatio index ${index}: ${panelRatio}`);
-        console.log(`remainingContainerSize: ${remainingContainerSize}`);
         if (!panelRatio) {
           console.warn('Expected panelRatio to be defined');
           return;
         }
         let proportionalSize = panelRatio * remainingContainerSize;
         let actualSize = Math.round(proportionalSize);
-        console.log(`panel index ${index} actual size`, actualSize);
+
         panelLengths[index] = actualSize;
         panelToNewLength.set(panel, actualSize);
       });
     };
     calculateLengthsOfPanelsWithoutMinLength();
-    console.log(
-      'remainingContainerSize after WithoutMinLength',
-      remainingContainerSize,
-    );
 
     this.panels.forEach((panel) => {
       panel.lengthPx = panelToNewLength.get(panel) ?? 0;

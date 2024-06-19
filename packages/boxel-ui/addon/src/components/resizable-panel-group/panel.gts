@@ -125,12 +125,7 @@ export default class Panel extends Component<Signature> {
   get lengthCssValue() {
     let lengthPx = this.lengthPx;
     let defaultLengthFraction = this.args.defaultLengthFraction;
-    console.log(
-      'lengthPx',
-      lengthPx,
-      'defaultLengthFraction',
-      defaultLengthFraction,
-    );
+
     if (this.args.isHidden) {
       return htmlSafe('0px');
     } else if (lengthPx === -1 && defaultLengthFraction) {
