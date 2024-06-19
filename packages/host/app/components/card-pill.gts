@@ -28,7 +28,6 @@ export default class CardPill extends Component<CardPillSignature> {
 
   <template>
     <Pill
-      @inert={{true}}
       class={{cn 'card-pill' is-autoattached=@isAutoAttachedCard}}
       data-test-attached-card={{@card.id}}
       data-test-autoattached-card={{@isAutoAttachedCard}}
@@ -75,9 +74,6 @@ export default class CardPill extends Component<CardPillSignature> {
       }
       .card-pill {
         --pill-icon-size: 18px;
-        padding: var(--boxel-sp-5xs);
-        background-color: var(--boxel-light);
-        border: 1px solid var(--boxel-400);
         height: var(--pill-height);
       }
       .card-title {
@@ -97,6 +93,8 @@ export default class CardPill extends Component<CardPillSignature> {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        border-radius: 0;
+        background: none;
       }
     </style>
   </template>

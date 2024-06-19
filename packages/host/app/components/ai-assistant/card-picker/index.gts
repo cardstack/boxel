@@ -65,7 +65,11 @@ export default class AiAssistantCardPicker extends Component<Signature> {
           (not this.isViewAllAttachedCards)
         )
       }}
-        <Pill {{on 'click' this.toggleViewAllAttachedCards}} data-test-view-all>
+        <Pill
+          @kind='button'
+          {{on 'click' this.toggleViewAllAttachedCards}}
+          data-test-view-all
+        >
           View All ({{this.cardsToDisplay.length}})
         </Pill>
       {{/if}}

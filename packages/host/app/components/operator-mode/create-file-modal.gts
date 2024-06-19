@@ -122,9 +122,7 @@ export default class CreateFileModal extends Component<Signature> {
               >
                 <div class='field-contents'>
                   {{#if this.definitionClass}}
-                    <Pill @inert={{true}}>
-                      {{this.definitionClass.displayName}}
-                    </Pill>
+                    <Pill>{{this.definitionClass.displayName}}</Pill>
                   {{else}}
                     {{#if this.selectedCatalogEntry}}
                       <SelectedTypePill @entry={{this.selectedCatalogEntry}} />
@@ -757,11 +755,7 @@ export function convertToClassName(input: string) {
 const SelectedTypePill: TemplateOnlyComponent<{
   entry: CatalogEntry;
 }> = <template>
-  <Pill
-    @inert={{true}}
-    class='selected-type'
-    data-test-selected-type={{@entry.title}}
-  >
+  <Pill class='selected-type' data-test-selected-type={{@entry.title}}>
     <:icon>
       <RealmInfoProvider @fileURL={{@entry.id}}>
         <:ready as |realmInfo|>
