@@ -1,5 +1,11 @@
 import { module, test } from 'qunit';
-import { Loader, VirtualNetwork, type Realm } from '@cardstack/runtime-common';
+import {
+  Loader,
+  VirtualNetwork,
+  type Realm,
+  fetcher,
+  maybeHandleScopedCSSRequest,
+} from '@cardstack/runtime-common';
 import { dirSync, setGracefulCleanup, DirResult } from 'tmp';
 import {
   createRealm,
@@ -24,6 +30,15 @@ module('loader', function (hooks) {
   let virtualNetwork = new VirtualNetwork();
   shimExternals(virtualNetwork);
 
+  function createLoader() {
+    let fetch = fetcher(virtualNetwork.fetch, [
+      async (req, next) => {
+        return (await maybeHandleScopedCSSRequest(req)) || next(req);
+      },
+    ]);
+    return new Loader(fetch, virtualNetwork.resolveImport);
+  }
+
   setupBaseRealmServer(hooks, virtualNetwork);
 
   hooks.before(async function () {
@@ -47,7 +62,7 @@ module('loader', function (hooks) {
   });
 
   test('can dynamically load modules with cycles', async function (assert) {
-    let loader = virtualNetwork.createLoader();
+    let loader = createLoader();
     let module = await loader.import<{ three(): number }>(
       `${testRealmHref}cycle-two`,
     );
@@ -55,7 +70,7 @@ module('loader', function (hooks) {
   });
 
   test('can resolve multiple import load races against a common dep', async function (assert) {
-    let loader = virtualNetwork.createLoader();
+    let loader = createLoader();
     let a = loader.import<{ a(): string }>(`${testRealmHref}a`);
     let b = loader.import<{ b(): string }>(`${testRealmHref}b`);
     let [aModule, bModule] = await Promise.all([a, b]);
@@ -64,7 +79,7 @@ module('loader', function (hooks) {
   });
 
   test('can resolve a import deadlock', async function (assert) {
-    let loader = virtualNetwork.createLoader();
+    let loader = createLoader();
     let a = loader.import<{ a(): string }>(`${testRealmHref}deadlock/a`);
     let b = loader.import<{ b(): string }>(`${testRealmHref}deadlock/b`);
     let c = loader.import<{ c(): string }>(`${testRealmHref}deadlock/c`);
@@ -75,7 +90,7 @@ module('loader', function (hooks) {
   });
 
   test('can determine consumed modules', async function (assert) {
-    let loader = virtualNetwork.createLoader();
+    let loader = createLoader();
     await loader.import<{ a(): string }>(`${testRealmHref}a`);
     assert.deepEqual(await loader.getConsumedModules(`${testRealmHref}a`), [
       `${testRealmHref}b`,
@@ -84,15 +99,14 @@ module('loader', function (hooks) {
   });
 
   test('can get consumed modules within a cycle', async function (assert) {
-    let loader = virtualNetwork.createLoader();
+    let loader = createLoader();
     await loader.import<{ three(): number }>(`${testRealmHref}cycle-two`);
     let modules = await loader.getConsumedModules(`${testRealmHref}cycle-two`);
     assert.deepEqual(modules, [`${testRealmHref}cycle-one`]);
   });
 
   test('supports identify API', async function (assert) {
-    let loader = virtualNetwork.createLoader();
-    shimExternals(virtualNetwork);
+    let loader = createLoader();
     let { Person } = await loader.import<{ Person: unknown }>(
       `${testRealmHref}person`,
     );
@@ -108,8 +122,7 @@ module('loader', function (hooks) {
   });
 
   test('exports cannot be mutated', async function (assert) {
-    let loader = virtualNetwork.createLoader();
-    shimExternals(virtualNetwork);
+    let loader = createLoader();
     let module = await loader.import<{ Person: unknown }>(
       `${testRealmHref}person`,
     );
@@ -119,8 +132,7 @@ module('loader', function (hooks) {
   });
 
   test('can get a loader used to import a specific card', async function (assert) {
-    let loader = virtualNetwork.createLoader();
-    shimExternals(virtualNetwork);
+    let loader = createLoader();
     let module = await loader.import<any>(`${testRealmHref}person`);
     let card = module.Person;
     let testingLoader = Loader.getLoaderFor(card);
@@ -139,7 +151,7 @@ module('loader', function (hooks) {
 
     setupDB(hooks, {
       before: async (dbAdapter, queue) => {
-        loader2 = virtualNetwork.createLoader();
+        loader2 = createLoader();
         realm = await createRealm({
           dir: dir.name,
           fileSystem: {

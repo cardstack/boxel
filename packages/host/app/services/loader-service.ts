@@ -10,6 +10,7 @@ import {
   fetcher,
   maybeHandleScopedCSSRequest,
   RunnerOpts,
+  FetcherMiddlewareHandler,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
@@ -89,22 +90,20 @@ export default class LoaderService extends Service {
   }
 
   private makeInstance() {
-    if (this.fastboot.isFastBoot) {
-      let loader = this.virtualNetwork.createLoader();
-      return loader;
-    }
-    let { realmInfoService, getRealmSession } = this;
-    let fetch = fetcher(this.virtualNetwork.fetch, [
-      async (req, next) => {
-        if (this.isIndexing) {
-          req.headers.set('X-Boxel-Use-WIP-Index', 'true');
-        }
-        return next(req);
-      },
-      async (req, next) => {
-        return (await maybeHandleScopedCSSRequest(req)) || next(req);
-      },
-      async (req, next) => {
+    let middlewareStack: FetcherMiddlewareHandler[] = [];
+    middlewareStack.push(async (req, next) => {
+      if (this.isIndexing) {
+        req.headers.set('X-Boxel-Use-WIP-Index', 'true');
+      }
+      return next(req);
+    });
+    middlewareStack.push(async (req, next) => {
+      return (await maybeHandleScopedCSSRequest(req)) || next(req);
+    });
+
+    if (!this.fastboot.isFastBoot) {
+      let { realmInfoService, getRealmSession } = this;
+      middlewareStack.push(async (req, next) => {
         let handleAuth = addAuthorizationHeader(loader.fetch, {
           realmURL: undefined,
           getJWT: async (realmURL: string) => {
@@ -129,10 +128,10 @@ export default class LoaderService extends Service {
         } as IRealmAuthDataSource);
         let response = await handleAuth(req);
         return response || next(req);
-      },
-    ]);
+      });
+    }
+    let fetch = fetcher(this.virtualNetwork.fetch, middlewareStack);
     let loader = new Loader(fetch, this.virtualNetwork.resolveImport);
-
     return loader;
   }
 
