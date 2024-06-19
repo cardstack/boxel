@@ -623,19 +623,9 @@ export default class ResizablePanelGroup extends Component<Signature> {
       remainingContainerSize,
     );
 
-    for (let index = 0; index <= this.panels.length; index++) {
-      let panel = this.panels[index];
-      if (panel) {
-        console.log(
-          `panel index ${index} length being set to ${panelToNewLength.get(
-            panel,
-          )}`,
-        );
-        // FIXME non-for?
-        panel.lengthPx = panelToNewLength.get(panel) ?? 0;
-        // panel.lengthPx = panelLengths[index] || 0;
-      }
-    }
+    this.panels.forEach((panel) => {
+      panel.lengthPx = panelToNewLength.get(panel) ?? 0;
+    });
   }
 
   private findPanelsByResizeHandle(handle: ResizeHandle) {
