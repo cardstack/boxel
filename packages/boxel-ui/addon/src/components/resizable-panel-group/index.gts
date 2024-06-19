@@ -212,11 +212,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
   }
 
   @action
-  isLastPanel(panel: ResizablePanel) {
-    return this.panels[this.panels.length - 1] === panel;
-  }
-
-  @action
   registerHandle(handle: ResizeHandle) {
     this.resizeHandles.push(handle);
   }
@@ -227,10 +222,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
     if (handleIndex > -1) {
       this.resizeHandles.splice(handleIndex, 1);
     }
-  }
-
-  get totalResizeHandle() {
-    return this.resizeHandles.length;
   }
 
   @action
@@ -376,7 +367,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
 
     let isFirstButton = this.resizeHandles.indexOf(handle) === 0;
     let isLastButton =
-      this.resizeHandles.indexOf(handle) === this.totalResizeHandle - 1;
+      this.resizeHandles.indexOf(handle) === this.resizeHandles.length - 1;
 
     let panelGroupLengthPx = this.panelGroupLengthWithoutResizeHandlePx;
     if (panelGroupLengthPx === undefined) {
