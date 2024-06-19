@@ -76,7 +76,7 @@ export default class Panel extends Component<Signature> {
 
   element!: HTMLDivElement;
 
-  @tracked lengthPx = 0;
+  @tracked lengthPx: number | undefined = 0;
   @tracked minLengthPx: number | undefined = 0;
   @tracked ratio: number | undefined;
   initialMinLengthPx: number;
@@ -85,7 +85,7 @@ export default class Panel extends Component<Signature> {
 
   constructor(owner: any, args: Signature['Args']) {
     super(owner, args);
-    this.lengthPx = args.lengthPx || 0;
+    this.lengthPx = args.lengthPx;
     this.minLengthPx = args.minLengthPx || 0;
     this.collapsible = args.collapsible ?? true;
     this.initialMinLengthPx = this.args.minLengthPx || 0;
