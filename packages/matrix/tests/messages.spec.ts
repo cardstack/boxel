@@ -233,7 +233,6 @@ test.describe('Room messages', () => {
 
     // peek into the matrix events and confirm there are multiple card fragments
     let messages = await getRoomEvents();
-    debugger;
     let cardFragments = messages.filter(
       (message) =>
         message.type === 'm.room.message' &&
@@ -1060,11 +1059,14 @@ test.describe('Room messages', () => {
     await putEvent(userCred.accessToken, room1, 'm.room.message', '1', content);
     await page.locator('[data-test-command-apply]').click();
     await page.locator('[data-test-command-idle]');
-    let events = await getRoomEvents('user1', 'pass', room1);
-    let reactionEvent = (events as any).find(
-      (e: any) => e.type === 'm.reaction',
-    );
-    await expect(reactionEvent).toBeDefined();
+
+    await expect(async () => {
+      let events = await getRoomEvents('user1', 'pass', room1);
+      let reactionEvent = (events as any).find(
+        (e: any) => e.type === 'm.reaction',
+      );
+      await expect(reactionEvent).toBeDefined();
+    }).toPass();
   });
 
   test(`applying a command dispatches a result event if command is succesful and result is returned`, async ({
@@ -1099,10 +1101,12 @@ test.describe('Room messages', () => {
     await putEvent(userCred.accessToken, room1, 'm.room.message', '1', content);
     await page.locator('[data-test-command-apply]').click();
     await page.locator('[data-test-command-idle]');
-    let events = await getRoomEvents('user1', 'pass', room1);
-    let commandResultEvent = (events as any).find(
-      (e: any) => e.content.msgtype === 'org.boxel.commandResult',
-    );
-    await expect(commandResultEvent).toBeDefined();
+    await expect(async () => {
+      let events = await getRoomEvents('user1', 'pass', room1);
+      let commandResultEvent = (events as any).find(
+        (e: any) => e.content.msgtype === 'org.boxel.commandResult',
+      );
+      await expect(commandResultEvent).toBeDefined();
+    }).toPass();
   });
 });
