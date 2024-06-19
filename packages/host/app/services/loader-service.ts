@@ -1,4 +1,5 @@
 import Service, { service } from '@ember/service';
+import { buildWaiter } from '@ember/test-waiters';
 import { tracked } from '@glimmer/tracking';
 
 import {
@@ -8,6 +9,7 @@ import {
   IRealmAuthDataSource,
   fetcher,
   maybeHandleScopedCSSRequest,
+  RunnerOpts,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
@@ -20,6 +22,33 @@ import MatrixService from '@cardstack/host/services/matrix-service';
 import RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import { shimExternals } from '../lib/externals';
+
+const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
+
+let virtualNetworkFetchWaiter = buildWaiter('virtual-network-fetch');
+
+function getNativeFetch(): typeof fetch {
+  if (isFastBoot) {
+    let optsId = (globalThis as any).runnerOptsId;
+    if (optsId == null) {
+      throw new Error(`Runner Options Identifier was not set`);
+    }
+    let getRunnerOpts = (globalThis as any).getRunnerOpts as (
+      optsId: number,
+    ) => RunnerOpts;
+    return getRunnerOpts(optsId)._fetch;
+  } else {
+    let fetchWithWaiter: typeof globalThis.fetch = async (...args) => {
+      let token = virtualNetworkFetchWaiter.beginAsync();
+      try {
+        return await fetch(...args);
+      } finally {
+        virtualNetworkFetchWaiter.endAsync(token);
+      }
+    };
+    return fetchWithWaiter;
+  }
+}
 
 export default class LoaderService extends Service {
   @service declare fastboot: { isFastBoot: boolean };
@@ -48,7 +77,7 @@ export default class LoaderService extends Service {
   }
 
   private makeVirtualNetwork() {
-    let virtualNetwork = new VirtualNetwork();
+    let virtualNetwork = new VirtualNetwork(getNativeFetch());
     if (!this.fastboot.isFastBoot) {
       virtualNetwork.addURLMapping(
         new URL(baseRealm.url),

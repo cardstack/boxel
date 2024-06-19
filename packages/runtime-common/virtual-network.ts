@@ -1,6 +1,5 @@
 import { RealmPaths } from './paths';
 import { Loader } from './loader';
-import type { RunnerOpts } from './worker';
 import {
   PackageShimHandler,
   PACKAGES_FAKE_ORIGIN,
@@ -11,28 +10,16 @@ export interface ResponseWithNodeStream extends Response {
   nodeStream?: Readable;
 }
 
-const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
-
-function getNativeFetch(): typeof fetch {
-  if (isFastBoot) {
-    let optsId = (globalThis as any).runnerOptsId;
-    if (optsId == null) {
-      throw new Error(`Runner Options Identifier was not set`);
-    }
-    let getRunnerOpts = (globalThis as any).getRunnerOpts as (
-      optsId: number,
-    ) => RunnerOpts;
-    return getRunnerOpts(optsId)._fetch;
-  } else {
-    return fetch.bind(globalThis);
-  }
-}
-
 export type Handler = (req: Request) => Promise<ResponseWithNodeStream | null>;
 
 export class VirtualNetwork {
   private handlers: Handler[] = [];
   private urlMappings: [string, string][] = [];
+
+  constructor(nativeFetch = globalThis.fetch.bind(globalThis)) {
+    this.nativeFetch = nativeFetch;
+    this.mount(this.packageShimHandler.handle);
+  }
 
   resolveImport = (moduleIdentifier: string) => {
     if (!isUrlLike(moduleIdentifier)) {
@@ -42,10 +29,6 @@ export class VirtualNetwork {
   };
 
   private packageShimHandler = new PackageShimHandler(this.resolveImport);
-
-  constructor() {
-    this.mount(this.packageShimHandler.handle);
-  }
 
   createLoader() {
     return new Loader(this.fetch, this.resolveImport);
@@ -59,9 +42,7 @@ export class VirtualNetwork {
     this.urlMappings.push([from.href, to.href]);
   }
 
-  private nativeFetch(...args: Parameters<typeof fetch>) {
-    return getNativeFetch()(...args);
-  }
+  private nativeFetch: typeof globalThis.fetch;
 
   private resolveURLMapping(
     url: string,
