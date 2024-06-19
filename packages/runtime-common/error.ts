@@ -85,6 +85,8 @@ export class CardError extends Error implements SerializedError {
       } catch (err) {
         /* it's ok if we can't parse it*/
       }
+      // TODO probably we should refactor this--i don't think our errors follow
+      // this shape anymore
       if (
         maybeErrorJSON &&
         typeof maybeErrorJSON === 'object' &&

@@ -254,6 +254,9 @@ export default class InteractSubmode extends Component<Signature> {
     // only return a background image when both stacks originate from the same realm
     // otherwise we delegate to each stack to handle this
     let { hasDifferingBackgroundURLs } = this.stackBackgroundsState;
+    if (this.stackBackgroundsState.backgroundImageURLs.length === 0) {
+      return false;
+    }
     if (!hasDifferingBackgroundURLs) {
       return htmlSafe(
         `background-image: url(${this.stackBackgroundsState.backgroundImageURLs[0]});`,

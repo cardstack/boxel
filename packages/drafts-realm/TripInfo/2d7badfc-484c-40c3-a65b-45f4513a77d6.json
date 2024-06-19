@@ -3,7 +3,10 @@
     "type": "card",
     "attributes": {
       "traveler": {
-        "name": "Marcelius Wilde"
+        "name": "Marcelius Wilde",
+        "nextTravelGoal": {
+          "goalTitle": "Summer '25"
+        }
       },
       "description": null,
       "thumbnailURL": null
@@ -22,6 +25,21 @@
       "traveler.countriesVisited.0": {
         "links": {
           "self": "http://localhost:4201/drafts/Country/4"
+        }
+      },
+      "traveler.nextTravelGoal.country": {
+        "links": {
+          "self": "http://localhost:4201/drafts/Country/argentina"
+        }
+      },
+      "traveler.nextTravelGoal.alternateTrips.0": {
+        "links": {
+          "self": "http://localhost:4201/drafts/Country/brazil"
+        }
+      },
+      "traveler.nextTravelGoal.alternateTrips.1": {
+        "links": {
+          "self": "http://localhost:4201/drafts/Country/2"
         }
       },
       "startLocation": {

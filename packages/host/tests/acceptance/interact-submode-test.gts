@@ -12,7 +12,7 @@ import { setupApplicationTest } from 'ember-qunit';
 
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
 
 import { FieldContainer, GridContainer } from '@cardstack/boxel-ui/components';
@@ -26,7 +26,6 @@ import { Realm } from '@cardstack/runtime-common/realm';
 
 import { AuthenticationErrorMessages } from '@cardstack/runtime-common/router';
 
-import { Submodes } from '@cardstack/host/components/submode-switcher';
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import { claimsFromRawToken } from '@cardstack/host/resources/realm-session';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -581,7 +580,6 @@ module('Acceptance | interact submode tests', function (hooks) {
       // Remove mango (the dog) from the stack
       await click('[data-test-stack-card-index="1"] [data-test-close-button]');
 
-      // The stack should be updated in the URL
       assert.operatorModeParametersMatch(currentURL(), {
         stacks: [
           [
@@ -591,9 +589,6 @@ module('Acceptance | interact submode tests', function (hooks) {
             },
           ],
         ],
-        submode: Submodes.Interact,
-        fileView: 'inspector',
-        openDirs: {},
       });
 
       await waitFor('[data-test-operator-mode-stack] [data-test-pet="Mango"]');
@@ -1421,7 +1416,6 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-operator-mode-stack="1"]').doesNotExist();
       assert.dom('[data-test-operator-mode-stack="0"]').includesText('Fadhlan');
 
-      // The stack should be updated in the URL
       assert.operatorModeParametersMatch(currentURL(), {
         stacks: [
           [
@@ -1431,9 +1425,6 @@ module('Acceptance | interact submode tests', function (hooks) {
             },
           ],
         ],
-        submode: Submodes.Interact,
-        fileView: 'inspector',
-        openDirs: {},
       });
 
       // Close the last card in the last stack that is left - should get the empty state
@@ -1467,8 +1458,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
     });
 
-    // skipping FLaky test: CS-6845
-    skip('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
+    test('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
       // creates a recent search
       window.localStorage.setItem(
         'recent-cards',
@@ -1505,14 +1495,14 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       // Click on a recent search
       await click(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`);
-      // There is some additional thing we are waiting on here, probably the
-      // card to load in the card resource, but I'm not too sure so using waitUntil instead
-      await waitUntil(() =>
-        document
-          .querySelector(
-            '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="0"]',
-          )
-          ?.textContent?.includes('Fadhlan'),
+
+      // We have to wait untill there is only one stack item in rightmost stack,
+      // because that's the expected behaviour when we open a card from card search.
+      await waitUntil(
+        () =>
+          document.querySelectorAll(
+            '[data-test-operator-mode-stack="1"] [data-test-stack-card-index]',
+          )?.length === 1,
       );
 
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed

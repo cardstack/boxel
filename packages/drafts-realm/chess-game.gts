@@ -1,6 +1,11 @@
 import {
+  BaseDefConstructor,
+  BaseInstanceType,
   Component as BoxelComponent,
   CardDef,
+  FieldDef,
+  deserialize,
+  primitive,
 } from 'https://cardstack.com/base/card-api';
 import Component from '@glimmer/component';
 import StringCard from 'https://cardstack.com/base/string';
@@ -21,8 +26,13 @@ import {
 
 //@ts-ignore
 import { action } from '@ember/object';
+
 //@ts-ignore
-import { Chess as ChessJS } from 'https://cdn.jsdelivr.net/npm/chess.js/+esm';
+import { Chess as _ChessJS } from 'https://cdn.jsdelivr.net/npm/chess.js/+esm';
+import type { Chess as _ChessJSType } from 'chess.js';
+type ChessJS = _ChessJSType;
+const ChessJS: typeof _ChessJSType = _ChessJS;
+
 //@ts-ignore
 import {
   MARKER_TYPE,
@@ -35,6 +45,7 @@ import { Resource } from 'ember-resources';
 
 import BooleanField from 'https://cardstack.com/base/boolean';
 import { tracked } from '@glimmer/tracking';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 
 type ChessboardModifierSignature = {
   Args: {
@@ -54,7 +65,6 @@ class ChessboardModifier extends Modifier<ChessboardModifierSignature> {
     { game, updatePgn }: ChessboardModifierSignature['Args']['Named'],
   ) {
     function inputHandler(event: any) {
-      console.log(event);
       if (event.type === INPUT_EVENT_TYPE.movingOverSquare) {
         return; // ignore this event
       }
@@ -124,6 +134,7 @@ class ChessboardModifier extends Modifier<ChessboardModifierSignature> {
         }
         return result;
       }
+      return undefined;
     }
     if (this.chessboard === undefined) {
       this.chessboard = new Chessboard(element, {
@@ -157,9 +168,9 @@ interface ChessJSResourceArgs {
 }
 
 class ChessJSResource extends Resource<ChessJSResourceArgs> {
-  game: ChessJS;
-  snapshot: ChessJS;
-  private future: any[] = [];
+  game!: ChessJS;
+  snapshot!: ChessJS;
+  private future: string[] = [];
   @tracked snapshotPgn: string | undefined;
 
   modify(_positional: never[], named: ChessJSResourceArgs['named']) {
@@ -171,7 +182,7 @@ class ChessJSResource extends Resource<ChessJSResourceArgs> {
 
     if (this.snapshotPgn) {
       this.snapshot.loadPgn(this.snapshotPgn);
-    } else {
+    } else if (named.pgn) {
       this.snapshot.loadPgn(named.pgn);
     }
   }
@@ -343,10 +354,7 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
   }
 
   get notAtMostCurrentMove() {
-    return (
-      !this.args.analysis &&
-      !(this.pgnDisplay === this.game.pgn({ strict: true }))
-    );
+    return !this.args.analysis && !(this.pgnDisplay === this.game.pgn());
   }
 
   //Game state
@@ -354,7 +362,7 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
     return this.chessJSResource.game;
   }
   get pgnDisplay() {
-    return this.snapshot.pgn({ strict: true });
+    return this.snapshot.pgn();
   }
 
   get isGameOver() {
@@ -362,7 +370,7 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
   }
 
   get moves() {
-    return this.game.history({ verbose: true }).map((move: any) => move.san);
+    return this.game.history({ verbose: true }).map((move) => move.san);
   }
 
   @action
@@ -379,7 +387,7 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
     return this.snapshot.history({ verbose: true });
   }
   get snapshotMoves() {
-    return this.snapshotHistory.map((move: any) => move.san);
+    return this.snapshotHistory.map((move) => move.san);
   }
 
   get fen() {
@@ -462,9 +470,37 @@ class Isolated extends BoxelComponent<typeof Chess> {
   </template>
 }
 
+class PgnField extends FieldDef {
+  static [primitive]: string;
+  static displayName = 'PGN';
+
+  static async [deserialize]<T extends BaseDefConstructor>(
+    this: T,
+    pgn: any,
+  ): Promise<BaseInstanceType<T>> {
+    if (pgn == null) {
+      return pgn;
+    }
+    // Validating pgn string
+    let chess = new ChessJS();
+    chess.loadPgn(pgn);
+    return pgn as BaseInstanceType<T>;
+  }
+
+  static edit = class Edit extends BoxelComponent<typeof this> {
+    <template>
+      <BoxelInput
+        @value={{@model}}
+        @onInput={{@set}}
+        @disabled={{not @canEdit}}
+      />
+    </template>
+  };
+}
+
 export class Chess extends CardDef {
   static displayName = 'Chess';
-  @field pgn = contains(StringCard);
+  @field pgn = contains(PgnField);
   @field analysis = contains(BooleanField);
 
   @field title = contains(StringCard, {
