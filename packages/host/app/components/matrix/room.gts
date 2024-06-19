@@ -23,6 +23,7 @@ import type { MessageField } from 'https://cardstack.com/base/room';
 
 import AiAssistantCardPicker from '../ai-assistant/card-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
+import AiAssistantSkillMenu from '../ai-assistant/skill-menu';
 import { AiAssistantConversation } from '../ai-assistant/message';
 import NewSession from '../ai-assistant/new-session';
 
@@ -66,6 +67,7 @@ export default class Room extends Component<Signature> {
       {{/if}}
 
       <footer class='room-actions'>
+        <AiAssistantSkillMenu />
         <div class='chat-input-area' data-test-chat-input-area>
           <AiAssistantChatInput
             @value={{this.messageToSend}}
@@ -95,11 +97,10 @@ export default class Room extends Component<Signature> {
         padding-bottom: var(--boxel-sp);
       }
       .room-actions {
+        display: grid;
+        gap: var(--boxel-sp-sm);
         padding: var(--boxel-sp);
         box-shadow: var(--boxel-box-shadow);
-      }
-      .room-actions > * + * {
-        margin-top: var(--boxel-sp-sm);
       }
       .chat-input-area {
         background-color: var(--boxel-light);
