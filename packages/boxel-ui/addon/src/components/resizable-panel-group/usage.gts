@@ -19,6 +19,7 @@ export default class ResizablePanelUsage extends Component {
 
   @tracked horizontalPanel3DefaultWidthFraction = 0.25;
   @tracked horizontalPanel3MinWidthPx = undefined;
+  @tracked horizontalPanel3IsHidden = false;
 
   @tracked verticalReverseCollapse = true;
 
@@ -64,6 +65,7 @@ export default class ResizablePanelUsage extends Component {
           <ResizablePanel
             @defaultLengthFraction={{this.horizontalPanel3DefaultWidthFraction}}
             @minLengthPx={{this.horizontalPanel3MinWidthPx}}
+            @isHidden={{this.horizontalPanel3IsHidden}}
           >
             Panel 3
           </ResizablePanel>
@@ -111,6 +113,12 @@ export default class ResizablePanelUsage extends Component {
           @value={{this.horizontalPanel3MinWidthPx}}
           @onInput={{fn (mut this.horizontalPanel3MinWidthPx)}}
           @required={{false}}
+        />
+        <Args.Bool
+          @name='isHidden'
+          @optional={{true}}
+          @onInput={{fn (mut this.horizontalPanel3IsHidden)}}
+          @value={{this.horizontalPanel3IsHidden}}
         />
       </:api>
       <:cssVars as |Css|>
