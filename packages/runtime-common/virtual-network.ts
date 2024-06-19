@@ -1,5 +1,4 @@
 import { RealmPaths } from './paths';
-import { Loader } from './loader';
 import {
   PackageShimHandler,
   PACKAGES_FAKE_ORIGIN,
@@ -29,10 +28,6 @@ export class VirtualNetwork {
   };
 
   private packageShimHandler = new PackageShimHandler(this.resolveImport);
-
-  createLoader() {
-    return new Loader(this.fetch, this.resolveImport);
-  }
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
     this.packageShimHandler.shimModule(moduleIdentifier, module);
