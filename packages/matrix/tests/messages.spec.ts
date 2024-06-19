@@ -1065,7 +1065,6 @@ test.describe('Room messages', () => {
     await putEvent(userCred.accessToken, room1, 'm.room.message', '1', content);
     await page.locator('[data-test-command-apply]').click();
     await page.locator('[data-test-command-idle]');
-    await getAllRoomEvents(room1, userCred.accessToken);
     let events = await getRoomEvents('user1', 'pass', room1);
     let reactionEvent = (events as any).find(
       (e: any) => e.type === 'm.reaction',
@@ -1105,7 +1104,6 @@ test.describe('Room messages', () => {
     await putEvent(userCred.accessToken, room1, 'm.room.message', '1', content);
     await page.locator('[data-test-command-apply]').click();
     await page.locator('[data-test-command-idle]');
-    await getAllRoomEvents(room1, userCred.accessToken);
     let events = await getRoomEvents('user1', 'pass', room1);
     let commandResultEvent = (events as any).find(
       (e: any) => e.content.msgtype === 'org.boxel.commandResult',
