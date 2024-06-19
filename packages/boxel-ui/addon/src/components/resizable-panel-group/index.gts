@@ -334,7 +334,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
     } else if (
       prevPanelEl.initialMinLengthPx &&
       newPrevPanelElLength < prevPanelEl.initialMinLengthPx &&
-      newPrevPanelElLength > prevPanelEl.lengthPx
+      newPrevPanelElLength > (prevPanelEl.lengthPx || 0)
     ) {
       newNextPanelElLength =
         newNextPanelElLength -
@@ -343,7 +343,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
     } else if (
       nextPanelEl.initialMinLengthPx &&
       newNextPanelElLength < nextPanelEl.initialMinLengthPx &&
-      newNextPanelElLength > nextPanelEl.lengthPx
+      newNextPanelElLength > (nextPanelEl.lengthPx || 0)
     ) {
       newPrevPanelElLength =
         newPrevPanelElLength +
@@ -352,14 +352,14 @@ export default class ResizablePanelGroup extends Component<Signature> {
     } else if (
       prevPanelEl.initialMinLengthPx &&
       newPrevPanelElLength < prevPanelEl.initialMinLengthPx &&
-      newPrevPanelElLength < prevPanelEl.lengthPx
+      newPrevPanelElLength < (prevPanelEl.lengthPx || 0)
     ) {
       newNextPanelElLength = newNextPanelElLength + newPrevPanelElLength;
       newPrevPanelElLength = 0;
     } else if (
       nextPanelEl.initialMinLengthPx &&
       newNextPanelElLength < nextPanelEl.initialMinLengthPx &&
-      newNextPanelElLength < nextPanelEl.lengthPx
+      newNextPanelElLength < (nextPanelEl.lengthPx || 0)
     ) {
       newPrevPanelElLength = newPrevPanelElLength + newNextPanelElLength;
       newNextPanelElLength = 0;
@@ -446,8 +446,8 @@ export default class ResizablePanelGroup extends Component<Signature> {
       return undefined;
     }
 
-    let prevPanelElLength = prevPanel.lengthPx;
-    let nextPanelElLength = nextPanel.lengthPx;
+    let prevPanelElLength = prevPanel.lengthPx || 0;
+    let nextPanelElLength = nextPanel.lengthPx || 0;
 
     if (
       isFirstButton &&
@@ -469,7 +469,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
         nextPanel,
         prevPanel.defaultLengthFraction
           ? panelGroupLengthPx * prevPanel.defaultLengthFraction
-          : prevPanel.lengthPx,
+          : prevPanel.lengthPx || 0,
         prevPanel.defaultLengthFraction
           ? nextPanelElLength -
               panelGroupLengthPx * prevPanel.defaultLengthFraction
@@ -496,7 +496,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
           : panelGroupLengthPx - prevPanelElLength,
         nextPanel.defaultLengthFraction
           ? panelGroupLengthPx * nextPanel.defaultLengthFraction
-          : nextPanel.lengthPx,
+          : nextPanel.lengthPx || 0,
         prevPanel.initialMinLengthPx,
         nextPanel.initialMinLengthPx,
       );
@@ -541,7 +541,9 @@ export default class ResizablePanelGroup extends Component<Signature> {
       this.panelGroupElement[this.perpendicularLengthProperty] <
       this.minimumLengthToShowHandles;
 
-    let panelLengths: number[] = this.panels.map((panel) => panel.lengthPx);
+    let panelLengths: number[] = this.panels.map(
+      (panel) => panel.lengthPx || 0,
+    );
     let panelToNewLength = new Map<ResizablePanel, number>();
 
     console.log('panelLengths', ...panelLengths);
