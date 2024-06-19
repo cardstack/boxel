@@ -286,11 +286,13 @@ export default class ResizablePanelGroup extends Component<Signature> {
     let newNextPanelElLength =
       this.currentResizeHandle.nextPanel.element[this.clientLengthProperty] -
       delta;
-    let prevPanelEl = this.currentResizeHandle.prevPanel;
-    let nextPanelEl = this.currentResizeHandle.nextPanel;
+    let prevPanel = this.currentResizeHandle.prevPanel;
+    let nextPanel = this.currentResizeHandle.nextPanel;
 
-    if (!prevPanelEl || !nextPanelEl) {
-      console.warn('Expected prevPanelEl && nextPanelEl to be defined');
+    if (!prevPanel || !nextPanel) {
+      console.warn(
+        'Expected prevPanel && nextPanel to be defined when dragging handle',
+      );
       return;
     }
 
@@ -301,53 +303,53 @@ export default class ResizablePanelGroup extends Component<Signature> {
       newPrevPanelElLength = newPrevPanelElLength + newNextPanelElLength;
       newNextPanelElLength = 0;
     } else if (
-      prevPanelEl.initialMinLengthPx &&
-      newPrevPanelElLength < prevPanelEl.initialMinLengthPx &&
-      newPrevPanelElLength > (prevPanelEl.lengthPx || 0)
+      prevPanel.initialMinLengthPx &&
+      newPrevPanelElLength < prevPanel.initialMinLengthPx &&
+      newPrevPanelElLength > (prevPanel.lengthPx || 0)
     ) {
       newNextPanelElLength =
         newNextPanelElLength -
-        (prevPanelEl.initialMinLengthPx - newPrevPanelElLength);
-      newPrevPanelElLength = prevPanelEl.initialMinLengthPx;
+        (prevPanel.initialMinLengthPx - newPrevPanelElLength);
+      newPrevPanelElLength = prevPanel.initialMinLengthPx;
     } else if (
-      nextPanelEl.initialMinLengthPx &&
-      newNextPanelElLength < nextPanelEl.initialMinLengthPx &&
-      newNextPanelElLength > (nextPanelEl.lengthPx || 0)
+      nextPanel.initialMinLengthPx &&
+      newNextPanelElLength < nextPanel.initialMinLengthPx &&
+      newNextPanelElLength > (nextPanel.lengthPx || 0)
     ) {
       newPrevPanelElLength =
         newPrevPanelElLength +
-        (nextPanelEl.initialMinLengthPx - newNextPanelElLength);
-      newNextPanelElLength = nextPanelEl.initialMinLengthPx;
+        (nextPanel.initialMinLengthPx - newNextPanelElLength);
+      newNextPanelElLength = nextPanel.initialMinLengthPx;
     } else if (
-      prevPanelEl.initialMinLengthPx &&
-      newPrevPanelElLength < prevPanelEl.initialMinLengthPx &&
-      newPrevPanelElLength < (prevPanelEl.lengthPx || 0)
+      prevPanel.initialMinLengthPx &&
+      newPrevPanelElLength < prevPanel.initialMinLengthPx &&
+      newPrevPanelElLength < (prevPanel.lengthPx || 0)
     ) {
       newNextPanelElLength = newNextPanelElLength + newPrevPanelElLength;
       newPrevPanelElLength = 0;
     } else if (
-      nextPanelEl.initialMinLengthPx &&
-      newNextPanelElLength < nextPanelEl.initialMinLengthPx &&
-      newNextPanelElLength < (nextPanelEl.lengthPx || 0)
+      nextPanel.initialMinLengthPx &&
+      newNextPanelElLength < nextPanel.initialMinLengthPx &&
+      newNextPanelElLength < (nextPanel.lengthPx || 0)
     ) {
       newPrevPanelElLength = newPrevPanelElLength + newNextPanelElLength;
       newNextPanelElLength = 0;
     }
 
     this.setSiblingPanelLengths(
-      prevPanelEl,
-      nextPanelEl,
+      prevPanel,
+      nextPanel,
       newPrevPanelElLength,
       newNextPanelElLength,
-      (prevPanelEl.initialMinLengthPx &&
-        newPrevPanelElLength >= prevPanelEl.initialMinLengthPx) ||
-        !prevPanelEl.collapsible
-        ? prevPanelEl.initialMinLengthPx
+      (prevPanel.initialMinLengthPx &&
+        newPrevPanelElLength >= prevPanel.initialMinLengthPx) ||
+        !prevPanel.collapsible
+        ? prevPanel.initialMinLengthPx
         : 0,
-      (nextPanelEl.initialMinLengthPx &&
-        newNextPanelElLength >= nextPanelEl.initialMinLengthPx) ||
-        !nextPanelEl.collapsible
-        ? nextPanelEl.initialMinLengthPx
+      (nextPanel.initialMinLengthPx &&
+        newNextPanelElLength >= nextPanel.initialMinLengthPx) ||
+        !nextPanel.collapsible
+        ? nextPanel.initialMinLengthPx
         : 0,
     );
 
