@@ -1,7 +1,4 @@
-import { not } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
-import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
@@ -31,18 +28,12 @@ export default class ResizablePanelUsage extends Component {
   @tracked verticalPanel2DefaultHeightFraction = 0.67;
   @tracked verticalPanel2MinHeightPx = undefined;
 
-  @tracked showPanel3 = true;
-
   cssClassName = 'boxel-panel';
   @cssVariable declare boxelPanelResizeHandleHeight: CSSVariableInfo;
   @cssVariable declare boxelPanelResizeHandleWidth: CSSVariableInfo;
   @cssVariable declare boxelPanelResizeHandleBackgroundColor: CSSVariableInfo;
   @cssVariable
   declare boxelPanelResizeHandleHoverBackgroundColor: CSSVariableInfo;
-
-  @action togglePanel3Visibility() {
-    this.showPanel3 = !this.showPanel3;
-  }
 
   <template>
     <FreestyleUsage @name='Horizontal ResizablePanelGroup'>
@@ -57,7 +48,6 @@ export default class ResizablePanelUsage extends Component {
           as |ResizablePanel ResizeHandle|
         >
           <ResizablePanel
-            class='panel'
             @defaultLengthFraction={{this.horizontalPanel1DefaultWidthFraction}}
             @minLengthPx={{this.horizontalPanel1MinWidthPx}}
           >
@@ -65,7 +55,6 @@ export default class ResizablePanelUsage extends Component {
           </ResizablePanel>
           <ResizeHandle />
           <ResizablePanel
-            class='panel'
             @defaultLengthFraction={{this.horizontalPanel2DefaultWidthFraction}}
             @minLengthPx={{this.horizontalPanel2MinWidthPx}}
           >
@@ -73,20 +62,12 @@ export default class ResizablePanelUsage extends Component {
           </ResizablePanel>
           <ResizeHandle />
           <ResizablePanel
-            class='panel'
             @defaultLengthFraction={{this.horizontalPanel3DefaultWidthFraction}}
             @minLengthPx={{this.horizontalPanel3MinWidthPx}}
-            @isHidden={{not this.showPanel3}}
           >
             Panel 3
           </ResizablePanel>
         </ResizablePanelGroup>
-        <button class='toggle' {{on 'click' this.togglePanel3Visibility}}>{{if
-            this.showPanel3
-            'Hide'
-            'Show'
-          }}
-          Panel 3</button>
       </:example>
       <:api as |Args|>
         <Args.Number
@@ -254,14 +235,6 @@ export default class ResizablePanelUsage extends Component {
     <style>
       .vertical-container {
         height: 30rem;
-      }
-
-      .panel {
-        background: var(--boxel-200);
-      }
-
-      .toggle {
-        margin-bottom: var(--boxel-sp);
       }
     </style>
   </template>
