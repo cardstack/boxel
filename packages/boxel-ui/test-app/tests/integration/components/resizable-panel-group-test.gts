@@ -108,12 +108,18 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       async function renderResizablePanelGroup(
         renderController: RenderController,
       ) {
+        // Putting this in <style> causes syntax highlighting to break
+        let testContainerStyles = `
+            #test-container {
+              ${orientationProperties.perpendicularDimension}: 100px;
+              max-${orientationProperties.dimension}: 100%;
+            }
+        `;
+
         await render(<template>
           {{! template-lint-disable no-inline-styles }}
-          <div
-            id='test-container'
-            style={{htmlSafe renderController.containerStyle}}
-          >
+          <style>{{testContainerStyles}}</style>
+          <div style={{htmlSafe renderController.containerStyle}}>
             <ResizablePanelGroup
               @orientation={{orientationProperties.orientation}}
               @reverseCollapse={{true}}
@@ -127,7 +133,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
                   @isHidden={{panel.isHidden}}
                 >
                   <div
-                    class='panel-{{index}}-content'
+                    class='panel'
                     style={{htmlSafe
                       (if
                         panel.outerContainerStyle panel.outerContainerStyle ''
@@ -153,8 +159,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
       test<MyTestContext>(`it can lay out panels with ${orientationProperties.orientation} orientation (default)`, async function (assert) {
         this.renderController.containerStyle = `
-          ${orientationProperties.perpendicularDimension}: 100px;
-          max-${orientationProperties.dimension}: 100%;
           ${orientationProperties.dimension}: 318px;
         `;
 
@@ -177,8 +181,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       test<MyTestContext>(`it can lay out panels with ${orientationProperties.orientation} orientation (length specified)`, async function (assert) {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 518px;
-          max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 100px;
           border: 1px solid green
           `;
 
@@ -204,8 +206,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       test<MyTestContext>(`it respects ${orientationProperties.orientation} minLength (default)`, async function (assert) {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 108px;
-          max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 100px;
         `;
 
         await renderResizablePanelGroup(this.renderController);
@@ -227,8 +227,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       test<MyTestContext>(`it respects ${orientationProperties.orientation} minLength (length specified)`, async function (assert) {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 108px;
-          max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 100px;
           border: 1px solid green
         `;
 
@@ -254,16 +252,12 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       test<MyTestContext>(`it adjusts to its container growing (default)`, async function (assert) {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 218px;
-          max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 100px;
         `;
 
         await renderResizablePanelGroup(this.renderController);
 
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 418px;
-          max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 100px;
         `;
         await waitForRerender();
 
@@ -284,8 +278,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       test<MyTestContext>(`it adjusts to its container growing (length specified)`, async function (assert) {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 218px;
-          max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 100px;
           border: 1px solid green;
         `;
 
@@ -309,8 +301,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 418px;
-          max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 100px;
           border: 1px solid green;
         `;
         await waitForRerender();
@@ -332,15 +322,11 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       test<MyTestContext>(`it adjusts to its container shrinking (default)`, async function (assert) {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 418px;
-          max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 100px;
         `;
 
         await renderResizablePanelGroup(this.renderController);
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 218px;
-          max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 100px;
         `;
 
         await waitForRerender();
@@ -362,8 +348,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       test<MyTestContext>(`it adjusts to its container shrinking (length specified A)`, async function (assert) {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 420px;
-          max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 100px;
           border: 1px solid green
         `;
 
@@ -388,8 +372,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 220px;
-          max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 100px;
           border: 1px solid green
         `;
 
@@ -412,8 +394,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       test<MyTestContext>(`it adjusts to its container shrinking (length specified B)`, async function (assert) {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 620px;
-          max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 100px;
           border: 1px solid green
         `;
 
@@ -443,8 +423,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 220px;
-          max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 100px;
           border: 1px solid green
         `;
 
@@ -468,8 +446,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       test<MyTestContext>(`it adjusts to its container shrinking and growing`, async function (assert) {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 620px;
-          max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 100px;
           border: 1px solid green
         `;
 
@@ -507,8 +483,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         // shrink container by ~5
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 320px;
-          max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 100px;
           border: 1px solid green
         `;
 
@@ -547,8 +521,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         // increase window/container length to original length
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 620px;
-          max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 100px;
           border: 1px solid green
         `;
 
@@ -572,8 +544,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       test<MyTestContext>(`it excludes hidden panels from participating in layout`, async function (assert) {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 218px;
-          max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 100px;
         `;
 
         this.renderController.panels = [
