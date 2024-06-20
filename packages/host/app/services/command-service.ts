@@ -2,7 +2,13 @@ import Service, { service } from '@ember/service';
 
 import { task } from 'ember-concurrency';
 
-import { PatchData } from '@cardstack/runtime-common';
+import {
+  type PatchData,
+  getCards,
+  codeRefWithAbsoluteURL,
+  isResolvedCodeRef,
+} from '@cardstack/runtime-common';
+import { CardTypeFilter } from '@cardstack/runtime-common/query';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -21,7 +27,7 @@ export default class CommandService extends Service {
       if (command.name === 'patchCard') {
         if (!hasPatchData(payload)) {
           throw new Error(
-            "Patch command can't run because it doesn't have all the fields in payload",
+            "Patch command can't run because it doesn't have all the fields in arguments returned by open ai",
           );
         }
         res = await this.operatorModeStateService.patchCard.perform(
@@ -32,7 +38,26 @@ export default class CommandService extends Service {
           },
         );
       } else if (command.name === 'searchCard') {
-        console.log('running search');
+        if (!hasSearchData(payload)) {
+          throw new Error(
+            "Search command can't run because it doesn't have all the arguments returned by open ai",
+          );
+        }
+        //If ai returns a relative module path, we make it absolute based upon the card_id that exists
+        let maybeCodeRef = codeRefWithAbsoluteURL(
+          payload.filter.type,
+          new URL(payload.card_id),
+        );
+        if (!isResolvedCodeRef(maybeCodeRef)) {
+          throw new Error('Query returned by ai bot is not fully resolved');
+        }
+        payload.filter.type = maybeCodeRef;
+        let searchCardResource = await getCards({
+          filter: payload.filter,
+        });
+        await searchCardResource.loaded;
+        res = searchCardResource.instances.map((c) => c.id);
+        console.log(res);
       }
       await this.matrixService.sendReactionEvent(roomId, eventId, 'applied');
       if (res) {
@@ -51,6 +76,7 @@ export default class CommandService extends Service {
 }
 
 type PatchPayload = { card_id: string } & PatchData;
+type SearchPayload = { card_id: string; filter: CardTypeFilter };
 
 function hasPatchData(payload: any): payload is PatchPayload {
   return (
@@ -62,5 +88,15 @@ function hasPatchData(payload: any): payload is PatchPayload {
       payload !== null &&
       'card_id' in payload &&
       'relationships' in payload)
+  );
+}
+
+function hasSearchData(payload: any): payload is SearchPayload {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'card_id' in payload &&
+    'filter' in payload &&
+    'type' in payload.filter
   );
 }
