@@ -3355,12 +3355,12 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
 
     await focus(`[data-test-search-field]`);
-    await typeIn(`[data-test-search-field]`, 'Ma');
-    assert.dom(`[data-test-search-label]`).containsText('Searching for “Ma”');
+    await typeIn(`[data-test-search-field]`, 'ma');
+    assert.dom(`[data-test-search-label]`).containsText('Searching for “ma”');
 
     await waitFor(`[data-test-search-sheet-search-result]`);
-    assert.dom(`[data-test-search-label]`).containsText('3 Results for “Ma”');
-    assert.dom(`[data-test-search-sheet-search-result]`).exists({ count: 3 });
+    assert.dom(`[data-test-search-label]`).containsText('4 Results for “ma”');
+    assert.dom(`[data-test-search-sheet-search-result]`).exists({ count: 4 });
     assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
     assert
       .dom(`[data-test-search-result="${testRealmURL}Author/mark"]`)

@@ -13,7 +13,7 @@ import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import * as MonacoSDK from 'monaco-editor';
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 
 import stringify from 'safe-stable-stringify';
 
@@ -2182,16 +2182,69 @@ export class ExportedCard extends ExportedCardParent {
       .doesNotExist('field defs do not display a create instance button');
   });
 
-  skip('can search for instances of an exported card definition', async function (_assert) {
-    // TODO
+  test('can search for instances of an exported card definition', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}pet`,
+    });
+
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="Pet"]');
+
+    await click('[data-boxel-selector-item-text="Pet"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Search for Instances"]');
+    await waitFor('[data-test-search-sheet-search-result]');
+    assert
+      .dom('[data-test-search-field]')
+      .hasValue(`carddef:${testRealmURL}pet/Pet`);
+    assert
+      .dom('[data-test-search-label]')
+      .hasText(`2 Results for “carddef:${testRealmURL}pet/Pet”`);
+    assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
+    assert
+      .dom(`[data-test-search-result="${testRealmURL}Pet/vangogh"]`)
+      .exists();
   });
 
-  skip('search for instances action is not displayed for non-exported Card definition', async function (_assert) {
-    // TODO
+  test('search for instances action is not displayed for non-exported Card definition', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    });
+
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="LocalCard"]');
+
+    await click('[data-boxel-selector-item-text="LocalCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    assert
+      .dom('[data-test-action-button="Search for Instances"]')
+      .doesNotExist(
+        'non-exported card defs do not display a search for instances button',
+      );
   });
 
-  skip('search for instances action is not displayed for field definition', async function (_assert) {
-    // TODO
+  test('search for instances action is not displayed for field definition', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    });
+
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="ExportedField"]');
+
+    await click('[data-boxel-selector-item-text="ExportedField"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    assert
+      .dom('[data-test-action-button="Search for Instances"]')
+      .doesNotExist('field defs do not display a search for instances button');
   });
 
   module('when the user lacks write permissions', function (hooks) {

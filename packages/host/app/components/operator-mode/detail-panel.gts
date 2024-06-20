@@ -187,7 +187,8 @@ export default class DetailPanel extends Component<Signature> {
             },
           ]
         : []),
-      ...(this.args.selectedDeclaration?.exportName
+      ...(this.args.selectedDeclaration?.exportName &&
+      (this.args.selectedDeclaration?.cardOrField as typeof CardDef).isCardDef
         ? [
             {
               label: 'Search for Instances',
