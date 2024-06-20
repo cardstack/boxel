@@ -11,7 +11,6 @@ class PanelProperties {
   @tracked defaultLengthFraction?: number;
   @tracked minLengthPx?: number;
 
-  innerContainerStyle?: string;
   outerContainerStyle?: string;
   showResizeHandle?: boolean;
   constructor(
@@ -20,12 +19,10 @@ class PanelProperties {
       isHidden?: boolean;
       defaultLengthFraction?: number;
       minLengthPx?: number;
-      innerContainerStyle?: string;
       outerContainerStyle?: string;
       showResizeHandle?: boolean;
     } = {},
     testArgs: {
-      innerContainerStyle?: string;
       outerContainerStyle?: string;
       showResizeHandle?: boolean;
     } = {},
@@ -36,8 +33,7 @@ class PanelProperties {
       defaultLengthFraction,
       minLengthPx,
     } = panelArgs;
-    let { innerContainerStyle, outerContainerStyle, showResizeHandle } =
-      testArgs;
+    let { outerContainerStyle, showResizeHandle } = testArgs;
     this.lengthPx = lengthPx;
     this.isHidden = isHidden;
     this.defaultLengthFraction = defaultLengthFraction;
@@ -45,7 +41,6 @@ class PanelProperties {
 
     this.showResizeHandle = showResizeHandle;
 
-    this.innerContainerStyle = innerContainerStyle;
     this.outerContainerStyle = outerContainerStyle;
   }
 }
@@ -394,10 +389,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         this.renderController.panels[0].lengthPx = 400;
         this.renderController.panels[1].lengthPx = 200;
 
-        this.renderController.panels[0].innerContainerStyle = `
-          ${orientationProperties.dimension}: 180px;
-        `;
-
         await renderResizablePanelGroup(this.renderController);
 
         assert.hasNumericStyle(
@@ -441,10 +432,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
         this.renderController.panels[0].lengthPx = 400;
         this.renderController.panels[1].lengthPx = 200;
-
-        this.renderController.panels[0].innerContainerStyle = `
-          ${orientationProperties.dimension}: 180px;
-        `;
 
         await renderResizablePanelGroup(this.renderController);
 
