@@ -1059,6 +1059,9 @@ module('getModifyPrompt', () => {
               type: 'string',
               const: 'http://localhost:4201/drafts/Friend/1',
             },
+            description: {
+              type: 'string',
+            },
             filter: {
               type: 'object',
               properties: {
@@ -1079,7 +1082,7 @@ module('getModifyPrompt', () => {
               },
             },
           },
-          required: ['card_id', 'filter'],
+          required: ['card_id', 'filter', 'description'],
         },
       },
     });
