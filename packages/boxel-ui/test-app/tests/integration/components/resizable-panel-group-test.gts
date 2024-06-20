@@ -336,7 +336,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         );
       });
 
-      test<MyTestContext>(`it adjusts to its container shrinking (length specified A)`, async function (assert) {
+      test<MyTestContext>(`it maintans ratio when its container shrinks`, async function (assert) {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 420px;
         `;
@@ -376,51 +376,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
           '[data-test-panel-index="1"]',
           orientationProperties.dimension,
           80,
-          1,
-        );
-      });
-
-      test<MyTestContext>(`it adjusts to its container shrinking (length specified B)`, async function (assert) {
-        this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 620px;
-        `;
-
-        // length ratio panel 1 and panel 2 is 2:1
-        this.renderController.panels[0].lengthPx = 400;
-        this.renderController.panels[1].lengthPx = 200;
-
-        await renderResizablePanelGroup(this.renderController);
-
-        assert.hasNumericStyle(
-          '[data-test-panel-index="0"]',
-          orientationProperties.dimension,
-          400,
-          1,
-        );
-        assert.hasNumericStyle(
-          '[data-test-panel-index="1"]',
-          orientationProperties.dimension,
-          200,
-          1,
-        );
-
-        this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 218px;
-        `;
-
-        await waitForRerender();
-
-        // Maintain the ratio 2:1 when resizing
-        assert.hasNumericStyle(
-          '[data-test-panel-index="0"]',
-          orientationProperties.dimension,
-          133,
-          1,
-        );
-        assert.hasNumericStyle(
-          '[data-test-panel-index="1"]',
-          orientationProperties.dimension,
-          67,
           1,
         );
       });
