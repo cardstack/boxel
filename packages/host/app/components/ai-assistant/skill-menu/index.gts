@@ -1,3 +1,4 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
@@ -5,7 +6,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 
-import { TrackedArray } from 'tracked-built-ins';
+import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
 import { AddButton } from '@cardstack/boxel-ui/components';
 
@@ -20,20 +21,36 @@ interface Signature {
   Args: {};
 }
 
+interface Skill {
+  card: SkillCard;
+  isActive: boolean;
+}
+
 export default class AiAssistantSkillMenu extends Component<Signature> {
   <template>
     <div class='skill-menu' ...attributes>
-      <div>{{this.skills.length}} Skills Active</div>
+      <div>{{this.activeSkills.length}}
+        of
+        {{this.skills.length}}
+        Skills Active</div>
       {{#if this.skills}}
         <ul class='skill-list'>
-          {{#each this.skills as |card|}}
-            <li><CardPill @card={{card}} /></li>
+          {{#each this.skills as |skill|}}
+            <li>
+              <CardPill
+                @card={{skill.card}}
+                @onToggle={{fn this.toggleSkill skill}}
+                @isEnabled={{skill.isActive}}
+              />
+            </li>
           {{/each}}
         </ul>
       {{/if}}
       <AddButton
         class='attach-button'
         @variant='pill'
+        @iconWidth='15px'
+        @iconHeight='15px'
         {{on 'click' this.attachSkillCard}}
         @disabled={{this.doAttachCard.isRunning}}
         data-test-choose-card-btn
@@ -62,6 +79,9 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
       .skill-list:deep(.card-pill) {
         width: 100%;
       }
+      .skill-list:deep(.card-content) {
+        max-width: initial;
+      }
       .attach-button {
         --icon-color: var(--boxel-highlight);
         display: inline-flex;
@@ -70,9 +90,14 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         font: 700 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
         background-color: var(--boxel-light);
+        padding-left: 0;
+      }
+      .attach-button:focus {
+        outline: 0;
       }
       .attach-button:hover:not(:disabled),
       .attach-button:focus:not(:disabled) {
+        --icon-color: var(--boxel-highlight-hover);
         background-color: var(--boxel-light);
         color: var(--boxel-highlight-hover);
         box-shadow: none;
@@ -80,13 +105,21 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
     </style>
   </template>
 
-  @tracked skills: TrackedArray<SkillCard> = new TrackedArray();
+  @tracked skills: TrackedArray<Skill> = new TrackedArray();
+
+  private get activeSkills() {
+    return this.skills.filter((skill) => skill.isActive);
+  }
+
+  @action toggleSkill(skill: Skill) {
+    skill.isActive = !skill.isActive;
+  }
 
   @action
   private async attachSkillCard() {
     let card = await this.doAttachCard.perform();
     if (card) {
-      this.skills.push(card);
+      this.skills.push(new TrackedObject({ card, isActive: true }));
     }
   }
 
