@@ -441,7 +441,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         await waitForRerender();
 
         await doubleClick('[data-test-resize-handle]'); // Double-click to hide recent
-        await waitForRerender(); // let onResizeHandleDblClick run
+        await waitForRerender();
 
         assert.hasNumericStyle(
           '[data-test-panel-index="0"]',
@@ -478,7 +478,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
         await doubleClick('[data-test-resize-handle]'); // Double-click to unhide recent
 
-        await waitForRerender(); // let onResizeHandleDblClick run
+        await waitForRerender();
 
         assert.hasNumericStyle(
           '[data-test-panel-index="0"]',
