@@ -133,6 +133,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
                         panel.outerContainerStyle panel.outerContainerStyle ''
                       )
                     }}
+                    data-test-panel-index={{index}}
                   >
                     <div>
                       Panel
@@ -160,13 +161,13 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         await renderResizablePanelGroup(this.renderController);
 
         assert.hasNumericStyle(
-          '.panel-0-content',
+          '[data-test-panel-index="0"]',
           orientationProperties.dimension,
           300 * 0.6,
           1,
         );
         assert.hasNumericStyle(
-          '.panel-1-content',
+          '[data-test-panel-index="1"]',
           orientationProperties.dimension,
           300 * 0.4,
           1,
@@ -187,13 +188,13 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         await renderResizablePanelGroup(this.renderController);
 
         assert.hasNumericStyle(
-          '.panel-0-content',
+          '[data-test-panel-index="0"]',
           orientationProperties.dimension,
           355,
           1,
         );
         assert.hasNumericStyle(
-          '.panel-1-content',
+          '[data-test-panel-index="1"]',
           orientationProperties.dimension,
           143,
           1,
@@ -210,13 +211,13 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         await renderResizablePanelGroup(this.renderController);
 
         assert.hasNumericStyle(
-          '.panel-0-content',
+          '[data-test-panel-index="0"]',
           orientationProperties.dimension,
           40,
           1,
         );
         assert.hasNumericStyle(
-          '.panel-1-content',
+          '[data-test-panel-index="1"]',
           orientationProperties.dimension,
           50,
           1,
@@ -237,13 +238,13 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         await renderResizablePanelGroup(this.renderController);
 
         assert.hasNumericStyle(
-          '.panel-0-content',
+          '[data-test-panel-index="0"]',
           orientationProperties.dimension,
           40,
           2,
         );
         assert.hasNumericStyle(
-          '.panel-1-content',
+          '[data-test-panel-index="1"]',
           orientationProperties.dimension,
           50,
           2,
@@ -267,13 +268,13 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         await waitForRerender();
 
         assert.hasNumericStyle(
-          '.panel-0-content',
+          '[data-test-panel-index="0"]',
           orientationProperties.dimension,
           240,
           1,
         );
         assert.hasNumericStyle(
-          '.panel-1-content',
+          '[data-test-panel-index="1"]',
           orientationProperties.dimension,
           160,
           1,
@@ -294,13 +295,13 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         await renderResizablePanelGroup(this.renderController);
 
         assert.hasNumericStyle(
-          '.panel-0-content',
+          '[data-test-panel-index="0"]',
           orientationProperties.dimension,
           100,
           1.5,
         );
         assert.hasNumericStyle(
-          '.panel-1-content',
+          '[data-test-panel-index="1"]',
           orientationProperties.dimension,
           100,
           1.5,
@@ -315,13 +316,13 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         await waitForRerender();
 
         assert.hasNumericStyle(
-          '.panel-0-content',
+          '[data-test-panel-index="0"]',
           orientationProperties.dimension,
           200,
           1.5,
         );
         assert.hasNumericStyle(
-          '.panel-1-content',
+          '[data-test-panel-index="1"]',
           orientationProperties.dimension,
           200,
           1.5,
@@ -345,13 +346,13 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         await waitForRerender();
 
         assert.hasNumericStyle(
-          '.panel-0-content',
+          '[data-test-panel-index="0"]',
           orientationProperties.dimension,
           120,
           1,
         );
         assert.hasNumericStyle(
-          '.panel-1-content',
+          '[data-test-panel-index="1"]',
           orientationProperties.dimension,
           80,
           1,
@@ -373,13 +374,13 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         await renderResizablePanelGroup(this.renderController);
 
         assert.hasNumericStyle(
-          '.panel-0-content',
+          '[data-test-panel-index="0"]',
           orientationProperties.dimension,
           240,
           1,
         );
         assert.hasNumericStyle(
-          '.panel-1-content',
+          '[data-test-panel-index="1"]',
           orientationProperties.dimension,
           160,
           1,
@@ -395,13 +396,13 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         await waitForRerender();
         // Maintain the ratio 3:2 when resizing
         assert.hasNumericStyle(
-          '.panel-0-content',
+          '[data-test-panel-index="0"]',
           orientationProperties.dimension,
           120,
           1,
         );
         assert.hasNumericStyle(
-          '.panel-1-content',
+          '[data-test-panel-index="1"]',
           orientationProperties.dimension,
           80,
           1,
@@ -428,13 +429,13 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         await renderResizablePanelGroup(this.renderController);
 
         assert.hasNumericStyle(
-          '.panel-0-content',
+          '[data-test-panel-index="0"]',
           orientationProperties.dimension,
           400,
           1,
         );
         assert.hasNumericStyle(
-          '.panel-1-content',
+          '[data-test-panel-index="1"]',
           orientationProperties.dimension,
           200,
           1,
@@ -451,13 +452,13 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
         // Maintain the ratio 2:1 when resizing
         assert.hasNumericStyle(
-          '.panel-0-content',
+          '[data-test-panel-index="0"]',
           orientationProperties.dimension,
           133,
           1,
         );
         assert.hasNumericStyle(
-          '.panel-1-content',
+          '[data-test-panel-index="1"]',
           orientationProperties.dimension,
           67,
           1,
@@ -491,13 +492,13 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         await waitForRerender(); // let onResizeHandleDblClick run
 
         assert.hasNumericStyle(
-          '.panel-0-content',
+          '[data-test-panel-index="0"]',
           orientationProperties.dimension,
           600,
           1,
         );
         assert.hasNumericStyle(
-          '.panel-1-content',
+          '[data-test-panel-index="1"]',
           orientationProperties.dimension,
           0,
           2,
@@ -514,13 +515,13 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         await waitForRerender();
 
         assert.hasNumericStyle(
-          '.panel-0-content',
+          '[data-test-panel-index="0"]',
           orientationProperties.dimension,
           300,
           1,
         );
         assert.hasNumericStyle(
-          '.panel-1-content',
+          '[data-test-panel-index="1"]',
           orientationProperties.dimension,
           0,
           2,
@@ -531,13 +532,13 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         await waitForRerender(); // let onResizeHandleDblClick run
 
         assert.hasNumericStyle(
-          '.panel-0-content',
+          '[data-test-panel-index="0"]',
           orientationProperties.dimension,
           180,
           1,
         );
         assert.hasNumericStyle(
-          '.panel-1-content',
+          '[data-test-panel-index="1"]',
           orientationProperties.dimension,
           120,
           1,
@@ -555,13 +556,13 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
         // expected behavior: panel length percentages would remain consistent
         assert.hasNumericStyle(
-          '.panel-0-content',
+          '[data-test-panel-index="0"]',
           orientationProperties.dimension,
           360,
           1,
         );
         assert.hasNumericStyle(
-          '.panel-1-content',
+          '[data-test-panel-index="1"]',
           orientationProperties.dimension,
           240,
           1,
@@ -600,13 +601,13 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         await waitForRerender();
 
         assert.hasNumericStyle(
-          '.panel-0-content',
+          '[data-test-panel-index="0"]',
           orientationProperties.dimension,
           218,
           1,
         );
         assert.hasNumericStyle(
-          '.panel-1-content',
+          '[data-test-panel-index="1"]',
           orientationProperties.dimension,
           0,
           0,
@@ -616,13 +617,13 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         await waitForRerender();
 
         assert.hasNumericStyle(
-          '.panel-0-content',
+          '[data-test-panel-index="0"]',
           orientationProperties.dimension,
           168,
           1,
         );
         assert.hasNumericStyle(
-          '.panel-1-content',
+          '[data-test-panel-index="1"]',
           orientationProperties.dimension,
           50,
           1,
@@ -632,13 +633,13 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         await waitForRerender();
 
         assert.hasNumericStyle(
-          '.panel-0-content',
+          '[data-test-panel-index="0"]',
           orientationProperties.dimension,
           218,
           1,
         );
         assert.hasNumericStyle(
-          '.panel-1-content',
+          '[data-test-panel-index="1"]',
           orientationProperties.dimension,
           0,
           0,
