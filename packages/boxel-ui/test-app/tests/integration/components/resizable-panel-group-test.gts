@@ -4,7 +4,6 @@ import { doubleClick, render, RenderingTestContext } from '@ember/test-helpers';
 import { htmlSafe } from '@ember/template';
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
-import { eq } from '@cardstack/boxel-ui/helpers';
 
 class PanelProperties {
   @tracked lengthPx?: number;
