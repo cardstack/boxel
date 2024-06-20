@@ -175,7 +175,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
       test<MyTestContext>(`it can lay out panels with ${orientationProperties.orientation} orientation (length specified)`, async function (assert) {
         this.renderController.containerStyle = `
-          ${orientationProperties.perpendicularDimension}: 200px;
+          ${orientationProperties.perpendicularDimension}: 100px;
           max-${orientationProperties.dimension}: 100%;
           ${orientationProperties.dimension}: 518px;
           border: 1px solid green
@@ -204,7 +204,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 108px;
           max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 200px;
+          ${orientationProperties.perpendicularDimension}: 100px;
         `;
 
         await renderResizablePanelGroup(this.renderController);
@@ -227,7 +227,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 108px;
           max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 200px;
+          ${orientationProperties.perpendicularDimension}: 100px;
           border: 1px solid green
         `;
 
@@ -253,7 +253,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       test<MyTestContext>(`it adjusts to its container growing (default)`, async function (assert) {
         this.renderController.containerStyle = `
           max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 200px;
+          ${orientationProperties.perpendicularDimension}: 100px;
           ${orientationProperties.dimension}: 218px;
         `;
 
@@ -261,7 +261,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
         this.renderController.containerStyle = `
           max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 200px;
+          ${orientationProperties.perpendicularDimension}: 100px;
           ${orientationProperties.dimension}: 418px;
         `;
         await waitForRerender();
@@ -284,7 +284,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 218px;
           max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 200px;
+          ${orientationProperties.perpendicularDimension}: 100px;
           border: 1px solid green;
         `;
 
@@ -309,7 +309,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 418px;
           max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 200px;
+          ${orientationProperties.perpendicularDimension}: 100px;
           border: 1px solid green;
         `;
         await waitForRerender();
@@ -332,14 +332,14 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 418px;
           max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 200px;
+          ${orientationProperties.perpendicularDimension}: 100px;
         `;
 
         await renderResizablePanelGroup(this.renderController);
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 218px;
           max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 200px;
+          ${orientationProperties.perpendicularDimension}: 100px;
         `;
 
         await waitForRerender();
@@ -362,7 +362,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 420px;
           max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 200px;
+          ${orientationProperties.perpendicularDimension}: 100px;
           border: 1px solid green
         `;
 
@@ -388,7 +388,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 220px;
           max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 200px;
+          ${orientationProperties.perpendicularDimension}: 100px;
           border: 1px solid green
         `;
 
@@ -412,7 +412,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 620px;
           max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 200px;
+          ${orientationProperties.perpendicularDimension}: 100px;
           border: 1px solid green
         `;
 
@@ -443,7 +443,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 220px;
           max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 200px;
+          ${orientationProperties.perpendicularDimension}: 100px;
           border: 1px solid green
         `;
 
@@ -468,7 +468,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 620px;
           max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 200px;
+          ${orientationProperties.perpendicularDimension}: 100px;
           border: 1px solid green
         `;
 
@@ -507,7 +507,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 320px;
           max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 200px;
+          ${orientationProperties.perpendicularDimension}: 100px;
           border: 1px solid green
         `;
 
@@ -547,7 +547,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 620px;
           max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 200px;
+          ${orientationProperties.perpendicularDimension}: 100px;
           border: 1px solid green
         `;
 
@@ -572,7 +572,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 218px;
           max-${orientationProperties.dimension}: 100%;
-          ${orientationProperties.perpendicularDimension}: 200px;
+          ${orientationProperties.perpendicularDimension}: 100px;
         `;
 
         this.renderController.panels = [
