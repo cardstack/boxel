@@ -127,32 +127,19 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
                   @minLengthPx={{panel.minLengthPx}}
                   @isHidden={{panel.isHidden}}
                 >
-                  {{#if (eq index 1)}}
-                    <div
-                      class='panel-{{index}}-content'
-                      style={{htmlSafe
-                        (if
-                          panel.outerContainerStyle panel.outerContainerStyle ''
-                        )
-                      }}
-                    >
-                      <div>
-                        Panel
-                        {{index}}
-                      </div>
+                  <div
+                    class='panel-{{index}}-content'
+                    style={{htmlSafe
+                      (if
+                        panel.outerContainerStyle panel.outerContainerStyle ''
+                      )
+                    }}
+                  >
+                    <div>
+                      Panel
+                      {{index}}
                     </div>
-                  {{else}}
-                    <div
-                      class='panel-{{index}}-content'
-                      style={{htmlSafe
-                        (if
-                          panel.outerContainerStyle panel.outerContainerStyle ''
-                        )
-                      }}
-                    >
-                      Panel 2
-                    </div>
-                  {{/if}}
+                  </div>
                 </ResizablePanel>
                 {{#if panel.showResizeHandle}}
                   <ResizeHandle />
