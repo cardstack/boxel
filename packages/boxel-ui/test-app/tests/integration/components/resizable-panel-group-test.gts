@@ -181,7 +181,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       test<MyTestContext>(`it can lay out panels with ${orientationProperties.orientation} orientation (length specified)`, async function (assert) {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 518px;
-          border: 1px solid green
           `;
 
         this.renderController.panels[0].lengthPx = 355;
@@ -227,7 +226,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       test<MyTestContext>(`it respects ${orientationProperties.orientation} minLength (length specified)`, async function (assert) {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 108px;
-          border: 1px solid green
         `;
 
         this.renderController.panels[0].lengthPx = 45;
@@ -278,7 +276,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       test<MyTestContext>(`it adjusts to its container growing (length specified)`, async function (assert) {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 218px;
-          border: 1px solid green;
         `;
 
         this.renderController.panels[0].lengthPx = 100;
@@ -301,7 +298,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 418px;
-          border: 1px solid green;
         `;
         await waitForRerender();
 
@@ -348,7 +344,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       test<MyTestContext>(`it adjusts to its container shrinking (length specified A)`, async function (assert) {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 420px;
-          border: 1px solid green
         `;
 
         // length ratio panel 1 and panel 2 is 3:2
@@ -372,7 +367,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 220px;
-          border: 1px solid green
         `;
 
         await waitForRerender();
@@ -394,7 +388,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       test<MyTestContext>(`it adjusts to its container shrinking (length specified B)`, async function (assert) {
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 620px;
-          border: 1px solid green
         `;
 
         // length ratio panel 1 and panel 2 is 2:1
@@ -403,7 +396,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
         this.renderController.panels[0].innerContainerStyle = `
           ${orientationProperties.dimension}: 180px;
-          background: blue
         `;
 
         await renderResizablePanelGroup(this.renderController);
@@ -422,8 +414,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         );
 
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 220px;
-          border: 1px solid green
+          ${orientationProperties.dimension}: 218px;
         `;
 
         await waitForRerender();
@@ -445,8 +436,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
       test<MyTestContext>(`it adjusts to its container shrinking and growing`, async function (assert) {
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 620px;
-          border: 1px solid green
+          ${orientationProperties.dimension}: 618px;
         `;
 
         this.renderController.panels[0].lengthPx = 400;
@@ -454,7 +444,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
         this.renderController.panels[0].innerContainerStyle = `
           ${orientationProperties.dimension}: 180px;
-          background: blue
         `;
 
         await renderResizablePanelGroup(this.renderController);
@@ -482,8 +471,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
         // shrink container by ~5
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 320px;
-          border: 1px solid green
+          ${orientationProperties.dimension}: 318px;
         `;
 
         await waitForRerender();
@@ -521,7 +509,6 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         // increase window/container length to original length
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: 620px;
-          border: 1px solid green
         `;
 
         await waitForRerender();
