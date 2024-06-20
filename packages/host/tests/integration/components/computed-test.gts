@@ -6,8 +6,6 @@ import { module, test } from 'qunit';
 import { RealmSessionContextName, baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
-
 import {
   cleanWhiteSpace,
   testRealmURL,
@@ -15,6 +13,7 @@ import {
   provideConsumeContext,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  lookupLoaderService,
 } from '../../helpers';
 import {
   setupBaseRealm,
@@ -43,8 +42,7 @@ module('Integration | computeds', function (hooks) {
       canWrite: true,
     });
 
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    loader = lookupLoaderService().loader;
   });
   setupLocalIndexing(hooks);
 

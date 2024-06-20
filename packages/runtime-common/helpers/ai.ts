@@ -19,7 +19,7 @@ export type ObjectSchema = {
   };
 };
 
-type LinksToSchema = {
+export type LinksToSchema = {
   type: 'object';
   description?: string;
   properties: {
@@ -234,26 +234,30 @@ function generatePatchCallSpecification(
   return schema;
 }
 
+type RelationshipFieldInfo = {
+  flatFieldName: string;
+  fieldType: 'linksTo' | 'linksToMany';
+  description?: string;
+};
+
 function generatePatchCallRelationshipsSpecification(
   def: typeof CardAPI.BaseDef,
   cardApi: typeof CardAPI,
 ): RelationshipsSchema | undefined {
-  const { id: _removedIdField, ...fields } = cardApi.getFields(def, {
-    usedFieldsOnly: false,
-  });
-  let schema: RelationshipsSchema | undefined;
-  for (let [fieldName, field] of Object.entries(fields)) {
-    if (field.fieldType !== 'linksTo' && field.fieldType !== 'linksToMany') {
-      continue;
-    }
-    if (!schema) {
-      schema = {
-        type: 'object',
-        properties: {},
-        required: [],
-      };
-    }
-    let linkedItemSchema: LinksToSchema = {
+  let relationships: RelationshipFieldInfo[] = generateRelationshipFieldsInfo(
+    def,
+    cardApi,
+  );
+  if (!relationships.length) {
+    return;
+  }
+  let schema: RelationshipsSchema = {
+    type: 'object',
+    properties: {},
+    required: [],
+  };
+  for (let rel of relationships) {
+    let relSchema: LinksToSchema = {
       type: 'object',
       properties: {
         links: {
@@ -266,19 +270,53 @@ function generatePatchCallRelationshipsSpecification(
       },
       required: ['links'],
     };
-    schema.required.push(fieldName);
-    schema.properties[fieldName] =
-      field.fieldType === 'linksTo'
-        ? linkedItemSchema
+    schema.properties[rel.flatFieldName] =
+      rel.fieldType === 'linksTo'
+        ? relSchema
         : {
             type: 'array',
-            items: linkedItemSchema,
+            items: relSchema,
           };
-    if (field.description) {
-      schema.properties[fieldName].description = field.description;
+    schema.required.push(rel.flatFieldName);
+    if (rel.description) {
+      schema.properties[rel.flatFieldName].description = rel.description;
     }
   }
   return schema;
+}
+
+function generateRelationshipFieldsInfo(
+  def: typeof CardAPI.BaseDef,
+  cardApi: typeof CardAPI,
+  relationships: RelationshipFieldInfo[] = [],
+  fieldName?: string,
+) {
+  const { id: _removedIdField, ...fields } = cardApi.getFields(def, {
+    usedFieldsOnly: false,
+  });
+  for (let [fName, fValue] of Object.entries(fields)) {
+    let flatFieldName = fieldName ? `${fieldName}.${fName}` : fName;
+    if (fValue.computeVia) {
+      continue;
+    } else if (
+      fValue.fieldType === 'linksTo' ||
+      fValue.fieldType === 'linksToMany'
+    ) {
+      relationships.push({
+        flatFieldName,
+        fieldType: fValue.fieldType,
+        description: fValue.description,
+      });
+    } else {
+      relationships = generateRelationshipFieldsInfo(
+        fValue.card,
+        cardApi,
+        relationships,
+        flatFieldName,
+      );
+    }
+  }
+  return relationships;
 }
 
 /**

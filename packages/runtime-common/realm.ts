@@ -29,6 +29,7 @@ import {
   type Indexer,
   fetchUserPermissions,
   addAuthorizationHeader,
+  maybeHandleScopedCSSRequest,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -67,6 +68,7 @@ import RealmPermissionChecker from './realm-permission-checker';
 import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
 
 import { RealmAuthDataSource } from './realm-auth-data-source';
+import { fetcher } from './fetcher';
 
 export interface RealmSession {
   canRead: boolean;
@@ -289,21 +291,29 @@ export class Realm {
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
     this.#assetsURL = assetsURL;
 
-    let loader = virtualNetwork.createLoader();
+    let maybeHandle = this.maybeHandle.bind(this);
+    let fetch = fetcher(virtualNetwork.fetch, [
+      async (req, next) => {
+        return (await maybeHandleScopedCSSRequest(req)) || next(req);
+      },
+      async (request, next) => {
+        let response = await maybeHandle(request);
+        return response || next(request);
+      },
+      async (request, next) => {
+        let authHandler = addAuthorizationHeader(
+          fetch,
+          new RealmAuthDataSource(this.#matrixClient, fetch, this.url),
+        );
+        let response = await authHandler(request);
+        return response || next(request);
+      },
+    ]);
+
+    let loader = new Loader(fetch, virtualNetwork.resolveImport);
     adapter.setLoader?.(loader);
 
     this.loaderTemplate = loader;
-    this.loaderTemplate.registerURLHandler(
-      addAuthorizationHeader(
-        loader,
-        new RealmAuthDataSource(
-          this.#matrixClient,
-          this.loaderTemplate,
-          this.url,
-        ),
-      ),
-    );
-    this.loaderTemplate.registerURLHandler(this.maybeHandle.bind(this));
 
     this.#adapter = adapter;
     this.#onIndexer = onIndexer;
@@ -505,7 +515,7 @@ export class Realm {
     });
   }
 
-  get loader() {
+  private get loader() {
     // the current loader used by the search index will contain the latest
     // module updates as we obtain a new loader for each indexing run.
     if (isNode) {
