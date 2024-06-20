@@ -570,7 +570,7 @@ export class Indexer {
       fieldArity({
         type: onRef,
         path: key,
-        value: [query, 'LIKE', v],
+        value: [query, 'ILIKE', v],
         errorHint: 'filter',
       }),
     ];

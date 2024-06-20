@@ -684,6 +684,7 @@ export default class CodeSubmode extends Component<Signature> {
     <SubmodeLayout
       @onCardSelectFromSearch={{this.openSearchResultInEditor}}
       @hideAiAssistant={{true}}
+      as |search|
     >
       <div
         class='code-mode'
@@ -744,6 +745,7 @@ export default class CodeSubmode extends Component<Signature> {
                           @delete={{this.setItemToDelete}}
                           @goToDefinition={{this.goToDefinition}}
                           @createFile={{perform this.createFile}}
+                          @openSearch={{search.openSearchToResults}}
                           data-test-card-inspector-panel
                         />
                       {{/if}}
