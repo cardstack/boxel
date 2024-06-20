@@ -5,10 +5,13 @@ import { service } from '@ember/service';
 
 import { buildWaiter } from '@ember/test-waiters';
 
+import { tracked } from '@glimmer/tracking';
+
 import {
   Permissions,
   SupportedMimeType,
   type RealmInfo,
+  JWTPayload,
 } from '@cardstack/runtime-common';
 
 import {
@@ -17,16 +20,60 @@ import {
 } from '../resources/realm-session';
 
 import type LoaderService from './loader-service';
+import type MatrixService from './matrix-service';
+import { task } from 'ember-concurrency';
 
 const waiter = buildWaiter('realm-service');
 
+interface Meta {
+  info: RealmInfo;
+  isPublic: boolean;
+}
+
 class RealmResource {
-  type = 'ready' as const;
+  @service private declare matrixService: MatrixService;
+
   constructor(
-    readonly info: RealmInfo,
-    readonly session: RealmSessionResource,
-    readonly isPublic: boolean,
-  ) {}
+    private realmURL: string,
+    auth: { token: string; claims: JWTPayload } | undefined,
+  ) {
+    this.auth = auth;
+  }
+
+  @tracked meta: Meta | undefined;
+
+  @tracked
+  private auth: { token: string; claims: JWTPayload } | undefined;
+
+  get token(): string | undefined {
+    return this.auth?.token;
+  }
+
+  get claims(): JWTPayload | undefined {
+    return this.auth?.claims;
+  }
+
+  private loggingIn: Promise<void> | undefined;
+
+  async login(): Promise<void> {
+    if (!this.loggingIn) {
+      this.loggingIn = this.loginTask.perform();
+    }
+    await this.loggingIn;
+  }
+
+  private loginTask = task(async () => {
+    let token = await this.matrixService.createRealmSession(
+      new URL(this.realmURL),
+    );
+    let claims = claimsFromRawToken(token);
+    this.auth = { claims, token };
+    this.loggingIn = undefined;
+  });
+
+  logout(): void {
+    this.auth = undefined;
+  }
 }
 
 class InitialRealmResource {
@@ -73,7 +120,9 @@ class InitialRealmResource {
       url: json.data.id,
       ...json.data.attributes,
     };
-    this.#state = new RealmResource(info, this.#state.session, this.isPublic);
+    let resource = new RealmResource(info, this.#state.session, this.isPublic);
+    setOwner(resource, getOwner(this));
+    this.#state = resource;
   }
 }
 
@@ -104,15 +153,26 @@ export default class RealmService extends Service {
   }
 
   info = (url: string): RealmInfo => {
-    return this.realm(url).info;
+    let info = this.requireRealmMeta(url).meta.info;
+    if (!info) {
+      throw new RealmNotReadyError(
+        `Haven't fetched from realm at ${url} yet, so realm info is not available`,
+      );
+    }
+    return info;
   };
 
   canRead = (url: string): boolean => {
-    return this.realm(url).session.canRead;
+    let resource = this.requireRealmMeta(url);
+    return (
+      resource.meta.isPublic ||
+      Boolean(resource.claims?.permissions?.includes('read'))
+    );
   };
 
   canWrite = (url: string): boolean => {
-    return this.realm(url).session.canWrite;
+    let resource = this.requireRealmMeta(url);
+    return Boolean(resource.claims?.permissions?.includes('write'));
   };
 
   permissions = (url: string): Permissions => {
@@ -127,34 +187,29 @@ export default class RealmService extends Service {
     };
   };
 
-  token = (url: string, httpMethod: string): string | undefined => {
-    let resource = this.realm(url);
-    if (resource.isPublic && ['GET', 'HEAD'].includes(httpMethod)) {
-      return undefined;
-    } else {
-      return this.realm(url).session.rawRealmToken;
-    }
+  token = (url: string): string | undefined => {
+    return this.knownRealm(url)?.token;
   };
 
-  private realm(url: string): RealmResource {
-    let realmURL = this.toRealmURL(url);
-    if (!realmURL) {
-      throw new RealmNotReadyError(`Failed to ensureRealmReady for ${url}`);
-    }
-    let r = this.realms.get(realmURL);
-    let s = r?.state;
-    if (s?.type !== 'ready') {
+  private requireRealmMeta(url: string): RealmResource & { meta: Meta } {
+    let resource = this.knownRealm(url);
+    if (!resource) {
       throw new RealmNotReadyError(
-        `Failed to await ensureRealmReady for ${realmURL}`,
+        `Haven't fetched from realm at ${url} yet, so realm info is not available`,
       );
     }
-    return s;
+    if (!resource.meta) {
+      throw new RealmNotReadyError(
+        `Haven't fetched from realm at ${url} yet, so realm info is not available`,
+      );
+    }
+    return resource as RealmResource & { meta: Meta };
   }
 
-  private toRealmURL(url: string): string | undefined {
-    for (let key of this.realms.keys()) {
+  private knownRealm(url: string): RealmResource | undefined {
+    for (let [key, value] of this.realms) {
       if (url.startsWith(key)) {
-        return key;
+        return value;
       }
     }
     return undefined;
@@ -179,8 +234,39 @@ export default class RealmService extends Service {
   }
 
   async refreshToken(url: string): Promise<void> {
-    await this.realm(url).session.refreshToken();
+    await this.requireRealmMeta(url).session.refreshToken();
   }
 
-  private realms: Map<string, InitialRealmResource> = new Map();
+  private realms: Map<string, RealmResource> = restoreSessions();
+}
+
+const tokenRefreshPeriodSec = 5 * 60; // 5 minutes
+const sessionLocalStorageKey = 'boxel-session';
+
+function claimsFromRawToken(rawToken: string): JWTPayload {
+  let [_header, payload] = rawToken.split('.');
+  return JSON.parse(atob(payload)) as JWTPayload;
+}
+
+function restoreSessions(): Map<string, RealmResource> {
+  let sessions: Map<string, RealmResource> = new Map();
+  let tokens = extractSessionsFromStorage();
+  if (tokens) {
+    for (let [realmURL, token] of Object.entries(tokens)) {
+      let claims = claimsFromRawToken(token);
+      let expiration = claims.exp;
+      if (expiration - tokenRefreshPeriodSec > Date.now() / 1000) {
+        sessions.set(realmURL, new RealmResource(realmURL, { claims, token }));
+      }
+    }
+  }
+  return sessions;
+}
+
+function extractSessionsFromStorage(): Record<string, string> | undefined {
+  let sessionsString = window.localStorage.getItem(sessionLocalStorageKey);
+  if (sessionsString) {
+    return JSON.parse(sessionsString);
+  }
+  return undefined;
 }

@@ -17,7 +17,7 @@ module('Unit | AuthorizationMiddleware', function (hooks) {
       assert.strictEqual(req.headers.get('Authorization'), null);
       return new Response('OK', { status: 200 });
     };
-    let fetch = fetcher(fetchImplementation, [authorizationMiddleware]);
+    let fetch = fetcher(fetchImplementation, [authorizationMiddleware()]);
     let response = await fetch(req);
     assert.strictEqual(response.status, 200);
   });
@@ -29,7 +29,7 @@ module('Unit | AuthorizationMiddleware', function (hooks) {
       assert.strictEqual(req.headers.get('Authorization'), null);
       return new Response('Forbidden', { status: 403 });
     };
-    let fetch = fetcher(fetchImplementation, [authorizationMiddleware]);
+    let fetch = fetcher(fetchImplementation, [authorizationMiddleware()]);
     let response = await fetch(req);
     assert.strictEqual(response.status, 403);
   });
