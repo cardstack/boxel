@@ -31,6 +31,8 @@ export default class CommandService extends Service {
             relationships: payload.relationships,
           },
         );
+      } else if (command.name === 'searchCard') {
+        console.log('running search');
       }
       await this.matrixService.sendReactionEvent(roomId, eventId, 'applied');
       if (res) {

@@ -369,6 +369,9 @@ export function getSearchTool(attachedOpenCard: CardDef) {
             type: 'string',
             const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
           },
+          description: {
+            type: 'string',
+          },
           filter: {
             type: 'object',
             properties: {
@@ -390,7 +393,7 @@ export function getSearchTool(attachedOpenCard: CardDef) {
             },
           },
         },
-        required: ['card_id', 'filter'],
+        required: ['card_id', 'filter', 'description'],
       },
     },
   };
