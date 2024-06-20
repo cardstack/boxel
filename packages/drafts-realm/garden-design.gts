@@ -15,7 +15,7 @@ import type Owner from '@ember/owner';
 import { htmlSafe } from '@ember/template';
 import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
-import { getLiveCards } from '@cardstack/runtime-common';
+import { baseRealm, getLiveCards } from '@cardstack/runtime-common';
 
 class Isolated extends Component<typeof GardenDesign> {
   <template>
@@ -210,21 +210,20 @@ class Isolated extends Component<typeof GardenDesign> {
       }),
     );
     this.updateGridModel();
-    let type = {
-      module: 'http://localhost:4201/drafts/garden-design',
-      name: 'GardenItem',
-    };
     this.liveQuery = getLiveCards(
       {
         filter: {
-          type,
+          eq: {
+            _cardType: 'Garden Item',
+          },
         },
         sort: [
           {
             on: {
-              ...type,
+              module: `${baseRealm.url}card-api`,
+              name: 'CardDef',
             },
-            by: 'symbol',
+            by: 'title',
           },
         ],
       },
@@ -384,7 +383,7 @@ export class GardenItem extends CardDef {
   @field symbol = contains(StringField);
   @field title = contains(StringField, {
     computeVia: function (this: GardenItem) {
-      return this.gardenItemId;
+      return this.symbol;
     },
   });
 
