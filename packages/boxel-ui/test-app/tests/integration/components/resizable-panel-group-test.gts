@@ -1,6 +1,7 @@
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { doubleClick, render, RenderingTestContext } from '@ember/test-helpers';
+import { htmlSafe } from '@ember/template';
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -110,7 +111,10 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       ) {
         await render(<template>
           {{! template-lint-disable no-inline-styles }}
-          <div id='test-container' style={{renderController.containerStyle}}>
+          <div
+            id='test-container'
+            style={{htmlSafe renderController.containerStyle}}
+          >
             <ResizablePanelGroup
               @orientation={{orientationProperties.orientation}}
               @reverseCollapse={{true}}
@@ -126,7 +130,11 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
                   {{#if (eq index 1)}}
                     <div
                       class='panel-{{index}}-content'
-                      style={{panel.outerContainerStyle}}
+                      style={{htmlSafe
+                        (if
+                          panel.outerContainerStyle panel.outerContainerStyle ''
+                        )
+                      }}
                     >
                       <div>
                         Panel
@@ -136,7 +144,11 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
                   {{else}}
                     <div
                       class='panel-{{index}}-content'
-                      style={{panel.outerContainerStyle}}
+                      style={{htmlSafe
+                        (if
+                          panel.outerContainerStyle panel.outerContainerStyle ''
+                        )
+                      }}
                     >
                       Panel 2
                     </div>
