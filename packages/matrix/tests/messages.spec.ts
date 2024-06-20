@@ -290,7 +290,7 @@ test.describe('Room messages', () => {
     expect(serializeCard.data.attributes.picture).toBeUndefined();
   });
 
-  test(`it does include patch tool in message event when top-most card is writable and context is shared`, async ({
+  test(`it does include command tools (patch, search) in message event when top-most card is writable and context is shared`, async ({
     page,
   }) => {
     await login(page, 'user1', 'pass');
@@ -348,6 +348,46 @@ test.describe('Room messages', () => {
             required: ['card_id', 'attributes', 'description'],
           },
         },
+      },
+      {
+        function: {
+          description:
+            'Propose a query to search for a card instance related to module it was from. Always prioritise search based upon the card that was last shared. Ensure that you find the correct "module" and "name" from the OUTERMOST "adoptsFrom" field from the card data that is shared',
+          name: 'searchCard',
+          parameters: {
+            properties: {
+              card_id: {
+                const: `${testHost}/mango`,
+                type: 'string',
+              },
+              description: {
+                type: 'string',
+              },
+              filter: {
+                properties: {
+                  type: {
+                    properties: {
+                      module: {
+                        description: 'the absolute path of the module',
+                        type: 'string',
+                      },
+                      name: {
+                        description: 'the name of the module',
+                        type: 'string',
+                      },
+                    },
+                    required: ['module', 'name'],
+                    type: 'object',
+                  },
+                },
+                type: 'object',
+              },
+            },
+            required: ['card_id', 'filter', 'description'],
+            type: 'object',
+          },
+        },
+        type: 'function',
       },
     ]);
   });
