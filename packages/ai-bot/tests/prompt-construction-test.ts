@@ -1051,7 +1051,7 @@ module('getModifyPrompt', () => {
       function: {
         name: 'searchCard',
         description:
-          'Propose a query to search for a card instance related to module it was from. \n        Always prioritise search based upon the card that was last shared. \n        Ensure that you find the correct "module" and "name" from the OUTERMOST "adoptsFrom" field from the card data that is shared',
+          'Propose a query to search for a card instance related to module it was from. Always prioritise search based upon the card that was last shared. Ensure that you find the correct "module" and "name" from the OUTERMOST "adoptsFrom" field from the card data that is shared',
         parameters: {
           type: 'object',
           properties: {
