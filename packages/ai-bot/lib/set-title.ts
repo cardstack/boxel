@@ -4,6 +4,7 @@ import {
   type OpenAIPromptMessage,
   isCommandReactionEvent,
   attachedCardsToMessage,
+  isCommandEvent,
 } from '../helpers';
 import { MatrixClient } from './matrix';
 import { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
