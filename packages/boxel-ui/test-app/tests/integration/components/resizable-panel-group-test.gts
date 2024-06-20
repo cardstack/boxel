@@ -152,10 +152,10 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
       test<MyTestContext>(`it can lay out panels with ${orientationProperties.orientation} orientation (default)`, async function (assert) {
         this.renderController.containerStyle = `
-            ${orientationProperties.perpendicularDimension}: 100px;
-            max-${orientationProperties.dimension}: 100%;
-            ${orientationProperties.dimension}: 318px;
-          `;
+          ${orientationProperties.perpendicularDimension}: 100px;
+          max-${orientationProperties.dimension}: 100%;
+          ${orientationProperties.dimension}: 318px;
+        `;
 
         await renderResizablePanelGroup(this.renderController);
 
