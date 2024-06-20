@@ -247,7 +247,7 @@ class Isolated extends Component<typeof GardenDesign> {
       return;
     }
 
-    return this.liveQuery.instances;
+    return this.liveQuery.instances as GardenItem[];
   }
 
   get title() {
