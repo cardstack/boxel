@@ -5,12 +5,6 @@ import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
-function sleep(ms: number) {
-  return new Promise(function (resolve) {
-    setTimeout(resolve, ms);
-  });
-}
-
 class PanelProperties {
   @tracked lengthPx?: number;
   @tracked isHidden?: boolean;
@@ -155,7 +149,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
             </ResizablePanelGroup>
           </div>
         </template>);
-        await sleep(100); // let didResizeModifier run
+        await waitForRerender();
       }
 
       test<MyTestContext>(`it can lay out panels with ${orientationProperties.orientation} orientation (default)`, async function (assert) {
@@ -272,7 +266,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
           ${orientationProperties.perpendicularDimension}: 200px;
           ${orientationProperties.dimension}: 418px;
         `;
-        await sleep(100); // let didResizeModifier run
+        await waitForRerender();
 
         assert.hasNumericStyle(
           '.panel-0-content',
@@ -320,7 +314,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
           ${orientationProperties.perpendicularDimension}: 200px;
           border: 1px solid green;
         `;
-        await sleep(100); // let didResizeModifier run
+        await waitForRerender();
 
         assert.hasNumericStyle(
           '.panel-0-content',
@@ -350,7 +344,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
           ${orientationProperties.perpendicularDimension}: 200px;
         `;
 
-        await sleep(100); // let didResizeModifier run
+        await waitForRerender();
 
         assert.hasNumericStyle(
           '.panel-0-content',
@@ -400,7 +394,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
           border: 1px solid green
         `;
 
-        await sleep(100); // let didResizeModifier run
+        await waitForRerender();
         // Maintain the ratio 3:2 when resizing
         assert.hasNumericStyle(
           '.panel-0-content',
@@ -455,7 +449,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
           border: 1px solid green
         `;
 
-        await sleep(100); // let didResizeModifier run
+        await waitForRerender();
 
         // Maintain the ratio 2:1 when resizing
         assert.hasNumericStyle(
@@ -493,10 +487,10 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         this.renderController.panels[0].lengthPx = 50;
         this.renderController.panels[1].lengthPx = 550;
 
-        await sleep(100); // let didResizeModifier run
+        await waitForRerender();
 
         await doubleClick('[data-test-resize-handle]'); // Double-click to hide recent
-        await sleep(100); // let onResizeHandleDblClick run
+        await waitForRerender(); // let onResizeHandleDblClick run
 
         assert.hasNumericStyle(
           '.panel-0-content',
@@ -519,7 +513,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
           border: 1px solid green
         `;
 
-        await sleep(100); // let didResizeModifier run
+        await waitForRerender();
 
         assert.hasNumericStyle(
           '.panel-0-content',
@@ -536,7 +530,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
         await doubleClick('[data-test-resize-handle]'); // Double-click to unhide recent
 
-        await sleep(100); // let onResizeHandleDblClick run
+        await waitForRerender(); // let onResizeHandleDblClick run
 
         assert.hasNumericStyle(
           '.panel-0-content',
@@ -559,7 +553,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
           border: 1px solid green
         `;
 
-        await sleep(100); // let didResizeModifier run
+        await waitForRerender();
 
         // expected behavior: panel length percentages would remain consistent
         assert.hasNumericStyle(
@@ -605,7 +599,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
         await renderResizablePanelGroup(this.renderController);
 
-        await sleep(100); // let didResizeModifier run
+        await waitForRerender();
 
         assert.hasNumericStyle(
           '.panel-0-content',
@@ -621,7 +615,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         );
 
         this.renderController.panels[1].isHidden = false;
-        await sleep(100); // let didResizeModifier run
+        await waitForRerender();
 
         assert.hasNumericStyle(
           '.panel-0-content',
@@ -637,7 +631,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         );
 
         this.renderController.panels[1].isHidden = true;
-        await sleep(100); // let didResizeModifier run
+        await waitForRerender();
 
         assert.hasNumericStyle(
           '.panel-0-content',
@@ -655,3 +649,9 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
     },
   );
 });
+
+function waitForRerender() {
+  return new Promise(function (resolve) {
+    setTimeout(resolve, 100);
+  });
+}
