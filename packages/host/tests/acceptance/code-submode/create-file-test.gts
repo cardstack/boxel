@@ -20,6 +20,7 @@ import {
   getMonacoContent,
   visitOperatorMode as _visitOperatorMode,
   type TestContextWithSave,
+  lookupLoaderService,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
@@ -228,17 +229,20 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       [testRealmURL2]: ['read', 'write'],
     };
 
-    await setupAcceptanceTestRealm({
-      contents: filesB,
-      realmURL: testRealmURL2,
-      onFetch: async (req: Request) => {
+    lookupLoaderService().virtualNetwork.mount(
+      async (req: Request) => {
         // Some tests need a simulated creation failure
         if (req.url.includes('fetch-failure')) {
           throw new Error('A deliberate fetch error');
         }
-
-        return { req, res: null };
+        return null;
       },
+      { prepend: true },
+    );
+
+    await setupAcceptanceTestRealm({
+      contents: filesB,
+      realmURL: testRealmURL2,
     });
     ({ adapter } = await setupAcceptanceTestRealm({
       contents: files,

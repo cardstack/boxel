@@ -9,6 +9,7 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupServerSentEvents,
+  lookupLoaderService,
 } from '../helpers';
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
 
@@ -70,25 +71,6 @@ const personCardSource = `
 
 module('Integration | realm info service tests', function (hooks) {
   let realmInfoService: RealmInfoService;
-  let onFetch: ((req: Request, body: string) => Response | null) | undefined;
-  function wrappedOnFetch() {
-    return async (req: Request) => {
-      if (!onFetch) {
-        return Promise.resolve({
-          req,
-          res: null,
-        });
-      }
-
-      let body = await req.clone().text();
-      let res = onFetch(req, body) ?? null;
-
-      return {
-        req,
-        res,
-      };
-    };
-  }
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -104,7 +86,6 @@ module('Integration | realm info service tests', function (hooks) {
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     await setupAcceptanceTestRealm({
-      onFetch: wrappedOnFetch(),
       contents: {
         'index.gts': indexCardSource,
         'person.gts': personCardSource,
@@ -147,13 +128,16 @@ module('Integration | realm info service tests', function (hooks) {
 
   test('ensures fetch for the same realm info occurs only once', async function (assert) {
     let totalRealmInfoRequest = 0;
-    onFetch = (req, _body) => {
-      if (req.method === 'GET' && req.url === `${testRealmURL}_info`) {
-        totalRealmInfoRequest++;
-      }
+    lookupLoaderService().virtualNetwork.mount(
+      async (req) => {
+        if (req.method === 'GET' && req.url === `${testRealmURL}_info`) {
+          totalRealmInfoRequest++;
+        }
 
-      return null;
-    };
+        return null;
+      },
+      { prepend: true },
+    );
     await Promise.all([
       realmInfoService.fetchRealmInfo({ realmURL: new URL(testRealmURL) }),
       realmInfoService.fetchRealmInfo({ realmURL: new URL(testRealmURL) }),

@@ -12,14 +12,12 @@ import {
 } from './error';
 import { v4 as uuidV4 } from 'uuid';
 import { formatRFC7231 } from 'date-fns';
-import { md5 } from 'super-fast-md5';
 import {
   isCardResource,
   executableExtensions,
   hasExecutableExtension,
   isNode,
   isSingleCardDocument,
-  baseRealm,
   assetsDir,
   logger,
   type CodeRef,
@@ -31,9 +29,9 @@ import {
   type Indexer,
   fetchUserPermissions,
   addAuthorizationHeader,
+  maybeHandleScopedCSSRequest,
 } from './index';
 import merge from 'lodash/merge';
-import flatMap from 'lodash/flatMap';
 import mergeWith from 'lodash/mergeWith';
 import cloneDeep from 'lodash/cloneDeep';
 import {
@@ -42,6 +40,7 @@ import {
   getFileWithFallbacks,
   writeToStream,
   waitForClose,
+  type TextFileRef,
 } from './stream';
 import { transpileJS } from './transpile';
 import {
@@ -69,6 +68,7 @@ import RealmPermissionChecker from './realm-permission-checker';
 import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
 
 import { RealmAuthDataSource } from './realm-auth-data-source';
+import { fetcher } from './fetcher';
 
 export interface RealmSession {
   canRead: boolean;
@@ -218,8 +218,6 @@ export class Realm {
   #router: Router;
   #deferStartup: boolean;
   #useTestingDomain = false;
-  // TODO remove this after we serve transpiled js from index
-  #transpileCache = new Map<string, string>();
   #log = logger('realm');
   #perfLog = logger('perf');
   #startTime = Date.now();
@@ -294,21 +292,29 @@ export class Realm {
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
     this.#assetsURL = assetsURL;
 
-    let loader = virtualNetwork.createLoader();
+    let maybeHandle = this.maybeHandle.bind(this);
+    let fetch = fetcher(virtualNetwork.fetch, [
+      async (req, next) => {
+        return (await maybeHandleScopedCSSRequest(req)) || next(req);
+      },
+      async (request, next) => {
+        let response = await maybeHandle(request);
+        return response || next(request);
+      },
+      async (request, next) => {
+        let authHandler = addAuthorizationHeader(
+          fetch,
+          new RealmAuthDataSource(this.#matrixClient, fetch, this.url),
+        );
+        let response = await authHandler(request);
+        return response || next(request);
+      },
+    ]);
+
+    let loader = new Loader(fetch, virtualNetwork.resolveImport);
     adapter.setLoader?.(loader);
 
     this.loaderTemplate = loader;
-    this.loaderTemplate.registerURLHandler(
-      addAuthorizationHeader(
-        loader,
-        new RealmAuthDataSource(
-          this.#matrixClient,
-          this.loaderTemplate,
-          this.url,
-        ),
-      ),
-    );
-    this.loaderTemplate.registerURLHandler(this.maybeHandle.bind(this));
 
     this.#adapter = adapter;
     this.#onIndexer = onIndexer;
@@ -352,7 +358,7 @@ export class Realm {
       .get(
         '/.*',
         SupportedMimeType.CardSource,
-        this.getCardSourceOrRedirect.bind(this),
+        this.getSourceOrRedirect.bind(this),
       )
       .delete(
         '/.+',
@@ -510,7 +516,7 @@ export class Realm {
     });
   }
 
-  get loader() {
+  private get loader() {
     // the current loader used by the search index will contain the latest
     // module updates as we obtain a new loader for each indexing run.
     if (isNode) {
@@ -539,40 +545,11 @@ export class Realm {
 
   async #startup() {
     await Promise.resolve();
-    // TODO remove this after we serve transpiled js from index
-    await this.#warmUpCache();
     await this.#searchIndex.run(this.#onIndexer);
     this.sendServerEvent({ type: 'index', data: { type: 'full' } });
     this.#perfLog.debug(
       `realm server startup in ${Date.now() - this.#startTime}ms`,
     );
-  }
-
-  // Take advantage of the fact that the base realm modules are static (for now)
-  // and cache the transpiled js for all the base realm modules so that all
-  // consuming realms can benefit from this work
-  // TODO remove this after we serve transpiled js from index
-  async #warmUpCache() {
-    if (this.url !== baseRealm.url) {
-      return;
-    }
-
-    let entries = await this.recursiveDirectoryEntries(new URL(this.url));
-    let modules = flatMap(entries, (e) =>
-      e.kind === 'file' && hasExecutableExtension(e.path) ? [e.path] : [],
-    );
-
-    for (let mod of modules) {
-      let handle = await this.#adapter.openFile(mod);
-      if (!handle) {
-        this.#log.error(
-          `cannot open file ${mod} when warming up transpilation cache`,
-        );
-        continue;
-      }
-
-      this.transpileJS(await fileContentToText(handle), handle.path);
-    }
   }
 
   get ready(): Promise<void> {
@@ -884,49 +861,85 @@ export class Realm {
     return undefined;
   }
 
-  // TODO we could really improve performance if this utilized the index instead
-  // of directly hitting the filesystem--especially the TS transpilation
-  // involved in making JS.
   async fallbackHandle(request: Request, requestContext: RequestContext) {
     let start = Date.now();
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
+
+    if (!localPath.startsWith(assetsDir)) {
+      let useWorkInProgressIndex = Boolean(
+        request.headers.get('X-Boxel-Use-WIP-Index'),
+      );
+      let module = await this.#searchIndex.module(url, {
+        useWorkInProgressIndex,
+      });
+      if (module?.type === 'module') {
+        try {
+          return createResponse({
+            body: module.executableCode,
+            init: {
+              status: 200,
+              headers: { 'content-type': 'text/javascript' },
+            },
+            requestContext,
+          });
+        } finally {
+          this.#logRequestPerformance(request, start, 'cache hit');
+        }
+      }
+      if (module?.type === 'error') {
+        try {
+          // using "Not Acceptable" here because no text/javascript representation
+          // can be made and we're sending text/html error page instead
+          return createResponse({
+            body: JSON.stringify(module.error, null, 2),
+            init: {
+              status: 406,
+              headers: { 'content-type': 'text/html' },
+            },
+            requestContext,
+          });
+        } finally {
+          this.#logRequestPerformance(request, start, 'cache hit');
+        }
+      }
+    }
 
     try {
       let maybeFileRef = await this.getFileWithFallbacks(
         localPath,
         executableExtensions,
       );
-
       if (!maybeFileRef) {
         return notFound(request, requestContext, `${request.url} not found`);
       }
 
       let fileRef = maybeFileRef;
-
       if (
-        executableExtensions.some((extension) =>
-          fileRef.path.endsWith(extension),
-        ) &&
+        hasExecutableExtension(fileRef.path) &&
         !localPath.startsWith(assetsDir)
       ) {
-        let response = this.makeJS(
+        if (fileRef[Symbol.for('shimmed-module')]) {
+          // this response is ultimately thrown away and only the symbol value
+          // is preserved. so what is inside this response is not important
+          let response = createResponse({ requestContext });
+          (response as any)[Symbol.for('shimmed-module')] =
+            fileRef[Symbol.for('shimmed-module')];
+          return response;
+        }
+        // fallback to the file system only after trying the index. during the
+        // initial index we need to use the API to run the indexer whose modules
+        // would otherwise live in index (this conundrum would go away if the
+        // API could be statically loaded and not come from the base realm.)
+        return this.makeJS(
           await fileContentToText(fileRef),
           fileRef.path,
           requestContext,
         );
-
-        if (fileRef[Symbol.for('shimmed-module')]) {
-          (response as any)[Symbol.for('shimmed-module')] =
-            fileRef[Symbol.for('shimmed-module')];
-        }
-
-        return response;
-      } else {
-        return await this.serveLocalFile(fileRef, requestContext);
       }
+      return await this.serveLocalFile(fileRef, requestContext);
     } finally {
-      this.#logRequestPerformance(request, start);
+      this.#logRequestPerformance(request, start, 'cache miss');
     }
   }
 
@@ -1138,10 +1151,40 @@ export class Realm {
     });
   }
 
-  private async getCardSourceOrRedirect(
+  private async getSourceOrRedirect(
     request: Request,
     requestContext: RequestContext,
   ): Promise<ResponseWithNodeStream> {
+    let indexedSource = await this.getSourceFromIndex(new URL(request.url));
+    if (indexedSource) {
+      let { canonicalURL, lastModified, source } = indexedSource;
+      if (request.url !== canonicalURL.href) {
+        return createResponse({
+          body: null,
+          init: {
+            status: 302,
+            headers: {
+              Location: `${new URL(this.url).pathname}${this.paths.local(
+                canonicalURL,
+              )}`,
+            },
+          },
+          requestContext,
+        });
+      }
+      return createResponse({
+        body: source,
+        init: {
+          headers: {
+            'last-modified': formatRFC7231(lastModified),
+          },
+        },
+        requestContext,
+      });
+    }
+
+    // fallback to file system if there is an error document or this is the
+    // first time index
     let localName = this.paths.local(new URL(request.url));
     let handle = await this.getFileWithFallbacks(localName, [
       ...executableExtensions,
@@ -1171,6 +1214,51 @@ export class Realm {
     }
   }
 
+  private async getSourceFromIndex(url: URL): Promise<
+    | {
+        source: string;
+        lastModified: number;
+        canonicalURL: URL;
+      }
+    | undefined
+  > {
+    let [module, instance] = await Promise.all([
+      this.#searchIndex.module(url),
+      this.#searchIndex.instance(url),
+    ]);
+    if (module?.type === 'module' || instance?.type === 'instance') {
+      let canonicalURL =
+        module?.type === 'module'
+          ? module.canonicalURL
+          : instance?.type === 'instance'
+          ? instance.canonicalURL
+          : undefined;
+      let source =
+        module?.type === 'module'
+          ? module.source
+          : instance?.type === 'instance'
+          ? instance.source
+          : undefined;
+      let lastModified =
+        module?.type === 'module'
+          ? module.lastModified
+          : instance?.type === 'instance'
+          ? instance.lastModified
+          : undefined;
+      if (canonicalURL == null || source == null || lastModified == null) {
+        throw new Error(
+          `missing 'canonicalURL', 'source', and/or 'lastModified' from index entry ${
+            url.href
+          }, where type is ${
+            module?.type === 'module' ? 'module' : 'instance'
+          }`,
+        );
+      }
+      return { canonicalURL: new URL(canonicalURL), lastModified, source };
+    }
+    return undefined;
+  }
+
   private async removeCardSource(
     request: Request,
     requestContext: RequestContext,
@@ -1191,40 +1279,16 @@ export class Realm {
     });
   }
 
-  private transpileJS(content: string, debugFilename: string): string {
-    let contentIsAllWhitespace = content.match(/^\s*$/);
-
-    if (contentIsAllWhitespace) {
-      throw new Error('File is empty');
-    }
-
-    let hash = md5(content);
-    let cached = this.#transpileCache.get(hash);
-    if (cached) {
-      return cached;
-    }
-    let src = transpileJS(content, debugFilename);
-    if (!src) {
-      throw new Error('bug: should never get here');
-    }
-
-    // This assumes the base realm is static. We take advantage of the static
-    // nature of the base realm such that we can cache the transpiled JS, which
-    // is the slowest part of module loading (and base realm modules are
-    // imported a lot by all realms)
-    if (this.url === baseRealm.url) {
-      this.#transpileCache.set(hash, src);
-    }
-    return src;
-  }
-
   private makeJS(
     content: string,
     debugFilename: string,
     requestContext: RequestContext,
   ): Response {
     try {
-      content = this.transpileJS(content, debugFilename);
+      if (content.match(/^\s*$/)) {
+        throw new Error('File is empty');
+      }
+      content = transpileJS(content, debugFilename);
     } catch (err: any) {
       // using "Not Acceptable" here because no text/javascript representation
       // can be made and we're sending text/html error page instead
@@ -1251,7 +1315,7 @@ export class Realm {
   // explicit file extensions in your source code
   private async getFileWithFallbacks(
     path: LocalPath,
-    fallbackExtensions: string[],
+    fallbackExtensions: string[] = [],
   ): Promise<FileRef | undefined> {
     return getFileWithFallbacks(
       path,
@@ -1307,7 +1371,7 @@ export class Realm {
       ),
     );
     let newURL = fileURL.href.replace(/\.json$/, '');
-    let entry = await this.#searchIndex.card(new URL(newURL), {
+    let entry = await this.#searchIndex.cardDocument(new URL(newURL), {
       loadLinks: true,
     });
     if (!entry || entry?.type === 'error') {
@@ -1349,7 +1413,7 @@ export class Realm {
     }
 
     let url = this.paths.fileURL(localPath);
-    let originalMaybeError = await this.#searchIndex.card(url);
+    let originalMaybeError = await this.#searchIndex.cardDocument(url);
     if (!originalMaybeError) {
       return notFound(request, requestContext);
     }
@@ -1412,7 +1476,7 @@ export class Realm {
       request.headers.get('X-Boxel-Client-Request-Id'),
     );
     let instanceURL = url.href.replace(/\.json$/, '');
-    let entry = await this.#searchIndex.card(new URL(instanceURL), {
+    let entry = await this.#searchIndex.cardDocument(new URL(instanceURL), {
       loadLinks: true,
     });
     if (!entry || entry?.type === 'error') {
@@ -1454,7 +1518,7 @@ export class Realm {
     );
 
     let url = this.paths.fileURL(localPath.replace(/\.json$/, ''));
-    let maybeError = await this.#searchIndex.card(url, {
+    let maybeError = await this.#searchIndex.cardDocument(url, {
       loadLinks: true,
       useWorkInProgressIndex,
     });
@@ -1507,7 +1571,7 @@ export class Realm {
     let reqURL = request.url.replace(/\.json$/, '');
     // strip off query params
     let url = new URL(new URL(reqURL).pathname, reqURL);
-    let result = await this.#searchIndex.card(url);
+    let result = await this.#searchIndex.cardDocument(url);
     if (!result) {
       return notFound(request, requestContext);
     }
@@ -1544,24 +1608,6 @@ export class Realm {
       entries.push(entry);
     }
     return entries;
-  }
-
-  private async recursiveDirectoryEntries(
-    url: URL,
-  ): Promise<{ name: string; kind: Kind; path: LocalPath }[]> {
-    let entries = await this.directoryEntries(url);
-    if (!entries) {
-      return [];
-    }
-    let nestedEntries: { name: string; kind: Kind; path: LocalPath }[] = [];
-    for (let dirEntry of entries.filter((e) => e.kind === 'directory')) {
-      nestedEntries.push(
-        ...(await this.recursiveDirectoryEntries(
-          new URL(`${url.href}${dirEntry.name}`),
-        )),
-      );
-    }
-    return [...entries, ...nestedEntries];
   }
 
   private async getDirectoryListing(
@@ -1619,7 +1665,7 @@ export class Realm {
   private async readFileAsText(
     path: LocalPath,
     opts: { withFallbacks?: true } = {},
-  ): Promise<{ content: string; lastModified: number } | undefined> {
+  ): Promise<TextFileRef | undefined> {
     return readFileAsText(
       path,
       this.#adapter.openFile.bind(this.#adapter),
@@ -1846,9 +1892,13 @@ export class Realm {
     };
   }
 
-  #logRequestPerformance(request: Request, startTime: number) {
+  #logRequestPerformance(
+    request: Request,
+    startTime: number,
+    prefix = 'serve time',
+  ) {
     this.#perfLog.debug(
-      `serve time: ${Date.now() - startTime}ms - ${request.method} ${
+      `${prefix}: ${Date.now() - startTime}ms - ${request.method} ${
         request.url
       } ${request.headers.get('Accept') ?? ''}`,
     );

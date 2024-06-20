@@ -1,14 +1,14 @@
 import { AuthenticationErrorMessages } from './router';
 import { baseRealm } from './index';
 import { PACKAGES_FAKE_ORIGIN } from './package-shim-handler';
-import { Loader, RequestHandler } from './loader';
+import { RequestHandler } from './loader';
 
 export interface IRealmAuthDataSource {
   getToken(url: string, httpMethod: string): Promise<string | undefined>;
   resetToken(url: string): void;
 }
 export function addAuthorizationHeader(
-  loader: Loader,
+  fetch: typeof globalThis.fetch,
   realmAuthDataSource: IRealmAuthDataSource,
 ): RequestHandler {
   return async function requestHandler(
@@ -36,7 +36,7 @@ export function addAuthorizationHeader(
       return null;
     }
     request.headers.set('Authorization', token);
-    let response = await loader.fetch(request);
+    let response = await fetch(request);
 
     if (response.status === 401 && retryOnAuthFail) {
       let errorMessage = await response.text();

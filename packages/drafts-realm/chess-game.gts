@@ -1,6 +1,11 @@
 import {
+  BaseDefConstructor,
+  BaseInstanceType,
   Component as BoxelComponent,
   CardDef,
+  FieldDef,
+  deserialize,
+  primitive,
 } from 'https://cardstack.com/base/card-api';
 import Component from '@glimmer/component';
 import StringCard from 'https://cardstack.com/base/string';
@@ -40,6 +45,7 @@ import { Resource } from 'ember-resources';
 
 import BooleanField from 'https://cardstack.com/base/boolean';
 import { tracked } from '@glimmer/tracking';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 
 type ChessboardModifierSignature = {
   Args: {
@@ -59,7 +65,6 @@ class ChessboardModifier extends Modifier<ChessboardModifierSignature> {
     { game, updatePgn }: ChessboardModifierSignature['Args']['Named'],
   ) {
     function inputHandler(event: any) {
-      console.log(event);
       if (event.type === INPUT_EVENT_TYPE.movingOverSquare) {
         return; // ignore this event
       }
@@ -465,9 +470,37 @@ class Isolated extends BoxelComponent<typeof Chess> {
   </template>
 }
 
+class PgnField extends FieldDef {
+  static [primitive]: string;
+  static displayName = 'PGN';
+
+  static async [deserialize]<T extends BaseDefConstructor>(
+    this: T,
+    pgn: any,
+  ): Promise<BaseInstanceType<T>> {
+    if (pgn == null) {
+      return pgn;
+    }
+    // Validating pgn string
+    let chess = new ChessJS();
+    chess.loadPgn(pgn);
+    return pgn as BaseInstanceType<T>;
+  }
+
+  static edit = class Edit extends BoxelComponent<typeof this> {
+    <template>
+      <BoxelInput
+        @value={{@model}}
+        @onInput={{@set}}
+        @disabled={{not @canEdit}}
+      />
+    </template>
+  };
+}
+
 export class Chess extends CardDef {
   static displayName = 'Chess';
-  @field pgn = contains(StringCard);
+  @field pgn = contains(PgnField);
   @field analysis = contains(BooleanField);
 
   @field title = contains(StringCard, {

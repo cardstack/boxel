@@ -22,7 +22,6 @@ import CardEditor from '@cardstack/host/components/card-editor';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
-import type LoaderService from '@cardstack/host/services/loader-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -33,6 +32,7 @@ import {
   saveCard,
   setupIntegrationTestRealm,
   provideConsumeContext,
+  lookupLoaderService,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
@@ -53,8 +53,7 @@ module('Integration | card-editor', function (hooks) {
     };
     provideConsumeContext(PermissionsContextName, permissions);
 
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    loader = lookupLoaderService().loader;
   });
 
   setupLocalIndexing(hooks);
@@ -66,7 +65,7 @@ module('Integration | card-editor', function (hooks) {
 
   async function loadCard(url: string): Promise<CardDef> {
     let { createFromSerialized, recompute } = cardApi;
-    let result = await realm.searchIndex.card(new URL(url));
+    let result = await realm.searchIndex.cardDocument(new URL(url));
     if (!result || result.type === 'error') {
       throw new Error(
         `cannot get instance ${url} from the index: ${

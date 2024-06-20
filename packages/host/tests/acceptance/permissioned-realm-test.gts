@@ -7,13 +7,13 @@ import { module, test } from 'qunit';
 import { baseRealm } from '@cardstack/runtime-common';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
-import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
   setupLocalIndexing,
   setupServerSentEvents,
   setupAcceptanceTestRealm,
   testRealmURL,
+  lookupLoaderService,
 } from '../helpers';
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
 
@@ -25,8 +25,7 @@ module('Acceptance | permissioned realm tests', function (hooks) {
   setupMatrixServiceMock(hooks);
 
   hooks.beforeEach(async function () {
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    let loader = lookupLoaderService().loader;
     let { field, contains, CardDef, Component } = await loader.import<
       typeof import('https://cardstack.com/base/card-api')
     >(`${baseRealm.url}card-api`);

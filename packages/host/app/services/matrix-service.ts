@@ -291,7 +291,7 @@ export default class MatrixService extends Service {
     let realmAuthClient = new RealmAuthClient(
       realmURL,
       this.client,
-      this.loaderService.loader,
+      this.loaderService.loader.fetch,
     );
 
     let jwtPromise = realmAuthClient.getJWT();
