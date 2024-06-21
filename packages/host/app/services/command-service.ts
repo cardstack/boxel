@@ -8,7 +8,7 @@ import {
   codeRefWithAbsoluteURL,
   isResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import { CardTypeFilter } from '@cardstack/runtime-common/query';
+import { CardTypeFilter, assertQuery } from '@cardstack/runtime-common/query';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -92,11 +92,6 @@ function hasPatchData(payload: any): payload is PatchPayload {
 }
 
 function hasSearchData(payload: any): payload is SearchPayload {
-  return (
-    typeof payload === 'object' &&
-    payload !== null &&
-    'card_id' in payload &&
-    'filter' in payload &&
-    'type' in payload.filter
-  );
+  assertQuery({ filter: payload.filter });
+  return payload;
 }
