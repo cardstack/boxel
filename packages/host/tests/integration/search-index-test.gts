@@ -602,6 +602,11 @@ module(`Integration | search-index`, function (hooks) {
             <h1><@fields.firstName /></h1>
           </template>
         };
+        static embedded = class Isolated extends Component<typeof this> {
+          <template>
+            <h1> Person Embedded Card: <@fields.firstName /></h1>
+          </template>
+        };
       }
 
       class Boom extends CardDef {
@@ -668,11 +673,15 @@ module(`Integration | search-index`, function (hooks) {
         );
         if (entry?.type === 'doc') {
           assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
-          let { isolatedHtml } =
+          let { isolatedHtml, embeddedHtml } =
             (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
           assert.strictEqual(
             trimCardContainer(stripScopedCSSAttributes(isolatedHtml!)),
             cleanWhiteSpace(`<h1> Van Gogh </h1>`),
+          );
+          assert.strictEqual(
+            trimCardContainer(stripScopedCSSAttributes(embeddedHtml!)),
+            cleanWhiteSpace(`<h1> Person Embedded Card: Van Gogh </h1>`),
           );
         } else {
           assert.ok(
@@ -699,6 +708,11 @@ module(`Integration | search-index`, function (hooks) {
         static isolated = class Isolated extends Component<typeof this> {
           <template>
             <h1><@fields.firstName /></h1>
+          </template>
+        };
+        static embedded = class Isolated extends Component<typeof this> {
+          <template>
+            <h1> Person Embedded Card: <@fields.firstName /></h1>
           </template>
         };
       }
@@ -728,11 +742,15 @@ module(`Integration | search-index`, function (hooks) {
         );
         if (entry?.type === 'doc') {
           assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
-          let { isolatedHtml } =
+          let { isolatedHtml, embeddedHtml } =
             (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
           assert.strictEqual(
             trimCardContainer(stripScopedCSSAttributes(isolatedHtml!)),
             cleanWhiteSpace(`<h1> Van Gogh </h1>`),
+          );
+          assert.strictEqual(
+            trimCardContainer(stripScopedCSSAttributes(embeddedHtml!)),
+            cleanWhiteSpace(`<h1> Person Embedded Card: Van Gogh </h1>`),
           );
         } else {
           assert.ok(
@@ -781,6 +799,11 @@ module(`Integration | search-index`, function (hooks) {
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <h1><@fields.firstName /></h1>
+        </template>
+      };
+      static embedded = class Isolated extends Component<typeof this> {
+        <template>
+          <h1> Person Embedded Card: <@fields.firstName /></h1>
         </template>
       };
     }
@@ -841,7 +864,7 @@ module(`Integration | search-index`, function (hooks) {
     );
     if (entry?.type === 'doc') {
       assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
-      let { isolatedHtml } =
+      let { isolatedHtml, embeddedHtml } =
         (await getInstance(
           realm,
           new URL(`${testRealmURL}working-van-gogh`),
@@ -849,6 +872,10 @@ module(`Integration | search-index`, function (hooks) {
       assert.strictEqual(
         trimCardContainer(stripScopedCSSAttributes(isolatedHtml!)),
         cleanWhiteSpace(`<h1> Van Gogh </h1>`),
+      );
+      assert.strictEqual(
+        trimCardContainer(stripScopedCSSAttributes(embeddedHtml!)),
+        cleanWhiteSpace(`<h1> Person Embedded Card: Van Gogh </h1>`),
       );
     } else {
       assert.ok(
@@ -899,6 +926,11 @@ module(`Integration | search-index`, function (hooks) {
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <h1><@fields.firstName /></h1>
+        </template>
+      };
+      static embedded = class Isolated extends Component<typeof this> {
+        <template>
+          <h1> Person Embedded Card: <@fields.firstName /></h1>
         </template>
       };
     }
@@ -961,12 +993,16 @@ module(`Integration | search-index`, function (hooks) {
     );
     if (entry?.type === 'doc') {
       assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
-      let { isolatedHtml } =
+      let { isolatedHtml, embeddedHtml } =
         (await getInstance(realm, new URL(`${testRealmURL}working-vangogh`))) ??
         {};
       assert.strictEqual(
         trimCardContainer(stripScopedCSSAttributes(isolatedHtml!)),
         cleanWhiteSpace(`<h1> Van Gogh </h1>`),
+      );
+      assert.strictEqual(
+        trimCardContainer(stripScopedCSSAttributes(embeddedHtml!)),
+        cleanWhiteSpace(`<h1> Person Embedded Card: Van Gogh </h1>`),
       );
     } else {
       assert.ok(
