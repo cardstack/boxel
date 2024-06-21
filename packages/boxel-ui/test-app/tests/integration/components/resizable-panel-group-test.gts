@@ -5,6 +5,8 @@ import { htmlSafe } from '@ember/template';
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 
+const RESIZE_HANDLE_WIDTH = 18;
+
 class PanelProperties {
   @tracked lengthPx?: number;
   @tracked isHidden?: boolean;
@@ -154,7 +156,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
       test<MyTestContext>(`it can lay out panels with ${orientationProperties.orientation} orientation (default)`, async function (assert) {
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 318px;
+          ${orientationProperties.dimension}: ${300 + RESIZE_HANDLE_WIDTH}px;
         `;
 
         await renderResizablePanelGroup(this.renderController);
@@ -175,7 +177,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
       test<MyTestContext>(`it can lay out panels with ${orientationProperties.orientation} orientation (length specified)`, async function (assert) {
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 518px;
+          ${orientationProperties.dimension}: ${500 + RESIZE_HANDLE_WIDTH}px;
           `;
 
         this.renderController.panels[0].lengthPx = 355;
@@ -244,13 +246,13 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
       test<MyTestContext>(`it adjusts to its container growing (default)`, async function (assert) {
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 218px;
+          ${orientationProperties.dimension}: ${200 + RESIZE_HANDLE_WIDTH}px;
         `;
 
         await renderResizablePanelGroup(this.renderController);
 
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 418px;
+          ${orientationProperties.dimension}: ${400 + RESIZE_HANDLE_WIDTH}px;
         `;
         await waitForRerender();
 
@@ -270,7 +272,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
       test<MyTestContext>(`it adjusts to its container growing (length specified)`, async function (assert) {
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 218px;
+          ${orientationProperties.dimension}: ${200 + RESIZE_HANDLE_WIDTH}px;
         `;
 
         this.renderController.panels[0].lengthPx = 100;
@@ -292,7 +294,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         );
 
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 418px;
+          ${orientationProperties.dimension}: ${400 + RESIZE_HANDLE_WIDTH}px;
         `;
         await waitForRerender();
 
@@ -312,12 +314,12 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
       test<MyTestContext>(`it adjusts to its container shrinking (default)`, async function (assert) {
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 418px;
+          ${orientationProperties.dimension}: ${400 + RESIZE_HANDLE_WIDTH}x;
         `;
 
         await renderResizablePanelGroup(this.renderController);
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 218px;
+          ${orientationProperties.dimension}: ${200 + RESIZE_HANDLE_WIDTH}px;
         `;
 
         await waitForRerender();
@@ -382,7 +384,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
       test<MyTestContext>(`it adjusts to its container shrinking and growing`, async function (assert) {
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 618px;
+          ${orientationProperties.dimension}: ${600 + RESIZE_HANDLE_WIDTH}px;
         `;
 
         this.renderController.panels[0].lengthPx = 400;
@@ -413,7 +415,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
         // shrink container by ~5
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 318px;
+          ${orientationProperties.dimension}: ${300 + RESIZE_HANDLE_WIDTH}px;
         `;
 
         await waitForRerender();
@@ -472,7 +474,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
       test<MyTestContext>(`it excludes hidden panels from participating in layout`, async function (assert) {
         this.renderController.containerStyle = `
-          ${orientationProperties.dimension}: 218px;
+          ${orientationProperties.dimension}: ${200 + RESIZE_HANDLE_WIDTH}px;
         `;
 
         this.renderController.panels = [
