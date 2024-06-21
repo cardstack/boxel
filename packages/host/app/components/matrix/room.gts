@@ -104,6 +104,7 @@ export default class Room extends Component<Signature> {
       .skills {
         position: sticky;
         bottom: 2px;
+        margin-left: auto;
         box-shadow: var(--boxel-box-shadow);
       }
       .room-actions {
@@ -112,6 +113,7 @@ export default class Room extends Component<Signature> {
       .chat-input-area {
         background-color: var(--boxel-light);
         border-radius: var(--boxel-border-radius);
+        box-shadow: var(--boxel-deep-box-shadow);
         overflow: hidden;
       }
       :deep(.ai-assistant-conversation > *:first-child) {
