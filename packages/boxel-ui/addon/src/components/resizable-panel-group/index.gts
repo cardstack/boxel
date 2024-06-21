@@ -27,7 +27,7 @@ interface Signature {
     default: [
       WithBoundArgs<
         typeof ResizablePanel,
-        'orientation' | 'registerPanel' | 'unregisterPanel'
+        'orientation' | 'registerPanel' | 'unregisterPanel' | 'didResize'
       >,
       WithBoundArgs<
         typeof ResizeHandle,
@@ -59,6 +59,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
             orientation=@orientation
             registerPanel=this.registerPanel
             unregisterPanel=this.unregisterPanel
+            didResize=this.panelDidResize
           )
           (component
             ResizeHandle
@@ -197,8 +198,14 @@ export default class ResizablePanelGroup extends Component<Signature> {
     }
   }
 
+  @action panelDidResize(_panel: ResizablePanel) {
+    this.onContainerResize();
+  }
+
   calculatePanelRatio() {
-    let panelLengths = this.panels.map((panel) => panel.lengthPx ?? 0);
+    let panelLengths = this.panels.map((panel) =>
+      panel.isHidden ? 0 : panel.lengthPx ?? 0,
+    );
     let totalPanelLength = sumArray(panelLengths);
 
     for (let index = 0; index < panelLengths.length; index++) {
@@ -507,6 +514,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
 
 export type Panellike = {
   initialMinLengthPx?: number;
+  isHidden: boolean;
   lengthPx?: number;
   ratio?: number;
 };
@@ -514,7 +522,9 @@ export type Panellike = {
 export function resizePanels(panels: Panellike[], newContainerSize: number) {
   let remainingContainerSize = newContainerSize;
 
-  let panelLengths: number[] = panels.map((panel) => panel.lengthPx || 0);
+  let panelLengths: number[] = panels.map((panel) =>
+    panel.isHidden ? 0 : panel.lengthPx || 0,
+  );
   let panelToNewLength = new Map<Panellike, number>();
 
   let panelsWithMinLength = panels.filter((panel) => panel.initialMinLengthPx);
@@ -525,6 +535,12 @@ export function resizePanels(panels: Panellike[], newContainerSize: number) {
     if (!panelRatio || !newContainerSize) {
       return;
     }
+
+    if (panel.isHidden) {
+      panelToNewLength.set(panel, 0);
+      return;
+    }
+
     let proportionalSize = panelRatio * newContainerSize;
 
     let actualSize = Math.round(
@@ -556,6 +572,12 @@ export function resizePanels(panels: Panellike[], newContainerSize: number) {
       console.warn('Expected panelRatio to be defined');
       return;
     }
+
+    if (panel.isHidden) {
+      panelToNewLength.set(panel, 0);
+      return;
+    }
+
     let proportionalSize = panelRatio * remainingContainerSize;
     let actualSize = Math.round(proportionalSize);
 
