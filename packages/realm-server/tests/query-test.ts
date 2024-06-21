@@ -248,6 +248,14 @@ module('query', function (hooks) {
     });
   });
 
+  test(`contains filter is case insensitive`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards: await makeTestCards(loader),
+    });
+  });
+
   test(`can use 'contains' to match multiple fields`, async function (assert) {
     await runSharedTest(queryTests, assert, {
       indexer,

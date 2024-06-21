@@ -704,6 +704,54 @@ const tests = Object.freeze({
     );
   },
 
+  'contains filter is case insensitive': async (
+    assert,
+    { indexer, loader, testCards },
+  ) => {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(indexer, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+          },
+        },
+      },
+    ]);
+
+    let type = await personCardType(testCards);
+    let { cards: results, meta } = await indexer.search(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: type,
+          contains: { name: 'mang' },
+        },
+      },
+      loader,
+    );
+
+    assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.deepEqual(getIds(results), [mango.id], 'results are correct');
+  },
+
   "can use 'contains' to match multiple fields": async (
     assert,
     { indexer, loader, testCards },
