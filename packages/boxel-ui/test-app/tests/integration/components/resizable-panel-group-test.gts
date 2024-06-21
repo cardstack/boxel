@@ -6,6 +6,7 @@ import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 
 const RESIZE_HANDLE_WIDTH = 18;
+const PANEL_INDEX_1_MIN_LENGTH = 50;
 
 class PanelProperties {
   @tracked lengthPx?: number;
@@ -91,7 +92,10 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
             },
           ),
           new PanelProperties(
-            { defaultLengthFraction: 0.4, minLengthPx: 50 },
+            {
+              defaultLengthFraction: 0.4,
+              minLengthPx: PANEL_INDEX_1_MIN_LENGTH,
+            },
             {
               outerContainerStyle: `
                 border: 1px solid red;
@@ -215,7 +219,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         assert.hasNumericStyle(
           '[data-test-panel-index="1"]',
           orientationProperties.dimension,
-          50,
+          PANEL_INDEX_1_MIN_LENGTH,
           1,
         );
       });
@@ -239,7 +243,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         assert.hasNumericStyle(
           '[data-test-panel-index="1"]',
           orientationProperties.dimension,
-          50,
+          PANEL_INDEX_1_MIN_LENGTH,
           2,
         );
       });
@@ -488,7 +492,11 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
             },
           ),
           new PanelProperties(
-            { defaultLengthFraction: 0.4, minLengthPx: 50, isHidden: true },
+            {
+              defaultLengthFraction: 0.4,
+              minLengthPx: PANEL_INDEX_1_MIN_LENGTH,
+              isHidden: true,
+            },
             {
               outerContainerStyle: `
                 ${orientationProperties.dimension}: 100%
@@ -526,7 +534,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         assert.hasNumericStyle(
           '[data-test-panel-index="1"]',
           orientationProperties.dimension,
-          50,
+          PANEL_INDEX_1_MIN_LENGTH,
           1,
         );
 
