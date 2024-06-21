@@ -367,8 +367,6 @@ export class Indexer {
       ['i.realm_url = ', param(realmURL.href)],
       ['i.type =', param('instance')],
       ['is_deleted = FALSE OR is_deleted IS NULL'],
-      // our tests assert that the index card should not come back in the search results, so:
-      ['url !=', param(new RealmPaths(realmURL).fileURL('index.json').href)],
       realmVersionExpression({ withMaxVersion: version }),
     ];
     if (filter) {
