@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, skip, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { doubleClick, render, RenderingTestContext } from '@ember/test-helpers';
 import { htmlSafe } from '@ember/template';
@@ -552,6 +552,43 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
           orientationProperties.dimension,
           0,
           0,
+        );
+      });
+
+      skip<MyTestContext>('the space is filled when a panel becomes hidden', async function (assert) {
+        this.renderController.containerStyle =
+          'max-width: 100%; height: 200px; width: 218px; background: var(--boxel-200)';
+        this.renderController.panels = [
+          new PanelProperties(
+            { defaultLengthFraction: 0.6 },
+            {
+              outerContainerStyle: `
+                ${orientationProperties.dimension}: 100%;
+                overflow-${orientationProperties.axis}: auto
+              `,
+            },
+          ),
+          new PanelProperties(
+            {
+              defaultLengthFraction: 0.4,
+              minLengthPx: PANEL_INDEX_1_MIN_LENGTH,
+            },
+            {
+              outerContainerStyle: `${orientationProperties.dimension}: 100%`,
+            },
+          ),
+        ];
+        await renderResizablePanelGroup(this.renderController);
+        await waitForRerender();
+
+        this.renderController.panels[1].isHidden = true;
+        await waitForRerender();
+
+        assert.hasNumericStyle(
+          '[data-test-panel-index="0"]',
+          orientationProperties.dimension,
+          218,
+          1,
         );
       });
     },
