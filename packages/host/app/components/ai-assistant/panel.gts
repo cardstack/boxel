@@ -315,7 +315,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         left: 1px;
         right: 1px;
         bottom: 1px;
-        background: #272330;
+        background: var(--boxel-700);
         border-radius: inherit;
         z-index: -1;
       }
@@ -325,7 +325,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         display: inline-block;
         border-radius: 3rem;
         color: white;
-        background: #272330;
+        background: var(--boxel-700);
         border: none;
         cursor: pointer;
         z-index: 1;
