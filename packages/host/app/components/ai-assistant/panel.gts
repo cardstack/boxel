@@ -213,7 +213,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
       :deep(.separator-horizontal) {
         min-width: calc(
-          var(--boxel-panel-resize-handler-width) +
+          var(--boxel-panel-resize-handle-width) +
             calc(var(--boxel-sp-xxxs) * 2)
         );
         position: absolute;

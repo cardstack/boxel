@@ -9,8 +9,10 @@ import { tracked } from '@glimmer/tracking';
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask, timeout } from 'ember-concurrency';
 
-import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
-import type { PanelContext } from '@cardstack/boxel-ui/components';
+import {
+  ResizablePanel,
+  ResizablePanelGroup,
+} from '@cardstack/boxel-ui/components';
 import { and, not } from '@cardstack/boxel-ui/helpers';
 
 import AiAssistantButton from '@cardstack/host/components/ai-assistant/button';
@@ -152,9 +154,9 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   @action
-  private onListPanelContextChange(listPanelContext: PanelContext[]) {
-    this.panelWidths.submodePanel = listPanelContext[0]?.lengthPx;
-    this.panelWidths.aiAssistantPanel = listPanelContext[1]?.lengthPx;
+  private onPanelResize(panels: ResizablePanel[]) {
+    this.panelWidths.submodePanel = panels[0]?.lengthPx;
+    this.panelWidths.aiAssistantPanel = panels[1]?.lengthPx;
   }
 
   @action
@@ -193,7 +195,7 @@ export default class SubmodeLayout extends Component<Signature> {
     <div class='submode-layout {{this.aiAssistantVisibilityClass}}'>
       <ResizablePanelGroup
         @orientation='horizontal'
-        @onListPanelContextChange={{this.onListPanelContextChange}}
+        @onPanelChange={{this.onPanelResize}}
         class='columns'
         as |ResizablePanel ResizeHandle|
       >
