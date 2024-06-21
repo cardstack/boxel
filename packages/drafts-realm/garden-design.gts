@@ -8,7 +8,8 @@ import {
   containsMany,
 } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
-import { Position, PositionedCard } from 'https://cardstack.com/base/position';
+import { Coordinate } from 'https://cardstack.com/base/coordinate';
+import { PositionedCard } from 'https://cardstack.com/base/positioned-card';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -204,7 +205,7 @@ class Isolated extends Component<typeof GardenDesign> {
     this.gridMap = new TrackedMap(
       this.generateGridIds().map((id) => {
         let maybeOption = this._gridModel.find(
-          (el) => this.composeId(el.position.x, el.position.y) === id,
+          (el) => this.composeId(el.coordinate.x, el.coordinate.y) === id,
         );
         return [id, maybeOption ? (maybeOption.card as GardenItem) : null];
       }),
@@ -270,7 +271,7 @@ class Isolated extends Component<typeof GardenDesign> {
   decomposeId(id: string): { x: number; y: number } {
     let arr = id.replace('r', '').replace('c', '').split('-');
     if (!arr[0] || !arr[1]) {
-      throw new Error('Unknown id format');
+      throw new Error(`Unknown id format: ${id}. Expected format: rx-cy`);
     }
 
     return {
@@ -287,9 +288,9 @@ class Isolated extends Component<typeof GardenDesign> {
     let newValues = [...this.gridMap.entries()]
       .filter((el) => el[1] != null)
       .map((el) => {
-        let position = new Position(this.decomposeId(el[0]));
+        let coordinate = new Coordinate(this.decomposeId(el[0]));
         let positionedGardenItem = new PositionedCard({
-          position,
+          coordinate,
           card: el[1],
         });
         return positionedGardenItem;

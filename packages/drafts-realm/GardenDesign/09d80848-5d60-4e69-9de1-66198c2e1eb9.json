@@ -6,31 +6,31 @@
       "columns": 9,
       "items": [
         {
-          "position": {
+          "coordinate": {
             "x": 6,
             "y": 2
           }
         },
         {
-          "position": {
+          "coordinate": {
             "x": 6,
             "y": 4
           }
         },
         {
-          "position": {
+          "coordinate": {
             "x": 7,
             "y": 7
           }
         },
         {
-          "position": {
+          "coordinate": {
             "x": 9,
             "y": 1
           }
         },
         {
-          "position": {
+          "coordinate": {
             "x": 9,
             "y": 3
           }
