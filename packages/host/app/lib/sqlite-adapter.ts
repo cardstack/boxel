@@ -169,6 +169,13 @@ export default class SQLiteAdapter implements DBAdapter {
                       value === null ? value : Boolean(row[index]);
                     break;
                   }
+                  case 'VARCHAR': {
+                    let value = row[index];
+                    rowObject[col] =
+                      // respect DB NULL values
+                      value === null ? value : String(row[index]);
+                    break;
+                  }
                   default:
                     assertNever(coerceAs);
                 }

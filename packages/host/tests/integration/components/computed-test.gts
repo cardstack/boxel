@@ -6,13 +6,14 @@ import { module, test } from 'qunit';
 import { RealmSessionContextName, baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
-
 import {
   cleanWhiteSpace,
   testRealmURL,
   setupCardLogs,
   provideConsumeContext,
+  setupIntegrationTestRealm,
+  setupLocalIndexing,
+  lookupLoaderService,
 } from '../../helpers';
 import {
   setupBaseRealm,
@@ -41,9 +42,9 @@ module('Integration | computeds', function (hooks) {
       canWrite: true,
     });
 
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    loader = lookupLoaderService().loader;
   });
+  setupLocalIndexing(hooks);
 
   setupCardLogs(
     hooks,
@@ -59,26 +60,6 @@ module('Integration | computeds', function (hooks) {
           return `${this.firstName} ${this.lastName}`;
         },
       });
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <@fields.fullName />
-        </template>
-      };
-    }
-
-    let mango = new Person({ firstName: 'Mango', lastName: 'Abdel-Rahman' });
-    let root = await renderCard(loader, mango, 'isolated');
-    assert.strictEqual(root.textContent!.trim(), 'Mango Abdel-Rahman');
-  });
-
-  test('can render a synchronous computed field (using a string in `computeVia`)', async function (assert) {
-    class Person extends CardDef {
-      @field firstName = contains(StringField);
-      @field lastName = contains(StringField);
-      @field fullName = contains(StringField, { computeVia: 'getFullName' });
-      getFullName() {
-        return `${this.firstName} ${this.lastName}`;
-      }
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <@fields.fullName />
@@ -110,7 +91,13 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
+
+    await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'test-cards.gts': { Post, Person },
+      },
+    });
 
     let firstPost = new Post({
       title: 'First Post',
@@ -227,7 +214,13 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    loader.shimModule(`${testRealmURL}test-cards`, { Family, Person });
+
+    await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'test-cards.gts': { Family, Person },
+      },
+    });
 
     let abdelRahmans = new Family({
       people: [
@@ -303,7 +296,13 @@ module('Integration | computeds', function (hooks) {
         },
       });
     }
-    loader.shimModule(`${testRealmURL}test-cards`, { Family, Person });
+
+    await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'test-cards.gts': { Family, Person },
+      },
+    });
 
     let family = new Family({
       people: [
@@ -414,12 +413,11 @@ module('Integration | computeds', function (hooks) {
       @field author = linksTo(Person);
       @field factCheckers = linksToMany(Pet);
       @field collaborators = linksToMany(Pet, {
-        computeVia: 'findCollaborators',
+        computeVia(this: Post) {
+          let mango = this.author.pets.find((p) => p.name === 'Mango');
+          return [mango, ...this.factCheckers];
+        },
       });
-      findCollaborators(this: Post) {
-        let mango = this.author.pets.find((p) => p.name === 'Mango');
-        return [mango, ...this.factCheckers];
-      }
     }
 
     let p1 = new Pet({ id: `${testRealmURL}mango`, name: 'Mango' });

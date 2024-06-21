@@ -288,7 +288,7 @@ export default class MatrixService extends Service {
     let realmAuthClient = new RealmAuthClient(
       realmURL,
       this.client,
-      this.loaderService.loader,
+      this.loaderService.loader.fetch,
     );
 
     let jwtPromise = realmAuthClient.getJWT();
@@ -429,7 +429,7 @@ export default class MatrixService extends Service {
             type: 'function',
             function: {
               name: 'patchCard',
-              description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
+              description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.`,
               parameters: {
                 type: 'object',
                 properties: {

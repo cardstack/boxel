@@ -34,6 +34,9 @@ module('Postgres', function (hooks) {
         'isolated_html',
         'indexed_at',
         'is_deleted',
+        'source',
+        'transpiled_code',
+        'last_modified',
       ]);
     }
     {

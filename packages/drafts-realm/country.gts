@@ -17,9 +17,7 @@ export class Country extends CardDef {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <address>
-        <@fields.name />
-      </address>
+      <@fields.name />
     </template>
   };
 }

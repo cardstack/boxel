@@ -16,7 +16,7 @@ import { setupRenderingTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { EventStatus } from 'matrix-js-sdk';
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 
@@ -30,8 +30,6 @@ import {
   addRoomEvent,
   updateRoomEvent,
 } from '@cardstack/host/lib/matrix-handlers';
-
-import type LoaderService from '@cardstack/host/services/loader-service';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -48,6 +46,7 @@ import {
   type TestContextWithSave,
   getMonacoContent,
   waitForCodeEditor,
+  lookupLoaderService,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
 import {
@@ -71,8 +70,7 @@ module('Integration | operator-mode', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function () {
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    loader = lookupLoaderService().loader;
   });
 
   setupLocalIndexing(hooks);
@@ -227,20 +225,28 @@ module('Integration | operator-mode', function (hooks) {
       });
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          <address>
-            <@fields.name />
-          </address>
+          <@fields.name />
         </template>
       };
     }
     class Trips extends FieldDef {
       static displayName = 'Trips';
+      @field tripTitle = contains(StringField);
+      @field homeCountry = linksTo(Country);
       @field countriesVisited = linksToMany(Country);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          <address>
+          {{#if @model.tripTitle}}
+            <h3 data-test-tripTitle><@fields.tripTitle /></h3>
+          {{/if}}
+          <div>
+            Home Country:
+            <@fields.homeCountry />
+          </div>
+          <div>
+            Countries Visited:
             <@fields.countriesVisited />
-          </address>
+          </div>
         </template>
       };
     }
@@ -397,6 +403,7 @@ module('Integration | operator-mode', function (hooks) {
         'friend.gts': { Friend },
         'publishing-packet.gts': { PublishingPacket },
         'pet-room.gts': { PetRoom },
+        'country.gts': { Country },
         'Pet/mango.json': {
           data: {
             type: 'card',
@@ -457,6 +464,21 @@ module('Integration | operator-mode', function (hooks) {
             },
           },
         },
+        'Pet/buzz.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Pet/buzz`,
+            attributes: {
+              name: 'Buzz',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
+              },
+            },
+          },
+        },
         'Person/fadhlan.json': {
           data: {
             type: 'card',
@@ -503,6 +525,66 @@ module('Integration | operator-mode', function (hooks) {
               'friends.1': {
                 links: {
                   self: `${testRealmURL}Pet/woody`,
+                },
+              },
+              'friends.2': {
+                links: {
+                  self: `${testRealmURL}Pet/buzz`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
+            },
+          },
+        },
+        'Country/usa.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Country/usa`,
+            attributes: {
+              name: 'USA',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}country`,
+                name: 'Country',
+              },
+            },
+          },
+        },
+        'Country/japan.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Country/japan`,
+            attributes: {
+              name: 'Japan',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}country`,
+                name: 'Country',
+              },
+            },
+          },
+        },
+        'Person/mickey.json': {
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Person/mickey`,
+            attributes: {
+              firstName: 'Mickey',
+              trips: {
+                tripTitle: 'Summer Vacation',
+              },
+            },
+            relationships: {
+              'trips.homeCountry': {
+                links: {
+                  self: `${testRealmURL}Country/usa`,
                 },
               },
             },
@@ -924,7 +1006,7 @@ module('Integration | operator-mode', function (hooks) {
             command: {
               type: 'patchCard',
               id: `${testRealmURL}Person/fadhlan`,
-              patch: { attributes: { pet: null } },
+              patch: { relationships: { pet: null } }, // this will error
               eventId: 'room2-event1',
             },
           }),
@@ -1043,6 +1125,8 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-ai-bot-retry-button]').exists();
       assert.dom('[data-test-command-apply]').doesNotExist();
       assert.dom('[data-test-person]').hasText('Fadhlan');
+
+      await waitFor('[data-test-embedded-card-options-button]');
       await percySnapshot(
         'Integration | operator-mode > matrix | it only applies changes from the chat if the stack contains a card with that ID | error',
       );
@@ -1057,6 +1141,12 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-person]').hasText('Dave');
       assert.dom('[data-test-command-apply]').doesNotExist();
       assert.dom('[data-test-ai-bot-retry-button]').doesNotExist();
+
+      await waitUntil(
+        () =>
+          document.querySelectorAll('[data-test-embedded-card-options-button]')
+            .length === 3,
+      );
       await percySnapshot(
         'Integration | operator-mode > matrix | it only applies changes from the chat if the stack contains a card with that ID | error fixed',
       );
@@ -1244,8 +1334,8 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom(`${stackCard} [data-test-country="Indonesia"]`).exists();
     });
 
-    test('it will throw error when patch code refers to nonexistent or incorrect field', async function (assert) {
-      let id = `${testRealmURL}Person/fadhlan`;
+    test('it does not crash when applying change to a card with preexisting nested linked card', async function (assert) {
+      let id = `${testRealmURL}Person/mickey`;
       await setCardInOperatorModeState(id);
       await renderComponent(
         class TestDriver extends GlimmerComponent {
@@ -1255,7 +1345,8 @@ module('Integration | operator-mode', function (hooks) {
           </template>
         },
       );
-      await waitFor('[data-test-person="Fadhlan"]');
+      await waitFor('[data-test-person="Mickey"]');
+      assert.dom('[data-test-tripTitle]').hasText('Summer Vacation');
 
       let roomId = await openAiAssistant();
       await addRoomEvent(matrixService, {
@@ -1267,118 +1358,31 @@ module('Integration | operator-mode', function (hooks) {
         sender: '@aibot:localhost',
         content: {
           msgtype: 'org.boxel.command',
-          formatted_body: 'Removing pet from person card',
+          formatted_body: 'Change tripTitle to Trip to Japan',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
               type: 'patchCard',
               id,
-              patch: { attributes: { pet: null } },
-              eventId: 'patch1',
+              patch: {
+                attributes: { trips: { tripTitle: 'Trip to Japan' } },
+              },
+              eventId: 'event1',
             },
           }),
           'm.relates_to': {
             rel_type: 'm.replace',
-            event_id: 'patch1',
+            event_id: 'event1',
           },
         },
         status: null,
       });
+
       await waitFor('[data-test-command-apply="ready"]');
       await click('[data-test-command-apply]');
       await waitFor('[data-test-patch-card-idle]');
-      assert.dom('[data-test-apply-state="failed"]').exists();
-      assert
-        .dom(`[data-test-card-error]`)
-        .hasText(`Failed to apply changes. Patch failed.`);
-
-      await addRoomEvent(matrixService, {
-        event_id: 'event3',
-        room_id: roomId,
-        state_key: 'state',
-        type: 'm.room.message',
-        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-        sender: '@aibot:localhost',
-        content: {
-          msgtype: 'org.boxel.command',
-          formatted_body:
-            "Adding 'Indonesia' to the list of countries visited in the trips attribute.",
-          format: 'org.matrix.custom.html',
-          data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id,
-              patch: {
-                attributes: {
-                  trips: {
-                    countriesVisited: ['Indonesia'],
-                  },
-                },
-              },
-              eventId: 'patch3',
-            },
-          }),
-          'm.relates_to': {
-            rel_type: 'm.replace',
-            event_id: 'patch3',
-          },
-        },
-        status: null,
-      });
-      await waitFor('[data-test-command-apply="ready"]');
-      await click('[data-test-command-apply]');
-      await waitFor('[data-test-message-idx="1"] [data-test-patch-card-idle]');
-      assert
-        .dom('[data-test-message-idx="1"] [data-test-apply-state="failed"]')
-        .exists();
-      assert
-        .dom(`[data-test-message-idx="1"] [data-test-card-error]`)
-        .hasText(`Failed to apply changes. Patch failed.`);
-      assert.dom('[data-test-trips]').hasText('');
-
-      await addRoomEvent(matrixService, {
-        event_id: 'event4',
-        room_id: roomId,
-        state_key: 'state',
-        type: 'm.room.message',
-        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-        sender: '@aibot:localhost',
-        content: {
-          msgtype: 'org.boxel.command',
-          formatted_body: 'Change preferred carrier',
-          format: 'org.matrix.custom.html',
-          data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id,
-              patch: {
-                attributes: {
-                  address: { shippingInfo: { carrier: 'UPS' } },
-                },
-              },
-              eventId: 'patch4',
-            },
-          }),
-          'm.relates_to': {
-            rel_type: 'm.replace',
-            event_id: 'patch4',
-          },
-        },
-        status: null,
-      });
-
-      await waitFor('[data-test-command-apply="ready"]');
-      assert.dom('[data-test-preferredcarrier="DHL"]').exists();
-
-      await click('[data-test-command-apply]');
-      await waitFor('[data-test-message-idx="1"] [data-test-patch-card-idle]');
-      assert
-        .dom('[data-test-message-idx="1"] [data-test-apply-state="failed"]')
-        .exists();
-      assert
-        .dom(`[data-test-message-idx="1"] [data-test-card-error]`)
-        .hasText(`Failed to apply changes. Patch failed.`);
-      assert.dom('[data-test-preferredcarrier="DHL"]').exists();
+      assert.dom('[data-test-apply-state="applied"]').exists();
+      assert.dom('[data-test-tripTitle]').hasText('Trip to Japan');
     });
 
     test('button states only apply to a single button in a chat room', async function (assert) {
@@ -1430,13 +1434,13 @@ module('Integration | operator-mode', function (hooks) {
         sender: '@aibot:localhost',
         content: {
           msgtype: 'org.boxel.command',
-          formatted_body: 'Change first name to Dave',
+          formatted_body: 'Incorrect patch command',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
               type: 'patchCard',
               id,
-              patch: { attributes: { pet: 'Harry' } },
+              patch: { relationships: { pet: null } }, // this will error
               eventId: 'event2',
             },
           }),
@@ -1456,7 +1460,7 @@ module('Integration | operator-mode', function (hooks) {
         sender: '@aibot:localhost',
         content: {
           msgtype: 'org.boxel.command',
-          formatted_body: 'Change first name to Dave',
+          formatted_body: 'Change first name to Jackie',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
             command: {
@@ -2971,7 +2975,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
     assert
       .dom('[data-test-field="friends"]')
-      .containsText('Jackie Woody Mango');
+      .containsText('Jackie Woody Buzz Mango');
   });
 
   test('can add a card to a linksTo field creating a loop', async function (assert) {
@@ -3176,12 +3180,15 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/burcu"]`);
-    assert.dom(`[data-test-plural-view-item]`).exists({ count: 2 });
+    assert.dom(`[data-test-plural-view-item]`).exists({ count: 3 });
     await click('[data-test-edit-button]');
     assert.dom('[data-test-field="friends"]').containsText('Jackie Woody');
 
     await click(
       '[data-test-links-to-many="friends"] [data-test-item="1"] [data-test-remove-card]',
+    );
+    await click(
+      '[data-test-links-to-many="friends"] [data-test-item="0"] [data-test-remove-card]',
     );
     await click(
       '[data-test-links-to-many="friends"] [data-test-item="0"] [data-test-remove-card]',
@@ -3248,8 +3255,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-create-new-card-button]`).isNotVisible();
   });
 
-  // Flaky test: CS-6842
-  skip(`displays recently accessed card`, async function (assert) {
+  test(`displays recently accessed card`, async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -3284,7 +3290,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
-    assert.dom(`[data-test-stack-card-index="1"]`).exists();
+    await waitFor(`[data-test-stack-card-index="1"]`);
 
     await focus(`[data-test-search-field]`);
     assert.dom(`[data-test-search-sheet-recent-card]`).exists({ count: 2 });
@@ -4038,9 +4044,8 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom('[data-test-card-url-bar-error]')
       .containsText('This resource does not exist');
-    // Percy is failing to capture this snapshot for some
-    // reason. creating issue for this CS-6780
-    // await percySnapshot(assert);
+
+    await percySnapshot(assert);
 
     await fillIn('[data-test-card-url-bar-input]', `Wrong URL`);
     await triggerKeyEvent(
@@ -4395,8 +4400,173 @@ module('Integration | operator-mode', function (hooks) {
     await click(`[data-test-card-catalog-create-new-button]`);
     await waitFor('[data-test-stack-card-index="1"]');
 
-    await click('[data-test-edit-button]');
+    await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
+
     await waitFor('[data-test-isolated-author]');
     assert.dom('[data-test-isolated-author]').exists();
+  });
+
+  test('displays card in interact mode when clicking `Open in Interact Mode` menu in preview panel', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await waitFor(`[data-test-cards-grid-item]`);
+    await click(`[data-test-cards-grid-item="${testRealmURL}BlogPost/1"]`);
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/1"]`);
+    await click(
+      `[data-test-stack-card="${testRealmURL}BlogPost/1"] [data-test-edit-button]`,
+    );
+
+    await click(
+      `[data-test-links-to-editor="authorBio"] [data-test-author="Alien"]`,
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}Author/1"]`);
+
+    assert.dom(`[data-test-stack-card]`).exists({ count: 3 });
+    assert.dom(`[data-test-stack-card="${testRealmURL}grid"]`).exists();
+    assert.dom(`[data-test-stack-card="${testRealmURL}BlogPost/1"]`).exists();
+    assert.dom(`[data-test-stack-card="${testRealmURL}Author/1"]`).exists();
+
+    await click(
+      '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
+    );
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    await waitFor('[data-test-submode-switcher]');
+    assert.dom('[data-test-submode-switcher]').hasText('Code');
+
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `${testRealmURL}Pet/mango.json`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    await blur('[data-test-card-url-bar-input]');
+    assert
+      .dom('[data-test-card-url-bar-realm-info]')
+      .hasText('in Operator Mode Workspace');
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}Pet/mango.json`);
+    await click(`[data-test-more-options-button]`);
+    await click(`[data-test-boxel-menu-item-text="Open in Interact Mode"]`);
+
+    await waitFor(`[data-test-stack-card]`);
+    assert.dom(`[data-test-stack-card]`).exists({ count: 1 });
+    assert.dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`).exists();
+  });
+
+  test('can reorder linksToMany cards in edit view', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await waitFor(`[data-test-cards-grid-item]`);
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/burcu"]`);
+    assert.dom(`[data-test-plural-view-item]`).exists({ count: 3 });
+    assert.dom(`[data-test-plural-view-item="0"]`).hasText('Jackie');
+    assert.dom(`[data-test-plural-view-item="1"]`).hasText('Woody');
+    assert.dom(`[data-test-plural-view-item="2"]`).hasText('Buzz');
+
+    await click(
+      `[data-test-stack-card="${testRealmURL}Person/burcu"] [data-test-edit-button]`,
+    );
+
+    assert.dom(`[data-test-item]`).exists({ count: 3 });
+    assert.dom(`[data-test-item="0"]`).hasText('Jackie');
+    assert.dom(`[data-test-item="1"]`).hasText('Woody');
+    assert.dom(`[data-test-item="2"]`).hasText('Buzz');
+
+    let dragAndDrop = async (itemSelector: string, targetSelector: string) => {
+      let itemElement = document.querySelector(itemSelector);
+      let targetElement = document.querySelector(targetSelector);
+
+      if (!itemElement || !targetElement) {
+        throw new Error('Item or target element not found');
+      }
+
+      let itemRect = itemElement.getBoundingClientRect();
+      let targetRect = targetElement.getBoundingClientRect();
+
+      await triggerEvent(itemElement, 'mousedown', {
+        clientX: itemRect.left + itemRect.width / 2,
+        clientY: itemRect.top + itemRect.height / 2,
+      });
+
+      await triggerEvent(document, 'mousemove', {
+        clientX: itemRect.left + 1,
+        clientY: itemRect.top + 1,
+      });
+      await triggerEvent(document, 'mousemove', {
+        clientX: targetRect.left + targetRect.width / 2,
+        clientY: targetRect.top - 100,
+      });
+
+      await triggerEvent(itemElement, 'mouseup', {
+        clientX: targetRect.left + targetRect.width / 2,
+        clientY: targetRect.top - 100,
+      });
+    };
+
+    await dragAndDrop('[data-test-sort="1"]', '[data-test-sort="0"]');
+    await dragAndDrop('[data-test-sort="2"]', '[data-test-sort="1"]');
+    assert.dom(`[data-test-item]`).exists({ count: 3 });
+    assert.dom(`[data-test-item="0"]`).hasText('Woody');
+    assert.dom(`[data-test-item="1"]`).hasText('Buzz');
+    assert.dom(`[data-test-item="2"]`).hasText('Jackie');
+
+    let itemElement = document.querySelector('[data-test-item="0"]');
+    let overlayButtonElements = document.querySelectorAll(
+      `[data-test-overlay-card="${testRealmURL}Pet/woody"]`,
+    );
+    if (
+      !itemElement ||
+      !overlayButtonElements ||
+      overlayButtonElements.length === 0
+    ) {
+      throw new Error('Item or overlay button element not found');
+    }
+
+    let itemRect = itemElement.getBoundingClientRect();
+    let overlayButtonRect =
+      overlayButtonElements[
+        overlayButtonElements.length - 1
+      ].getBoundingClientRect();
+
+    assert.strictEqual(
+      Math.round(itemRect.top),
+      Math.round(overlayButtonRect.top),
+    );
+    assert.strictEqual(
+      Math.round(itemRect.left),
+      Math.round(overlayButtonRect.left),
+    );
+
+    await click(
+      `[data-test-stack-card="${testRealmURL}Person/burcu"] [data-test-edit-button]`,
+    );
+    assert.dom(`[data-test-plural-view-item="0"]`).hasText('Woody');
+    assert.dom(`[data-test-plural-view-item="1"]`).hasText('Buzz');
+    assert.dom(`[data-test-plural-view-item="2"]`).hasText('Jackie');
   });
 });

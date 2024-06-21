@@ -16,7 +16,18 @@
    isolated_html TEXT,
    indexed_at,
    is_deleted BOOLEAN,
+   source TEXT,
+   transpiled_code TEXT,
+   last_modified,
    PRIMARY KEY ( url, realm_version, realm_url ) 
+);
+
+ CREATE TABLE IF NOT EXISTS realm_user_permissions (
+   realm_url TEXT NOT NULL,
+   username TEXT NOT NULL,
+   read BOOLEAN NOT NULL,
+   write BOOLEAN NOT NULL,
+   PRIMARY KEY ( realm_url, username, read, write ) 
 );
 
  CREATE TABLE IF NOT EXISTS realm_versions (

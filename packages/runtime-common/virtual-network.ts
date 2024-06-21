@@ -1,30 +1,12 @@
 import { RealmPaths } from './paths';
-import { Loader, followRedirections } from './loader';
-import type { RunnerOpts } from './worker';
 import {
   PackageShimHandler,
   PACKAGES_FAKE_ORIGIN,
 } from './package-shim-handler';
 import type { Readable } from 'stream';
+import { simulateNetworkBehaviors } from './fetcher';
 export interface ResponseWithNodeStream extends Response {
   nodeStream?: Readable;
-}
-
-const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
-
-function getNativeFetch(): typeof fetch {
-  if (isFastBoot) {
-    let optsId = (globalThis as any).runnerOptsId;
-    if (optsId == null) {
-      throw new Error(`Runner Options Identifier was not set`);
-    }
-    let getRunnerOpts = (globalThis as any).getRunnerOpts as (
-      optsId: number,
-    ) => RunnerOpts;
-    return getRunnerOpts(optsId)._fetch;
-  } else {
-    return fetch.bind(globalThis);
-  }
 }
 
 export type Handler = (req: Request) => Promise<ResponseWithNodeStream | null>;
@@ -33,7 +15,12 @@ export class VirtualNetwork {
   private handlers: Handler[] = [];
   private urlMappings: [string, string][] = [];
 
-  private resolveImport = (moduleIdentifier: string) => {
+  constructor(nativeFetch = globalThis.fetch.bind(globalThis)) {
+    this.nativeFetch = nativeFetch;
+    this.mount(this.packageShimHandler.handle);
+  }
+
+  resolveImport = (moduleIdentifier: string) => {
     if (!isUrlLike(moduleIdentifier)) {
       moduleIdentifier = new URL(moduleIdentifier, PACKAGES_FAKE_ORIGIN).href;
     }
@@ -41,14 +28,6 @@ export class VirtualNetwork {
   };
 
   private packageShimHandler = new PackageShimHandler(this.resolveImport);
-
-  constructor() {
-    this.mount(this.packageShimHandler.handle);
-  }
-
-  createLoader() {
-    return new Loader(this.fetch, this.resolveImport);
-  }
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
     this.packageShimHandler.shimModule(moduleIdentifier, module);
@@ -58,9 +37,7 @@ export class VirtualNetwork {
     this.urlMappings.push([from.href, to.href]);
   }
 
-  private nativeFetch(...args: Parameters<typeof fetch>) {
-    return getNativeFetch()(...args);
-  }
+  private nativeFetch: typeof globalThis.fetch;
 
   private resolveURLMapping(
     url: string,
@@ -96,8 +73,16 @@ export class VirtualNetwork {
     return undefined;
   }
 
-  mount(handler: Handler) {
-    this.handlers.push(handler);
+  mount(handler: Handler, opts?: { prepend: boolean }) {
+    if (opts?.prepend) {
+      this.handlers.unshift(handler);
+    } else {
+      this.handlers.push(handler);
+    }
+  }
+
+  unmount(handler: Handler) {
+    this.handlers = this.handlers.filter((h) => h !== handler);
   }
 
   fetch: typeof fetch = async (
@@ -184,7 +169,7 @@ export class VirtualNetwork {
     for (let handler of this.handlers) {
       let response = await handler(request);
       if (response) {
-        return await followRedirections(request, response, this.fetch);
+        return await simulateNetworkBehaviors(request, response, this.fetch);
       }
     }
 

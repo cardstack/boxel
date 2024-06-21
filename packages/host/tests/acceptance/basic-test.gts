@@ -6,12 +6,11 @@ import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
-
 import {
   setupLocalIndexing,
   setupServerSentEvents,
   setupAcceptanceTestRealm,
+  lookupLoaderService,
 } from '../helpers';
 
 module('Acceptance | basic tests', function (hooks) {
@@ -21,9 +20,7 @@ module('Acceptance | basic tests', function (hooks) {
   setupWindowMock(hooks);
 
   hooks.beforeEach(async function () {
-    let loaderService = this.owner.lookup(
-      'service:loader-service',
-    ) as LoaderService;
+    let loaderService = lookupLoaderService();
     let loader = loaderService.loader;
     let { field, contains, CardDef, Component } = await loader.import<
       typeof import('https://cardstack.com/base/card-api')

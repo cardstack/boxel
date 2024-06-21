@@ -1,5 +1,11 @@
 import { module, test } from 'qunit';
-import { Loader, VirtualNetwork, type Realm } from '@cardstack/runtime-common';
+import {
+  Loader,
+  VirtualNetwork,
+  type Realm,
+  fetcher,
+  maybeHandleScopedCSSRequest,
+} from '@cardstack/runtime-common';
 import { dirSync, setGracefulCleanup, DirResult } from 'tmp';
 import {
   createRealm,
@@ -22,36 +28,41 @@ module('loader', function (hooks) {
   let testRealmServer: Server;
 
   let virtualNetwork = new VirtualNetwork();
-  let loader = virtualNetwork.createLoader();
-
   shimExternals(virtualNetwork);
+
+  function createLoader() {
+    let fetch = fetcher(virtualNetwork.fetch, [
+      async (req, next) => {
+        return (await maybeHandleScopedCSSRequest(req)) || next(req);
+      },
+    ]);
+    return new Loader(fetch, virtualNetwork.resolveImport);
+  }
 
   setupBaseRealmServer(hooks, virtualNetwork);
 
-  hooks.beforeEach(async function () {
+  hooks.before(async function () {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
   });
 
   setupDB(hooks, {
-    beforeEach: async (dbAdapter, queue) => {
-      testRealmServer = (
-        await runTestRealmServer({
-          virtualNetwork,
-          dir: dir.name,
-          realmURL: testRealmURL,
-          dbAdapter,
-          queue,
-        })
-      ).testRealmServer;
+    before: async (dbAdapter, queue) => {
+      ({ testRealmServer } = await runTestRealmServer({
+        virtualNetwork,
+        dir: dir.name,
+        realmURL: testRealmURL,
+        dbAdapter,
+        queue,
+      }));
     },
-    afterEach: async () => {
+    after: async () => {
       testRealmServer.close();
     },
   });
 
   test('can dynamically load modules with cycles', async function (assert) {
-    let loader = virtualNetwork.createLoader();
+    let loader = createLoader();
     let module = await loader.import<{ three(): number }>(
       `${testRealmHref}cycle-two`,
     );
@@ -59,7 +70,7 @@ module('loader', function (hooks) {
   });
 
   test('can resolve multiple import load races against a common dep', async function (assert) {
-    let loader = virtualNetwork.createLoader();
+    let loader = createLoader();
     let a = loader.import<{ a(): string }>(`${testRealmHref}a`);
     let b = loader.import<{ b(): string }>(`${testRealmHref}b`);
     let [aModule, bModule] = await Promise.all([a, b]);
@@ -68,7 +79,7 @@ module('loader', function (hooks) {
   });
 
   test('can resolve a import deadlock', async function (assert) {
-    let loader = virtualNetwork.createLoader();
+    let loader = createLoader();
     let a = loader.import<{ a(): string }>(`${testRealmHref}deadlock/a`);
     let b = loader.import<{ b(): string }>(`${testRealmHref}deadlock/b`);
     let c = loader.import<{ c(): string }>(`${testRealmHref}deadlock/c`);
@@ -79,7 +90,7 @@ module('loader', function (hooks) {
   });
 
   test('can determine consumed modules', async function (assert) {
-    let loader = virtualNetwork.createLoader();
+    let loader = createLoader();
     await loader.import<{ a(): string }>(`${testRealmHref}a`);
     assert.deepEqual(await loader.getConsumedModules(`${testRealmHref}a`), [
       `${testRealmHref}b`,
@@ -87,32 +98,15 @@ module('loader', function (hooks) {
     ]);
   });
 
-  test('can determine consumed modules when an error is encountered during loading', async function (assert) {
-    let loader = virtualNetwork.createLoader();
-    try {
-      await loader.import<{ d(): string }>(`${testRealmHref}d`);
-      throw new Error(`expected error was not thrown`);
-    } catch (e: any) {
-      assert.strictEqual(e.message, 'intentional error thrown');
-      assert.deepEqual(await loader.getConsumedModules(`${testRealmHref}d`), [
-        `${testRealmHref}a`,
-        `${testRealmHref}b`,
-        `${testRealmHref}c`,
-        `${testRealmHref}e`,
-      ]);
-    }
-  });
-
   test('can get consumed modules within a cycle', async function (assert) {
-    let loader = virtualNetwork.createLoader();
+    let loader = createLoader();
     await loader.import<{ three(): number }>(`${testRealmHref}cycle-two`);
     let modules = await loader.getConsumedModules(`${testRealmHref}cycle-two`);
     assert.deepEqual(modules, [`${testRealmHref}cycle-one`]);
   });
 
   test('supports identify API', async function (assert) {
-    let loader = virtualNetwork.createLoader();
-    shimExternals(virtualNetwork);
+    let loader = createLoader();
     let { Person } = await loader.import<{ Person: unknown }>(
       `${testRealmHref}person`,
     );
@@ -128,8 +122,7 @@ module('loader', function (hooks) {
   });
 
   test('exports cannot be mutated', async function (assert) {
-    let loader = virtualNetwork.createLoader();
-    shimExternals(virtualNetwork);
+    let loader = createLoader();
     let module = await loader.import<{ Person: unknown }>(
       `${testRealmHref}person`,
     );
@@ -139,44 +132,26 @@ module('loader', function (hooks) {
   });
 
   test('can get a loader used to import a specific card', async function (assert) {
-    let loader = virtualNetwork.createLoader();
-    shimExternals(virtualNetwork);
+    let loader = createLoader();
     let module = await loader.import<any>(`${testRealmHref}person`);
     let card = module.Person;
     let testingLoader = Loader.getLoaderFor(card);
     assert.strictEqual(testingLoader, loader, 'the loaders are the same');
   });
 
-  test('is able to follow redirects', async function (assert) {
-    loader.prependURLHandlers([
-      async (request) => {
-        if (request.url.includes('node-b.abc')) {
-          return new Response('final redirection url');
-        }
-        return null;
-      },
-      async (request) => {
-        if (!request.url.includes('node-a.abc')) {
-          return null;
-        }
-        return new Response('redirected', {
-          status: 301,
-          headers: new Headers({ Location: `http://node-b.abc` }),
-        });
-      },
-    ]);
-
-    let response = await loader.fetch(`http://node-a.abc`);
-    assert.strictEqual(response.url, 'http://node-b.abc/');
-    assert.true(response.redirected);
-  });
-
   module('with a different realm', function (hooks) {
     let loader2: Loader;
     let realm: Realm;
+
+    hooks.before(async function () {
+      dir = dirSync();
+      copySync(join(__dirname, 'cards'), dir.name);
+      shimExternals(virtualNetwork);
+    });
+
     setupDB(hooks, {
-      beforeEach: async (dbAdapter, queue) => {
-        loader2 = virtualNetwork.createLoader();
+      before: async (dbAdapter, queue) => {
+        loader2 = createLoader();
         realm = await createRealm({
           dir: dir.name,
           fileSystem: {
@@ -190,7 +165,7 @@ module('loader', function (hooks) {
           dbAdapter,
           queue,
         });
-        loader2.registerURLHandler(realm.maybeHandle.bind(realm));
+        virtualNetwork.mount(realm.maybeHandle.bind(realm));
         await realm.ready;
       },
     });

@@ -16,8 +16,6 @@ import {
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
-
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as StringFieldMod from 'https://cardstack.com/base/string';
 
@@ -29,6 +27,7 @@ import {
   setupServerSentEvents,
   type TestContextWithSSE,
   setupIntegrationTestRealm,
+  lookupLoaderService,
 } from '../helpers';
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -39,8 +38,7 @@ module('Integration | realm', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    loader = lookupLoaderService().loader;
   });
 
   setupServerSentEvents(hooks);
@@ -441,7 +439,7 @@ module('Integration | realm', function (hooks) {
     }
 
     let searchIndex = realm.searchIndex;
-    let result = await searchIndex.card(new URL(json.data.links.self));
+    let result = await searchIndex.cardDocument(new URL(json.data.links.self));
     if (result?.type === 'error') {
       throw new Error(
         `unexpected error when getting card from index: ${result.error.detail}`,
@@ -727,7 +725,7 @@ module('Integration | realm', function (hooks) {
     }
 
     let searchIndex = realm.searchIndex;
-    let result = await searchIndex.card(new URL(json.data.links.self));
+    let result = await searchIndex.cardDocument(new URL(json.data.links.self));
     if (result?.type === 'error') {
       throw new Error(
         `unexpected error when getting card from index: ${result.error.detail}`,
@@ -1943,7 +1941,9 @@ module('Integration | realm', function (hooks) {
     let { data: cards } = await searchIndex.search({});
     assert.strictEqual(cards.length, 2, 'two cards found');
 
-    let result = await searchIndex.card(new URL(`${testRealmURL}cards/2`));
+    let result = await searchIndex.cardDocument(
+      new URL(`${testRealmURL}cards/2`),
+    );
     if (result?.type === 'error') {
       throw new Error(
         `unexpected error when getting card from index: ${result.error.detail}`,
@@ -1983,10 +1983,10 @@ module('Integration | realm', function (hooks) {
     });
     assert.strictEqual(response.status, 204, 'status was 204');
 
-    result = await searchIndex.card(new URL(`${testRealmURL}cards/2`));
+    result = await searchIndex.cardDocument(new URL(`${testRealmURL}cards/2`));
     assert.strictEqual(result, undefined, 'card was deleted');
 
-    result = await searchIndex.card(new URL(`${testRealmURL}cards/1`));
+    result = await searchIndex.cardDocument(new URL(`${testRealmURL}cards/1`));
     if (result?.type === 'error') {
       throw new Error(
         `unexpected error when getting card from index: ${result.error.detail}`,
