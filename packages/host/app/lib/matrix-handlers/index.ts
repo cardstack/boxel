@@ -56,6 +56,7 @@ export interface Context extends EventSendingContext {
     event: Event,
     roomId: string,
   ) => Promise<void>;
+  addEventReadReceipt(eventId: string, receipt: { readAt: Date }): void;
 }
 
 export async function addRoomEvent(context: EventSendingContext, event: Event) {
