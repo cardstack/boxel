@@ -2182,7 +2182,7 @@ export class ExportedCard extends ExportedCardParent {
       .doesNotExist('field defs do not display a create instance button');
   });
 
-  test('can search for instances of an exported card definition', async function (assert) {
+  test('can find instances of an exported card definition', async function (assert) {
     await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
@@ -2195,7 +2195,7 @@ export class ExportedCard extends ExportedCardParent {
     await click('[data-boxel-selector-item-text="Pet"]');
     await waitFor('[data-test-card-module-definition]');
 
-    await click('[data-test-action-button="Search for Instances"]');
+    await click('[data-test-action-button="Find instances"]');
     await waitFor('[data-test-search-sheet-search-result]');
     assert
       .dom('[data-test-search-field]')
@@ -2209,7 +2209,7 @@ export class ExportedCard extends ExportedCardParent {
       .exists();
   });
 
-  test('search for instances action is not displayed for non-exported Card definition', async function (assert) {
+  test('find instances action is not displayed for non-exported Card definition', async function (assert) {
     await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
@@ -2223,13 +2223,13 @@ export class ExportedCard extends ExportedCardParent {
     await waitFor('[data-test-card-module-definition]');
 
     assert
-      .dom('[data-test-action-button="Search for Instances"]')
+      .dom('[data-test-action-button="Find instances"]')
       .doesNotExist(
-        'non-exported card defs do not display a search for instances button',
+        'non-exported card defs do not display a Find instances button',
       );
   });
 
-  test('search for instances action is not displayed for field definition', async function (assert) {
+  test('find instances action is not displayed for field definition', async function (assert) {
     await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
@@ -2243,8 +2243,8 @@ export class ExportedCard extends ExportedCardParent {
     await waitFor('[data-test-card-module-definition]');
 
     assert
-      .dom('[data-test-action-button="Search for Instances"]')
-      .doesNotExist('field defs do not display a search for instances button');
+      .dom('[data-test-action-button="Find instances"]')
+      .doesNotExist('field defs do not display a Find instances button');
   });
 
   module('when the user lacks write permissions', function (hooks) {
