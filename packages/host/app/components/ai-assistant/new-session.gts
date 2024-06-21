@@ -11,11 +11,13 @@ interface Signature {
     sendPrompt?: (message: string) => void;
     errorAction?: () => void;
   };
+  Element: HTMLDivElement;
+  Blocks: { default: [] };
 }
 
 export default class NewSession extends Component<Signature> {
   <template>
-    <div class='intro' data-test-new-session>
+    <div class='intro' data-test-new-session ...attributes>
       <div class='title-group'>
         <img alt='AI Assistant' src={{assistantIcon}} width='40' height='40' />
         <h2 class='title-text'>Assistant</h2>
@@ -57,13 +59,14 @@ export default class NewSession extends Component<Signature> {
           responses.
         </p>
       {{/if}}
+      {{yield}}
     </div>
 
     <style>
       .intro {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-xl);
+        gap: var(--boxel-sp-lg);
         height: 100%;
         padding: var(--boxel-sp) var(--boxel-sp-lg);
         color: var(--boxel-light);

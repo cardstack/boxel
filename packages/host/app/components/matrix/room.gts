@@ -46,7 +46,7 @@ export default class Room extends Component<Signature> {
       data-test-room={{this.room.roomId}}
     >
       {{#if this.room.messages}}
-        <AiAssistantConversation>
+        <AiAssistantConversation class='conversation-area'>
           {{#each this.room.messages as |message i|}}
             <RoomMessage
               @roomId={{@roomId}}
@@ -61,13 +61,14 @@ export default class Room extends Component<Signature> {
               data-test-message-idx={{i}}
             />
           {{/each}}
+          <AiAssistantSkillMenu class='skills' />
         </AiAssistantConversation>
       {{else}}
-        <NewSession @sendPrompt={{this.sendPrompt}} />
+        <NewSession @sendPrompt={{this.sendPrompt}} class='conversation-area'>
+          <AiAssistantSkillMenu class='skills' />
+        </NewSession>
       {{/if}}
-
       <footer class='room-actions'>
-        <AiAssistantSkillMenu />
         <div class='chat-input-area' data-test-chat-input-area>
           <AiAssistantChatInput
             @value={{this.messageToSend}}
@@ -96,11 +97,17 @@ export default class Room extends Component<Signature> {
       .timeline-start {
         padding-bottom: var(--boxel-sp);
       }
-      .room-actions {
-        display: grid;
-        gap: var(--boxel-sp-sm);
-        padding: var(--boxel-sp);
+      .conversation-area {
+        position: relative;
+        padding-bottom: 0;
+      }
+      .skills {
+        position: sticky;
+        bottom: 2px;
         box-shadow: var(--boxel-box-shadow);
+      }
+      .room-actions {
+        padding: 0 var(--boxel-sp) var(--boxel-sp);
       }
       .chat-input-area {
         background-color: var(--boxel-light);
