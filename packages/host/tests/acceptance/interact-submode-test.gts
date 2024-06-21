@@ -25,8 +25,8 @@ import { Realm } from '@cardstack/runtime-common/realm';
 
 import { AuthenticationErrorMessages } from '@cardstack/runtime-common/router';
 
-import { claimsFromRawToken } from '@cardstack/host/resources/realm-session';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import { claimsFromRawToken } from '@cardstack/host/services/realm';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 
 import {

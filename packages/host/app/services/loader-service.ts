@@ -98,9 +98,9 @@ export default class LoaderService extends Service {
     if (!this.fastboot.isFastBoot) {
       middlewareStack.push(async (req, next) => {
         let handleAuth = addAuthorizationHeader(loader.fetch, {
-          getToken: async (url: string, httpMethod: string) => {
+          getToken: async (url: string) => {
             try {
-              return this.realm.token(url, httpMethod);
+              return this.realm.token(url);
             } catch (e: any) {
               if (e.code === 'RealmNotReady') {
                 return undefined;

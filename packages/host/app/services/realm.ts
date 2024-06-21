@@ -1,4 +1,10 @@
+import {
+  isDestroyed,
+  isDestroying,
+  registerDestructor,
+} from '@ember/destroyable';
 import { setOwner, getOwner } from '@ember/owner';
+import type Owner from '@ember/owner';
 import Service from '@ember/service';
 
 import { service } from '@ember/service';
@@ -7,21 +13,17 @@ import { buildWaiter } from '@ember/test-waiters';
 
 import { tracked } from '@glimmer/tracking';
 
-import {
-  Permissions,
-  SupportedMimeType,
-  type RealmInfo,
-  JWTPayload,
-} from '@cardstack/runtime-common';
+import { task } from 'ember-concurrency';
 
 import {
-  RealmSessionResource,
-  getRealmSession,
-} from '../resources/realm-session';
+  Permissions,
+  type RealmInfo,
+  JWTPayload,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 
 import type LoaderService from './loader-service';
 import type MatrixService from './matrix-service';
-import { task } from 'ember-concurrency';
 
 const waiter = buildWaiter('realm-service');
 
@@ -32,18 +34,26 @@ interface Meta {
 
 class RealmResource {
   @service private declare matrixService: MatrixService;
+  @service declare loaderService: LoaderService;
+
+  @tracked meta: Meta | undefined;
+
+  @tracked
+  private auth: { token: string; claims: JWTPayload } | undefined;
+
+  private sessionExpirationTimeout: number | undefined;
 
   constructor(
     private realmURL: string,
     auth: { token: string; claims: JWTPayload } | undefined,
   ) {
     this.auth = auth;
+    if (auth) {
+      SessionStorage.persist(this.realmURL, auth.token);
+      this.scheduleSessionRefresh();
+    }
+    registerDestructor(this, this.cleanup);
   }
-
-  @tracked meta: Meta | undefined;
-
-  @tracked
-  private auth: { token: string; claims: JWTPayload } | undefined;
 
   get token(): string | undefined {
     return this.auth?.token;
@@ -51,6 +61,16 @@ class RealmResource {
 
   get claims(): JWTPayload | undefined {
     return this.auth?.claims;
+  }
+
+  get canRead() {
+    return (
+      !!this.meta?.isPublic || !!this.claims?.permissions?.includes('read')
+    );
+  }
+
+  get canWrite() {
+    return !!this.claims?.permissions?.includes('write');
   }
 
   private loggingIn: Promise<void> | undefined;
@@ -68,51 +88,29 @@ class RealmResource {
     );
     let claims = claimsFromRawToken(token);
     this.auth = { claims, token };
+    SessionStorage.persist(this.realmURL, token);
     this.loggingIn = undefined;
   });
 
   logout(): void {
     this.auth = undefined;
-  }
-}
-
-class InitialRealmResource {
-  @service declare loaderService: LoaderService;
-
-  #state:
-    | {
-        type: 'initializing';
-        session: RealmSessionResource;
-      }
-    | RealmResource = {
-    type: 'initializing',
-    session: getRealmSession(this, { realmURL: () => new URL(this.url) }),
-  };
-
-  constructor(
-    readonly url: string,
-    readonly isPublic: boolean,
-  ) {}
-
-  get state() {
-    return this.#state;
+    clearTimeout(this.sessionExpirationTimeout);
+    SessionStorage.remove(this.realmURL);
   }
 
-  async initialize(): Promise<void> {
-    await this.#state.session.loaded;
+  async fetchMeta(): Promise<void> {
     let headers: Record<string, string> = {
       Accept: SupportedMimeType.RealmInfo,
     };
-    let token = this.#state.session.rawRealmToken;
-    if (token) {
-      headers['Authorization'] = token;
-    }
-    let response = await this.loaderService.loader.fetch(`${this.url}_info`, {
-      headers,
-    });
+    let response = await this.loaderService.loader.fetch(
+      `${this.realmURL}_info`,
+      {
+        headers,
+      },
+    );
     if (response.status !== 200) {
       throw new Error(
-        `Failed to fetch realm info for ${this.url}: ${response.status}`,
+        `Failed to fetch realm info for ${this.realmURL}: ${response.status}`,
       );
     }
     let json = await response.json();
@@ -120,9 +118,53 @@ class InitialRealmResource {
       url: json.data.id,
       ...json.data.attributes,
     };
-    let resource = new RealmResource(info, this.#state.session, this.isPublic);
-    setOwner(resource, getOwner(this));
-    this.#state = resource;
+    let isPublic = Boolean(
+      response.headers.get('x-boxel-realm-public-readable'),
+    );
+    this.meta = { info, isPublic };
+  }
+
+  // TODO: can probably delete this once middleware no longer uses it
+  async refreshToken() {
+    if (!this.auth) {
+      throw new Error(`Cannot do session refresh without token`);
+    }
+    return await this.login();
+  }
+
+  private scheduleSessionRefresh() {
+    if (!this.claims) {
+      throw new Error(`Cannot schedule session refresh without token`);
+    }
+    let { exp } = this.claims;
+    if (this.sessionExpirationTimeout) {
+      clearTimeout(this.sessionExpirationTimeout);
+    }
+    let expirationMs = exp * 1000; // token expiration is unix time (seconds)
+    let refreshMs = Math.max(
+      expirationMs - Date.now() - tokenRefreshPeriodSec * 1000,
+      0,
+    );
+    this.sessionExpirationTimeout = setTimeout(() => {
+      this.sessionExpirationTimeout = undefined;
+      if (isDestroyed(this) || isDestroying(this)) {
+        return;
+      }
+      this.login();
+    }, refreshMs) as unknown as number; // because type is defaultint to NodeJS Timeout type
+  }
+
+  private cleanup() {
+    // when a resource is destroyed we need to check to see if it is a resource
+    // whose timer is managing the session refresh and if so clean up the timer.
+    // As well as we need to be careful to cleanup module
+    // scope pointers to the destroyed resource.
+    // let resources = sessionResources.get(realmURL);
+    // resources?.delete(this);
+    if (this.sessionExpirationTimeout) {
+      clearTimeout(this.sessionExpirationTimeout);
+      this.sessionExpirationTimeout = undefined;
+    }
   }
 }
 
@@ -132,21 +174,22 @@ class RealmNotReadyError extends Error {
 export default class RealmService extends Service {
   @service declare loaderService: LoaderService;
 
+  private realms: Map<string, RealmResource> = restoreSessions(getOwner(this)!);
+
   async ensureRealmReady(url: string): Promise<void> {
     let token = waiter.beginAsync();
     try {
-      let isPublic: boolean | undefined;
-      let realmURL = this.toRealmURL(url);
-      if (!realmURL) {
-        ({ realmURL, isPublic } = await this.fetchRealmURL(url));
+      let realmResource = this.knownRealm(url);
+      if (!realmResource) {
+        await this.fetchRealm(url); // this should have the side effect of creating and noting the realm resource
       }
-      let resource = this.realms.get(realmURL);
-      if (!resource) {
-        resource = new InitialRealmResource(realmURL, !!isPublic);
-        setOwner(resource, getOwner(this)!);
-        this.realms.set(realmURL, resource);
+      realmResource = this.knownRealm(url);
+      if (!realmResource) {
+        throw new RealmNotReadyError(
+          `Failed to fetch realm at ${url} and create realm resource`,
+        );
       }
-      await resource.initialize();
+      this.requireRealmMeta(url); // this will throw if the realm resource is not fully loaded
     } finally {
       waiter.endAsync(token);
     }
@@ -163,16 +206,11 @@ export default class RealmService extends Service {
   };
 
   canRead = (url: string): boolean => {
-    let resource = this.requireRealmMeta(url);
-    return (
-      resource.meta.isPublic ||
-      Boolean(resource.claims?.permissions?.includes('read'))
-    );
+    return this.requireRealmMeta(url).canRead;
   };
 
   canWrite = (url: string): boolean => {
-    let resource = this.requireRealmMeta(url);
-    return Boolean(resource.claims?.permissions?.includes('write'));
+    return this.requireRealmMeta(url).canWrite;
   };
 
   permissions = (url: string): Permissions => {
@@ -215,58 +253,87 @@ export default class RealmService extends Service {
     return undefined;
   }
 
-  private async fetchRealmURL(
-    url: string,
-  ): Promise<{ realmURL: string; isPublic: boolean }> {
-    let response = await this.loaderService.loader.fetch(url, {
+  private async fetchRealm(url: string): Promise<void> {
+    // middleware will ahndle instantiation of a RealmResource
+    await this.loaderService.loader.fetch(url, {
       method: 'HEAD',
     });
-    let realmURL = response.headers.get('x-boxel-realm-url');
-    if (!realmURL) {
-      throw new Error(
-        `Could not find realm URL in response headers (x-boxel-realm-url) for ${url} ${response.status}`,
-      );
-    }
-    let isPublic = Boolean(
-      response.headers.get('x-boxel-realm-public-readable'),
-    );
-    return { realmURL, isPublic };
+    return;
   }
 
   async refreshToken(url: string): Promise<void> {
-    await this.requireRealmMeta(url).session.refreshToken();
+    await this.requireRealmMeta(url).refreshToken();
   }
-
-  private realms: Map<string, RealmResource> = restoreSessions();
 }
 
-const tokenRefreshPeriodSec = 5 * 60; // 5 minutes
-const sessionLocalStorageKey = 'boxel-session';
+// TODO: prefer not export these but a test needs it. Can we do better?
+export const tokenRefreshPeriodSec = 5 * 60; // 5 minutes
+export const sessionLocalStorageKey = 'boxel-session';
 
-function claimsFromRawToken(rawToken: string): JWTPayload {
+export function claimsFromRawToken(rawToken: string): JWTPayload {
   let [_header, payload] = rawToken.split('.');
   return JSON.parse(atob(payload)) as JWTPayload;
 }
 
-function restoreSessions(): Map<string, RealmResource> {
+function restoreSessions(owner: Owner): Map<string, RealmResource> {
   let sessions: Map<string, RealmResource> = new Map();
-  let tokens = extractSessionsFromStorage();
+  let tokens = SessionStorage.getAll();
   if (tokens) {
     for (let [realmURL, token] of Object.entries(tokens)) {
       let claims = claimsFromRawToken(token);
       let expiration = claims.exp;
       if (expiration - tokenRefreshPeriodSec > Date.now() / 1000) {
-        sessions.set(realmURL, new RealmResource(realmURL, { claims, token }));
+        let resource = new RealmResource(realmURL, { claims, token });
+        setOwner(resource, owner);
+        sessions.set(realmURL, resource);
+        registerDestructor(resource, () => {
+          sessions.delete(realmURL);
+        });
       }
     }
   }
   return sessions;
 }
 
-function extractSessionsFromStorage(): Record<string, string> | undefined {
-  let sessionsString = window.localStorage.getItem(sessionLocalStorageKey);
-  if (sessionsString) {
-    return JSON.parse(sessionsString);
-  }
-  return undefined;
+// TODO: callers of this expect to clear everything -- this should probably be done by logging out of all known realms
+export function clearAllRealmSessions() {
+  window.localStorage.removeItem(sessionLocalStorageKey);
+  // for (let [realm, timeout] of sessionExpirations.entries()) {
+  //   clearTimeout(timeout);
+  //   sessionExpirations.delete(realm);
+  // }
 }
+
+let SessionStorage = {
+  getAll(): Record<string, string> | undefined {
+    let sessionsString = window.localStorage.getItem(sessionLocalStorageKey);
+    if (sessionsString) {
+      return JSON.parse(sessionsString);
+    }
+    return undefined;
+  },
+  persist(realmURL: string, token: string) {
+    let sessionStr =
+      window.localStorage.getItem(sessionLocalStorageKey) ?? '{}';
+    let session = JSON.parse(sessionStr);
+    if (session[realmURL] !== token) {
+      session[realmURL] = token;
+      window.localStorage.setItem(
+        sessionLocalStorageKey,
+        JSON.stringify(session),
+      );
+    }
+  },
+  remove(realmURL: string) {
+    let sessionStr = window.localStorage.getItem(sessionLocalStorageKey);
+    if (!sessionStr) {
+      return;
+    }
+    let session = JSON.parse(sessionStr);
+    delete session[realmURL];
+    window.localStorage.setItem(
+      sessionLocalStorageKey,
+      JSON.stringify(session),
+    );
+  },
+};

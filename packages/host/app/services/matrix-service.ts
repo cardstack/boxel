@@ -53,7 +53,7 @@ import type {
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
 import { importResource } from '../resources/import';
 
-import { clearAllRealmSessions } from '../resources/realm-session';
+import { clearAllRealmSessions } from './realm';
 
 import RealmService from './realm';
 

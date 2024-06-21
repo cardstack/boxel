@@ -22,7 +22,7 @@ import { Submodes } from '@cardstack/host/components/submode-switcher';
 import {
   tokenRefreshPeriodSec,
   sessionLocalStorageKey,
-} from '@cardstack/host/resources/realm-session';
+} from '@cardstack/host/services/realm';
 
 import {
   percySnapshot,

@@ -7,11 +7,11 @@ import { v4 as uuid } from 'uuid';
 
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
-import { clearAllRealmSessions } from '@cardstack/host/resources/realm-session';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { OperatorModeContext } from '@cardstack/host/services/matrix-service';
+import { clearAllRealmSessions } from '@cardstack/host/services/realm';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import type {
