@@ -271,10 +271,10 @@ export default class ResizablePanelGroup extends Component<Signature> {
       return;
     }
 
-    let newPrevPanelElLength =
+    let newPrevPanelLength =
       this.currentResizeHandle.prevPanel.element[this.clientLengthProperty] +
       delta;
-    let newNextPanelElLength =
+    let newNextPanelLength =
       this.currentResizeHandle.nextPanel.element[this.clientLengthProperty] -
       delta;
     let prevPanel = this.currentResizeHandle.prevPanel;
@@ -287,58 +287,58 @@ export default class ResizablePanelGroup extends Component<Signature> {
       return;
     }
 
-    if (newPrevPanelElLength < 0 && newNextPanelElLength > 0) {
-      newNextPanelElLength = newNextPanelElLength + newPrevPanelElLength;
-      newPrevPanelElLength = 0;
-    } else if (newPrevPanelElLength > 0 && newNextPanelElLength < 0) {
-      newPrevPanelElLength = newPrevPanelElLength + newNextPanelElLength;
-      newNextPanelElLength = 0;
+    if (newPrevPanelLength < 0 && newNextPanelLength > 0) {
+      newNextPanelLength = newNextPanelLength + newPrevPanelLength;
+      newPrevPanelLength = 0;
+    } else if (newPrevPanelLength > 0 && newNextPanelLength < 0) {
+      newPrevPanelLength = newPrevPanelLength + newNextPanelLength;
+      newNextPanelLength = 0;
     } else if (
       prevPanel.initialMinLengthPx &&
-      newPrevPanelElLength < prevPanel.initialMinLengthPx &&
-      newPrevPanelElLength > (prevPanel.lengthPx || 0)
+      newPrevPanelLength < prevPanel.initialMinLengthPx &&
+      newPrevPanelLength > (prevPanel.lengthPx || 0)
     ) {
-      newNextPanelElLength =
-        newNextPanelElLength -
-        (prevPanel.initialMinLengthPx - newPrevPanelElLength);
-      newPrevPanelElLength = prevPanel.initialMinLengthPx;
+      newNextPanelLength =
+        newNextPanelLength -
+        (prevPanel.initialMinLengthPx - newPrevPanelLength);
+      newPrevPanelLength = prevPanel.initialMinLengthPx;
     } else if (
       nextPanel.initialMinLengthPx &&
-      newNextPanelElLength < nextPanel.initialMinLengthPx &&
-      newNextPanelElLength > (nextPanel.lengthPx || 0)
+      newNextPanelLength < nextPanel.initialMinLengthPx &&
+      newNextPanelLength > (nextPanel.lengthPx || 0)
     ) {
-      newPrevPanelElLength =
-        newPrevPanelElLength +
-        (nextPanel.initialMinLengthPx - newNextPanelElLength);
-      newNextPanelElLength = nextPanel.initialMinLengthPx;
+      newPrevPanelLength =
+        newPrevPanelLength +
+        (nextPanel.initialMinLengthPx - newNextPanelLength);
+      newNextPanelLength = nextPanel.initialMinLengthPx;
     } else if (
       prevPanel.initialMinLengthPx &&
-      newPrevPanelElLength < prevPanel.initialMinLengthPx &&
-      newPrevPanelElLength < (prevPanel.lengthPx || 0)
+      newPrevPanelLength < prevPanel.initialMinLengthPx &&
+      newPrevPanelLength < (prevPanel.lengthPx || 0)
     ) {
-      newNextPanelElLength = newNextPanelElLength + newPrevPanelElLength;
-      newPrevPanelElLength = 0;
+      newNextPanelLength = newNextPanelLength + newPrevPanelLength;
+      newPrevPanelLength = 0;
     } else if (
       nextPanel.initialMinLengthPx &&
-      newNextPanelElLength < nextPanel.initialMinLengthPx &&
-      newNextPanelElLength < (nextPanel.lengthPx || 0)
+      newNextPanelLength < nextPanel.initialMinLengthPx &&
+      newNextPanelLength < (nextPanel.lengthPx || 0)
     ) {
-      newPrevPanelElLength = newPrevPanelElLength + newNextPanelElLength;
-      newNextPanelElLength = 0;
+      newPrevPanelLength = newPrevPanelLength + newNextPanelLength;
+      newNextPanelLength = 0;
     }
 
     this.setSiblingPanelLengths(
       prevPanel,
       nextPanel,
-      newPrevPanelElLength,
-      newNextPanelElLength,
+      newPrevPanelLength,
+      newNextPanelLength,
       (prevPanel.initialMinLengthPx &&
-        newPrevPanelElLength >= prevPanel.initialMinLengthPx) ||
+        newPrevPanelLength >= prevPanel.initialMinLengthPx) ||
         !prevPanel.collapsible
         ? prevPanel.initialMinLengthPx
         : 0,
       (nextPanel.initialMinLengthPx &&
-        newNextPanelElLength >= nextPanel.initialMinLengthPx) ||
+        newNextPanelLength >= nextPanel.initialMinLengthPx) ||
         !nextPanel.collapsible
         ? nextPanel.initialMinLengthPx
         : 0,
