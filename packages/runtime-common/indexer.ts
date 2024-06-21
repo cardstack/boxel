@@ -99,6 +99,7 @@ export interface IndexedInstance {
   canonicalURL: string;
   lastModified: number;
   isolatedHtml: string | null;
+  embeddedHtml: string | null;
   searchDoc: Record<string, any> | null;
   types: string[] | null;
   deps: string[] | null;
@@ -257,6 +258,7 @@ export class Indexer {
       url: canonicalURL,
       pristine_doc: instance,
       isolated_html: isolatedHtml,
+      embedded_html: embeddedHtml,
       search_doc: searchDoc,
       realm_version: realmVersion,
       realm_url: realmURL,
@@ -279,6 +281,7 @@ export class Indexer {
       realmURL,
       instance,
       isolatedHtml,
+      embeddedHtml,
       searchDoc,
       types,
       indexedAt: indexedAt != null ? parseInt(indexedAt) : null,
@@ -920,6 +923,7 @@ export interface InstanceEntry {
   resource: CardResource;
   searchData: Record<string, any>;
   isolatedHtml?: string;
+  embeddedHtml?: string;
   types: string[];
   deps: Set<string>;
 }
@@ -973,6 +977,7 @@ export class Batch {
               pristine_doc: entry.resource,
               search_doc: entry.searchData,
               isolated_html: entry.isolatedHtml,
+              embedded_html: entry.embeddedHtml,
               deps: [...entry.deps],
               types: entry.types,
               source: entry.source,

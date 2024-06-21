@@ -351,6 +351,7 @@ export class CurrentRun {
     let searchData: Record<string, any> | undefined;
     let cardType: typeof CardDef | undefined;
     let isolatedHtml: string | undefined;
+    let embeddedHtml: string | undefined;
     try {
       let api = await this.loaderService.loader.import<typeof CardAPI>(
         `${baseRealm.url}card-api`,
@@ -385,6 +386,13 @@ export class CurrentRun {
       isolatedHtml = await this.#renderCard({
         card,
         format: 'isolated',
+        visit: this.visitFile.bind(this),
+        identityContext,
+        realmPath: this.#realmPaths,
+      });
+      embeddedHtml = await this.#renderCard({
+        card,
+        format: 'embedded',
         visit: this.visitFile.bind(this),
         identityContext,
         realmPath: this.#realmPaths,
@@ -437,6 +445,7 @@ export class CurrentRun {
         resource: doc.data,
         searchData,
         isolatedHtml,
+        embeddedHtml,
         lastModified,
         types: typesMaybeError.types,
         deps: new Set([

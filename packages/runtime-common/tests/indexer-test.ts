@@ -870,6 +870,7 @@ const tests = Object.freeze({
         types: null,
         indexedAt: null,
         isolatedHtml: null,
+        embeddedHtml: null,
       });
     } else {
       assert.ok(false, `expected index entry to not be an error document`);
@@ -957,6 +958,7 @@ const tests = Object.freeze({
         deps: [],
         types: [],
         isolatedHtml: null,
+        embeddedHtml: null,
       });
     } else {
       assert.ok(false, `expected index entry to not be an error document`);
