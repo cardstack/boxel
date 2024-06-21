@@ -217,11 +217,16 @@ module('Responding', (hooks) => {
     assert.deepEqual(
       JSON.parse(sentEvents[1].content.data),
       {
-        command: {
-          type: 'patchCard',
-          id: patchArgs.card_id,
-          patch: { attributes: patchArgs.attributes },
-          eventId: '0',
+        eventId: '0',
+        toolCall: {
+          name: 'patchCard',
+          arguments: {
+            card_id: 'card/1',
+            description: 'A new thing',
+            attributes: {
+              some: 'thing',
+            },
+          },
         },
       },
       'Tool call event should be sent with correct content',
@@ -277,10 +282,15 @@ module('Responding', (hooks) => {
     assert.deepEqual(
       JSON.parse(sentEvents[2].content.data),
       {
-        command: {
-          type: 'patchCard',
-          id: patchArgs.card_id,
-          patch: { attributes: patchArgs.attributes },
+        toolCall: {
+          name: 'patchCard',
+          arguments: {
+            card_id: 'card/1',
+            description: 'A new thing',
+            attributes: {
+              some: 'thing',
+            },
+          },
         },
       },
       'Tool call event should be sent with correct content',

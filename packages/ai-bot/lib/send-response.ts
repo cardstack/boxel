@@ -1,11 +1,18 @@
 import { cleanContent } from '../helpers';
 import { logger } from '@cardstack/runtime-common';
-import { MatrixClient, sendError, sendMessage, sendOption } from './matrix';
+import {
+  MatrixClient,
+  sendError,
+  sendMessage,
+  sendOption,
+  type FunctionToolCall,
+} from './matrix';
 
 import * as Sentry from '@sentry/node';
 import { OpenAIError } from 'openai/error';
 import debounce from 'lodash/debounce';
 import { ISendEventResponse } from 'matrix-js-sdk/lib/matrix';
+import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
 
 let log = logger('ai-bot');
 
@@ -81,38 +88,47 @@ export class Responder {
 
   async onMessage(msg: {
     role: string;
-    tool_calls?: { function: { name: string; arguments: string } }[];
+    tool_calls?: { function: ChatCompletionMessageToolCall.Function }[];
   }) {
     if (msg.role === 'assistant') {
-      for (const toolCall of msg.tool_calls || []) {
-        const functionCall = toolCall.function;
-        log.debug('[Room Timeline] Function call', toolCall);
-        let args;
-        try {
-          args = JSON.parse(functionCall.arguments);
-        } catch (error) {
-          Sentry.captureException(error);
-          this.initialMessageReplaced = true;
-          let errorPromise = sendError(
-            this.client,
-            this.roomId,
-            error,
-            this.initialMessageReplaced ? undefined : this.initialMessageId,
-          );
-          this.messagePromises.push(errorPromise);
-          await errorPromise;
-        }
-        if (functionCall.name === 'patchCard') {
-          let optionPromise = sendOption(
-            this.client,
-            this.roomId,
-            args,
-            this.initialMessageReplaced ? undefined : this.initialMessageId,
-          );
-          this.messagePromises.push(optionPromise);
-          await optionPromise;
-          this.initialMessageReplaced = true;
-        }
+      await this.handleFunctionToolCalls(msg);
+    }
+  }
+
+  deserializeToolCall(
+    f: ChatCompletionMessageToolCall.Function,
+  ): FunctionToolCall {
+    return { name: f.name, arguments: JSON.parse(f.arguments) };
+  }
+
+  async handleFunctionToolCalls(msg: {
+    role: string;
+    tool_calls?: { function: ChatCompletionMessageToolCall.Function }[];
+  }) {
+    for (const toolCall of msg.tool_calls || []) {
+      const functionCall = toolCall.function;
+      log.debug('[Room Timeline] Function call', toolCall);
+      try {
+        let optionPromise = sendOption(
+          this.client,
+          this.roomId,
+          this.deserializeToolCall(functionCall),
+          this.initialMessageReplaced ? undefined : this.initialMessageId,
+        );
+        this.messagePromises.push(optionPromise);
+        await optionPromise;
+        this.initialMessageReplaced = true;
+      } catch (error) {
+        Sentry.captureException(error);
+        this.initialMessageReplaced = true;
+        let errorPromise = sendError(
+          this.client,
+          this.roomId,
+          error,
+          this.initialMessageReplaced ? undefined : this.initialMessageId,
+        );
+        this.messagePromises.push(errorPromise);
+        await errorPromise;
       }
     }
   }

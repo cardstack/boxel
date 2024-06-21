@@ -896,14 +896,14 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'A patch',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id: `${testRealmURL}Person/fadhlan`,
-              patch: {
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: `${testRealmURL}Person/fadhlan`,
                 attributes: { firstName: 'Dave' },
               },
-              eventId: 'patch1',
             },
+            eventId: 'patch1',
           }),
           'm.relates_to': {
             rel_type: 'm.replace',
@@ -921,7 +921,7 @@ module('Integration | operator-mode', function (hooks) {
         assert.strictEqual(json.data.attributes?.firstName, 'Dave');
       });
       await click('[data-test-command-apply]');
-      await waitFor('[data-test-patch-card-idle]');
+      await waitFor('[data-test-command-card-idle]');
 
       assert.dom('[data-test-person]').hasText('Dave');
     });
@@ -951,12 +951,14 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'Changing first name to Evie',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id: `${testRealmURL}Person/fadhlan`,
-              patch: { attributes: { firstName: 'Evie' } },
-              eventId: 'room1-event1',
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: `${testRealmURL}Person/fadhlan`,
+                attributes: { firstName: 'Evie' },
+              },
             },
+            eventId: 'room1-event1',
           }),
           'm.relates_to': {
             rel_type: 'm.replace',
@@ -977,12 +979,14 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'Changing first name to Jackie',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id: `${testRealmURL}Person/fadhlan`,
-              patch: { attributes: { firstName: 'Jackie' } },
-              eventId: 'room1-event2',
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: `${testRealmURL}Person/fadhlan`,
+                attributes: { firstName: 'Jackie' },
+              },
             },
+            eventId: 'room1-event2',
           }),
           'm.relates_to': {
             rel_type: 'm.replace',
@@ -1003,12 +1007,14 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'Incorrect command',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id: `${testRealmURL}Person/fadhlan`,
-              patch: { relationships: { pet: null } }, // this will error
-              eventId: 'room2-event1',
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: `${testRealmURL}Person/fadhlan`,
+                relationships: { pet: null }, // this will error
+              },
             },
+            eventId: 'room2-event1',
           }),
           'm.relates_to': {
             rel_type: 'm.replace',
@@ -1022,7 +1028,7 @@ module('Integration | operator-mode', function (hooks) {
       await waitFor('[data-test-room-name="test room 1"]');
       await waitFor('[data-test-message-idx="1"] [data-test-command-apply]');
       await click('[data-test-message-idx="1"] [data-test-command-apply]');
-      await waitFor('[data-test-patch-card-idle]');
+      await waitFor('[data-test-command-card-idle]');
 
       assert
         .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
@@ -1036,7 +1042,7 @@ module('Integration | operator-mode', function (hooks) {
       await waitFor('[data-test-room-name="test room 2"]');
       await waitFor('[data-test-command-apply]');
       await click('[data-test-command-apply]');
-      await waitFor('[data-test-patch-card-idle]');
+      await waitFor('[data-test-command-card-idle]');
       assert
         .dom('[data-test-message-idx="0"] [data-test-apply-state="failed"]')
         .exists();
@@ -1095,14 +1101,14 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'A patch',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id: otherCardID,
-              patch: {
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: otherCardID,
                 attributes: { firstName: 'Dave' },
               },
-              eventId: 'event1',
             },
+            eventId: 'event1',
           }),
           'm.relates_to': {
             rel_type: 'm.replace',
@@ -1115,7 +1121,7 @@ module('Integration | operator-mode', function (hooks) {
       await waitFor('[data-test-command-apply="ready"]');
       await click('[data-test-command-apply]');
 
-      await waitFor('[data-test-patch-card-idle]');
+      await waitFor('[data-test-command-card-idle]');
       assert
         .dom('[data-test-card-error]')
         .containsText(
@@ -1136,7 +1142,7 @@ module('Integration | operator-mode', function (hooks) {
       await click('[data-test-ai-bot-retry-button]'); // retry the command with correct card
       assert.dom('[data-test-apply-state="applying"]').exists();
 
-      await waitFor('[data-test-patch-card-idle]');
+      await waitFor('[data-test-command-card-idle]');
       assert.dom('[data-test-apply-state="applied"]').exists();
       assert.dom('[data-test-person]').hasText('Dave');
       assert.dom('[data-test-command-apply]').doesNotExist();
@@ -1167,16 +1173,13 @@ module('Integration | operator-mode', function (hooks) {
 
       let roomId = await openAiAssistant();
       let payload = {
-        type: 'patchCard',
-        id: `${testRealmURL}Person/fadhlan`,
-        patch: {
-          attributes: {
-            firstName: 'Joy',
-            address: { shippingInfo: { preferredCarrier: 'UPS' } },
-          },
+        card_id: `${testRealmURL}Person/fadhlan`,
+        attributes: {
+          firstName: 'Joy',
+          address: { shippingInfo: { preferredCarrier: 'UPS' } },
         },
-        eventId: 'event1',
       };
+
       await addRoomEvent(matrixService, {
         event_id: 'event1',
         room_id: roomId,
@@ -1189,7 +1192,13 @@ module('Integration | operator-mode', function (hooks) {
           msgtype: 'org.boxel.command',
           formatted_body: 'A patch',
           format: 'org.matrix.custom.html',
-          data: JSON.stringify({ command: payload }),
+          data: JSON.stringify({
+            toolCall: {
+              name: 'patchCard',
+              arguments: payload,
+            },
+            eventId: 'event1',
+          }),
           'm.relates_to': {
             rel_type: 'm.replace',
             event_id: 'event1',
@@ -1205,7 +1214,7 @@ module('Integration | operator-mode', function (hooks) {
       assert.deepEqual(
         JSON.parse(getMonacoContent()),
         {
-          commandType: 'patchCard',
+          name: 'patchCard',
           payload,
         },
         'it can preview code when a change is proposed',
@@ -1216,7 +1225,7 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-code-editor]').doesNotExist();
 
       await click('[data-test-command-apply="ready"]');
-      await waitFor('[data-test-patch-card-idle]');
+      await waitFor('[data-test-command-card-idle]');
       assert.dom('[data-test-apply-state="applied"]').exists();
       assert.dom('[data-test-person]').hasText('Joy');
       assert.dom(`[data-test-preferredcarrier]`).hasText('UPS');
@@ -1250,10 +1259,10 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'Removing pet and changing preferred carrier',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id,
-              patch: {
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: id,
                 attributes: {
                   address: { shippingInfo: { preferredCarrier: 'Fedex' } },
                 },
@@ -1261,8 +1270,8 @@ module('Integration | operator-mode', function (hooks) {
                   pet: { links: { self: null } },
                 },
               },
-              eventId: 'patch0',
             },
+            eventId: 'patch0',
           }),
           'm.relates_to': {
             rel_type: 'm.replace',
@@ -1279,7 +1288,7 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom(`${stackCard} [data-test-pet="Mango"]`).exists();
 
       await click('[data-test-command-apply]');
-      await waitFor('[data-test-patch-card-idle]');
+      await waitFor('[data-test-command-card-idle]');
       assert.dom('[data-test-apply-state="applied"]').exists();
       assert.dom(`${stackCard} [data-test-preferredcarrier="Fedex"]`).exists();
       assert.dom(`${stackCard} [data-test-pet="Mango"]`).doesNotExist();
@@ -1296,10 +1305,10 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'Link to pet and change preferred carrier',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id,
-              patch: {
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: id,
                 attributes: {
                   address: { shippingInfo: { preferredCarrier: 'UPS' } },
                 },
@@ -1309,8 +1318,8 @@ module('Integration | operator-mode', function (hooks) {
                   },
                 },
               },
-              eventId: 'patch1',
             },
+            eventId: 'patch1',
           }),
           'm.relates_to': {
             rel_type: 'm.replace',
@@ -1324,7 +1333,9 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom(`${stackCard} [data-test-pet]`).doesNotExist();
 
       await click('[data-test-command-apply]');
-      await waitFor('[data-test-message-idx="1"] [data-test-patch-card-idle]');
+      await waitFor(
+        '[data-test-message-idx="1"] [data-test-command-card-idle]',
+      );
       assert
         .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
         .exists();
@@ -1361,10 +1372,10 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'Change tripTitle to Trip to Japan',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id,
-              patch: {
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: id,
                 attributes: { trips: { tripTitle: 'Trip to Japan' } },
               },
               eventId: 'event1',
@@ -1380,7 +1391,7 @@ module('Integration | operator-mode', function (hooks) {
 
       await waitFor('[data-test-command-apply="ready"]');
       await click('[data-test-command-apply]');
-      await waitFor('[data-test-patch-card-idle]');
+      await waitFor('[data-test-command-card-idle]');
       assert.dom('[data-test-apply-state="applied"]').exists();
       assert.dom('[data-test-tripTitle]').hasText('Trip to Japan');
     });
@@ -1411,12 +1422,14 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'Change first name to Dave',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id,
-              patch: { attributes: { firstName: 'Dave' } },
-              eventId: 'event1',
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: id,
+                attributes: { firstName: 'Dave' },
+              },
             },
+            eventId: 'event1',
           }),
           'm.relates_to': {
             rel_type: 'm.replace',
@@ -1437,12 +1450,14 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'Incorrect patch command',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id,
-              patch: { relationships: { pet: null } }, // this will error
-              eventId: 'event2',
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: id,
+                relationships: { pet: null }, // this will error
+              },
             },
+            eventId: 'event2',
           }),
           'm.relates_to': {
             rel_type: 'm.replace',
@@ -1463,12 +1478,14 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'Change first name to Jackie',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id,
-              patch: { attributes: { firstName: 'Jackie' } },
-              eventId: 'event3',
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: id,
+                attributes: { firstName: 'Jackie' },
+              },
             },
+            eventId: 'event3',
           }),
           'm.relates_to': {
             rel_type: 'm.replace',
@@ -1486,7 +1503,9 @@ module('Integration | operator-mode', function (hooks) {
         .dom('[data-test-message-idx="2"] [data-test-apply-state="applying"]')
         .exists();
 
-      await waitFor('[data-test-message-idx="2"] [data-test-patch-card-idle]');
+      await waitFor(
+        '[data-test-message-idx="2"] [data-test-command-card-idle]',
+      );
       assert.dom('[data-test-apply-state="applied"]').exists({ count: 1 });
       assert
         .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
@@ -1495,7 +1514,9 @@ module('Integration | operator-mode', function (hooks) {
       assert.dom('[data-test-person]').hasText('Jackie');
 
       await click('[data-test-message-idx="1"] [data-test-command-apply]');
-      await waitFor('[data-test-message-idx="1"] [data-test-patch-card-idle]');
+      await waitFor(
+        '[data-test-message-idx="1"] [data-test-command-card-idle]',
+      );
       assert.dom('[data-test-apply-state="failed"]').exists({ count: 1 });
       assert
         .dom('[data-test-message-idx="1"] [data-test-apply-state="failed"]')
@@ -1532,12 +1553,14 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'Change first name to Dave',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id,
-              patch: { attributes: { firstName: 'Dave' } },
-              eventId: undefined,
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: id,
+                attributes: { firstName: 'Dave' },
+              },
             },
+            eventId: undefined,
           }),
           'm.relates_to': {
             rel_type: 'm.replace',
@@ -1555,7 +1578,9 @@ module('Integration | operator-mode', function (hooks) {
         .dom('[data-test-message-idx="0"] [data-test-apply-state="applying"]')
         .exists();
 
-      await waitFor('[data-test-message-idx="0"] [data-test-patch-card-idle]');
+      await waitFor(
+        '[data-test-message-idx="0"] [data-test-command-card-idle]',
+      );
       assert.dom('[data-test-apply-state="applied"]').exists({ count: 1 });
       assert
         .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
@@ -2173,14 +2198,14 @@ module('Integration | operator-mode', function (hooks) {
           formatted_body: 'A patch',
           format: 'org.matrix.custom.html',
           data: JSON.stringify({
-            command: {
-              type: 'patchCard',
-              id: `${testRealmURL}Person/fadhlan`,
-              patch: {
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: `${testRealmURL}Person/fadhlan`,
                 attributes: { firstName: 'Dave' },
               },
-              eventId: 'patch1',
             },
+            eventId: 'patch1',
           }),
           'm.relates_to': {
             rel_type: 'm.replace',

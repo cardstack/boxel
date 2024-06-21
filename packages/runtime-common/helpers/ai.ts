@@ -1,6 +1,7 @@
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { primitive } from '../constants';
 import { Loader } from '../loader';
+import { CardDef } from 'https://cardstack.com/base/card-api';
 
 type ArraySchema = {
   type: 'array';
@@ -366,3 +367,86 @@ export function generateCardPatchCallSpecification(
     };
   }
 }
+
+export function getPatchTool(attachedOpenCard: CardDef, patchSpec: any) {
+  return {
+    type: 'function',
+    function: {
+      name: 'patchCard',
+      description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.`,
+      parameters: {
+        type: 'object',
+        properties: {
+          card_id: {
+            type: 'string',
+            const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
+          },
+          description: {
+            type: 'string',
+          },
+          ...patchSpec,
+        },
+        required: ['card_id', 'attributes', 'description'],
+      },
+    },
+  };
+}
+
+export function getSearchTool(attachedOpenCard: CardDef) {
+  return {
+    type: 'function',
+    function: {
+      name: 'searchCard',
+      description: `Propose a query to search for a card instance related to module it was from. 
+        Always prioritise search based upon the card that was last shared. 
+        Ensure that you find the correct "module" and "name" from the OUTERMOST "adoptsFrom" field from the card data that is shared`,
+      parameters: {
+        type: 'object',
+        properties: {
+          card_id: {
+            type: 'string',
+            const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
+          },
+          filter: {
+            type: 'object',
+            properties: {
+              type: {
+                //resolved code ref essentially
+                type: 'object',
+                properties: {
+                  module: {
+                    type: 'string',
+                    description: `the absolute path of the module`,
+                  },
+                  name: {
+                    type: 'string',
+                    description: 'the name of the module',
+                  },
+                },
+                required: ['module', 'name'],
+              },
+            },
+          },
+        },
+        required: ['card_id', 'filter'],
+      },
+    },
+  };
+}
+
+export const MODIFY_SYSTEM_MESSAGE =
+  '\
+The user is using an application called Boxel, where they are working on editing "Cards" which are data models representable as JSON. \
+The user may be non-technical and should not need to understand the inner workings of Boxel. \
+The user may be asking questions about the contents of the cards rather than help editing them. Use your world knowledge to help them. \
+If the user wants the data they see edited, AND the patchCard function is available, you MUST use the "patchCard" function to make the change. \
+If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you \
+If you do not call patchCard, the user will not see the change. \
+You can ONLY modify cards shared with you, if there is no patchCard function or tool then the user hasn\'t given you access \
+NEVER tell the user to use patchCard, you should always do it for them. \
+If the user request is unclear, you may ask clarifying questions. \
+You may make multiple function calls, all calls are gated by the user so multiple options can be explored.\
+If a user asks you about things in the world, use your existing knowledge to help them. Only if necessary, add a *small* caveat at the end of your message to explain that you do not have live external data. \
+\
+If you need access to the cards the user can see, you can ask them to attach the cards. \
+If you encounter JSON structures, please enclose them within backticks to ensure they are displayed stylishly in Markdown.';

@@ -67,42 +67,35 @@ export async function sendMessage(
   );
 }
 
+export interface FunctionToolCall {
+  name: string;
+  arguments: { [key: string]: any };
+}
+
 // TODO we might want to think about how to handle patches that are larger than
 // 65KB (the maximum matrix event size), such that we split them into fragments
 // like we split cards into fragments
 export async function sendOption(
   client: MatrixClient,
   roomId: string,
-  patch: any,
+  functionCall: FunctionToolCall,
   eventToUpdate: string | undefined,
 ) {
-  log.debug('sending option', patch);
-  const id = patch['card_id'];
-  const body = patch['description'] || "Here's the change:";
-  let messageObject = {
-    body: body,
-    msgtype: 'org.boxel.command',
-    formatted_body: body,
-    format: 'org.matrix.custom.html',
-    data: {
-      command: {
-        type: 'patchCard',
-        id: id,
-        patch: {
-          attributes: patch['attributes'],
-          relationships: patch['relationships'],
-        },
-        eventId: eventToUpdate,
-      },
-    },
-  };
-  return await sendEvent(
-    client,
-    roomId,
-    'm.room.message',
-    messageObject,
+  let messageObject = toMatrixMessageCommandContent(
+    functionCall,
     eventToUpdate,
   );
+
+  if (messageObject !== undefined) {
+    return await sendEvent(
+      client,
+      roomId,
+      'm.room.message',
+      messageObject,
+      eventToUpdate,
+    );
+  }
+  return;
 }
 
 export async function sendError(
@@ -131,6 +124,25 @@ export async function sendError(
     Sentry.captureException(e);
   }
 }
+
+export const toMatrixMessageCommandContent = (
+  functionCall: FunctionToolCall,
+  eventToUpdate: string | undefined,
+): IContent | undefined => {
+  let { arguments: payload } = functionCall;
+  const body = payload['description'] || "Here's the change:";
+  let messageObject: IContent = {
+    body: body,
+    msgtype: 'org.boxel.command',
+    formatted_body: body,
+    format: 'org.matrix.custom.html',
+    data: {
+      eventId: eventToUpdate,
+      toolCall: functionCall,
+    },
+  };
+  return messageObject;
+};
 
 function getErrorMessage(error: any): string {
   if (error instanceof OpenAIError) {
