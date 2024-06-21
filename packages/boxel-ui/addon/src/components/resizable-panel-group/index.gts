@@ -476,11 +476,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
       this.panelGroupElement[this.perpendicularLengthProperty] <
       this.minimumLengthToShowHandles;
 
-    let panelLengths: number[] = this.panels.map(
-      (panel) => panel.lengthPx || 0,
-    );
-    let panelToNewLength = new Map<ResizablePanel, number>();
-
     let newContainerSize = this.panelGroupLengthWithoutResizeHandlePx;
 
     if (newContainerSize == undefined) {
@@ -488,61 +483,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
       return;
     }
 
-    let remainingContainerSize = newContainerSize;
-    let calculateLengthsOfPanelsWithMinLength = () => {
-      let panels = this.panels.filter((panel) => panel.initialMinLengthPx);
-
-      panels.forEach((panel, index) => {
-        let panelRatio = panel.ratio;
-
-        if (!panelRatio || !newContainerSize) {
-          return;
-        }
-        let proportionalSize = panelRatio * newContainerSize;
-
-        let actualSize = Math.round(
-          panel?.initialMinLengthPx
-            ? Math.max(proportionalSize, panel.initialMinLengthPx)
-            : proportionalSize,
-        );
-        panelLengths[index] = actualSize;
-        panelToNewLength.set(panel, actualSize);
-        remainingContainerSize = remainingContainerSize - actualSize;
-      });
-    };
-
-    calculateLengthsOfPanelsWithMinLength();
-
-    let calculateLengthsOfPanelsWithoutMinLength = () => {
-      let panels = this.panels.filter((panel) => !panel.initialMinLengthPx);
-
-      let newPanelRatios = panels.map((panel) => panel.ratio ?? 0);
-      let totalNewPanelRatio = newPanelRatios.reduce(
-        (prevValue, currentValue) => prevValue + currentValue,
-        0,
-      );
-      newPanelRatios = newPanelRatios.map(
-        (panelRatio) => panelRatio / totalNewPanelRatio,
-      );
-
-      panels.forEach((panel, index) => {
-        let panelRatio = newPanelRatios[index];
-        if (!panelRatio) {
-          console.warn('Expected panelRatio to be defined');
-          return;
-        }
-        let proportionalSize = panelRatio * remainingContainerSize;
-        let actualSize = Math.round(proportionalSize);
-
-        panelLengths[index] = actualSize;
-        panelToNewLength.set(panel, actualSize);
-      });
-    };
-    calculateLengthsOfPanelsWithoutMinLength();
-
-    this.panels.forEach((panel) => {
-      panel.lengthPx = panelToNewLength.get(panel) ?? 0;
-    });
+    resizePanels(this.panels, newContainerSize);
   }
 
   private findPanelsByResizeHandle(handle: ResizeHandle) {
@@ -562,4 +503,67 @@ export default class ResizablePanelGroup extends Component<Signature> {
       nextPanel,
     };
   }
+}
+
+export type Panellike = {
+  initialMinLengthPx?: number;
+  lengthPx?: number;
+  ratio?: number;
+};
+
+export function resizePanels(panels: Panellike[], newContainerSize: number) {
+  let remainingContainerSize = newContainerSize;
+
+  let panelLengths: number[] = panels.map((panel) => panel.lengthPx || 0);
+  let panelToNewLength = new Map<Panellike, number>();
+
+  let panelsWithMinLength = panels.filter((panel) => panel.initialMinLengthPx);
+
+  panelsWithMinLength.forEach((panel, index) => {
+    let panelRatio = panel.ratio;
+
+    if (!panelRatio || !newContainerSize) {
+      return;
+    }
+    let proportionalSize = panelRatio * newContainerSize;
+
+    let actualSize = Math.round(
+      panel?.initialMinLengthPx
+        ? Math.max(proportionalSize, panel.initialMinLengthPx)
+        : proportionalSize,
+    );
+    panelLengths[index] = actualSize;
+    panelToNewLength.set(panel, actualSize);
+    remainingContainerSize = remainingContainerSize - actualSize;
+  });
+
+  let panelsWithoutMinLength = panels.filter(
+    (panel) => !panel.initialMinLengthPx,
+  );
+
+  let newPanelRatios = panelsWithoutMinLength.map((panel) => panel.ratio ?? 0);
+  let totalNewPanelRatio = newPanelRatios.reduce(
+    (prevValue, currentValue) => prevValue + currentValue,
+    0,
+  );
+  newPanelRatios = newPanelRatios.map(
+    (panelRatio) => panelRatio / totalNewPanelRatio,
+  );
+
+  panelsWithoutMinLength.forEach((panel, index) => {
+    let panelRatio = newPanelRatios[index];
+    if (!panelRatio) {
+      console.warn('Expected panelRatio to be defined');
+      return;
+    }
+    let proportionalSize = panelRatio * remainingContainerSize;
+    let actualSize = Math.round(proportionalSize);
+
+    panelLengths[index] = actualSize;
+    panelToNewLength.set(panel, actualSize);
+  });
+
+  panels.forEach((panel) => {
+    panel.lengthPx = panelToNewLength.get(panel) ?? 0;
+  });
 }
