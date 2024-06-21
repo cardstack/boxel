@@ -96,6 +96,7 @@ export interface IndexedInstance {
   type: 'instance';
   instance: CardResource;
   source: string;
+  canonicalURL: string;
   lastModified: number;
   isolatedHtml: string | null;
   searchDoc: Record<string, any> | null;
@@ -219,18 +220,20 @@ export class Indexer {
     };
   }
 
-  async getCard(
+  async getInstance(
     url: URL,
     opts?: GetEntryOptions,
   ): Promise<IndexedInstanceOrError | undefined> {
-    let href = assertURLEndsWithJSON(url).href;
     let result = (await this.query([
       `SELECT i.* 
        FROM boxel_index as i
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
        WHERE`,
       ...every([
-        [`i.url =`, param(href)],
+        any([
+          [`i.url =`, param(url.href)],
+          [`i.file_alias =`, param(url.href)],
+        ]),
         realmVersionExpression(opts),
         any([
           ['i.type =', param('instance')],
@@ -251,6 +254,7 @@ export class Indexer {
     }
     let instanceEntry = assertIndexEntrySource(maybeResult);
     let {
+      url: canonicalURL,
       pristine_doc: instance,
       isolated_html: isolatedHtml,
       search_doc: searchDoc,
@@ -264,13 +268,14 @@ export class Indexer {
     } = instanceEntry;
     if (!instance) {
       throw new Error(
-        `bug: index entry for ${href} with opts: ${JSON.stringify(
+        `bug: index entry for ${url.href} with opts: ${JSON.stringify(
           opts,
         )} has neither an error_doc nor a pristine_doc`,
       );
     }
     return {
       type: 'instance',
+      canonicalURL,
       realmURL,
       instance,
       isolatedHtml,
@@ -955,7 +960,7 @@ export class Batch {
     let { nameExpressions, valueExpressions } = asExpressions(
       {
         url: href,
-        file_alias: trimExecutableExtension(url).href,
+        file_alias: trimExecutableExtension(url).href.replace(/\.json$/, ''),
         realm_version: this.realmVersion,
         realm_url: this.realmURL.href,
         is_deleted: false,
@@ -1218,7 +1223,10 @@ export class Batch {
       this.realmVersion,
     );
     let invalidations = childInvalidations.map(({ url }) => url);
-    let aliases = childInvalidations.map(({ alias: _alias }) => _alias);
+    let aliases = childInvalidations.map(({ alias: moduleAlias, type, url }) =>
+      // for instances we expect that the deps for an entry always includes .json extension
+      type === 'instance' ? url : moduleAlias,
+    );
     let results = [
       ...invalidations,
       ...flatten(
@@ -1302,13 +1310,6 @@ function isFieldPlural(field: Field): boolean {
   );
 }
 
-function assertURLEndsWithJSON(url: URL): URL {
-  if (!url.href.endsWith('.json')) {
-    return new URL(`${url}.json`);
-  }
-  return url;
-}
-
 function assertIndexEntrySource(obj: BoxelIndexTable): Omit<
   BoxelIndexTable,
   'source' | 'last_modified'
@@ -1320,9 +1321,7 @@ function assertIndexEntrySource(obj: BoxelIndexTable): Omit<
     throw new Error(`expected index entry to have "source" string property`);
   }
   if (!('last_modified' in obj) || typeof obj.last_modified !== 'string') {
-    throw new Error(
-      `expected index entry to have "last_modified" number property`,
-    );
+    throw new Error(`expected index entry to have "last_modified" property`);
   }
   return obj as Omit<BoxelIndexTable, 'source' | 'last_modified'> & {
     source: string;

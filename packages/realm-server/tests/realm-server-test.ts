@@ -26,6 +26,9 @@ import {
   RealmPermissions,
   VirtualNetwork,
   type LooseSingleCardDocument,
+  Loader,
+  fetcher,
+  maybeHandleScopedCSSRequest,
 } from '@cardstack/runtime-common';
 import { stringify } from 'qs';
 import { Query } from '@cardstack/runtime-common/query';
@@ -60,6 +63,24 @@ let createJWT = (
 ) => {
   return realm.createJWT({ user, realm: realmUrl, permissions }, '7d');
 };
+
+function createVirtualNetwork() {
+  let virtualNetwork = new VirtualNetwork();
+  shimExternals(virtualNetwork);
+  virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
+  return virtualNetwork;
+}
+
+function createVirtualNetworkAndLoader() {
+  let virtualNetwork = createVirtualNetwork();
+  let fetch = fetcher(virtualNetwork.fetch, [
+    async (req, next) => {
+      return (await maybeHandleScopedCSSRequest(req)) || next(req);
+    },
+  ]);
+  let loader = new Loader(fetch, virtualNetwork.resolveImport);
+  return { virtualNetwork, loader };
+}
 
 module('Realm Server', function (hooks) {
   async function expectEvent<T>({
@@ -126,12 +147,7 @@ module('Realm Server', function (hooks) {
       beforeEach: async (dbAdapter, queue) => {
         dir = dirSync();
         copySync(join(__dirname, 'cards'), dir.name);
-        let virtualNetwork = new VirtualNetwork();
-        shimExternals(virtualNetwork);
-        virtualNetwork.addURLMapping(
-          new URL(baseRealm.url),
-          new URL(localBaseRealm),
-        );
+        let virtualNetwork = createVirtualNetwork();
 
         ({ testRealm, testRealmServer } = await runTestRealmServer({
           virtualNetwork,
@@ -147,10 +163,7 @@ module('Realm Server', function (hooks) {
     });
   }
 
-  let virtualNetwork = new VirtualNetwork();
-  let loader = virtualNetwork.createLoader();
-
-  shimExternals(virtualNetwork);
+  let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
 
   setupCardLogs(
     hooks,
@@ -2000,10 +2013,7 @@ module('Realm Server serving from root', function (hooks) {
 
   let dir: DirResult;
 
-  let virtualNetwork = new VirtualNetwork();
-  let loader = virtualNetwork.createLoader();
-
-  shimExternals(virtualNetwork);
+  let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
 
   setupCardLogs(
     hooks,
@@ -2208,10 +2218,8 @@ module('Realm server serving multiple realms', function (hooks) {
   let base: Realm;
   let testRealm: Realm;
 
-  let virtualNetwork = new VirtualNetwork();
-  let loader = virtualNetwork.createLoader();
+  let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
   const basePath = resolve(join(__dirname, '..', '..', 'base'));
-  shimExternals(virtualNetwork);
 
   hooks.beforeEach(async function () {
     dir = dirSync();
@@ -2299,9 +2307,7 @@ module('Realm Server serving from a subdirectory', function (hooks) {
 
   let dir: DirResult;
 
-  let virtualNetwork = new VirtualNetwork();
-  let loader = virtualNetwork.createLoader();
-  shimExternals(virtualNetwork);
+  let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
 
   setupCardLogs(
     hooks,

@@ -31,8 +31,6 @@ import {
   updateRoomEvent,
 } from '@cardstack/host/lib/matrix-handlers';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
-
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { CardDef } from '../../../../drafts-realm/re-export';
@@ -48,6 +46,7 @@ import {
   type TestContextWithSave,
   getMonacoContent,
   waitForCodeEditor,
+  lookupLoaderService,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
 import {
@@ -71,8 +70,7 @@ module('Integration | operator-mode', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function () {
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    loader = lookupLoaderService().loader;
   });
 
   setupLocalIndexing(hooks);
