@@ -32,6 +32,7 @@ import {
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
+import { waitUntil } from '@ember/test-helpers';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
@@ -479,6 +480,9 @@ module('Integration | card-editor', function (hooks) {
 
     await click('[data-test-create-new-card="Pet"] [data-test-save-card]');
     await waitFor('[data-test-pet="Simba"]');
+    await waitUntil(
+      () => !document.querySelector('[data-test-create-new-card="Pet"]'),
+    );
     assert.dom('[data-test-create-new-card="Pet"]').doesNotExist();
     assert.dom('[data-test-remove-card]').exists();
 
