@@ -169,6 +169,13 @@ export default class SQLiteAdapter implements DBAdapter {
                       value === null ? value : Boolean(row[index]);
                     break;
                   }
+                  case 'VARCHAR': {
+                    let value = row[index];
+                    rowObject[col] =
+                      // respect DB NULL values
+                      value === null ? value : String(row[index]);
+                    break;
+                  }
                   default:
                     assertNever(coerceAs);
                 }
@@ -207,6 +214,7 @@ export default class SQLiteAdapter implements DBAdapter {
       })
       .replace(/ANY_VALUE\(([^)]*)\)/g, '$1')
       .replace(/CROSS JOIN LATERAL/g, 'CROSS JOIN')
+      .replace(/ILIKE/g, 'LIKE') // sqlite LIKE is case insensitive
       .replace(/jsonb_array_elements_text\(/g, 'json_each(')
       .replace(/jsonb_tree\(/g, 'json_tree(')
       .replace(/([^\s]+\s[^\s]+)_array_element/g, (match, group) => {

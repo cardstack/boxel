@@ -51,13 +51,18 @@ export async function fileContentToText({ content }: FileRef): Promise<string> {
   }
 }
 
+export interface TextFileRef {
+  content: string;
+  lastModified: number;
+  path: string;
+  isShimmed?: true;
+}
+
 export async function readFileAsText(
   path: LocalPath,
   openFile: (path: string) => Promise<FileRef | undefined>,
   opts: { withFallbacks?: true } = {},
-): Promise<
-  { content: string; lastModified: number; path: string } | undefined
-> {
+): Promise<TextFileRef | undefined> {
   let ref: FileRef | undefined;
   if (opts.withFallbacks) {
     ref = await getFileWithFallbacks(path, openFile, executableExtensions);
@@ -71,6 +76,7 @@ export async function readFileAsText(
     content: await fileContentToText(ref),
     lastModified: ref.lastModified,
     path: ref.path,
+    ...(Symbol.for('shimmed-module') in ref ? { isShimmed: true } : {}),
   };
 }
 // we bother with this because typescript is picky about allowing you to use

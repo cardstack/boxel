@@ -123,6 +123,7 @@ export async function setupIndex(
   } else {
     versionRows = maybeVersionRows as RealmVersionsTable[];
   }
+  let now = Date.now();
   let indexedCardsExpressions = await Promise.all(
     indexRows.map(async (r) => {
       let row: Pick<RelaxedBoxelIndexTable, 'url'> &
@@ -151,8 +152,12 @@ export async function setupIndex(
             ? `${row.url}.json`
             : row.url
           : row.url;
-      row.file_alias = trimExecutableExtension(new URL(row.url)).href;
+      row.file_alias = trimExecutableExtension(new URL(row.url)).href.replace(
+        /\.json$/,
+        '',
+      );
       row.type = row.type ?? 'instance';
+      row.last_modified = String(row.last_modified ?? now);
       return asExpressions(
         { ...defaultIndexEntry, ...row },
         {

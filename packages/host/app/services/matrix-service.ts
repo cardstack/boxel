@@ -93,10 +93,16 @@ export default class MatrixService extends Service {
   #ready: Promise<void>;
   #matrixSDK: typeof MatrixSDK | undefined;
   #eventBindings: [EmittedEvents, (...arg: any[]) => void][] | undefined;
+  currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
+    new TrackedMap();
 
   constructor(owner: Owner) {
     super(owner);
     this.#ready = this.loadSDK.perform();
+  }
+
+  addEventReadReceipt(eventId: string, receipt: { readAt: Date }) {
+    this.currentUserEventReadReceipts.set(eventId, receipt);
   }
 
   get ready() {
@@ -135,6 +141,7 @@ export default class MatrixService extends Service {
         this.matrixSDK.RoomEvent.LocalEchoUpdated,
         Timeline.onUpdateEventStatus(this),
       ],
+      [this.matrixSDK.RoomEvent.Receipt, Timeline.onReceipt(this)],
     ];
   });
 
@@ -288,7 +295,7 @@ export default class MatrixService extends Service {
     let realmAuthClient = new RealmAuthClient(
       realmURL,
       this.client,
-      this.loaderService.loader,
+      this.loaderService.loader.fetch,
     );
 
     let jwtPromise = realmAuthClient.getJWT();

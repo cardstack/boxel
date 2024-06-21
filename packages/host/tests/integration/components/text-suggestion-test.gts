@@ -5,8 +5,6 @@ import { module, test } from 'qunit';
 
 import { baseRealm, Loader } from '@cardstack/runtime-common';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
-
 import {
   suggestCardChooserTitle,
   getSuggestionWithLowestDepth,
@@ -16,6 +14,7 @@ import {
   testRealmURL,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  lookupLoaderService,
 } from '../../helpers';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -27,8 +26,7 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
   setupLocalIndexing(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    loader = lookupLoaderService().loader;
   });
 
   hooks.beforeEach(async function () {

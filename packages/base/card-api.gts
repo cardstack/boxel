@@ -2512,13 +2512,13 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   if (!card) {
     throw new Error(`could not find card: '${humanReadable(adoptsFrom)}'`);
   }
-  return await _createFromSerialized(
-    card as T,
-    resource as any,
-    doc,
+
+  return card[deserialize](
+    resource,
     relativeTo,
+    doc as CardDocument,
     identityContext,
-  );
+  ) as BaseInstanceType<T>;
 }
 
 // Crawls all fields for cards and populates the identityContext
@@ -2594,9 +2594,6 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   _relativeTo: URL | undefined,
   identityContext: IdentityContext = new IdentityContext(),
 ): Promise<BaseInstanceType<T>> {
-  if (primitive in card) {
-    return card[deserialize](data, _relativeTo);
-  }
   let resource: LooseCardResource | undefined;
   if (isCardResource(data)) {
     resource = data;

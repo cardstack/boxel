@@ -5,6 +5,7 @@ import {
   RealmPaths,
   baseRealm,
   createResponse,
+  hasExecutableExtension,
 } from '@cardstack/runtime-common';
 
 import {
@@ -179,7 +180,7 @@ export class TestRealmAdapter implements RealmAdapter {
         fileRefContent =
           typeof value === 'string' ? value : JSON.stringify(value);
       }
-    } else if (path.endsWith('.gts')) {
+    } else if (hasExecutableExtension(path)) {
       if (typeof value === 'string') {
         fileRefContent = value;
       } else {

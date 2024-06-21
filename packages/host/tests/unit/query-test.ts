@@ -5,6 +5,8 @@ import {
   VirtualNetwork,
   baseRealm,
   Indexer,
+  fetcher,
+  maybeHandleScopedCSSRequest,
 } from '@cardstack/runtime-common';
 
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
@@ -39,12 +41,17 @@ module('Unit | query', function (hooks) {
 
   hooks.beforeEach(async function () {
     let virtualNetwork = new VirtualNetwork();
-    loader = virtualNetwork.createLoader();
     virtualNetwork.addURLMapping(
       new URL(baseRealm.url),
       new URL(resolvedBaseRealmURL),
     );
     shimExternals(virtualNetwork);
+    let fetch = fetcher(virtualNetwork.fetch, [
+      async (req, next) => {
+        return (await maybeHandleScopedCSSRequest(req)) || next(req);
+      },
+    ]);
+    loader = new Loader(fetch, virtualNetwork.resolveImport);
 
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
@@ -291,6 +298,14 @@ module('Unit | query', function (hooks) {
   });
 
   test(`can use a 'contains' filter`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards,
+    });
+  });
+
+  test(`contains filter is case insensitive`, async function (assert) {
     await runSharedTest(queryTests, assert, {
       indexer,
       loader,

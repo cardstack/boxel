@@ -1,3 +1,4 @@
+import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
@@ -6,6 +7,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
+import { restartableTask, timeout } from 'ember-concurrency';
 
 import {
   ResizablePanel,
@@ -48,7 +50,12 @@ interface Signature {
     onCardSelectFromSearch: (card: CardDef) => void;
   };
   Blocks: {
-    default: [openSearch: () => void];
+    default: [
+      {
+        openSearchToPrompt: () => void;
+        openSearchToResults: (term: string) => void;
+      },
+    ];
   };
 }
 
@@ -62,9 +69,11 @@ export default class SubmodeLayout extends Component<Signature> {
     aiAssistantPanel: 200,
   };
   @service private declare operatorModeStateService: OperatorModeStateService;
-  @service declare matrixService: MatrixService;
+  @service private declare matrixService: MatrixService;
 
   private searchElement: HTMLElement | null = null;
+  private suppressSearchClose = false;
+  private declare doSearch: (term: string) => void;
 
   private get aiAssistantVisibilityClass() {
     return this.isAiAssistantVisible
@@ -109,6 +118,9 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   @action private closeSearchSheet() {
+    if (this.suppressSearchClose) {
+      return;
+    }
     this.searchSheetMode = SearchSheetModes.Closed;
     this.args.onSearchSheetClosed?.();
   }
@@ -118,7 +130,7 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   @action private openSearchSheetToPrompt() {
-    if (this.searchSheetMode == SearchSheetModes.Closed) {
+    if (this.searchSheetMode === SearchSheetModes.Closed) {
       this.searchSheetMode = SearchSheetModes.SearchPrompt;
     }
 
@@ -131,13 +143,13 @@ export default class SubmodeLayout extends Component<Signature> {
     this.closeSearchSheet();
   }
 
-  @action toggleProfileSettings() {
+  @action private toggleProfileSettings() {
     this.profileSettingsOpened = !this.profileSettingsOpened;
 
     this.profileSummaryOpened = false;
   }
 
-  @action toggleProfileSummary() {
+  @action private toggleProfileSummary() {
     this.profileSummaryOpened = !this.profileSummaryOpened;
   }
 
@@ -151,6 +163,33 @@ export default class SubmodeLayout extends Component<Signature> {
   private storeSearchElement(element: HTMLElement) {
     this.searchElement = element;
   }
+  @action
+  private openSearchAndShowResults(term: string) {
+    this.doOpenSearchAndShowResults.perform(term);
+  }
+
+  @action
+  private setupSearch(doSearch: (term: string) => void) {
+    this.doSearch = doSearch;
+  }
+
+  private doOpenSearchAndShowResults = restartableTask(async (term: string) => {
+    this.suppressSearchClose = true;
+
+    let wasClosed = this.searchSheetMode === SearchSheetModes.Closed;
+    this.searchSheetMode = SearchSheetModes.SearchResults;
+    this.searchElement?.focus();
+    if (wasClosed) {
+      this.args.onSearchSheetOpened?.();
+    }
+    this.doSearch(term);
+
+    // we need to prevent the onblur of the search sheet from triggering a
+    // search sheet close from the click that actually triggered the search
+    // sheet to show in the first place
+    await timeout(250);
+    this.suppressSearchClose = false;
+  });
 
   <template>
     <div class='submode-layout {{this.aiAssistantVisibilityClass}}'>
@@ -171,7 +210,12 @@ export default class SubmodeLayout extends Component<Signature> {
             @onSubmodeSelect={{this.updateSubmode}}
             class='submode-switcher'
           />
-          {{yield this.openSearchSheetToPrompt}}
+          {{yield
+            (hash
+              openSearchToPrompt=this.openSearchSheetToPrompt
+              openSearchToResults=this.openSearchAndShowResults
+            )
+          }}
           <div class='profile-icon-container'>
             <button
               class='profile-icon-button'
@@ -183,6 +227,7 @@ export default class SubmodeLayout extends Component<Signature> {
           </div>
           <SearchSheet
             @mode={{this.searchSheetMode}}
+            @onSetup={{this.setupSearch}}
             @onBlur={{this.closeSearchSheet}}
             @onCancel={{this.closeSearchSheet}}
             @onFocus={{this.openSearchSheetToPrompt}}
