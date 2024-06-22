@@ -4,20 +4,28 @@ import { task } from 'ember-concurrency';
 
 import {
   type PatchData,
-  getCards,
   codeRefWithAbsoluteURL,
   isResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import { CardTypeFilter, assertQuery } from '@cardstack/runtime-common/query';
+import {
+  CardTypeFilter,
+  Query,
+  assertQuery,
+} from '@cardstack/runtime-common/query';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { CommandField } from 'https://cardstack.com/base/command';
+import { getSearchResults } from '../resources/search';
+import { tracked } from '@glimmer/tracking';
 
 export default class CommandService extends Service {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
+  @tracked query: Query = {};
+
+  searchCardResource = getSearchResults(this, () => this.query);
 
   run = task(async (command: CommandField, roomId: string) => {
     let { payload, eventId } = command;
@@ -52,11 +60,11 @@ export default class CommandService extends Service {
           throw new Error('Query returned by ai bot is not fully resolved');
         }
         payload.filter.type = maybeCodeRef;
-        let searchCardResource = await getCards({
-          filter: payload.filter,
-        });
-        await searchCardResource.loaded;
-        res = searchCardResource.instances.map((c) => c.id);
+
+        this.query = { filter: payload.filter };
+
+        await this.searchCardResource.loaded;
+        res = this.searchCardResource.instances.map((c) => c.id);
         console.log(res);
       }
       await this.matrixService.sendReactionEvent(roomId, eventId, 'applied');
