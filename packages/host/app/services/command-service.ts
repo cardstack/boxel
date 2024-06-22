@@ -1,5 +1,7 @@
 import Service, { service } from '@ember/service';
 
+import { tracked } from '@glimmer/tracking';
+
 import { task } from 'ember-concurrency';
 
 import {
@@ -17,8 +19,8 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { CommandField } from 'https://cardstack.com/base/command';
+
 import { getSearchResults } from '../resources/search';
-import { tracked } from '@glimmer/tracking';
 
 export default class CommandService extends Service {
   @service declare operatorModeStateService: OperatorModeStateService;
