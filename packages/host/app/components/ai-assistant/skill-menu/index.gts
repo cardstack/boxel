@@ -196,8 +196,13 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
   }
 
   private doAttachCard = restartableTask(async () => {
+    let selectedCards =
+      this.skills?.map((skill: Skill) => ({
+        not: { eq: { id: skill.card.id } },
+      })) ?? [];
+    // catalog only displays skill cards that are not already selected
     let card: SkillCard | undefined = await chooseCard({
-      filter: { type: skillCardRef },
+      filter: { every: [{ type: skillCardRef }, ...selectedCards] },
     });
     return card;
   });
