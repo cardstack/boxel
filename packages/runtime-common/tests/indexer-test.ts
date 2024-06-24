@@ -1280,6 +1280,35 @@ const tests = Object.freeze({
     );
   },
 
+  'can get error doc for css': async (assert, { indexer }) => {
+    await setupIndex(indexer, [
+      {
+        url: `${testRealmURL}person.gts`,
+        realm_version: 1,
+        realm_url: testRealmURL,
+        type: 'error',
+        error_doc: {
+          detail: 'test error',
+          status: 500,
+          additionalErrors: [],
+        },
+      },
+    ]);
+    let result = await indexer.getCSS(new URL(`${testRealmURL}person.gts`));
+    if (result?.type === 'error') {
+      assert.deepEqual(result, {
+        type: 'error',
+        error: {
+          detail: 'test error',
+          status: 500,
+          additionalErrors: [],
+        },
+      });
+    } else {
+      assert.ok(false, `expected an error document`);
+    }
+  },
+
   'returns undefined when getting deleted css': async (assert, { indexer }) => {
     await setupIndex(indexer, [
       {
