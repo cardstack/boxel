@@ -23,9 +23,9 @@ import type { MessageField } from 'https://cardstack.com/base/room';
 
 import AiAssistantCardPicker from '../ai-assistant/card-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
-import AiAssistantSkillMenu from '../ai-assistant/skill-menu';
 import { AiAssistantConversation } from '../ai-assistant/message';
 import NewSession from '../ai-assistant/new-session';
+import AiAssistantSkillMenu from '../ai-assistant/skill-menu';
 
 import RoomMessage from './room-message';
 
