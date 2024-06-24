@@ -5,11 +5,11 @@ import { tracked } from '@glimmer/tracking';
 import {
   VirtualNetwork,
   baseRealm,
-  addAuthorizationHeader,
   fetcher,
   maybeHandleScopedCSSRequest,
   RunnerOpts,
   FetcherMiddlewareHandler,
+  authorizationMiddleware,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
@@ -96,25 +96,7 @@ export default class LoaderService extends Service {
     });
 
     if (!this.fastboot.isFastBoot) {
-      middlewareStack.push(async (req, next) => {
-        let handleAuth = addAuthorizationHeader(loader.fetch, {
-          getToken: async (url: string) => {
-            try {
-              return this.realm.token(url);
-            } catch (e: any) {
-              if (e.code === 'RealmNotReady') {
-                return undefined;
-              }
-              throw e;
-            }
-          },
-          resetToken: async (url: string) => {
-            return await this.realm.refreshToken(url);
-          },
-        });
-        let response = await handleAuth(req);
-        return response || next(req);
-      });
+      middlewareStack.push(authorizationMiddleware(this.realm));
     }
     let fetch = fetcher(this.virtualNetwork.fetch, middlewareStack);
     let loader = new Loader(fetch, this.virtualNetwork.resolveImport);
