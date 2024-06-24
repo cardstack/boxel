@@ -4,11 +4,13 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask } from 'ember-concurrency';
 
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
-import { AddButton, Button } from '@cardstack/boxel-ui/components';
+import { AddButton } from '@cardstack/boxel-ui/components';
+import { cn, not } from '@cardstack/boxel-ui/helpers';
 
 import { chooseCard, skillCardRef } from '@cardstack/runtime-common';
 
@@ -29,8 +31,8 @@ interface Skill {
 export default class AiAssistantSkillMenu extends Component<Signature> {
   <template>
     <div
-      class='skill-menu
-        {{if this.isExpanded "skill-menu--expanded" "skill-menu--minimized"}}'
+      class={{cn 'skill-menu' skill-menu--minimized=(not this.isExpanded)}}
+      {{onClickOutside this.closeMenu exceptSelector='.card-catalog-modal'}}
       ...attributes
     >
       <button {{on 'click' this.toggleMenu}} class='menu-toggle'>
@@ -74,6 +76,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
     </div>
     <style>
       .skill-menu {
+        display: grid;
         max-height: 100%;
         width: 100%;
         background-color: var(--boxel-light);
@@ -81,22 +84,20 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         color: var(--boxel-dark);
         font: 700 var(--boxel-font-sm);
         box-shadow: var(--boxel-box-shadow);
-        transition: width 0.2s ease-in;
       }
       .skill-menu--minimized {
         width: 3.75rem;
         white-space: nowrap;
+        transition: width 0.2s ease-in;
       }
-      .skill-menu--minimized:hover,
-      .skill-menu--minimized:focus-within {
+      .skill-menu--minimized:hover {
         width: 100%;
       }
       .skill-menu--minimized .maybe-hidden {
         visibility: collapse;
         transition: visibility 0.2s ease-in;
       }
-      .skill-menu--minimized:hover .maybe-hidden,
-      .skill-menu--minimized:focus-within .maybe-hidden {
+      .skill-menu--minimized:hover .maybe-hidden {
         visibility: visible;
       }
       .menu-toggle {
@@ -151,6 +152,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         width: max-content;
         padding: var(--boxel-sp-xs);
         background: none;
+        border-radius: var(--boxel-border-radius-xl);
         color: var(--boxel-highlight);
         font: 700 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
@@ -171,6 +173,10 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
 
   @action toggleMenu() {
     this.isExpanded = !this.isExpanded;
+  }
+
+  @action closeMenu() {
+    this.isExpanded = false;
   }
 
   private get activeSkills() {
