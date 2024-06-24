@@ -2182,6 +2182,71 @@ export class ExportedCard extends ExportedCardParent {
       .doesNotExist('field defs do not display a create instance button');
   });
 
+  test('can find instances of an exported card definition', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}pet`,
+    });
+
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="Pet"]');
+
+    await click('[data-boxel-selector-item-text="Pet"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Find instances"]');
+    await waitFor('[data-test-search-sheet-search-result]');
+    assert
+      .dom('[data-test-search-field]')
+      .hasValue(`carddef:${testRealmURL}pet/Pet`);
+    assert
+      .dom('[data-test-search-label]')
+      .hasText(`2 Results for “carddef:${testRealmURL}pet/Pet”`);
+    assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
+    assert
+      .dom(`[data-test-search-result="${testRealmURL}Pet/vangogh"]`)
+      .exists();
+  });
+
+  test('find instances action is not displayed for non-exported Card definition', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    });
+
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="LocalCard"]');
+
+    await click('[data-boxel-selector-item-text="LocalCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    assert
+      .dom('[data-test-action-button="Find instances"]')
+      .doesNotExist(
+        'non-exported card defs do not display a Find instances button',
+      );
+  });
+
+  test('find instances action is not displayed for field definition', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    });
+
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="ExportedField"]');
+
+    await click('[data-boxel-selector-item-text="ExportedField"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    assert
+      .dom('[data-test-action-button="Find instances"]')
+      .doesNotExist('field defs do not display a Find instances button');
+  });
+
   module('when the user lacks write permissions', function (hooks) {
     hooks.beforeEach(async function () {
       realmPermissions = { [testRealmURL]: ['read'] };

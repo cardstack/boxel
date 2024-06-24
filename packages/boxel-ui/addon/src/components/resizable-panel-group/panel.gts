@@ -5,42 +5,20 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import createRef from 'ember-ref-bucket/modifiers/create-ref';
 
 import cssVars from '../../helpers/css-var.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
-import type ResizablePanelGroup from './index.gts';
-
-export type PanelContext = {
-  collapsible: boolean;
-  defaultLengthFraction?: number;
-  id: number;
-  initialMinLengthPx?: number;
-  isHidden?: boolean;
-  lengthPx: number;
-  minLengthPx?: number;
-};
 
 interface Signature {
   Args: {
     collapsible?: boolean; //default true
     defaultLengthFraction: number;
     isHidden?: boolean; //default false
-    isLastPanel: (panelId: number) => boolean;
     lengthPx?: number;
     minLengthPx?: number;
     orientation: 'horizontal' | 'vertical';
-    panelContext: (panelId: number) => PanelContext | undefined;
-    panelGroupComponent: ResizablePanelGroup;
-    registerPanel: (context: {
-      collapsible: boolean | undefined;
-      defaultLengthFraction: number | undefined;
-      isHidden: boolean | undefined;
-      lengthPx: number | undefined;
-      minLengthPx: number | undefined;
-    }) => number;
-    resizablePanelElId: (id: number | undefined) => string;
-    unregisterPanel: (id: number) => void;
+    registerPanel: (panel: Panel) => void;
+    unregisterPanel: (panel: Panel) => void;
   };
   Blocks: {
     default: [];
@@ -48,14 +26,14 @@ interface Signature {
   Element: HTMLDivElement;
 }
 
-let managePanelRegistration = modifier((_element, [panel]: [Panel]) => {
+let managePanelRegistration = modifier((element, [panel]: [Panel]) => {
+  panel.element = element as HTMLDivElement;
   scheduleOnce('afterRender', panel, panel.registerPanel);
 });
 
 export default class Panel extends Component<Signature> {
   <template>
     <div
-      id={{(@resizablePanelElId this.id)}}
       class='boxel-panel {{@orientation}}'
       style={{if
         (eq @orientation 'horizontal')
@@ -68,7 +46,6 @@ export default class Panel extends Component<Signature> {
           boxel-panel-min-height=this.minLengthCssValue
         )
       }}
-      {{createRef (@resizablePanelElId this.id) bucket=@panelGroupComponent}}
       {{managePanelRegistration this}}
       ...attributes
     >
@@ -97,50 +74,48 @@ export default class Panel extends Component<Signature> {
     </style>
   </template>
 
-  @tracked id: number | undefined;
+  element!: HTMLDivElement;
 
-  constructor(owner: any, args: any) {
+  @tracked lengthPx: number | undefined = 0;
+  @tracked minLengthPx: number | undefined = 0;
+  @tracked ratio: number | undefined;
+  initialMinLengthPx: number;
+
+  @tracked collapsible: boolean;
+
+  constructor(owner: any, args: Signature['Args']) {
     super(owner, args);
+    this.lengthPx = args.lengthPx;
+    this.minLengthPx = args.minLengthPx || 0;
+    this.collapsible = args.collapsible ?? true;
+    this.initialMinLengthPx = this.args.minLengthPx || 0;
+
     registerDestructor(this, this.unregisterPanel);
+  }
+
+  get isHidden() {
+    return this.args.isHidden;
+  }
+
+  get defaultLengthFraction() {
+    return this.args.defaultLengthFraction;
   }
 
   @action
   registerPanel() {
-    if (this.id == undefined) {
-      this.id = this.args.registerPanel({
-        lengthPx: this.args.lengthPx,
-        defaultLengthFraction: this.args.defaultLengthFraction,
-        minLengthPx: this.args.minLengthPx,
-        collapsible: this.args.collapsible,
-        isHidden: this.args.isHidden,
-      });
-    }
+    this.args.registerPanel(this);
   }
 
   @action
   unregisterPanel() {
-    if (this.id) {
-      this.args.unregisterPanel(this.id);
-      this.id = undefined;
-    }
-  }
-
-  get panelContext() {
-    if (this.id == undefined) {
-      return {
-        lengthPx: undefined,
-        defaultLengthFraction: this.args.defaultLengthFraction,
-        minLengthPx: undefined,
-      };
-    }
-    return this.args.panelContext(this.id);
+    this.args.unregisterPanel(this);
   }
 
   get minLengthCssValue() {
     if (this.args.isHidden) {
       return htmlSafe('0px');
-    } else if (this.panelContext?.minLengthPx !== undefined) {
-      return htmlSafe(`${this.panelContext.minLengthPx}px`);
+    } else if (this.minLengthPx !== undefined) {
+      return htmlSafe(`${this.minLengthPx}px`);
     } else if (this.args.minLengthPx !== undefined) {
       return htmlSafe(`${this.args.minLengthPx}px`);
     }
@@ -148,8 +123,9 @@ export default class Panel extends Component<Signature> {
   }
 
   get lengthCssValue() {
-    let lengthPx = this.panelContext?.lengthPx;
-    let defaultLengthFraction = this.panelContext?.defaultLengthFraction;
+    let lengthPx = this.lengthPx;
+    let defaultLengthFraction = this.args.defaultLengthFraction;
+
     if (this.args.isHidden) {
       return htmlSafe('0px');
     } else if (lengthPx === -1 && defaultLengthFraction) {

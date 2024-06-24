@@ -531,7 +531,7 @@ export default class InteractSubmode extends Component<Signature> {
     <SubmodeLayout
       @onSearchSheetClosed={{this.clearSearchSheetTrigger}}
       @onCardSelectFromSearch={{perform this.openSelectedSearchResultInStack}}
-      as |openSearch|
+      as |search|
     >
       <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
         {{#if (eq this.allStackItems.length 0)}}
@@ -595,13 +595,19 @@ export default class InteractSubmode extends Component<Signature> {
             data-test-add-card-left-stack
             @triggerSide={{SearchSheetTriggers.DropCardToLeftNeighborStackButton}}
             @activeTrigger={{this.searchSheetTrigger}}
-            @onTrigger={{fn this.showSearchWithTrigger openSearch}}
+            @onTrigger={{fn
+              this.showSearchWithTrigger
+              search.openSearchToPrompt
+            }}
           />
           <NeighborStackTriggerButton
             data-test-add-card-right-stack
             @triggerSide={{SearchSheetTriggers.DropCardToRightNeighborStackButton}}
             @activeTrigger={{this.searchSheetTrigger}}
-            @onTrigger={{fn this.showSearchWithTrigger openSearch}}
+            @onTrigger={{fn
+              this.showSearchWithTrigger
+              search.openSearchToPrompt
+            }}
           />
         {{/if}}
         {{#if this.itemToDelete}}
