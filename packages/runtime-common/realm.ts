@@ -28,8 +28,8 @@ import {
   type Queue,
   type Indexer,
   fetchUserPermissions,
-  addAuthorizationHeader,
   maybeHandleScopedCSSRequest,
+  authorizationMiddleware,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -301,14 +301,13 @@ export class Realm {
         let response = await maybeHandle(request);
         return response || next(request);
       },
-      async (request, next) => {
-        let authHandler = addAuthorizationHeader(
-          fetch,
-          new RealmAuthDataSource(this.#matrixClient, fetch, this.url),
-        );
-        let response = await authHandler(request);
-        return response || next(request);
-      },
+      authorizationMiddleware(
+        new RealmAuthDataSource(
+          this.#matrixClient,
+          virtualNetwork.fetch,
+          this.url,
+        ),
+      ),
     ]);
 
     let loader = new Loader(fetch, virtualNetwork.resolveImport);

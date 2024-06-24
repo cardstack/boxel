@@ -210,7 +210,7 @@ export default class RealmService extends Service {
     return undefined;
   }
 
-  async attemptLogin(realmURL: string): Promise<string | undefined> {
+  async reauthenticate(realmURL: string): Promise<string | undefined> {
     let resource = this.knownRealm(realmURL);
     if (!resource) {
       resource = this.createRealmResource(realmURL, undefined);

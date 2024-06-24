@@ -68,10 +68,6 @@ export default class RenderCard extends Route<Model | null> {
     try {
       await this.loadMatrix.perform();
 
-      for (let url of this.cardService.realmURLs) {
-        await this.realm.ensureRealmReady(url);
-      }
-
       let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
         new URL(ownRealmURL),
       );

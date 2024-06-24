@@ -72,10 +72,6 @@ export const isNode =
 export { SupportedMimeType } from './router';
 export { VirtualNetwork, type ResponseWithNodeStream } from './virtual-network';
 export { RealmAuthDataSource } from './realm-auth-data-source';
-export {
-  addAuthorizationHeader,
-  type IRealmAuthDataSource,
-} from './add-authorization-header';
 
 export type {
   Kind,
