@@ -89,7 +89,17 @@ export default class RealmInfoService extends Service {
     if (!url) {
       throw new Error("Must provide either 'realmUrl' or 'fileUrl'");
     }
-    let info = this.realm.info(url);
+    let info: RealmInfo | undefined;
+
+    try {
+      info = this.realm.info(url);
+    } catch (err: any) {
+      if (err.code !== 'RealmNotReady') {
+        throw err;
+      }
+      await this.loaderService.loader.fetch(url, { method: 'HEAD' });
+      info = this.realm.info(url);
+    }
     return {
       ...info,
       canRead: this.realm.canRead(url),
@@ -119,16 +129,23 @@ export default class RealmInfoService extends Service {
   // otherwise default to the first writable realm lexically
   @cached
   get userDefaultRealm(): { path: string; info: RealmInfo } {
-    let writeableRealms = [...this.cachedRealmInfos.entries()]
-      .filter(([_, realmInfo]) => realmInfo.canWrite)
-      .sort(([_a, a], [_b, b]) => a.name.localeCompare(b.name));
-    let ownRealm = writeableRealms.find(([path]) => path === ownRealmURL);
+    let infos = this.cardService.realmURLs.map((realmURL) => {
+      return {
+        canWrite: this.realm.canWrite(realmURL),
+        info: this.realm.info(realmURL),
+      };
+    });
+
+    let writeableRealms = infos
+      .filter((i) => i.canWrite)
+      .sort((i, j) => i.info.name.localeCompare(j.info.name));
+
+    let ownRealm = writeableRealms.find((i) => i.info.url === ownRealmURL);
     if (ownRealm) {
-      let [path, info] = ownRealm;
-      return { path, info };
+      return { path: ownRealm.info.url, info: ownRealm.info };
     } else {
-      let [path, info] = writeableRealms[0];
-      return { path, info };
+      let first = writeableRealms[0];
+      return { path: first.info.url, info: first.info };
     }
   }
 }
