@@ -1,6 +1,9 @@
 import { module, test } from 'qunit';
 
-import { Panellike, resizePanels } from '@cardstack/boxel-ui/components';
+import {
+  Panellike,
+  resizePanels,
+} from '@cardstack/boxel-ui/-private/resizable-panel-group';
 
 module('Unit | ResizablePanelGroup | resizePanels', function () {
   test('it preserves the existing ratio', async function (assert) {

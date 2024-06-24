@@ -25,10 +25,8 @@ import Message from './components/message/index.gts';
 import Modal from './components/modal/index.gts';
 import RadioInput from './components/radio-input/index.gts';
 import ResizablePanelGroup, {
-  type Panellike, // FIXME do these need to be exported for use in tests? ugh
   ResizablePanel,
   ResizeHandle,
-  resizePanels,
 } from './components/resizable-panel-group/index.gts';
 import BoxelSelect from './components/select/index.gts';
 import Tooltip from './components/tooltip/index.gts';
@@ -59,11 +57,9 @@ export {
   Menu,
   Message,
   Modal,
-  Panellike,
   RadioInput,
   ResizablePanel,
   ResizablePanelGroup,
   ResizeHandle,
-  resizePanels,
   Tooltip,
 };

@@ -514,7 +514,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
 
 export type Panellike = {
   initialMinLengthPx?: number;
-  isHidden: boolean;
+  isHidden?: boolean;
   lengthPx?: number;
   ratio?: number;
 };
