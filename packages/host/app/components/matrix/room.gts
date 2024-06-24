@@ -45,29 +45,25 @@ export default class Room extends Component<Signature> {
       data-test-room-name={{this.room.name}}
       data-test-room={{this.room.roomId}}
     >
-      {{#if this.room.messages}}
-        <AiAssistantConversation class='conversation-area'>
-          {{#each this.room.messages as |message i|}}
-            <RoomMessage
-              @roomId={{@roomId}}
-              @message={{message}}
-              @index={{i}}
-              @isPending={{this.isPendingMessage message}}
-              @monacoSDK={{@monacoSDK}}
-              @isStreaming={{this.isMessageStreaming message i}}
-              @currentEditor={{this.currentMonacoContainer}}
-              @setCurrentEditor={{this.setCurrentMonacoContainer}}
-              @retryAction={{this.maybeRetryAction i message}}
-              data-test-message-idx={{i}}
-            />
-          {{/each}}
-          <AiAssistantSkillMenu class='skills' />
-        </AiAssistantConversation>
-      {{else}}
-        <NewSession @sendPrompt={{this.sendPrompt}} class='conversation-area'>
-          <AiAssistantSkillMenu class='skills' />
-        </NewSession>
-      {{/if}}
+      <AiAssistantConversation class='conversation-area'>
+        {{#each this.room.messages as |message i|}}
+          <RoomMessage
+            @roomId={{@roomId}}
+            @message={{message}}
+            @index={{i}}
+            @isPending={{this.isPendingMessage message}}
+            @monacoSDK={{@monacoSDK}}
+            @isStreaming={{this.isMessageStreaming message i}}
+            @currentEditor={{this.currentMonacoContainer}}
+            @setCurrentEditor={{this.setCurrentMonacoContainer}}
+            @retryAction={{this.maybeRetryAction i message}}
+            data-test-message-idx={{i}}
+          />
+        {{else}}
+          <NewSession @sendPrompt={{this.sendPrompt}} />
+        {{/each}}
+        <AiAssistantSkillMenu class='skills' />
+      </AiAssistantConversation>
       <footer class='room-actions'>
         <div class='chat-input-area' data-test-chat-input-area>
           <AiAssistantChatInput
@@ -94,18 +90,13 @@ export default class Room extends Component<Signature> {
         height: 100%;
         overflow: hidden;
       }
-      .timeline-start {
-        padding-bottom: var(--boxel-sp);
-      }
       .conversation-area {
-        position: relative;
-        padding-bottom: 0;
+        padding-bottom: var(--boxel-sp-5xs);
       }
       .skills {
         position: sticky;
-        bottom: 2px;
+        bottom: 0;
         margin-left: auto;
-        box-shadow: var(--boxel-box-shadow);
       }
       .room-actions {
         padding: 0 var(--boxel-sp) var(--boxel-sp);

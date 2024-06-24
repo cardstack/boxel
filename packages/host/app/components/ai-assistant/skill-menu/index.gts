@@ -37,8 +37,9 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
     >
       <button {{on 'click' this.toggleMenu}} class='menu-toggle'>
         <div class='menu-title'>
+          <span class='bot-head-icon' />
           {{this.activeSkills.length}}
-          <span class='maybe-hidden'>of
+          <span class='maybe-hidden skills-length'>of
             {{this.skills.length}}
             Skills Active
           </span>
@@ -122,7 +123,21 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         color: var(--boxel-highlight);
       }
       .menu-title {
+        display: flex;
+        align-items: center;
         padding-left: var(--boxel-sp-xs);
+      }
+      .bot-head-icon {
+        width: 24px;
+        height: 16px;
+        background-image: url('./robot-head@2x.webp');
+        background-position: left center;
+        background-repeat: no-repeat;
+        background-size: contain;
+        margin-right: var(--boxel-sp-xxxs);
+      }
+      .skills-length {
+        margin-left: var(--boxel-sp-5xs);
       }
       .expand-label {
         color: var(--boxel-450);
