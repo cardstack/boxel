@@ -4,10 +4,14 @@ import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
 
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask, timeout } from 'ember-concurrency';
+
+import { use, resource } from 'ember-resources';
+
+import { TrackedMap, TrackedObject } from 'tracked-built-ins';
 
 import {
   ResizablePanel,
@@ -17,13 +21,17 @@ import { and, not } from '@cardstack/boxel-ui/helpers';
 
 import AiAssistantButton from '@cardstack/host/components/ai-assistant/button';
 import AiAssistantPanel from '@cardstack/host/components/ai-assistant/panel';
+import AiAssistantToast from '@cardstack/host/components/ai-assistant/toast';
 import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile/profile-settings-modal';
 import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 import ENV from '@cardstack/host/config/environment';
+import { RoomResource, getRoom } from '@cardstack/host/resources/room';
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+
+import { MessageField } from 'https://cardstack.com/base/room';
 
 import SearchSheet, {
   SearchSheetMode,
@@ -191,6 +199,80 @@ export default class SubmodeLayout extends Component<Signature> {
     this.suppressSearchClose = false;
   });
 
+  @cached
+  private get roomResources() {
+    let resources = new TrackedMap<string, RoomResource>();
+    for (let roomId of this.matrixService.rooms.keys()) {
+      resources.set(
+        roomId,
+        getRoom(this, () => roomId),
+      );
+    }
+    return resources;
+  }
+
+  @use private findUnseenMessage = resource(() => {
+    const state: {
+      value: {
+        roomId: string;
+        message: MessageField;
+      } | null;
+      load: () => Promise<void>;
+    } = new TrackedObject({
+      value: null,
+      load: async () => {
+        let lastMessages: Map<string, MessageField> = new Map();
+        for (let resource of this.roomResources.values()) {
+          if (!resource.room) {
+            continue;
+          }
+          let { room } = resource;
+          lastMessages.set(
+            room.roomId,
+            room.messages[room.messages.length - 1],
+          );
+        }
+
+        let lastMessage =
+          Array.from(lastMessages).filter(
+            (lastMessage) =>
+              lastMessage[1] &&
+              !this.matrixService.currentUserEventReadReceipts.has(
+                lastMessage[1].eventId,
+              ),
+          )[0] ?? null;
+        if (lastMessage) {
+          state.value = {
+            roomId: lastMessage[0],
+            message: lastMessage[1],
+          };
+          setTimeout(() => {
+            state.value = null;
+          }, 3000);
+        }
+      },
+    });
+
+    state.load();
+    return state;
+  });
+
+  get unseenMessageRoomId() {
+    return this.findUnseenMessage.value?.roomId ?? '';
+  }
+
+  get unseenMessage() {
+    return this.findUnseenMessage.value?.message ?? new MessageField();
+  }
+
+  get isAiAssistantToastVisible() {
+    return (
+      this.unseenMessageRoomId &&
+      this.unseenMessage &&
+      !this.isAiAssistantVisible
+    );
+  }
+
   <template>
     <div class='submode-layout {{this.aiAssistantVisibilityClass}}'>
       <ResizablePanelGroup
@@ -236,6 +318,13 @@ export default class SubmodeLayout extends Component<Signature> {
             @onInputInsertion={{this.storeSearchElement}}
           />
           {{#if (and APP.experimentalAIEnabled (not @hideAiAssistant))}}
+            {{#if this.isAiAssistantToastVisible}}
+              <AiAssistantToast
+                @roomId={{this.unseenMessageRoomId}}
+                @message={{this.unseenMessage}}
+                @onViewInChatClick={{this.toggleChat}}
+              />
+            {{/if}}
             <AiAssistantButton
               class='chat-btn'
               @isActive={{this.isAiAssistantVisible}}

@@ -10,7 +10,8 @@ import { tracked, cached } from '@glimmer/tracking';
 import { restartableTask, timeout } from 'ember-concurrency';
 import { Velcro } from 'ember-velcro';
 import window from 'ember-window-mock';
-import { TrackedMap } from 'tracked-built-ins';
+
+import { TrackedMap } from 'tracked-built-ins/.';
 
 import {
   Button,
@@ -35,13 +36,12 @@ import {
   eventDebounceMs,
 } from '@cardstack/host/lib/matrix-utils';
 
+import { RoomResource, getRoom } from '@cardstack/host/resources/room';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import type { RoomField } from 'https://cardstack.com/base/room';
-
-import { getRoom, RoomResource } from '../../resources/room';
 
 import assistantIcon from './ai-assist-icon.webp';
 
@@ -57,7 +57,7 @@ interface Signature {
 }
 
 // Local storage keys
-let currentRoomIdPersistenceKey = 'aiPanelCurrentRoomId';
+export const currentRoomIdPersistenceKey = 'aiPanelCurrentRoomId';
 let newSessionIdPersistenceKey = 'aiPanelNewSessionId';
 
 export default class AiAssistantPanel extends Component<Signature> {
