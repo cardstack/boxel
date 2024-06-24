@@ -51,6 +51,8 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import LoaderService from '../services/loader-service';
 import { type RenderCard } from '../services/render-service';
 
+import { getScopedCss } from './scoped-css';
+
 const log = logger('current-run');
 
 type TypesWithErrors =
@@ -308,14 +310,25 @@ export class CurrentRun {
     let consumes = (
       await this.loaderService.loader.getConsumedModules(url.href)
     ).filter((u) => u !== url.href);
-    await this.batch.updateEntry(new URL(url.href), {
+    let deps = consumes.map((d) => trimExecutableExtension(new URL(d)).href);
+    await this.batch.updateEntry(url, {
       type: 'module',
       source: ref.content,
       lastModified: ref.lastModified,
-      deps: new Set(
-        consumes.map((d) => trimExecutableExtension(new URL(d)).href),
-      ),
+      deps: new Set(deps),
     });
+
+    let request = await this.loaderService.loader.fetch(url.href);
+    let transpiledSrc = await request.text();
+    let css = getScopedCss(transpiledSrc);
+    if (css) {
+      await this.batch.updateEntry(url, {
+        type: 'css',
+        source: css,
+        lastModified: ref.lastModified,
+        deps: new Set(deps),
+      });
+    }
   }
 
   private async indexCard({

@@ -34,6 +34,7 @@ export async function makeFastBootIndexRunner(
           Request: globalThis.Request,
           Response: globalThis.Response,
           btoa,
+          atob,
           performance,
           getRunnerOpts,
           _logDefinitions: (globalThis as any)._logDefinitions,
@@ -52,6 +53,7 @@ export async function makeFastBootIndexRunner(
           Request: globalThis.Request,
           Response: globalThis.Response,
           btoa,
+          atob,
           performance,
           getRunnerOpts,
           _logDefinitions: (globalThis as any)._logDefinitions,
@@ -79,4 +81,14 @@ function btoa(str: string | Buffer) {
     buffer = Buffer.from(str.toString(), 'binary');
   }
   return buffer.toString('base64');
+}
+
+function atob(base64: string | Buffer) {
+  let buffer;
+  if (base64 instanceof Buffer) {
+    buffer = base64;
+  } else {
+    buffer = Buffer.from(base64.toString(), 'base64');
+  }
+  return buffer.toString('ascii');
 }

@@ -87,4 +87,20 @@ module('indexer db client', function (hooks) {
   test('returns undefined when getting a deleted module', async function (assert) {
     await runSharedTest(indexerTests, assert, { indexer, adapter });
   });
+
+  test('can get css when requested with file extension', async function (assert) {
+    await runSharedTest(indexerTests, assert, { indexer, adapter });
+  });
+
+  test('can get css when requested without file extension', async function (assert) {
+    await runSharedTest(indexerTests, assert, { indexer, adapter });
+  });
+
+  test('can get css from WIP index', async function (assert) {
+    await runSharedTest(indexerTests, assert, { indexer, adapter });
+  });
+
+  test('returns undefined when getting deleted css', async function (assert) {
+    await runSharedTest(indexerTests, assert, { indexer, adapter });
+  });
 });
