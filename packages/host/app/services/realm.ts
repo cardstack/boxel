@@ -1,19 +1,12 @@
-import {
-  isDestroyed,
-  isDestroying,
-  registerDestructor,
-} from '@ember/destroyable';
+import { associateDestroyableChild } from '@ember/destroyable';
 import { setOwner, getOwner } from '@ember/owner';
-import type Owner from '@ember/owner';
 import Service from '@ember/service';
 
 import { service } from '@ember/service';
 
-import { buildWaiter } from '@ember/test-waiters';
-
 import { tracked } from '@glimmer/tracking';
 
-import { task } from 'ember-concurrency';
+import { task, restartableTask, timeout } from 'ember-concurrency';
 
 import {
   Permissions,
@@ -24,8 +17,6 @@ import {
 
 import type LoaderService from './loader-service';
 import type MatrixService from './matrix-service';
-
-const waiter = buildWaiter('realm-service');
 
 interface Meta {
   info: RealmInfo;
@@ -41,22 +32,25 @@ class RealmResource {
   @tracked
   private auth: { token: string; claims: JWTPayload } | undefined;
 
-  private sessionExpirationTimeout: number | undefined;
-
   constructor(
     private realmURL: string,
-    auth: { token: string; claims: JWTPayload } | undefined,
+    token: string | undefined,
   ) {
-    this.auth = auth;
-    if (auth) {
-      SessionStorage.persist(this.realmURL, auth.token);
-      this.scheduleSessionRefresh();
-    }
-    registerDestructor(this, this.cleanup);
+    this.token = token;
   }
 
   get token(): string | undefined {
     return this.auth?.token;
+  }
+
+  set token(value: string | undefined) {
+    if (value) {
+      this.auth = { token: value, claims: claimsFromRawToken(value) };
+    } else {
+      this.auth = undefined;
+    }
+    SessionStorage.persist(this.realmURL, value);
+    this.tokenRefresher.perform();
   }
 
   get claims(): JWTPayload | undefined {
@@ -83,19 +77,18 @@ class RealmResource {
   }
 
   private loginTask = task(async () => {
-    let token = await this.matrixService.createRealmSession(
-      new URL(this.realmURL),
-    );
-    let claims = claimsFromRawToken(token);
-    this.auth = { claims, token };
-    SessionStorage.persist(this.realmURL, token);
-    this.loggingIn = undefined;
+    try {
+      let token = await this.matrixService.createRealmSession(
+        new URL(this.realmURL),
+      );
+      this.token = token;
+    } finally {
+      this.loggingIn = undefined;
+    }
   });
 
   logout(): void {
     this.auth = undefined;
-    clearTimeout(this.sessionExpirationTimeout);
-    SessionStorage.remove(this.realmURL);
   }
 
   async fetchMeta(): Promise<void> {
@@ -124,48 +117,22 @@ class RealmResource {
     this.meta = { info, isPublic };
   }
 
-  // TODO: can probably delete this once middleware no longer uses it
-  async refreshToken() {
-    if (!this.auth) {
-      throw new Error(`Cannot do session refresh without token`);
-    }
-    return await this.login();
-  }
-
-  private scheduleSessionRefresh() {
+  private tokenRefresher = restartableTask(async () => {
     if (!this.claims) {
-      throw new Error(`Cannot schedule session refresh without token`);
+      return;
     }
-    let { exp } = this.claims;
-    if (this.sessionExpirationTimeout) {
-      clearTimeout(this.sessionExpirationTimeout);
-    }
-    let expirationMs = exp * 1000; // token expiration is unix time (seconds)
+
+    // token expiration is unix time (seconds)
+    let expirationMs = this.claims.exp * 1000;
+
     let refreshMs = Math.max(
       expirationMs - Date.now() - tokenRefreshPeriodSec * 1000,
       0,
     );
-    this.sessionExpirationTimeout = setTimeout(() => {
-      this.sessionExpirationTimeout = undefined;
-      if (isDestroyed(this) || isDestroying(this)) {
-        return;
-      }
-      this.login();
-    }, refreshMs) as unknown as number; // because type is defaultint to NodeJS Timeout type
-  }
 
-  private cleanup() {
-    // when a resource is destroyed we need to check to see if it is a resource
-    // whose timer is managing the session refresh and if so clean up the timer.
-    // As well as we need to be careful to cleanup module
-    // scope pointers to the destroyed resource.
-    // let resources = sessionResources.get(realmURL);
-    // resources?.delete(this);
-    if (this.sessionExpirationTimeout) {
-      clearTimeout(this.sessionExpirationTimeout);
-      this.sessionExpirationTimeout = undefined;
-    }
-  }
+    await timeout(refreshMs);
+    await this.login();
+  });
 }
 
 class RealmNotReadyError extends Error {
@@ -174,25 +141,15 @@ class RealmNotReadyError extends Error {
 export default class RealmService extends Service {
   @service declare loaderService: LoaderService;
 
-  private realms: Map<string, RealmResource> = restoreSessions(getOwner(this)!);
+  private realms: Map<string, RealmResource> = this.restoreSessions();
 
-  async ensureRealmReady(url: string): Promise<void> {
-    let token = waiter.beginAsync();
-    try {
-      let realmResource = this.knownRealm(url);
-      if (!realmResource) {
-        await this.fetchRealm(url); // this should have the side effect of creating and noting the realm resource
-      }
-      realmResource = this.knownRealm(url);
-      if (!realmResource) {
-        throw new RealmNotReadyError(
-          `Failed to fetch realm at ${url} and create realm resource`,
-        );
-      }
-      this.requireRealmMeta(url); // this will throw if the realm resource is not fully loaded
-    } finally {
-      waiter.endAsync(token);
+  async ensureRealmMeta(realmURL: string): Promise<void> {
+    let resource = this.knownRealm(realmURL);
+    if (!resource) {
+      resource = this.createRealmResource(realmURL, undefined);
+      this.realms.set(realmURL, resource);
     }
+    await resource.fetchMeta();
   }
 
   info = (url: string): RealmInfo => {
@@ -253,16 +210,41 @@ export default class RealmService extends Service {
     return undefined;
   }
 
-  private async fetchRealm(url: string): Promise<void> {
-    // middleware will ahndle instantiation of a RealmResource
-    await this.loaderService.loader.fetch(url, {
-      method: 'HEAD',
-    });
-    return;
+  async attemptLogin(realmURL: string): Promise<string | undefined> {
+    let resource = this.knownRealm(realmURL);
+    if (!resource) {
+      resource = this.createRealmResource(realmURL, undefined);
+      this.realms.set(realmURL, resource);
+    }
+    resource.logout();
+
+    // TODO: decide how to identify expected login failures vs unexpected ones
+    // here and catch the expected ones.
+    await resource.login();
+
+    return resource.token;
   }
 
-  async refreshToken(url: string): Promise<void> {
-    await this.requireRealmMeta(url).refreshToken();
+  private createRealmResource(
+    realmURL: string,
+    token: string | undefined,
+  ): RealmResource {
+    let resource = new RealmResource(realmURL, token);
+    setOwner(resource, getOwner(this)!);
+    associateDestroyableChild(this, resource);
+    return resource;
+  }
+
+  private restoreSessions(): Map<string, RealmResource> {
+    let sessions: Map<string, RealmResource> = new Map();
+    let tokens = SessionStorage.getAll();
+    if (tokens) {
+      for (let [realmURL, token] of Object.entries(tokens)) {
+        let resource = this.createRealmResource(realmURL, token);
+        sessions.set(realmURL, resource);
+      }
+    }
+    return sessions;
   }
 }
 
@@ -273,26 +255,6 @@ export const sessionLocalStorageKey = 'boxel-session';
 export function claimsFromRawToken(rawToken: string): JWTPayload {
   let [_header, payload] = rawToken.split('.');
   return JSON.parse(atob(payload)) as JWTPayload;
-}
-
-function restoreSessions(owner: Owner): Map<string, RealmResource> {
-  let sessions: Map<string, RealmResource> = new Map();
-  let tokens = SessionStorage.getAll();
-  if (tokens) {
-    for (let [realmURL, token] of Object.entries(tokens)) {
-      let claims = claimsFromRawToken(token);
-      let expiration = claims.exp;
-      if (expiration - tokenRefreshPeriodSec > Date.now() / 1000) {
-        let resource = new RealmResource(realmURL, { claims, token });
-        setOwner(resource, owner);
-        sessions.set(realmURL, resource);
-        registerDestructor(resource, () => {
-          sessions.delete(realmURL);
-        });
-      }
-    }
-  }
-  return sessions;
 }
 
 // TODO: callers of this expect to clear everything -- this should probably be done by logging out of all known realms
@@ -312,7 +274,7 @@ let SessionStorage = {
     }
     return undefined;
   },
-  persist(realmURL: string, token: string) {
+  persist(realmURL: string, token: string | undefined) {
     let sessionStr =
       window.localStorage.getItem(sessionLocalStorageKey) ?? '{}';
     let session = JSON.parse(sessionStr);
@@ -323,17 +285,5 @@ let SessionStorage = {
         JSON.stringify(session),
       );
     }
-  },
-  remove(realmURL: string) {
-    let sessionStr = window.localStorage.getItem(sessionLocalStorageKey);
-    if (!sessionStr) {
-      return;
-    }
-    let session = JSON.parse(sessionStr);
-    delete session[realmURL];
-    window.localStorage.setItem(
-      sessionLocalStorageKey,
-      JSON.stringify(session),
-    );
   },
 };
