@@ -28,11 +28,17 @@ export type MockMatrixService = MatrixService & {
 };
 
 class MockClient {
+  matrixService: MockMatrixService;
   lastSentEvent: any;
   userId?: string;
   displayname?: string;
 
-  constructor(userId?: string, displayname?: string) {
+  constructor(
+    matrixService: MockMatrixService,
+    userId?: string,
+    displayname?: string,
+  ) {
+    this.matrixService = matrixService;
     this.userId = userId;
     this.displayname = displayname;
   }
@@ -62,6 +68,12 @@ class MockClient {
   public getUserId() {
     return this.userId;
   }
+
+  public sendReadReceipt(event: { getId: () => string }) {
+    this.matrixService.addEventReadReceipt(event.getId(), {
+      readAt: new Date(),
+    });
+  }
 }
 function generateMockMatrixService(
   realmPermissions?: () => {
@@ -73,18 +85,19 @@ function generateMockMatrixService(
     @service declare loaderService: LoaderService;
 
     // @ts-ignore
-    @tracked client: MockClient = new MockClient('@testuser:staging', '');
+    @tracked client: MockClient = new MockClient(this, '@testuser:staging', '');
     // @ts-ignore
     cardAPI!: typeof cardApi;
 
     profile = getMatrixProfile(this, () => this.userId);
 
-    // These will be empty in the tests, but we need to define them to satisfy the interface
     rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
 
     messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
     cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
     failedCommandState: TrackedMap<string, Error> = new TrackedMap();
+    currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
+      new TrackedMap();
 
     async start(_auth?: any) {}
 
@@ -120,6 +133,10 @@ function generateMockMatrixService(
       // this is our silly JWT--we don't sign with crypto since we are running in the
       // browser so the secret is the signature
       return Promise.resolve(`${headerAndPayload}.${secret}`);
+    }
+
+    addEventReadReceipt(eventId: string, readAt: Date) {
+      this.currentUserEventReadReceipts.set(eventId, { readAt });
     }
 
     async createRoom(
@@ -194,7 +211,7 @@ function generateMockMatrixService(
     }
 
     async logout() {
-      this.client = new MockClient(undefined);
+      this.client = new MockClient(this as any, undefined);
     }
 
     async setDisplayName(displayName: string) {
@@ -262,7 +279,7 @@ function generateMockMatrixService(
     getLastActiveTimestamp(room: RoomField) {
       return (
         room.events[room.events.length - 1]?.origin_server_ts ??
-        room.created.getTime()
+        room.created?.getTime()
       );
     }
   }

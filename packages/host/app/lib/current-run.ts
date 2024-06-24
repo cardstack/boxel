@@ -1,3 +1,4 @@
+import { service } from '@ember/service';
 import { cached } from '@glimmer/tracking';
 
 import ignore, { type Ignore } from 'ignore';
@@ -6,7 +7,6 @@ import isEqual from 'lodash/isEqual';
 import merge from 'lodash/merge';
 
 import {
-  Loader,
   baseRealm,
   logger,
   baseCardRef,
@@ -48,6 +48,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
+import LoaderService from '../services/loader-service';
 import { type RenderCard } from '../services/render-service';
 
 const log = logger('current-run');
@@ -64,30 +65,27 @@ export class CurrentRun {
   #batch: Batch | undefined;
   #realmPaths: RealmPaths;
   #ignoreData: Record<string, string>;
-  #loader: Loader;
   #renderCard: RenderCard;
   #realmURL: URL;
   #realmInfo?: RealmInfo;
-  #isIndexing = false;
   readonly stats: Stats = {
     instancesIndexed: 0,
     instanceErrors: 0,
     moduleErrors: 0,
   };
+  @service declare loaderService: LoaderService;
 
   constructor({
     realmURL,
     reader,
     indexer,
     ignoreData = {},
-    loader,
     renderCard,
   }: {
     realmURL: URL;
     reader: Reader;
     indexer: Indexer;
     ignoreData?: Record<string, string>;
-    loader: Loader;
     renderCard: RenderCard;
   }) {
     this.#indexer = indexer;
@@ -96,18 +94,6 @@ export class CurrentRun {
     this.#realmURL = realmURL;
     this.#ignoreData = ignoreData;
     this.#renderCard = renderCard;
-    // we are intentionally using the same loader as the LoaderService.loader
-    // because our WIP header needs to be used anywhere the loader service's
-    // loader is being used (specifically in the render-service).
-    this.#loader = loader;
-    this.loader.prependURLHandlers([
-      async (req) => {
-        if (this.#isIndexing) {
-          req.headers.set('X-Boxel-Use-WIP-Index', 'true');
-        }
-        return null;
-      },
-    ]);
   }
 
   static async fromScratch(current: CurrentRun): Promise<IndexResults> {
@@ -124,36 +110,19 @@ export class CurrentRun {
     return { invalidations: [], stats, ignoreData };
   }
 
-  static async incremental({
-    url,
-    realmURL,
-    operation,
-    ignoreData,
-    reader,
-    loader,
-    renderCard,
-    indexer,
-  }: {
-    url: URL;
-    realmURL: URL;
-    operation: 'update' | 'delete';
-    ignoreData: Record<string, string>;
-    reader: Reader;
-    loader: Loader;
-    renderCard: RenderCard;
-    indexer: Indexer;
-  }): Promise<IndexResults> {
+  static async incremental(
+    current: CurrentRun,
+    {
+      url,
+      operation,
+    }: {
+      url: URL;
+      operation: 'update' | 'delete';
+    },
+  ): Promise<IndexResults> {
     let start = Date.now();
     log.debug(`starting from incremental indexing for ${url.href}`);
 
-    let current = new this({
-      realmURL,
-      reader,
-      indexer,
-      ignoreData: { ...ignoreData },
-      loader,
-      renderCard,
-    });
     current.#batch = await current.#indexer.createBatch(current.realmURL);
     let invalidations = (await current.batch.invalidate(url)).map(
       (href) => new URL(href),
@@ -196,9 +165,9 @@ export class CurrentRun {
   }
 
   private async whileIndexing(doIndexing: () => Promise<void>) {
-    this.#isIndexing = true;
+    this.loaderService.setIsIndexing(true);
     await doIndexing();
-    this.#isIndexing = false;
+    this.loaderService.setIsIndexing(false);
   }
 
   private get batch() {
@@ -214,10 +183,6 @@ export class CurrentRun {
 
   get realmURL() {
     return this.#realmURL;
-  }
-
-  public get loader() {
-    return this.#loader;
   }
 
   @cached
@@ -276,7 +241,7 @@ export class CurrentRun {
       await this.indexModule(url, fileRef);
     } else {
       if (!identityContext) {
-        let api = await this.#loader.import<typeof CardAPI>(
+        let api = await this.loaderService.loader.import<typeof CardAPI>(
           `${baseRealm.url}card-api`,
         );
         let { IdentityContext } = api;
@@ -310,14 +275,14 @@ export class CurrentRun {
   private async indexModule(url: URL, ref: TextFileRef): Promise<void> {
     let module: Record<string, unknown>;
     try {
-      module = await this.loader.import(url.href);
+      module = await this.loaderService.loader.import(url.href);
     } catch (err: any) {
       this.stats.moduleErrors++;
       log.warn(
         `encountered error loading module "${url.href}": ${err.message}`,
       );
       let deps = await (
-        await this.loader.getConsumedModules(url.href)
+        await this.loaderService.loader.getConsumedModules(url.href)
       ).filter((u) => u !== url.href);
       await this.batch.updateEntry(new URL(url), {
         type: 'error',
@@ -340,9 +305,9 @@ export class CurrentRun {
       log.debug(`skipping indexing of shimmed module ${url.href}`);
       return;
     }
-    let consumes = (await this.loader.getConsumedModules(url.href)).filter(
-      (u) => u !== url.href,
-    );
+    let consumes = (
+      await this.loaderService.loader.getConsumedModules(url.href)
+    ).filter((u) => u !== url.href);
     await this.batch.updateEntry(new URL(url.href), {
       type: 'module',
       source: ref.content,
@@ -387,12 +352,12 @@ export class CurrentRun {
     let cardType: typeof CardDef | undefined;
     let isolatedHtml: string | undefined;
     try {
-      let api = await this.#loader.import<typeof CardAPI>(
+      let api = await this.loaderService.loader.import<typeof CardAPI>(
         `${baseRealm.url}card-api`,
       );
 
       if (!this.#realmInfo) {
-        let realmInfoResponse = await this.#loader.fetch(
+        let realmInfoResponse = await this.loaderService.loader.fetch(
           `${this.realmURL}_info`,
           { headers: { Accept: SupportedMimeType.RealmInfo } },
         );
@@ -412,7 +377,7 @@ export class CurrentRun {
         res,
         { data: res },
         new URL(fileURL),
-        this.#loader as unknown as LoaderType,
+        this.loaderService.loader as unknown as LoaderType,
         {
           identityContext,
         },
@@ -476,7 +441,7 @@ export class CurrentRun {
         types: typesMaybeError.types,
         deps: new Set([
           moduleURL,
-          ...(await this.loader.getConsumedModules(moduleURL)),
+          ...(await this.loaderService.loader.getConsumedModules(moduleURL)),
         ]),
       });
     } else if (uncaughtError || typesMaybeError?.type === 'error') {
@@ -538,7 +503,9 @@ export class CurrentRun {
     while (fullRef) {
       let loadedCard, loadedCardRef;
       try {
-        loadedCard = await loadCard(fullRef, { loader: this.loader });
+        loadedCard = await loadCard(fullRef, {
+          loader: this.loaderService.loader,
+        });
         loadedCardRef = identifyCard(loadedCard);
         if (!loadedCardRef) {
           throw new Error(`could not identify card ${loadedCard.name}`);

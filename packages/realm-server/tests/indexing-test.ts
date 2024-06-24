@@ -2,7 +2,10 @@ import { module, test } from 'qunit';
 import { dirSync, setGracefulCleanup } from 'tmp';
 import {
   baseRealm,
+  fetcher,
+  Loader,
   LooseSingleCardDocument,
+  maybeHandleScopedCSSRequest,
   Realm,
   RealmPermissions,
   VirtualNetwork,
@@ -40,10 +43,15 @@ setGracefulCleanup();
 // as to test through loader caching)
 module('indexing', function (hooks) {
   let virtualNetwork = new VirtualNetwork();
-  let loader = virtualNetwork.createLoader();
-
   virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
   shimExternals(virtualNetwork);
+
+  let fetch = fetcher(virtualNetwork.fetch, [
+    async (req, next) => {
+      return (await maybeHandleScopedCSSRequest(req)) || next(req);
+    },
+  ]);
+  let loader = new Loader(fetch, virtualNetwork.resolveImport);
 
   setupCardLogs(
     hooks,

@@ -8,8 +8,6 @@ import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-sc
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
-
 import {
   testRealmURL,
   setupCardLogs,
@@ -17,6 +15,7 @@ import {
   trimCardContainer,
   setupLocalIndexing,
   setupIntegrationTestRealm,
+  lookupLoaderService,
 } from '../helpers';
 
 let loader: Loader;
@@ -27,8 +26,7 @@ module('Integration | card-prerender', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function () {
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    loader = lookupLoaderService().loader;
   });
 
   setupLocalIndexing(hooks);

@@ -1,5 +1,6 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
@@ -7,9 +8,11 @@ import { tracked, cached } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-import { modifier } from 'ember-modifier';
+import Modifier, { modifier, type NamedArgs } from 'ember-modifier';
 
 import { trackedFunction } from 'ember-resources/util/function';
+
+import { MatrixEvent } from 'matrix-js-sdk';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -25,7 +28,7 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-import { type MessageField } from 'https://cardstack.com/base/room';
+import { RoomField, type MessageField } from 'https://cardstack.com/base/room';
 
 import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
@@ -36,6 +39,7 @@ import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
 interface Signature {
   Element: HTMLDivElement;
   Args: {
+    room: RoomField;
     roomId: string;
     message: MessageField;
     index?: number;
@@ -49,6 +53,51 @@ interface Signature {
 }
 
 const STREAMING_TIMEOUT_MS = 60000;
+
+interface SendReadReceiptModifierSignature {
+  Args: {
+    Named: {
+      matrixService: MatrixService;
+      message: MessageField;
+      room: RoomField;
+    };
+    Positional: [];
+  };
+  Element: Element;
+}
+
+class SendReadReceipt extends Modifier<SendReadReceiptModifierSignature> {
+  async modify(
+    _element: Element,
+    _positional: [],
+    {
+      matrixService,
+      message,
+      room,
+    }: NamedArgs<SendReadReceiptModifierSignature>,
+  ) {
+    let isLastMessage = room.messages[room.messages.length - 1] === message;
+    if (!isLastMessage) {
+      return;
+    }
+
+    if (matrixService.currentUserEventReadReceipts.has(message.eventId)) {
+      return;
+    }
+
+    // sendReadReceipt expects an actual MatrixEvent (as defined in the matrix SDK), but it' not available to us here - however, we can fake it by adding the necessary methods
+    let matrixEvent = {
+      getId: () => message.eventId,
+      getRoomId: () => room.roomId,
+      getTs: () => message.created.getTime(),
+    };
+
+    // Without scheduling this after render, this produces the "attempted to update value, but it had already been used previously in the same computation" error
+    schedule('afterRender', () => {
+      matrixService.client.sendReadReceipt(matrixEvent as MatrixEvent);
+    });
+  }
+}
 
 export default class RoomMessage extends Component<Signature> {
   constructor(owner: unknown, args: Signature['Args']) {
@@ -89,6 +138,11 @@ export default class RoomMessage extends Component<Signature> {
     }}
     {{#if this.resources}}
       <AiAssistantMessage
+        {{SendReadReceipt
+          matrixService=this.matrixService
+          message=@message
+          room=@room
+        }}
         id='message-container-{{@index}}'
         class='room-message'
         @formattedMessage={{htmlSafe

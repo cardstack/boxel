@@ -23,7 +23,6 @@ import {
   tokenRefreshPeriodSec,
   sessionLocalStorageKey,
 } from '@cardstack/host/resources/realm-session';
-import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
   percySnapshot,
@@ -33,6 +32,7 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  lookupLoaderService,
 } from '../helpers';
 import {
   MockMatrixService,
@@ -52,8 +52,7 @@ module('Acceptance | operator mode tests', function (hooks) {
   hooks.beforeEach(async function () {
     sessionExpirationSec = 60 * 60;
 
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    let loader = lookupLoaderService().loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
     cardApi = await loader.import(`${baseRealm.url}card-api`);

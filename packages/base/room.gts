@@ -153,6 +153,7 @@ type MessageFieldArgs = {
   isStreamingFinished?: boolean;
   clientGeneratedId?: string | null;
   status: EventStatus | null;
+  eventId: string;
 };
 
 type AttachedCardResource = {
@@ -277,6 +278,7 @@ export function getEventIdForCard(
 }
 
 export class MessageField extends FieldDef {
+  @field eventId = contains(StringField);
   @field author = contains(RoomMemberField);
   @field message = contains(MarkdownField);
   @field formattedMessage = contains(MarkdownField);
@@ -288,6 +290,7 @@ export class MessageField extends FieldDef {
   @field command = contains(PatchField);
   @field isStreamingFinished = contains(BooleanField);
   @field errorMessage = contains(StringField);
+
   // ID from the client and can be used by client
   // to verify whether the message is already sent or not.
   @field clientGeneratedId = contains(StringField);
@@ -464,7 +467,7 @@ export class RoomField extends FieldDef {
         roomMemberCache.set(this, roomMembers);
       }
 
-      for (let event of this.newEvents) {
+      for (let event of this.events) {
         if (event.type !== 'm.room.member') {
           continue;
         }
@@ -530,6 +533,7 @@ export class RoomField extends FieldDef {
           attachedCard: null,
           command: null,
           status: event.status,
+          eventId: event.event_id,
         };
 
         if (event.status === 'cancelled' || event.status === 'not_sent') {
@@ -778,7 +782,6 @@ interface LeaveEvent extends RoomStateEvent {
   };
 }
 
-//Here are some message events
 interface MessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: {

@@ -15,8 +15,6 @@ import {
 } from '@cardstack/runtime-common/helpers/ai';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
-
 import { primitive as primitiveType } from 'https://cardstack.com/base/card-api';
 
 import {
@@ -24,6 +22,7 @@ import {
   setupServerSentEvents,
   setupOnSave,
   setupCardLogs,
+  lookupLoaderService,
 } from '../helpers';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -41,8 +40,7 @@ let loader: Loader;
 module('Unit | ai-function-generation-test', function (hooks) {
   setupRenderingTest(hooks);
   hooks.beforeEach(function (this: RenderingTestContext) {
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    loader = lookupLoaderService().loader;
   });
   hooks.beforeEach(async function () {
     cardApi = await loader.import(`${baseRealm.url}card-api`);

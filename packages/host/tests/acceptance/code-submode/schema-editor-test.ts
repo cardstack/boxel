@@ -653,7 +653,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   });
 
   test<TestContextWithSSE>('adding a field from schema editor - cardinality test', async function (assert) {
-    assert.expect(9);
+    assert.expect(10);
     let waitForOpts = { timeout: 2000 }; // Helps mitigating flaky tests since Writing to a file + reflecting that in the UI can be a bit slow
     let expectedEvents = [
       {
@@ -688,6 +688,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'luckyNumbers');
     await click('[data-test-boxel-radio-option-id="many"]');
+    await waitFor('.card-chooser-area [data-test-selected-field-display-name]');
+    assert
+      .dom('.card-chooser-area [data-test-selected-field-display-name]')
+      .containsText('BigInteger');
     await saveField(this, assert, expectedEvents);
 
     await waitFor(

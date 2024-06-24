@@ -1,4 +1,5 @@
 import type Owner from '@ember/owner';
+import { getOwner, setOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -99,15 +100,15 @@ export default class CardPrerender extends Component {
   private doFromScratch = enqueueTask(async (realmURL: URL) => {
     let { reader, indexer } = this.getRunnerParams();
     await this.resetLoaderInFastboot.perform();
-    let current = await CurrentRun.fromScratch(
-      new CurrentRun({
-        realmURL,
-        loader: this.loaderService.loader,
-        reader,
-        indexer,
-        renderCard: this.renderService.renderCard.bind(this.renderService),
-      }),
-    );
+    let currentRun = new CurrentRun({
+      realmURL,
+      reader,
+      indexer,
+      renderCard: this.renderService.renderCard.bind(this.renderService),
+    });
+    setOwner(currentRun, getOwner(this)!);
+
+    let current = await CurrentRun.fromScratch(currentRun);
     this.renderService.indexRunDeferred?.fulfill();
     return current;
   });
@@ -121,15 +122,17 @@ export default class CardPrerender extends Component {
     ) => {
       let { reader, indexer } = this.getRunnerParams();
       await this.resetLoaderInFastboot.perform();
-      let current = await CurrentRun.incremental({
-        url,
+      let currentRun = new CurrentRun({
         realmURL,
-        operation,
         reader,
-        ignoreData,
         indexer,
-        loader: this.loaderService.loader,
+        ignoreData: { ...ignoreData },
         renderCard: this.renderService.renderCard.bind(this.renderService),
+      });
+      setOwner(currentRun, getOwner(this)!);
+      let current = await CurrentRun.incremental(currentRun, {
+        url,
+        operation,
       });
       this.renderService.indexRunDeferred?.fulfill();
       return current;
