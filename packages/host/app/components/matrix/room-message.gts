@@ -142,7 +142,7 @@ export default class RoomMessage extends Component<Signature> {
           </div>
 
           {{#let (getComponent @message) as |Component|}}
-            <Component @format='embedded' />
+            <Component @format='embedded' @displayContainer={{false}} />
           {{/let}}
           {{#if this.isDisplayingCode}}
             <div class='preview-code'>

@@ -37,7 +37,7 @@ export class CommandField extends CardDef {
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       {{#if @model.result}}
-        <@fields.result />
+        <@fields.result @displayContainer={{false}} />
       {{/if}}
       <style>
         .command {
