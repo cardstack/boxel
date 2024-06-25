@@ -21,10 +21,26 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import { CommandField } from 'https://cardstack.com/base/command';
 
 import { getSearchResults } from '../resources/search';
+import { serializeCard } from 'https://cardstack.com/base/card-api';
+import CardService from './card-service';
+
+const deserializeToQuery = (payload: SearchPayload) => {
+  let maybeCodeRef = codeRefWithAbsoluteURL(
+    payload.filter.type,
+    new URL(payload.card_id),
+  );
+  if (!isResolvedCodeRef(maybeCodeRef)) {
+    throw new Error('Query returned by ai bot is not fully resolved');
+  }
+  payload.filter.type = maybeCodeRef;
+
+  return { filter: payload.filter };
+};
 
 export default class CommandService extends Service {
-  @service declare operatorModeStateService: OperatorModeStateService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
+  @service private declare cardService: CardService;
   @tracked query: Query = {};
 
   searchCardResource = getSearchResults(this, () => this.query);
@@ -53,20 +69,12 @@ export default class CommandService extends Service {
             "Search command can't run because it doesn't have all the arguments returned by open ai",
           );
         }
-        //If ai returns a relative module path, we make it absolute based upon the card_id that exists
-        let maybeCodeRef = codeRefWithAbsoluteURL(
-          payload.filter.type,
-          new URL(payload.card_id),
-        );
-        if (!isResolvedCodeRef(maybeCodeRef)) {
-          throw new Error('Query returned by ai bot is not fully resolved');
-        }
-        payload.filter.type = maybeCodeRef;
-
-        this.query = { filter: payload.filter };
-
+        this.query = deserializeToQuery(payload);
         await this.searchCardResource.loaded;
-        res = this.searchCardResource.instances.map((c) => c.id);
+        let promises = this.searchCardResource.instances.map((c) =>
+          this.cardService.serializeCard(c),
+        );
+        res = await Promise.all(promises);
         console.log(res);
       }
       await this.matrixService.sendReactionEvent(roomId, eventId, 'applied');

@@ -11,7 +11,7 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     viewBox='0 0 20.414 20.414'
     ...attributes
   ><g
-      fill='none'
+      fill='var(--icon-bg,none)'
       stroke='var(--icon-color, #000)'
       stroke-linecap='round'
       stroke-linejoin='round'

@@ -25,7 +25,7 @@ import type MonacoService from '@cardstack/host/services/monaco-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import { BaseDef, type CardDef } from 'https://cardstack.com/base/card-api';
 import { type CommandField } from 'https://cardstack.com/base/command';
 import { type MessageField } from 'https://cardstack.com/base/room';
 
@@ -51,6 +51,10 @@ interface Signature {
 }
 
 const STREAMING_TIMEOUT_MS = 60000;
+
+function getComponent(cardOrField: BaseDef) {
+  return cardOrField.constructor.getComponent(cardOrField);
+}
 
 export default class RoomMessage extends Component<Signature> {
   constructor(owner: unknown, args: Signature['Args']) {
@@ -136,6 +140,10 @@ export default class RoomMessage extends Component<Signature> {
               data-test-command-apply={{this.applyButtonState}}
             />
           </div>
+
+          {{#let (getComponent @message) as |Component|}}
+            <Component @format='embedded' />
+          {{/let}}
           {{#if this.isDisplayingCode}}
             <div class='preview-code'>
               <Button
