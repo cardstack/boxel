@@ -390,19 +390,45 @@ class Edit extends Component<typeof CampaignForm> {
 }
 
 export class CampaignForm extends CardDef {
-  @field name = contains(StringField);
-  @field status = contains(StringField);
-  @field active = contains(BooleanField);
-  @field type = contains(StringField);
-  @field parent_campaign = linksTo(() => CampaignForm);
-  @field description = contains(StringField);
-  @field start_date = contains(DateField);
-  @field end_date = contains(DateField);
-  @field number_sent = contains(NumberField);
-  @field expected_response_percentage = contains(NumberField);
-  @field expected_revenue = contains(NumberField);
-  @field budgeted_cost = contains(NumberField);
-  @field actual_cost = contains(NumberField);
+  @field name = contains(StringField, {
+    description: 'The campaign name',
+  });
+  @field status = contains(StringField, {
+    description: 'The campaign current status',
+  });
+  @field active = contains(BooleanField, {
+    description: 'Tells whether the campaign is active or not',
+  });
+  @field type = contains(StringField, {
+    description: 'The type of campaign',
+  });
+  @field parent_campaign = linksTo(() => CampaignForm, {
+    description: 'The parent campaign',
+  });
+  @field description = contains(StringField, {
+    description: 'The campaign description',
+  });
+  @field start_date = contains(DateField, {
+    description: 'The campaign start date',
+  });
+  @field end_date = contains(DateField, {
+    description: 'The campaign end date',
+  });
+  @field number_sent = contains(NumberField, {
+    description: 'The number of forms sent in the campaign',
+  });
+  @field expected_response_percentage = contains(NumberField, {
+    description: 'The expected response by percentage (%) in the campaign',
+  });
+  @field expected_revenue = contains(NumberField, {
+    description: 'The expected revenue by RM in the campaign',
+  });
+  @field budgeted_cost = contains(NumberField, {
+    description: 'The budgeted cost by RM in the campaign',
+  });
+  @field actual_cost = contains(NumberField, {
+    description: 'The actual cost by RM in the campaign',
+  });
 
   static displayName = 'CampaignForm';
 
