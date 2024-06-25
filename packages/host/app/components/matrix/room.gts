@@ -1,5 +1,4 @@
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -10,7 +9,6 @@ import { v4 as uuidv4 } from 'uuid';
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
-import { getRoom } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -19,7 +17,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
-import type { MessageField } from 'https://cardstack.com/base/room';
+import type { MessageField, RoomField } from 'https://cardstack.com/base/room';
 
 import AiAssistantCardPicker from '../ai-assistant/card-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
@@ -31,7 +29,7 @@ import RoomMessage from './room-message';
 
 interface Signature {
   Args: {
-    roomId: string;
+    room: RoomField;
     monacoSDK: MonacoSDK;
   };
 }
@@ -42,14 +40,13 @@ export default class Room extends Component<Signature> {
       class='room'
       data-room-settled={{this.doWhenRoomChanges.isIdle}}
       data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
-      data-test-room-name={{this.room.name}}
-      data-test-room={{this.room.roomId}}
+      data-test-room-name={{@room.name}}
+      data-test-room={{@room.roomId}}
     >
       <AiAssistantConversation class='conversation-area'>
-        {{#each this.room.messages as |message i|}}
+        {{#each @room.messages as |message i|}}
           <RoomMessage
-            @room={{this.room}}
-            @roomId={{@roomId}}
+            @room={{@room}}
             @message={{message}}
             @index={{i}}
             @isPending={{this.isPendingMessage message}}
@@ -72,7 +69,7 @@ export default class Room extends Component<Signature> {
             @onInput={{this.setMessage}}
             @onSend={{this.sendMessage}}
             @canSend={{this.canSend}}
-            data-test-message-field={{this.room.roomId}}
+            data-test-message-field={{@room.roomId}}
           />
           <AiAssistantCardPicker
             @autoAttachedCards={{this.autoAttachedCards}}
@@ -118,7 +115,6 @@ export default class Room extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
 
-  private roomResource = getRoom(this, () => this.args.roomId);
   private autoAttachmentResource = getAutoAttachment(
     this,
     () => this.topMostStackItems,
@@ -127,9 +123,8 @@ export default class Room extends Component<Signature> {
 
   @tracked private currentMonacoContainer: number | undefined;
 
-  constructor(owner: Owner, args: Signature['Args']) {
-    super(owner, args);
-    this.doMatrixEventFlush.perform();
+  private get roomId() {
+    return this.args.room.roomId;
   }
 
   maybeRetryAction = (messageIndex: number, message: MessageField) => {
@@ -147,37 +142,20 @@ export default class Room extends Component<Signature> {
     );
   }
 
-  private doMatrixEventFlush = restartableTask(async () => {
-    await this.matrixService.flushMembership;
-    await this.matrixService.flushTimeline;
-    await this.roomResource.loading;
-  });
-
-  private get room() {
-    let room = this.roomResource.room;
-    return room;
-  }
-
   private doWhenRoomChanges = restartableTask(async () => {
     await all([this.cardService.cardsSettled(), timeout(500)]);
   });
 
   private get messageToSend() {
-    return this.matrixService.messagesToSend.get(this.args.roomId) ?? '';
+    return this.matrixService.messagesToSend.get(this.roomId) ?? '';
   }
 
   private get cardsToAttach() {
-    return this.matrixService.cardsToSend.get(this.args.roomId);
+    return this.matrixService.cardsToSend.get(this.roomId);
   }
 
   @action resendLastMessage() {
-    if (!this.room) {
-      throw new Error(
-        'Bug: should not be able to resend a message without a room.',
-      );
-    }
-
-    let myMessages = this.room.messages.filter(
+    let myMessages = this.args.room.messages.filter(
       (message) => message.author.userId === this.matrixService.userId,
     );
     if (myMessages.length === 0) {
@@ -202,13 +180,11 @@ export default class Room extends Component<Signature> {
     this.doSendMessage.perform(prompt); // sends the prompt only
   }
 
-  @action
-  private setMessage(message: string) {
-    this.matrixService.messagesToSend.set(this.args.roomId, message);
+  @action private setMessage(message: string) {
+    this.matrixService.messagesToSend.set(this.roomId, message);
   }
 
-  @action
-  private sendMessage() {
+  @action private sendMessage() {
     let cards = [];
     if (this.cardsToAttach) {
       cards.push(...this.cardsToAttach);
@@ -224,21 +200,18 @@ export default class Room extends Component<Signature> {
     );
   }
 
-  @action
-  private chooseCard(card: CardDef) {
+  @action private chooseCard(card: CardDef) {
     let cards = this.cardsToAttach ?? [];
     if (!cards?.find((c) => c.id === card.id)) {
-      this.matrixService.cardsToSend.set(this.args.roomId, [...cards, card]);
+      this.matrixService.cardsToSend.set(this.roomId, [...cards, card]);
     }
   }
 
-  @action
-  private isAutoAttachedCard(card: CardDef) {
+  @action private isAutoAttachedCard(card: CardDef) {
     return this.autoAttachedCards.has(card);
   }
 
-  @action
-  private removeCard(card: CardDef) {
+  @action private removeCard(card: CardDef) {
     if (this.isAutoAttachedCard(card)) {
       this.autoAttachmentResource.onCardRemoval(card);
     } else {
@@ -253,27 +226,27 @@ export default class Room extends Component<Signature> {
       }
     }
     this.matrixService.cardsToSend.set(
-      this.args.roomId,
+      this.roomId,
       this.cardsToAttach?.length ? this.cardsToAttach : undefined,
     );
   }
+
   private doSendMessage = enqueueTask(
     async (
       message: string | undefined,
       cards?: CardDef[],
       clientGeneratedId: string = uuidv4(),
     ) => {
-      this.matrixService.messagesToSend.set(this.args.roomId, undefined);
-      this.matrixService.cardsToSend.set(this.args.roomId, undefined);
+      this.matrixService.messagesToSend.set(this.roomId, undefined);
+      this.matrixService.cardsToSend.set(this.roomId, undefined);
       let context = {
         submode: this.operatorModeStateService.state.submode,
-        openCardIds: this.operatorModeStateService
-          .topMostStackItems()
+        openCardIds: this.topMostStackItems
           .filter((stackItem) => stackItem)
           .map((stackItem) => stackItem.card.id),
       };
       await this.matrixService.sendMessage(
-        this.args.roomId,
+        this.roomId,
         message,
         cards,
         clientGeneratedId,
@@ -287,11 +260,10 @@ export default class Room extends Component<Signature> {
   }
 
   get lastTopMostCard() {
-    let stackItems = this.operatorModeStateService.topMostStackItems();
-    if (stackItems.length === 0) {
+    if (this.topMostStackItems.length === 0) {
       return undefined;
     }
-    let topMostItem = stackItems[stackItems.length - 1];
+    let topMostItem = this.topMostStackItems[this.topMostStackItems.length - 1];
     let topMostCard = topMostItem?.card;
     if (!topMostCard) {
       return undefined;
@@ -321,16 +293,12 @@ export default class Room extends Component<Signature> {
           this.cardsToAttach?.length ||
           this.autoAttachedCards.size !== 0,
       ) &&
-      !!this.room &&
-      !this.room.messages.some((m) => this.isPendingMessage(m))
+      !this.args.room.messages.some((m) => this.isPendingMessage(m))
     );
   }
 
-  @action
-  private isLastMessage(messageIndex: number) {
-    return (
-      (this.room && messageIndex === this.room.messages.length - 1) ?? false
-    );
+  @action private isLastMessage(messageIndex: number) {
+    return messageIndex === this.args.room.messages.length - 1 ?? false;
   }
 
   @action private setCurrentMonacoContainer(index: number | undefined) {

@@ -170,14 +170,8 @@ export default class AiAssistantPanel extends Component<Signature> {
           <div class='session-error'>
             <NewSession @errorAction={{this.createNewSession}} />
           </div>
-        {{else if this.isReady}}
-          {{! below if statement is covered in 'isReady' check above but added due to glint not realizing it }}
-          {{#if this.currentRoomId}}
-            <Room
-              @roomId={{this.currentRoomId}}
-              @monacoSDK={{this.monacoSDK}}
-            />
-          {{/if}}
+        {{else if this.currentRoom}}
+          <Room @room={{this.currentRoom}} @monacoSDK={{this.monacoSDK}} />
         {{else}}
           <LoadingIndicator
             class='loading-new-session'
@@ -364,6 +358,12 @@ export default class AiAssistantPanel extends Component<Signature> {
     this.loadMonaco.perform();
   }
 
+  private currentRoomResource = getRoom(this, () => this.currentRoomId);
+
+  private get currentRoom() {
+    return this.currentRoomResource.room;
+  }
+
   private get isDisplayingRoomTitle() {
     return this.currentRoom?.messages.length && !this.displayRoomError;
   }
@@ -388,14 +388,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     }
   }
 
-  private get currentRoom() {
-    return this.currentRoomId
-      ? this.roomResources.get(this.currentRoomId)?.room
-      : undefined;
-  }
-
-  @cached
-  private get roomResources() {
+  @cached private get roomResources() {
     let resources = new TrackedMap<string, RoomResource>();
     for (let roomId of this.matrixService.rooms.keys()) {
       resources.set(
@@ -413,8 +406,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     this.enterRoomInitially();
   });
 
-  @action
-  private createNewSession() {
+  @action private createNewSession() {
     this.displayRoomError = false;
     if (this.newSessionId) {
       this.enterRoom(this.newSessionId!);
@@ -459,8 +451,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     this.isShowingPastSessions = false;
   }
 
-  @cached
-  private get aiSessionRooms() {
+  @cached private get aiSessionRooms() {
     let rooms: RoomField[] = [];
     for (let resource of this.roomResources.values()) {
       if (!resource.room) {
@@ -489,8 +480,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     return sorted;
   }
 
-  @action
-  private enterRoom(roomId: string, hidePastSessionsList = true) {
+  @action private enterRoom(roomId: string, hidePastSessionsList = true) {
     this.currentRoomId = roomId;
     if (hidePastSessionsList) {
       this.hidePastSessions();
@@ -521,8 +511,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     };
   }
 
-  @action
-  private leaveRoom(roomId: string) {
+  @action private leaveRoom(roomId: string) {
     this.doLeaveRoom.perform(roomId);
   }
 
@@ -567,11 +556,5 @@ export default class AiAssistantPanel extends Component<Signature> {
       return this.maybeMonacoSDK;
     }
     throw new Error(`cannot use monaco SDK before it has loaded`);
-  }
-
-  private get isReady() {
-    return Boolean(
-      this.currentRoomId && this.maybeMonacoSDK && this.doCreateRoom.isIdle,
-    );
   }
 }
