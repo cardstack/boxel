@@ -4,6 +4,7 @@ import {
   click,
   RenderingTestContext,
 } from '@ember/test-helpers';
+import { waitUntil } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { setupRenderingTest } from 'ember-qunit';
@@ -485,6 +486,9 @@ module('Integration | card-editor', function (hooks) {
 
     await click('[data-test-create-new-card="Pet"] [data-test-save-card]');
     await waitFor('[data-test-pet="Simba"]');
+    await waitUntil(
+      () => !document.querySelector('[data-test-create-new-card="Pet"]'),
+    );
     assert.dom('[data-test-create-new-card="Pet"]').doesNotExist();
     assert.dom('[data-test-remove-card]').exists();
 

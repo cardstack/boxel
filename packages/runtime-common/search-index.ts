@@ -15,6 +15,7 @@ import {
   type IncrementalResult,
   type IndexedModuleOrError,
   IndexedInstanceOrError,
+  IndexedCSSOrError,
 } from '.';
 import { Realm } from './realm';
 import { RealmPaths } from './paths';
@@ -233,6 +234,12 @@ export class SearchIndex {
       }
     }
     return { type: 'doc', doc };
+  }
+
+  // this is for tests--it's unlikely we'd actually want to access CSS directly
+  // this way
+  async css(url: URL, opts?: Options): Promise<IndexedCSSOrError | undefined> {
+    return await this.#indexer.getCSS(url, opts);
   }
 
   async module(

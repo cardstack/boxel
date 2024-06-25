@@ -2107,6 +2107,12 @@ module('Integration | operator-mode', function (hooks) {
           'Answer to my current question is in progress',
         );
 
+      await click('[data-test-past-sessions-button]');
+      assert
+        .dom("[data-test-enter-room='New AI Assistant Chat']")
+        .includesText('Thinking');
+      assert.dom('[data-test-is-streaming]').exists();
+
       await addRoomEvent(matrixService, {
         event_id: 'event4',
         room_id: roomId,
@@ -2146,6 +2152,11 @@ module('Integration | operator-mode', function (hooks) {
           'ai-avatar-animated',
           'Answer to my last question is not in progress',
         );
+
+      assert
+        .dom("[data-test-enter-room='New AI Assistant Chat']")
+        .doesNotContainText('Thinking');
+      assert.dom('[data-test-is-streaming]').doesNotExist();
     });
 
     test('it does not display the streaming indicator when ai bot sends an option', async function (assert) {
@@ -2197,6 +2208,153 @@ module('Integration | operator-mode', function (hooks) {
           'ai-avatar-animated',
           'ai bot patch message does not have a spinner',
         );
+    });
+
+    test('it animates the sessions dropdown button when there are other sessions that have activity which was not seen by the user yet', async function (assert) {
+      await setCardInOperatorModeState();
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      let roomId = await openAiAssistant();
+
+      await addRoomEvent(matrixService, {
+        event_id: 'event0',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@matic:boxel',
+        content: {
+          body: 'Say one word.',
+          msgtype: 'org.boxel.message',
+          formatted_body: 'Say one word.',
+          format: 'org.matrix.custom.html',
+        },
+        origin_server_ts: Date.now() - 100,
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+        status: null,
+      });
+
+      await addRoomEvent(matrixService, {
+        event_id: 'event1',
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'Word.',
+          msgtype: 'm.text',
+          formatted_body: 'Word.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+        },
+        origin_server_ts: Date.now() - 99,
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+        status: null,
+      });
+
+      assert
+        .dom('[data-test-past-sessions-button] [data-test-has-active-sessions]')
+        .doesNotExist();
+      assert
+        .dom(
+          "[data-test-enter-room='New AI Assistant Chat'] [data-test-is-streaming]",
+        )
+        .doesNotExist();
+
+      // Create a new room with some activity (this could happen when we will have a feature that interacts with AI outside of the AI pannel, i.e. "commands")
+
+      let anotherRoomId = await matrixService.createAndJoinRoom('Another Room');
+
+      await addRoomEvent(matrixService, {
+        event_id: 'event2',
+        room_id: anotherRoomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'I sent a message from the background.',
+          msgtype: 'm.text',
+          formatted_body: 'Word.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+        },
+        origin_server_ts: Date.now() - 98,
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+        status: null,
+      });
+
+      await waitFor('[data-test-has-active-sessions]');
+
+      assert
+        .dom('[data-test-past-sessions-button][data-test-has-active-sessions]')
+        .exists("'All Sessions button' is animated");
+
+      await click('[data-test-past-sessions-button]');
+
+      assert
+        .dom(
+          "[data-test-joined-room='Another Room'] [data-test-is-unseen-message]",
+        )
+        .exists('Newly created room has an unseen message');
+
+      assert
+        .dom(
+          "[data-test-joined-room='Another Room'] [data-test-is-unseen-message]",
+        )
+        .containsText('Updated');
+
+      assert
+        .dom(
+          "[data-test-joined-room='New AI Assistant Chat'][data-test-is-unseen-message]",
+        )
+        .doesNotExist("Old room doesn't have an unseen message");
+
+      assert
+        .dom("[data-test-joined-room='New AI Assistant Chat']")
+        .doesNotContainText('Updated');
+
+      await click("[data-test-enter-room='Another Room']");
+      assert
+        .dom(
+          "[data-test-joined-room='Another Room'] [data-test-is-unseen-message]",
+        )
+        .doesNotExist(
+          "Newly created room doesn't have an unseen message because we just opened it and saw the message",
+        );
+      assert
+        .dom(
+          "[data-test-joined-room='New AI Assistant'] [data-test-is-unseen-message]",
+        )
+        .doesNotExist("Old room doesn't have an unseen message");
+
+      assert
+        .dom('[data-test-past-sessions-button][data-test-has-active-sessions]')
+        .doesNotExist(
+          "'All Sessions button' is not animated anymore because the other active session was seen",
+        );
+
+      await click('[data-test-past-sessions-button]');
+
+      assert
+        .dom("[data-test-joined-room='New AI Assistant Chat']")
+        .doesNotContainText('Updated');
+      assert
+        .dom("[data-test-joined-room='Another Room']")
+        .doesNotContainText('Updated');
     });
 
     test('it can retry a message when receiving an error from the AI bot', async function (assert) {
@@ -3355,12 +3513,12 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
 
     await focus(`[data-test-search-field]`);
-    await typeIn(`[data-test-search-field]`, 'Ma');
-    assert.dom(`[data-test-search-label]`).containsText('Searching for “Ma”');
+    await typeIn(`[data-test-search-field]`, 'ma');
+    assert.dom(`[data-test-search-label]`).containsText('Searching for “ma”');
 
     await waitFor(`[data-test-search-sheet-search-result]`);
-    assert.dom(`[data-test-search-label]`).containsText('3 Results for “Ma”');
-    assert.dom(`[data-test-search-sheet-search-result]`).exists({ count: 3 });
+    assert.dom(`[data-test-search-label]`).containsText('4 Results for “ma”');
+    assert.dom(`[data-test-search-sheet-search-result]`).exists({ count: 4 });
     assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
     assert
       .dom(`[data-test-search-result="${testRealmURL}Author/mark"]`)

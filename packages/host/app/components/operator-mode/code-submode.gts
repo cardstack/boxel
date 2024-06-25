@@ -20,7 +20,7 @@ import { provide } from 'ember-provide-consume-context';
 import { Accordion } from '@cardstack/boxel-ui/components';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
-import type { PanelContext } from '@cardstack/boxel-ui/components';
+import type { ResizablePanel } from '@cardstack/boxel-ui/components';
 import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
@@ -501,18 +501,18 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action
-  private onListPanelContextChange(listPanelContext: PanelContext[]) {
-    this.panelWidths.leftPanel = listPanelContext[0]?.lengthPx;
-    this.panelWidths.codeEditorPanel = listPanelContext[1]?.lengthPx;
-    this.panelWidths.rightPanel = listPanelContext[2]?.lengthPx;
+  private onHorizontalPanelChange(panels: ResizablePanel[]) {
+    this.panelWidths.leftPanel = panels[0]?.lengthPx;
+    this.panelWidths.codeEditorPanel = panels[1]?.lengthPx;
+    this.panelWidths.rightPanel = panels[2]?.lengthPx;
 
     localStorage.setItem(CodeModePanelWidths, JSON.stringify(this.panelWidths));
   }
 
   @action
-  private onFilePanelContextChange(filePanelContext: PanelContext[]) {
-    this.panelHeights.filePanel = filePanelContext[0]?.lengthPx;
-    this.panelHeights.recentPanel = filePanelContext[1]?.lengthPx;
+  private onVerticalPanelChange(panels: ResizablePanel[]) {
+    this.panelHeights.filePanel = panels[0]?.lengthPx;
+    this.panelHeights.recentPanel = panels[1]?.lengthPx;
 
     localStorage.setItem(
       CodeModePanelHeights,
@@ -683,6 +683,7 @@ export default class CodeSubmode extends Component<Signature> {
     <SubmodeLayout
       @onCardSelectFromSearch={{this.openSearchResultInEditor}}
       @hideAiAssistant={{true}}
+      as |search|
     >
       <div
         class='code-mode'
@@ -707,7 +708,7 @@ export default class CodeSubmode extends Component<Signature> {
         </div>
         <ResizablePanelGroup
           @orientation='horizontal'
-          @onListPanelContextChange={{this.onListPanelContextChange}}
+          @onPanelChange={{this.onHorizontalPanelChange}}
           class='columns'
           as |ResizablePanel ResizeHandle|
         >
@@ -718,7 +719,7 @@ export default class CodeSubmode extends Component<Signature> {
             <div class='column'>
               <ResizablePanelGroup
                 @orientation='vertical'
-                @onListPanelContextChange={{this.onFilePanelContextChange}}
+                @onPanelChange={{this.onVerticalPanelChange}}
                 @reverseCollapse={{true}}
                 as |VerticallyResizablePanel VerticallyResizeHandle|
               >
@@ -743,6 +744,7 @@ export default class CodeSubmode extends Component<Signature> {
                           @delete={{this.setItemToDelete}}
                           @goToDefinition={{this.goToDefinition}}
                           @createFile={{perform this.createFile}}
+                          @openSearch={{search.openSearchToResults}}
                           data-test-card-inspector-panel
                         />
                       {{/if}}

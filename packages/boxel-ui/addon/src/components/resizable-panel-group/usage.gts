@@ -19,6 +19,7 @@ export default class ResizablePanelUsage extends Component {
 
   @tracked horizontalPanel3DefaultWidthFraction = 0.25;
   @tracked horizontalPanel3MinWidthPx = undefined;
+  @tracked horizontalPanel3IsHidden = false;
 
   @tracked verticalReverseCollapse = true;
 
@@ -41,9 +42,9 @@ export default class ResizablePanelUsage extends Component {
         <ResizablePanelGroup
           @orientation='horizontal'
           style={{cssVar
-            boxel-panel-resize-handler-height=this.boxelPanelResizeHandleHeight.value
-            boxel-panel-resize-handler-background-color=this.boxelPanelResizeHandleBackgroundColor.value
-            boxel-panel-resize-handler-hover-background-color=this.boxelPanelResizeHandleHoverBackgroundColor.value
+            boxel-panel-resize-handle-height=this.boxelPanelResizeHandleHeight.value
+            boxel-panel-resize-handle-background-color=this.boxelPanelResizeHandleBackgroundColor.value
+            boxel-panel-resize-handle-hover-background-color=this.boxelPanelResizeHandleHoverBackgroundColor.value
           }}
           as |ResizablePanel ResizeHandle|
         >
@@ -64,6 +65,7 @@ export default class ResizablePanelUsage extends Component {
           <ResizablePanel
             @defaultLengthFraction={{this.horizontalPanel3DefaultWidthFraction}}
             @minLengthPx={{this.horizontalPanel3MinWidthPx}}
+            @isHidden={{this.horizontalPanel3IsHidden}}
           >
             Panel 3
           </ResizablePanel>
@@ -112,24 +114,30 @@ export default class ResizablePanelUsage extends Component {
           @onInput={{fn (mut this.horizontalPanel3MinWidthPx)}}
           @required={{false}}
         />
+        <Args.Bool
+          @name='isHidden'
+          @optional={{true}}
+          @onInput={{fn (mut this.horizontalPanel3IsHidden)}}
+          @value={{this.horizontalPanel3IsHidden}}
+        />
       </:api>
       <:cssVars as |Css|>
         <Css.Basic
-          @name='boxel-panel-resize-handler-height'
+          @name='boxel-panel-resize-handle-height'
           @type='dimension'
           @defaultValue={{this.boxelPanelResizeHandleHeight.defaults}}
           @value={{this.boxelPanelResizeHandleHeight.value}}
           @onInput={{this.boxelPanelResizeHandleHeight.update}}
         />
         <Css.Basic
-          @name='boxel-panel-resize-handler-background-color'
+          @name='boxel-panel-resize-handle-background-color'
           @type='color'
           @defaultValue={{this.boxelPanelResizeHandleBackgroundColor.defaults}}
           @value={{this.boxelPanelResizeHandleBackgroundColor.value}}
           @onInput={{this.boxelPanelResizeHandleBackgroundColor.update}}
         />
         <Css.Basic
-          @name='boxel-panel-resize-handler-hover-background-color'
+          @name='boxel-panel-resize-handle-hover-background-color'
           @type='color'
           @defaultValue={{this.boxelPanelResizeHandleHoverBackgroundColor.defaults}}
           @value={{this.boxelPanelResizeHandleHoverBackgroundColor.value}}
@@ -149,9 +157,9 @@ export default class ResizablePanelUsage extends Component {
             @orientation='vertical'
             @reverseCollapse={{this.verticalReverseCollapse}}
             style={{cssVar
-              boxel-panel-resize-handler-width=this.boxelPanelResizeHandleWidth.value
-              boxel-panel-resize-handler-background-color=this.boxelPanelResizeHandleBackgroundColor.value
-              boxel-panel-resize-handler-hover-background-color=this.boxelPanelResizeHandleHoverBackgroundColor.value
+              boxel-panel-resize-handle-width=this.boxelPanelResizeHandleWidth.value
+              boxel-panel-resize-handle-background-color=this.boxelPanelResizeHandleBackgroundColor.value
+              boxel-panel-resize-handle-hover-background-color=this.boxelPanelResizeHandleHoverBackgroundColor.value
             }}
             as |ResizablePanel ResizeHandle|
           >
@@ -210,21 +218,21 @@ export default class ResizablePanelUsage extends Component {
       </:api>
       <:cssVars as |Css|>
         <Css.Basic
-          @name='boxel-panel-resize-handler-width'
+          @name='boxel-panel-resize-handle-width'
           @type='dimension'
           @defaultValue={{this.boxelPanelResizeHandleWidth.defaults}}
           @value={{this.boxelPanelResizeHandleWidth.value}}
           @onInput={{this.boxelPanelResizeHandleWidth.update}}
         />
         <Css.Basic
-          @name='boxel-panel-resize-handler-background-color'
+          @name='boxel-panel-resize-handle-background-color'
           @type='color'
           @defaultValue={{this.boxelPanelResizeHandleBackgroundColor.defaults}}
           @value={{this.boxelPanelResizeHandleBackgroundColor.value}}
           @onInput={{this.boxelPanelResizeHandleBackgroundColor.update}}
         />
         <Css.Basic
-          @name='boxel-panel-resize-handler-hover-background-color'
+          @name='boxel-panel-resize-handle-hover-background-color'
           @type='color'
           @defaultValue={{this.boxelPanelResizeHandleHoverBackgroundColor.defaults}}
           @value={{this.boxelPanelResizeHandleHoverBackgroundColor.value}}
