@@ -18,10 +18,11 @@ import {
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+import { serializeCard } from 'https://cardstack.com/base/card-api';
 import { CommandField } from 'https://cardstack.com/base/command';
 
 import { getSearchResults } from '../resources/search';
-import { serializeCard } from 'https://cardstack.com/base/card-api';
+
 import CardService from './card-service';
 
 const deserializeToQuery = (payload: SearchPayload) => {
