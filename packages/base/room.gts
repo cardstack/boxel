@@ -1,6 +1,7 @@
 import {
   contains,
   containsMany,
+  linksToMany,
   field,
   Component,
   primitive,
@@ -12,6 +13,7 @@ import StringField from './string';
 import DateTimeField from './datetime';
 import NumberField from './number';
 import MarkdownField from './markdown';
+import { SkillCard } from './skill-card';
 import Modifier from 'ember-modifier';
 import { type Schema } from '@cardstack/runtime-common/helpers/ai';
 import {
@@ -642,6 +644,8 @@ export class RoomField extends FieldDef {
       );
     },
   });
+
+  @field skills = linksToMany(SkillCard);
 
   @field joinedMembers = containsMany(RoomMemberField, {
     computeVia: function (this: RoomField) {

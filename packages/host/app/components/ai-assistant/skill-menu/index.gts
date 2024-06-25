@@ -1,4 +1,4 @@
-import { fn } from '@ember/helper';
+// import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
@@ -7,7 +7,7 @@ import { tracked } from '@glimmer/tracking';
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask } from 'ember-concurrency';
 
-import { TrackedArray, TrackedObject } from 'tracked-built-ins';
+import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import { AddButton } from '@cardstack/boxel-ui/components';
 import { cn, not } from '@cardstack/boxel-ui/helpers';
@@ -16,16 +16,12 @@ import { chooseCard, skillCardRef } from '@cardstack/runtime-common';
 
 import CardPill from '@cardstack/host/components/card-pill';
 
-import type { SkillCard } from 'https://cardstack.com/base/skill-card';
-
 interface Signature {
   Element: HTMLDivElement;
-  Args: {};
-}
-
-interface Skill {
-  card: SkillCard;
-  isActive: boolean;
+  Args: {
+    skills: SkillCard[];
+    attachSkill: (card: SkillCard) => void;
+  };
 }
 
 export default class AiAssistantSkillMenu extends Component<Signature> {
@@ -40,7 +36,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
           <span class='bot-head-icon' />
           {{this.activeSkills.length}}
           <span class='maybe-hidden skills-length'>of
-            {{this.skills.length}}
+            {{@skills.length}}
             Skills Active
           </span>
         </div>
@@ -49,15 +45,11 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         </div>
       </button>
       {{#if this.isExpanded}}
-        {{#if this.skills}}
+        {{#if @skills}}
           <ul class='skill-list'>
-            {{#each this.skills as |skill|}}
+            {{#each @skills as |skill|}}
               <li>
-                <CardPill
-                  @card={{skill.card}}
-                  @onToggle={{fn this.toggleSkill skill}}
-                  @isEnabled={{skill.isActive}}
-                />
+                <CardPill @card={{skill}} />
               </li>
             {{/each}}
           </ul>
@@ -67,8 +59,8 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
           @variant='pill'
           @iconWidth='15px'
           @iconHeight='15px'
-          {{on 'click' this.attachSkillCard}}
-          @disabled={{this.doAttachCard.isRunning}}
+          {{on 'click' this.attachSkill}}
+          @disabled={{this.doAttachSkillCard.isRunning}}
           data-test-choose-card-btn
         >
           Add Skill
@@ -183,7 +175,6 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
     </style>
   </template>
 
-  @tracked skills: TrackedArray<Skill> = new TrackedArray();
   @tracked isExpanded = false;
 
   @action toggleMenu() {
@@ -195,25 +186,21 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
   }
 
   private get activeSkills() {
-    return this.skills.filter((skill) => skill.isActive);
+    // return this.args.skills.filter((skill) => skill.isActive);
+    return this.args.skills;
   }
 
-  @action toggleSkill(skill: Skill) {
-    skill.isActive = !skill.isActive;
-  }
-
-  @action
-  private async attachSkillCard() {
-    let card = await this.doAttachCard.perform();
+  @action private async attachSkill() {
+    let card = await this.doAttachSkillCard.perform();
     if (card) {
-      this.skills.push(new TrackedObject({ card, isActive: true }));
+      this.args.attachSkill(card);
     }
   }
 
-  private doAttachCard = restartableTask(async () => {
+  private doAttachSkillCard = restartableTask(async () => {
     let selectedCards =
-      this.skills?.map((skill: Skill) => ({
-        not: { eq: { id: skill.card.id } },
+      this.args.skills?.map((card: SkillCard) => ({
+        not: { eq: { id: card.id } },
       })) ?? [];
     // catalog only displays skill cards that are not already selected
     let card: SkillCard | undefined = await chooseCard({

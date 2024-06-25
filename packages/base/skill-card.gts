@@ -1,5 +1,19 @@
-import { CardDef, Component, field, contains } from './card-api';
+// import BooleanField from 'boolean';
+import {
+  CardDef,
+  Component,
+  field,
+  // FieldDef,
+  contains,
+  // linksTo,
+} from './card-api';
 import TextAreaField from './text-area';
+
+// export class SkillField extends FieldDef {
+//   @field isActive = contains(BooleanField);
+//   @field card = linksTo(SkillCard);
+// }
+
 export class SkillCard extends CardDef {
   static displayName = 'Skill Card';
   @field instructions = contains(TextAreaField);

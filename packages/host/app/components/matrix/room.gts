@@ -18,6 +18,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
 import type { MessageField, RoomField } from 'https://cardstack.com/base/room';
+import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import AiAssistantCardPicker from '../ai-assistant/card-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
@@ -60,7 +61,11 @@ export default class Room extends Component<Signature> {
         {{else}}
           <NewSession @sendPrompt={{this.sendPrompt}} />
         {{/each}}
-        <AiAssistantSkillMenu class='skills' />
+        <AiAssistantSkillMenu
+          class='skills'
+          @skills={{@room.skills}}
+          @attachSkill={{this.attachSkill}}
+        />
       </AiAssistantConversation>
       <footer class='room-actions'>
         <div class='chat-input-area' data-test-chat-input-area>
@@ -307,6 +312,10 @@ export default class Room extends Component<Signature> {
 
   private isPendingMessage(message: MessageField) {
     return message.status === 'sending' || message.status === 'queued';
+  }
+
+  @action private attachSkill(skill: SkillCard) {
+    this.args.room.skills = [skill, ...this.args.room.skills];
   }
 }
 
