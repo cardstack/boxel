@@ -1,5 +1,6 @@
 import DateField from 'https://cardstack.com/base/date';
 import BooleanField from 'https://cardstack.com/base/boolean';
+import NumberField from 'https://cardstack.com/base/number';
 import {
   Component,
   CardDef,
@@ -14,21 +15,12 @@ import {
   BoxelSelect,
   BoxelInput,
 } from '@cardstack/boxel-ui/components';
-import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import { parse, format, isBefore, isAfter } from 'date-fns';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { parse, format, isBefore, isAfter } from 'date-fns';
 
 const dateFormat = `yyyy-MM-dd`;
-
-const sanitisedNumber = (inputText: string) => {
-  const sanitised = inputText
-    .replace(/ /g, '')
-    .replace(/,/g, '')
-    .replace(/%/g, '')
-    .replace(/RM/g, '');
-  return !isNaN(parseFloat(sanitised)) ? parseFloat(sanitised) : 0;
-};
 
 const nearestDecimal = (num: number, decimalPlaces: number) => {
   // https://stackoverflow.com/questions/11832914/how-to-round-to-at-most-2-decimal-places-if-necessary
@@ -57,7 +49,9 @@ const formatCurrency = (
     currentNumber = parseFloat(num);
   }
 
-  return formatter.format(currentNumber as number);
+  const formatNumber = Math.round(currentNumber as number);
+
+  return formatter.format(formatNumber);
 };
 
 const formatNumberWithSeparator = (
@@ -77,6 +71,22 @@ const formatNumberWithSeparator = (
 };
 
 class Isolated extends Component<typeof CampaignForm> {
+  get numberSent() {
+    let { model } = this.args;
+    const nearestRoundNumber = Math.round(model.number_sent || 0);
+    const formatNumber = nearestRoundNumber;
+    return formatNumberWithSeparator(formatNumber);
+  }
+
+  get expectedResponsePercentage() {
+    let { model } = this.args;
+    const formatNumber = nearestDecimal(
+      model.expected_response_percentage || 0,
+      2,
+    );
+    return formatNumberWithSeparator(formatNumber, true);
+  }
+
   <template>
     <div class='campaign-form-isolated'>
       <FieldContainer @label='Name' class='field'>
@@ -104,10 +114,10 @@ class Isolated extends Component<typeof CampaignForm> {
         <@fields.end_date />
       </FieldContainer>
       <FieldContainer @label='Num Sent in Campaign' class='field'>
-        {{formatNumberWithSeparator @model.number_sent}}
+        {{this.numberSent}}
       </FieldContainer>
       <FieldContainer @label='Expected Response (%)' class='field'>
-        {{formatNumberWithSeparator @model.expected_response_percentage true}}
+        {{this.expectedResponsePercentage}}
       </FieldContainer>
       <FieldContainer @label='Expected Revenue in Campaign' class='field'>
         {{formatCurrency @model.expected_revenue}}
@@ -136,39 +146,39 @@ class Embedded extends Component<typeof CampaignForm> {
 }
 
 class Edit extends Component<typeof CampaignForm> {
-  @tracked name = this.args.model.name;
-  @tracked selectedStatus = { name: this.args.model.status };
-  @tracked selectedActive = this.args.model.active;
-  @tracked selectedType = { name: this.args.model.type };
-  @tracked description = this.args.model.description;
-  @tracked startDateString = this.args.model.start_date
-    ? format(this.args.model.start_date, dateFormat)
-    : null;
-  @tracked endDateString = this.args.model.end_date
-    ? format(this.args.model.end_date, dateFormat)
-    : null;
-  @tracked numberSentInputValue = formatNumberWithSeparator(
-    this.args.model.number_sent,
-  );
-  @tracked expectedResponseInputValue = formatNumberWithSeparator(
-    this.args.model.expected_response_percentage,
-    true,
-  );
-  @tracked expectedRevenueInputValue = formatCurrency(
-    this.args.model.expected_revenue,
-  );
-  @tracked budgetedCostInputValue = formatCurrency(
-    this.args.model.budgeted_cost,
-  );
-  @tracked actualCostInputValue = formatCurrency(this.args.model.actual_cost);
+  get selectedStatus() {
+    return {
+      name: this.args.model.status,
+    };
+  }
+
+  get selectedType() {
+    return {
+      name: this.args.model.type,
+    };
+  }
+
+  get selectedActive() {
+    return this.args.model.active;
+  }
+
+  get selectedStartDate() {
+    return this.args.model.start_date
+      ? format(this.args.model.start_date, dateFormat)
+      : null;
+  }
+
+  get selectedEndDate() {
+    return this.args.model.end_date
+      ? format(this.args.model.end_date, dateFormat)
+      : null;
+  }
 
   @action updateName(inputText: string) {
-    this.name = inputText;
     this.args.model.name = inputText;
   }
 
   @action updateStatus(type: { name: string }) {
-    this.selectedStatus = type;
     this.args.model.status = type.name;
   }
 
@@ -177,12 +187,10 @@ class Edit extends Component<typeof CampaignForm> {
   }
 
   @action updateType(type: { name: string }) {
-    this.selectedType = type;
     this.args.model.type = type.name;
   }
 
   @action updateDescription(inputText: string) {
-    this.description = inputText;
     this.args.model.description = inputText;
   }
 
@@ -190,10 +198,8 @@ class Edit extends Component<typeof CampaignForm> {
     // If the end date is set and the new start date is after the end date, update the end date
     if (this.args.model.end_date && isAfter(date, this.args.model.end_date)) {
       this.args.model.end_date = date;
-      this.endDateString = format(date, dateFormat);
     }
     this.args.model.start_date = date;
-    this.startDateString = format(date, dateFormat);
   }
 
   @action updateEndDate(date: Date) {
@@ -203,81 +209,16 @@ class Edit extends Component<typeof CampaignForm> {
       isBefore(date, this.args.model.start_date)
     ) {
       this.args.model.start_date = date;
-      this.startDateString = format(date, dateFormat);
     }
     this.args.model.end_date = date;
-    this.endDateString = format(date, dateFormat);
   }
 
   @action parseDateInput(field: string, date: string) {
+    const newDate = parse(date, dateFormat, new Date());
     if (field === 'start_date') {
-      return this.updateStartDate(parse(date, dateFormat, new Date()));
+      return this.updateStartDate(newDate);
     }
-    return this.updateEndDate(parse(date, dateFormat, new Date()));
-  }
-
-  validateOnKeyPress = (event: KeyboardEvent) => {
-    const eventKey = event.key;
-    // Allow only numeric characters (0-9) and decimal point (.)
-    if (
-      !/^\d+$/.test(eventKey) &&
-      eventKey !== '.' &&
-      eventKey !== 'Backspace' &&
-      eventKey !== 'Delete' &&
-      eventKey !== 'ArrowLeft' &&
-      eventKey !== 'ArrowRight' &&
-      eventKey !== 'ArrowUp' &&
-      eventKey !== 'ArrowDown' &&
-      eventKey !== 'Tab'
-    ) {
-      event.preventDefault();
-    }
-  };
-
-  @action updateCustomNumberInput(
-    fieldName:
-      | 'numberSentInputValue'
-      | 'expectedResponseInputValue'
-      | 'expectedRevenueInputValue'
-      | 'budgetedCostInputValue'
-      | 'actualCostInputValue',
-    inputText: string,
-  ) {
-    this[fieldName] = inputText;
-  }
-
-  @action onBlurNumberSent() {
-    const currentNumber = sanitisedNumber(this.numberSentInputValue);
-    const nearestRoundNumber = Math.round(currentNumber);
-
-    const formatNumber = nearestRoundNumber;
-    this.numberSentInputValue = formatNumberWithSeparator(formatNumber);
-    this.args.model.number_sent = formatNumber.toString();
-  }
-
-  @action onBlurExpectedResponse() {
-    const currentNumber = sanitisedNumber(this.expectedResponseInputValue);
-    const formatNumber = nearestDecimal(currentNumber, 2);
-    this.expectedResponseInputValue = formatNumberWithSeparator(
-      formatNumber,
-      true,
-    );
-    this.args.model.expected_response_percentage = formatNumber.toString();
-  }
-
-  @action onBlurCurrencyField(
-    inputText: string,
-    inputValueName:
-      | 'expectedRevenueInputValue'
-      | 'budgetedCostInputValue'
-      | 'actualCostInputValue',
-    fieldName: 'expected_revenue' | 'budgeted_cost' | 'actual_cost',
-  ) {
-    const currentNumber = sanitisedNumber(inputText);
-    const formatNumber = Math.round(currentNumber);
-    const numberWithCurrency = formatCurrency(formatNumber);
-    this[inputValueName] = numberWithCurrency;
-    this.args.model[fieldName] = formatNumber.toString();
+    return this.updateEndDate(newDate);
   }
 
   private campaignStatuses = [
@@ -310,7 +251,7 @@ class Edit extends Component<typeof CampaignForm> {
         class='field'
       >
         <BoxelInput
-          @value={{this.name}}
+          @value={{this.args.model.name}}
           @onInput={{this.updateName}}
           maxlength='255'
         />
@@ -330,8 +271,8 @@ class Edit extends Component<typeof CampaignForm> {
       <FieldContainer @label='Active' data-test-field='active' class='field'>
         <BoxelInput
           @type='checkbox'
-          @onFocus={{this.updateActive}}
           checked={{this.selectedActive}}
+          {{on 'click' this.updateActive}}
           class='boxel-input-campaign-active'
         />
       </FieldContainer>
@@ -363,7 +304,7 @@ class Edit extends Component<typeof CampaignForm> {
       >
         <BoxelInput
           @type='textarea'
-          @value={{this.description}}
+          @value={{this.args.model.description}}
           @onInput={{this.updateDescription}}
         />
       </FieldContainer>
@@ -375,7 +316,7 @@ class Edit extends Component<typeof CampaignForm> {
       >
         <BoxelInput
           type='date'
-          @value={{this.startDateString}}
+          @value={{this.selectedStartDate}}
           @onInput={{fn this.parseDateInput 'start_date'}}
           @max='9999-12-31'
         />
@@ -388,7 +329,7 @@ class Edit extends Component<typeof CampaignForm> {
       >
         <BoxelInput
           type='date'
-          @value={{this.endDateString}}
+          @value={{this.selectedEndDate}}
           @onInput={{fn this.parseDateInput 'end_date'}}
           @max='9999-12-31'
         />
@@ -399,12 +340,7 @@ class Edit extends Component<typeof CampaignForm> {
         @tag='label'
         class='field'
       >
-        <BoxelInput
-          @value={{this.numberSentInputValue}}
-          @onKeyPress={{this.validateOnKeyPress}}
-          @onInput={{fn this.updateCustomNumberInput 'numberSentInputValue'}}
-          @onBlur={{this.onBlurNumberSent}}
-        />
+        <@fields.number_sent />
       </FieldContainer>
       <FieldContainer
         @label='Expected Response (%)'
@@ -412,72 +348,31 @@ class Edit extends Component<typeof CampaignForm> {
         @tag='label'
         class='field'
       >
-        <BoxelInput
-          @value={{this.expectedResponseInputValue}}
-          @onKeyPress={{this.validateOnKeyPress}}
-          @onInput={{fn
-            this.updateCustomNumberInput
-            'expectedResponseInputValue'
-          }}
-          @onBlur={{this.onBlurExpectedResponse}}
-        />
+        <@fields.expected_response_percentage />
       </FieldContainer>
       <FieldContainer
-        @label='Expected Revenue in Campaign'
+        @label='Expected Revenue in Campaign (RM)'
         data-test-field='expected_revenue'
         @tag='label'
         class='field'
       >
-        <BoxelInput
-          @value={{this.expectedRevenueInputValue}}
-          @onKeyPress={{this.validateOnKeyPress}}
-          @onInput={{fn
-            this.updateCustomNumberInput
-            'expectedRevenueInputValue'
-          }}
-          @onBlur={{fn
-            this.onBlurCurrencyField
-            this.expectedRevenueInputValue
-            'expectedRevenueInputValue'
-            'expected_revenue'
-          }}
-        />
+        <@fields.expected_revenue />
       </FieldContainer>
       <FieldContainer
-        @label='Budgeted Cost in Campaign'
+        @label='Budgeted Cost in Campaign (RM)'
         data-test-field='budgeted_cost'
         @tag='label'
         class='field'
       >
-        <BoxelInput
-          @value={{this.budgetedCostInputValue}}
-          @onKeyPress={{this.validateOnKeyPress}}
-          @onInput={{fn this.updateCustomNumberInput 'budgetedCostInputValue'}}
-          @onBlur={{fn
-            this.onBlurCurrencyField
-            this.budgetedCostInputValue
-            'budgetedCostInputValue'
-            'budgeted_cost'
-          }}
-        />
+        <@fields.budgeted_cost />
       </FieldContainer>
       <FieldContainer
-        @label='Actual Cost in Campaign'
+        @label='Actual Cost in Campaign (RM)'
         data-test-field='actual_cost'
         @tag='label'
         class='field'
       >
-        <BoxelInput
-          @value={{this.actualCostInputValue}}
-          @onKeyPress={{this.validateOnKeyPress}}
-          @onInput={{fn this.updateCustomNumberInput 'actualCostInputValue'}}
-          @onBlur={{fn
-            this.onBlurCurrencyField
-            this.actualCostInputValue
-            'actualCostInputValue'
-            'actual_cost'
-          }}
-        />
+        <@fields.actual_cost />
       </FieldContainer>
     </div>
     <style>
@@ -503,11 +398,11 @@ export class CampaignForm extends CardDef {
   @field description = contains(StringField);
   @field start_date = contains(DateField);
   @field end_date = contains(DateField);
-  @field number_sent = contains(StringField);
-  @field expected_response_percentage = contains(StringField);
-  @field expected_revenue = contains(StringField);
-  @field budgeted_cost = contains(StringField);
-  @field actual_cost = contains(StringField);
+  @field number_sent = contains(NumberField);
+  @field expected_response_percentage = contains(NumberField);
+  @field expected_revenue = contains(NumberField);
+  @field budgeted_cost = contains(NumberField);
+  @field actual_cost = contains(NumberField);
 
   static displayName = 'CampaignForm';
 
