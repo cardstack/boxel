@@ -6,7 +6,7 @@ import { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 
-import { task, restartableTask, timeout } from 'ember-concurrency';
+import { task, restartableTask, rawTimeout } from 'ember-concurrency';
 
 import {
   Permissions,
@@ -130,7 +130,7 @@ class RealmResource {
       0,
     );
 
-    await timeout(refreshMs);
+    await rawTimeout(refreshMs);
     await this.login();
   });
 }
