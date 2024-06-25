@@ -10,7 +10,7 @@ import {
 import TextAreaField from './text-area';
 
 export class SkillCard extends CardDef {
-  static displayName = 'Skill Card';
+  static displayName = 'Skill';
   @field instructions = contains(TextAreaField);
   static embedded = class Embedded extends Component<typeof this> {
     <template>

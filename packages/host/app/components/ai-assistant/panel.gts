@@ -51,8 +51,8 @@ export const aiBotUserId = `@${aiBotUsername}:${matrixServerName}`;
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    onClose: () => void;
-    resizeHandle: ResizeHandle;
+    onClose?: () => void;
+    resizeHandle?: ResizeHandle;
   };
 }
 
@@ -89,7 +89,9 @@ export default class AiAssistantPanel extends Component<Signature> {
         data-test-ai-assistant-panel
         ...attributes
       >
-        <@resizeHandle />
+        {{#if @resizeHandle}}
+          <@resizeHandle />
+        {{/if}}
         <header class='panel-header'>
           {{#if this.isDisplayingRoomTitle}}
             <div class='panel-title-group'>
@@ -104,16 +106,18 @@ export default class AiAssistantPanel extends Component<Signature> {
               </h3>
             </div>
           {{/if}}
-          <IconButton
-            class='close-ai-panel'
-            @variant='primary'
-            @icon={{IconX}}
-            @width='12px'
-            @height='12px'
-            {{on 'click' @onClose}}
-            aria-label='Close AI Assistant'
-            data-test-close-ai-assistant
-          />
+          {{#if @onClose}}
+            <IconButton
+              class='close-ai-panel'
+              @variant='primary'
+              @icon={{IconX}}
+              @width='12px'
+              @height='12px'
+              {{on 'click' @onClose}}
+              aria-label='Close AI Assistant'
+              data-test-close-ai-assistant
+            />
+          {{/if}}
           <div class='header-buttons' {{popoverVelcro.hook}}>
             <Button
               class='new-session-button'

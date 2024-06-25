@@ -7,17 +7,17 @@ import { tracked } from '@glimmer/tracking';
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask } from 'ember-concurrency';
 
-import type {
-  SkillField,
-  SkillCard,
-} from 'https://cardstack.com/base/skill-card';
-
 import { AddButton } from '@cardstack/boxel-ui/components';
 import { cn, not } from '@cardstack/boxel-ui/helpers';
 
 import { chooseCard, skillCardRef } from '@cardstack/runtime-common';
 
 import CardPill from '@cardstack/host/components/card-pill';
+
+import type {
+  SkillField,
+  SkillCard,
+} from 'https://cardstack.com/base/skill-card';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -34,7 +34,11 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
       {{onClickOutside this.closeMenu exceptSelector='.card-catalog-modal'}}
       ...attributes
     >
-      <button {{on 'click' this.toggleMenu}} class='menu-toggle'>
+      <button
+        {{on 'click' this.toggleMenu}}
+        class='menu-toggle'
+        data-test-skill-menu-toggle
+      >
         <div class='menu-title'>
           <span class='bot-head-icon' />
           {{this.activeSkills.length}}
@@ -68,7 +72,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
           @iconHeight='15px'
           {{on 'click' this.attachSkill}}
           @disabled={{this.doAttachSkillCard.isRunning}}
-          data-test-choose-card-btn
+          data-test-add-skill-button
         >
           Add Skill
         </AddButton>
