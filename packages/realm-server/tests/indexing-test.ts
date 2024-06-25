@@ -250,7 +250,6 @@ module('indexing', function (hooks) {
 
   test('can store card pre-rendered html in the index', async function (assert) {
     let entry = await realm.searchIndex.instance(new URL(`${testRealm}mango`));
-    console.log(entry);
     if (entry?.type === 'instance') {
       assert.strictEqual(
         trimCardContainer(stripScopedCSSAttributes(entry!.isolatedHtml!)),
