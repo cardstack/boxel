@@ -6,15 +6,24 @@ import { TrackedArray } from 'tracked-built-ins';
 
 import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 
-import type { SkillCard } from 'https://cardstack.com/base/skill-card';
+import type {
+  SkillCard,
+  SkillField,
+} from 'https://cardstack.com/base/skill-card';
 
 import AiAssistantSkillMenu from './index';
 
 export default class AiAssistantSkillMenuUsage extends Component {
-  skills: TrackedArray<SkillCard> = new TrackedArray();
+  skills: TrackedArray<SkillField> = new TrackedArray();
 
   @action attachSkill(card: SkillCard) {
-    this.skills.push(card);
+    this.skills.push({
+      card,
+      isActive: true,
+      toggleActive: function () {
+        this.isActive = !this.isActive;
+      },
+    } as SkillField);
   }
 
   <template>

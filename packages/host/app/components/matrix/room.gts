@@ -314,8 +314,8 @@ export default class Room extends Component<Signature> {
     return message.status === 'sending' || message.status === 'queued';
   }
 
-  @action private attachSkill(skill: SkillCard) {
-    this.args.room.skills = [skill, ...this.args.room.skills];
+  @action private attachSkill(card: SkillCard) {
+    this.args.room.addSkill(card);
   }
 }
 

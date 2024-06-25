@@ -1,4 +1,4 @@
-// import { fn } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
@@ -7,7 +7,10 @@ import { tracked } from '@glimmer/tracking';
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask } from 'ember-concurrency';
 
-import type { SkillCard } from 'https://cardstack.com/base/skill-card';
+import type {
+  SkillField,
+  SkillCard,
+} from 'https://cardstack.com/base/skill-card';
 
 import { AddButton } from '@cardstack/boxel-ui/components';
 import { cn, not } from '@cardstack/boxel-ui/helpers';
@@ -19,8 +22,8 @@ import CardPill from '@cardstack/host/components/card-pill';
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    skills: SkillCard[];
-    attachSkill: (card: SkillCard) => void;
+    skills: SkillField[];
+    attachSkill: (skill: SkillCard) => void;
   };
 }
 
@@ -49,7 +52,11 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
           <ul class='skill-list'>
             {{#each @skills as |skill|}}
               <li>
-                <CardPill @card={{skill}} />
+                <CardPill
+                  @card={{skill.card}}
+                  @onToggle={{fn this.toggleSkill skill}}
+                  @isEnabled={{skill.isActive}}
+                />
               </li>
             {{/each}}
           </ul>
@@ -186,26 +193,28 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
   }
 
   private get activeSkills() {
-    // return this.args.skills.filter((skill) => skill.isActive);
-    return this.args.skills;
+    return this.args.skills.filter((skill) => skill.isActive);
   }
 
-  @action private async attachSkill() {
-    let card = await this.doAttachSkillCard.perform();
-    if (card) {
-      this.args.attachSkill(card);
-    }
+  @action private attachSkill() {
+    this.doAttachSkillCard.perform();
   }
 
   private doAttachSkillCard = restartableTask(async () => {
     let selectedCards =
-      this.args.skills?.map((card: SkillCard) => ({
-        not: { eq: { id: card.id } },
+      this.args.skills?.map((skill: SkillField) => ({
+        not: { eq: { id: skill.card.id } },
       })) ?? [];
     // catalog only displays skill cards that are not already selected
     let card: SkillCard | undefined = await chooseCard({
       filter: { every: [{ type: skillCardRef }, ...selectedCards] },
     });
-    return card;
+    if (card) {
+      this.args.attachSkill(card);
+    }
   });
+
+  @action private toggleSkill(skill: SkillField) {
+    skill.toggleActive();
+  }
 }

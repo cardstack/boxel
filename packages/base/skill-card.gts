@@ -1,18 +1,13 @@
-// import BooleanField from 'boolean';
+import BooleanField from './boolean';
 import {
   CardDef,
   Component,
   field,
-  // FieldDef,
+  FieldDef,
   contains,
-  // linksTo,
+  linksTo,
 } from './card-api';
 import TextAreaField from './text-area';
-
-// export class SkillField extends FieldDef {
-//   @field isActive = contains(BooleanField);
-//   @field card = linksTo(SkillCard);
-// }
 
 export class SkillCard extends CardDef {
   static displayName = 'Skill Card';
@@ -22,4 +17,13 @@ export class SkillCard extends CardDef {
       <@fields.title />
     </template>
   };
+}
+
+export class SkillField extends FieldDef {
+  @field isActive = contains(BooleanField);
+  @field card = linksTo(SkillCard);
+
+  toggleActive() {
+    this.isActive = !this.isActive;
+  }
 }
