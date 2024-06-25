@@ -10,23 +10,25 @@ import {
   baseRealm,
   logger,
   baseCardRef,
-  LooseCardResource,
   isCardResource,
   internalKeyFor,
   trimExecutableExtension,
   hasExecutableExtension,
   SupportedMimeType,
-  Indexer,
-  Batch,
   loadCard,
   identifyCard,
   moduleFrom,
+  isCardDef,
+  type Indexer,
+  type Batch,
+  type LooseCardResource,
   type InstanceEntry,
   type ErrorEntry,
   type CodeRef,
   type RealmInfo,
   type IndexResults,
   type SingleCardDocument,
+  type CardResource,
   type Relationship,
   type TextFileRef,
 } from '@cardstack/runtime-common';
@@ -46,7 +48,7 @@ import {
   type IdentityContext as IdentityContextType,
   LoaderType,
 } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import LoaderService from '../services/loader-service';
 import { type RenderCard } from '../services/render-service';
@@ -55,9 +57,19 @@ import { getScopedCss } from './scoped-css';
 
 const log = logger('current-run');
 
+interface CardType {
+  refURL: string;
+  codeRef: CodeRef;
+}
 type TypesWithErrors =
-  | { type: 'types'; types: string[] }
-  | { type: 'error'; error: SerializedError };
+  | {
+      type: 'types';
+      types: CardType[];
+    }
+  | {
+      type: 'error';
+      error: SerializedError;
+    };
 
 export class CurrentRun {
   #typesCache = new WeakMap<typeof CardDef, Promise<TypesWithErrors>>();
@@ -364,7 +376,7 @@ export class CurrentRun {
     let searchData: Record<string, any> | undefined;
     let cardType: typeof CardDef | undefined;
     let isolatedHtml: string | undefined;
-    let embeddedHtml: string | undefined;
+    let adjustedResource: CardResource | undefined;
     try {
       let api = await this.loaderService.loader.import<typeof CardAPI>(
         `${baseRealm.url}card-api`,
@@ -378,18 +390,21 @@ export class CurrentRun {
         this.#realmInfo = (await realmInfoResponse.json())?.data?.attributes;
       }
 
-      let res = { ...resource, ...{ id: instanceURL.href } };
+      adjustedResource = {
+        ...resource,
+        ...{ id: instanceURL.href, type: 'card' },
+      };
       //Realm info may be used by a card to render field values.
       //Example: catalog-entry-card
-      merge(res, {
+      merge(adjustedResource, {
         meta: {
           realmInfo: this.#realmInfo,
           realmURL: this.realmURL,
         },
       });
       let card = await api.createFromSerialized<typeof CardDef>(
-        res,
-        { data: res },
+        adjustedResource,
+        { data: adjustedResource },
         new URL(fileURL),
         this.loaderService.loader as unknown as LoaderType,
         {
@@ -399,13 +414,6 @@ export class CurrentRun {
       isolatedHtml = await this.#renderCard({
         card,
         format: 'isolated',
-        visit: this.visitFile.bind(this),
-        identityContext,
-        realmPath: this.#realmPaths,
-      });
-      embeddedHtml = await this.#renderCard({
-        card,
-        format: 'embedded',
         visit: this.visitFile.bind(this),
         identityContext,
         realmPath: this.#realmPaths,
@@ -451,6 +459,14 @@ export class CurrentRun {
     if (!uncaughtError && cardType) {
       typesMaybeError = await this.getTypes(cardType);
     }
+    let embeddedHtml: Record<string, string> | undefined;
+    if (adjustedResource && typesMaybeError?.type === 'types') {
+      embeddedHtml = await this.buildEmbeddedHtml(
+        adjustedResource,
+        typesMaybeError.types,
+        identityContext,
+      );
+    }
     if (searchData && doc && typesMaybeError?.type === 'types') {
       await this.updateEntry(instanceURL, {
         type: 'instance',
@@ -460,7 +476,7 @@ export class CurrentRun {
         isolatedHtml,
         embeddedHtml,
         lastModified,
-        types: typesMaybeError.types,
+        types: typesMaybeError.types.map(({ refURL }) => refURL),
         deps: new Set([
           moduleURL,
           ...(await this.loaderService.loader.getConsumedModules(moduleURL)),
@@ -497,6 +513,45 @@ export class CurrentRun {
     deferred.fulfill();
   }
 
+  private async buildEmbeddedHtml(
+    resource: CardResource,
+    types: CardType[],
+    identityContext: IdentityContextType,
+  ): Promise<{ [refURL: string]: string }> {
+    let api = await this.loaderService.loader.import<typeof CardAPI>(
+      `${baseRealm.url}card-api`,
+    );
+    let result: { [refURL: string]: string } = {};
+    for (let { codeRef, refURL } of types) {
+      // we need to remove ourselves from the identity context so that we don't
+      // revive a cached instance with the original card class
+      let clonedIdentities = new Map([...identityContext.identities]);
+      clonedIdentities.delete(resource.id);
+      let modifiedContext = { identities: clonedIdentities };
+
+      let resourceForType = merge(resource, { meta: { adoptsFrom: codeRef } });
+      let card = await api.createFromSerialized<typeof CardDef>(
+        resourceForType,
+        { data: resourceForType },
+        new URL(resource.id),
+        this.loaderService.loader as unknown as LoaderType,
+        {
+          identityContext: modifiedContext,
+        },
+      );
+      let embeddedHtml = await this.#renderCard({
+        card,
+        format: 'embedded',
+        visit: this.visitFile.bind(this),
+        identityContext: modifiedContext,
+        realmPath: this.#realmPaths,
+      });
+      let ref = refURL === types[0].refURL ? 'default' : refURL;
+      result[ref] = embeddedHtml;
+    }
+    return result;
+  }
+
   private async updateEntry(
     instanceURL: URL,
     entry: InstanceEntry | ErrorEntry,
@@ -520,14 +575,19 @@ export class CurrentRun {
     }
     let deferred = new Deferred<TypesWithErrors>();
     this.#typesCache.set(card, deferred.promise);
-    let types: string[] = [];
+    let types: CardType[] = [];
     let fullRef: CodeRef = ref;
     while (fullRef) {
-      let loadedCard, loadedCardRef;
+      let loadedCard: typeof CardAPI.CardDef,
+        loadedCardRef: CodeRef | undefined;
       try {
-        loadedCard = await loadCard(fullRef, {
+        let maybeCard = await loadCard(fullRef, {
           loader: this.loaderService.loader,
         });
+        if (!isCardDef(maybeCard)) {
+          throw new Error(`The definition at ${fullRef} is not a CardDef`);
+        }
+        loadedCard = maybeCard;
         loadedCardRef = identifyCard(loadedCard);
         if (!loadedCardRef) {
           throw new Error(`could not identify card ${loadedCard.name}`);
@@ -536,7 +596,10 @@ export class CurrentRun {
         return { type: 'error', error: serializableError(error) };
       }
 
-      types.push(internalKeyFor(loadedCardRef, undefined));
+      types.push({
+        refURL: internalKeyFor(loadedCardRef, undefined),
+        codeRef: loadedCardRef,
+      });
       if (!isEqual(loadedCardRef, baseCardRef)) {
         fullRef = {
           type: 'ancestorOf',
