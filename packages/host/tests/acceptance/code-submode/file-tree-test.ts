@@ -807,7 +807,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       ],
       submode: 'code',
       fileView: 'browser',
-      codePath: `http://localhost:4201/base/cards-grid.gts`,
+      codePath: `https://cardstack.com/base/cards-grid.gts`,
     });
 
     await waitForCodeEditor();

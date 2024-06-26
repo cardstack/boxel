@@ -1,4 +1,3 @@
-import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -8,9 +7,9 @@ import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 
 import { type RealmInfo, RealmPaths } from '@cardstack/runtime-common';
 
-import RealmIcon from './operator-mode/realm-icon';
+import RealmService from '../services/realm';
 
-import type RealmInfoService from '../services/realm-info-service';
+import RealmIcon from './operator-mode/realm-icon';
 
 export interface RealmDropdownItem extends RealmInfo {
   path: string;
@@ -31,7 +30,7 @@ export default class RealmDropdown extends Component<Signature> {
   <template>
     <BoxelDropdown
       @contentClass={{@contentClass}}
-      data-test-load-realms-loaded={{this.loaded}}
+      data-test-load-realms-loaded='true'
     >
       <:trigger as |bindings|>
         <Button
@@ -107,30 +106,18 @@ export default class RealmDropdown extends Component<Signature> {
   </template>
 
   defaultRealmIcon = '/default-realm-icon.png';
-  @service declare realmInfoService: RealmInfoService;
-
-  constructor(owner: Owner, args: Signature['Args']) {
-    super(owner, args);
-    this.realmInfoService.fetchAllKnownRealmInfos.perform();
-  }
-
-  get loaded() {
-    return this.realmInfoService.fetchAllKnownRealmInfos.isIdle;
-  }
+  @service declare realm: RealmService;
 
   get realms(): RealmDropdownItem[] {
     let items: RealmDropdownItem[] | [] = [];
-    for (let [
-      path,
-      realmInfo,
-    ] of this.realmInfoService.cachedRealmInfos.entries()) {
-      if (!realmInfo.canWrite) {
+    for (let realmMeta of this.realm.allRealmsMeta) {
+      if (!realmMeta.canWrite) {
         continue;
       }
       let item: RealmDropdownItem = {
-        path,
-        ...realmInfo,
-        iconURL: realmInfo.iconURL ?? this.defaultRealmIcon,
+        path: realmMeta.info.url,
+        ...realmMeta.info,
+        iconURL: realmMeta.info.iconURL ?? this.defaultRealmIcon,
       };
       items = [item, ...items];
     }
@@ -162,7 +149,7 @@ export default class RealmDropdown extends Component<Signature> {
     }
 
     return this.realms.find(
-      (realm) => realm.path === this.realmInfoService.userDefaultRealm.path,
+      (realm) => realm.path === this.realm.userDefaultRealm.path,
     );
   }
 }

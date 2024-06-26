@@ -12,6 +12,7 @@ import { RecentFile } from '@cardstack/host/services/recent-files-service';
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RecentFilesService from '../../services/recent-files-service';
+import WithLoadedRealm from '../with-loaded-realm';
 
 interface Args {
   Args: {};
@@ -73,18 +74,17 @@ class File extends Component<FileArgs> {
   <template>
     {{#unless this.isSelected}}
       {{! template-lint-disable require-presentational-children }}
-      <li
-        class='recent-file'
-        data-test-recent-file={{this.fullUrl.href}}
-        role='button'
-        {{on 'click' this.openFile}}
-      >
-        <RealmIcon
-          @realmInfo={{this.realm.info @recentFile.realmURL.href}}
-          class='icon'
-        />
-        {{@recentFile.filePath}}
-      </li>
+      <WithLoadedRealm @realmURL={{@recentFile.realmURL.href}} as |realm|>
+        <li
+          class='recent-file'
+          data-test-recent-file={{this.fullUrl.href}}
+          role='button'
+          {{on 'click' this.openFile}}
+        >
+          <RealmIcon @realmInfo={{realm.info}} class='icon' />
+          {{@recentFile.filePath}}
+        </li>
+      </WithLoadedRealm>
     {{/unless}}
     <style>
       .recent-file {

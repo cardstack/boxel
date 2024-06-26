@@ -6,6 +6,8 @@ import { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 
+import { cached } from '@glimmer/tracking';
+
 import { task, restartableTask, rawTimeout } from 'ember-concurrency';
 
 import {
@@ -14,14 +16,24 @@ import {
   JWTPayload,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common/constants';
+
+import ENV from '@cardstack/host/config/environment';
 
 import type LoaderService from './loader-service';
 import type MatrixService from './matrix-service';
+
+const { ownRealmURL } = ENV;
 
 interface Meta {
   info: RealmInfo;
   isPublic: boolean;
 }
+
+type AuthStatus =
+  | { type: 'failed' }
+  | { type: 'logged-in'; token: string; claims: JWTPayload }
+  | { type: 'uninitialized' };
 
 class RealmResource {
   @service private declare matrixService: MatrixService;
@@ -30,7 +42,7 @@ class RealmResource {
   @tracked meta: Meta | undefined;
 
   @tracked
-  private auth: { token: string; claims: JWTPayload } | undefined;
+  private auth: AuthStatus = { type: 'uninitialized' };
 
   constructor(
     private realmURL: string,
@@ -40,21 +52,43 @@ class RealmResource {
   }
 
   get token(): string | undefined {
-    return this.auth?.token;
+    if (this.auth.type === 'logged-in') {
+      return this.auth.token;
+    }
+    return undefined;
   }
 
   set token(value: string | undefined) {
     if (value) {
-      this.auth = { token: value, claims: claimsFromRawToken(value) };
+      this.auth = {
+        type: 'logged-in',
+        token: value,
+        claims: claimsFromRawToken(value),
+      };
     } else {
-      this.auth = undefined;
+      this.auth = { type: 'uninitialized' };
     }
     SessionStorage.persist(this.realmURL, value);
     this.tokenRefresher.perform();
   }
 
+  get info() {
+    return this.meta?.info;
+  }
+
+  setAuthFailed() {
+    this.auth = {
+      type: 'failed',
+    };
+    SessionStorage.persist(this.realmURL, undefined);
+    this.tokenRefresher.perform();
+  }
+
   get claims(): JWTPayload | undefined {
-    return this.auth?.claims;
+    if (this.auth.type === 'logged-in') {
+      return this.auth.claims;
+    }
+    return undefined;
   }
 
   get canRead() {
@@ -82,40 +116,66 @@ class RealmResource {
         new URL(this.realmURL),
       );
       this.token = token;
+    } catch (e) {
+      console.error('Failed to login to realm', e);
+      this.setAuthFailed();
     } finally {
       this.loggingIn = undefined;
     }
   });
 
   logout(): void {
-    this.auth = undefined;
+    this.token = undefined;
   }
 
+  private fetchingMeta: Promise<void> | undefined;
+
   async fetchMeta(): Promise<void> {
-    let headers: Record<string, string> = {
-      Accept: SupportedMimeType.RealmInfo,
-    };
-    let response = await this.loaderService.loader.fetch(
-      `${this.realmURL}_info`,
-      {
-        headers,
-      },
-    );
-    if (response.status !== 200) {
-      throw new Error(
-        `Failed to fetch realm info for ${this.realmURL}: ${response.status}`,
-      );
+    if (!this.fetchingMeta) {
+      this.fetchingMeta = this.fetchMetaTask.perform();
     }
-    let json = await response.json();
-    let info: RealmInfo = {
-      url: json.data.id,
-      ...json.data.attributes,
-    };
-    let isPublic = Boolean(
-      response.headers.get('x-boxel-realm-public-readable'),
-    );
-    this.meta = { info, isPublic };
+    await this.fetchingMeta;
   }
+
+  private fetchMetaTask = task(async () => {
+    try {
+      if (this.auth.type === 'uninitialized') {
+        if (this.realmURL === baseRealm.url) {
+          this.setAuthFailed();
+        } else {
+          await this.login();
+        }
+      }
+      if (this.meta) {
+        return;
+      }
+      let headers: Record<string, string> = {
+        Accept: SupportedMimeType.RealmInfo,
+      };
+      let response = await this.loaderService.loader.fetch(
+        `${this.realmURL}_info`,
+        {
+          headers,
+        },
+      );
+      if (response.status !== 200) {
+        throw new Error(
+          `Failed to fetch realm info for ${this.realmURL}: ${response.status}`,
+        );
+      }
+      let json = await response.json();
+      let info: RealmInfo = {
+        url: json.data.id,
+        ...json.data.attributes,
+      };
+      let isPublic = Boolean(
+        response.headers.get('x-boxel-realm-public-readable'),
+      );
+      this.meta = { info, isPublic };
+    } finally {
+      this.fetchingMeta = undefined;
+    }
+  });
 
   private tokenRefresher = restartableTask(async () => {
     if (!this.claims) {
@@ -135,6 +195,10 @@ class RealmResource {
   });
 }
 
+// private loginAttempter = restartableTask(async () => {
+//   // if
+// });
+
 class RealmNotReadyError extends Error {
   code = 'RealmNotReady';
 }
@@ -153,13 +217,7 @@ export default class RealmService extends Service {
   }
 
   info = (url: string): RealmInfo => {
-    let info = this.requireRealmMeta(url).meta.info;
-    if (!info) {
-      throw new RealmNotReadyError(
-        `Haven't fetched from realm at ${url} yet, so realm info is not available`,
-      );
-    }
-    return info;
+    return this.requireRealmMeta(url).meta.info;
   };
 
   canRead = (url: string): boolean => {
@@ -181,6 +239,44 @@ export default class RealmService extends Service {
       },
     };
   };
+
+  meta = (url: string) => {
+    let self = this;
+    return {
+      get info() {
+        return self.info(url);
+      },
+      get canWrite() {
+        return self.canWrite(url);
+      },
+    };
+  };
+
+  get allRealmsMeta() {
+    const realmsMeta: { info: RealmInfo; canWrite: boolean }[] = [];
+    for (const [url, _resource] of this.realms.entries()) {
+      realmsMeta.push(this.meta(url));
+    }
+    return realmsMeta;
+  }
+
+  // Currently the personal realm has not yet been implemented,
+  // until then default to the realm serving the host app if it is writable,
+  // otherwise default to the first writable realm lexically
+  @cached
+  get userDefaultRealm(): { path: string; info: RealmInfo } {
+    let writeableRealms = this.allRealmsMeta
+      .filter((i) => i.canWrite)
+      .sort((i, j) => i.info.name.localeCompare(j.info.name));
+
+    let ownRealm = writeableRealms.find((i) => i.info.url === ownRealmURL);
+    if (ownRealm) {
+      return { path: ownRealm.info.url, info: ownRealm.info };
+    } else {
+      let first = writeableRealms[0];
+      return { path: first.info.url, info: first.info };
+    }
+  }
 
   token = (url: string): string | undefined => {
     return this.knownRealm(url)?.token;

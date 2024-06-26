@@ -70,22 +70,23 @@ import {
   unsubscribeFromChanges,
 } from '../../helpers/base-realm';
 import { mango } from '../../helpers/image-fixture';
+import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderCard } from '../../helpers/render-component';
 
 let loader: Loader;
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
+  setupMatrixServiceMock(hooks);
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = lookupLoaderService().loader;
   });
 
-  setupCardLogs(
-    hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
-  );
+  setupCardLogs(hooks, async () => {
+    return await loader.import(`${baseRealm.url}card-api`);
+  });
 
   module('cards are read-only', function (_hooks) {
     test('input fields are disabled', async function (assert) {

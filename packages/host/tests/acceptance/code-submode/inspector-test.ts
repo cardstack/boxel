@@ -537,11 +537,11 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       },
     }));
 
-    let realmService = this.owner.lookup(
+    let realmInfoService = this.owner.lookup(
       'service:realm-info-service',
     ) as RealmInfoService;
 
-    await realmService.fetchRealmInfo({
+    await realmInfoService.fetchRealmInfo({
       realmURL: new URL(testRealmURL2),
     });
     monacoService = this.owner.lookup(

@@ -52,7 +52,6 @@ import type EnvironmentService from '@cardstack/host/services/environment-servic
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RealmService from '@cardstack/host/services/realm';
-import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
@@ -119,7 +118,6 @@ export default class CodeSubmode extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare recentFilesService: RecentFilesService;
   @service private declare environmentService: EnvironmentService;
-  @service private declare realmInfoService: RealmInfoService;
   @service private declare realm: RealmService;
 
   @tracked private loadFileError: string | null = null;
@@ -605,10 +603,9 @@ export default class CodeSubmode extends Component<Signature> {
         throw new Error(`bug: CreateFileModal not instantiated`);
       }
       this.isCreateModalOpen = true;
-      await this.realmInfoService.fetchAllKnownRealmInfos.perform();
       let url = await this.createFileModal.createNewFile(
         fileType,
-        new URL(this.realmInfoService.userDefaultRealm.path),
+        new URL(this.realm.userDefaultRealm.path),
         definitionClass,
         sourceInstance,
       );

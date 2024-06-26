@@ -106,46 +106,4 @@ export default class RealmInfoService extends Service {
       canWrite: this.realm.canWrite(url),
     };
   }
-
-  fetchAllKnownRealmInfos = restartableTask(async () => {
-    let paths = this.cardService.realmURLs.map(
-      (path) => new RealmPaths(new URL(path)).url,
-    );
-    let token = waiter.beginAsync();
-    try {
-      await Promise.all(
-        paths.map(
-          async (path) =>
-            await this.fetchRealmInfo({ realmURL: new URL(path) }),
-        ),
-      );
-    } finally {
-      waiter.endAsync(token);
-    }
-  });
-
-  // Currently the personal realm has not yet been implemented,
-  // until then default to the realm serving the host app if it is writable,
-  // otherwise default to the first writable realm lexically
-  @cached
-  get userDefaultRealm(): { path: string; info: RealmInfo } {
-    let infos = this.cardService.realmURLs.map((realmURL) => {
-      return {
-        canWrite: this.realm.canWrite(realmURL),
-        info: this.realm.info(realmURL),
-      };
-    });
-
-    let writeableRealms = infos
-      .filter((i) => i.canWrite)
-      .sort((i, j) => i.info.name.localeCompare(j.info.name));
-
-    let ownRealm = writeableRealms.find((i) => i.info.url === ownRealmURL);
-    if (ownRealm) {
-      return { path: ownRealm.info.url, info: ownRealm.info };
-    } else {
-      let first = writeableRealms[0];
-      return { path: first.info.url, info: first.info };
-    }
-  }
 }

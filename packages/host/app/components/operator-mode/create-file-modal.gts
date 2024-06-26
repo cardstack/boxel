@@ -47,6 +47,8 @@ import ModalContainer from '../modal-container';
 import Pill from '../pill';
 import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
 
+import WithKnownRealmsLoaded from '../with-known-realms-loaded';
+
 import RealmIcon from './realm-icon';
 
 import type CardService from '../../services/card-service';
@@ -104,11 +106,13 @@ export default class CreateFileModal extends Component<Signature> {
             <LoadingIndicator />
           {{else}}
             <FieldContainer @label='Create In' @tag='label' class='field'>
-              <RealmDropdown
-                @dropdownWidth='15rem'
-                @selectedRealmURL={{this.selectedRealmURL}}
-                @onSelect={{this.onSelectRealm}}
-              />
+              <WithKnownRealmsLoaded>
+                <RealmDropdown
+                  @dropdownWidth='15rem'
+                  @selectedRealmURL={{this.selectedRealmURL}}
+                  @onSelect={{this.onSelectRealm}}
+                />
+              </WithKnownRealmsLoaded>
             </FieldContainer>
             {{#unless (eq this.fileType.id 'duplicate-instance')}}
               <FieldContainer

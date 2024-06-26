@@ -17,6 +17,8 @@ import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 
 import RealmService from '@cardstack/host/services/realm';
 
+import WithLoadedRealm from '../with-loaded-realm';
+
 import Directory from './directory';
 
 interface Signature {
@@ -27,54 +29,53 @@ interface Signature {
 
 export default class FileTree extends Component<Signature> {
   <template>
-    <div class='realm-info'>
-      {{#let (this.realm.info @realmURL.href) as |realmInfo|}}
-        <RealmIcon @realmInfo={{realmInfo}} class='icon' />
-        {{#let (concat 'In ' realmInfo.name) as |realmTitle|}}
+    <WithLoadedRealm @realmURL={{@realmURL.href}} as |realm|>
+      <div class='realm-info'>
+        <RealmIcon @realmInfo={{realm.info}} class='icon' />
+        {{#let (concat 'In ' realm.info.name) as |realmTitle|}}
           <span
             class='realm-title'
-            data-test-realm-name={{realmInfo.name}}
+            data-test-realm-name={{realm.info.name}}
             title={{realmTitle}}
           >{{realmTitle}}</span>
+          {{#if realm.canWrite}}
+            <Tooltip @placement='top' class='editability-icon'>
+              <:trigger>
+                <IconPencilNotCrossedOut
+                  width='18px'
+                  height='18px'
+                  aria-label='Can edit files in this workspace'
+                  data-test-realm-writable
+                />
+              </:trigger>
+              <:content>
+                Can edit files in this workspace
+              </:content>
+            </Tooltip>
+          {{else}}
+            <Tooltip @placement='top' class='editability-icon'>
+              <:trigger>
+                <IconPencilCrossedOut
+                  width='18px'
+                  height='18px'
+                  aria-label='Cannot edit files in this workspace'
+                  data-test-realm-not-writable
+                />
+              </:trigger>
+              <:content>
+                Cannot edit files in this workspace
+              </:content>
+            </Tooltip>
+          {{/if}}
         {{/let}}
-        {{#if (this.realm.canWrite @realmURL.href)}}
-          <Tooltip @placement='top' class='editability-icon'>
-            <:trigger>
-              <IconPencilNotCrossedOut
-                width='18px'
-                height='18px'
-                aria-label='Can edit files in this workspace'
-                data-test-realm-writable
-              />
-            </:trigger>
-            <:content>
-              Can edit files in this workspace
-            </:content>
-          </Tooltip>
-        {{else}}
-          <Tooltip @placement='top' class='editability-icon'>
-            <:trigger>
-              <IconPencilCrossedOut
-                width='18px'
-                height='18px'
-                aria-label='Cannot edit files in this workspace'
-                data-test-realm-not-writable
-              />
-            </:trigger>
-            <:content>
-              Cannot edit files in this workspace
-            </:content>
-          </Tooltip>
-
+      </div>
+      <nav>
+        <Directory @relativePath='' @realmURL={{@realmURL}} />
+        {{#if this.showMask}}
+          <div class='mask' data-test-file-tree-mask></div>
         {{/if}}
-      {{/let}}
-    </div>
-    <nav>
-      <Directory @relativePath='' @realmURL={{@realmURL}} />
-      {{#if this.showMask}}
-        <div class='mask' data-test-file-tree-mask></div>
-      {{/if}}
-    </nav>
+      </nav>
+    </WithLoadedRealm>
 
     <style>
       .mask {
