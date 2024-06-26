@@ -179,8 +179,6 @@ const filesB: Record<string, any> = {
   },
 };
 
-let realmPermissions: { [realmURL: string]: ('read' | 'write')[] };
-
 module('Acceptance | code submode | create-file tests', function (hooks) {
   async function openNewFileModal(
     menuSelection: string,
@@ -215,7 +213,14 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
   let adapter: TestRealmAdapter;
 
-  async function setupAcceptanceTestRealms() {
+  setupApplicationTest(hooks);
+  setupLocalIndexing(hooks);
+  setupServerSentEvents(hooks);
+  setupOnSave(hooks);
+  setupWindowMock(hooks);
+  let { setRealmPermissions } = setupMatrixServiceMock(hooks);
+
+  hooks.beforeEach(async function () {
     await setupAcceptanceTestRealm({
       contents: filesB,
       realmURL: testRealmURL2,
@@ -223,16 +228,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     ({ adapter } = await setupAcceptanceTestRealm({
       contents: files,
     }));
-  }
 
-  setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
-  setupOnSave(hooks);
-  setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks, { realmPermissions: () => realmPermissions });
-
-  hooks.beforeEach(async function () {
     lookupLoaderService().virtualNetwork.mount(
       async (req: Request) => {
         // Some tests need a simulated creation failure
@@ -247,13 +243,11 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
   module('when user has permissions to both test realms', function (hooks) {
     hooks.beforeEach(async function () {
-      realmPermissions = {
+      setRealmPermissions({
         [baseRealm.url]: ['read'],
         [testRealmURL]: ['read', 'write'],
         [testRealmURL2]: ['read', 'write'],
-      };
-
-      await setupAcceptanceTestRealms();
+      });
     });
 
     test('new file button has options to create card def, field def, and card instance files', async function (assert) {
@@ -1188,12 +1182,11 @@ export class TestCard extends CardDef {
       }
 
       hooks.beforeEach(async function () {
-        realmPermissions = {
+        setRealmPermissions({
           [baseRealm.url]: ['read'],
           [testRealmURL2]: ['read'],
           [testRealmURL]: ['read', 'write'],
-        };
-        await setupAcceptanceTestRealms();
+        });
       });
 
       test('read only realm is not present in realm drop down when creating card definition', async function (assert) {
@@ -1260,12 +1253,11 @@ export class TestCard extends CardDef {
       }
 
       hooks.beforeEach(async function () {
-        realmPermissions = {
+        setRealmPermissions({
           [baseRealm.url]: ['read'],
           [testRealmURL2]: ['read', 'write'],
           [testRealmURL]: ['read'],
-        };
-        await setupAcceptanceTestRealms();
+        });
       });
 
       test('read only realm is not present in realm drop down when creating card definition', async function (assert) {

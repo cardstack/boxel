@@ -1,23 +1,13 @@
 import Service, { service } from '@ember/service';
 
-import { buildWaiter } from '@ember/test-waiters';
-
-import { cached } from '@glimmer/tracking';
-
-import { restartableTask } from 'ember-concurrency';
 import { TrackedMap } from 'tracked-built-ins';
 
-import { RealmInfo, RealmPaths } from '@cardstack/runtime-common';
-
-import ENV from '@cardstack/host/config/environment';
+import { RealmInfo } from '@cardstack/runtime-common';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import RealmService from './realm';
-
-const waiter = buildWaiter('realm-info-service:waiter');
-const { ownRealmURL } = ENV;
 
 type RealmInfoWithPermissions = RealmInfo & {
   canRead: boolean;
