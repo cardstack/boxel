@@ -14,6 +14,27 @@ on:
         type: string
 
 jobs:
+  build-ai-bot:
+    name: Build ai-bot Docker image
+    uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
+    secrets: inherit
+    with:
+      repository: "boxel-ai-bot-${{ inputs.environment }}"
+      environment: ${{ inputs.environment }}
+      dockerfile: "packages/ai-bot/Dockerfile"
+
+  deploy-ai-bot:
+    needs: [build-ai-bot]
+    name: Deploy ai-bot to AWS ECS
+    uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
+    secrets: inherit
+    with:
+      container-name: "boxel-ai-bot"
+      environment: ${{ inputs.environment }}
+      cluster: ${{ inputs.environment }}
+      service-name: "boxel-ai-bot-${{ inputs.environment }}"
+      image: ${{ needs.build.outputs.image }}
+
   build-host:
     name: Build host
     uses: ./.github/workflows/build-host.yml
@@ -44,7 +65,7 @@ jobs:
       environment: staging
 
   build-realm-server:
-    name: Build Docker image
+    name: Build realm-server Docker image
     uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
     secrets: inherit
     with:
