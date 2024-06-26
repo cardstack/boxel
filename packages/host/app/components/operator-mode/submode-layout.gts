@@ -266,11 +266,7 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   get isAiAssistantToastVisible() {
-    return (
-      this.unseenMessageRoomId &&
-      this.unseenMessage &&
-      !this.isAiAssistantVisible
-    );
+    return this.findUnseenMessage.value && !this.isAiAssistantVisible;
   }
 
   <template>
