@@ -63,6 +63,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       </div>
     {{/if}}
   </header>
+
   <style>
     @layer {
       header {
