@@ -31,7 +31,7 @@ import { assertNever } from '@cardstack/host/utils/assert-never';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { MessageField } from 'https://cardstack.com/base/room';
+import type { MessageField } from 'https://cardstack.com/base/room';
 
 import SearchSheet, {
   SearchSheetMode,
@@ -262,7 +262,7 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   get unseenMessage() {
-    return this.findUnseenMessage.value?.message ?? new MessageField();
+    return this.findUnseenMessage.value?.message ?? ({} as MessageField);
   }
 
   get isAiAssistantToastVisible() {

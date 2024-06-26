@@ -7,6 +7,8 @@ import Component from '@glimmer/component';
 
 import { format as formatDate, formatISO } from 'date-fns';
 
+import window from 'ember-window-mock';
+
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
@@ -28,14 +30,14 @@ interface Signature {
 
 export default class AiAssistantToast extends Component<Signature> {
   <template>
-    <div class='ai-assistant-toast'>
-      <header class='toast-header'>
+    <div class='ai-assistant-toast' data-test-ai-assistant-toast>
+      <header class='toast-header' data-test-ai-assistant-toast-header>
         <img alt='AI Assistant' src={{assistantIcon}} width='20' height='20' />
         <time datetime={{formatISO @message.created}} class='time'>
           {{formatDate @message.created 'dd.MM.yyyy, h:mm aa'}}
         </time>
       </header>
-      <div class='toast-content'>
+      <div class='toast-content' data-test-ai-assistant-toast-content>
         {{htmlSafe (markdownToHtml @message.formattedMessage)}}
       </div>
       <BoxelButton
@@ -43,6 +45,7 @@ export default class AiAssistantToast extends Component<Signature> {
         @size='extra-small'
         class='view-in-chat-button'
         {{on 'click' this.viewInChat}}
+        data-test-ai-assistant-toast-button
       >
         View in chat
       </BoxelButton>

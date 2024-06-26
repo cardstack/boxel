@@ -12,6 +12,7 @@ import {
 } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { format } from 'date-fns';
 import { setupRenderingTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
@@ -2355,6 +2356,58 @@ module('Integration | operator-mode', function (hooks) {
       assert
         .dom("[data-test-joined-room='Another Room']")
         .doesNotContainText('Updated');
+    });
+
+    test('it displays a toast if there is an activity that was not seen by the user yet', async function (assert) {
+      await setCardInOperatorModeState();
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      await openAiAssistant();
+      await click('[data-test-close-ai-assistant]');
+
+      // Create a new room with some activity
+      let anotherRoomId = await matrixService.createAndJoinRoom('Another Room');
+
+      let date = Date.now() - 98;
+      await addRoomEvent(matrixService, {
+        event_id: 'event2',
+        room_id: anotherRoomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'I sent a message from the background.',
+          msgtype: 'm.text',
+          formatted_body: 'A message from the background.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+        },
+        origin_server_ts: date,
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+        status: null,
+      });
+
+      await waitFor('[data-test-ai-assistant-toast]');
+      assert
+        .dom('[data-test-ai-assistant-toast-header]')
+        .exists(`${format(date, 'dd.MM.yyyy, h:mm aa')}`);
+      assert
+        .dom('[data-test-ai-assistant-toast-content]')
+        .exists(`${format(date, 'dd.MM.yyyy, h:mm aa')}`);
+      await click('[data-test-ai-assistant-toast-button]');
+      assert.dom('[data-test-chat-title]').containsText('Another Room');
+      assert
+        .dom('[data-test-ai-message-content]')
+        .containsText('A message from the background.');
     });
 
     test('it can retry a message when receiving an error from the AI bot', async function (assert) {
