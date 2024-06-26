@@ -33,7 +33,7 @@ jobs:
       environment: ${{ inputs.environment }}
       cluster: ${{ inputs.environment }}
       service-name: "boxel-ai-bot-${{ inputs.environment }}"
-      image: ${{ needs.build.outputs.image }}
+      image: ${{ needs.build-ai-bot.outputs.image }}
 
   build-host:
     name: Build host
