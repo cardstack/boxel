@@ -53,8 +53,6 @@ import type {
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
 import { importResource } from '../resources/import';
 
-import { clearAllRealmSessions } from './realm';
-
 import RealmService from './realm';
 
 import type CardService from './card-service';
@@ -201,7 +199,7 @@ export default class MatrixService extends Service {
       await this.flushMembership;
       await this.flushTimeline;
       clearAuth();
-      clearAllRealmSessions();
+      this.realm.logout();
       this.unbindEventListeners();
       await this.client.logout(true);
     } catch (e) {

@@ -39,18 +39,16 @@ import {
   setupMatrixServiceMock,
 } from '../helpers/mock-matrix-service';
 
-let sessionExpirationSec: number;
-
 module('Acceptance | operator mode tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks, { expiresInSec: () => sessionExpirationSec });
+  let { setExpiresInSec } = setupMatrixServiceMock(hooks);
 
   hooks.beforeEach(async function () {
-    sessionExpirationSec = 60 * 60;
+    setExpiresInSec(60 * 60);
 
     let loader = lookupLoaderService().loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -652,7 +650,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     let refreshInSec = 2;
 
     hooks.beforeEach(async function () {
-      sessionExpirationSec = tokenRefreshPeriodSec + refreshInSec;
+      setExpiresInSec(tokenRefreshPeriodSec + refreshInSec);
     });
 
     test('realm session refreshes within 5 minute window of expiration', async function (assert) {

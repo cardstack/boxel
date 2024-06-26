@@ -42,7 +42,6 @@ import {
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
 
 const testRealm2URL = `http://test-realm/test2/`;
-let realmPermissions: { [realmURL: string]: ('read' | 'write')[] };
 
 module('Acceptance | interact submode tests', function (hooks) {
   let realm: Realm;
@@ -52,9 +51,9 @@ module('Acceptance | interact submode tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks, { realmPermissions: () => realmPermissions });
+  let { setRealmPermissions } = setupMatrixServiceMock(hooks);
 
-  async function setupTestRealms() {
+  hooks.beforeEach(async function () {
     let loader = lookupLoaderService().loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
@@ -306,12 +305,9 @@ module('Acceptance | interact submode tests', function (hooks) {
         }),
       },
     });
-  }
+  });
 
-  module('0 stacks', function (hooks) {
-    hooks.beforeEach(async function () {
-      await setupTestRealms();
-    });
+  module('0 stacks', function () {
     test('Clicking card in search panel opens card on a new stack', async function (assert) {
       await visitOperatorMode({});
 
@@ -507,14 +503,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
   });
 
-  module('1 stack', function (hooks) {
-    hooks.beforeEach(async function () {
-      realmPermissions = {
-        [testRealmURL]: ['read', 'write'],
-        [testRealm2URL]: ['read', 'write'],
-      };
-      await setupTestRealms();
-    });
+  module('1 stack', function (_hooks) {
     test('restoring the stack from query param', async function (assert) {
       await visitOperatorMode({
         stacks: [
@@ -925,12 +914,10 @@ module('Acceptance | interact submode tests', function (hooks) {
 
   module('1 stack, when the user lacks write permissions', function (hooks) {
     hooks.beforeEach(async function () {
-      realmPermissions = {
+      setRealmPermissions({
         [testRealmURL]: ['read'],
         [testRealm2URL]: ['read', 'write'],
-      };
-
-      await setupTestRealms();
+      });
     });
 
     test('the edit button is hidden when the user lacks permissions', async function (assert) {
@@ -1141,11 +1128,10 @@ module('Acceptance | interact submode tests', function (hooks) {
 
   module('2 stacks with differing permissions', function (hooks) {
     hooks.beforeEach(async function () {
-      realmPermissions = {
+      setRealmPermissions({
         [testRealmURL]: ['read'],
         [testRealm2URL]: ['read', 'write'],
-      };
-      await setupTestRealms();
+      });
     });
 
     test('the edit button respects the realm permissions of the cards in differing realms', async function (assert) {
@@ -1276,10 +1262,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
   });
 
-  module('2 stacks', function (hooks) {
-    hooks.beforeEach(async function () {
-      await setupTestRealms();
-    });
+  module('2 stacks', function () {
     test('restoring the stacks from query param', async function (assert) {
       await visitOperatorMode({
         stacks: [
@@ -1429,11 +1412,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
   });
 
-  module('index changes', function (hooks) {
-    hooks.beforeEach(async function () {
-      await setupTestRealms();
-    });
-
+  module('index changes', function () {
     test<TestContextWithSSE>('stack item live updates when index changes', async function (assert) {
       assert.expect(3);
       let expectedEvents = [

@@ -453,16 +453,6 @@ export default class CardService extends Service {
     await api.flushLogs();
   }
 
-  getRealmURLFor(url: URL) {
-    for (let realmURL of this.realmURLs) {
-      let path = new RealmPaths(new URL(realmURL));
-      if (path.inRealm(url)) {
-        return new URL(realmURL);
-      }
-    }
-    return undefined;
-  }
-
   async getRealmInfoByRealmURL(realmURL: URL): Promise<RealmInfo> {
     let response = await this.loaderService.loader.fetch(`${realmURL}_info`, {
       headers: { Accept: SupportedMimeType.RealmInfo },

@@ -11,7 +11,8 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { OperatorModeContext } from '@cardstack/host/services/matrix-service';
-import { clearAllRealmSessions } from '@cardstack/host/services/realm';
+
+import RealmService from '@cardstack/host/services/realm';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import type {
@@ -79,7 +80,7 @@ function generateMockMatrixService(
   realmPermissions?: () => {
     [realmURL: string]: ('read' | 'write')[];
   },
-  expiresInSec?: () => number,
+  expiresInSec?: () => number | undefined,
 ) {
   class MockMatrixService extends Service implements MockMatrixService {
     @service declare loaderService: LoaderService;
@@ -111,9 +112,7 @@ function generateMockMatrixService(
     async createRealmSession(realmURL: URL) {
       let secret = "shhh! it's a secret";
       let nowInSeconds = Math.floor(Date.now() / 1000);
-      let expires =
-        nowInSeconds +
-        (typeof expiresInSec === 'function' ? expiresInSec() : 60 * 60);
+      let expires = nowInSeconds + (expiresInSec?.() ?? 60 * 60);
       let header = { alg: 'none', typ: 'JWT' };
       let payload = {
         iat: nowInSeconds,
@@ -286,21 +285,23 @@ function generateMockMatrixService(
   return MockMatrixService;
 }
 
-export function setupMatrixServiceMock(
-  hooks: NestedHooks,
-  opts?: {
-    realmPermissions?: () => {
-      [realmURL: string]: ('read' | 'write')[];
-    };
-    expiresInSec?: () => number;
-  },
-) {
+export function setupMatrixServiceMock(hooks: NestedHooks) {
+  let realmService: RealmService;
+  let currentPermissions: Record<string, ('read' | 'write')[]> = {};
+  let currentExpiresInSec: number | undefined;
+
   hooks.beforeEach(function () {
+    currentPermissions = {};
+    currentExpiresInSec = undefined;
+    realmService = this.owner.lookup('service:realm') as RealmService;
     // clear any session refresh timers that may bleed into tests
-    clearAllRealmSessions();
+    realmService.logout();
     this.owner.register(
       'service:matrixService',
-      generateMockMatrixService(opts?.realmPermissions, opts?.expiresInSec),
+      generateMockMatrixService(
+        () => currentPermissions,
+        () => currentExpiresInSec,
+      ),
     );
     let matrixService = this.owner.lookup(
       'service:matrixService',
@@ -310,6 +311,26 @@ export function setupMatrixServiceMock(
 
   hooks.afterEach(function () {
     // clear any session refresh timers that may bleed into other tests
-    clearAllRealmSessions();
+    realmService?.logout();
+    currentPermissions = {};
+    currentExpiresInSec = undefined;
   });
+
+  const setRealmPermissions = (permissions: {
+    [realmURL: string]: ('read' | 'write')[];
+  }) => {
+    currentPermissions = permissions;
+    // indexing may have already caused the realm service to establish a
+    // session, so when we change permissions we need to re-authenticate. This
+    // could stop being a problem if we make the test realm's indexing stay
+    // separate from the normal host loader.
+    realmService.logout();
+  };
+
+  const setExpiresInSec = (expiresInSec: number) => {
+    currentExpiresInSec = expiresInSec;
+    realmService.logout();
+  };
+
+  return { setRealmPermissions, setExpiresInSec };
 }

@@ -9,6 +9,7 @@ import { tracked } from '@glimmer/tracking';
 import { cached } from '@glimmer/tracking';
 
 import { task, restartableTask, rawTimeout } from 'ember-concurrency';
+import window from 'ember-window-mock';
 
 import {
   Permissions,
@@ -126,6 +127,10 @@ class RealmResource {
 
   logout(): void {
     this.token = undefined;
+    this.loginTask.cancelAll();
+    this.loggingIn = undefined;
+    this.fetchMetaTask.cancelAll();
+    this.fetchingMeta = undefined;
   }
 
   private fetchingMeta: Promise<void> | undefined;
@@ -286,6 +291,12 @@ export default class RealmService extends Service {
     return this.knownRealm(url)?.token;
   };
 
+  logout() {
+    for (let realm of this.realms.values()) {
+      realm.logout();
+    }
+  }
+
   private requireRealmMeta(url: string): RealmResource & { meta: Meta } {
     let resource = this.knownRealm(url);
     if (!resource) {
@@ -355,15 +366,6 @@ export const sessionLocalStorageKey = 'boxel-session';
 export function claimsFromRawToken(rawToken: string): JWTPayload {
   let [_header, payload] = rawToken.split('.');
   return JSON.parse(atob(payload)) as JWTPayload;
-}
-
-// TODO: callers of this expect to clear everything -- this should probably be done by logging out of all known realms
-export function clearAllRealmSessions() {
-  window.localStorage.removeItem(sessionLocalStorageKey);
-  // for (let [realm, timeout] of sessionExpirations.entries()) {
-  //   clearTimeout(timeout);
-  //   sessionExpirations.delete(realm);
-  // }
 }
 
 let SessionStorage = {
