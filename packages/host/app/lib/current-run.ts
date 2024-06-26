@@ -48,7 +48,7 @@ import {
   type IdentityContext as IdentityContextType,
   LoaderType,
 } from 'https://cardstack.com/base/card-api';
-import * as CardAPI from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import LoaderService from '../services/loader-service';
 import { type RenderCard } from '../services/render-service';
