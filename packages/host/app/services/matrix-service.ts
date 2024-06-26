@@ -29,6 +29,7 @@ import {
 import {
   basicMappings,
   generateCardPatchCallSpecification,
+  getSearchTool,
 } from '@cardstack/runtime-common/helpers/ai';
 
 import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
@@ -457,6 +458,7 @@ export default class MatrixService extends Service {
         await realmSession.loaded;
         if (realmSession.canWrite) {
           tools.push(getPatchTool(attachedOpenCard, patchSpec));
+          tools.push(getSearchTool(attachedOpenCard));
         }
       }
     }

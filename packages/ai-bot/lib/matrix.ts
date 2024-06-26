@@ -130,7 +130,7 @@ export const toMatrixMessageCommandContent = (
   eventToUpdate: string | undefined,
 ): IContent | undefined => {
   let { arguments: payload } = functionCall;
-  const body = payload['description'] || "Here's the change:";
+  const body = payload['description'] || 'Issuing command';
   let messageObject: IContent = {
     body: body,
     msgtype: 'org.boxel.command',
