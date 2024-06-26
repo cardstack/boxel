@@ -1,7 +1,12 @@
 import { UserName } from './user-name';
 import { UserEmail } from './user-email';
 import { AddressInfo } from './address-info';
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+import {
+  CardDef,
+  field,
+  contains,
+  FieldDef,
+} from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import { FieldContainer, CardContainer } from '@cardstack/boxel-ui/components';
@@ -134,19 +139,17 @@ class Isolated extends Component<typeof ContactForm> {
 
 class View extends Component<typeof ContactForm> {
   <template>
-    <CardContainer @displayBoundaries={{true}} class='container'>
+    <div class='container'>
       <div class='content'>
         <label>User</label>
         <h2><@fields.name /></h2>
       </div>
-    </CardContainer>
+    </div>
 
     <style>
       .container {
-        padding: var(--boxel-sp-lg);
         display: grid;
         gap: var(--boxel-sp);
-        background-color: #eeeeee50;
       }
       .content {
         color: var(--boxel-700);
@@ -208,6 +211,36 @@ class Edit extends Component<typeof ContactForm> {
       }
     </style>
   </template>
+}
+
+export class ContactFormField extends FieldDef {
+  @field title = contains(StringField, {
+    description: `Contact Form Title`,
+  });
+  @field name = contains(UserName, {
+    description: `User's Full Name`,
+  });
+  @field email = contains(UserEmail, {
+    description: `User's Email`,
+  });
+  @field phone = contains(StringField, {
+    description: `User's phone number`,
+  });
+  @field fax = contains(StringField, {
+    description: `User's Fax Number`,
+  });
+  @field department = contains(StringField, {
+    description: `User's Department`,
+  });
+  @field addressInfo = contains(AddressInfo, {
+    description: `User's AddressInfo`,
+  });
+
+  static displayName = 'Contact Form';
+  static isolated = Isolated;
+  static embedded = View;
+  static atom = View;
+  static edit = Edit;
 }
 
 export class ContactForm extends CardDef {

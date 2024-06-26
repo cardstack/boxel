@@ -191,12 +191,12 @@ class IsolatedSecForOpportunityForm extends Component<typeof OpportunityForm> {
           <div class='field-input'>
             <label>Percentage: </label>
             {{this.getFormattedPercentage}}
-
           </div>
           <div class='field-input'>
             <label>Forecast Category: </label>
             {{this.getForestCategory}}
           </div>
+
         </div>
       </div>
 
@@ -329,7 +329,7 @@ class EditSecForOpportunityForm extends Component<typeof OpportunityForm> {
   }
 
   <template>
-    <CardContainer @displayBoundaries={{false}} class='container'>
+    <CardContainer @displayBoundaries={{true}} class='container'>
       <FieldContainer @tag='label' @label='Opportunity Name' @vertical={{true}}>
         <@fields.opportunityName />
       </FieldContainer>
@@ -422,6 +422,39 @@ class ViewSecForOpportunityForm extends Component<typeof OpportunityForm> {
       }
     </style>
   </template>
+}
+
+export class OpportunityFormField extends FieldDef {
+  static displayName = 'Opportunity Form';
+  @field opportunityName = contains(StringField, {
+    description: `Opportunity Name`,
+  });
+  @field accountName = linksTo(CrmAccount, {
+    description: `Account Name`,
+  });
+  @field closeDate = contains(DateCard, {
+    description: `Close Date`,
+  });
+  @field amount = contains(AmountField, {
+    description: `Amount`,
+  });
+  @field description = contains(MarkdownField, {
+    description: `Description`,
+  });
+  @field stage = contains(StringField, {
+    description: `Stage`,
+  });
+  @field percentage = contains(NumberField, {
+    description: `Percentage`,
+  });
+  @field forecastCategory = contains(StringField, {
+    description: `Forecast Category`,
+  });
+
+  static isolated = IsolatedSecForOpportunityForm;
+  static edit = EditSecForOpportunityForm;
+  static embedded = ViewSecForOpportunityForm;
+  static atom = ViewSecForOpportunityForm;
 }
 
 export class OpportunityForm extends CardDef {

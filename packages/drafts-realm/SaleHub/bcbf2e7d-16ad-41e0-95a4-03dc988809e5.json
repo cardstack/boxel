@@ -1,0 +1,77 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "leadForm": {
+        "name": {
+          "salutation": "Mr.",
+          "firstName": "Law",
+          "lastName": "Bom Bom"
+        },
+        "company": "lawbombom",
+        "title": "Lead Form - lawbombom",
+        "website": "lawbom.com",
+        "description": "this is lead-form",
+        "leadStatus": "Unqualified",
+        "phone": "010381997",
+        "email": "lawbombom@gmail.com",
+        "addressInfo": {
+          "address": "14, Jalan Teknologi, Taman Sains",
+          "zip": "47810",
+          "city": "Petaling Jaya",
+          "state": "Selangor",
+          "country": "Malaysia",
+          "countryCode": "MY",
+          "stateCode": "10"
+        },
+        "noOfEmployees": 10,
+        "annualRevenue": {
+          "currency": "RM",
+          "totalAmount": 125000
+        },
+        "leadSource": "Advertisement",
+        "industry": "Agriculture"
+      },
+      "contactForm": {
+        "name": {
+          "salutation": "Mr.",
+          "firstName": "Law",
+          "lastName": "Bom Bom"
+        },
+        "company": null,
+        "title": null,
+        "website": null,
+        "description": null,
+        "leadStatus": null,
+        "phone": null,
+        "email": null,
+        "addressInfo": {
+          "address": null,
+          "zip": null,
+          "city": null,
+          "state": null,
+          "country": null,
+          "countryCode": null,
+          "stateCode": null
+        },
+        "noOfEmployees": null,
+        "annualRevenue": {
+          "currency": null,
+          "totalAmount": null
+        },
+        "leadSource": null,
+        "industry": null
+      },
+      "scheduledTask": [],
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sale-hub",
+        "name": "SaleHub"
+      }
+    }
+  }
+}

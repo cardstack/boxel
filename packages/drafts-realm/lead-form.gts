@@ -1,5 +1,10 @@
 import MarkdownField from 'https://cardstack.com/base/markdown';
-import { CardDef, contains, field } from 'https://cardstack.com/base/card-api';
+import {
+  CardDef,
+  FieldDef,
+  contains,
+  field,
+} from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import { UserName } from './user-name';
@@ -445,6 +450,55 @@ class EditSecFoLeadForm extends Component<typeof LeadForm> {
       }
     </style>
   </template>
+}
+
+export class LeadFormField extends FieldDef {
+  static displayName = 'Lead Form';
+
+  @field name = contains(UserName, {
+    description: `User's Full Name`,
+  });
+  @field company = contains(StringField, {
+    description: `User's Company Name`,
+  });
+  @field title = contains(StringField, {
+    description: `User's Title`,
+  });
+  @field website = contains(StringField, {
+    description: `User's Website`,
+  });
+  @field description = contains(MarkdownField, {
+    description: `User's Description`,
+  });
+  @field leadStatus = contains(StringField, {
+    description: `Lead Status`,
+  });
+  @field phone = contains(StringField, {
+    description: `User's phone number`,
+  });
+  @field email = contains(UserEmail, {
+    description: `User's Email`,
+  });
+  @field addressInfo = contains(AddressInfo, {
+    description: `User's AddressInfo`,
+  });
+  @field noOfEmployees = contains(NumberField, {
+    description: `No Of Employees`,
+  });
+  @field annualRevenue = contains(CurrencyAmount, {
+    description: `Annual Revenue`,
+  });
+  @field leadSource = contains(StringField, {
+    description: `Lead Source`,
+  });
+  @field industry = contains(StringField, {
+    description: `Industry`,
+  });
+
+  static isolated = IsolatedSecForLeadForm;
+  static atom = ViewSecForLeadForm;
+  static embedded = ViewSecForLeadForm;
+  static edit = EditSecFoLeadForm;
 }
 
 export class LeadForm extends CardDef {

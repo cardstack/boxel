@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": {
+        "salutation": "Mr.",
+        "firstName": "Chow",
+        "lastName": "Chow "
+      },
+      "company": "Chow Holding",
+      "title": "Lead Form - Chow Chow",
+      "website": "www.chow.com",
+      "description": "Description Here",
+      "leadStatus": "Qualified",
+      "phone": "0109090000",
+      "email": "chow@xxxx.com",
+      "addressInfo": {
+        "address": "14, Jalan Teknologi, Taman Sains",
+        "zip": "47810",
+        "city": "Petaling Jaya",
+        "state": "Selangor",
+        "country": "Malaysia",
+        "countryCode": "MY",
+        "stateCode": "10"
+      },
+      "noOfEmployees": 49.8,
+      "annualRevenue": {
+        "currency": "RM",
+        "totalAmount": 12000000
+      },
+      "leadSource": "Employee Referral",
+      "industry": "Banking",
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../lead-form",
+        "name": "LeadForm"
+      }
+    }
+  }
+}
