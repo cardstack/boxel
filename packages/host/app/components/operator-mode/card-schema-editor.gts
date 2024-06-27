@@ -160,11 +160,6 @@ export default class CardSchemaEditor extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-xs);
       }
 
-      .realm-icon > img {
-        height: 20px;
-        width: 20px;
-      }
-
       .header {
         display: flex;
         justify-content: space-between;
@@ -254,6 +249,7 @@ export default class CardSchemaEditor extends Component<Signature> {
           <Tooltip @placement='bottom'>
             <:trigger>
               <Pill
+                @kind='button'
                 {{on 'click' (fn @goToDefinition codeRef @cardType.localName)}}
                 data-test-card-schema-navigational-button
               >
@@ -340,6 +336,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                       <Tooltip @placement='bottom'>
                         <:trigger>
                           <Pill
+                            @kind='button'
                             {{on
                               'click'
                               (fn @goToDefinition codeRef field.card.localName)
