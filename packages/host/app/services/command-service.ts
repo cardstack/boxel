@@ -100,14 +100,14 @@ export default class CommandService extends Service {
     }
   });
 
-  getCommandResultComponent = (message: MessageField) => {
+  getCommandResultComponent(message: MessageField) {
     if (message.command && message.command.result) {
       if (message.command.name === 'searchCard') {
         return getComponent(message.command.result as SearchCommandResult);
       }
     }
     return;
-  };
+  }
 }
 
 type PatchPayload = { card_id: string } & PatchData;
