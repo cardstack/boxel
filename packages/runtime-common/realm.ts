@@ -828,6 +828,9 @@ export class Realm {
       if (e instanceof AuthenticationError) {
         return new Response(`${e.message}`, {
           status: 401,
+          headers: {
+            'X-Boxel-Realm-Url': requestContext.realm.url,
+          },
         });
       }
 
