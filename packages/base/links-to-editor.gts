@@ -40,17 +40,21 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
   <template>
     <PermissionsConsumer as |permissions|>
       <div class='links-to-editor' data-test-links-to-editor={{@field.name}}>
-        {{#if (and permissions.canWrite this.isEmpty)}}
-          <AddButton
-            class='add-new'
-            @variant='full-width'
-            @hideIcon={{true}}
-            {{on 'click' this.add}}
-            data-test-add-new
-          >
-            Link
-            {{@field.card.displayName}}
-          </AddButton>
+        {{#if this.isEmpty}}
+          {{#if permissions.canWrite}}
+            <AddButton
+              class='add-new'
+              @variant='full-width'
+              @hideIcon={{true}}
+              {{on 'click' this.add}}
+              data-test-add-new
+            >
+              Link
+              {{@field.card.displayName}}
+            </AddButton>
+          {{else}}
+            - Empty -
+          {{/if}}
         {{else}}
           {{#if permissions.canWrite}}
             <IconButton

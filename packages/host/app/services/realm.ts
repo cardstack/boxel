@@ -67,10 +67,21 @@ class RealmResource {
         claims: claimsFromRawToken(value),
       };
     } else {
-      this.auth = { type: 'uninitialized' };
+      this.auth = this.buildInitialAuthState();
     }
     SessionStorage.persist(this.realmURL, value);
     this.tokenRefresher.perform();
+  }
+
+  private buildInitialAuthState(): AuthStatus {
+    if (this.realmURL === baseRealm.url) {
+      // this special case is an unfortunate necessity so long as the matrix
+      // service cannot start up without accessing things in the base realm.
+      // The base realm is publicly-readable and nobody needs to be logged
+      // into it, so always having no session is acceptable.
+      return { type: 'failed' };
+    }
+    return { type: 'uninitialized' };
   }
 
   get info() {
@@ -145,15 +156,7 @@ class RealmResource {
   private fetchMetaTask = task(async () => {
     try {
       if (this.auth.type === 'uninitialized') {
-        if (this.realmURL === baseRealm.url) {
-          // this special case is an unfortunate necessity so long as the matrix
-          // service cannot start up without accessing things in the base realm.
-          // The base realm is publicly-readable and nobody needs to be logged
-          // into it, so always having no session is acceptable.
-          this.setAuthFailed();
-        } else {
-          await this.login();
-        }
+        await this.login();
       }
       if (this.meta) {
         return;
@@ -203,10 +206,6 @@ class RealmResource {
     await this.login();
   });
 }
-
-// private loginAttempter = restartableTask(async () => {
-//   // if
-// });
 
 class RealmNotReadyError extends Error {
   code = 'RealmNotReady';

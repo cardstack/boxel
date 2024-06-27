@@ -1,7 +1,7 @@
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { task } from 'ember-concurrency';
+import { task, timeout } from 'ember-concurrency';
 
 import CardService from '../services/card-service';
 import RealmService from '../services/realm';
@@ -10,6 +10,7 @@ interface Signature {
   Args: {};
   Blocks: {
     default: [];
+    loading: [];
   };
 }
 export default class WithKnownRealmsLoaded extends Component<Signature> {
@@ -34,7 +35,11 @@ export default class WithKnownRealmsLoaded extends Component<Signature> {
     {{#if this.loadRealmsTask.last.isSuccessful}}
       {{yield}}
     {{else if this.loadRealmsTask.isRunning}}
-      <div>Loading...</div>
+      {{#if (has-block 'loading')}}
+        {{yield to='loading'}}
+      {{else}}
+        <div>Loading...</div>
+      {{/if}}
     {{else}}
       <div>Failed to load known realms</div>
     {{/if}}
