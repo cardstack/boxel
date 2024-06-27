@@ -11,7 +11,7 @@ import { restartableTask, timeout } from 'ember-concurrency';
 import { Velcro } from 'ember-velcro';
 import window from 'ember-window-mock';
 
-import { TrackedMap } from 'tracked-built-ins/.';
+import { TrackedMap } from 'tracked-built-ins';
 
 import {
   Button,

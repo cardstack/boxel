@@ -211,49 +211,47 @@ export default class SubmodeLayout extends Component<Signature> {
     return resources;
   }
 
-  @use private findUnseenMessage = resource(() => {
+  @use private findUnseenMessage = resource(({ on }) => {
     const state: {
       value: {
         roomId: string;
         message: MessageField;
       } | null;
-      load: () => Promise<void>;
     } = new TrackedObject({
       value: null,
-      load: async () => {
-        let lastMessages: Map<string, MessageField> = new Map();
-        for (let resource of this.roomResources.values()) {
-          if (!resource.room) {
-            continue;
-          }
-          let { room } = resource;
-          lastMessages.set(
-            room.roomId,
-            room.messages[room.messages.length - 1],
-          );
-        }
-
-        let lastMessage =
-          Array.from(lastMessages).filter(
-            (lastMessage) =>
-              lastMessage[1] &&
-              !this.matrixService.currentUserEventReadReceipts.has(
-                lastMessage[1].eventId,
-              ),
-          )[0] ?? null;
-        if (lastMessage) {
-          state.value = {
-            roomId: lastMessage[0],
-            message: lastMessage[1],
-          };
-          setTimeout(() => {
-            state.value = null;
-          }, 3000);
-        }
-      },
     });
 
-    state.load();
+    let lastMessages: Map<string, MessageField> = new Map();
+    for (let resource of this.roomResources.values()) {
+      if (!resource.room) {
+        continue;
+      }
+      let { room } = resource;
+      lastMessages.set(room.roomId, room.messages[room.messages.length - 1]);
+    }
+
+    let lastMessage =
+      Array.from(lastMessages).filter(
+        (lastMessage) =>
+          lastMessage[1] &&
+          !this.matrixService.currentUserEventReadReceipts.has(
+            lastMessage[1].eventId,
+          ),
+      )[0] ?? null;
+    if (lastMessage) {
+      state.value = {
+        roomId: lastMessage[0],
+        message: lastMessage[1],
+      };
+
+      let resetState = setTimeout(() => {
+        state.value = null;
+      }, 3000);
+      on.cleanup(() => {
+        clearInterval(resetState);
+      });
+    }
+
     return state;
   });
 
