@@ -29,6 +29,7 @@ import {
 import {
   basicMappings,
   generateCardPatchCallSpecification,
+  getSearchTool,
 } from '@cardstack/runtime-common/helpers/ai';
 
 import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
@@ -50,6 +51,7 @@ import type {
   CardMessageContent,
   CardFragmentContent,
   ReactionEventContent,
+  CommandResultContent,
 } from 'https://cardstack.com/base/room';
 
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
@@ -362,7 +364,11 @@ export default class MatrixService extends Service {
   private async sendEvent(
     roomId: string,
     eventType: string,
-    content: CardMessageContent | CardFragmentContent | ReactionEventContent,
+    content:
+      | CardMessageContent
+      | CardFragmentContent
+      | ReactionEventContent
+      | CommandResultContent,
   ) {
     if ('data' in content) {
       const encodedContent = {
@@ -385,6 +391,31 @@ export default class MatrixService extends Service {
     };
     try {
       return await this.sendEvent(roomId, 'm.reaction', content);
+    } catch (e) {
+      throw new Error(
+        `Error sending reaction event: ${
+          'message' in (e as Error) ? (e as Error).message : e
+        }`,
+      );
+    }
+  }
+
+  async sendCommandResultMessage(roomId: string, eventId: string, result: any) {
+    let body = `Command Results from command event ${eventId}`;
+    let html = markdownToHtml(body);
+    let content: CommandResultContent = {
+      'm.relates_to': {
+        event_id: eventId,
+        rel_type: 'm.annotation',
+        key: 'applied', //this is aggregated key. All annotations must have one. This identifies the reaction event.
+      },
+      body,
+      formatted_body: html,
+      msgtype: 'org.boxel.commandResult',
+      result,
+    };
+    try {
+      return await this.sendEvent(roomId, 'm.room.message', content);
     } catch (e) {
       throw new Error(
         `Error sending reaction event: ${
@@ -427,6 +458,7 @@ export default class MatrixService extends Service {
         await realmSession.loaded;
         if (realmSession.canWrite) {
           tools.push(getPatchTool(attachedOpenCard, patchSpec));
+          tools.push(getSearchTool(attachedOpenCard));
         }
       }
     }

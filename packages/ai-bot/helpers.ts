@@ -290,11 +290,3 @@ export function isCommandEvent(
     typeof event.content.data.toolCall === 'object'
   );
 }
-
-export function isPatchCommandEvent(
-  event: DiscreteMatrixEvent,
-): event is CommandEvent {
-  return (
-    isCommandEvent(event) && event.content.data.toolCall.name === 'patchCard'
-  );
-}

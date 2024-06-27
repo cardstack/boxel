@@ -359,15 +359,16 @@ export function getSearchTool(attachedOpenCard: CardDef) {
     type: 'function',
     function: {
       name: 'searchCard',
-      description: `Propose a query to search for a card instance related to module it was from. 
-        Always prioritise search based upon the card that was last shared. 
-        Ensure that you find the correct "module" and "name" from the OUTERMOST "adoptsFrom" field from the card data that is shared`,
+      description: `Propose a query to search for a card instance related to module it was from. Always prioritise search based upon the card that was last shared. Ensure that you find the correct "module" and "name" from the OUTERMOST "adoptsFrom" field from the card data that is shared`,
       parameters: {
         type: 'object',
         properties: {
           card_id: {
             type: 'string',
             const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
+          },
+          description: {
+            type: 'string',
           },
           filter: {
             type: 'object',
@@ -390,7 +391,7 @@ export function getSearchTool(attachedOpenCard: CardDef) {
             },
           },
         },
-        required: ['card_id', 'filter'],
+        required: ['card_id', 'filter', 'description'],
       },
     },
   };
