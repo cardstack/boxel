@@ -1,5 +1,5 @@
 import Service, { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import { TrackedMap } from 'tracked-built-ins';
 
@@ -8,6 +8,7 @@ import { v4 as uuid } from 'uuid';
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 import { clearAllRealmSessions } from '@cardstack/host/resources/realm-session';
+import { RoomResource, getRoom } from '@cardstack/host/resources/room';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -281,6 +282,19 @@ function generateMockMatrixService(
         room.events[room.events.length - 1]?.origin_server_ts ??
         room.created?.getTime()
       );
+    }
+
+    @cached
+    get roomResources() {
+      let resources: Map<string, RoomResource> = new Map();
+      for (let roomId of this.rooms.keys()) {
+        resources.set(
+          roomId,
+          getRoom(this, () => roomId),
+        );
+      }
+
+      return resources;
     }
   }
   return MockMatrixService;

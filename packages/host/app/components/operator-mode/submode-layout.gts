@@ -4,14 +4,14 @@ import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
 
 import Component from '@glimmer/component';
-import { cached, tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask, timeout } from 'ember-concurrency';
 
 import { use, resource } from 'ember-resources';
 
-import { TrackedMap, TrackedObject } from 'tracked-built-ins';
+import { TrackedObject } from 'tracked-built-ins';
 
 import {
   ResizablePanel,
@@ -26,7 +26,6 @@ import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profi
 import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 import ENV from '@cardstack/host/config/environment';
-import { RoomResource, getRoom } from '@cardstack/host/resources/room';
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -199,18 +198,6 @@ export default class SubmodeLayout extends Component<Signature> {
     this.suppressSearchClose = false;
   });
 
-  @cached
-  private get roomResources() {
-    let resources = new TrackedMap<string, RoomResource>();
-    for (let roomId of this.matrixService.rooms.keys()) {
-      resources.set(
-        roomId,
-        getRoom(this, () => roomId),
-      );
-    }
-    return resources;
-  }
-
   @use private findUnseenMessage = resource(({ on }) => {
     const state: {
       value: {
@@ -222,7 +209,7 @@ export default class SubmodeLayout extends Component<Signature> {
     });
 
     let lastMessages: Map<string, MessageField> = new Map();
-    for (let resource of this.roomResources.values()) {
+    for (let resource of this.matrixService.roomResources.values()) {
       if (!resource.room) {
         continue;
       }

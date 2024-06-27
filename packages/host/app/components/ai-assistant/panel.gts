@@ -11,8 +11,6 @@ import { restartableTask, timeout } from 'ember-concurrency';
 import { Velcro } from 'ember-velcro';
 import window from 'ember-window-mock';
 
-import { TrackedMap } from 'tracked-built-ins';
-
 import {
   Button,
   IconButton,
@@ -36,7 +34,6 @@ import {
   eventDebounceMs,
 } from '@cardstack/host/lib/matrix-utils';
 
-import { RoomResource, getRoom } from '@cardstack/host/resources/room';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -390,14 +387,7 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @cached
   private get roomResources() {
-    let resources = new TrackedMap<string, RoomResource>();
-    for (let roomId of this.matrixService.rooms.keys()) {
-      resources.set(
-        roomId,
-        getRoom(this, () => roomId),
-      );
-    }
-    return resources;
+    return this.matrixService.roomResources;
   }
 
   private loadRoomsTask = restartableTask(async () => {
