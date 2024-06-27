@@ -26,7 +26,8 @@ import BooleanField from './boolean';
 import { md5 } from 'super-fast-md5';
 import { EventStatus, MatrixError } from 'matrix-js-sdk';
 import { CommandField } from './command';
-import { CommandResult } from './command-result';
+import { CommandResult, SearchCommandResult } from './command-result';
+import { bool } from '@cardstack/boxel-ui/helpers';
 
 const ErrorMessage: Record<string, string> = {
   ['M_TOO_LARGE']: 'Message is too large',
@@ -193,20 +194,16 @@ function getCardComponent(card: CardDef) {
 }
 
 class EmbeddedMessageField extends Component<typeof MessageField> {
+  get hasCommandResult() {
+    //only display when there is a result
+    return this.args.fields.command && this.args.model.command?.result;
+  }
   <template>
     <div
       {{ScrollIntoView}}
       data-test-message-idx={{@model.index}}
       data-test-message-cards
     >
-      <div>
-        {{#if @fields.command}}
-          <@fields.command @format='embedded' />
-        {{else}}
-          {{@fields.message}}
-        {{/if}}
-      </div>
-
       {{#each @model.attachedResources as |cardResource|}}
         {{#if cardResource.cardError}}
           <div data-test-card-error={{cardResource.cardError.id}} class='error'>
@@ -231,11 +228,6 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
       }
     </style>
   </template>
-
-  get hi() {
-    debugger;
-    return this.args.fields.command;
-  }
 
   get timestamp() {
     if (!this.args.model.created) {
@@ -589,16 +581,20 @@ export class RoomField extends FieldDef {
           ) as CommandResultEvent;
           let serializedResults: LooseSingleCardDocument[] =
             commandResultEvent?.content?.result;
-          let r: CommandResult | undefined;
+          let r: CommandResult | SearchCommandResult | undefined;
           if (serializedResults) {
-            console.log('======');
-            console.log(serializedResults);
-            debugger;
-            // let cards = serializedResults.cards.map((c) => getCard(c, loader));
-            r = new CommandResult({
-              intent: 'howdy',
-              cardIds: serializedResults.map((r) => r.data.id),
-            });
+            // TODO: We should move this code into component when room has been changed
+            if (command.name === 'searchCard') {
+              r = new SearchCommandResult({
+                intent: command.arguments.description,
+                cardIds: serializedResults.map((r) => r.data.id),
+              });
+            } else {
+              r = new CommandResult({
+                intent: command.arguments.description,
+                cardIds: serializedResults.map((r) => r.data.id),
+              });
+            }
           }
           let commandFieldArgs = {
             eventId: event_id,

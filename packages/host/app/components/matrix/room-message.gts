@@ -25,7 +25,7 @@ import type MonacoService from '@cardstack/host/services/monaco-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import { BaseDef, type CardDef } from 'https://cardstack.com/base/card-api';
+import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type CommandField } from 'https://cardstack.com/base/command';
 import { type MessageField } from 'https://cardstack.com/base/room';
 
@@ -51,10 +51,6 @@ interface Signature {
 }
 
 const STREAMING_TIMEOUT_MS = 60000;
-
-function getComponent(cardOrField: BaseDef) {
-  return cardOrField.constructor.getComponent(cardOrField);
-}
 
 export default class RoomMessage extends Component<Signature> {
   constructor(owner: unknown, args: Signature['Args']) {
@@ -84,6 +80,10 @@ export default class RoomMessage extends Component<Signature> {
 
   get isFromAssistant() {
     return this.args.message.author.userId === aiBotUserId;
+  }
+
+  get getComponent() {
+    return this.commandService.getCommandResultComponent(this.args.message);
   }
 
   <template>
@@ -141,8 +141,12 @@ export default class RoomMessage extends Component<Signature> {
             />
           </div>
 
-          {{#let (getComponent @message) as |Component|}}
-            <Component @format='embedded' @displayContainer={{false}} />
+          {{#let this.getComponent as |Component|}}
+            <Component
+              class='embedded-message-field'
+              @format='embedded'
+              @displayContainer={{false}}
+            />
           {{/let}}
           {{#if this.isDisplayingCode}}
             <div class='preview-code'>
@@ -237,6 +241,9 @@ export default class RoomMessage extends Component<Signature> {
         height: var(--monaco-container-height);
         min-height: 7rem;
         max-height: 30vh;
+      }
+      .embedded-message-field {
+        --boxel-field-embedded-padding: 0;
       }
     </style>
   </template>

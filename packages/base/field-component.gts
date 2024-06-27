@@ -244,7 +244,7 @@ export function getBoxComponent(
       }
 
       .field-component-card.embedded-format {
-        padding: var(--boxel-sp);
+        padding: var(--boxel-field-embedded-padding, var(--boxel-sp));
       }
 
       .field-component-card.atom-format {

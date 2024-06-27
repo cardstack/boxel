@@ -1,35 +1,22 @@
-import { Query, getCard } from '@cardstack/runtime-common';
+import { getCard } from '@cardstack/runtime-common';
 import {
   CardDef,
   Component,
-  FieldDef,
   StringField,
   contains,
   containsMany,
   field,
-  linksToMany,
-  primitive,
 } from './card-api';
-import { CommandField } from './command';
 import { cached, tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import {
-  IconLink,
   IconMinusCircle,
   IconPlus,
   IconSearch,
   ThreeDotsHorizontal,
 } from '@cardstack/boxel-ui/icons';
-import {
-  BoxelDropdown,
-  Button,
-  Header,
-  IconButton,
-  Menu,
-  Tooltip,
-} from '@cardstack/boxel-ui/components';
+import { Button, Header, IconButton } from '@cardstack/boxel-ui/components';
 import { on } from '@ember/modifier';
-import { MenuItem } from '@cardstack/boxel-ui/helpers';
 
 type AttachedCardResource = {
   card: CardDef | undefined;
@@ -37,13 +24,8 @@ type AttachedCardResource = {
   cardError?: { id: string; error: Error };
 };
 
-class EmbeddedView extends Component<typeof CommandResult> {
+class SearchCommandResultEmbeddedView extends Component<typeof CommandResult> {
   @tracked showAllResults = false;
-  get what() {
-    debugger;
-    console.log(this.args.model);
-    return 'hi';
-  }
 
   @cached
   get attachedResources(): AttachedCardResource[] | undefined {
@@ -74,10 +56,6 @@ class EmbeddedView extends Component<typeof CommandResult> {
   }
 
   get numberOfCards() {
-    console.log('model', this.args.model);
-    if (this.args.model.cardIds === null) {
-      debugger;
-    }
     if (!this.args.model.cardIds) {
       return 0;
     }
@@ -96,24 +74,14 @@ class EmbeddedView extends Component<typeof CommandResult> {
     return 3;
   }
 
-  get showAllText() {
+  get toggleShowText() {
     return !this.showAllResults
       ? `Show ${this.leftoverCardsToShow} more results`
       : 'See Less';
   }
 
-  @action showAll() {
+  @action toggleShow() {
     this.showAllResults = !this.showAllResults;
-  }
-
-  get actions() {
-    let menuItems: MenuItem[] = [
-      new MenuItem('Copy Card URL', 'action', {
-        action: () => 'hi',
-        icon: IconLink,
-      }),
-    ];
-    return menuItems;
   }
 
   <template>
@@ -121,10 +89,9 @@ class EmbeddedView extends Component<typeof CommandResult> {
       <Header
         @title='Search Results'
         @subtitle='{{this.numberOfCards}} results'
-        @size='small'
         @hasBottomBorder={{true}}
         class='header'
-        data-test-definition-header
+        data-test-comand-result-header
       >
         <:icon>
           <div class='search-icon-container'>
@@ -132,29 +99,14 @@ class EmbeddedView extends Component<typeof CommandResult> {
           </div>
         </:icon>
         <:actions>
-          <BoxelDropdown>
-            <:trigger as |bindings|>
-              <Tooltip @placement='top'>
-                <:trigger>
-                  <IconButton
-                    @icon={{ThreeDotsHorizontal}}
-                    @width='20px'
-                    @height='20px'
-                    class='icon-button'
-                    aria-label='Options'
-                    data-test-more-options-button
-                    {{bindings}}
-                  />
-                </:trigger>
-                <:content>
-                  More Options
-                </:content>
-              </Tooltip>
-            </:trigger>
-            <:content as |dd|>
-              <Menu @closeMenu={{dd.close}} @items={{this.actions}} />
-            </:content>
-          </BoxelDropdown>
+          <IconButton
+            @icon={{ThreeDotsHorizontal}}
+            @width='20px'
+            @height='20px'
+            class='icon-button'
+            aria-label='Options'
+            data-test-more-options-button
+          />
         </:actions>
       </Header>
       <div class='body'>
@@ -178,11 +130,10 @@ class EmbeddedView extends Component<typeof CommandResult> {
         <div class='footer'>
           {{#if this.numberOfCardsGreaterThanPaginateSize}}
             <Button
-              @kind='secondary-light'
               @size='small'
-              class='show-all-results'
-              {{on 'click' this.showAll}}
-              data-test-show-all-results-button
+              class='toggle-show'
+              {{on 'click' this.toggleShow}}
+              data-test-toggle-show-button
             >
               {{#if this.showAllResults}}
                 <IconMinusCircle
@@ -194,7 +145,7 @@ class EmbeddedView extends Component<typeof CommandResult> {
                 <IconPlus width='11px' height='11px' role='presentation' />
               {{/if}}
 
-              {{this.showAllText}}
+              {{this.toggleShowText}}
             </Button>
           {{/if}}
 
@@ -204,26 +155,31 @@ class EmbeddedView extends Component<typeof CommandResult> {
     <style>
       .result {
         color: black;
-        border: 1px solid var(--boxel-border-color);
         width: 100%;
+        --left-padding: var(--boxel-sp-xs);
+      }
+      .search-icon {
+        --icon-stroke-width: 3.5;
       }
       .search-icon-container {
-        background-color: var(--boxel-button-border-color);
+        background-color: var(--boxel-border-color);
         display: flex;
-        padding: var(--boxel-sp-4xs);
+        padding: var(--boxel-sp-xxxs);
         border-radius: var(--boxel-border-radius-sm);
       }
       .header {
         --boxel-label-color: var(--boxel-400);
         --boxel-label-font-weight: 500;
         --boxel-label-font: 500 var(--boxel-font-xs);
+        --boxel-header-padding: var(--boxel-sp-xxxs) var(--boxel-sp-xxxs) 0
+          var(--left-padding);
       }
       .body {
         display: flex;
         flex-direction: column;
         font-weight: bold;
-        padding: var(--boxel-sp-sm) var(--boxel-sp-sm) var(--boxel-sp-xxs)
-          var(--boxel-sp-sm);
+        padding: var(--boxel-sp-sm) var(--boxel-sp-xs) var(--boxel-sp-xxs)
+          var(--boxel-sp);
         gap: var(--boxel-sp-xxxs);
       }
 
@@ -231,15 +187,16 @@ class EmbeddedView extends Component<typeof CommandResult> {
         color: var(--boxel-header-text-color);
         text-overflow: ellipsis;
       }
-      .show-all-results {
+      .toggle-show {
         --icon-color: var(--boxel-highlight);
         --icon-border: var(--boxel-highlight);
         --boxel-button-padding: 0px;
         --boxel-button-font: var(--boxel-font-xs);
+        --icon-stroke-width: 2.5;
         font-weight: bold;
         color: var(--boxel-highlight);
         display: flex;
-        gap: var(--boxel-sp-xxs);
+        gap: var(--boxel-sp-xxxs);
         border: none;
       }
     </style>
@@ -249,5 +206,8 @@ class EmbeddedView extends Component<typeof CommandResult> {
 export class CommandResult extends CardDef {
   @field intent = contains(StringField);
   @field cardIds = containsMany(StringField);
-  static embedded = EmbeddedView;
+}
+
+export class SearchCommandResult extends CommandResult {
+  static embedded = SearchCommandResultEmbeddedView;
 }

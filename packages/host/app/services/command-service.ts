@@ -18,8 +18,11 @@ import {
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import { serializeCard } from 'https://cardstack.com/base/card-api';
+import { BaseDef } from 'https://cardstack.com/base/card-api';
 import { CommandField } from 'https://cardstack.com/base/command';
+
+import { SearchCommandResult } from 'https://cardstack.com/base/command-result';
+import { MessageField } from 'https://cardstack.com/base/room';
 
 import { getSearchResults } from '../resources/search';
 
@@ -37,6 +40,10 @@ const deserializeToQuery = (payload: SearchPayload) => {
 
   return { filter: payload.filter };
 };
+
+function getComponent(cardOrField: BaseDef) {
+  return cardOrField.constructor.getComponent(cardOrField);
+}
 
 export default class CommandService extends Service {
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -92,6 +99,15 @@ export default class CommandService extends Service {
       this.matrixService.failedCommandState.set(eventId, error);
     }
   });
+
+  getCommandResultComponent = (message: MessageField) => {
+    if (message.command && message.command.result) {
+      if (message.command.name === 'searchCard') {
+        return getComponent(message.command.result as SearchCommandResult);
+      }
+    }
+    return;
+  };
 }
 
 type PatchPayload = { card_id: string } & PatchData;

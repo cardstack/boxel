@@ -1,6 +1,5 @@
 import {
   CardDef,
-  Component,
   FieldDef,
   StringField,
   contains,
@@ -33,17 +32,4 @@ export class CommandField extends CardDef {
   @field eventId = contains(StringField);
   @field status = contains(CommandStatusField);
   @field result = linksTo(CommandResult);
-
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      {{#if @model.result}}
-        <@fields.result @displayContainer={{false}} />
-      {{/if}}
-      <style>
-        .command {
-          color: black;
-        }
-      </style>
-    </template>
-  };
 }
