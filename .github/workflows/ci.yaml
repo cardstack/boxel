@@ -234,17 +234,12 @@ jobs:
               - '.github/workflows/deploy-host.yml'
               - '.github/workflows/manual-deploy.yml'
               - '.github/workflows/ci.yaml'
+              - 'packages/ai-bot/**'
               - 'packages/base/**'
               - 'packages/boxel-ui/**'
               - 'packages/host/**'
               - 'packages/realm-server/**'
               - 'packages/runtime-common/**'
-              - 'pnpm-lock.yaml'
-            ai-bot:
-              - '.github/workflows/manual-ai-bot.yml'
-              - '.github/workflows/ci.yaml'
-              - 'packages/runtime-common/**'
-              - 'packages/ai-bot/**'
               - 'pnpm-lock.yaml'
 
   deploy:
@@ -252,19 +247,10 @@ jobs:
     if: ${{ needs.change-check.outputs.boxel == 'true' }}
     needs:
       - change-check
+      - ai-bot-test
       - boxel-ui-test
       - realm-server-test
     uses: ./.github/workflows/manual-deploy.yml
-    secrets: inherit
-    with:
-      environment: "staging"
-
-  deploy-ai-bot:
-    needs:
-      - ai-bot-test
-      - change-check
-    if: ${{ needs.change-check.outputs.ai-bot == 'true' }}
-    uses: ./.github/workflows/manual-ai-bot.yml
     secrets: inherit
     with:
       environment: "staging"
