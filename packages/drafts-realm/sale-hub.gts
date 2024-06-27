@@ -24,10 +24,8 @@ import {
   Modal,
 } from '@cardstack/boxel-ui/components';
 import MarkdownField from '../base/markdown';
-import { CrmAccount } from './crm/account';
-import { AddressInfo } from './address-info';
+import { CrmAccount, CrmAccountField } from './crm/account';
 import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import {
   format as formatDate,
@@ -35,11 +33,9 @@ import {
   isTomorrow,
   isThisMonth,
 } from 'date-fns';
-import { UserName } from './user-name';
-import { UserEmail } from './user-email';
-import { CurrencyAmount } from './currency-amount';
 import { OpportunityFormField } from './opportunity-form';
-import { LeadFormField, LeadForm } from './lead-form';
+import { LeadFormField } from './lead-form';
+import { ContactFormField } from './contact-form';
 
 interface StepSignature {
   step: number;
@@ -758,77 +754,6 @@ class Steps extends GlimmerComponent<StepsSignature> {
   </template>
 }
 
-//*contact-form-field
-
-class ContactFormField extends LeadFormField {
-  static displayName = 'Contact Form';
-  @field name = contains(UserName, {
-    description: `User's Full Name`,
-  });
-}
-
-//*convert lead form
-// class EditSecFoLeadConvertedFormField extends Component<
-//   typeof LeadConvertedFormField
-// > {
-//   /* Lead Status Options */
-//   get selectedConvertedStatus() {
-//     return { name: this.args.model.convertedStatus || 'None' };
-//   }
-
-//   @tracked convertedStatusOptions = [
-//     { name: 'None' },
-//     { name: 'New' },
-//     { name: 'Working' },
-//     { name: 'Nurturing' },
-//     { name: 'Qualified' },
-//     { name: 'Unqualified' },
-//   ] as Array<CategorySignature>;
-
-//   @action updateConvertedStatus(type: { name: string }) {
-//     this.args.model.convertedStatus = type.name;
-//   }
-
-//   <template>
-//     <CardContainer @displayBoundaries={{false}} class='container'>
-//       <FieldContainer @tag='label' @label='Lead Status' @vertical={{true}}>
-//         <BoxelSelect
-//           @searchEnabled={{true}}
-//           @searchField='name'
-//           @selected={{this.selectedConvertedStatus}}
-//           @onChange={{this.updateConvertedStatus}}
-//           @options={{this.convertedStatusOptions}}
-//           class='select'
-//           as |item|
-//         >
-//           <div>{{item.name}}</div>
-//         </BoxelSelect>
-//       </FieldContainer>
-//     </CardContainer>
-
-//     <style>
-//       .container {
-//         padding: var(--boxel-sp-lg);
-//         display: grid;
-//         gap: var(--boxel-sp);
-//       }
-//       .select {
-//         padding: var(--boxel-sp-xs);
-//         background-color: white;
-//       }
-//     </style>
-//   </template>
-// }
-
-// class LeadConvertedFormField extends FieldDef {
-//   static displayName = 'Convert Lead Form';
-//   @field contactForm = linksTo(ContactForm);
-//   @field opportunityForm = contains(OpportunityFormField);
-//   @field convertedStatus = contains(StringField);
-
-//   static edit = EditSecFoLeadConvertedFormField;
-// }
-
 //*scheduled task
 class ScheduledTask extends FieldDef {
   static displayName = 'Scheduled Task';
@@ -871,6 +796,10 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
   @action
   openTaskFormModal() {
     this.isTaskFormModalVisible = true;
+
+    this.updateAccountFormAccountName();
+    this.updateContactFormName();
+    this.updateOpportunityAccountName();
   }
 
   @action
@@ -878,9 +807,22 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
     this.isTaskFormModalVisible = false;
   }
 
-  //auto bind contact-form
+  //auto bind form
+  @action
+  updateAccountFormAccountName() {
+    if (
+      this.args.model &&
+      this.args.model.accountForm &&
+      this.args.model.leadForm
+    ) {
+      const { salutation, firstName, lastName } = this.args.model.leadForm.name;
 
-  get contactFormName() {
+      this.args.model.accountForm.accountName = `${salutation} ${firstName} ${lastName}`;
+    }
+  }
+
+  @action
+  updateContactFormName() {
     if (
       this.args.model &&
       this.args.model.contactForm &&
@@ -893,10 +835,57 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
       this.args.model.contactForm.name.salutation = salutation;
       this.args.model.contactForm.name.firstName = firstName;
       this.args.model.contactForm.name.lastName = lastName;
-
-      return salutation + ' ' + firstName + ' ' + lastName;
     }
-    return ''; // Ensure a string is always returned
+  }
+
+  @action
+  updateOpportunityAccountName() {
+    if (
+      this.args.model &&
+      this.args.model.opportunityForm &&
+      this.args.model.leadForm
+    ) {
+      const firstName = this.args.model.leadForm.name.firstName;
+      const company = this.args.model.leadForm.company;
+
+      this.args.model.opportunityForm.opportunityName = `${firstName} ${company}`;
+    }
+  }
+
+  get accountFormAccountName() {
+    const { leadForm } = this.args.model;
+
+    if (!leadForm || !leadForm.name) return '';
+
+    const { salutation, firstName, lastName } = leadForm.name;
+
+    if (!salutation || !firstName || !lastName) return '';
+
+    return `${salutation} ${firstName} ${lastName}`;
+  }
+
+  get contactFormAccountName() {
+    const { leadForm } = this.args.model;
+
+    if (!leadForm || !leadForm.name) return '';
+
+    const { salutation, firstName, lastName } = leadForm.name;
+
+    if (!salutation || !firstName || !lastName) return '';
+
+    return `${salutation} ${firstName} ${lastName}`;
+  }
+
+  get opportunityFormName() {
+    const { leadForm } = this.args.model;
+
+    if (!leadForm || !leadForm.name || !leadForm.company) return '';
+
+    const { firstName } = leadForm.name;
+
+    if (!firstName) return '';
+
+    return `${firstName} ${leadForm.company}`;
   }
 
   //step
@@ -1058,9 +1047,33 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
         <h1>Convert Lead Form</h1>
 
         <div class='formInputGroup'>
-          <FieldContainer @tag='label' @label='Contact Form' @vertical={{true}}>
-            {{this.contactFormName}}
+          <FieldContainer
+            @tag='label'
+            @label='Account Form'
+            @vertical={{true}}
+            class='input-container'
+          >
+            {{this.accountFormAccountName}}
           </FieldContainer>
+
+          <FieldContainer
+            @tag='label'
+            @label='Contact Form'
+            @vertical={{true}}
+            class='input-container'
+          >
+            {{this.contactFormAccountName}}
+          </FieldContainer>
+
+          <FieldContainer
+            @tag='label'
+            @label='Opportunity Form'
+            @vertical={{true}}
+            class='input-container'
+          >
+            {{this.opportunityFormName}}
+          </FieldContainer>
+
         </div>
 
       </CardContainer>
@@ -1176,6 +1189,11 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
     <style>
       .container {
         padding: var(--boxel-sp);
+      }
+      .input-container {
+        padding: var(--boxel-sp);
+        background-color: var(--boxel-100);
+        border-radius: var(--boxel-border-radius);
       }
       .sale-hub-container {
         padding: var(--boxel-sp-xs);
@@ -1295,7 +1313,7 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
         color: var(--boxel-red);
       }
       .formInputGroup > * + * {
-        margin-top: 1rem;
+        margin-top: 2rem;
       }
     </style>
   </template>
@@ -1304,10 +1322,9 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
 export class SaleHub extends CardDef {
   static displayName = 'sale hub';
   @field leadForm = contains(LeadFormField);
-  // @field leadConvertedForm = contains(LeadConvertedFormField);
-  // @field accountForm = linksTo(CrmAccount);
+  @field accountForm = contains(CrmAccountField);
   @field contactForm = contains(ContactFormField);
-  // @field opportunityForm = linksTo(OpportunityForm);
+  @field opportunityForm = contains(OpportunityFormField);
   @field scheduledTask = containsMany(ScheduledTask);
   static isolated = IsolatedSecForSaleHub;
 }

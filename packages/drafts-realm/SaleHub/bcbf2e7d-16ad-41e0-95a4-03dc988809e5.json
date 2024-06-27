@@ -32,19 +32,55 @@
         "leadSource": "Advertisement",
         "industry": "Agriculture"
       },
+      "accountForm": {
+        "accountName": "Mr. Law Bom Bom",
+        "accountAlias": null,
+        "description": null,
+        "contactInformation": {
+          "salutation": "Mr.",
+          "firstName": "Law",
+          "lastName": "Bom Bom",
+          "address": {
+            "streetAddress": null,
+            "city": null,
+            "region": null,
+            "postalCode": null,
+            "poBoxNumber": null,
+            "country": null
+          },
+          "phoneNumber": {
+            "country": null,
+            "area": null,
+            "number": null
+          },
+          "email": {
+            "value": null
+          },
+          "website": {
+            "value": null
+          }
+        },
+        "billingAddress": {
+          "streetAddress": null,
+          "city": null,
+          "region": null,
+          "postalCode": null,
+          "poBoxNumber": null,
+          "country": null
+        },
+        "numberOfEmployees": null
+      },
       "contactForm": {
+        "title": null,
         "name": {
           "salutation": "Mr.",
           "firstName": "Law",
           "lastName": "Bom Bom"
         },
-        "company": null,
-        "title": null,
-        "website": null,
-        "description": null,
-        "leadStatus": null,
-        "phone": null,
         "email": null,
+        "phone": null,
+        "fax": null,
+        "department": null,
         "addressInfo": {
           "address": null,
           "zip": null,
@@ -53,19 +89,46 @@
           "country": null,
           "countryCode": null,
           "stateCode": null
-        },
-        "noOfEmployees": null,
-        "annualRevenue": {
+        }
+      },
+      "opportunityForm": {
+        "opportunityName": null,
+        "closeDate": null,
+        "amount": {
           "currency": null,
           "totalAmount": null
         },
-        "leadSource": null,
-        "industry": null
+        "description": null,
+        "stage": null,
+        "percentage": null,
+        "forecastCategory": null
       },
       "scheduledTask": [],
       "title": null,
       "description": null,
       "thumbnailURL": null
+    },
+    "relationships": {
+      "accountForm.owner": {
+        "links": {
+          "self": null
+        }
+      },
+      "accountForm.parentAccount": {
+        "links": {
+          "self": null
+        }
+      },
+      "accountForm.company": {
+        "links": {
+          "self": null
+        }
+      },
+      "opportunityForm.accountName": {
+        "links": {
+          "self": null
+        }
+      }
     },
     "meta": {
       "adoptsFrom": {
