@@ -6,6 +6,8 @@ import {
   findAll,
 } from '@ember/test-helpers';
 
+import { waitUntil } from '@ember/test-helpers';
+
 import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
@@ -22,7 +24,6 @@ import {
   waitForCodeEditor,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
-import { waitUntil } from '@ember/test-helpers';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";

@@ -25,7 +25,6 @@ import {
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
 import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
 import { consume } from 'ember-provide-consume-context';
-import { and } from '@cardstack/boxel-ui/helpers';
 
 interface Signature {
   Args: {

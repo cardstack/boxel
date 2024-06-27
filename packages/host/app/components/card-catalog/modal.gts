@@ -56,7 +56,7 @@ interface Signature {
 
 export interface RealmCards {
   url: string | null;
-  realmInfo: RealmInfo;
+  realmInfo: Omit<RealmInfo, 'url'>;
   cards: CardDef[];
 }
 

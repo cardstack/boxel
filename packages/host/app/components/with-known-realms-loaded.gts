@@ -1,7 +1,7 @@
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { task, timeout } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 
 import CardService from '../services/card-service';
 import RealmService from '../services/realm';

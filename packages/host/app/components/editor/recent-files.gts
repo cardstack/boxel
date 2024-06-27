@@ -9,10 +9,11 @@ import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmService from '@cardstack/host/services/realm';
 import { RecentFile } from '@cardstack/host/services/recent-files-service';
 
+import WithLoadedRealm from '../with-loaded-realm';
+
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RecentFilesService from '../../services/recent-files-service';
-import WithLoadedRealm from '../with-loaded-realm';
 
 interface Args {
   Args: {};
