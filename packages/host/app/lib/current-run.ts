@@ -376,6 +376,7 @@ export class CurrentRun {
     let searchData: Record<string, any> | undefined;
     let cardType: typeof CardDef | undefined;
     let isolatedHtml: string | undefined;
+    let atomHtml: string | undefined;
     let adjustedResource: CardResource | undefined;
     try {
       let api = await this.loaderService.loader.import<typeof CardAPI>(
@@ -414,6 +415,13 @@ export class CurrentRun {
       isolatedHtml = await this.#renderCard({
         card,
         format: 'isolated',
+        visit: this.visitFile.bind(this),
+        identityContext,
+        realmPath: this.#realmPaths,
+      });
+      atomHtml = await this.#renderCard({
+        card,
+        format: 'atom',
         visit: this.visitFile.bind(this),
         identityContext,
         realmPath: this.#realmPaths,
@@ -474,6 +482,7 @@ export class CurrentRun {
         resource: doc.data,
         searchData,
         isolatedHtml,
+        atomHtml,
         embeddedHtml,
         lastModified,
         types: typesMaybeError.types.map(({ refURL }) => refURL),
