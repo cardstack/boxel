@@ -393,6 +393,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
           </div>
         {{else}}
           <Header
+            @size='large'
             @title={{this.headerTitle}}
             class={{cn 'header' header--icon-hovered=this.isHoverOnRealmIcon}}
             {{on
@@ -538,7 +539,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         --boxel-header-icon-width: var(--boxel-icon-med);
         --boxel-header-icon-height: var(--boxel-icon-med);
         --boxel-header-padding: var(--boxel-sp-sm);
-        --boxel-header-text-size: var(--boxel-font-med);
+        --boxel-header-text-font: var(--boxel-font-med);
         --boxel-header-border-radius: var(--boxel-border-radius-xl);
         z-index: 1;
         background-color: var(--boxel-light);
@@ -560,7 +561,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
       .header--icon-hovered {
         --boxel-header-text-color: var(--boxel-highlight);
-        --boxel-header-text-size: var(--boxel-font);
+        --boxel-header-text-font: var(--boxel-font);
       }
 
       .save-indicator {
@@ -620,7 +621,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         font: 700 var(--boxel-font);
         gap: var(--boxel-sp-xxxs);
         --boxel-header-padding: var(--boxel-sp-xs);
-        --boxel-header-text-size: var(--boxel-font-size);
+        --boxel-header-text-font: var(--boxel-font-size);
         --boxel-header-icon-width: var(--boxel-icon-sm);
         --boxel-header-icon-height: var(--boxel-icon-sm);
         --boxel-header-border-radius: var(--boxel-border-radius-lg);
