@@ -602,8 +602,6 @@ export class RoomField extends FieldDef {
             status: annotation?.content['m.relates_to'].key ?? 'ready',
             ...(r && { result: r }),
           };
-          console.log('===');
-          console.log(commandFieldArgs);
           let commandField = new CommandField(commandFieldArgs);
           messageField = new MessageField({
             ...cardArgs,
