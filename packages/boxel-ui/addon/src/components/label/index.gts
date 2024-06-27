@@ -22,7 +22,7 @@ const Label: TemplateOnlyComponent<Signature> = <template>
     .boxel-label {
       color: var(--boxel-label-color);
       font: var(--boxel-label-font, 700 var(--boxel-font-sm));
-      letter-spacing: var(--boxel-label-letter-spacing, var(--boxel-lsp-sm) ;);
+      letter-spacing: var(--boxel-label-letter-spacing, var(--boxel-lsp-sm));
     }
   </style>
 </template>;

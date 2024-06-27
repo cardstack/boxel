@@ -81,7 +81,6 @@ const BaseDefinitionContainer: TemplateOnlyComponent<BaseSignature> = <template>
     .header {
       --boxel-header-text-font: var(--boxel-font-size-sm);
       --boxel-header-padding: var(--boxel-sp-xs);
-      --boxel-header-text-font: var(--boxel-font-size-sm);
       --boxel-header-text-transform: uppercase;
       --boxel-header-letter-spacing: var(--boxel-lsp-xxl);
       --boxel-header-detail-max-width: none;
