@@ -1,4 +1,13 @@
-import { FieldDef, StringField, contains, field, primitive } from './card-api';
+import {
+  CardDef,
+  FieldDef,
+  StringField,
+  contains,
+  field,
+  linksTo,
+  primitive,
+} from './card-api';
+import { CommandResult } from './command-result';
 
 type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
 
@@ -17,9 +26,10 @@ class CommandStatusField extends FieldDef {
 }
 
 // Subclass, add a validator that checks the fields required?
-export class CommandField extends FieldDef {
+export class CommandField extends CardDef {
   @field name = contains(StringField);
   @field payload = contains(CommandObjectField);
   @field eventId = contains(StringField);
   @field status = contains(CommandStatusField);
+  @field result = linksTo(CommandResult);
 }
