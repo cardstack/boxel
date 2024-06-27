@@ -71,7 +71,7 @@ class SearchCommandResultEmbeddedView extends Component<typeof CommandResult> {
   }
 
   get paginateSize() {
-    return 3;
+    return 5;
   }
 
   get toggleShowText() {
