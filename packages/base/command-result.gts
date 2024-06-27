@@ -1,5 +1,6 @@
 import { getCard } from '@cardstack/runtime-common';
 import {
+  BaseDef,
   CardDef,
   Component,
   StringField,
@@ -23,6 +24,9 @@ type AttachedCardResource = {
   loaded?: Promise<void>;
   cardError?: { id: string; error: Error };
 };
+function getComponent(cardOrField: BaseDef) {
+  return cardOrField.constructor.getComponent(cardOrField);
+}
 
 class SearchCommandResultEmbeddedView extends Component<typeof CommandResult> {
   @tracked showAllResults = false;
@@ -121,9 +125,11 @@ class SearchCommandResultEmbeddedView extends Component<typeof CommandResult> {
               {{cardResource.cardError.error.message}}
             </div>
           {{else if cardResource.card}}
-            <div data-test-result-card={{cardResource.card.id}}>
-              {{i}}.
-              {{cardResource.card.title}}
+            <div class='card' data-test-result-card={{cardResource.card.id}}>
+              {{#let (getComponent cardResource.card) as |Component|}}
+                {{i}}.
+                <Component @format='atom' @displayContainer={{false}} />
+              {{/let}}
             </div>
           {{/if}}
         {{/each}}
@@ -157,6 +163,10 @@ class SearchCommandResultEmbeddedView extends Component<typeof CommandResult> {
         color: black;
         width: 100%;
         --left-padding: var(--boxel-sp-xs);
+      }
+      .card {
+        display: flex;
+        gap: var(--boxel-sp-xxs);
       }
       .search-icon {
         --icon-stroke-width: 3.5;
