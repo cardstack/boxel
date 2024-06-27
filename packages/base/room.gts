@@ -27,7 +27,6 @@ import { md5 } from 'super-fast-md5';
 import { EventStatus, MatrixError } from 'matrix-js-sdk';
 import { CommandField } from './command';
 import { CommandResult, SearchCommandResult } from './command-result';
-import { bool } from '@cardstack/boxel-ui/helpers';
 
 const ErrorMessage: Record<string, string> = {
   ['M_TOO_LARGE']: 'Message is too large',
