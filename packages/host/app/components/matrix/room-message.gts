@@ -40,7 +40,6 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     room: RoomField;
-    roomId: string;
     message: MessageField;
     index?: number;
     monacoSDK: MonacoSDK;
@@ -375,7 +374,7 @@ export default class RoomMessage extends Component<Signature> {
       );
       //here is reaction event
       await this.matrixService.sendReactionEvent(
-        this.args.roomId,
+        this.args.room.roomId,
         eventId,
         'applied',
       );

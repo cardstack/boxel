@@ -18,6 +18,8 @@ interface CardPillSignature {
     card: CardDef;
     isAutoAttachedCard?: boolean;
     removeCard?: (card: CardDef) => void;
+    onToggle?: () => void;
+    isEnabled?: boolean;
   };
 }
 
@@ -28,7 +30,6 @@ export default class CardPill extends Component<CardPillSignature> {
 
   <template>
     <Pill
-      @inert={{true}}
       class={{cn 'card-pill' is-autoattached=@isAutoAttachedCard}}
       data-test-attached-card={{@card.id}}
       data-test-autoattached-card={{@isAutoAttachedCard}}
@@ -57,6 +58,17 @@ export default class CardPill extends Component<CardPillSignature> {
             data-test-remove-card-btn
           />
         {{/if}}
+        {{#if @onToggle}}
+          <label class={{cn 'toggle' checked=@isEnabled}}>
+            <span class='boxel-sr-only'>Is Enabled:</span>
+            <input
+              {{on 'click' @onToggle}}
+              class='toggle-switch'
+              type='checkbox'
+              switch
+            />
+          </label>
+        {{/if}}
       </:default>
     </Pill>
     <style>
@@ -75,9 +87,6 @@ export default class CardPill extends Component<CardPillSignature> {
       }
       .card-pill {
         --pill-icon-size: 18px;
-        padding: var(--boxel-sp-5xs);
-        background-color: var(--boxel-light);
-        border: 1px solid var(--boxel-400);
         height: var(--pill-height);
       }
       .card-title {
@@ -93,10 +102,45 @@ export default class CardPill extends Component<CardPillSignature> {
         display: flex;
         max-width: 100px;
       }
+      .toggle {
+        margin-left: auto;
+        width: 22px;
+        height: 12px;
+        background-color: var(--boxel-450);
+        border-radius: var(--boxel-border-radius-sm);
+        padding: 3px;
+        display: flex;
+        align-items: center;
+        transition: background-color 0.1s ease-in;
+      }
+      input[type='checkbox'] {
+        appearance: none;
+      }
+      .toggle-switch {
+        margin: 0;
+        width: 6px;
+        height: 6px;
+        background-color: var(--boxel-light);
+        border-radius: 50%;
+        transform: translateX(0);
+        transition: transform 0.1s ease-in;
+      }
+      .toggle.checked {
+        background-color: var(--boxel-dark-green);
+      }
+      .toggle.checked .toggle-switch {
+        transform: translateX(10px);
+      }
+      .toggle:hover,
+      .toggle-switch:hover {
+        cursor: pointer;
+      }
       :deep(.atom-format) {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        border-radius: 0;
+        background: none;
       }
     </style>
   </template>

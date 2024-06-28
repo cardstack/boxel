@@ -65,7 +65,11 @@ export default class AiAssistantCardPicker extends Component<Signature> {
           (not this.isViewAllAttachedCards)
         )
       }}
-        <Pill {{on 'click' this.toggleViewAllAttachedCards}} data-test-view-all>
+        <Pill
+          @kind='button'
+          {{on 'click' this.toggleViewAllAttachedCards}}
+          data-test-view-all
+        >
           View All ({{this.cardsToDisplay.length}})
         </Pill>
       {{/if}}
@@ -104,9 +108,6 @@ export default class AiAssistantCardPicker extends Component<Signature> {
         color: var(--boxel-highlight);
         transition: color var(--boxel-transition);
         outline: 0;
-      }
-      .attach-button :deep(svg) {
-        padding: var(--boxel-sp-5xs);
       }
       .attach-button:hover:not(:disabled),
       .attach-button:focus:not(:disabled) {

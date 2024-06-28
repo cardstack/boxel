@@ -1787,7 +1787,7 @@ export class TestCard extends ExportedCard {
     );
 
     assert
-      .dom('[data-test-inherits-from-field] .pill.inert')
+      .dom('[data-test-inherits-from-field] .pill')
       .includesText('exported card', 'the inherits from is correct');
     assert.dom('[data-test-create-definition]').isDisabled();
 
@@ -1831,7 +1831,7 @@ export class TestCard extends ExportedCard {
       `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
     );
     assert
-      .dom('[data-test-inherits-from-field] .pill.inert')
+      .dom('[data-test-inherits-from-field] .pill')
       .includesText('Test Card', 'the inherits from is correct');
     assert
       .dom('[data-test-display-name-field]')
@@ -1861,7 +1861,7 @@ export class TestCard extends ExportedCard {
     );
 
     assert
-      .dom('[data-test-inherits-from-field] .pill.inert')
+      .dom('[data-test-inherits-from-field] .pill')
       .includesText('exported field', 'the inherits from is correct');
 
     await fillIn('[data-test-display-name-field]', 'Test Field');
@@ -1936,7 +1936,7 @@ export class TestField extends ExportedField {
       `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
     );
     assert
-      .dom('[data-test-inherits-from-field] .pill.inert')
+      .dom('[data-test-inherits-from-field] .pill')
       .includesText('exported card', 'the inherits from is correct');
     assert
       .dom('[data-test-display-name-field]')
@@ -2095,7 +2095,7 @@ export class ExportedCard extends ExportedCardParent {
     );
 
     assert
-      .dom('[data-test-inherits-from-field] .pill.inert')
+      .dom('[data-test-inherits-from-field] .pill')
       .includesText('exported card', 'the inherits from is correct');
     assert.dom('[data-test-create-card-instance]').isEnabled();
 

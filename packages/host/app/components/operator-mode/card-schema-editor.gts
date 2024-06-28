@@ -254,6 +254,7 @@ export default class CardSchemaEditor extends Component<Signature> {
           <Tooltip @placement='bottom'>
             <:trigger>
               <Pill
+                @kind='button'
                 {{on 'click' (fn @goToDefinition codeRef @cardType.localName)}}
                 data-test-card-schema-navigational-button
               >
@@ -340,6 +341,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                       <Tooltip @placement='bottom'>
                         <:trigger>
                           <Pill
+                            @kind='button'
                             {{on
                               'click'
                               (fn @goToDefinition codeRef field.card.localName)

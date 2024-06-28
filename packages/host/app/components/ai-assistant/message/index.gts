@@ -284,15 +284,17 @@ interface AiAssistantConversationSignature {
 
 const AiAssistantConversation: TemplateOnlyComponent<AiAssistantConversationSignature> =
   <template>
-    <div class='ai-assistant-conversation'>
+    <div class='ai-assistant-conversation' ...attributes>
       {{yield}}
     </div>
     <style>
-      .ai-assistant-conversation {
-        display: flex;
-        flex-direction: column;
-        padding: var(--boxel-sp);
-        overflow-y: auto;
+      @layer {
+        .ai-assistant-conversation {
+          display: flex;
+          flex-direction: column;
+          padding: var(--boxel-sp);
+          overflow-y: auto;
+        }
       }
     </style>
   </template>;
