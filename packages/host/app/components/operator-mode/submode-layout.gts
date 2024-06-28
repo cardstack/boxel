@@ -9,10 +9,6 @@ import { tracked } from '@glimmer/tracking';
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask, timeout } from 'ember-concurrency';
 
-import { use, resource } from 'ember-resources';
-
-import { TrackedObject } from 'tracked-built-ins';
-
 import {
   ResizablePanel,
   ResizablePanelGroup,
@@ -29,8 +25,6 @@ import ENV from '@cardstack/host/config/environment';
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-
-import type { MessageField } from 'https://cardstack.com/base/room';
 
 import SearchSheet, {
   SearchSheetMode,
@@ -198,62 +192,6 @@ export default class SubmodeLayout extends Component<Signature> {
     this.suppressSearchClose = false;
   });
 
-  @use private findUnseenMessage = resource(({ on }) => {
-    const state: {
-      value: {
-        roomId: string;
-        message: MessageField;
-      } | null;
-    } = new TrackedObject({
-      value: null,
-    });
-
-    let lastMessages: Map<string, MessageField> = new Map();
-    for (let resource of this.matrixService.roomResources.values()) {
-      if (!resource.room) {
-        continue;
-      }
-      let { room } = resource;
-      lastMessages.set(room.roomId, room.messages[room.messages.length - 1]);
-    }
-
-    let lastMessage =
-      Array.from(lastMessages).filter(
-        (lastMessage) =>
-          lastMessage[1] &&
-          !this.matrixService.currentUserEventReadReceipts.has(
-            lastMessage[1].eventId,
-          ),
-      )[0] ?? null;
-    if (lastMessage) {
-      state.value = {
-        roomId: lastMessage[0],
-        message: lastMessage[1],
-      };
-
-      let resetState = setTimeout(() => {
-        state.value = null;
-      }, 3000);
-      on.cleanup(() => {
-        clearInterval(resetState);
-      });
-    }
-
-    return state;
-  });
-
-  get unseenMessageRoomId() {
-    return this.findUnseenMessage.value?.roomId ?? '';
-  }
-
-  get unseenMessage() {
-    return this.findUnseenMessage.value?.message ?? ({} as MessageField);
-  }
-
-  get isAiAssistantToastVisible() {
-    return this.findUnseenMessage.value && !this.isAiAssistantVisible;
-  }
-
   <template>
     <div class='submode-layout {{this.aiAssistantVisibilityClass}}'>
       <ResizablePanelGroup
@@ -299,13 +237,10 @@ export default class SubmodeLayout extends Component<Signature> {
             @onInputInsertion={{this.storeSearchElement}}
           />
           {{#if (and APP.experimentalAIEnabled (not @hideAiAssistant))}}
-            {{#if this.isAiAssistantToastVisible}}
-              <AiAssistantToast
-                @roomId={{this.unseenMessageRoomId}}
-                @message={{this.unseenMessage}}
-                @onViewInChatClick={{this.toggleChat}}
-              />
-            {{/if}}
+            <AiAssistantToast
+              @hide={{this.isAiAssistantVisible}}
+              @onViewInChatClick={{this.toggleChat}}
+            />
             <AiAssistantButton
               class='chat-btn'
               @isActive={{this.isAiAssistantVisible}}
