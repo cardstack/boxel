@@ -40,8 +40,8 @@ export default class AiAssistantToast extends Component<Signature> {
     <div
       class='ai-assistant-toast {{if this.isVisible "visible"}}'
       data-test-ai-assistant-toast
-      {{on 'mouseenter' this.blockResetState}}
-      {{on 'mouseleave' this.unBlockResetState}}
+      {{on 'mouseenter' this.blockResetStateValue}}
+      {{on 'mouseleave' this.unBlockResetStateValue}}
     >
       <header class='toast-header' data-test-ai-assistant-toast-header>
         <img alt='AI Assistant' src={{assistantIcon}} width='20' height='20' />
@@ -138,17 +138,17 @@ export default class AiAssistantToast extends Component<Signature> {
         roomId: string;
         message: MessageField;
       } | null;
-      isResetStateBlocked: boolean;
+      isResetStateValueBlocked: boolean;
     } = new TrackedObject({
       value: null,
-      isResetStateBlocked: false,
+      isResetStateValueBlocked: false,
     });
 
-    let resetStateId: Timer | null;
-    const resetState = function (timeout = 3000): Timer {
+    let resetStateValueId: Timer | null;
+    const resetStateValue = function (timeout = 3000): Timer {
       return later(() => {
-        if (state.isResetStateBlocked) {
-          resetStateId = resetState(1000);
+        if (state.isResetStateValueBlocked) {
+          resetStateValueId = resetStateValue(1000);
           return;
         }
         state.value = null;
@@ -182,10 +182,10 @@ export default class AiAssistantToast extends Component<Signature> {
         message: lastMessage[1],
       };
 
-      resetStateId = resetState();
+      resetStateValueId = resetStateValue();
       on.cleanup(() => {
-        if (resetStateId) {
-          clearInterval(resetStateId);
+        if (resetStateValueId) {
+          clearInterval(resetStateValueId);
         }
       });
     }
@@ -212,13 +212,13 @@ export default class AiAssistantToast extends Component<Signature> {
   }
 
   @action
-  blockResetState() {
-    this.state.isResetStateBlocked = true;
+  blockResetStateValue() {
+    this.state.isResetStateValueBlocked = true;
   }
 
   @action
-  unBlockResetState() {
-    this.state.isResetStateBlocked = false;
+  unBlockResetStateValue() {
+    this.state.isResetStateValueBlocked = false;
   }
 
   @action
