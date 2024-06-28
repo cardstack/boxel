@@ -30,6 +30,8 @@ import {
   fetchUserPermissions,
   addAuthorizationHeader,
   maybeHandleScopedCSSRequest,
+  PrerenderedCard,
+  QueryResultsMeta,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -334,6 +336,11 @@ export class Realm {
       )
       .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
       .get('/_search', SupportedMimeType.CardJson, this.search.bind(this))
+      .get(
+        '/_search-rendered',
+        SupportedMimeType.CardJson,
+        this.searchRendered.bind(this),
+      )
       .post(
         '/_session',
         SupportedMimeType.Session,
@@ -1687,6 +1694,71 @@ export class Realm {
       parseQueryString(new URL(request.url).search.slice(1)),
       { loadLinks: true, useWorkInProgressIndex },
     );
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: { 'content-type': SupportedMimeType.CardJson },
+      },
+      requestContext,
+    });
+  }
+
+  private transformResultsToPrerenderedCardsDoc(results: {
+    prerenderedCards: PrerenderedCard[];
+    meta: QueryResultsMeta;
+  }) {
+    let { prerenderedCards, meta } = results;
+    let uniqueCssModules = new Map(); // every instance in fetched results will have css (if it exists) - to avoid duplication in the response, we'll store unique css modules here
+
+    let data = prerenderedCards.map((card) => ({
+      type: 'prerendered-card',
+      id: card.url,
+      attributes: {
+        embeddedHtml: card.embeddedHtml,
+      },
+      relationships: {
+        'prerendered-card-css': {
+          data: card.prerenderedCardCss.map((css) => {
+            uniqueCssModules.set(css.moduleUrl, css);
+            return {
+              type: 'prerendered-card-css',
+              id: css.moduleUrl,
+            };
+          }),
+        },
+      },
+    }));
+
+    let included = Array.from(uniqueCssModules.values()).map((css) => ({
+      type: 'prerendered-card-css',
+      id: css.moduleUrl,
+      attributes: {
+        content: css.source,
+      },
+    }));
+
+    return {
+      data,
+      included,
+      meta,
+    };
+  }
+
+  private async searchRendered(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let useWorkInProgressIndex = Boolean(
+      request.headers.get('X-Boxel-Use-WIP-Index'),
+    );
+    let query = parseQueryString(new URL(request.url).search.slice(1));
+
+    let results = await this.#searchIndex.searchPrerendered(query, {
+      useWorkInProgressIndex,
+    });
+
+    let doc = this.transformResultsToPrerenderedCardsDoc(results);
+
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {
