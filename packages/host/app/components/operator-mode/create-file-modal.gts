@@ -1,4 +1,3 @@
-import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -41,13 +40,11 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
+import CardPill from '../card-pill';
 import ModalContainer from '../modal-container';
 
 import Pill from '../pill';
 import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
-
-import RealmIcon from './realm-icon';
-import RealmInfoProvider from './realm-info-provider';
 
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
@@ -122,12 +119,15 @@ export default class CreateFileModal extends Component<Signature> {
               >
                 <div class='field-contents'>
                   {{#if this.definitionClass}}
-                    <Pill @inert={{true}}>
+                    <Pill class='definition-pill'>
                       {{this.definitionClass.displayName}}
                     </Pill>
                   {{else}}
                     {{#if this.selectedCatalogEntry}}
-                      <SelectedTypePill @entry={{this.selectedCatalogEntry}} />
+                      <CardPill
+                        @card={{this.selectedCatalogEntry}}
+                        data-test-selected-type={{this.selectedCatalogEntry.title}}
+                      />
                     {{/if}}
                     <Button
                       class={{if this.selectedCatalogEntry 'change-trigger'}}
@@ -298,6 +298,9 @@ export default class CreateFileModal extends Component<Signature> {
       .error-message {
         color: var(--boxel-error-100);
         margin-top: var(--boxel-sp-lg);
+      }
+      .definition-pill {
+        padding-left: var(--boxel-sp-xxxs);
       }
     </style>
   </template>
@@ -753,36 +756,3 @@ export function convertToClassName(input: string) {
 
   return className;
 }
-
-const SelectedTypePill: TemplateOnlyComponent<{
-  entry: CatalogEntry;
-}> = <template>
-  <Pill
-    @inert={{true}}
-    class='selected-type'
-    data-test-selected-type={{@entry.title}}
-  >
-    <:icon>
-      <RealmInfoProvider @fileURL={{@entry.id}}>
-        <:ready as |realmInfo|>
-          <RealmIcon
-            @realmIconURL={{realmInfo.iconURL}}
-            @realmName={{realmInfo.name}}
-          />
-        </:ready>
-      </RealmInfoProvider>
-    </:icon>
-    <:default>
-      {{@entry.title}}
-    </:default>
-  </Pill>
-  <style>
-    .selected-type {
-      padding: var(--boxel-sp-xxxs);
-      gap: var(--boxel-sp-xxxs);
-    }
-    .selected-type :deep(.icon) {
-      margin-right: 0;
-    }
-  </style>
-</template>;
