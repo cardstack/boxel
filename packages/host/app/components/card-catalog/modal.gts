@@ -246,7 +246,7 @@ export default class CardCatalogModal extends Component<Signature> {
 
   get cardRefName() {
     if (!this.state) {
-      return;
+      return undefined;
     }
     return (
       (
