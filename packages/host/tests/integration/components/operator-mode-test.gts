@@ -12,7 +12,6 @@ import {
 } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
-import { format } from 'date-fns';
 import { setupRenderingTest } from 'ember-qunit';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
