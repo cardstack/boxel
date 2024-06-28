@@ -1,6 +1,6 @@
 import { module, test, assert } from 'qunit';
 import { shouldSetRoomTitle } from '../lib/set-title';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
+import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
 module('shouldSetRoomTitle', () => {
   test('Do not set a title when there is no content', () => {

@@ -28,7 +28,8 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-import { RoomField, type MessageField } from 'https://cardstack.com/base/room';
+import { RoomField } from 'https://cardstack.com/base/room';
+import { type MessageField } from 'https://cardstack.com/base/message';
 
 import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';

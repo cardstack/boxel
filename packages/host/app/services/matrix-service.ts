@@ -44,12 +44,12 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import * as RoomModule from 'https://cardstack.com/base/room';
 import type {
-  RoomField,
   MatrixEvent as DiscreteMatrixEvent,
   CardMessageContent,
   CardFragmentContent,
   ReactionEventContent,
-} from 'https://cardstack.com/base/room';
+} from 'https://cardstack.com/base/matrix-event';
+import type { RoomField } from 'https://cardstack.com/base/room';
 
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
 import { importResource } from '../resources/import';

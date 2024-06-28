@@ -19,7 +19,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
-import type { MessageField } from 'https://cardstack.com/base/room';
+import type { MessageField } from 'https://cardstack.com/base/message';
 
 import AiAssistantCardPicker from '../ai-assistant/card-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
