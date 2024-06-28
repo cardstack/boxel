@@ -17,6 +17,7 @@ import {
   IconPencil,
   IconTrash,
   ThreeDotsHorizontal,
+  IconCircle,
 } from '@cardstack/boxel-ui/icons';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -32,6 +33,7 @@ export type RoomActions = {
 interface Signature {
   Args: {
     room: RoomField;
+    currentRoomId?: string;
     actions: RoomActions;
   };
 }
@@ -45,8 +47,32 @@ export default class PastSessionItem extends Component<Signature> {
         data-test-enter-room={{@room.roomId}}
       >
         <div class='name'>{{@room.name}}</div>
-        <div class='date' data-test-last-active={{this.lastActive}}>
-          {{this.formattedDate}}
+        <div
+          class='date
+            {{if this.isStreaming "is-streaming"}}
+            {{if this.hasUnseenMessage "has-unseen-message"}}'
+          data-test-last-active={{this.lastActive}}
+          data-test-is-streaming={{this.isStreaming}}
+          data-test-is-unseen-message={{this.hasUnseenMessage}}
+        >
+          {{#if this.isStreaming}}
+            <IconCircle
+              width='12px'
+              height='12px'
+              class='icon-recency-indicator icon-streaming pulsing'
+            />
+            Thinking…
+          {{else if this.hasUnseenMessage}}
+            <IconCircle
+              width='10px'
+              height='10px'
+              class='icon-recency-indicator icon-new-messages'
+            />
+            Updated
+            {{this.formattedDate}}
+          {{else}}
+            {{this.formattedDate}}
+          {{/if}}
         </div>
       </button>
       <BoxelDropdown>
@@ -85,6 +111,11 @@ export default class PastSessionItem extends Component<Signature> {
     </li>
 
     <style>
+      :global(:root) {
+        --color-streaming: #01c6bf;
+        --color-new-messages: #00ad4a;
+      }
+
       .session {
         display: flex;
         align-items: center;
@@ -126,6 +157,40 @@ export default class PastSessionItem extends Component<Signature> {
       .menu :deep(.boxel-menu__item:nth-child(2) svg) {
         --icon-stroke-width: 0.5px;
       }
+      .icon-recency-indicator {
+        display: inline-block;
+        margin-right: 4px;
+      }
+      .icon-streaming {
+        --icon-color: var(--color-streaming);
+      }
+      .icon-new-messages {
+        --icon-color: var(--color-new-messages);
+        --icon-fill-color: var(--color-new-messages);
+      }
+      .has-unseen-message {
+        color: var(--color-new-messages);
+      }
+      .is-streaming {
+        color: var(--color-streaming);
+      }
+      .pulsing {
+        animation: pulse 2s infinite;
+      }
+      @keyframes pulse {
+        0% {
+          transform: scale(1);
+          opacity: 1;
+        }
+        50% {
+          transform: scale(0.2);
+          opacity: 0.7;
+        }
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
     </style>
   </template>
 
@@ -138,6 +203,26 @@ export default class PastSessionItem extends Component<Signature> {
       return new Date();
     }
     return this.args.room.created;
+  }
+
+  get lastSessionMessage() {
+    return this.args.room.messages[this.args.room.messages.length - 1];
+  }
+
+  get isStreaming() {
+    if (!this.lastSessionMessage) {
+      return false;
+    }
+    return !this.lastSessionMessage.isStreamingFinished;
+  }
+
+  get hasUnseenMessage() {
+    if (!this.lastSessionMessage) {
+      return false;
+    }
+    return !this.matrixService.currentUserEventReadReceipts.has(
+      this.lastSessionMessage.eventId,
+    );
   }
 
   private get lastActive() {

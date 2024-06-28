@@ -26,6 +26,9 @@ import {
   RealmPermissions,
   VirtualNetwork,
   type LooseSingleCardDocument,
+  Loader,
+  fetcher,
+  maybeHandleScopedCSSRequest,
 } from '@cardstack/runtime-common';
 import { stringify } from 'qs';
 import { Query } from '@cardstack/runtime-common/query';
@@ -60,6 +63,24 @@ let createJWT = (
 ) => {
   return realm.createJWT({ user, realm: realmUrl, permissions }, '7d');
 };
+
+function createVirtualNetwork() {
+  let virtualNetwork = new VirtualNetwork();
+  shimExternals(virtualNetwork);
+  virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
+  return virtualNetwork;
+}
+
+function createVirtualNetworkAndLoader() {
+  let virtualNetwork = createVirtualNetwork();
+  let fetch = fetcher(virtualNetwork.fetch, [
+    async (req, next) => {
+      return (await maybeHandleScopedCSSRequest(req)) || next(req);
+    },
+  ]);
+  let loader = new Loader(fetch, virtualNetwork.resolveImport);
+  return { virtualNetwork, loader };
+}
 
 module('Realm Server', function (hooks) {
   async function expectEvent<T>({
@@ -126,12 +147,7 @@ module('Realm Server', function (hooks) {
       beforeEach: async (dbAdapter, queue) => {
         dir = dirSync();
         copySync(join(__dirname, 'cards'), dir.name);
-        let virtualNetwork = new VirtualNetwork();
-        shimExternals(virtualNetwork);
-        virtualNetwork.addURLMapping(
-          new URL(baseRealm.url),
-          new URL(localBaseRealm),
-        );
+        let virtualNetwork = createVirtualNetwork();
 
         ({ testRealm, testRealmServer } = await runTestRealmServer({
           virtualNetwork,
@@ -147,10 +163,7 @@ module('Realm Server', function (hooks) {
     });
   }
 
-  let virtualNetwork = new VirtualNetwork();
-  let loader = virtualNetwork.createLoader();
-
-  shimExternals(virtualNetwork);
+  let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
 
   setupCardLogs(
     hooks,
@@ -789,7 +802,7 @@ module('Realm Server', function (hooks) {
           'true',
           'realm is public readable',
         );
-        let result = response.body.toString().trim();
+        let result = response.text.trim();
         assert.strictEqual(result, cardSrc, 'the card source is correct');
         assert.ok(
           response.headers['last-modified'],
@@ -1663,9 +1676,9 @@ module('Realm Server', function (hooks) {
       });
     });
   });
-
   module('various other realm tests', function (hooks) {
     let testRealmServer2: Server;
+    let testRealm2: Realm;
 
     hooks.beforeEach(async function () {
       shimExternals(virtualNetwork);
@@ -1677,15 +1690,17 @@ module('Realm Server', function (hooks) {
 
     setupDB(hooks, {
       beforeEach: async (dbAdapter, queue) => {
-        testRealmServer2 = (
+        if (testRealm2) {
+          virtualNetwork.unmount(testRealm2.maybeExternalHandle);
+        }
+        ({ testRealm: testRealm2, testRealmServer: testRealmServer2 } =
           await runTestRealmServer({
             virtualNetwork,
             dir: dir.name,
             realmURL: testRealm2URL,
             dbAdapter,
             queue,
-          })
-        ).testRealmServer;
+          }));
       },
       afterEach: async () => {
         testRealmServer2.close();
@@ -1927,6 +1942,22 @@ module('Realm Server', function (hooks) {
         assert.strictEqual(response.status, 404, 'HTTP 404 status');
       }
     });
+
+    test('can make HEAD request to get realmURL and isPublicReadable status', async function (assert) {
+      let response = await request
+        .head('/person-1')
+        .set('Accept', 'application/vnd.card+json');
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        response.headers['x-boxel-realm-url'],
+        testRealmURL.href,
+      );
+      assert.strictEqual(
+        response.headers['x-boxel-realm-public-readable'],
+        'true',
+      );
+    });
   });
 
   module('BOXEL_HTTP_BASIC_PW env var', function (hooks) {
@@ -1968,9 +1999,7 @@ module('Realm Server', function (hooks) {
         .auth('cardstack', process.env.BOXEL_HTTP_BASIC_PW);
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
       assert.ok(
-        /<script src="\/__boxel\/assets\/vendor.js"><\/script>/.test(
-          response.text,
-        ),
+        /https?:\/\/[^/]+\/__boxel\/assets\/vendor\.css/.test(response.text),
         'the HTML returned is correct',
       );
     });
@@ -1984,10 +2013,7 @@ module('Realm Server serving from root', function (hooks) {
 
   let dir: DirResult;
 
-  let virtualNetwork = new VirtualNetwork();
-  let loader = virtualNetwork.createLoader();
-
-  shimExternals(virtualNetwork);
+  let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
 
   setupCardLogs(
     hooks,
@@ -2192,15 +2218,8 @@ module('Realm server serving multiple realms', function (hooks) {
   let base: Realm;
   let testRealm: Realm;
 
-  let virtualNetwork = new VirtualNetwork();
-  let loader = virtualNetwork.createLoader();
+  let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
   const basePath = resolve(join(__dirname, '..', '..', 'base'));
-  shimExternals(virtualNetwork);
-
-  setupCardLogs(
-    hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
-  );
 
   hooks.beforeEach(async function () {
     dir = dirSync();
@@ -2246,6 +2265,11 @@ module('Realm server serving multiple realms', function (hooks) {
     },
   });
 
+  setupCardLogs(
+    hooks,
+    async () => await loader.import(`${baseRealm.url}card-api`),
+  );
+
   test(`Can perform full indexing multiple times on a server that runs multiple realms`, async function (assert) {
     {
       let response = await request
@@ -2283,9 +2307,7 @@ module('Realm Server serving from a subdirectory', function (hooks) {
 
   let dir: DirResult;
 
-  let virtualNetwork = new VirtualNetwork();
-  let loader = virtualNetwork.createLoader();
-  shimExternals(virtualNetwork);
+  let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
 
   setupCardLogs(
     hooks,

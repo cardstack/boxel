@@ -1,7 +1,11 @@
 import Service from '@ember/service';
-import { type TestContext, getContext, visit } from '@ember/test-helpers';
+import {
+  type TestContext,
+  getContext,
+  visit,
+  settled,
+} from '@ember/test-helpers';
 import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
-import { buildWaiter } from '@ember/test-waiters';
 import GlimmerComponent from '@glimmer/component';
 
 import ms from 'ms';
@@ -20,6 +24,8 @@ import {
   type RunnerRegistration,
   type IndexRunner,
   type IndexResults,
+  assetsDir,
+  insertPermissions,
 } from '@cardstack/runtime-common';
 
 import {
@@ -57,7 +63,6 @@ export * from '@cardstack/runtime-common/helpers';
 export * from '@cardstack/runtime-common/helpers/indexer';
 
 const { sqlSchema } = ENV;
-const waiter = buildWaiter('@cardstack/host/test/helpers/index:onFetch-waiter');
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 const testMatrix = {
@@ -253,6 +258,15 @@ export function setupLocalIndexing(hooks: NestedHooks) {
     await dbAdapter.reset();
     this.owner.register('service:local-indexer', MockLocalIndexer);
   });
+
+  hooks.afterEach(async function () {
+    // This is here to allow card prerender component (which renders cards as part
+    // of the indexer process) to come to a graceful stop before we tear a test
+    // down (this should prevent tests from finishing before the prerender is still doing work).
+    // Without this, we have been experiencing test failures related to a destroyed owner, e.g.
+    // "Cannot call .factoryFor('template:index-card_error') after the owner has been destroyed"
+    await settled();
+  });
 }
 
 class MockMessageService extends Service {
@@ -343,7 +357,7 @@ export function setupServerSentEvents(hooks: NestedHooks) {
               `expectEvent timed out, saw events ${JSON.stringify(events)}`,
             ),
           ),
-        opts?.timeout ?? 3000,
+        opts?.timeout ?? 10000,
       );
       let result = await callback();
       let decoder = new TextDecoder();
@@ -420,21 +434,15 @@ interface RealmContents {
 export async function setupAcceptanceTestRealm({
   contents,
   realmURL,
-  onFetch,
   permissions,
 }: {
   contents: RealmContents;
   realmURL?: string;
-  onFetch?: (req: Request) => Promise<{
-    req: Request;
-    res: Response | null;
-  }>;
   permissions?: RealmPermissions;
 }) {
   return await setupTestRealm({
     contents,
     realmURL,
-    onFetch,
     isAcceptanceTest: true,
     permissions,
   });
@@ -443,45 +451,37 @@ export async function setupAcceptanceTestRealm({
 export async function setupIntegrationTestRealm({
   contents,
   realmURL,
-  onFetch,
 }: {
   loader: Loader;
   contents: RealmContents;
   realmURL?: string;
-  onFetch?: (req: Request) => Promise<{
-    req: Request;
-    res: Response | null;
-  }>;
 }) {
   return await setupTestRealm({
     contents,
     realmURL,
-    onFetch,
     isAcceptanceTest: false,
   });
+}
+
+export function lookupLoaderService(): LoaderService {
+  let owner = (getContext() as TestContext).owner;
+  return owner.lookup('service:loader-service') as LoaderService;
 }
 
 export const testRealmSecretSeed = "shhh! it's a secret";
 async function setupTestRealm({
   contents,
   realmURL,
-  onFetch,
   isAcceptanceTest,
   permissions = { '*': ['read', 'write'] },
 }: {
   contents: RealmContents;
   realmURL?: string;
-  onFetch?: (req: Request) => Promise<{
-    req: Request;
-    res: Response | null;
-  }>;
   isAcceptanceTest?: boolean;
   permissions?: RealmPermissions;
 }) {
   let owner = (getContext() as TestContext).owner;
-  let { loader, virtualNetwork } = owner.lookup(
-    'service:loader-service',
-  ) as LoaderService;
+  let { virtualNetwork } = lookupLoaderService();
   let { queue } = owner.lookup('service:queue') as QueueService;
 
   realmURL = realmURL ?? testRealmURL;
@@ -499,24 +499,6 @@ async function setupTestRealm({
     'service:local-indexer',
   ) as unknown as MockLocalIndexer;
   let realm: Realm;
-  if (onFetch) {
-    // we need to register this before the realm is created so
-    // that it is in prime position in the url handlers list
-    loader.registerURLHandler(async (req: Request) => {
-      let token = waiter.beginAsync();
-      try {
-        let { req: newReq, res } = await onFetch(req);
-        if (res) {
-          return res;
-        }
-        req = newReq;
-      } finally {
-        waiter.endAsync(token);
-      }
-
-      return realm.maybeHandle(req);
-    });
-  }
 
   let adapter = new TestRealmAdapter(contents, new URL(realmURL));
   let indexRunner: IndexRunner = async (optsId) => {
@@ -525,13 +507,13 @@ async function setupTestRealm({
   };
 
   let dbAdapter = await getDbAdapter();
+  await insertPermissions(dbAdapter, new URL(realmURL), permissions);
   realm = new Realm({
     url: realmURL,
     adapter,
     getIndexHTML: async () =>
       `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
     matrix: testMatrix,
-    permissions,
     realmSecretSeed: testRealmSecretSeed,
     virtualNetwork,
     dbAdapter,
@@ -548,6 +530,7 @@ async function setupTestRealm({
       });
       await worker.run();
     },
+    assetsURL: new URL(`${realmURL}${assetsDir}`),
   });
   virtualNetwork.mount(realm.maybeHandle);
 

@@ -1,11 +1,12 @@
 import { waitUntil, waitFor, click } from '@ember/test-helpers';
 
+import { buildWaiter } from '@ember/test-waiters';
 import GlimmerComponent from '@glimmer/component';
 
 import { setupRenderingTest } from 'ember-qunit';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import flatMap from 'lodash/flatMap';
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import { validate as uuidValidate } from 'uuid';
 
 import {
@@ -19,8 +20,6 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
-
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
@@ -33,6 +32,7 @@ import {
   type TestContextWithSave,
   type TestContextWithSSE,
   setupIntegrationTestRealm,
+  lookupLoaderService,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
@@ -47,29 +47,13 @@ let setCardInOperatorModeState: (
 type TestContextForCopy = TestContextWithSave & TestContextWithSSE;
 
 module('Integration | card-copy', function (hooks) {
-  let onFetch: ((req: Request, body: string) => void) | undefined;
   let realm1: Realm;
   let realm2: Realm;
   let noop = () => {};
-  function wrappedOnFetch() {
-    return async (req: Request) => {
-      if (!onFetch) {
-        return Promise.resolve({ req, res: null });
-      }
-
-      let body = await req.clone().text();
-      onFetch(req, body);
-      return {
-        req,
-        res: null,
-      };
-    };
-  }
 
   setupRenderingTest(hooks);
   hooks.beforeEach(function () {
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    loader = lookupLoaderService().loader;
   });
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
@@ -151,7 +135,6 @@ module('Integration | card-copy', function (hooks) {
 
     ({ realm: realm1 } = await setupIntegrationTestRealm({
       loader,
-      onFetch: wrappedOnFetch(),
       contents: {
         'person.gts': { Person },
         'pet.gts': { Pet },
@@ -797,8 +780,7 @@ module('Integration | card-copy', function (hooks) {
     );
   });
 
-  // Skip flaky test: CS-6846
-  skip<TestContextForCopy>('can copy a card that has a relative link to card in source realm', async function (assert) {
+  test<TestContextForCopy>('can copy a card that has a relative link to card in source realm', async function (assert) {
     assert.expect(15);
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
@@ -812,17 +794,26 @@ module('Integration | card-copy', function (hooks) {
         </template>
       },
     );
-    onFetch = (req, body) => {
-      if (req.method !== 'GET' && req.method !== 'HEAD') {
-        let json = JSON.parse(body);
-        assert.strictEqual(json.data.attributes.firstName, 'Hassan');
-        assert.strictEqual(
-          json.included,
-          undefined,
-          'included not being sent over the wire',
-        );
-      }
-    };
+
+    let waiter = buildWaiter('body-interception-middleware');
+
+    lookupLoaderService().virtualNetwork.mount(
+      async (req) => {
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+          let token = waiter.beginAsync();
+          let json = JSON.parse(await req.clone().text());
+          waiter.endAsync(token);
+          assert.strictEqual(json.data.attributes.firstName, 'Hassan');
+          assert.strictEqual(
+            json.included,
+            undefined,
+            'included not being sent over the wire',
+          );
+        }
+        return null;
+      },
+      { prepend: true },
+    );
 
     let id: string | undefined;
     this.onSave((url, json) => {
@@ -931,17 +922,27 @@ module('Integration | card-copy', function (hooks) {
         </template>
       },
     );
-    onFetch = (req, body) => {
-      if (req.method !== 'GET' && req.method !== 'HEAD') {
-        let json = JSON.parse(body);
-        assert.strictEqual(json.data.attributes.firstName, 'Sakura');
-        assert.strictEqual(
-          json.included,
-          undefined,
-          'included not being sent over the wire',
-        );
-      }
-    };
+
+    let waiter = buildWaiter('body-interception-middleware');
+
+    lookupLoaderService().virtualNetwork.mount(
+      async (req) => {
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+          let token = waiter.beginAsync();
+          let json = JSON.parse(await req.clone().text());
+          waiter.endAsync(token);
+          assert.strictEqual(json.data.attributes.firstName, 'Sakura');
+          assert.strictEqual(
+            json.included,
+            undefined,
+            'included not being sent over the wire',
+          );
+        }
+        return null;
+      },
+      { prepend: true },
+    );
+
     let id: string | undefined;
     this.onSave((url, json) => {
       if (typeof json === 'string') {

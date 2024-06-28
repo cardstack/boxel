@@ -25,7 +25,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 
-import {
+import type {
   BaseDef,
   SignatureFor,
   primitive as primitiveType,
@@ -615,7 +615,7 @@ module('Integration | card-basics', function (hooks) {
       await renderCard(loader, driver, 'edit');
       assert.dom('input').doesNotExist('no input fields exist');
       assert
-        .dom('[data-test-ref')
+        .dom('[data-test-ref]')
         .containsText(`Module: http://localhost:4202/test/person Name: Person`);
     });
 
@@ -843,6 +843,111 @@ module('Integration | card-basics', function (hooks) {
         ['brown', 'green'],
         'the field value was correctly specified in change event',
       );
+    });
+
+    test('can subscribe and unsubscribe to changes of field instance within a composite containsMany field', async function (assert) {
+      let {
+        field,
+        contains,
+        containsMany,
+        CardDef,
+        FieldDef,
+        subscribeToChanges,
+        unsubscribeFromChanges,
+        flushLogs,
+      } = cardApi;
+      let { default: StringField } = string;
+      let { default: DateField } = date;
+
+      class WorkExperience extends FieldDef {
+        @field company = contains(StringField);
+        @field startDate = contains(DateField);
+        @field endDate = contains(DateField);
+      }
+
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field workExperiences = containsMany(WorkExperience);
+      }
+
+      let mango = new Person({
+        firstName: 'Mango',
+        workExperiences: [],
+      });
+
+      let changeEvent:
+        | { instance: BaseDef; fieldName: string; value: any }
+        | undefined;
+      let eventCount = 0;
+      let subscriber = (instance: BaseDef, fieldName: string, value: any) => {
+        eventCount++;
+        changeEvent = {
+          instance,
+          fieldName,
+          value,
+        };
+      };
+      subscribeToChanges(mango, subscriber);
+
+      try {
+        let firstWorkExperience = new WorkExperience();
+        mango.workExperiences.push(firstWorkExperience);
+        await flushLogs();
+        await waitUntil(() => eventCount === 1);
+        assert.deepEqual(
+          changeEvent?.instance,
+          mango,
+          'the instance was correctly specified in change event',
+        );
+        assert.strictEqual(
+          changeEvent?.fieldName,
+          'workExperiences',
+          'the fieldName was correctly specified in change event',
+        );
+        assert.deepEqual(
+          changeEvent?.value[0],
+          firstWorkExperience,
+          'the field value was correctly specified in change event',
+        );
+
+        firstWorkExperience.company = 'First Company';
+        await waitUntil(() => eventCount === 2);
+        assert.deepEqual(
+          changeEvent?.instance,
+          firstWorkExperience,
+          'the instance was correctly specified in change event',
+        );
+        assert.strictEqual(
+          changeEvent?.fieldName,
+          'company',
+          'the fieldName was correctly specified in change event',
+        );
+        assert.deepEqual(
+          changeEvent?.value,
+          'First Company',
+          'the field value was correctly specified in change event',
+        );
+
+        mango.workExperiences.pop();
+        await waitUntil(() => eventCount === 3);
+        assert.deepEqual(
+          changeEvent?.instance,
+          mango,
+          'the instance was correctly specified in change event',
+        );
+        assert.strictEqual(
+          changeEvent?.fieldName,
+          'workExperiences',
+          'the fieldName was correctly specified in change event',
+        );
+        assert.deepEqual(
+          changeEvent?.value.length,
+          0,
+          'the field value was correctly specified in change event',
+        );
+      } finally {
+        unsubscribeFromChanges(mango, subscriber);
+      }
     });
 
     test('can subscribe and unsubscribe to card instance linksTo field changes', async function (assert) {
@@ -1156,6 +1261,7 @@ module('Integration | card-basics', function (hooks) {
       let { field, contains, FieldDef, CardDef, Component } = cardApi;
       let { default: StringField } = string;
       let { default: NumberField } = number;
+
       class Person extends FieldDef {
         @field firstName = contains(StringField);
         @field title = contains(StringField);

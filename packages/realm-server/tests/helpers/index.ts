@@ -12,6 +12,8 @@ import {
   type MatrixConfig,
   type Queue,
   type IndexRunner,
+  assetsDir,
+  insertPermissions,
 } from '@cardstack/runtime-common';
 import { makeFastBootIndexRunner } from '../../fastboot';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -111,7 +113,7 @@ export async function createRealm({
   dir,
   fileSystem = {},
   realmURL = testRealm,
-  permissions = { '*': ['read', 'write'] },
+  permissions = { '*': ['read'] },
   virtualNetwork,
   queue,
   dbAdapter,
@@ -128,6 +130,8 @@ export async function createRealm({
   dbAdapter: PgAdapter;
   deferStartUp?: true;
 }): Promise<Realm> {
+  await insertPermissions(dbAdapter, new URL(realmURL), permissions);
+
   if (!getRunner) {
     ({ getRunner } = await makeFastBootIndexRunner(
       distPath,
@@ -151,7 +155,6 @@ export async function createRealm({
       getIndexHTML: async () =>
         readFileSync(join(distPath, 'index.html')).toString(),
       matrix: matrixConfig,
-      permissions,
       realmSecretSeed: "shhh! it's a secret",
       virtualNetwork,
       dbAdapter,
@@ -168,6 +171,7 @@ export async function createRealm({
         });
         await worker.run();
       },
+      assetsURL: new URL(`${realmURL}${assetsDir}`),
     },
     { deferStartUp },
   );
@@ -197,6 +201,7 @@ export async function runBaseRealmServer(
   virtualNetwork: VirtualNetwork,
   queue: Queue,
   dbAdapter: PgAdapter,
+  permissions: RealmPermissions = { '*': ['read'] },
 ) {
   let localBaseRealmURL = new URL(localBaseRealm);
   virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
@@ -207,6 +212,7 @@ export async function runBaseRealmServer(
     virtualNetwork,
     queue,
     dbAdapter,
+    permissions,
   });
   virtualNetwork.mount(testBaseRealm.maybeExternalHandle);
   await testBaseRealm.ready;
@@ -218,11 +224,11 @@ export async function runTestRealmServer({
   dir,
   fileSystem,
   realmURL,
-  permissions,
   virtualNetwork,
   queue,
   dbAdapter,
   matrixConfig,
+  permissions = { '*': ['read'] },
 }: {
   dir: string;
   fileSystem?: Record<string, string | LooseSingleCardDocument>;

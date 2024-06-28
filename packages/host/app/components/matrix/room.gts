@@ -48,6 +48,7 @@ export default class Room extends Component<Signature> {
         <AiAssistantConversation>
           {{#each this.room.messages as |message i|}}
             <RoomMessage
+              @room={{this.room}}
               @roomId={{@roomId}}
               @message={{message}}
               @index={{i}}
@@ -315,7 +316,7 @@ export default class Room extends Component<Signature> {
     return (
       !this.doSendMessage.isRunning &&
       Boolean(
-        this.messageToSend ||
+        this.messageToSend?.trim() ||
           this.cardsToAttach?.length ||
           this.autoAttachedCards.size !== 0,
       ) &&

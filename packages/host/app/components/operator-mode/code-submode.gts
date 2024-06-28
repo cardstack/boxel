@@ -20,7 +20,7 @@ import { provide } from 'ember-provide-consume-context';
 import { Accordion } from '@cardstack/boxel-ui/components';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
-import type { PanelContext } from '@cardstack/boxel-ui/components';
+import type { ResizablePanel } from '@cardstack/boxel-ui/components';
 import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
@@ -52,7 +52,8 @@ import type CardService from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import RecentFilesService from '@cardstack/host/services/recent-files-service';
+import type RealmInfoService from '@cardstack/host/services/realm-info-service';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
@@ -118,6 +119,7 @@ export default class CodeSubmode extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare recentFilesService: RecentFilesService;
   @service private declare environmentService: EnvironmentService;
+  @service private declare realmInfoService: RealmInfoService;
 
   @tracked private loadFileError: string | null = null;
   @tracked private userHasDismissedURLError = false;
@@ -498,18 +500,18 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action
-  private onListPanelContextChange(listPanelContext: PanelContext[]) {
-    this.panelWidths.leftPanel = listPanelContext[0]?.lengthPx;
-    this.panelWidths.codeEditorPanel = listPanelContext[1]?.lengthPx;
-    this.panelWidths.rightPanel = listPanelContext[2]?.lengthPx;
+  private onHorizontalPanelChange(panels: ResizablePanel[]) {
+    this.panelWidths.leftPanel = panels[0]?.lengthPx;
+    this.panelWidths.codeEditorPanel = panels[1]?.lengthPx;
+    this.panelWidths.rightPanel = panels[2]?.lengthPx;
 
     localStorage.setItem(CodeModePanelWidths, JSON.stringify(this.panelWidths));
   }
 
   @action
-  private onFilePanelContextChange(filePanelContext: PanelContext[]) {
-    this.panelHeights.filePanel = filePanelContext[0]?.lengthPx;
-    this.panelHeights.recentPanel = filePanelContext[1]?.lengthPx;
+  private onVerticalPanelChange(panels: ResizablePanel[]) {
+    this.panelHeights.filePanel = panels[0]?.lengthPx;
+    this.panelHeights.recentPanel = panels[1]?.lengthPx;
 
     localStorage.setItem(
       CodeModePanelHeights,
@@ -602,9 +604,10 @@ export default class CodeSubmode extends Component<Signature> {
         throw new Error(`bug: CreateFileModal not instantiated`);
       }
       this.isCreateModalOpen = true;
+      await this.realmInfoService.fetchAllKnownRealmInfos.perform();
       let url = await this.createFileModal.createNewFile(
         fileType,
-        this.realmURL,
+        new URL(this.realmInfoService.userDefaultRealm.path),
         definitionClass,
         sourceInstance,
       );
@@ -681,6 +684,7 @@ export default class CodeSubmode extends Component<Signature> {
     <SubmodeLayout
       @onCardSelectFromSearch={{this.openSearchResultInEditor}}
       @hideAiAssistant={{true}}
+      as |search|
     >
       <div
         class='code-mode'
@@ -705,7 +709,7 @@ export default class CodeSubmode extends Component<Signature> {
         </div>
         <ResizablePanelGroup
           @orientation='horizontal'
-          @onListPanelContextChange={{this.onListPanelContextChange}}
+          @onPanelChange={{this.onHorizontalPanelChange}}
           class='columns'
           as |ResizablePanel ResizeHandle|
         >
@@ -716,7 +720,7 @@ export default class CodeSubmode extends Component<Signature> {
             <div class='column'>
               <ResizablePanelGroup
                 @orientation='vertical'
-                @onListPanelContextChange={{this.onFilePanelContextChange}}
+                @onPanelChange={{this.onVerticalPanelChange}}
                 @reverseCollapse={{true}}
                 as |VerticallyResizablePanel VerticallyResizeHandle|
               >
@@ -741,6 +745,7 @@ export default class CodeSubmode extends Component<Signature> {
                           @delete={{this.setItemToDelete}}
                           @goToDefinition={{this.goToDefinition}}
                           @createFile={{perform this.createFile}}
+                          @openSearch={{search.openSearchToResults}}
                           data-test-card-inspector-panel
                         />
                       {{/if}}
@@ -972,7 +977,7 @@ export default class CodeSubmode extends Component<Signature> {
         height: 100%;
       }
 
-      .recent-files {
+      .inner-container.recent-files {
         background-color: var(--boxel-200);
       }
 

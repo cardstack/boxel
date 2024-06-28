@@ -1,5 +1,6 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
@@ -7,7 +8,11 @@ import { tracked, cached } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-import { modifier } from 'ember-modifier';
+import Modifier, { modifier, type NamedArgs } from 'ember-modifier';
+
+import { trackedFunction } from 'ember-resources/util/function';
+
+import { MatrixEvent } from 'matrix-js-sdk';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -23,7 +28,7 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-import { type MessageField } from 'https://cardstack.com/base/room';
+import { RoomField, type MessageField } from 'https://cardstack.com/base/room';
 
 import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
@@ -34,6 +39,7 @@ import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
 interface Signature {
   Element: HTMLDivElement;
   Args: {
+    room: RoomField;
     roomId: string;
     message: MessageField;
     index?: number;
@@ -44,6 +50,53 @@ interface Signature {
     retryAction?: () => void;
     isPending?: boolean;
   };
+}
+
+const STREAMING_TIMEOUT_MS = 60000;
+
+interface SendReadReceiptModifierSignature {
+  Args: {
+    Named: {
+      matrixService: MatrixService;
+      message: MessageField;
+      room: RoomField;
+    };
+    Positional: [];
+  };
+  Element: Element;
+}
+
+class SendReadReceipt extends Modifier<SendReadReceiptModifierSignature> {
+  async modify(
+    _element: Element,
+    _positional: [],
+    {
+      matrixService,
+      message,
+      room,
+    }: NamedArgs<SendReadReceiptModifierSignature>,
+  ) {
+    let isLastMessage = room.messages[room.messages.length - 1] === message;
+    if (!isLastMessage) {
+      return;
+    }
+
+    if (matrixService.currentUserEventReadReceipts.has(message.eventId)) {
+      return;
+    }
+
+    // sendReadReceipt expects an actual MatrixEvent (as defined in the matrix SDK), but it' not available to us here - however, we can fake it by adding the necessary methods
+    let matrixEvent = {
+      getId: () => message.eventId,
+      getRoomId: () => room.roomId,
+      getTs: () => message.created.getTime(),
+    };
+
+    // Without scheduling this after render, this produces the "attempted to update value, but it had already been used previously in the same computation" error
+    schedule('afterRender', () => {
+      matrixService.client.sendReadReceipt(matrixEvent as MatrixEvent);
+    });
+  }
 }
 
 export default class RoomMessage extends Component<Signature> {
@@ -61,7 +114,7 @@ export default class RoomMessage extends Component<Signature> {
     }
 
     // If message is streaming and hasn't been updated in the last minute, show a timeout message
-    if (Date.now() - Number(this.args.message.updated) > 60000) {
+    if (Date.now() - Number(this.args.message.updated) > STREAMING_TIMEOUT_MS) {
       this.streamingTimeout = true;
       return;
     }
@@ -77,84 +130,99 @@ export default class RoomMessage extends Component<Signature> {
   }
 
   <template>
-    <AiAssistantMessage
-      id='message-container-{{@index}}'
-      class='room-message'
-      @formattedMessage={{htmlSafe (markdownToHtml @message.formattedMessage)}}
-      @datetime={{@message.created}}
-      @isFromAssistant={{this.isFromAssistant}}
-      @profileAvatar={{component
-        ProfileAvatarIcon
-        userId=@message.author.userId
-      }}
-      @resources={{this.resources}}
-      @errorMessage={{this.errorMessage}}
-      @isStreaming={{@isStreaming}}
-      @retryAction={{if
-        (eq @message.command.commandType 'patch')
-        (perform this.patchCard)
-        @retryAction
-      }}
-      @isPending={{@isPending}}
-      data-test-boxel-message-from={{@message.author.name}}
-      ...attributes
-    >
-      {{#if (eq @message.command.commandType 'patch')}}
-        <div
-          class='patch-button-bar'
-          data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
-        >
-          <Button
-            class='view-code-button'
-            {{on 'click' this.viewCodeToggle}}
-            @kind={{if this.isDisplayingCode 'primary-dark' 'secondary-dark'}}
-            @size='extra-small'
-            data-test-view-code-button
+    {{! We Intentionally wait until message resources are loaded (i.e. have a value) before rendering the message.
+      This is because if the message resources render asynchronously after the message is already rendered (e.g. card pills),
+      it is problematic to ensure the last message sticks to the bottom of the screen.
+      In AiAssistantMessage, there is a ScrollIntoView modifier that will scroll the last message into view (i.e. scroll to the bottom) when it renders.
+      If we let things in the message render asynchronously, the height of the message will change after that and the scroll position will move up a bit (i.e. not stick to the bottom).
+    }}
+    {{#if this.resources}}
+      <AiAssistantMessage
+        {{SendReadReceipt
+          matrixService=this.matrixService
+          message=@message
+          room=@room
+        }}
+        id='message-container-{{@index}}'
+        class='room-message'
+        @formattedMessage={{htmlSafe
+          (markdownToHtml @message.formattedMessage)
+        }}
+        @datetime={{@message.created}}
+        @isFromAssistant={{this.isFromAssistant}}
+        @profileAvatar={{component
+          ProfileAvatarIcon
+          userId=@message.author.userId
+        }}
+        @resources={{this.resources}}
+        @errorMessage={{this.errorMessage}}
+        @isStreaming={{@isStreaming}}
+        @retryAction={{if
+          (eq @message.command.commandType 'patchCard')
+          (perform this.patchCard)
+          @retryAction
+        }}
+        @isPending={{@isPending}}
+        data-test-boxel-message-from={{@message.author.name}}
+        ...attributes
+      >
+        {{#if (eq @message.command.commandType 'patchCard')}}
+          <div
+            class='patch-button-bar'
+            data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
           >
-            {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
-          </Button>
-          <ApplyButton
-            @state={{this.applyButtonState}}
-            {{on 'click' (perform this.patchCard)}}
-            data-test-command-apply={{this.applyButtonState}}
-          />
-        </div>
-        {{#if this.isDisplayingCode}}
-          <div class='preview-code'>
             <Button
-              class='copy-to-clipboard-button'
-              @kind='text-only'
+              class='view-code-button'
+              {{on 'click' this.viewCodeToggle}}
+              @kind={{if this.isDisplayingCode 'primary-dark' 'secondary-dark'}}
               @size='extra-small'
-              {{on 'click' (perform this.copyToClipboard)}}
-              data-test-copy-code
+              data-test-view-code-button
             >
-              <CopyIcon
-                width='16'
-                height='16'
-                role='presentation'
-                aria-hidden='true'
-              />
-              Copy to clipboard
+              {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
             </Button>
-            <div
-              class='monaco-container'
-              {{this.scrollBottomIntoView}}
-              {{monacoModifier
-                content=this.previewPatchCode
-                contentChanged=undefined
-                monacoSDK=@monacoSDK
-                language='json'
-                readOnly=true
-                darkTheme=true
-                editorDisplayOptions=this.editorDisplayOptions
-              }}
-              data-test-editor
-              data-test-percy-hide
+            <ApplyButton
+              @state={{this.applyButtonState}}
+              {{on 'click' (perform this.patchCard)}}
+              data-test-command-apply={{this.applyButtonState}}
             />
           </div>
+          {{#if this.isDisplayingCode}}
+            <div class='preview-code'>
+              <Button
+                class='copy-to-clipboard-button'
+                @kind='text-only'
+                @size='extra-small'
+                {{on 'click' (perform this.copyToClipboard)}}
+                data-test-copy-code
+              >
+                <CopyIcon
+                  width='16'
+                  height='16'
+                  role='presentation'
+                  aria-hidden='true'
+                />
+                Copy to clipboard
+              </Button>
+              <div
+                class='monaco-container'
+                {{this.scrollBottomIntoView}}
+                {{monacoModifier
+                  content=this.previewPatchCode
+                  contentChanged=undefined
+                  monacoSDK=@monacoSDK
+                  language='json'
+                  readOnly=true
+                  darkTheme=true
+                  editorDisplayOptions=this.editorDisplayOptions
+                }}
+                data-test-editor
+                data-test-percy-hide
+              />
+            </div>
+          {{/if}}
         {{/if}}
-      {{/if}}
-    </AiAssistantMessage>
+      </AiAssistantMessage>
+    {{/if}}
 
     <style>
       .room-message {
@@ -219,6 +287,9 @@ export default class RoomMessage extends Component<Signature> {
     wordWrap: 'on',
     wrappingIndent: 'indent',
     fontWeight: 'bold',
+    scrollbar: {
+      alwaysConsumeMouseWheel: false,
+    },
   };
 
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -231,24 +302,37 @@ export default class RoomMessage extends Component<Signature> {
     await navigator.clipboard.writeText(this.previewPatchCode);
   });
 
-  private get resources() {
+  private loadMessageResources = trackedFunction(this, async () => {
     let cards: CardDef[] = [];
     let errors: { id: string; error: Error }[] = [];
-    this.args.message.attachedResources?.map((resource) => {
-      if (resource.card) {
-        cards.push(resource.card);
-      } else if (resource.cardError) {
-        let { id, error } = resource.cardError;
-        errors.push({
-          id,
-          error,
-        });
-      }
-    });
+
+    let promises = this.args.message.attachedResources?.map(
+      async (resource) => {
+        await resource.loaded;
+        if (resource.card) {
+          cards.push(resource.card);
+        } else if (resource.cardError) {
+          let { id, error } = resource.cardError;
+          errors.push({
+            id,
+            error,
+          });
+        }
+      },
+    );
+
+    if (promises) {
+      await Promise.all(promises);
+    }
+
     return {
       cards: cards.length ? cards : undefined,
       errors: errors.length ? errors : undefined,
     };
+  });
+
+  private get resources() {
+    return this.loadMessageResources.value;
   }
 
   private get errorMessage() {
@@ -264,7 +348,7 @@ export default class RoomMessage extends Component<Signature> {
       return 'This message was processing for too long. Please try again.';
     }
 
-    if (!this.resources.errors) {
+    if (!this.resources?.errors) {
       return undefined;
     }
 
@@ -289,6 +373,7 @@ export default class RoomMessage extends Component<Signature> {
         payload.id,
         payload.patch,
       );
+      //here is reaction event
       await this.matrixService.sendReactionEvent(
         this.args.roomId,
         eventId,
@@ -300,7 +385,7 @@ export default class RoomMessage extends Component<Signature> {
           ? new Error(e)
           : e instanceof Error
           ? e
-          : new Error('Unknown error.');
+          : new Error('Patch failed.');
       this.matrixService.failedCommandState.set(eventId, error);
     }
   });

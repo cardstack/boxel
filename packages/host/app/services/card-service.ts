@@ -1,7 +1,5 @@
 import Service, { service } from '@ember/service';
 
-import isEqual from 'lodash/isEqual';
-
 import { stringify } from 'qs';
 
 import { v4 as uuidv4 } from 'uuid';
@@ -18,6 +16,8 @@ import {
   type LooseSingleCardDocument,
   type RealmInfo,
   type Loader,
+  type PatchData,
+  type Relationship,
 } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 
@@ -34,7 +34,7 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
-import { trackCard } from '../resources/card-resource';
+import { trackCard, getCard } from '../resources/card-resource';
 
 import type LoaderService from './loader-service';
 
@@ -43,7 +43,7 @@ export type CardSaveSubscriber = (
   content: SingleCardDocument | string,
 ) => void;
 
-const { ownRealmURL, otherRealmURLs } = ENV;
+const { ownRealmURL, otherRealmURLs, environment } = ENV;
 
 export default class CardService extends Service {
   @service private declare loaderService: LoaderService;
@@ -56,8 +56,8 @@ export default class CardService extends Service {
 
   loaderToCardAPILoadingCache = new WeakMap<Loader, Promise<typeof CardAPI>>();
 
-  async getAPI(loader?: Loader): Promise<typeof CardAPI> {
-    loader = loader ?? this.loaderService.loader;
+  async getAPI(): Promise<typeof CardAPI> {
+    let loader = this.loaderService.loader;
     if (!this.loaderToCardAPILoadingCache.has(loader)) {
       let apiPromise = loader.import<typeof CardAPI>(
         'https://cardstack.com/base/card-api',
@@ -89,13 +89,11 @@ export default class CardService extends Service {
   async fetchJSON(
     url: string | URL,
     args?: RequestInit,
-    loader?: Loader,
   ): Promise<CardDocument | undefined> {
     let clientRequestId = uuidv4();
     this.clientRequestIds.add(clientRequestId);
 
-    loader = loader ?? this.loaderService.loader;
-    let response = await loader.fetch(url, {
+    let response = await this.loaderService.loader.fetch(url, {
       headers: {
         Accept: SupportedMimeType.CardJson,
         'X-Boxel-Client-Request-Id': clientRequestId,
@@ -124,18 +122,16 @@ export default class CardService extends Service {
     resource: LooseCardResource,
     doc: LooseSingleCardDocument | CardDocument,
     relativeTo?: URL | undefined,
-    loader?: Loader,
   ): Promise<CardDef> {
-    loader = loader ?? this.loaderService.loader;
-    let api = await this.getAPI(loader);
+    let api = await this.getAPI();
     let card = await api.createFromSerialized(
       resource,
       doc,
       relativeTo,
-      loader,
+      this.loaderService.loader,
     );
     // it's important that we absorb the field async here so that glimmer won't
-    // encounter NotReady errors, since we don't have the luxury of the indexer
+    // encounter NotLoaded errors, since we don't have the luxury of the indexer
     // being able to inform us of which fields are used or not at this point.
     // (this is something that the card compiler could optimize for us in the
     // future)
@@ -149,9 +145,8 @@ export default class CardService extends Service {
   async serializeCard(
     card: CardDef,
     opts?: SerializeOpts,
-    loader?: Loader,
   ): Promise<LooseSingleCardDocument> {
-    let api = await this.getAPI(loader);
+    let api = await this.getAPI();
     let serialized = api.serializeCard(card, opts);
     delete serialized.included;
     return serialized;
@@ -161,14 +156,12 @@ export default class CardService extends Service {
   async saveModel<T extends object>(
     owner: T,
     card: CardDef,
-    loader?: Loader,
   ): Promise<CardDef | undefined> {
     let cardChanged = false;
     function onCardChange() {
       cardChanged = true;
     }
-    loader = loader ?? this.loaderService.loader;
-    let api = await this.getAPI(loader);
+    let api = await this.getAPI();
     try {
       api.subscribeToChanges(card, onCardChange);
       let doc = await this.serializeCard(card, {
@@ -218,9 +211,8 @@ export default class CardService extends Service {
     }
   }
 
-  async saveSource(url: URL, content: string, loader?: Loader) {
-    loader = loader ?? this.loaderService.loader;
-    let response = await loader.fetch(url, {
+  async saveSource(url: URL, content: string) {
+    let response = await this.loaderService.loader.fetch(url, {
       method: 'POST',
       headers: {
         Accept: 'application/vnd.card+source',
@@ -239,9 +231,8 @@ export default class CardService extends Service {
     return response;
   }
 
-  async deleteSource(url: URL, loader?: Loader) {
-    loader = loader ?? this.loaderService.loader;
-    let response = await loader.fetch(url, {
+  async deleteSource(url: URL) {
+    let response = await this.loaderService.loader.fetch(url, {
       method: 'DELETE',
       headers: {
         Accept: 'application/vnd.card+source',
@@ -262,68 +253,81 @@ export default class CardService extends Service {
   async patchCard(
     card: CardDef,
     doc: LooseSingleCardDocument,
-    patchData: Record<string, any>,
-    loader?: Loader,
+    patchData: PatchData,
   ): Promise<CardDef | undefined> {
-    let api = await this.getAPI(loader);
-    let initialDoc = await this.serializeCard(card);
-    let updatedCard = await api.updateFromSerialized<typeof CardDef>(card, doc);
-    let updatedCardDoc = await this.serializeCard(updatedCard);
-
-    if (!this.isPatchApplied(updatedCardDoc.data, patchData, card.id)) {
-      await api.updateFromSerialized<typeof CardDef>(card, initialDoc);
-      throw new Error('Patch failed.');
+    let api = await this.getAPI();
+    let linkedCards = await this.loadPatchedCards(patchData, new URL(card.id));
+    for (let [field, value] of Object.entries(linkedCards)) {
+      if (field.includes('.')) {
+        let parts = field.split('.');
+        let leaf = parts.pop();
+        if (!leaf) {
+          throw new Error(`bug: error in field name "${field}"`);
+        }
+        let inner = card;
+        for (let part of parts) {
+          inner = (inner as any)[part];
+        }
+        (inner as any)[leaf.match(/^\d+$/) ? Number(leaf) : leaf] = value;
+      } else {
+        // TODO this could trigger a save. perhaps instead we could
+        // introduce a new option to updateFromSerialized to accept a list of
+        // fields to pre-load? which in this case would be any relationships that
+        // were patched in
+        (card as any)[field] = value;
+      }
     }
-
+    let updatedCard = await api.updateFromSerialized<typeof CardDef>(card, doc);
     // TODO setting `this` as an owner until we can have a better solution here...
     // (currently only used by the AI bot to patch cards from chat)
     return await this.saveModel(this, updatedCard);
   }
 
-  private isPatchApplied(
-    cardData: Record<string, any> | undefined,
-    patchData: Record<string, any>,
-    relativeTo: string,
-  ): boolean {
-    if (!cardData || !patchData) {
-      return false;
+  private async loadRelationshipCard(rel: Relationship, relativeTo: URL) {
+    if (!rel.links.self) {
+      return;
     }
-    if (isEqual(cardData, patchData)) {
-      return true;
+    let id = rel.links.self;
+    let cardResource = getCard(this, () => new URL(id, relativeTo).href);
+    await cardResource.loaded;
+    if (!cardResource.card && cardResource.cardError) {
+      throw cardResource.cardError;
     }
-    if (!Object.keys(patchData).length) {
-      return false;
+    return cardResource.card;
+  }
+
+  private async loadPatchedCards(
+    patchData: PatchData,
+    relativeTo: URL,
+  ): Promise<{
+    [fieldName: string]: CardDef | CardDef[];
+  }> {
+    if (!patchData?.relationships) {
+      return {};
     }
-    for (let [key, patchValue] of Object.entries(patchData)) {
-      if (!(key in cardData)) {
-        return false;
-      }
-      let cardValue = cardData[key];
-      if (
-        !isEqual(cardValue, patchValue) &&
-        typeof cardValue === 'object' &&
-        typeof patchValue === 'object'
-      ) {
-        if (key === 'attributes' && !Object.keys(patchValue).length) {
-          continue;
-        }
-        if (!this.isPatchApplied(cardValue, patchValue, relativeTo)) {
-          return false;
-        }
-      } else if (!isEqual(cardValue, patchValue)) {
-        try {
-          if (
-            new URL(cardValue, relativeTo).href ===
-            new URL(patchValue, relativeTo).href
-          ) {
-            return true;
+    let result: { [fieldName: string]: CardDef | CardDef[] } = {};
+    await Promise.all(
+      Object.entries(patchData.relationships).map(async ([fieldName, rel]) => {
+        if (Array.isArray(rel)) {
+          let cards: CardDef[] = [];
+          await Promise.all(
+            rel.map(async (r) => {
+              let card = await this.loadRelationshipCard(r, relativeTo);
+              if (card) {
+                cards.push(card);
+              }
+            }),
+          );
+          result[fieldName] = cards;
+        } else {
+          let card = await this.loadRelationshipCard(rel, relativeTo);
+          if (card) {
+            result[fieldName] = card;
           }
-        } catch (e) {
-          return false;
         }
-      }
-    }
-    return true;
+      }),
+    );
+    return result;
   }
 
   private async saveCardDocument(
@@ -347,13 +351,9 @@ export default class CardService extends Service {
     return json;
   }
 
-  async copyCard(
-    source: CardDef,
-    destinationRealm: URL,
-    loader?: Loader,
-  ): Promise<CardDef> {
-    loader = loader ?? this.loaderService.loader;
-    let api = await this.getAPI(loader);
+  async copyCard(source: CardDef, destinationRealm: URL): Promise<CardDef> {
+    let loader = this.loaderService.loader;
+    let api = await this.getAPI();
     let serialized = await this.serializeCard(source, {
       maybeRelativeURL: null, // forces URL's to be absolute.
     });
@@ -388,56 +388,59 @@ export default class CardService extends Service {
       );
     }
     let collectionDoc = json;
-    return (
-      await Promise.all(
-        collectionDoc.data.map(async (doc) => {
-          try {
-            return await this.createFromSerialized(
-              doc,
-              collectionDoc,
-              new URL(doc.id),
-            );
-          } catch (e) {
-            console.warn(
-              `Skipping ${
-                doc.id
-              }. Encountered error deserializing from search result for query ${JSON.stringify(
-                query,
-                null,
-                2,
-              )} against realm ${realmURL}`,
-              e,
-            );
-            return undefined;
-          }
-        }),
-      )
-    ).filter(Boolean) as CardDef[];
+    try {
+      console.time('search deserialization');
+      return (
+        await Promise.all(
+          collectionDoc.data.map(async (doc) => {
+            try {
+              return await this.createFromSerialized(
+                doc,
+                collectionDoc,
+                new URL(doc.id),
+              );
+            } catch (e) {
+              console.warn(
+                `Skipping ${
+                  doc.id
+                }. Encountered error deserializing from search result for query ${JSON.stringify(
+                  query,
+                  null,
+                  2,
+                )} against realm ${realmURL}`,
+                e,
+              );
+              return undefined;
+            }
+          }),
+        )
+      ).filter(Boolean) as CardDef[];
+    } finally {
+      if (environment !== 'test') {
+        console.timeEnd('search deserialization');
+      }
+    }
   }
 
   async getFields(
     cardOrField: BaseDef,
-    loader?: Loader,
   ): Promise<{ [fieldName: string]: Field<typeof BaseDef> }> {
-    let api = await this.getAPI(loader);
+    let api = await this.getAPI();
     return api.getFields(cardOrField, { includeComputeds: true });
   }
 
-  async isPrimitive(card: typeof FieldDef, loader?: Loader): Promise<boolean> {
-    let api = await this.getAPI(loader);
+  async isPrimitive(card: typeof FieldDef): Promise<boolean> {
+    let api = await this.getAPI();
     return api.primitive in card;
   }
 
-  async getRealmInfo(
-    card: CardDef,
-    loader?: Loader,
-  ): Promise<RealmInfo | undefined> {
-    let api = await this.getAPI(loader);
+  async getRealmInfo(card: CardDef): Promise<RealmInfo | undefined> {
+    let api = await this.getAPI();
     return card[api.realmInfo];
   }
 
-  async getRealmURL(card: CardDef, loader?: Loader) {
-    let api = await this.getAPI(loader);
+  async getRealmURL(card: CardDef) {
+    let api = await this.getAPI();
     // in the case where we get no realm URL from the card, we are dealing with
     // a new card instance that does not have a realm URL yet. For now let's
     // assume that the new card instance will reside in the realm that is hosting the app...
@@ -445,8 +448,8 @@ export default class CardService extends Service {
     return card[api.realmURL] ?? new URL(ownRealmURL);
   }
 
-  async cardsSettled(loader?: Loader) {
-    let api = await this.getAPI(loader);
+  async cardsSettled() {
+    let api = await this.getAPI();
     await api.flushLogs();
   }
 
@@ -460,12 +463,8 @@ export default class CardService extends Service {
     return undefined;
   }
 
-  async getRealmInfoByRealmURL(
-    realmURL: URL,
-    loader?: Loader,
-  ): Promise<RealmInfo> {
-    loader = loader ?? this.loaderService.loader;
-    let response = await loader.fetch(`${realmURL}_info`, {
+  async getRealmInfoByRealmURL(realmURL: URL): Promise<RealmInfo> {
+    let response = await this.loaderService.loader.fetch(`${realmURL}_info`, {
       headers: { Accept: SupportedMimeType.RealmInfo },
       method: 'GET',
     });

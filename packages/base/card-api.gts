@@ -24,11 +24,9 @@ import {
   isSingleCardDocument,
   isRelationship,
   isNotLoadedError,
-  isNotReadyError,
   CardError,
   CardContextName,
   NotLoaded,
-  NotReady,
   getField,
   isField,
   primitive,
@@ -40,7 +38,6 @@ import {
   maybeURL,
   maybeRelativeURL,
   moduleFrom,
-  getCard,
   trackCard,
   type Meta,
   type CardFields,
@@ -97,7 +94,7 @@ export type FieldType = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
 type Setter = (value: any) => void;
 
 interface Options {
-  computeVia?: string | (() => unknown);
+  computeVia?: () => unknown;
   description?: string;
   // there exists cards that we only ever run in the host without
   // the isolated renderer (RoomField), which means that we cannot
@@ -138,27 +135,6 @@ function isNotLoadedValue(val: any): val is NotLoadedValue {
     return false;
   }
   return type === 'not-loaded';
-}
-
-interface NotReadyValue {
-  type: 'not-ready';
-  instance: BaseDef;
-  fieldName: string;
-}
-
-function isNotReadyValue(value: any): value is NotReadyValue {
-  if (value && typeof value === 'object') {
-    return (
-      'type' in value &&
-      value.type === 'not-ready' &&
-      'instance' in value &&
-      isCardOrField(value.instance) &&
-      'fieldName' in value &&
-      typeof value.fieldName === 'string'
-    );
-  } else {
-    return false;
-  }
 }
 
 interface StaleValue {
@@ -288,7 +264,7 @@ export interface Field<
   card: CardT;
   name: string;
   fieldType: FieldType;
-  computeVia: undefined | string | (() => unknown);
+  computeVia: undefined | (() => unknown);
   description: undefined | string;
   // there exists cards that we only ever run in the host without
   // the isolated renderer (RoomField), which means that we cannot
@@ -347,6 +323,9 @@ function cardTypeFor(
   if (primitive in field.card) {
     return field.card;
   }
+  if (boxedElement.value == null) {
+    return field.card;
+  }
   return Reflect.getPrototypeOf(boxedElement.value)!
     .constructor as typeof BaseDef;
 }
@@ -383,19 +362,9 @@ function getter<CardT extends BaseDefConstructor>(
     let value = deserialized.get(field.name);
     if (isStaleValue(value)) {
       value = value.staleValue;
-    } else if (
-      !deserialized.has(field.name) &&
-      typeof field.computeVia === 'function' &&
-      field.computeVia.constructor.name !== 'AsyncFunction'
-    ) {
+    } else if (!deserialized.has(field.name)) {
       value = field.computeVia.bind(instance)();
       deserialized.set(field.name, value);
-    } else if (
-      !deserialized.has(field.name) &&
-      (typeof field.computeVia === 'string' ||
-        typeof field.computeVia === 'function')
-    ) {
-      throw new NotReady(instance, field.name, field.computeVia);
     }
     return value;
   } else {
@@ -414,7 +383,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
   readonly fieldType = 'containsMany';
   constructor(
     private cardThunk: () => FieldT,
-    readonly computeVia: undefined | string | (() => unknown),
+    readonly computeVia: undefined | (() => unknown),
     readonly name: string,
     readonly description: string | undefined,
     readonly isUsed: undefined | true,
@@ -440,9 +409,12 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     // WatchedArray proxy is not structuredClone-able, and hence cannot be
     // communicated over the postMessage boundary between worker and DOM.
     // TODO: can this be simplified since we don't have the worker anymore?
-    return [...instances].map((instance) => {
-      return this.card[queryableValue](instance, stack);
-    });
+    let results = [...instances]
+      .map((instance) => {
+        return this.card[queryableValue](instance, stack);
+      })
+      .filter((i) => i != null);
+    return results.length === 0 ? null : results;
   }
 
   serialize(
@@ -518,7 +490,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     doc: CardDocument,
     relationships: JSONAPIResource['relationships'] | undefined,
     fieldMeta: CardFields[string] | undefined,
-    _identityContext: undefined,
+    identityContext: IdentityContext,
     instancePromise: Promise<BaseDef>,
     _loadedValue: any,
     relativeTo: URL | undefined,
@@ -538,15 +510,26 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     }
     let metas: Partial<Meta>[] = fieldMeta ?? [];
     return new WatchedArray(
-      (arrayValue) =>
+      (prevArrayValue, arrayValue) =>
         instancePromise.then((instance) => {
+          applySubscribersToInstanceValue(
+            instance,
+            this,
+            prevArrayValue,
+            arrayValue,
+          );
           notifySubscribers(instance, field.name, arrayValue);
           logger.log(recompute(instance));
         }),
       await Promise.all(
         value.map(async (entry, index) => {
           if (primitive in this.card) {
-            return this.card[deserialize](entry, relativeTo, doc);
+            return this.card[deserialize](
+              entry,
+              relativeTo,
+              doc,
+              identityContext,
+            );
           } else {
             let meta = metas[index];
             let resource: LooseCardResource = {
@@ -572,7 +555,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
             }
             return (
               await cardClassFromResource(resource, this.card, relativeTo)
-            )[deserialize](resource, relativeTo, doc);
+            )[deserialize](resource, relativeTo, doc, identityContext);
           }
         }),
       ),
@@ -580,7 +563,13 @@ class ContainsMany<FieldT extends FieldDefConstructor>
   }
 
   emptyValue(instance: BaseDef) {
-    return new WatchedArray((value) => {
+    return new WatchedArray((oldValue, value) => {
+      applySubscribersToInstanceValue(
+        instance,
+        this,
+        oldValue as BaseDef[],
+        value as BaseDef[],
+      );
       notifySubscribers(instance, this.name, value);
       logger.log(recompute(instance));
     });
@@ -590,7 +579,13 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     if (value && !Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
-    return new WatchedArray((value) => {
+    return new WatchedArray((oldValue, value) => {
+      applySubscribersToInstanceValue(
+        instance,
+        this,
+        oldValue as BaseDef[],
+        value as BaseDef[],
+      );
       notifySubscribers(instance, this.name, value);
       logger.log(recompute(instance));
     }, value);
@@ -622,7 +617,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   readonly fieldType = 'contains';
   constructor(
     private cardThunk: () => CardT,
-    readonly computeVia: undefined | string | (() => unknown),
+    readonly computeVia: undefined | (() => unknown),
     readonly name: string,
     readonly description: string | undefined,
     readonly isUsed: undefined | true,
@@ -695,13 +690,13 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     doc: CardDocument,
     relationships: JSONAPIResource['relationships'] | undefined,
     fieldMeta: CardFields[string] | undefined,
-    _identityContext: undefined,
+    identityContext: IdentityContext,
     _instancePromise: Promise<BaseDef>,
     _loadedValue: any,
     relativeTo: URL | undefined,
   ): Promise<BaseInstanceType<CardT>> {
     if (primitive in this.card) {
-      return this.card[deserialize](value, relativeTo, doc);
+      return this.card[deserialize](value, relativeTo, doc, identityContext);
     }
     if (fieldMeta && Array.isArray(fieldMeta)) {
       throw new Error(
@@ -729,7 +724,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     }
     return (await cardClassFromResource(resource, this.card, relativeTo))[
       deserialize
-    ](resource, relativeTo, doc);
+    ](resource, relativeTo, doc, identityContext);
   }
 
   emptyValue(_instance: BaseDef) {
@@ -768,7 +763,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   readonly fieldType = 'linksTo';
   constructor(
     private cardThunk: () => CardT,
-    readonly computeVia: undefined | string | (() => unknown),
+    readonly computeVia: undefined | (() => unknown),
     readonly name: string,
     readonly description: string | undefined,
     readonly isUsed: undefined | true,
@@ -895,17 +890,13 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         }' cannot deserialize non-relationship value ${JSON.stringify(value)}`,
       );
     }
-    if (value?.links?.self == null) {
+    if (value?.links?.self == null || value.links.self === '') {
       return null;
     }
     let loader = Loader.getLoaderFor(this.card)!;
-    let cardResource = getCard(new URL(value.links.self, relativeTo), {
-      cachedOnly: true,
-      loader,
-    });
-    await cardResource.loaded;
-    let cachedInstance =
-      cardResource.card ?? identityContext.identities.get(value.links.self);
+    let cachedInstance = identityContext.identities.get(
+      new URL(value.links.self, relativeTo).href,
+    );
     if (cachedInstance) {
       cachedInstance[isSavedInstance] = true;
       return cachedInstance as BaseInstanceType<CardT>;
@@ -1087,7 +1078,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
   readonly fieldType = 'linksToMany';
   constructor(
     private cardThunk: () => FieldT,
-    readonly computeVia: undefined | string | (() => unknown),
+    readonly computeVia: undefined | (() => unknown),
     readonly name: string,
     readonly description: string | undefined,
     readonly isUsed: undefined | true,
@@ -1127,17 +1118,23 @@ class LinksToMany<FieldT extends CardDefConstructor>
     // WatchedArray proxy is not structuredClone-able, and hence cannot be
     // communicated over the postMessage boundary between worker and DOM.
     // TODO: can this be simplified since we don't have the worker anymore?
-    return [...instances].map((instance) => {
-      if (primitive in instance) {
-        throw new Error(
-          `the linksToMany field '${this.name}' contains a primitive card '${instance.name}'`,
-        );
-      }
-      if (isNotLoadedValue(instance)) {
-        return { id: instance.reference };
-      }
-      return this.card[queryableValue](instance, stack);
-    });
+    let results = [...instances]
+      .map((instance) => {
+        if (instance == null) {
+          return null;
+        }
+        if (primitive in instance) {
+          throw new Error(
+            `the linksToMany field '${this.name}' contains a primitive card '${instance.name}'`,
+          );
+        }
+        if (isNotLoadedValue(instance)) {
+          return { id: instance.reference };
+        }
+        return this.card[queryableValue](instance, stack);
+      })
+      .filter((i) => i != null);
+    return results.length === 0 ? null : results;
   }
 
   serialize(
@@ -1162,6 +1159,15 @@ class LinksToMany<FieldT extends CardDefConstructor>
 
     let relationships: Record<string, Relationship> = {};
     values.map((value, i) => {
+      if (value == null) {
+        relationships[`${this.name}\.${i}`] = {
+          links: {
+            self: null,
+          },
+          data: null,
+        };
+        return;
+      }
       if (isNotLoadedValue(value)) {
         relationships[`${this.name}\.${i}`] = {
           links: {
@@ -1238,13 +1244,9 @@ class LinksToMany<FieldT extends CardDefConstructor>
           return null;
         }
         let loader = Loader.getLoaderFor(this.card)!;
-        let cardResource = getCard(new URL(value.links.self, relativeTo), {
-          cachedOnly: true,
-          loader,
-        });
-        await cardResource.loaded;
-        let cachedInstance =
-          cardResource.card ?? identityContext.identities.get(value.links.self);
+        let cachedInstance = identityContext.identities.get(
+          new URL(value.links.self, relativeTo).href,
+        );
         if (cachedInstance) {
           cachedInstance[isSavedInstance] = true;
           return cachedInstance;
@@ -1286,8 +1288,14 @@ class LinksToMany<FieldT extends CardDefConstructor>
       });
 
     return new WatchedArray(
-      (value) =>
+      (oldValue, value) =>
         instancePromise.then((instance) => {
+          applySubscribersToInstanceValue(
+            instance,
+            this,
+            oldValue as BaseDef[],
+            value as BaseDef[],
+          );
           notifySubscribers(instance, this.name, value);
           logger.log(recompute(instance));
         }),
@@ -1296,7 +1304,13 @@ class LinksToMany<FieldT extends CardDefConstructor>
   }
 
   emptyValue(instance: BaseDef) {
-    return new WatchedArray((value) => {
+    return new WatchedArray((oldValue, value) => {
+      applySubscribersToInstanceValue(
+        instance,
+        this,
+        oldValue as BaseDef[],
+        value as BaseDef[],
+      );
       notifySubscribers(instance, this.name, value);
       logger.log(recompute(instance));
     });
@@ -1325,7 +1339,13 @@ class LinksToMany<FieldT extends CardDefConstructor>
       }
     }
 
-    return new WatchedArray((value) => {
+    return new WatchedArray((oldValue, value) => {
+      applySubscribersToInstanceValue(
+        instance,
+        this,
+        oldValue as BaseDef[],
+        value as BaseDef[],
+      );
       notifySubscribers(instance, this.name, value);
       logger.log(recompute(instance));
     }, values);
@@ -1689,6 +1709,16 @@ export class BaseDef {
   }
 }
 
+export function isArrayOfCardOrField(
+  cardsOrFields: any,
+): cardsOrFields is CardDef[] | FieldDef[] {
+  return (
+    Array.isArray(cardsOrFields) &&
+    (cardsOrFields.length === 0 ||
+      cardsOrFields.every((item) => isCardOrField(item)))
+  );
+}
+
 export function isCardOrField(card: any): card is CardDef | FieldDef {
   return card && typeof card === 'object' && isBaseInstance in card;
 }
@@ -2018,9 +2048,16 @@ export type CardDefConstructor = typeof CardDef;
 export type FieldDefConstructor = typeof FieldDef;
 
 export function subscribeToChanges(
-  fieldOrCard: BaseDef,
+  fieldOrCard: BaseDef | BaseDef[],
   subscriber: CardChangeSubscriber,
 ) {
+  if (isArrayOfCardOrField(fieldOrCard)) {
+    fieldOrCard.forEach((item) => {
+      subscribeToChanges(item, subscriber);
+    });
+    return;
+  }
+
   let changeSubscribers = subscribers.get(fieldOrCard);
   if (changeSubscribers && changeSubscribers.has(subscriber)) {
     return;
@@ -2038,17 +2075,38 @@ export function subscribeToChanges(
     includeComputeds: false,
   });
   Object.keys(fields).forEach((fieldName) => {
-    let value = peekAtField(fieldOrCard, fieldName);
-    if (isCardOrField(value)) {
-      subscribeToChanges(value, subscriber);
+    let field = getField(fieldOrCard.constructor, fieldName) as Field<
+      typeof BaseDef
+    >;
+    if (
+      field &&
+      (field.fieldType === 'contains' || field.fieldType === 'containsMany')
+    ) {
+      let value = peekAtField(fieldOrCard, fieldName);
+      if (isCardOrField(value) || isArrayOfCardOrField(value)) {
+        subscribeToChanges(value, subscriber);
+      }
     }
   });
 }
 
 export function unsubscribeFromChanges(
-  fieldOrCard: BaseDef,
+  fieldOrCard: BaseDef | BaseDef[],
   subscriber: CardChangeSubscriber,
+  visited: Set<BaseDef> = new Set(),
 ) {
+  if (isArrayOfCardOrField(fieldOrCard)) {
+    fieldOrCard.forEach((item) => {
+      unsubscribeFromChanges(item, subscriber);
+    });
+    return;
+  }
+
+  if (visited.has(fieldOrCard)) {
+    return;
+  }
+
+  visited.add(fieldOrCard);
   let changeSubscribers = subscribers.get(fieldOrCard);
   if (!changeSubscribers) {
     return;
@@ -2060,23 +2118,71 @@ export function unsubscribeFromChanges(
     includeComputeds: false,
   });
   Object.keys(fields).forEach((fieldName) => {
-    let value = peekAtField(fieldOrCard, fieldName);
-    if (isCardOrField(value)) {
-      unsubscribeFromChanges(value, subscriber);
+    let field = getField(fieldOrCard.constructor, fieldName) as Field<
+      typeof BaseDef
+    >;
+    if (
+      field &&
+      (field.fieldType === 'contains' || field.fieldType === 'containsMany')
+    ) {
+      let value = peekAtField(fieldOrCard, fieldName);
+      if (isCardOrField(value) || isArrayOfCardOrField(value)) {
+        unsubscribeFromChanges(value, subscriber);
+      }
     }
   });
 }
 
-function migrateSubscribers(oldFieldOrCard: BaseDef, newFieldOrCard: BaseDef) {
-  let changeSubscribers = subscribers.get(oldFieldOrCard);
-  if (changeSubscribers) {
-    changeSubscribers.forEach((changeSubscriber) =>
-      subscribeToChanges(newFieldOrCard, changeSubscriber),
-    );
-    changeSubscribers.forEach((changeSubscriber) =>
-      unsubscribeFromChanges(oldFieldOrCard, changeSubscriber),
-    );
+function applySubscribersToInstanceValue(
+  instance: BaseDef,
+  field: Field<typeof BaseDef>,
+  oldValue: BaseDef | BaseDef[],
+  newValue: BaseDef | BaseDef[],
+) {
+  let changeSubscribers: Set<CardChangeSubscriber> | undefined = undefined;
+  if (field.fieldType === 'contains' || field.fieldType === 'containsMany') {
+    changeSubscribers = subscribers.get(instance);
+  } else if (
+    isArrayOfCardOrField(oldValue) &&
+    oldValue[0] &&
+    subscribers.has(oldValue[0])
+  ) {
+    changeSubscribers = subscribers.get(oldValue[0]);
+  } else if (isCardOrField(oldValue)) {
+    changeSubscribers = subscribers.get(oldValue);
   }
+
+  if (!changeSubscribers) {
+    return;
+  }
+
+  let toArray = function (item: BaseDef | BaseDef[]) {
+    if (isCardOrField(item)) {
+      return [item];
+    } else if (isArrayOfCardOrField(item)) {
+      return [...item];
+    } else {
+      return [];
+    }
+  };
+
+  let oldItems = toArray(oldValue);
+  let newItems = toArray(newValue);
+
+  let addedItems = newItems.filter((item) => !oldItems.includes(item));
+  let removedItems = oldItems.filter((item) => !newItems.includes(item));
+
+  addedItems.forEach((item) =>
+    changeSubscribers!.forEach((subscriber) =>
+      subscribeToChanges(item, subscriber),
+    ),
+  );
+
+  removedItems.forEach((item) =>
+    changeSubscribers!.forEach((subscriber) =>
+      unsubscribeFromChanges(item, subscriber),
+    ),
+  );
 }
 
 function getDataBucket<T extends BaseDef>(instance: T): Map<string, any> {
@@ -2403,24 +2509,61 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   if (!card) {
     throw new Error(`could not find card: '${humanReadable(adoptsFrom)}'`);
   }
-  return await _createFromSerialized(
-    card as T,
-    resource as any,
-    doc,
+
+  return card[deserialize](
+    resource,
     relativeTo,
+    doc as CardDocument,
     identityContext,
-  );
+  ) as BaseInstanceType<T>;
+}
+
+// Crawls all fields for cards and populates the identityContext
+function buildIdentityContext(
+  instance: CardDef | FieldDef,
+  identityContext: IdentityContext = new IdentityContext(),
+  visited: WeakSet<CardDef | FieldDef> = new WeakSet(),
+) {
+  if (instance == null || visited.has(instance)) {
+    return identityContext;
+  }
+  visited.add(instance);
+  let fields = getFields(instance);
+  for (let fieldName of Object.keys(fields)) {
+    let value = peekAtField(instance, fieldName);
+    if (value == null) {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      for (let item of value) {
+        if (value == null) {
+          continue;
+        }
+        if (isCard(item)) {
+          identityContext.identities.set(item.id, item);
+        }
+        if (isCardOrField(item)) {
+          buildIdentityContext(item, identityContext, visited);
+        }
+      }
+    } else {
+      if (isCard(value) && value.id) {
+        identityContext.identities.set(value.id, value);
+      }
+      if (isCardOrField(value)) {
+        buildIdentityContext(value, identityContext, visited);
+      }
+    }
+  }
+  return identityContext;
 }
 
 export async function updateFromSerialized<T extends BaseDefConstructor>(
   instance: BaseInstanceType<T>,
   doc: LooseSingleCardDocument,
 ): Promise<BaseInstanceType<T>> {
-  let identityContext = identityContexts.get(instance);
-  if (!identityContext) {
-    identityContext = new IdentityContext();
-    identityContexts.set(instance, identityContext);
-  }
+  let identityContext = buildIdentityContext(instance);
+  identityContexts.set(instance, identityContext);
   if (!instance[relativeTo] && doc.data.id) {
     instance[relativeTo] = new URL(doc.data.id);
   }
@@ -2448,9 +2591,6 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   _relativeTo: URL | undefined,
   identityContext: IdentityContext = new IdentityContext(),
 ): Promise<BaseInstanceType<T>> {
-  if (primitive in card) {
-    return card[deserialize](data, _relativeTo);
-  }
   let resource: LooseCardResource | undefined;
   if (isCardResource(data)) {
     resource = data;
@@ -2539,7 +2679,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
       }
       let relativeToVal = instance[relativeTo];
       return [
-        fieldName,
+        field,
         await getDeserializedValue({
           card,
           loadedValue: loadedValues.get(fieldName),
@@ -2553,7 +2693,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
         }),
       ];
     }),
-  )) as [keyof BaseInstanceType<T>, any][];
+  )) as [Field<T>, any][];
 
   // this block needs to be synchronous
   {
@@ -2564,8 +2704,11 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
       originalId = (instance as CardDef).id; // the instance is a composite card
       instance[isSavedInstance] = false;
     }
-    for (let [fieldName, value] of values) {
-      if (fieldName === 'id' && wasSaved && originalId !== value) {
+    for (let [field, value] of values) {
+      if (!field) {
+        continue;
+      }
+      if (field.name === 'id' && wasSaved && originalId !== value) {
         throw new Error(
           `cannot change the id for saved instance ${originalId}`,
         );
@@ -2574,15 +2717,16 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
 
       // Before updating field's value, we also have to make sure
       // the subscribers also subscribes to a new value.
-      let existingValue = deserialized.get(fieldName as string);
+      let existingValue = deserialized.get(field.name as string);
       if (
-        isCardOrField(existingValue) &&
-        isCardOrField(value) &&
-        existingValue !== value
+        isCardOrField(existingValue) ||
+        isArrayOfCardOrField(existingValue) ||
+        isCardOrField(value) ||
+        isArrayOfCardOrField(value)
       ) {
-        migrateSubscribers(existingValue, value);
+        applySubscribersToInstanceValue(instance, field, existingValue, value);
       }
-      deserialized.set(fieldName as string, value);
+      deserialized.set(field.name as string, value);
       logger.log(recompute(instance));
     }
     if (isCardInstance(instance) && resource.id != null) {
@@ -2813,7 +2957,7 @@ export async function recompute(
           undefined,
           opts,
         );
-        if (!isNotReadyValue(value) && !isStaleValue(value)) {
+        if (!isStaleValue(value)) {
           pendingFields.delete(fieldName);
           if (recomputePromises.get(card) !== recomputePromise) {
             return;
@@ -2847,7 +2991,7 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
   fieldName: K,
   compute: () => T[K] | Promise<T[K]> = () => instance[fieldName],
   opts?: RecomputeOptions,
-): Promise<T[K] | T[K][] | NotReadyValue | StaleValue | undefined> {
+): Promise<T[K] | T[K][] | StaleValue | undefined> {
   let result: T[K] | T[K][] | undefined;
   let deserialized = getDataBucket(instance);
   let maybeStale = deserialized.get(fieldName as string);
@@ -2871,11 +3015,8 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
         }`,
       );
     }
-    let computeVia = _computeVia as (() => T[K] | Promise<T[K]>) | string;
-    compute =
-      typeof computeVia === 'function'
-        ? computeVia.bind(instance)
-        : () => (instance as any)[computeVia as string]();
+    let computeVia = _computeVia as () => T[K] | Promise<T[K]>;
+    compute = computeVia.bind(instance);
   }
   try {
     //To avoid race conditions,
@@ -2895,14 +3036,6 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
         | T[K]
         | T[K][]
         | undefined;
-    } else if (isNotReadyError(e)) {
-      let { instance: depModel, computeVia, fieldName: depField } = e;
-      let nestedCompute =
-        typeof computeVia === 'function'
-          ? computeVia.bind(depModel)
-          : () => depModel[computeVia as string]();
-      await getIfReady(depModel, depField, nestedCompute, opts);
-      return { type: 'not-ready', instance, fieldName: fieldName as string };
     } else {
       throw e;
     }

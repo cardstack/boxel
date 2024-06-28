@@ -21,6 +21,8 @@ import {
   trimExecutableExtension,
 } from '../index';
 
+import { coerceTypes } from '../indexer';
+
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { testRealmURL } from './const';
@@ -101,6 +103,7 @@ export type TestIndexRow =
 //
 // the realm version table will default to version 1 of the testRealmURL if no
 // value is supplied
+export async function setupIndex(client: Indexer): Promise<void>;
 export async function setupIndex(
   client: Indexer,
   indexRows: TestIndexRow[],
@@ -112,7 +115,7 @@ export async function setupIndex(
 ): Promise<void>;
 export async function setupIndex(
   client: Indexer,
-  maybeVersionRows: RealmVersionsTable[] | TestIndexRow[],
+  maybeVersionRows: RealmVersionsTable[] | TestIndexRow[] = [],
   indexRows?: TestIndexRow[],
 ): Promise<void> {
   let versionRows: RealmVersionsTable[];
@@ -122,6 +125,7 @@ export async function setupIndex(
   } else {
     versionRows = maybeVersionRows as RealmVersionsTable[];
   }
+  let now = Date.now();
   let indexedCardsExpressions = await Promise.all(
     indexRows.map(async (r) => {
       let row: Pick<RelaxedBoxelIndexTable, 'url'> &
@@ -150,18 +154,18 @@ export async function setupIndex(
             ? `${row.url}.json`
             : row.url
           : row.url;
-      row.file_alias = trimExecutableExtension(new URL(row.url)).href;
+      row.file_alias = trimExecutableExtension(new URL(row.url)).href.replace(
+        /\.json$/,
+        '',
+      );
       row.type = row.type ?? 'instance';
+      row.last_modified = String(row.last_modified ?? now);
       return asExpressions(
         { ...defaultIndexEntry, ...row },
         {
-          jsonFields: [
-            'deps',
-            'types',
-            'pristine_doc',
-            'error_doc',
-            'search_doc',
-          ],
+          jsonFields: [...Object.entries(coerceTypes)]
+            .filter(([_, type]) => type === 'JSON')
+            .map(([column]) => column),
         },
       );
     }),

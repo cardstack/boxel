@@ -11,7 +11,7 @@ import { setupApplicationTest } from 'ember-qunit';
 
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
 
 import { FieldContainer, GridContainer } from '@cardstack/boxel-ui/components';
@@ -23,9 +23,9 @@ import {
 } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 
-import { Submodes } from '@cardstack/host/components/submode-switcher';
+import { AuthenticationErrorMessages } from '@cardstack/runtime-common/router';
+
 import { claimsFromRawToken } from '@cardstack/host/resources/realm-session';
-import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 
@@ -41,6 +41,7 @@ import {
   type TestContextWithSave,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  lookupLoaderService,
 } from '../helpers';
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
 
@@ -49,25 +50,6 @@ let realmPermissions: { [realmURL: string]: ('read' | 'write')[] };
 
 module('Acceptance | interact submode tests', function (hooks) {
   let realm: Realm;
-  let onFetch: ((req: Request, body: string) => Response | null) | undefined;
-  function wrappedOnFetch() {
-    return async (req: Request) => {
-      if (!onFetch) {
-        return Promise.resolve({
-          req,
-          res: null,
-        });
-      }
-
-      let body = await req.clone().text();
-      let res = onFetch(req, body) ?? null;
-
-      return {
-        req,
-        res,
-      };
-    };
-  }
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -82,8 +64,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       [testRealm2URL]: ['read', 'write'],
     };
 
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    let loader = lookupLoaderService().loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
     let catalogEntry: typeof import('https://cardstack.com/base/catalog-entry');
@@ -248,7 +229,6 @@ module('Acceptance | interact submode tests', function (hooks) {
     let mangoPet = new Pet({ name: 'Mango' });
 
     ({ realm } = await setupAcceptanceTestRealm({
-      onFetch: wrappedOnFetch(),
       contents: {
         'address.gts': { Address },
         'person.gts': { Person },
@@ -407,7 +387,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test('Can add an index card by URL (without "index" in path) using the add button', async function (assert) {
-      const wrongURL = 'https://cardstack.com/bas';
+      const wrongURL = 'https://example.test/this/is/a/wrong/url';
       await visitOperatorMode({});
 
       assert.dom('[data-test-operator-mode-stack]').doesNotExist();
@@ -563,7 +543,6 @@ module('Acceptance | interact submode tests', function (hooks) {
       // Remove mango (the dog) from the stack
       await click('[data-test-stack-card-index="1"] [data-test-close-button]');
 
-      // The stack should be updated in the URL
       assert.operatorModeParametersMatch(currentURL(), {
         stacks: [
           [
@@ -573,9 +552,6 @@ module('Acceptance | interact submode tests', function (hooks) {
             },
           ],
         ],
-        submode: Submodes.Interact,
-        fileView: 'inspector',
-        openDirs: {},
       });
 
       await waitFor('[data-test-operator-mode-stack] [data-test-pet="Mango"]');
@@ -1169,7 +1145,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           realmPermissions = { [testRealmURL]: ['read'] };
         });
 
-        test('retrieve a new JWT on  401 error', async function (assert) {
+        test('retrieve a new JWT on 401 error', async function (assert) {
           let token = createJWT(
             {
               user: '@testuser:staging',
@@ -1195,20 +1171,25 @@ module('Acceptance | interact submode tests', function (hooks) {
             ],
           });
 
-          // Mock `Authentication` error response from the server.
-          onFetch = (req, _body) => {
-            if (
-              req.method !== 'GET' &&
-              req.method !== 'HEAD' &&
-              req.headers.get('Authorization') === token
-            ) {
-              return new Response(`Authentication error`, {
-                status: 401,
-              });
-            }
-
-            return null;
-          };
+          lookupLoaderService().virtualNetwork.mount(
+            async (req) => {
+              // Mock `Authentication` error response from the server.
+              if (
+                req.method !== 'GET' &&
+                req.method !== 'HEAD' &&
+                req.headers.get('Authorization') === token
+              ) {
+                return new Response(
+                  AuthenticationErrorMessages.PermissionMismatch,
+                  {
+                    status: 401,
+                  },
+                );
+              }
+              return null;
+            },
+            { prepend: true },
+          );
           assert
             .dom('[data-test-operator-mode-stack] [data-test-edit-button]')
             .exists();
@@ -1259,18 +1240,22 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
         ],
       });
-      onFetch = (req, _body) => {
-        if (req.method !== 'GET' && req.method !== 'HEAD') {
-          let token = req.headers.get('Authorization');
-          assert.notStrictEqual(token, null);
 
-          let claims = claimsFromRawToken(token!);
-          assert.deepEqual(claims.user, '@testuser:staging');
-          assert.strictEqual(claims.realm, 'http://test-realm/test2/');
-          assert.deepEqual(claims.permissions, ['read', 'write']);
-        }
-        return null;
-      };
+      lookupLoaderService().virtualNetwork.mount(
+        async (req) => {
+          if (req.method !== 'GET' && req.method !== 'HEAD') {
+            let token = req.headers.get('Authorization');
+            assert.notStrictEqual(token, null);
+
+            let claims = claimsFromRawToken(token!);
+            assert.deepEqual(claims.user, '@testuser:staging');
+            assert.strictEqual(claims.realm, 'http://test-realm/test2/');
+            assert.deepEqual(claims.permissions, ['read', 'write']);
+          }
+          return null;
+        },
+        { prepend: true },
+      );
 
       assert
         .dom('[data-test-operator-mode-stack="0"] [data-test-edit-button]')
@@ -1400,7 +1385,6 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-operator-mode-stack="1"]').doesNotExist();
       assert.dom('[data-test-operator-mode-stack="0"]').includesText('Fadhlan');
 
-      // The stack should be updated in the URL
       assert.operatorModeParametersMatch(currentURL(), {
         stacks: [
           [
@@ -1410,9 +1394,6 @@ module('Acceptance | interact submode tests', function (hooks) {
             },
           ],
         ],
-        submode: Submodes.Interact,
-        fileView: 'inspector',
-        openDirs: {},
       });
 
       // Close the last card in the last stack that is left - should get the empty state
@@ -1446,8 +1427,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
     });
 
-    // skipping FLaky test: CS-6845
-    skip('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
+    test('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
       // creates a recent search
       window.localStorage.setItem(
         'recent-cards',
@@ -1484,14 +1464,14 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       // Click on a recent search
       await click(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`);
-      // There is some additional thing we are waiting on here, probably the
-      // card to load in the card resource, but I'm not too sure so using waitUntil instead
-      await waitUntil(() =>
-        document
-          .querySelector(
-            '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="0"]',
-          )
-          ?.textContent?.includes('Fadhlan'),
+
+      // We have to wait untill there is only one stack item in rightmost stack,
+      // because that's the expected behaviour when we open a card from card search.
+      await waitUntil(
+        () =>
+          document.querySelectorAll(
+            '[data-test-operator-mode-stack="1"] [data-test-stack-card-index]',
+          )?.length === 1,
       );
 
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed

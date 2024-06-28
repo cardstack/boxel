@@ -10,7 +10,9 @@ import {
   identifyCard,
   hasExecutableExtension,
   trimExecutableExtension,
+  RealmPaths,
 } from './index';
+import { transpileJS } from './transpile';
 import {
   type PgPrimitive,
   type Expression,
@@ -51,14 +53,13 @@ import { type DBAdapter } from './db';
 
 import type { BaseDef, Field } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import { RealmPaths } from './index';
 
 export interface BoxelIndexTable {
   url: string;
   file_alias: string;
   realm_version: number;
   realm_url: string;
-  type: 'instance' | 'module' | 'error';
+  type: 'instance' | 'module' | 'css' | 'error';
   // TODO in followup PR update this to be a document not a resource
   pristine_doc: CardResource | null;
   error_doc: SerializedError | null;
@@ -69,9 +70,12 @@ export interface BoxelIndexTable {
   // `types` is the adoption chain for card where each code ref is serialized
   // using `internalKeyFor()`
   types: string[] | null;
-  embedded_html: string | null;
+  transpiled_code: string | null;
+  source: string | null;
+  embedded_html: Record<string, string> | null;
   isolated_html: string | null;
-  indexed_at: number | null;
+  indexed_at: string | null; // pg represents big integers as strings in javascript
+  last_modified: string | null; // pg represents big integers as strings in javascript
   is_deleted: boolean | null;
 }
 
@@ -80,22 +84,48 @@ export interface RealmVersionsTable {
   current_version: number;
 }
 
-export interface SearchCardResult {
-  type: 'card';
-  card: CardResource;
+interface IndexedModule {
+  type: 'module';
+  executableCode: string;
+  source: string;
+  canonicalURL: string;
+  lastModified: number;
+}
+
+interface IndexedCSS {
+  type: 'css';
+  source: string;
+  canonicalURL: string;
+  lastModified: number;
+}
+
+export interface IndexedInstance {
+  type: 'instance';
+  instance: CardResource;
+  source: string;
+  canonicalURL: string;
+  lastModified: number;
   isolatedHtml: string | null;
+  embeddedHtml: string | null;
   searchDoc: Record<string, any> | null;
   types: string[] | null;
   deps: string[] | null;
   realmVersion: number;
   realmURL: string;
   indexedAt: number | null;
+  // TODO this is used for testing, lets remove this after we have a way to ask
+  // for which card class to use for embedded HTML. This will mean we'll need to
+  // alter the way we test this so that it's a bit more indirect.
+  _embeddedHtmlByClassHierarchy: { [refURL: string]: string } | null;
 }
-interface SearchErrorResult {
+interface IndexedError {
   type: 'error';
   error: SerializedError;
 }
-export type SearchResult = SearchCardResult | SearchErrorResult;
+
+export type IndexedInstanceOrError = IndexedInstance | IndexedError;
+export type IndexedModuleOrError = IndexedModule | IndexedError;
+export type IndexedCSSOrError = IndexedCSS | IndexedError;
 
 type GetEntryOptions = WIPOptions;
 export type QueryOptions = WIPOptions;
@@ -115,13 +145,16 @@ interface QueryResultsMeta {
   };
 }
 
-const coerceTypes = Object.freeze({
+export const coerceTypes = Object.freeze({
   deps: 'JSON',
   types: 'JSON',
   pristine_doc: 'JSON',
   error_doc: 'JSON',
   search_doc: 'JSON',
+  embedded_html: 'JSON',
   is_deleted: 'BOOLEAN',
+  last_modified: 'VARCHAR',
+  indexed_at: 'VARCHAR',
 });
 
 export class Indexer {
@@ -146,21 +179,83 @@ export class Indexer {
     return this.query(await this.makeExpression(query, loader));
   }
 
-  async getCard(
+  async getModule(
     url: URL,
     opts?: GetEntryOptions,
-  ): Promise<SearchResult | undefined> {
-    let href = assertURLEndsWithJSON(url).href;
+  ): Promise<IndexedModuleOrError | undefined> {
+    let result = await this.getModuleOrCSS(url, 'module', opts);
+    if (!result) {
+      return undefined;
+    }
+    if (result.type === 'error') {
+      return { type: 'error', error: result.error_doc! };
+    }
+    let moduleEntry = assertIndexEntrySource(result);
+    let {
+      transpiled_code: executableCode,
+      source,
+      url: canonicalURL,
+      last_modified: lastModified,
+    } = moduleEntry;
+    if (!executableCode) {
+      throw new Error(
+        `bug: index entry for ${url.href} with opts: ${JSON.stringify(
+          opts,
+        )} has neither an error_doc nor transpiled_code`,
+      );
+    }
+    return {
+      type: 'module',
+      canonicalURL,
+      executableCode,
+      source,
+      lastModified: parseInt(lastModified),
+    };
+  }
+
+  async getCSS(
+    url: URL,
+    opts?: GetEntryOptions,
+  ): Promise<IndexedCSSOrError | undefined> {
+    let result = await this.getModuleOrCSS(url, 'css', opts);
+    if (!result) {
+      return undefined;
+    }
+    if (result.type === 'error') {
+      return { type: 'error', error: result.error_doc! };
+    }
+    let moduleEntry = assertIndexEntrySource(result);
+    let {
+      source,
+      url: canonicalURL,
+      last_modified: lastModified,
+    } = moduleEntry;
+    return {
+      type: 'css',
+      canonicalURL,
+      source,
+      lastModified: parseInt(lastModified),
+    };
+  }
+
+  private async getModuleOrCSS(
+    url: URL,
+    type: 'module' | 'css',
+    opts?: GetEntryOptions,
+  ): Promise<BoxelIndexTable | undefined> {
     let result = (await this.query([
       `SELECT i.* 
        FROM boxel_index as i
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
        WHERE`,
       ...every([
-        [`i.url =`, param(href)],
+        any([
+          [`i.url =`, param(url.href)],
+          [`i.file_alias =`, param(url.href)],
+        ]),
         realmVersionExpression(opts),
         any([
-          ['i.type =', param('instance')],
+          ['i.type =', param(type)],
           ['i.type =', param('error')],
         ]),
       ]),
@@ -172,37 +267,87 @@ export class Indexer {
     if (maybeResult.is_deleted) {
       return undefined;
     }
+    return maybeResult;
+  }
+
+  async getInstance(
+    url: URL,
+    opts?: GetEntryOptions,
+  ): Promise<IndexedInstanceOrError | undefined> {
+    let result = (await this.query([
+      `SELECT i.*, embedded_html ->> `,
+      param('default'),
+      ` as default_embedded_html 
+       FROM boxel_index as i
+       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
+       WHERE`,
+      ...every([
+        any([
+          [`i.url =`, param(url.href)],
+          [`i.file_alias =`, param(url.href)],
+        ]),
+        realmVersionExpression(opts),
+        any([
+          ['i.type =', param('instance')],
+          ['i.type =', param('error')],
+        ]),
+      ]),
+    ] as Expression)) as unknown as (BoxelIndexTable & {
+      default_embedded_html: string | null;
+    })[];
+    let maybeResult:
+      | (BoxelIndexTable & { default_embedded_html: string | null })
+      | undefined = result[0];
+    if (!maybeResult) {
+      return undefined;
+    }
+    if (maybeResult.is_deleted) {
+      return undefined;
+    }
 
     if (maybeResult.error_doc) {
       return { type: 'error', error: maybeResult.error_doc };
     }
+    let instanceEntry = assertIndexEntrySource(maybeResult);
     let {
-      pristine_doc: card,
+      url: canonicalURL,
+      pristine_doc: instance,
       isolated_html: isolatedHtml,
+      default_embedded_html: embeddedHtml,
+      embedded_html: _embeddedHtmlByClassHierarchy,
       search_doc: searchDoc,
       realm_version: realmVersion,
       realm_url: realmURL,
       indexed_at: indexedAt,
+      last_modified: lastModified,
+      source,
       types,
       deps,
-    } = maybeResult;
-    if (!card) {
+    } = instanceEntry;
+    if (!instance) {
       throw new Error(
-        `bug: index entry for ${href} with opts: ${JSON.stringify(
+        `bug: index entry for ${url.href} with opts: ${JSON.stringify(
           opts,
         )} has neither an error_doc nor a pristine_doc`,
       );
     }
     return {
-      type: 'card',
+      type: 'instance',
+      canonicalURL,
       realmURL,
-      card,
+      instance,
       isolatedHtml,
+      embeddedHtml,
       searchDoc,
       types,
-      indexedAt,
+      indexedAt: indexedAt != null ? parseInt(indexedAt) : null,
+      source,
       deps,
+      lastModified: parseInt(lastModified),
       realmVersion,
+      // TODO this is used for testing, lets remove this after we have a way to ask
+      // for which card class to use for embedded HTML
+      _embeddedHtmlByClassHierarchy,
     };
   }
 
@@ -219,8 +364,12 @@ export class Indexer {
     { url: string; alias: string; type: 'instance' | 'module' | 'error' }[]
   > {
     const pageSize = 1000;
-    let results: Pick<BoxelIndexTable, 'url' | 'file_alias' | 'type'>[] = [];
-    let rows: Pick<BoxelIndexTable, 'url' | 'file_alias' | 'type'>[] = [];
+    let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
+      type: 'instance' | 'module' | 'error';
+    })[] = [];
+    let rows: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
+      type: 'instance' | 'module' | 'error';
+    })[] = [];
     let pageNumber = 0;
     do {
       // SQLite does not support cursors when used in the worker thread since
@@ -236,13 +385,15 @@ export class Indexer {
         ...every([
           [`deps_array_element =`, param(alias)],
           realmVersionExpression({ withMaxVersion: realmVersion }),
+          // css is a subset of modules, so there won't by any references that
+          // are css entries that aren't already represented by a module entry
+          [`i.type != 'css'`],
         ]),
         'ORDER BY i.url COLLATE "POSIX"',
         `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
-      ] as Expression)) as Pick<
-        BoxelIndexTable,
-        'url' | 'file_alias' | 'type'
-      >[];
+      ] as Expression)) as (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
+        type: 'instance' | 'module' | 'error';
+      })[];
       results = [...results, ...rows];
       pageNumber++;
     } while (rows.length === pageSize);
@@ -284,8 +435,6 @@ export class Indexer {
       ['i.realm_url = ', param(realmURL.href)],
       ['i.type =', param('instance')],
       ['is_deleted = FALSE OR is_deleted IS NULL'],
-      // our tests assert that the index card should not come back in the search results, so:
-      ['url !=', param(new RealmPaths(realmURL).fileURL('index.json').href)],
       realmVersionExpression({ withMaxVersion: version }),
     ];
     if (filter) {
@@ -487,7 +636,7 @@ export class Indexer {
       fieldArity({
         type: onRef,
         path: key,
-        value: [query, 'LIKE', v],
+        value: [query, 'ILIKE', v],
         errorHint: 'filter',
       }),
     ];
@@ -828,17 +977,38 @@ export class Indexer {
   }
 }
 
-export interface SearchEntry {
+export type IndexEntry = InstanceEntry | ModuleEntry | CSSEntry | ErrorEntry;
+
+export interface InstanceEntry {
+  type: 'instance';
+  source: string;
+  lastModified: number;
   resource: CardResource;
   searchData: Record<string, any>;
   isolatedHtml?: string;
+  embeddedHtml?: Record<string, string>;
   types: string[];
   deps: Set<string>;
 }
 
-export type SearchEntryWithErrors =
-  | { type: 'entry'; entry: SearchEntry }
-  | { type: 'error'; error: SerializedError };
+export interface ErrorEntry {
+  type: 'error';
+  error: SerializedError;
+}
+
+interface ModuleEntry {
+  type: 'module';
+  source: string;
+  lastModified: number;
+  deps: Set<string>;
+}
+
+interface CSSEntry {
+  type: 'css';
+  source: string;
+  lastModified: number;
+  deps: Set<string>;
+}
 
 export class Batch {
   readonly ready: Promise<void>;
@@ -853,57 +1023,70 @@ export class Batch {
     this.ready = this.setNextRealmVersion();
   }
 
-  async updateEntry(
-    url: URL,
-    entry:
-      | SearchEntryWithErrors
-      | {
-          type: 'module';
-          module: {
-            deps: Set<string>;
-          };
-        },
-  ): Promise<void> {
+  async updateEntry(url: URL, entry: IndexEntry): Promise<void> {
+    if (!new RealmPaths(this.realmURL).inRealm(url)) {
+      // TODO this is a workaround for CS-6886. after we have solved that issue we can
+      // drop this band-aid
+      return;
+    }
     let href = url.href;
     this.touched.add(href);
     let { nameExpressions, valueExpressions } = asExpressions(
       {
         url: href,
-        file_alias: trimExecutableExtension(url).href,
+        file_alias: trimExecutableExtension(url).href.replace(/\.json$/, ''),
         realm_version: this.realmVersion,
         realm_url: this.realmURL.href,
         is_deleted: false,
         indexed_at: Date.now(),
-        ...(entry.type === 'entry'
+        ...(entry.type === 'instance'
           ? {
               // TODO in followup PR we need to alter the SearchEntry type to use
               // a document instead of a resource
               type: 'instance',
-              pristine_doc: entry.entry.resource,
-              search_doc: entry.entry.searchData,
-              isolated_html: entry.entry.isolatedHtml,
-              deps: [...entry.entry.deps],
-              types: entry.entry.types,
+              pristine_doc: entry.resource,
+              search_doc: entry.searchData,
+              isolated_html: entry.isolatedHtml,
+              embedded_html: entry.embeddedHtml,
+              deps: [...entry.deps],
+              types: entry.types,
+              source: entry.source,
+              last_modified: entry.lastModified,
             }
           : entry.type === 'module'
           ? {
               type: 'module',
-              deps: [...entry.module.deps],
+              deps: [...entry.deps],
+              source: entry.source,
+              last_modified: entry.lastModified,
+              transpiled_code: transpileJS(
+                entry.source,
+                new RealmPaths(this.realmURL).local(url),
+              ),
+            }
+          : entry.type === 'css'
+          ? {
+              type: 'css',
+              deps: [...entry.deps],
+              source: entry.source,
+              last_modified: entry.lastModified,
             }
           : {
               type: 'error',
               error_doc: entry.error,
               deps: entry.error.deps,
             }),
-      } as BoxelIndexTable,
+      } as Omit<BoxelIndexTable, 'last_modified' | 'indexed_at'> & {
+        // we do this because pg automatically casts big ints into strings, so
+        // we unwind that to accurately type the structure that we want to pass
+        // _in_ to the DB
+        last_modified: number;
+        indexed_at: number;
+      },
       {
-        jsonFields: [
-          'pristine_doc',
-          'search_doc',
-          'deps',
-          'types',
-          'error_doc',
-        ],
+        jsonFields: [...Object.entries(coerceTypes)]
+          .filter(([_, type]) => type === 'JSON')
+          .map(([column]) => column),
       },
     );
 
@@ -1118,7 +1301,10 @@ export class Batch {
       this.realmVersion,
     );
     let invalidations = childInvalidations.map(({ url }) => url);
-    let aliases = childInvalidations.map(({ alias: _alias }) => _alias);
+    let aliases = childInvalidations.map(({ alias: moduleAlias, type, url }) =>
+      // for instances we expect that the deps for an entry always includes .json extension
+      type === 'instance' ? url : moduleAlias,
+    );
     let results = [
       ...invalidations,
       ...flatten(
@@ -1202,11 +1388,26 @@ function isFieldPlural(field: Field): boolean {
   );
 }
 
-function assertURLEndsWithJSON(url: URL): URL {
-  if (!url.href.endsWith('.json')) {
-    return new URL(`${url}.json`);
+function assertIndexEntrySource<T>(obj: T): Omit<
+  T,
+  'source' | 'last_modified'
+> & {
+  source: string;
+  last_modified: string;
+} {
+  if (!obj || typeof obj !== 'object') {
+    throw new Error(`expected index entry is null or not an object`);
   }
-  return url;
+  if (!('source' in obj) || typeof obj.source !== 'string') {
+    throw new Error(`expected index entry to have "source" string property`);
+  }
+  if (!('last_modified' in obj) || typeof obj.last_modified !== 'string') {
+    throw new Error(`expected index entry to have "last_modified" property`);
+  }
+  return obj as Omit<T, 'source' | 'last_modified'> & {
+    source: string;
+    last_modified: string;
+  };
 }
 
 function assertNever(value: never) {

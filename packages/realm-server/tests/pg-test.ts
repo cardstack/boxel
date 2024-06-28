@@ -30,10 +30,13 @@ module('Postgres', function (hooks) {
         'error_doc',
         'deps',
         'types',
-        'embedded_html',
         'isolated_html',
         'indexed_at',
         'is_deleted',
+        'source',
+        'transpiled_code',
+        'last_modified',
+        'embedded_html',
       ]);
     }
     {

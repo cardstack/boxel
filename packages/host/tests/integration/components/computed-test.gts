@@ -6,49 +6,53 @@ import { module, test } from 'qunit';
 import { RealmSessionContextName, baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
-
 import {
   cleanWhiteSpace,
   testRealmURL,
   setupCardLogs,
   provideConsumeContext,
+  setupIntegrationTestRealm,
+  setupLocalIndexing,
+  lookupLoaderService,
 } from '../../helpers';
+import {
+  setupBaseRealm,
+  StringField,
+  NumberField,
+  field,
+  contains,
+  CardDef,
+  Component,
+  FieldDef,
+  containsMany,
+  recompute,
+  linksTo,
+  linksToMany,
+} from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 import { settled } from '@ember/test-helpers';
-
-let cardApi: typeof import('https://cardstack.com/base/card-api');
-let string: typeof import('https://cardstack.com/base/string');
-let number: typeof import('https://cardstack.com/base/number');
 
 let loader: Loader;
 
 module('Integration | computeds', function (hooks) {
   setupRenderingTest(hooks);
+  setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     provideConsumeContext(RealmSessionContextName, {
       canWrite: true,
     });
 
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    loader = lookupLoaderService().loader;
   });
+  setupLocalIndexing(hooks);
 
   setupCardLogs(
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  hooks.beforeEach(async function () {
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    number = await loader.import(`${baseRealm.url}number`);
-  });
-
   test('can render a synchronous computed field', async function (assert) {
-    let { field, contains, CardDef, Component } = cardApi;
-    let { default: StringField } = string;
     class Person extends CardDef {
       @field firstName = contains(StringField);
       @field lastName = contains(StringField);
@@ -72,31 +76,7 @@ module('Integration | computeds', function (hooks) {
     assert.strictEqual(root.textContent!.trim(), 'Papaya Abdel-Rahman');
   });
 
-  test('can render a synchronous computed field (using a string in `computeVia`)', async function (assert) {
-    let { field, contains, CardDef, Component } = cardApi;
-    let { default: StringField } = string;
-    class Person extends CardDef {
-      @field firstName = contains(StringField);
-      @field lastName = contains(StringField);
-      @field fullName = contains(StringField, { computeVia: 'getFullName' });
-      getFullName() {
-        return `${this.firstName} ${this.lastName}`;
-      }
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <@fields.fullName />
-        </template>
-      };
-    }
-
-    let mango = new Person({ firstName: 'Mango', lastName: 'Abdel-Rahman' });
-    let root = await renderCard(loader, mango, 'isolated');
-    assert.strictEqual(root.textContent!.trim(), 'Mango Abdel-Rahman');
-  });
-
   test('can render a computed that consumes a nested property', async function (assert) {
-    let { field, contains, CardDef, Component, FieldDef } = cardApi;
-    let { default: StringField } = string;
     class Person extends FieldDef {
       @field firstName = contains(StringField);
     }
@@ -115,7 +95,13 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
+
+    await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'test-cards.gts': { Post, Person },
+      },
+    });
 
     let firstPost = new Post({
       title: 'First Post',
@@ -126,8 +112,6 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a computed that is a composite type', async function (assert) {
-    let { field, contains, CardDef, FieldDef, Component } = cardApi;
-    let { default: StringField } = string;
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
@@ -159,8 +143,6 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a containsMany computed primitive field', async function (assert) {
-    let { field, contains, containsMany, CardDef, Component } = cardApi;
-    let { default: StringField } = string;
     class Person extends CardDef {
       @field firstName = contains(StringField);
       @field languagesSpoken = containsMany(StringField);
@@ -189,8 +171,6 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('supports an empty containsMany computed primitive field', async function (assert) {
-    let { field, contains, containsMany, CardDef, Component } = cardApi;
-    let { default: StringField } = string;
     class Person extends CardDef {
       @field firstName = contains(StringField);
       @field languagesSpoken = containsMany(StringField);
@@ -216,9 +196,6 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a containsMany computed composite field', async function (this: RenderingTestContext, assert) {
-    let { field, contains, containsMany, CardDef, FieldDef, Component } =
-      cardApi;
-    let { default: StringField } = string;
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
@@ -241,7 +218,13 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    loader.shimModule(`${testRealmURL}test-cards`, { Family, Person });
+
+    await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'test-cards.gts': { Family, Person },
+      },
+    });
 
     let abdelRahmans = new Family({
       people: [
@@ -272,9 +255,6 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('supports an empty containsMany computed composite field', async function (assert) {
-    let { field, contains, containsMany, FieldDef, CardDef, Component } =
-      cardApi;
-    let { default: StringField } = string;
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
@@ -307,11 +287,6 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can recompute containsMany field', async function (assert) {
-    let { field, contains, containsMany, FieldDef, CardDef, recompute } =
-      cardApi;
-    let { default: StringField } = string;
-    let { default: NumberField } = number;
-
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       @field age = contains(NumberField);
@@ -325,7 +300,13 @@ module('Integration | computeds', function (hooks) {
         },
       });
     }
-    loader.shimModule(`${testRealmURL}test-cards`, { Family, Person });
+
+    await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'test-cards.gts': { Family, Person },
+      },
+    });
 
     let family = new Family({
       people: [
@@ -343,8 +324,6 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('computed fields render as embedded in the edit format', async function (assert) {
-    let { field, contains, CardDef } = cardApi;
-    let { default: StringField } = string;
     class Person extends CardDef {
       @field firstName = contains(StringField);
       @field alias = contains(StringField, {
@@ -363,8 +342,6 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a computed linksTo relationship', async function (assert) {
-    let { field, contains, linksTo, CardDef, FieldDef, Component } = cardApi;
-    let { default: StringField } = string;
     class Pet extends CardDef {
       @field name = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
@@ -418,8 +395,6 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a computed linksToMany relationship', async function (this: RenderingTestContext, assert) {
-    let { field, contains, linksTo, linksToMany, CardDef, Component } = cardApi;
-    let { default: StringField } = string;
     class Pet extends CardDef {
       @field name = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
@@ -442,12 +417,11 @@ module('Integration | computeds', function (hooks) {
       @field author = linksTo(Person);
       @field factCheckers = linksToMany(Pet);
       @field collaborators = linksToMany(Pet, {
-        computeVia: 'findCollaborators',
+        computeVia(this: Post) {
+          let mango = this.author.pets.find((p) => p.name === 'Mango');
+          return [mango, ...this.factCheckers];
+        },
       });
-      findCollaborators(this: Post) {
-        let mango = this.author.pets.find((p) => p.name === 'Mango');
-        return [mango, ...this.factCheckers];
-      }
     }
 
     let p1 = new Pet({ id: `${testRealmURL}mango`, name: 'Mango' });

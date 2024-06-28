@@ -93,10 +93,16 @@ export default class MatrixService extends Service {
   #ready: Promise<void>;
   #matrixSDK: typeof MatrixSDK | undefined;
   #eventBindings: [EmittedEvents, (...arg: any[]) => void][] | undefined;
+  currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
+    new TrackedMap();
 
   constructor(owner: Owner) {
     super(owner);
     this.#ready = this.loadSDK.perform();
+  }
+
+  addEventReadReceipt(eventId: string, receipt: { readAt: Date }) {
+    this.currentUserEventReadReceipts.set(eventId, receipt);
   }
 
   get ready() {
@@ -135,6 +141,7 @@ export default class MatrixService extends Service {
         this.matrixSDK.RoomEvent.LocalEchoUpdated,
         Timeline.onUpdateEventStatus(this),
       ],
+      [this.matrixSDK.RoomEvent.Receipt, Timeline.onReceipt(this)],
     ];
   });
 
@@ -288,7 +295,7 @@ export default class MatrixService extends Service {
     let realmAuthClient = new RealmAuthClient(
       realmURL,
       this.client,
-      this.loaderService.loader,
+      this.loaderService.loader.fetch,
     );
 
     let jwtPromise = realmAuthClient.getJWT();
@@ -429,7 +436,7 @@ export default class MatrixService extends Service {
             type: 'function',
             function: {
               name: 'patchCard',
-              description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
+              description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.`,
               parameters: {
                 type: 'object',
                 properties: {
