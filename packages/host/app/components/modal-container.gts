@@ -58,7 +58,7 @@ export default class ModalContainer extends Component<Signature> {
             {{yield to='sidebar'}}
           </aside>
         {{/if}}
-        <Header @title={{@title}} class='dialog-box__header'>
+        <Header @size='large' @title={{@title}} class='dialog-box__header'>
           <IconButton
             @icon={{IconX}}
             @width='12'
