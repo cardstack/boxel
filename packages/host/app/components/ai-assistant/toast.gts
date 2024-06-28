@@ -13,7 +13,7 @@ import { format as formatDate, formatISO } from 'date-fns';
 import { resource, use } from 'ember-resources';
 import window from 'ember-window-mock';
 
-import { TrackedObject } from 'tracked-built-ins/.';
+import { TrackedObject } from 'tracked-built-ins';
 
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 
