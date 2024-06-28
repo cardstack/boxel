@@ -1864,8 +1864,13 @@ class DefaultAtomViewTemplate extends GlimmerComponent<{
   };
 }> {
   get text() {
-    return this.args.model.title
-      ? String(this.args.model.title).trim()
+    let title =
+      typeof this.args.model.title === 'string'
+        ? this.args.model.title.trim()
+        : null;
+
+    return title
+      ? title
       : `Untitled ${this.args.model.constructor.displayName}`;
   }
   <template>
