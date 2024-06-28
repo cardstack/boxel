@@ -1788,7 +1788,7 @@ module('Realm Server', function (hooks) {
         },
       );
 
-      test.only('returns instances with prerendered html + css', async function (assert) {
+      test('returns instances with prerendered html + css', async function (assert) {
         let response = await request
           .get(`/_search-rendered`)
           .set('Accept', 'application/vnd.card+json');
@@ -1934,7 +1934,7 @@ module('Realm Server', function (hooks) {
         assert.strictEqual(json.meta.page.total, 4, 'total count is correct');
       });
 
-      test.only('can filter', async function (assert) {
+      test('can filter', async function (assert) {
         let query: Query = {
           filter: {
             on: {
@@ -1951,10 +1951,39 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.card+json');
 
         let json = response.body;
-        // todo: Error executing SQL column "types0_array_element" does not exist (undefined):
+
+        assert.strictEqual(
+          json.data.length,
+          1,
+          'one prerendered card instance is returned in the filtered search results',
+        );
+        assert.strictEqual(json.data[0].id, 'http://127.0.0.1:4444/jimmy');
       });
 
-      // todo add sorting test
+      test('can sort', async function (assert) {
+        let query: Query = {
+          sort: [
+            {
+              by: 'firstName',
+              on: { module: `${testRealmHref}person`, name: 'Person' },
+              direction: 'desc',
+            },
+          ],
+        };
+        let response = await request
+          .get(`/_search-rendered?${stringify(query)}`)
+          .set('Accept', 'application/vnd.card+json');
+
+        let json = response.body;
+        // todo: sql error: column "i.file_alias" must appear in the GROUP BY clause or be used in an aggregate function
+        assert.strictEqual(
+          json.data.length,
+          2,
+          'filtered results count is correct',
+        );
+        assert.strictEqual(json.data[0].id, 'http://127.0.0.1:4444/craig');
+        assert.strictEqual(json.data[1].id, 'http://127.0.0.1:4444/aaron');
+      });
     });
   });
 

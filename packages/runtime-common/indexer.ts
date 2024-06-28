@@ -502,7 +502,7 @@ export class Indexer {
     return [
       `WITH instance_records AS (
         SELECT i.file_alias, i.deps, i.embedded_html, r.realm_url
-        FROM boxel_index i
+        FROM boxel_index AS i ${tableValuedFunctionsPlaceholder}
         INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
       'WHERE',
       ...everyCondition,
