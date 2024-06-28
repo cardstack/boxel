@@ -788,6 +788,9 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
   @action
   handleConvert() {
     this.openModal();
+    this.updateAccountFormAccountName();
+    this.updateContactFormName();
+    this.updateOpportunityAccountName();
   }
 
   //task-form modal
@@ -796,10 +799,6 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
   @action
   openTaskFormModal() {
     this.isTaskFormModalVisible = true;
-
-    this.updateAccountFormAccountName();
-    this.updateContactFormName();
-    this.updateOpportunityAccountName();
   }
 
   @action
@@ -848,43 +847,34 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
       const firstName = this.args.model.leadForm.name.firstName;
       const company = this.args.model.leadForm.company;
 
-      this.args.model.opportunityForm.opportunityName = `${firstName} ${company}`;
+      this.args.model.opportunityForm.companyName = `${firstName} ${company}`;
     }
   }
 
   get accountFormAccountName() {
     const { leadForm } = this.args.model;
-
     if (!leadForm || !leadForm.name) return '';
-
     const { salutation, firstName, lastName } = leadForm.name;
 
     if (!salutation || !firstName || !lastName) return '';
-
     return `${salutation} ${firstName} ${lastName}`;
   }
 
   get contactFormAccountName() {
     const { leadForm } = this.args.model;
-
     if (!leadForm || !leadForm.name) return '';
-
     const { salutation, firstName, lastName } = leadForm.name;
 
     if (!salutation || !firstName || !lastName) return '';
-
     return `${salutation} ${firstName} ${lastName}`;
   }
 
   get opportunityFormName() {
     const { leadForm } = this.args.model;
-
-    if (!leadForm || !leadForm.name || !leadForm.company) return '';
-
+    if (!leadForm || !leadForm.company) return '';
     const { firstName } = leadForm.name;
 
     if (!firstName) return '';
-
     return `${firstName} ${leadForm.company}`;
   }
 

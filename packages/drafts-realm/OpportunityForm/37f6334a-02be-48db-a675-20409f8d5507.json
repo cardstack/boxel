@@ -3,6 +3,7 @@
     "type": "card",
     "attributes": {
       "opportunityName": "Opportunity Name",
+      "companyName": "",
       "closeDate": "2024-06-13",
       "amount": {
         "currency": "RM",

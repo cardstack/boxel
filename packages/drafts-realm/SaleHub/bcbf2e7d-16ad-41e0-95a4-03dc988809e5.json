@@ -93,6 +93,7 @@
       },
       "opportunityForm": {
         "opportunityName": null,
+        "companyName": "Law lawbombom",
         "closeDate": null,
         "amount": {
           "currency": null,

@@ -119,6 +119,11 @@ class AmountField extends FieldDef {
 
 /* Opportunity Form */
 class IsolatedSecForOpportunityForm extends Component<typeof OpportunityForm> {
+  get getCompanyName() {
+    if (!this.args.model.companyName) return '-';
+    return this.args.model.companyName;
+  }
+
   get getFormattedAmount() {
     const amount = this.args.model.amount;
     const hasAmount = amount && amount.totalAmount;
@@ -176,6 +181,11 @@ class IsolatedSecForOpportunityForm extends Component<typeof OpportunityForm> {
         </div>
 
         <div class='field-input-group'>
+          <div class='field-input'>
+            <label>Company Name: </label>
+
+            {{this.getCompanyName}}
+          </div>
           <div class='field-input'>
             <label>Close Date: </label>
             <@fields.closeDate />
@@ -338,6 +348,10 @@ class EditSecForOpportunityForm extends Component<typeof OpportunityForm> {
         <@fields.accountName />
       </FieldContainer>
 
+      <FieldContainer @tag='label' @label='Company Name' @vertical={{true}}>
+        <@fields.companyName />
+      </FieldContainer>
+
       <FieldContainer @tag='label' @label='Close Date' @vertical={{true}}>
         <@fields.closeDate />
       </FieldContainer>
@@ -432,6 +446,9 @@ export class OpportunityFormField extends FieldDef {
   @field accountName = linksTo(CrmAccount, {
     description: `Account Name`,
   });
+  @field companyName = contains(StringField, {
+    description: `Company Name`,
+  });
   @field closeDate = contains(DateCard, {
     description: `Close Date`,
   });
@@ -464,6 +481,9 @@ export class OpportunityForm extends CardDef {
   });
   @field accountName = linksTo(CrmAccount, {
     description: `Account Name`,
+  });
+  @field companyName = contains(StringField, {
+    description: `Company Name`,
   });
   @field closeDate = contains(DateCard, {
     description: `Close Date`,
