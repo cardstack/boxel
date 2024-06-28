@@ -37,38 +37,31 @@ interface Signature {
 
 export default class AiAssistantToast extends Component<Signature> {
   <template>
-    {{#if this.isVisible}}
-      <div
-        class='ai-assistant-toast'
-        data-test-ai-assistant-toast
-        {{on 'mouseenter' this.blockResetState}}
-        {{on 'mouseleave' this.unBlockResetState}}
-      >
-        <header class='toast-header' data-test-ai-assistant-toast-header>
-          <img
-            alt='AI Assistant'
-            src={{assistantIcon}}
-            width='20'
-            height='20'
-          />
-          <time datetime={{formatISO this.unseenMessage.created}} class='time'>
-            {{formatDate this.unseenMessage.created 'dd.MM.yyyy, h:mm aa'}}
-          </time>
-        </header>
-        <div class='toast-content' data-test-ai-assistant-toast-content>
-          {{htmlSafe (markdownToHtml this.unseenMessage.formattedMessage)}}
-        </div>
-        <BoxelButton
-          @kind='secondary-dark'
-          @size='extra-small'
-          class='view-in-chat-button'
-          {{on 'click' this.viewInChat}}
-          data-test-ai-assistant-toast-button
-        >
-          View in chat
-        </BoxelButton>
+    <div
+      class='ai-assistant-toast {{if this.isVisible "visible"}}'
+      data-test-ai-assistant-toast
+      {{on 'mouseenter' this.blockResetState}}
+      {{on 'mouseleave' this.unBlockResetState}}
+    >
+      <header class='toast-header' data-test-ai-assistant-toast-header>
+        <img alt='AI Assistant' src={{assistantIcon}} width='20' height='20' />
+        <time datetime={{formatISO this.unseenMessage.created}} class='time'>
+          {{formatDate this.unseenMessage.created 'dd.MM.yyyy, h:mm aa'}}
+        </time>
+      </header>
+      <div class='toast-content' data-test-ai-assistant-toast-content>
+        {{htmlSafe (markdownToHtml this.unseenMessage.formattedMessage)}}
       </div>
-    {{/if}}
+      <BoxelButton
+        @kind='secondary-dark'
+        @size='extra-small'
+        class='view-in-chat-button'
+        {{on 'click' this.viewInChat}}
+        data-test-ai-assistant-toast-button
+      >
+        View in chat
+      </BoxelButton>
+    </div>
     <style>
       .ai-assistant-toast {
         display: flex;
@@ -77,14 +70,27 @@ export default class AiAssistantToast extends Component<Signature> {
         background-color: var(--boxel-ai-purple);
         border-radius: var(--boxel-border-radius);
         padding: var(--boxel-sp);
-        max-width: 250px;
-        overflow: ellipsis;
+
+        overflow: hidden;
 
         position: absolute;
         bottom: calc(
           var(--boxel-sp) + var(--container-button-size) + var(--boxel-sp)
         );
-        right: calc(var(--boxel-sp));
+        right: var(--boxel-sp);
+
+        opacity: 0;
+        height: 0;
+        max-width: 250px;
+        transition:
+          transform 0.5s ease-in-out,
+          opacity 0.5s ease-in-out;
+        transform: translateY(100%);
+      }
+      .visible {
+        opacity: 1;
+        height: fit-content;
+        transform: translateY(0);
       }
       .toast-header {
         display: flex;
@@ -155,7 +161,11 @@ export default class AiAssistantToast extends Component<Signature> {
         continue;
       }
       let { room } = resource;
-      lastMessages.set(room.roomId, room.messages[room.messages.length - 1]);
+      let finishedMessages = room.messages.filter((m) => m.isStreamingFinished);
+      lastMessages.set(
+        room.roomId,
+        finishedMessages[finishedMessages.length - 1],
+      );
     }
 
     let lastMessage =
@@ -188,7 +198,13 @@ export default class AiAssistantToast extends Component<Signature> {
   }
 
   get unseenMessage() {
-    return this.state.value?.message ?? ({} as MessageField);
+    return (
+      this.state.value?.message ??
+      ({
+        formattedMessage: '',
+        created: new Date(),
+      } as MessageField)
+    );
   }
 
   get isVisible() {
