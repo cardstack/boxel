@@ -79,15 +79,14 @@ const BaseDefinitionContainer: TemplateOnlyComponent<BaseSignature> = <template>
       overflow-wrap: anywhere;
     }
     .header {
-      --boxel-header-text-size: var(--boxel-font-size-sm);
+      --boxel-header-text-font: var(--boxel-font-size-sm);
       --boxel-header-padding: var(--boxel-sp-xs);
-      --boxel-header-text-size: var(--boxel-font-size-sm);
       --boxel-header-text-transform: uppercase;
       --boxel-header-letter-spacing: var(--boxel-lsp-xxl);
-      --boxel-header-detail-margin-left: auto;
       --boxel-header-detail-max-width: none;
       --boxel-header-background-color: var(--boxel-100);
       --boxel-header-text-color: var(--boxel-450);
+      --boxel-header-max-width: calc(100% - 10rem);
     }
 
     .header.active {
