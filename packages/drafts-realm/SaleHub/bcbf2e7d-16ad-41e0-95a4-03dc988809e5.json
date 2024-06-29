@@ -104,7 +104,44 @@
         "percentage": null,
         "forecastCategory": null
       },
-      "scheduledTask": [],
+      "scheduledTask": [
+        {
+          "taskForm": {
+            "taskId": "0",
+            "subject": "1",
+            "dueDate": "2024-06-29",
+            "comments": null,
+            "isCompleted": false
+          }
+        },
+        {
+          "taskForm": {
+            "taskId": "1",
+            "subject": "task b",
+            "dueDate": "2024-06-27",
+            "comments": null,
+            "isCompleted": false
+          }
+        },
+        {
+          "taskForm": {
+            "taskId": "2",
+            "subject": "task ccc",
+            "dueDate": "2024-06-30",
+            "comments": null,
+            "isCompleted": false
+          }
+        },
+        {
+          "taskForm": {
+            "taskId": "3",
+            "subject": "task xx",
+            "dueDate": "2024-07-03",
+            "comments": null,
+            "isCompleted": false
+          }
+        }
+      ],
       "title": null,
       "description": null,
       "thumbnailURL": null
@@ -128,6 +165,26 @@
       "opportunityForm.accountName": {
         "links": {
           "self": null
+        }
+      },
+      "scheduledTask.0.taskForm.relatedTo": {
+        "links": {
+          "self": "http://localhost:4201/drafts/CardDef/7298c9c6-2964-41a0-87f7-42127a16e12b"
+        }
+      },
+      "scheduledTask.1.taskForm.relatedTo": {
+        "links": {
+          "self": "http://localhost:4201/drafts/CrmAccount/4802eeed-bec6-4d7a-8f05-6370866edd40"
+        }
+      },
+      "scheduledTask.2.taskForm.relatedTo": {
+        "links": {
+          "self": null
+        }
+      },
+      "scheduledTask.3.taskForm.relatedTo": {
+        "links": {
+          "self": "http://localhost:4201/drafts/CardDef/992531db-9912-49eb-9b72-f710cbcdb085"
         }
       }
     },

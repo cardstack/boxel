@@ -969,8 +969,8 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
       }, {});
 
     const sortedMonths = Object.keys(groupedTasks).sort((a, b) => {
-      if (a === 'Upcoming & Overdue') return -1;
-      if (b === 'Upcoming & Overdue') return 1;
+      if (a === 'Upcoming') return -1;
+      if (b === 'Overdue') return 1;
       return new Date(a).getTime() - new Date(b).getTime();
     });
 
@@ -990,15 +990,18 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
 
   @action formatDueDate(date: Date) {
     const todayDate = new Date();
-    if (date > todayDate || isToday(date))
-      return formatDate(new Date(date), 'MMMM yyyy');
-    return 'Upcoming & Overdue';
+
+    if (isToday(date)) return formatDate(new Date(date), 'MMMM yyyy');
+    if (date > todayDate) return 'Upcoming';
+    return 'Overdue';
   }
 
   @action formatDay(date: Date) {
     const todayDate = new Date();
     if (isToday(date)) return 'Today';
     if (isTomorrow(date)) return 'Tomorrow';
+    if (date > todayDate || isTomorrow(date))
+      return formatDate(new Date(date), 'dd/MM/yyyy');
     if (date < todayDate) return null;
     if (isThisMonth(date)) return 'This Month';
     return null;
