@@ -1,6 +1,6 @@
 import { module, test, assert } from 'qunit';
 import { getTools, getModifyPrompt, getRelevantCards } from '../helpers';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
+import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
 function getPatchTool(cardId: string, properties: any) {
   return {

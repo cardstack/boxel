@@ -1,7 +1,7 @@
 import debounce from 'lodash/debounce';
 import { type MatrixEvent, type RoomMember } from 'matrix-js-sdk';
 
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
+import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
 import { eventDebounceMs } from '../matrix-utils';
 

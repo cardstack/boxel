@@ -14,10 +14,8 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import { OperatorModeContext } from '@cardstack/host/services/matrix-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
-import type {
-  RoomField,
-  ReactionEventContent,
-} from 'https://cardstack.com/base/room';
+import type { ReactionEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RoomField } from 'https://cardstack.com/base/room';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let nonce = 0;
