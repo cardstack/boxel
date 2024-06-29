@@ -73,7 +73,7 @@ const formatNumberWithSeparator = (
 class Isolated extends Component<typeof CampaignForm> {
   get numberSent() {
     let { model } = this.args;
-    const nearestRoundNumber = Math.round(model.number_sent || 0);
+    const nearestRoundNumber = Math.round(model.numberSent || 0);
     const formatNumber = nearestRoundNumber;
     return formatNumberWithSeparator(formatNumber);
   }
@@ -81,7 +81,7 @@ class Isolated extends Component<typeof CampaignForm> {
   get expectedResponsePercentage() {
     let { model } = this.args;
     const formatNumber = nearestDecimal(
-      model.expected_response_percentage || 0,
+      model.expectedResponsePercentage || 0,
       2,
     );
     return formatNumberWithSeparator(formatNumber, true);
@@ -102,16 +102,16 @@ class Isolated extends Component<typeof CampaignForm> {
         {{@model.type}}
       </FieldContainer>
       <FieldContainer @label='Parent Campaign' class='field'>
-        <@fields.parent_campaign />
+        <@fields.parentCampaign />
       </FieldContainer>
       <FieldContainer @label='Description' class='field'>
         {{@model.description}}
       </FieldContainer>
       <FieldContainer @label='Start Date' class='field'>
-        <@fields.start_date />
+        <@fields.startDate />
       </FieldContainer>
       <FieldContainer @label='End Date' class='field'>
-        <@fields.end_date />
+        <@fields.endDate />
       </FieldContainer>
       <FieldContainer @label='Num Sent in Campaign' class='field'>
         {{this.numberSent}}
@@ -120,13 +120,13 @@ class Isolated extends Component<typeof CampaignForm> {
         {{this.expectedResponsePercentage}}
       </FieldContainer>
       <FieldContainer @label='Expected Revenue in Campaign' class='field'>
-        {{formatCurrency @model.expected_revenue}}
+        {{formatCurrency @model.expectedRevenue}}
       </FieldContainer>
       <FieldContainer @label='Budgeted Cost in Campaign' class='field'>
-        {{formatCurrency @model.budgeted_cost}}
+        {{formatCurrency @model.budgetedCost}}
       </FieldContainer>
       <FieldContainer @label='Actual Cost in Campaign' class='field'>
-        {{formatCurrency @model.actual_cost}}
+        {{formatCurrency @model.actualCost}}
       </FieldContainer>
     </div>
     <style>
@@ -163,14 +163,14 @@ class Edit extends Component<typeof CampaignForm> {
   }
 
   get selectedStartDate() {
-    return this.args.model.start_date
-      ? format(this.args.model.start_date, dateFormat)
+    return this.args.model.startDate
+      ? format(this.args.model.startDate, dateFormat)
       : null;
   }
 
   get selectedEndDate() {
-    return this.args.model.end_date
-      ? format(this.args.model.end_date, dateFormat)
+    return this.args.model.endDate
+      ? format(this.args.model.endDate, dateFormat)
       : null;
   }
 
@@ -196,26 +196,26 @@ class Edit extends Component<typeof CampaignForm> {
 
   @action updateStartDate(date: Date) {
     // If the end date is set and the new start date is after the end date, update the end date
-    if (this.args.model.end_date && isAfter(date, this.args.model.end_date)) {
-      this.args.model.end_date = date;
+    if (this.args.model.endDate && isAfter(date, this.args.model.endDate)) {
+      this.args.model.endDate = date;
     }
-    this.args.model.start_date = date;
+    this.args.model.startDate = date;
   }
 
   @action updateEndDate(date: Date) {
     // If the start date is set and the new end date is before the start date, update the start date
     if (
-      this.args.model.start_date &&
-      isBefore(date, this.args.model.start_date)
+      this.args.model.startDate &&
+      isBefore(date, this.args.model.startDate)
     ) {
-      this.args.model.start_date = date;
+      this.args.model.startDate = date;
     }
-    this.args.model.end_date = date;
+    this.args.model.endDate = date;
   }
 
   @action parseDateInput(field: string, date: string) {
     const newDate = parse(date, dateFormat, new Date());
-    if (field === 'start_date') {
+    if (field === 'startDate') {
       return this.updateStartDate(newDate);
     }
     return this.updateEndDate(newDate);
@@ -294,7 +294,7 @@ class Edit extends Component<typeof CampaignForm> {
         @tag='label'
         class='field'
       >
-        <@fields.parent_campaign />
+        <@fields.parentCampaign />
       </FieldContainer>
       <FieldContainer
         @label='Description'
@@ -317,7 +317,7 @@ class Edit extends Component<typeof CampaignForm> {
         <BoxelInput
           type='date'
           @value={{this.selectedStartDate}}
-          @onInput={{fn this.parseDateInput 'start_date'}}
+          @onInput={{fn this.parseDateInput 'startDate'}}
           @max='9999-12-31'
         />
       </FieldContainer>
@@ -340,7 +340,7 @@ class Edit extends Component<typeof CampaignForm> {
         @tag='label'
         class='field'
       >
-        <@fields.number_sent />
+        <@fields.numberSent />
       </FieldContainer>
       <FieldContainer
         @label='Expected Response (%)'
@@ -348,7 +348,7 @@ class Edit extends Component<typeof CampaignForm> {
         @tag='label'
         class='field'
       >
-        <@fields.expected_response_percentage />
+        <@fields.expectedResponsePercentage />
       </FieldContainer>
       <FieldContainer
         @label='Expected Revenue in Campaign (RM)'
@@ -356,7 +356,7 @@ class Edit extends Component<typeof CampaignForm> {
         @tag='label'
         class='field'
       >
-        <@fields.expected_revenue />
+        <@fields.expectedRevenue />
       </FieldContainer>
       <FieldContainer
         @label='Budgeted Cost in Campaign (RM)'
@@ -364,7 +364,7 @@ class Edit extends Component<typeof CampaignForm> {
         @tag='label'
         class='field'
       >
-        <@fields.budgeted_cost />
+        <@fields.budgetedCost />
       </FieldContainer>
       <FieldContainer
         @label='Actual Cost in Campaign (RM)'
@@ -372,7 +372,7 @@ class Edit extends Component<typeof CampaignForm> {
         @tag='label'
         class='field'
       >
-        <@fields.actual_cost />
+        <@fields.actualCost />
       </FieldContainer>
     </div>
     <style>
@@ -403,31 +403,31 @@ export class CampaignForm extends CardDef {
   @field type = contains(StringField, {
     description: 'The type of campaign',
   });
-  @field parent_campaign = linksTo(() => CampaignForm, {
+  @field parentCampaign = linksTo(() => CampaignForm, {
     description: 'The parent campaign',
   });
   @field description = contains(StringField, {
     description: 'The campaign description',
   });
-  @field start_date = contains(DateField, {
+  @field startDate = contains(DateField, {
     description: 'The campaign start date',
   });
-  @field end_date = contains(DateField, {
+  @field endDate = contains(DateField, {
     description: 'The campaign end date',
   });
-  @field number_sent = contains(NumberField, {
+  @field numberSent = contains(NumberField, {
     description: 'The number of forms sent in the campaign',
   });
-  @field expected_response_percentage = contains(NumberField, {
+  @field expectedResponsePercentage = contains(NumberField, {
     description: 'The expected response by percentage (%) in the campaign',
   });
-  @field expected_revenue = contains(NumberField, {
+  @field expectedRevenue = contains(NumberField, {
     description: 'The expected revenue by RM in the campaign',
   });
-  @field budgeted_cost = contains(NumberField, {
+  @field budgetedCost = contains(NumberField, {
     description: 'The budgeted cost by RM in the campaign',
   });
-  @field actual_cost = contains(NumberField, {
+  @field actualCost = contains(NumberField, {
     description: 'The actual cost by RM in the campaign',
   });
 

@@ -4,21 +4,21 @@
     "attributes": {
       "name": "Advertisement Campaign Form",
       "status": "Planned",
-      "active": false,
+      "active": true,
       "type": "Email",
-      "description": "ssssssjkk",
-      "start_date": null,
-      "end_date": null,
-      "number_sent": 200003212,
-      "expected_response_percentage": 222.5355,
-      "expected_revenue": 231200,
-      "budgeted_cost": 1003039,
-      "actual_cost": 12034044,
+      "description": "This is advertisment campaign form",
+      "startDate": "2024-06-13",
+      "endDate": "2024-06-30",
+      "numberSent": 2000,
+      "expectedResponsePercentage": 100,
+      "expectedRevenue": 60000,
+      "budgetedCost": 40000,
+      "actualCost": 50000,
       "title": null,
       "thumbnailURL": null
     },
     "relationships": {
-      "parent_campaign": {
+      "parentCampaign": {
         "links": {
           "self": null
         }
