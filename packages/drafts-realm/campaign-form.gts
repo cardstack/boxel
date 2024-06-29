@@ -390,6 +390,7 @@ class Edit extends Component<typeof CampaignForm> {
 }
 
 export class CampaignForm extends CardDef {
+  static displayName = 'CampaignForm';
   @field name = contains(StringField, {
     description: 'The campaign name',
   });
@@ -429,8 +430,6 @@ export class CampaignForm extends CardDef {
   @field actual_cost = contains(NumberField, {
     description: 'The actual cost by RM in the campaign',
   });
-
-  static displayName = 'CampaignForm';
 
   static isolated = Isolated;
   static embedded = Embedded;
