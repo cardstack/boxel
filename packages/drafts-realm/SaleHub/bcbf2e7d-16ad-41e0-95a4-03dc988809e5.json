@@ -2,6 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
+      "targetPage": "Account Form",
       "leadForm": {
         "name": {
           "salutation": "Mr.",

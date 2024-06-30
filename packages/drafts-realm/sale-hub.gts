@@ -40,6 +40,21 @@ import { LeadFormField } from './lead-form';
 import { ContactFormField } from './contact-form';
 import { MatrixUser } from './matrix-user';
 
+interface TargetPageLinkSingnature {
+  name: string;
+  isActive: boolean;
+  shouldShowFormData: boolean;
+}
+
+interface TargetPageLinksSignature {
+  Element: HTMLElement;
+  Args: {
+    targetPageLinks: TargetPageLinkSingnature[];
+    targetPage: string | undefined;
+    onSelectPage: (val: string) => void;
+  };
+}
+
 interface StepSignature {
   step: number;
   name: string;
@@ -101,6 +116,39 @@ class TaskForm extends FieldDef {
   @field isCompleted = contains(BooleanField, {
     description: `Is Task Completed`,
   });
+}
+
+//*Target Page Links
+class TargetPageLinks extends GlimmerComponent<TargetPageLinksSignature> {
+  <template>
+    <div class='targetPageLinks'>
+      {{#each this.args.targetPageLinks as |pageLink|}}
+        <div
+          class={{concat (if pageLink.isActive 'active ') 'pageLink'}}
+          {{on 'click' (fn this.args.onSelectPage pageLink.name)}}
+        >
+          {{pageLink.name}}</div>
+      {{/each}}
+    </div>
+    <style>
+      .targetPageLinks {
+        display: flex;
+        gap: var(--boxel-sp);
+        overflow-x: auto;
+      }
+      .pageLink {
+        color: var(--boxel-200);
+        cursor: pointer;
+        margin-bottom: 0.5rem;
+        white-space: nowrap;
+      }
+      .pageLink.active {
+        color: white;
+        font-weight: bold;
+        text-decoration: underline;
+      }
+    </style>
+  </template>
 }
 
 //*steps
@@ -408,7 +456,52 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
     return `${firstName} ${leadForm.company}`;
   }
 
-  //step
+  //targetPageLinks
+  @tracked initTargetPageLinks = [
+    {
+      name: 'Lead Form',
+      isActive: true,
+      shouldShowFormData: true,
+    },
+    {
+      name: 'Account Form',
+      isActive: false,
+      shouldShowFormData: false,
+    },
+    {
+      name: 'Contact Form',
+      isActive: false,
+      shouldShowFormData: false,
+    },
+    {
+      name: 'Opportunity Form',
+      isActive: false,
+      shouldShowFormData: false,
+    },
+  ] as Array<TargetPageLinkSingnature>;
+
+  get targetPageLinks() {
+    return this.initTargetPageLinks.map((page) => {
+      return { ...page, isActive: page.name === this.targetPage };
+    });
+  }
+
+  get targetPage() {
+    return this.args.model.targetPage;
+  }
+
+  @action onSelectPage(name: string) {
+    this.args.model.targetPage = name;
+
+    this.initTargetPageLinks = this.initTargetPageLinks.map((page) => {
+      return {
+        ...page,
+        isActive: page.name === name,
+      };
+    });
+  }
+
+  //steps
   @tracked initStepOptions = [
     {
       step: 0,
@@ -696,9 +789,16 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
       </CardContainer>
     </Modal>
 
-    <div class='sale-hub-container'>
-
+    <div class='sale-hub'>
       <section>
+        <TargetPageLinks
+          @targetPageLinks={{this.targetPageLinks}}
+          @targetPage={{this.args.model.targetPage}}
+          @onSelectPage={{this.onSelectPage}}
+        />
+      </section>
+
+      <section class='sale-hub-container'>
         <aside class='left-panel'>
           <section class='leadForm-panel'>
             {{! *this have bug, if linkTo in isolated mode is empty, the page will cause error }}
@@ -793,8 +893,16 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
         border: 1px solid var(--boxel-300);
         border-radius: var(--boxel-border-radius);
       }
-      .sale-hub-container {
+      .sale-hub {
         padding: var(--boxel-sp-xs);
+        background-color: #007272;
+      }
+      .target-pages-tab {
+        display: flex;
+        gap: var(--boxel-sp-xxs);
+        overflow-x: auto;
+      }
+      .sale-hub-container {
         overflow: hidden;
         display: grid;
         grid-template-columns: 2fr 5fr 2fr;
