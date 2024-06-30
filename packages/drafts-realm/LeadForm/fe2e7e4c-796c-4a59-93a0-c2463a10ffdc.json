@@ -32,6 +32,13 @@
       "industry": "Banking",
       "thumbnailURL": null
     },
+    "relationships": {
+      "leadOwner": {
+        "links": {
+          "self": "../CardDef/7298c9c6-2964-41a0-87f7-42127a16e12b"
+        }
+      }
+    },
     "meta": {
       "adoptsFrom": {
         "module": "../lead-form",

@@ -12,7 +12,7 @@
         "title": "Lead Form - lawbombom",
         "website": "lawbom.com",
         "description": "this is lead-form",
-        "leadStatus": "Unqualified",
+        "leadStatus": "Qualified",
         "phone": "010381997",
         "email": "lawbombom@gmail.com",
         "addressInfo": {
@@ -120,7 +120,7 @@
             "subject": "task b",
             "dueDate": "2024-06-27",
             "comments": null,
-            "isCompleted": false
+            "isCompleted": true
           }
         },
         {
@@ -140,13 +140,29 @@
             "comments": null,
             "isCompleted": false
           }
+        },
+        {
+          "taskForm": {
+            "taskId": null,
+            "subject": null,
+            "dueDate": "2024-06-30",
+            "comments": null,
+            "isCompleted": false
+          }
         }
       ],
+      "convertedStatus": "Qualified",
+      "isLeadFormConverted": true,
       "title": null,
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
+      "leadForm.leadOwner": {
+        "links": {
+          "self": "http://localhost:4201/drafts/MatrixUser/e65ae338-64a1-4a97-9ae8-9b9e773a7095"
+        }
+      },
       "accountForm.owner": {
         "links": {
           "self": null
@@ -185,6 +201,16 @@
       "scheduledTask.3.taskForm.relatedTo": {
         "links": {
           "self": "http://localhost:4201/drafts/CardDef/992531db-9912-49eb-9b72-f710cbcdb085"
+        }
+      },
+      "scheduledTask.4.taskForm.relatedTo": {
+        "links": {
+          "self": null
+        }
+      },
+      "recordOwner": {
+        "links": {
+          "self": "../MatrixUser/e65ae338-64a1-4a97-9ae8-9b9e773a7095"
         }
       }
     },

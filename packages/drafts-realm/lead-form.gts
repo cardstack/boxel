@@ -4,6 +4,7 @@ import {
   FieldDef,
   contains,
   field,
+  linksTo,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
@@ -17,6 +18,7 @@ import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { CurrencyAmount } from './currency-amount';
+import { MatrixUser } from './matrix-user';
 
 interface CategorySignature {
   name: string;
@@ -52,6 +54,10 @@ class IsolatedSecForLeadForm extends Component<typeof LeadForm> {
           <div class='field-input'>
             <label>Lead Status: </label>
             <@fields.leadStatus />
+          </div>
+          <div class='field-input'>
+            <label>Lead Owner: </label>
+            <@fields.leadOwner />
           </div>
           <div class='field-input-column description'>
             <label>Description: </label>
@@ -177,6 +183,9 @@ class ViewSecForLeadForm extends Component<typeof LeadForm> {
           </FieldContainer>
           <FieldContainer @tag='label' @label='Lead Status' @vertical={{true}}>
             <@fields.leadStatus @format='edit' />
+          </FieldContainer>
+          <FieldContainer @tag='label' @label='Lead Owner' @vertical={{true}}>
+            <@fields.leadOwner />
           </FieldContainer>
         </div>
       </section>
@@ -385,6 +394,10 @@ class EditSecFoLeadForm extends Component<typeof LeadForm> {
         </BoxelSelect>
       </FieldContainer>
 
+      <FieldContainer @tag='label' @label='Lead Owner' @vertical={{true}}>
+        <@fields.leadOwner />
+      </FieldContainer>
+
       <FieldContainer @tag='label' @label='Phone' @vertical={{true}}>
         <@fields.phone />
       </FieldContainer>
@@ -473,6 +486,7 @@ export class LeadFormField extends FieldDef {
   @field leadStatus = contains(StringField, {
     description: `Lead Status`,
   });
+  @field leadOwner = linksTo(MatrixUser);
   @field phone = contains(StringField, {
     description: `User's phone number`,
   });
@@ -522,6 +536,7 @@ export class LeadForm extends CardDef {
   @field leadStatus = contains(StringField, {
     description: `Lead Status`,
   });
+  @field leadOwner = linksTo(MatrixUser);
   @field phone = contains(StringField, {
     description: `User's phone number`,
   });

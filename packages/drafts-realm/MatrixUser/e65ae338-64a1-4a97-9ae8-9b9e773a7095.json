@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "username": "law bom bom",
+      "email": {
+        "value": "lawbombom@gmail.com"
+      },
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-user",
+        "name": "MatrixUser"
+      }
+    }
+  }
+}
