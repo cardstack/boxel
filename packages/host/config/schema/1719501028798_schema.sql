@@ -19,6 +19,7 @@
    transpiled_code TEXT,
    last_modified,
    embedded_html BLOB,
+   atom_html TEXT,
    PRIMARY KEY ( url, realm_version, realm_url, type ) 
 );
 

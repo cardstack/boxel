@@ -870,6 +870,7 @@ const tests = Object.freeze({
         types: null,
         indexedAt: null,
         isolatedHtml: null,
+        atomHtml: null,
         embeddedHtml: null,
         _embeddedHtmlByClassHierarchy: null,
       });
@@ -960,6 +961,7 @@ const tests = Object.freeze({
         types: [],
         isolatedHtml: null,
         embeddedHtml: null,
+        atomHtml: null,
         _embeddedHtmlByClassHierarchy: null,
       });
     } else {

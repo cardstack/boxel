@@ -376,7 +376,9 @@ module('Acceptance | interact submode tests', function (hooks) {
       await waitFor(`[data-test-card-catalog-item="${testRealmURL}index"]`, {
         timeout: 2000,
       });
-      assert.dom('[data-test-card-catalog-item]').hasText('Test Workspace B');
+      assert
+        .dom(`[data-test-card-catalog-item="${testRealmURL}index"]`)
+        .hasText('Test Workspace B');
 
       await click(`[data-test-select="${testRealmURL}index"]`);
       await click('[data-test-card-catalog-go-button]');

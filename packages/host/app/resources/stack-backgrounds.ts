@@ -44,8 +44,9 @@ export class StackBackgroundsResource extends Resource<Args> {
           this.value = [];
           return;
         }
-        let bottomMostCard = stack[0];
-        return (await this.cardService.getRealmInfo(bottomMostCard.card))
+        let bottomMostStackItem = stack[0];
+        await bottomMostStackItem.ready;
+        return (await this.cardService.getRealmInfo(bottomMostStackItem.card))
           ?.backgroundURL;
       }),
     );

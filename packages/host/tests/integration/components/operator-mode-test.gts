@@ -319,7 +319,7 @@ module('Integration | operator-mode', function (hooks) {
       personCards.set(
         `Person/${i}.json`,
         new Person({
-          firstName: i,
+          firstName: String(i),
           address: new Address({
             city: 'Bandung',
             country: 'Indonesia',
