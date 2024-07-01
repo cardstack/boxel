@@ -1594,7 +1594,7 @@ module('Realm Server', function (hooks) {
     });
   });
 
-  module('/_search-rendered GET request', function (_hooks) {
+  module('/_search-prerendered GET request', function (_hooks) {
     module('instances with no css of its own', function (hooks) {
       setupPermissionedRealm(
         hooks,
@@ -1638,7 +1638,7 @@ module('Realm Server', function (hooks) {
 
       test('returns prerendered instances', async function (assert) {
         let response = await request
-          .get(`/_search-rendered`)
+          .get(`/_search-prerendered`)
           .set('Accept', 'application/vnd.card+json');
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -1790,7 +1790,7 @@ module('Realm Server', function (hooks) {
 
       test('returns instances with prerendered html + css', async function (assert) {
         let response = await request
-          .get(`/_search-rendered`)
+          .get(`/_search-prerendered`)
           .set('Accept', 'application/vnd.card+json');
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -1947,7 +1947,7 @@ module('Realm Server', function (hooks) {
           },
         };
         let response = await request
-          .get(`/_search-rendered?${stringify(query)}`)
+          .get(`/_search-prerendered?${stringify(query)}`)
           .set('Accept', 'application/vnd.card+json');
 
         let json = response.body;
@@ -1971,7 +1971,7 @@ module('Realm Server', function (hooks) {
           ],
         };
         let response = await request
-          .get(`/_search-rendered?${stringify(query)}`)
+          .get(`/_search-prerendered?${stringify(query)}`)
           .set('Accept', 'application/vnd.card+json');
 
         let json = response.body;

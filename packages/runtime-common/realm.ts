@@ -339,7 +339,7 @@ export class Realm {
       .get(
         '/_search-rendered',
         SupportedMimeType.CardJson,
-        this.searchRendered.bind(this),
+        this.searchPrerendered.bind(this),
       )
       .post(
         '/_session',
@@ -1744,7 +1744,7 @@ export class Realm {
     };
   }
 
-  private async searchRendered(
+  private async searchPrerendered(
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
