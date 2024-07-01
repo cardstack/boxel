@@ -1,6 +1,8 @@
 import Modifier from 'ember-modifier';
 import { action } from '@ember/object';
 import GlimmerComponent from '@glimmer/component';
+// @ts-expect-error no types
+import cssUrl from 'ember-css-url';
 import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
@@ -26,6 +28,7 @@ import {
   isNotLoadedError,
   CardError,
   CardContextName,
+  cardTypeDisplayName,
   NotLoaded,
   getField,
   isField,
@@ -1783,6 +1786,81 @@ class DefaultCardDefTemplate extends GlimmerComponent<{
   </template>
 }
 
+class DefaultEmbeddedTemplate extends GlimmerComponent<{
+  Args: {
+    cardOrField: typeof BaseDef;
+    model: CardDef;
+    fields: Record<string, new () => GlimmerComponent>;
+    context?: CardContext;
+  };
+}> {
+  <template>
+    <div class='default-embedded-template'>
+      <div
+        class='card-thumbnail'
+        style={{cssUrl 'background-image' @model.thumbnailURL}}
+      >
+        {{#unless @model.thumbnailURL}}
+          <div
+            class='card-thumbnail-text'
+            data-test-card-thumbnail-text
+          >{{cardTypeDisplayName @model}}</div>
+        {{/unless}}
+      </div>
+      <h3 class='card-title' data-test-card-title>{{@model.title}}</h3>
+      <h4
+        class='card-display-name'
+        data-test-card-display-name
+      >{{cardTypeDisplayName @model}}</h4>
+    </div>
+    <style>
+      .default-embedded-template {
+        width: var(--grid-card-width);
+        height: var(--grid-card-height);
+        padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
+      }
+      .default-embedded-template > *,
+      .card-thumbnail-text {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .card-thumbnail {
+        display: flex;
+        align-items: center;
+        height: var(--grid-card-text-thumbnail-height);
+        background-color: var(--boxel-teal);
+        background-position: center;
+        background-size: cover;
+        background-repeat: no-repeat;
+        color: var(--boxel-light);
+        padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius);
+        font: 700 var(--boxel-font);
+        letter-spacing: var(--boxel-lsp);
+      }
+      .card-title {
+        margin: 0;
+        font: 500 var(--boxel-font-sm);
+        text-align: center;
+      }
+      .card-display-name {
+        margin: 0;
+        font: 500 var(--boxel-font-xs);
+        text-align: center;
+        color: var(--grid-card-label-color);
+      }
+      .card-thumbnail + * {
+        margin-top: var(--boxel-sp-lg);
+      }
+      .card-title + .card-display-name {
+        margin-top: 0.2em;
+      }
+    </style>
+  </template>
+}
+
 class MissingEmbeddedTemplate extends GlimmerComponent<{
   Args: {
     cardOrField: typeof BaseDef;
@@ -2044,7 +2122,7 @@ export class CardDef extends BaseDef {
     }
   }
 
-  static embedded: BaseDefComponent = MissingEmbeddedTemplate;
+  static embedded: BaseDefComponent = DefaultEmbeddedTemplate;
   static isolated: BaseDefComponent = DefaultCardDefTemplate;
   static edit: BaseDefComponent = DefaultCardDefTemplate;
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
