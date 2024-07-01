@@ -337,7 +337,7 @@ export class Realm {
       .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
       .get('/_search', SupportedMimeType.CardJson, this.search.bind(this))
       .get(
-        '/_search-rendered',
+        '/_search-prerendered',
         SupportedMimeType.CardJson,
         this.searchPrerendered.bind(this),
       )
