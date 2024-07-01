@@ -93,7 +93,8 @@ function generateMockMatrixService(
 
     profile = getMatrixProfile(this, () => this.userId);
 
-    rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
+    private rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
+    private roomResourcesCache: Map<string, RoomResource> = new Map();
 
     messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
     cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
@@ -288,17 +289,43 @@ function generateMockMatrixService(
       );
     }
 
+    getRoom(roomId: string) {
+      return this.rooms.get(roomId);
+    }
+
+    setRoom(roomId: string, roomPromise: Promise<RoomField>) {
+      this.rooms.set(roomId, roomPromise);
+      this.updateRoomResourcesCache();
+    }
+
     @cached
     get roomResources() {
-      let resources: Map<string, RoomResource> = new Map();
+      let resources: TrackedMap<string, RoomResource> = new TrackedMap();
       for (let roomId of this.rooms.keys()) {
-        resources.set(
+        if (!this.roomResourcesCache.get(roomId)) {
+          continue;
+        }
+        resources.set(roomId, this.roomResourcesCache.get(roomId)!);
+      }
+      return resources;
+    }
+
+    private updateRoomResourcesCache() {
+      for (let roomId of this.rooms.keys()) {
+        if (this.roomResourcesCache.has(roomId)) {
+          continue;
+        }
+        this.roomResourcesCache.set(
           roomId,
           getRoom(this, () => roomId),
         );
       }
 
-      return resources;
+      for (let roomResourceId of this.roomResourcesCache.keys()) {
+        if (!this.rooms.has(roomResourceId)) {
+          this.roomResourcesCache.delete(roomResourceId);
+        }
+      }
     }
   }
   return MockMatrixService;

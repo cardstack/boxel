@@ -84,7 +84,7 @@ export default class MatrixService extends Service {
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
-  rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
+  private rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
   private roomResourcesCache: Map<string, RoomResource> = new Map();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
@@ -709,10 +709,25 @@ export default class MatrixService extends Service {
     }
   }
 
+  getRoom(roomId: string) {
+    return this.rooms.get(roomId);
+  }
+
+  setRoom(roomId: string, roomPromise: Promise<RoomField>) {
+    this.rooms.set(roomId, roomPromise);
+    this.updateRoomResourcesCache();
+  }
+
   @cached
   get roomResources() {
-    this.updateRoomResourcesCache();
-    return this.roomResourcesCache;
+    let resources: TrackedMap<string, RoomResource> = new TrackedMap();
+    for (let roomId of this.rooms.keys()) {
+      if (!this.roomResourcesCache.get(roomId)) {
+        continue;
+      }
+      resources.set(roomId, this.roomResourcesCache.get(roomId)!);
+    }
+    return resources;
   }
 
   private updateRoomResourcesCache() {
