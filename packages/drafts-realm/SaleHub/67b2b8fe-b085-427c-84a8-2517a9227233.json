@@ -1,0 +1,76 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "targetPage": "Account Form",
+      "scheduledTask": [
+        {
+          "taskForm": {
+            "taskId": "0",
+            "subject": "task 0",
+            "dueDate": "2024-07-12",
+            "comments": null,
+            "isCompleted": false
+          }
+        },
+        {
+          "taskForm": {
+            "taskId": "1",
+            "subject": "task 1",
+            "dueDate": "2024-06-21",
+            "comments": null,
+            "isCompleted": false
+          }
+        }
+      ],
+      "convertedStatus": "Qualified",
+      "isLeadFormConverted": true,
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "leadForm": {
+        "links": {
+          "self": "../LeadForm/fe2e7e4c-796c-4a59-93a0-c2463a10ffdc"
+        }
+      },
+      "accountForm": {
+        "links": {
+          "self": "../AccountForm/491351ed-d1cf-4f95-b085-acdf45eb45d7"
+        }
+      },
+      "contactForm": {
+        "links": {
+          "self": "../ContactForm/67b66644-5964-4be2-a334-73e5e0d79ce5"
+        }
+      },
+      "opportunityForm": {
+        "links": {
+          "self": "../OpportunityForm/6b8a10a9-0798-436d-9183-42bd6bfe6e38"
+        }
+      },
+      "scheduledTask.0.taskForm.relatedTo": {
+        "links": {
+          "self": "http://localhost:4201/drafts/CardDef/7298c9c6-2964-41a0-87f7-42127a16e12b"
+        }
+      },
+      "scheduledTask.1.taskForm.relatedTo": {
+        "links": {
+          "self": null
+        }
+      },
+      "recordOwner": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sale-hub",
+        "name": "SaleHub"
+      }
+    }
+  }
+}

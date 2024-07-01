@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "targetPage": "Lead Form",
+      "scheduledTask": [],
+      "convertedStatus": null,
+      "isLeadFormConverted": true,
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "leadForm": {
+        "links": {
+          "self": "../LeadForm/ca5a2eb1-fb9e-4467-a7aa-54f3ec316ee9"
+        }
+      },
+      "accountForm": {
+        "links": {
+          "self": "../AccountForm/491351ed-d1cf-4f95-b085-acdf45eb45d7"
+        }
+      },
+      "contactForm": {
+        "links": {
+          "self": "../ContactForm/67b66644-5964-4be2-a334-73e5e0d79ce5"
+        }
+      },
+      "opportunityForm": {
+        "links": {
+          "self": "../OpportunityForm/6b8a10a9-0798-436d-9183-42bd6bfe6e38"
+        }
+      },
+      "recordOwner": {
+        "links": {
+          "self": "../MatrixUser/e65ae338-64a1-4a97-9ae8-9b9e773a7095"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sale-hub",
+        "name": "SaleHub"
+      }
+    }
+  }
+}

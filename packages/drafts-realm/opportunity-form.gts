@@ -34,6 +34,19 @@ const formatNumber = (val: number) => {
 };
 
 /* Amount */
+
+class EmbeddedSecForAmount extends Component<typeof AmountField> {
+  <template>
+    <CardContainer @displayBoundaries={{false}} class='container'>
+      <FieldContainer @tag='label' @vertical={{true}}><@fields.currency
+        /></FieldContainer>
+
+      <FieldContainer @tag='label' @vertical={{true}}><@fields.totalAmount
+        /></FieldContainer>
+    </CardContainer>
+  </template>
+}
+
 class EditSecForAmount extends Component<typeof AmountField> {
   @tracked currencyOptions = ['Select', 'RM'];
   get selectedCurrency() {
@@ -114,6 +127,7 @@ class AmountField extends FieldDef {
     description: `Total Amount`,
   });
 
+  static embedded = EmbeddedSecForAmount;
   static edit = EditSecForAmount;
 }
 
@@ -174,7 +188,6 @@ class IsolatedSecForOpportunityForm extends Component<typeof OpportunityForm> {
       </div>
 
       <div class='right-box'>
-
         <div class='field-input-column'>
           <label>Account Name: </label>
           <@fields.accountName />
@@ -341,27 +354,27 @@ class EditSecForOpportunityForm extends Component<typeof OpportunityForm> {
   <template>
     <CardContainer @displayBoundaries={{true}} class='container'>
       <FieldContainer @tag='label' @label='Opportunity Name' @vertical={{true}}>
-        <@fields.opportunityName />
+        <@fields.opportunityName @format='edit' />
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Account Name' @vertical={{true}}>
-        <@fields.accountName />
+        <@fields.accountName @format='edit' />
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Company Name' @vertical={{true}}>
-        <@fields.companyName />
+        <@fields.companyName @format='edit' />
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Close Date' @vertical={{true}}>
-        <@fields.closeDate />
+        <@fields.closeDate @format='edit' />
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Amount' @vertical={{true}}>
-        <@fields.amount />
+        <@fields.amount @format='edit' />
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Description' @vertical={{true}}>
-        <@fields.description />
+        <@fields.description @format='edit' />
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Stage' @vertical={{true}}>
@@ -421,11 +434,47 @@ class EditSecForOpportunityForm extends Component<typeof OpportunityForm> {
 
 class ViewSecForOpportunityForm extends Component<typeof OpportunityForm> {
   <template>
-    {{#if this.args.model.opportunityName}}
-      <CardContainer @displayBoundaries={{true}} class='container'>
+    <div class='field-input-group'>
+      <FieldContainer @tag='label' @label='Opportunity Name' @vertical={{true}}>
         <@fields.opportunityName />
-      </CardContainer>
-    {{/if}}
+      </FieldContainer>
+
+      <FieldContainer @tag='label' @label='Account Name' @vertical={{true}}>
+        <@fields.accountName />
+      </FieldContainer>
+
+      <FieldContainer @tag='label' @label='Company Name' @vertical={{true}}>
+        <@fields.companyName />
+      </FieldContainer>
+
+      <FieldContainer @tag='label' @label='Close Date' @vertical={{true}}>
+        <@fields.closeDate />
+      </FieldContainer>
+
+      <FieldContainer @tag='label' @label='Amount' @vertical={{true}}>
+        <@fields.amount />
+      </FieldContainer>
+
+      <FieldContainer @tag='label' @label='Description' @vertical={{true}}>
+        <@fields.description />
+      </FieldContainer>
+
+      <FieldContainer @tag='label' @label='Stage' @vertical={{true}}>
+        <@fields.stage />
+      </FieldContainer>
+
+      <FieldContainer @tag='label' @label='Percentage' @vertical={{true}}>
+        <@fields.percentage />
+      </FieldContainer>
+
+      <FieldContainer
+        @tag='label'
+        @label='Forecast Category'
+        @vertical={{true}}
+      >
+        <@fields.forecastCategory />
+      </FieldContainer>
+    </div>
 
     <style>
       .container {
@@ -433,6 +482,14 @@ class ViewSecForOpportunityForm extends Component<typeof OpportunityForm> {
         display: grid;
         gap: var(--boxel-sp);
         background-color: #fbfbfb;
+        overflow: hidden;
+      }
+      .field-input-group {
+        overflow: overlay;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-evenly;
+        gap: var(--boxel-sp);
       }
     </style>
   </template>

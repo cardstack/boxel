@@ -16,7 +16,6 @@ import { concat, fn } from '@ember/helper';
 import { IconX } from '@cardstack/boxel-ui/icons';
 import GlimmerComponent from '@glimmer/component';
 import {
-  BoxelInput,
   BoxelSelect,
   Button,
   CardContainer,
@@ -26,7 +25,7 @@ import {
   Modal,
 } from '@cardstack/boxel-ui/components';
 import MarkdownField from '../base/markdown';
-import { CrmAccount, CrmAccountField } from './crm/account';
+import { CrmAccount } from './crm/account';
 import StringField from 'https://cardstack.com/base/string';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import {
@@ -35,10 +34,13 @@ import {
   isTomorrow,
   isThisMonth,
 } from 'date-fns';
-import { OpportunityFormField } from './opportunity-form';
-import { LeadFormField } from './lead-form';
-import { ContactFormField } from './contact-form';
+import { OpportunityForm } from './opportunity-form';
+import { LeadForm } from './lead-form';
+import { ContactForm } from './contact-form';
 import { MatrixUser } from './matrix-user';
+import { eq } from '@cardstack/boxel-ui/helpers';
+import { AccountForm } from './account-form';
+import type Owner from '@ember/owner';
 
 interface TargetPageLinkSingnature {
   name: string;
@@ -77,13 +79,13 @@ interface CategorySignature {
   name: string;
 }
 
-interface TaskSignature {
-  taskId: string | null;
-  subject: string | null;
-  dueDate: Date | any;
-  comments: string | null;
-  isCompleted: boolean;
-}
+// interface TaskSignature {
+//   taskId: string | null;
+//   subject: string | null;
+//   dueDate: Date | any;
+//   comments: string | null;
+//   isCompleted: boolean;
+// }
 
 interface GroupedTasksSignature {
   month: any;
@@ -153,15 +155,14 @@ class TargetPageLinks extends GlimmerComponent<TargetPageLinksSignature> {
 
 //*steps
 class Steps extends GlimmerComponent<StepsSignature> {
-  @tracked steps = this.args.steps.map((step) => ({ ...step }));
+  @tracked steps = this.args.steps.map((step) => {
+    return { ...step, isCompleted: this.args.isLeadFormConverted };
+  });
   @tracked currentStepName = this.steps[0].name || '';
   @tracked currentStepIndex = this.steps[0].step || 0;
 
   get isStepCompleted() {
-    return (
-      this.currentStepStatus === 'Step Completed' ||
-      this.args.isLeadFormConverted
-    );
+    return this.currentStepStatus === 'Step Completed';
   }
 
   get currentStepStatus() {
@@ -171,6 +172,10 @@ class Steps extends GlimmerComponent<StepsSignature> {
     }
     if (this.steps[this.currentStepIndex].isCompleted) return 'Step Completed';
     return 'Mark Status as Complete';
+  }
+
+  get shouldDisableClick() {
+    return this.isStepCompleted || this.args.isLeadFormConverted;
   }
 
   @action
@@ -229,8 +234,8 @@ class Steps extends GlimmerComponent<StepsSignature> {
 
       <button
         {{on 'click' this.handleButtonClick}}
-        disabled={{this.isStepCompleted}}
-        class='{{if this.isStepCompleted "button-disabled" "button"}}'
+        disabled={{this.shouldDisableClick}}
+        class='{{if this.shouldDisableClick "button-disabled" "button"}}'
       >
         {{this.currentStepStatus}}
       </button>
@@ -382,6 +387,30 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
   @action
   closeTaskFormModal() {
     this.isTaskFormModalVisible = false;
+  }
+
+  //account-form
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+    if (!this.args.model.leadForm || !this.args.model.isLeadFormConverted)
+      return;
+
+    const { salutation, firstName, lastName } = this.args.model.leadForm.name;
+
+    if (this.args.model.accountForm) {
+      this.args.model.accountForm.accountName = `${salutation} ${firstName} ${lastName}`;
+    }
+
+    if (this.args.model.contactForm) {
+      this.args.model.contactForm.name.salutation = salutation;
+      this.args.model.contactForm.name.firstName = firstName;
+      this.args.model.contactForm.name.lastName = lastName;
+    }
+
+    if (this.args.model.opportunityForm) {
+      const company = this.args.model.leadForm.company;
+      this.args.model.opportunityForm.companyName = `${firstName} ${company}`;
+    }
   }
 
   //auto bind form
@@ -681,6 +710,23 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
     this.closeModal();
   }
 
+  //if else condition
+  get shouldShowLeadForm() {
+    return !!this.args.model.leadForm ? true : false;
+  }
+
+  get shouldShowAccountForm() {
+    return !!this.args.model.accountForm ? true : false;
+  }
+
+  get shouldShowContactForm() {
+    return !!this.args.model.contactForm ? true : false;
+  }
+
+  get shouldShowOpportunityForm() {
+    return !!this.args.model.opportunityForm ? true : false;
+  }
+
   <template>
     <Modal
       @size={{'large'}}
@@ -800,21 +846,72 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
 
       <section class='sale-hub-container'>
         <aside class='left-panel'>
-          <section class='leadForm-panel'>
-            {{! *this have bug, if linkTo in isolated mode is empty, the page will cause error }}
-            <@fields.leadForm @format='edit' />
-          </section>
+
+          {{#if (eq this.args.model.targetPage 'Lead Form')}}
+            {{#if this.shouldShowLeadForm}}
+              <section>
+                {{! *this have bug, if linkTo in isolated mode is empty, the page will cause error }}
+                <@fields.leadForm />
+              </section>
+            {{else}}
+              <section>
+                <p>Lead form data is missing or invalid.</p>
+              </section>
+            {{/if}}
+          {{/if}}
+
+          {{#if (eq this.args.model.targetPage 'Account Form')}}
+            {{#if this.shouldShowAccountForm}}
+              <section>
+                <@fields.accountForm />
+              </section>
+            {{else}}
+              <section>
+                <p>Account form data is missing or invalid.</p>
+              </section>
+            {{/if}}
+          {{/if}}
+
+          {{#if (eq this.args.model.targetPage 'Contact Form')}}
+            {{#if this.shouldShowContactForm}}
+              <section>
+                <@fields.contactForm />
+              </section>
+            {{else}}
+              <section>
+                <p>Contact form data is missing or invalid.</p>
+              </section>
+            {{/if}}
+          {{/if}}
+
+          {{#if (eq this.args.model.targetPage 'Opportunity Form')}}
+            {{#if this.shouldShowOpportunityForm}}
+              <section>
+                <@fields.opportunityForm />
+              </section>
+            {{else}}
+              <section>
+                <p>Opportunity form data is missing or invalid.</p>
+              </section>
+            {{/if}}
+          {{/if}}
+
         </aside>
 
         <main class='center-panel'>
-          <section class='progress-tab-panel'>
-            <Steps
-              @steps={{this.stepOptions}}
-              @isLeadFormConverted={{this.args.model.isLeadFormConverted}}
-              @updateLeadStatus={{this.updateLeadStatus}}
-              @handleConvert={{this.handleConvert}}
-            />
-          </section>
+
+          {{#if (eq this.args.model.targetPage 'Lead Form')}}
+            {{#if this.shouldShowLeadForm}}
+              <section class='progress-tab-panel'>
+                <Steps
+                  @steps={{this.stepOptions}}
+                  @isLeadFormConverted={{this.args.model.isLeadFormConverted}}
+                  @updateLeadStatus={{this.updateLeadStatus}}
+                  @handleConvert={{this.handleConvert}}
+                />
+              </section>
+            {{/if}}
+          {{/if}}
 
           <section class='activity-panel'>
             <div class='activity-button-group'>
@@ -896,6 +993,8 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
       .sale-hub {
         padding: var(--boxel-sp-xs);
         background-color: #007272;
+        height: 100vh;
+        overflow: scroll;
       }
       .target-pages-tab {
         display: flex;
@@ -905,18 +1004,18 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
       .sale-hub-container {
         overflow: hidden;
         display: grid;
-        grid-template-columns: 2fr 5fr 2fr;
+        grid-template-columns: 25% 50% 25%;
         gap: var(--boxel-sp);
         background-color: #007272;
       }
       .left-panel {
-        overflow-x: hidden;
+        overflow: auto;
         padding: var(--boxel-sp-xs);
         background-color: var(--boxel-100);
         border-radius: var(--boxel-border-radius);
       }
       .center-panel {
-        overflow-x: hidden;
+        overflow: hidden;
         padding: var(--boxel-sp-xs);
         display: flex;
         flex-direction: column;
@@ -925,7 +1024,6 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
         border-radius: var(--boxel-border-radius);
       }
       .right-panel {
-        overflow-x: hidden;
         display: grid;
         gap: var(--boxel-sp);
         background-color: var(--boxel-100);
@@ -1041,16 +1139,16 @@ export class SaleHub extends CardDef {
   @field targetPage = contains(StringField, {
     description: `Show which page is clicked`,
   });
-  @field leadForm = contains(LeadFormField, {
+  @field leadForm = linksTo(LeadForm, {
     description: `Lead form`,
   });
-  @field accountForm = contains(CrmAccountField, {
-    description: `crm account`,
+  @field accountForm = linksTo(AccountForm, {
+    description: `Account Form`,
   });
-  @field contactForm = contains(ContactFormField, {
+  @field contactForm = linksTo(ContactForm, {
     description: `Contact Form`,
   });
-  @field opportunityForm = contains(OpportunityFormField, {
+  @field opportunityForm = linksTo(OpportunityForm, {
     description: `Opportunity Form`,
   });
   @field scheduledTask = containsMany(ScheduledTask, {

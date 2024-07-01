@@ -117,7 +117,7 @@ class IsolatedSecForLeadForm extends Component<typeof LeadForm> {
         overflow: hidden;
       }
       section {
-        overflow: hidden;
+        overflow: overlay;
       }
       .description {
         text-align: justify;
@@ -154,7 +154,7 @@ class IsolatedSecForLeadForm extends Component<typeof LeadForm> {
         font-weight: 700;
       }
       .address-info {
-        overflow: scroll;
+        overflow: overlay;
       }
     </style>
   </template>
@@ -167,22 +167,22 @@ class ViewSecForLeadForm extends Component<typeof LeadForm> {
         <div class='field-group-title'>About</div>
         <div class='field-input-group'>
           <FieldContainer @tag='label' @label='User' @vertical={{true}}>
-            <@fields.name @format='edit' />
+            <@fields.name />
           </FieldContainer>
           <FieldContainer @tag='label' @label='Company' @vertical={{true}}>
-            <@fields.company @format='edit' />
+            <@fields.company />
           </FieldContainer>
           <FieldContainer @tag='label' @label='Title' @vertical={{true}}>
-            <@fields.title @format='edit' />
+            <@fields.title />
           </FieldContainer>
           <FieldContainer @tag='label' @label='Website' @vertical={{true}}>
-            <@fields.website @format='edit' />
+            <@fields.website />
           </FieldContainer>
           <FieldContainer @tag='label' @label='Description' @vertical={{true}}>
-            <@fields.description @format='edit' />
+            <@fields.description />
           </FieldContainer>
           <FieldContainer @tag='label' @label='Lead Status' @vertical={{true}}>
-            <@fields.leadStatus @format='edit' />
+            <@fields.leadStatus />
           </FieldContainer>
           <FieldContainer @tag='label' @label='Lead Owner' @vertical={{true}}>
             <@fields.leadOwner />
@@ -194,13 +194,13 @@ class ViewSecForLeadForm extends Component<typeof LeadForm> {
         <div class='field-group-title'>Get In Touch</div>
         <div class='field-input-group'>
           <FieldContainer @tag='label' @label='Phone' @vertical={{true}}>
-            <@fields.phone @format='edit' />
+            <@fields.phone />
           </FieldContainer>
           <FieldContainer @tag='label' @label='Email' @vertical={{true}}>
-            <@fields.email @format='edit' />
+            <@fields.email />
           </FieldContainer>
           <FieldContainer @tag='label' @label='Address' @vertical={{true}}>
-            <@fields.addressInfo @format='edit' />
+            <@fields.addressInfo />
           </FieldContainer>
         </div>
       </section>
@@ -213,20 +213,20 @@ class ViewSecForLeadForm extends Component<typeof LeadForm> {
             @label='No. of Employees'
             @vertical={{true}}
           >
-            <@fields.noOfEmployees @format='edit' />
+            <@fields.noOfEmployees />
           </FieldContainer>
           <FieldContainer
             @tag='label'
             @label='Annual Revenue'
             @vertical={{true}}
           >
-            <@fields.annualRevenue @format='edit' />
+            <@fields.annualRevenue />
           </FieldContainer>
           <FieldContainer @tag='label' @label='Lead Source' @vertical={{true}}>
-            <@fields.leadSource @format='edit' />
+            <@fields.leadSource />
           </FieldContainer>
           <FieldContainer @tag='label' @label='Industry' @vertical={{true}}>
-            <@fields.industry @format='edit' />
+            <@fields.industry />
           </FieldContainer>
         </div>
       </section>
@@ -242,11 +242,12 @@ class ViewSecForLeadForm extends Component<typeof LeadForm> {
         overflow: hidden;
       }
       .field-group-title {
-        font-size: var(--boxel-font-size);
-        font-weight: 800;
-        margin-bottom: var(--boxel-sp-xs);
+        font-size: 1rem;
+        font-weight: bold;
+        margin-bottom: 0.75rem;
       }
       .field-input-group {
+        overflow: overlay;
         display: flex;
         flex-direction: column;
         justify-content: space-evenly;
@@ -254,7 +255,7 @@ class ViewSecForLeadForm extends Component<typeof LeadForm> {
         background-color: #fbfbfb;
         border: 1px solid var(--boxel-300);
         border-radius: var(--boxel-border-radius);
-        padding: var(--boxel-sp);
+        padding: var(--boxel-sp-xxs);
       }
     </style>
   </template>

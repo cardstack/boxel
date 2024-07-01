@@ -139,38 +139,7 @@ class Isolated extends Component<typeof ContactForm> {
 
 class View extends Component<typeof ContactForm> {
   <template>
-    <div class='container'>
-      <div class='content'>
-        <label>User</label>
-        <h2><@fields.name /></h2>
-      </div>
-    </div>
-
-    <style>
-      .container {
-        display: grid;
-        gap: var(--boxel-sp);
-      }
-      .content {
-        color: var(--boxel-700);
-      }
-      h2 {
-        margin: 0px;
-      }
-      .icon-profile {
-        position: absolute;
-        top: 1px;
-        right: 1px;
-        width: 50px;
-        height: 50px;
-      }
-    </style>
-  </template>
-}
-
-class Edit extends Component<typeof ContactForm> {
-  <template>
-    <CardContainer @displayBoundaries={{true}} class='container'>
+    <CardContainer @displayBoundaries={{false}} class='container'>
       <FieldContainer
         @tag='label'
         @label='Title'
@@ -189,17 +158,68 @@ class Edit extends Component<typeof ContactForm> {
         <@fields.phone />
       </FieldContainer>
 
+      <FieldContainer @tag='label' @label='Fax' @vertical={{true}}>
+        <@fields.fax />
+      </FieldContainer>
+
+      <FieldContainer @tag='label' @label='Department' @vertical={{true}}>
+        <@fields.department />
+      </FieldContainer>
+
+      <FieldContainer @tag='label' @label='Address Info' @vertical={{true}}>
+        <@fields.addressInfo />
+      </FieldContainer>
+    </CardContainer>
+
+    <style>
+      .container {
+        display: grid;
+        gap: var(--boxel-sp-lg);
+        overflow: hidden;
+      }
+      .content {
+        color: var(--boxel-700);
+      }
+      h2 {
+        margin: 0px;
+      }
+    </style>
+  </template>
+}
+
+class Edit extends Component<typeof ContactForm> {
+  <template>
+    <CardContainer @displayBoundaries={{true}} class='container'>
+      <FieldContainer
+        @tag='label'
+        @label='Title'
+        @vertical={{true}}
+      ><@fields.title @format='edit' /></FieldContainer>
+
+      <FieldContainer @tag='label' @label='User' @vertical={{true}}>
+        <@fields.name @format='edit' />
+      </FieldContainer>
+
+      <FieldContainer @tag='label' @label='Email' @vertical={{true}}>
+        <@fields.email @format='edit' />
+      </FieldContainer>
+
+      <FieldContainer @tag='label' @label='Phone' @vertical={{true}}>
+        <@fields.phone @format='edit' />
+      </FieldContainer>
+
       <FieldContainer @tag='label' @label='Fax' @vertical={{true}}><@fields.fax
+          @format='edit'
         /></FieldContainer>
 
       <FieldContainer
         @tag='label'
         @label='Department'
         @vertical={{true}}
-      ><@fields.department /></FieldContainer>
+      ><@fields.department @format='edit' /></FieldContainer>
 
       <FieldContainer @tag='label' @label='Address Info' @vertical={{true}}>
-        <@fields.addressInfo />
+        <@fields.addressInfo @format='edit' />
       </FieldContainer>
     </CardContainer>
 
