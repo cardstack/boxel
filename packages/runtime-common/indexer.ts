@@ -431,16 +431,10 @@ export class Indexer {
     if (page?.realmVersion) {
       version = page.realmVersion;
     } else {
-      let [{ current_version }] = (await this.query([
-        'SELECT current_version FROM realm_versions WHERE realm_url =',
-        param(realmURL.href),
-      ])) as Pick<RealmVersionsTable, 'current_version'>[];
-      if (current_version == null) {
-        throw new Error(`No current version found for realm ${realmURL.href}`);
-      }
+      let currentRealmVersion = await this.fetchCurrentRealmVersion(realmURL);
       version = opts?.useWorkInProgressIndex
-        ? current_version + 1
-        : current_version;
+        ? currentRealmVersion + 1
+        : currentRealmVersion;
     }
     let conditions: CardExpression[] = [
       ['i.realm_url = ', param(realmURL.href)],
@@ -569,16 +563,10 @@ export class Indexer {
     if (page?.realmVersion) {
       version = page.realmVersion;
     } else {
-      let [{ current_version }] = (await this.query([
-        'SELECT current_version FROM realm_versions WHERE realm_url =',
-        param(realmURL.href),
-      ])) as Pick<RealmVersionsTable, 'current_version'>[];
-      if (current_version == null) {
-        throw new Error(`No current version found for realm ${realmURL.href}`);
-      }
+      let currentRealmVersion = await this.fetchCurrentRealmVersion(realmURL);
       version = opts?.useWorkInProgressIndex
-        ? current_version + 1
-        : current_version;
+        ? currentRealmVersion + 1
+        : currentRealmVersion;
     }
 
     let conditions: CardExpression[] = [
@@ -640,6 +628,17 @@ export class Indexer {
     });
 
     return { prerenderedCards, meta };
+  }
+
+  private async fetchCurrentRealmVersion(realmURL: URL) {
+    let [{ current_version }] = (await this.query([
+      'SELECT current_version FROM realm_versions WHERE realm_url =',
+      param(realmURL.href),
+    ])) as Pick<RealmVersionsTable, 'current_version'>[];
+    if (current_version == null) {
+      throw new Error(`No current version found for realm ${realmURL.href}`);
+    }
+    return current_version;
   }
 
   private filterCondition(filter: Filter, onRef: CodeRef): CardExpression {
