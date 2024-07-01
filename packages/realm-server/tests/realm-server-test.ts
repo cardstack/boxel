@@ -1605,23 +1605,23 @@ module('Realm Server', function (hooks) {
           },
           {
             'person.gts': `
-          import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-          import StringCard from "https://cardstack.com/base/string";
+              import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+              import StringCard from "https://cardstack.com/base/string";
 
-          export class Person extends CardDef {
-            @field firstName = contains(StringCard);
-            static isolated = class Isolated extends Component<typeof this> {
-              <template>
-                <h1><@fields.firstName/></h1>
-              </template>
-            }
-            static embedded = class Embedded extends Component<typeof this> {
-              <template>
-                Embedded Card Person: <@fields.firstName/>
-              </template>
-            }
-          }
-        `,
+              export class Person extends CardDef {
+                @field firstName = contains(StringCard);
+                static isolated = class Isolated extends Component<typeof this> {
+                  <template>
+                    <h1><@fields.firstName/></h1>
+                  </template>
+                }
+                static embedded = class Embedded extends Component<typeof this> {
+                  <template>
+                    Embedded Card Person: <@fields.firstName/>
+                  </template>
+                }
+              }
+            `,
             'john.json': {
               data: {
                 attributes: {
