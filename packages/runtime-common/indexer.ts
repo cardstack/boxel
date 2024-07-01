@@ -513,7 +513,7 @@ export class Indexer {
   private buildPrerenderedInstancesQuery(everyCondition: CardExpression) {
     return [
       `WITH instance_records AS (
-        SELECT i.file_alias, i.deps, i.embedded_html, i.search_doc, i.url, r.realm_url
+        SELECT i.file_alias, i.deps, i.embedded_html ->> 'default' as default_embedded_html, i.search_doc, i.url, r.realm_url
         FROM boxel_index AS i ${tableValuedFunctionsPlaceholder}
         INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
       'WHERE',
@@ -522,7 +522,7 @@ export class Indexer {
       deps_expanded AS (
         SELECT
           ir.file_alias AS instance_file_alias,
-          ir.embedded_html AS instance_embedded_html,
+          ir.default_embedded_html AS instance_embedded_html,
           ir.realm_url,
           ir.search_doc,
           ir.url,
