@@ -1975,14 +1975,14 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.card+json');
 
         let json = response.body;
-        // todo: sql error: column "i.file_alias" must appear in the GROUP BY clause or be used in an aggregate function
-        assert.strictEqual(
-          json.data.length,
-          2,
-          'filtered results count is correct',
-        );
-        assert.strictEqual(json.data[0].id, 'http://127.0.0.1:4444/craig');
-        assert.strictEqual(json.data[1].id, 'http://127.0.0.1:4444/aaron');
+
+        assert.strictEqual(json.data.length, 4, 'results count is correct');
+
+        // firstName descending
+        assert.strictEqual(json.data[0].id, 'http://127.0.0.1:4444/jimmy');
+        assert.strictEqual(json.data[1].id, 'http://127.0.0.1:4444/jane');
+        assert.strictEqual(json.data[2].id, 'http://127.0.0.1:4444/craig');
+        assert.strictEqual(json.data[3].id, 'http://127.0.0.1:4444/aaron');
       });
     });
   });

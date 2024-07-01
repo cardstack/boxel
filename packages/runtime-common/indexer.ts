@@ -495,24 +495,22 @@ export class Indexer {
     ];
   }
 
-  private buildPrerenderedInstancesQuery(
-    everyCondition: CardExpression,
-    sort?: Sort,
-  ) {
+  private buildPrerenderedInstancesQuery(everyCondition: CardExpression) {
     return [
       `WITH instance_records AS (
-        SELECT i.file_alias, i.deps, i.embedded_html, r.realm_url
+        SELECT i.file_alias, i.deps, i.embedded_html, i.search_doc, i.url, r.realm_url
         FROM boxel_index AS i ${tableValuedFunctionsPlaceholder}
         INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
       'WHERE',
       ...everyCondition,
-      ...this.orderExpression(sort),
       `),
       deps_expanded AS (
         SELECT
           ir.file_alias AS instance_file_alias,
           ir.embedded_html AS instance_embedded_html,
           ir.realm_url,
+          ir.search_doc,
+          ir.url,
           jsonb_array_elements_text(ir.deps) AS dep
         FROM instance_records ir
       ),
@@ -520,7 +518,9 @@ export class Indexer {
         SELECT DISTINCT
           d.instance_file_alias,
           d.instance_embedded_html,
+          d.search_doc,
           d.realm_url,
+          d.url,
           b.file_alias AS css_file_alias,
           b.source AS css_source
         FROM deps_expanded d
@@ -531,6 +531,8 @@ export class Indexer {
           instance_file_alias,
           MAX(instance_embedded_html) AS instance_embedded_html,
           MAX(realm_url) AS realm_url,
+          MAX(url) as url,
+		      (ARRAY_AGG(search_doc))[1] AS search_doc,
           COALESCE(array_agg(css_file_alias ORDER BY css_file_alias) FILTER (WHERE css_file_alias IS NOT NULL), ARRAY[]::text[]) AS css_file_alias_array,
           COALESCE(array_agg(css_source ORDER BY css_file_alias) FILTER (WHERE css_file_alias IS NOT NULL), ARRAY[]::text[]) AS css_source_array
         FROM css_matches
@@ -578,13 +580,16 @@ export class Indexer {
     let everyCondition = every(conditions);
 
     let query = [
-      ...this.buildPrerenderedInstancesQuery(everyCondition, sort),
-      'SELECT instance_file_alias, instance_embedded_html, css_file_alias_array, css_source_array FROM aggregated_results',
+      ...this.buildPrerenderedInstancesQuery(everyCondition),
+      'SELECT ANY_VALUE(instance_file_alias) as instance_file_alias, ANY_VALUE(instance_embedded_html) as instance_embedded_html, ANY_VALUE(css_file_alias_array) as css_file_alias_array, ANY_VALUE(css_source_array) as css_source_array',
+      'FROM aggregated_results',
+      'GROUP BY url',
+      ...this.orderExpression(sort),
       ...(page ? [`LIMIT ${page.size} OFFSET ${page.number * page.size}`] : []),
     ];
 
     let countQuery = [
-      ...this.buildPrerenderedInstancesQuery(everyCondition, sort),
+      ...this.buildPrerenderedInstancesQuery(everyCondition),
       'SELECT COUNT(*) as total FROM aggregated_results',
     ];
 
