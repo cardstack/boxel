@@ -1927,7 +1927,7 @@ module('Realm Server', function (hooks) {
         );
         assert.strictEqual(
           json.included[1].attributes.content.replace(/\s+/g, ' '),
-          '.fancy-border[data-scopedcss-b9c3801d7f-4c0a5cc85e] { border: 1px solid pink; }',
+          '.fancy-border[data-scopedcss-fdc0982806-4c0a5cc85e] { border: 1px solid pink; }',
           'css content for FancyPerson is correct',
         );
 
