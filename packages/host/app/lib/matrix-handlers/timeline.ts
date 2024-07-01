@@ -5,7 +5,7 @@ import {
   type CardMessageContent,
   type CardFragmentContent,
   type MatrixEvent as DiscreteMatrixEvent,
-} from 'https://cardstack.com/base/room';
+} from 'https://cardstack.com/base/matrix-event';
 
 import { eventDebounceMs } from '../matrix-utils';
 
