@@ -2,12 +2,11 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
-import { htmlSafe } from '@ember/template';
 
-import { AddButton } from '@cardstack/boxel-ui/components';
-import { cn, not } from '@cardstack/boxel-ui/helpers';
+import { AddButton, Header } from '@cardstack/boxel-ui/components';
 
 import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
 
@@ -23,15 +22,17 @@ export type PillMenuItem = {
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    headerIconURL?: string;
-    headerAction: () => void;
+    title?: string;
+    isExpandableHeader?: boolean;
+    headerAction?: () => void;
     items: PillMenuItem[];
     canAttachCard?: boolean;
     onChooseCard?: (card: CardDef) => void;
   };
   Blocks: {
-    title: [];
-    'header-action': [];
+    'header-icon': [];
+    'header-detail': [];
+    'header-button': [];
     content: [];
   };
 }
@@ -39,58 +40,65 @@ interface Signature {
 export default class PillMenu extends Component<Signature> {
   <template>
     <div class='pill-menu' ...attributes>
-      <header class='menu-header'>
-        <div class='title-group'>
-          {{#if @headerIconURL}}
-            <span class='header-icon' style={{this.headerIcon}} />
+      <Header class='menu-header' @title={{@title}}>
+        <:icon>
+          {{yield to='header-icon'}}
+        </:icon>
+        <:detail>
+          {{yield to='header-detail'}}
+        </:detail>
+        <:actions>
+          <button {{on 'click' this.headerAction}} class='header-button'>
+            {{#if @isExpandableHeader}}
+              {{if this.isExpanded 'Hide' 'Show'}}
+            {{else}}
+              {{yield to='header-button'}}
+            {{/if}}
+          </button>
+        </:actions>
+      </Header>
+      {{#if this.isExpanded}}
+        <div class='menu-content'>
+          {{yield to='content'}}
+
+          {{#if @items.length}}
+            <ul class='pill-list'>
+              {{#each @items as |item|}}
+                <li>
+                  <CardPill
+                    @card={{item.card}}
+                    @onToggle={{fn this.toggleActive item}}
+                    @isEnabled={{item.isActive}}
+                  />
+                </li>
+              {{/each}}
+            </ul>
           {{/if}}
-          <h3 class='title'>{{yield to='title'}}</h3>
         </div>
-        <button {{on 'click' @headerAction}} class='header-button'>
-          {{yield to='header-action'}}
-        </button>
-      </header>
 
-      <div class={{cn 'menu-content' no-footer=(not @canAttachCard)}}>
-        {{yield to='content'}}
-
-        {{#if @items.length}}
-          <ul class='pill-list'>
-            {{#each @items as |item|}}
-              <li>
-                <CardPill
-                  @card={{item.card}}
-                  @onToggle={{fn this.toggleActive item}}
-                  @isEnabled={{item.isActive}}
-                />
-              </li>
-            {{/each}}
-          </ul>
+        {{#if @canAttachCard}}
+          <footer class='menu-footer'>
+            <AddButton
+              class='add-button'
+              @variant='pill'
+              @iconWidth='15px'
+              @iconHeight='15px'
+              {{on 'click' this.attachCard}}
+              @disabled={{this.doAttachCard.isRunning}}
+            >
+              Add Item
+            </AddButton>
+          </footer>
         {{/if}}
-      </div>
-
-      {{#if @canAttachCard}}
-        <footer class='menu-footer'>
-          <AddButton
-            class='add-button'
-            @variant='pill'
-            @iconWidth='15px'
-            @iconHeight='15px'
-            {{on 'click' this.attachCard}}
-            @disabled={{this.doAttachCard.isRunning}}
-          >
-            Add Item
-          </AddButton>
-        </footer>
       {{/if}}
     </div>
     <style>
       .pill-menu {
         --pill-menu-spacing: var(--boxel-pill-menu-spacing, var(--boxel-sp-xs));
-        --pill-menu-icon-spacing: var(
-          --boxel-pill-menu-icon-spacing,
-          var(--boxel-sp-xxxs)
-        );
+        --boxel-header-padding: 0 0 0 var(--pill-menu-spacing);
+        --boxel-header-detail-max-width: 100%;
+        --boxel-header-letter-spacing: var(--boxel-lsp);
+
         display: grid;
         max-height: 100%;
         width: 100%;
@@ -101,35 +109,7 @@ export default class PillMenu extends Component<Signature> {
         letter-spacing: var(--boxel-lsp);
         box-shadow: var(--boxel-box-shadow);
       }
-      .menu-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-      .title {
-        margin: 0;
-        font: 700 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp);
-      }
-      .title-group {
-        display: flex;
-        align-items: center;
-        flex-flow: row nowrap;
-        gap: var(--pill-menu-icon-spacing);
-        padding: var(--pill-menu-spacing);
-      }
-      .header-icon {
-        width: 18px;
-        height: 18px;
-        background-position: left center;
-        background-repeat: no-repeat;
-        background-size: contain;
-      }
       .header-button {
-        display: flex;
-        align-items: center;
-        flex-flow: row nowrap;
-        gap: var(--pill-menu-icon-spacing);
         padding: var(--pill-menu-spacing);
         background: none;
         border: none;
@@ -139,12 +119,12 @@ export default class PillMenu extends Component<Signature> {
         text-transform: uppercase;
       }
       .menu-content {
-        padding: var(--pill-menu-spacing);
+        padding: var(
+          --boxel-pill-menu-content-padding,
+          var(--pill-menu-spacing)
+        );
         display: grid;
         gap: var(--pill-menu-spacing);
-      }
-      .menu-content.no-footer {
-        padding-bottom: var(--boxel-sp);
       }
       .pill-list {
         display: grid;
@@ -182,8 +162,17 @@ export default class PillMenu extends Component<Signature> {
     </style>
   </template>
 
-  private get headerIcon() {
-    return htmlSafe(`background-image: url(${this.args.headerIconURL});`);
+  @tracked isExpanded = !Boolean(this.args.isExpandableHeader);
+
+  @action headerAction() {
+    if (this.args.isExpandableHeader) {
+      this.toggleMenu();
+    }
+    this.args.headerAction?.();
+  }
+
+  @action toggleMenu() {
+    this.isExpanded = !this.isExpanded;
   }
 
   @action private toggleActive(item: PillMenuItem) {

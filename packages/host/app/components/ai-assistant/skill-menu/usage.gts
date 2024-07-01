@@ -4,9 +4,8 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-// import { TrackedArray } from 'tracked-built-ins';
+import { TrackedObject } from 'tracked-built-ins';
 
-// import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 import type { PillMenuItem } from '@cardstack/host/components/pill-menu';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -21,11 +20,11 @@ export default class AiAssistantSkillMenuUsage extends Component {
   }
 
   @action onChooseCard(card: CardDef) {
-    this.skills = [...this.skills, { card, isActive: true }];
+    this.skills = [...this.skills, new TrackedObject({ card, isActive: true })];
   }
 
   <template>
-    <FreestyleUsage @name='AiAssistant::SkillMenu'>
+    <FreestyleUsage @name='AiAssistantSkillMenu'>
       <:description>
         Component with a header and a list of card pills.
       </:description>
