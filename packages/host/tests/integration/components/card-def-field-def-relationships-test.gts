@@ -49,7 +49,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-  setupMatrixServiceMock(hooks);
+  setupMatrixServiceMock(hooks, { autostart: true });
 
   hooks.beforeEach(async function () {
     let permissions: Permissions = {

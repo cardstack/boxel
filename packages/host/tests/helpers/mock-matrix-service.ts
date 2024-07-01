@@ -7,6 +7,7 @@ import { v4 as uuid } from 'uuid';
 
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
+import CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -83,6 +84,8 @@ function generateMockMatrixService(
   expiresInSec?: () => number | undefined,
 ) {
   class MockMatrixService extends Service implements MockMatrixService {
+    @service declare cardService: CardService;
+    @service declare realm: RealmService;
     @service declare loaderService: LoaderService;
 
     // @ts-ignore
@@ -100,7 +103,31 @@ function generateMockMatrixService(
     currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
       new TrackedMap();
 
-    async start(_auth?: any) {}
+    async start(_auth?: any) {
+      await this.loginToRealms();
+    }
+
+    private async loginToRealms() {
+      // This is where we would actually load user-specific choices out of the
+      // user's profile based on this.client.getUserId();
+      let activeRealms = this.cardService.realmURLs;
+
+      await Promise.all(
+        activeRealms.map(async (realmURL) => {
+          try {
+            // Our authorization-middleware can login automatically after seeing a
+            // 401, but this preemptive login makes it possible to see
+            // mayWrite===true on realms that are publicly readable.
+            await this.realm.login(realmURL);
+          } catch (err) {
+            console.warn(
+              `Unable to establish session with realm ${realmURL}`,
+              err,
+            );
+          }
+        }),
+      );
+    }
 
     get isLoggedIn() {
       return this.userId !== undefined;
@@ -285,12 +312,17 @@ function generateMockMatrixService(
   return MockMatrixService;
 }
 
-export function setupMatrixServiceMock(hooks: NestedHooks) {
+export function setupMatrixServiceMock(
+  hooks: NestedHooks,
+  // "autostart: true" is recommended for integration tests. Acceptance tests
+  // can rely on the real app's start behavior.
+  opts: { autostart: boolean } = { autostart: false },
+) {
   let realmService: RealmService;
   let currentPermissions: Record<string, ('read' | 'write')[]> = {};
   let currentExpiresInSec: number | undefined;
 
-  hooks.beforeEach(function () {
+  hooks.beforeEach(async function () {
     currentPermissions = {};
     currentExpiresInSec = undefined;
     realmService = this.owner.lookup('service:realm') as RealmService;
@@ -307,6 +339,9 @@ export function setupMatrixServiceMock(hooks: NestedHooks) {
       'service:matrixService',
     ) as MockMatrixService;
     matrixService.cardAPI = cardApi;
+    if (opts.autostart) {
+      await matrixService.start();
+    }
   });
 
   hooks.afterEach(function () {

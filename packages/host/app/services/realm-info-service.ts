@@ -84,6 +84,7 @@ export default class RealmInfoService extends Service {
     try {
       info = this.realm.info(url);
     } catch (err: any) {
+      // TODO: this code can't even be thrown anymore, cleanup
       if (err.code !== 'RealmNotReady') {
         throw err;
       }

@@ -25,10 +25,6 @@ export function authorizationMiddleware(
           response = await next(req);
         }
       }
-
-      if (req.url !== `${realmURL}_info`) {
-        await tokenSource.ensureRealmMeta(realmURL);
-      }
     }
     return response;
   };

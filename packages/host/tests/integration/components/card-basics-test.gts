@@ -77,7 +77,7 @@ let loader: Loader;
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMatrixServiceMock(hooks, { autostart: true });
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {

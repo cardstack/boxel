@@ -80,7 +80,7 @@ module('Integration | operator-mode', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMatrixServiceMock(hooks, { autostart: true });
   setupWindowMock(hooks);
   let noop = () => {};
 
@@ -2609,8 +2609,6 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       },
     );
-
-    await waitFor('[data-test-person]');
     assert.dom('[data-test-boxel-header-title]').hasText('Person');
     assert
       .dom(`[data-test-boxel-header-icon="https://example-icon.test"]`)

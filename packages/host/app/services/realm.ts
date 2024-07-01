@@ -4,12 +4,15 @@ import Service from '@ember/service';
 
 import { service } from '@ember/service';
 
+import { waitForPromise } from '@ember/test-waiters';
 import { tracked } from '@glimmer/tracking';
 
 import { cached } from '@glimmer/tracking';
 
 import { task, restartableTask, rawTimeout } from 'ember-concurrency';
 import window from 'ember-window-mock';
+
+import { TrackedSet } from 'tracked-built-ins';
 
 import {
   Permissions,
@@ -155,9 +158,6 @@ class RealmResource {
 
   private fetchMetaTask = task(async () => {
     try {
-      if (this.auth.type === 'uninitialized') {
-        await this.login();
-      }
       if (this.meta) {
         return;
       }
@@ -175,7 +175,7 @@ class RealmResource {
           `Failed to fetch realm info for ${this.realmURL}: ${response.status}`,
         );
       }
-      let json = await response.json();
+      let json = await waitForPromise(response.json());
       let info: RealmInfo = {
         url: json.data.id,
         ...json.data.attributes,
@@ -207,33 +207,56 @@ class RealmResource {
   });
 }
 
-class RealmNotReadyError extends Error {
-  code = 'RealmNotReady';
-}
 export default class RealmService extends Service {
   @service declare loaderService: LoaderService;
 
+  // This is not a TrackedMap, it's a regular Map. Conceptually, we want it to
+  // be tracked, but we're using it as a read-through cache and glimmer/tracking
+  // treats that case as a read-then-write assertion failure. So instead we do
+  // untracked reads from `realms` and pair them, at the right times, with
+  // tracked reads from `currentKnownRealms` to establish dependencies.
   private realms: Map<string, RealmResource> = this.restoreSessions();
+  private currentKnownRealms = new TrackedSet<string>();
 
   async ensureRealmMeta(realmURL: string): Promise<void> {
-    let resource = this.knownRealm(realmURL);
-    if (!resource) {
-      resource = this.createRealmResource(realmURL, undefined);
-      this.realms.set(realmURL, resource);
-    }
+    let resource = this.getOrCreateRealmResource(realmURL);
     await resource.fetchMeta();
   }
 
+  async login(realmURL: string): Promise<void> {
+    let resource = this.getOrCreateRealmResource(realmURL);
+    await resource.login();
+  }
+
   info = (url: string): RealmInfo => {
-    return this.requireRealmMeta(url).meta.info;
+    let resource = this.knownRealm(url);
+    if (!resource) {
+      this.identifyRealm.perform(url);
+      return {
+        name: 'Unknown Realm',
+        backgroundURL: null,
+        iconURL: null,
+      };
+    }
+
+    if (!resource.meta) {
+      resource.fetchMeta();
+      return {
+        name: 'Unknown Realm',
+        backgroundURL: null,
+        iconURL: null,
+      };
+    } else {
+      return resource.meta.info;
+    }
   };
 
   canRead = (url: string): boolean => {
-    return this.requireRealmMeta(url).canRead;
+    return this.knownRealm(url)?.canRead ?? false;
   };
 
   canWrite = (url: string): boolean => {
-    return this.requireRealmMeta(url).canWrite;
+    return this.knownRealm(url)?.canWrite ?? false;
   };
 
   permissions = (url: string): Permissions => {
@@ -297,36 +320,23 @@ export default class RealmService extends Service {
     }
   }
 
-  private requireRealmMeta(url: string): RealmResource & { meta: Meta } {
-    let resource = this.knownRealm(url);
-    if (!resource) {
-      throw new RealmNotReadyError(
-        `Haven't fetched from realm at ${url} yet, so realm info is not available`,
-      );
-    }
-    if (!resource.meta) {
-      throw new RealmNotReadyError(
-        `Haven't fetched from realm at ${url} yet, so realm info is not available`,
-      );
-    }
-    return resource as RealmResource & { meta: Meta };
-  }
-
-  private knownRealm(url: string): RealmResource | undefined {
+  // By default, this does a tracked read from currentKnownRealms so that your
+  // answer can be invalidated if a new realm is discovered. Internally, we also
+  // use it untracked to implement the read-through cache.
+  private knownRealm(url: string, tracked = true): RealmResource | undefined {
     for (let [key, value] of this.realms) {
       if (url.startsWith(key)) {
         return value;
       }
     }
+    if (tracked) {
+      this.currentKnownRealms.has(url);
+    }
     return undefined;
   }
 
   async reauthenticate(realmURL: string): Promise<string | undefined> {
-    let resource = this.knownRealm(realmURL);
-    if (!resource) {
-      resource = this.createRealmResource(realmURL, undefined);
-      this.realms.set(realmURL, resource);
-    }
+    let resource = this.getOrCreateRealmResource(realmURL);
     resource.logout();
 
     // TODO: decide how to identify expected login failures vs unexpected ones
@@ -345,6 +355,40 @@ export default class RealmService extends Service {
     associateDestroyableChild(this, resource);
     return resource;
   }
+
+  private getOrCreateRealmResource(realmURL: string): RealmResource {
+    // this should be the only place we do the untracked read. It needs to be
+    // untracked so our `this.realms.set` below will not be an assertion.
+    let resource = this.knownRealm(realmURL, false);
+    if (!resource) {
+      resource = this.createRealmResource(realmURL, undefined);
+      this.realms.set(realmURL, resource);
+      // only after the set has happened can we safely do the tracked read to
+      // establish our depenency.
+      this.currentKnownRealms.add(realmURL);
+    }
+    return resource;
+  }
+
+  private identifyRealm = task(
+    { maxConcurrency: 1, enqueue: true },
+    async (url: string): Promise<void> => {
+      console.log(`starting identify realm`);
+      if (this.knownRealm(url)) {
+        // could have already been discovered while we were queued
+        return;
+      }
+      console.log('load start');
+      let response = await this.loaderService.loader.fetch(url, {
+        method: 'HEAD',
+      });
+      console.log('load end');
+      let realmURL = response.headers.get('x-boxel-realm-url');
+      if (realmURL) {
+        this.getOrCreateRealmResource(realmURL);
+      }
+    },
+  );
 
   private restoreSessions(): Map<string, RealmResource> {
     let sessions: Map<string, RealmResource> = new Map();

@@ -277,11 +277,34 @@ export default class MatrixService extends Service {
       try {
         await this._client.startClient();
         await this.initializeRooms();
+        await this.loginToRealms();
       } catch (e) {
         console.log('Error starting Matrix client', e);
         await this.logout();
       }
     }
+  }
+
+  private async loginToRealms() {
+    // This is where we would actually load user-specific choices out of the
+    // user's profile based on this.client.getUserId();
+    let activeRealms = this.cardService.realmURLs;
+
+    await Promise.all(
+      activeRealms.map(async (realmURL) => {
+        try {
+          // Our authorization-middleware can login automatically after seeing a
+          // 401, but this preemptive login makes it possible to see
+          // mayWrite===true on realms that are publicly readable.
+          await this.realm.login(realmURL);
+        } catch (err) {
+          console.warn(
+            `Unable to establish session with realm ${realmURL}`,
+            err,
+          );
+        }
+      }),
+    );
   }
 
   public async createRealmSession(realmURL: URL) {

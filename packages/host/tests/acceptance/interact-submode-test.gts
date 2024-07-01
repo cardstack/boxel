@@ -884,7 +884,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         .exists({ count: 1 });
     });
 
-    test('embedded card from writable realm shows pencil icon in edit mode', async (assert) => {
+    test('embedded card from writable realm shows pencil icon in edit mode', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
