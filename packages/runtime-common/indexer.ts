@@ -505,7 +505,7 @@ export class Indexer {
   }
 
   private buildPrerenderedInstancesQuery(everyCondition: CardExpression) {
-    // For evety indexed card instance, go through its deps and find the corresponding CSS index entries
+    // For evety indexed card instance (type = instance), go through its deps and find the corresponding CSS index entries (type = css)
     return [
       `WITH instance_records AS (
         SELECT i.file_alias, i.deps, i.embedded_html ->> 'default' as default_embedded_html, i.search_doc, i.url, r.realm_url
