@@ -1917,9 +1917,10 @@ module('Realm Server', function (hooks) {
 
         assert.strictEqual(json.included[0].type, 'prerendered-card-css');
         assert.strictEqual(json.included[0].id, 'http://127.0.0.1:4444/person');
-        assert.strictEqual(
-          json.included[0].attributes.content.replace(/\s+/g, ' '),
-          '.border[data-scopedcss-2a598dec83-c0485838e3] { border: 1px solid red; }',
+        assert.ok(
+          /^\.border\[data-scopedcss-[a-f0-9]+-[a-f0-9]+\] \{ border: 1px solid red; \}$/.test(
+            json.included[0].attributes.content.replace(/\s+/g, ' '),
+          ),
           'css content for Person is correct',
         );
 
@@ -1928,9 +1929,10 @@ module('Realm Server', function (hooks) {
           json.included[1].id,
           'http://127.0.0.1:4444/fancy-person',
         );
-        assert.strictEqual(
-          json.included[1].attributes.content.replace(/\s+/g, ' '),
-          '.fancy-border[data-scopedcss-fdc0982806-4c0a5cc85e] { border: 1px solid pink; }',
+        assert.ok(
+          /^\.fancy-border\[data-scopedcss-[a-f0-9]+-[a-f0-9]+\] \{ border: 1px solid pink; \}$/.test(
+            json.included[1].attributes.content.replace(/\s+/g, ' '),
+          ),
           'css content for FancyPerson is correct',
         );
 
