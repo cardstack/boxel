@@ -261,9 +261,10 @@ export default class RealmService extends Service {
   };
 
   get allRealmsMeta() {
-    const realmsMeta: { info: RealmInfo; canWrite: boolean }[] = [];
+    const realmsMeta: Record<string, { info: RealmInfo; canWrite: boolean }> =
+      Object.create(null);
     for (const [url, _resource] of this.realms.entries()) {
-      realmsMeta.push(this.meta(url));
+      realmsMeta[url] = this.meta(url);
     }
     return realmsMeta;
   }
@@ -273,16 +274,16 @@ export default class RealmService extends Service {
   // otherwise default to the first writable realm lexically
   @cached
   get userDefaultRealm(): { path: string; info: RealmInfo } {
-    let writeableRealms = this.allRealmsMeta
-      .filter((i) => i.canWrite)
-      .sort((i, j) => i.info.name.localeCompare(j.info.name));
+    let writeableRealms = Object.entries(this.allRealmsMeta)
+      .filter(([, i]) => i.canWrite)
+      .sort(([, i], [, j]) => i.info.name.localeCompare(j.info.name));
 
-    let ownRealm = writeableRealms.find((i) => i.info.url === ownRealmURL);
+    let ownRealm = writeableRealms.find(([url]) => url === ownRealmURL);
     if (ownRealm) {
-      return { path: ownRealm.info.url, info: ownRealm.info };
+      return { path: ownRealm[0], info: ownRealm[1].info };
     } else {
       let first = writeableRealms[0];
-      return { path: first.info.url, info: first.info };
+      return { path: first[0], info: first[1].info };
     }
   }
 

@@ -110,12 +110,12 @@ export default class RealmDropdown extends Component<Signature> {
 
   get realms(): RealmDropdownItem[] {
     let items: RealmDropdownItem[] | [] = [];
-    for (let realmMeta of this.realm.allRealmsMeta) {
+    for (let [url, realmMeta] of Object.entries(this.realm.allRealmsMeta)) {
       if (!realmMeta.canWrite) {
         continue;
       }
       let item: RealmDropdownItem = {
-        path: realmMeta.info.url,
+        path: url,
         ...realmMeta.info,
         iconURL: realmMeta.info.iconURL ?? this.defaultRealmIcon,
       };

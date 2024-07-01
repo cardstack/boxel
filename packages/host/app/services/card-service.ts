@@ -433,9 +433,7 @@ export default class CardService extends Service {
     return api.primitive in card;
   }
 
-  async getRealmInfo(
-    card: CardDef,
-  ): Promise<Omit<RealmInfo, 'url'> | undefined> {
+  async getRealmInfo(card: CardDef): Promise<RealmInfo | undefined> {
     let api = await this.getAPI();
     return card[api.realmInfo];
   }

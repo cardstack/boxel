@@ -79,7 +79,6 @@ export type RealmInfo = {
   name: string;
   backgroundURL: string | null;
   iconURL: string | null;
-  url: string;
 };
 
 export interface FileRef {

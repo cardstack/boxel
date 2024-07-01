@@ -8,7 +8,7 @@ import type { RealmInfo } from '@cardstack/runtime-common';
 
 interface Signature {
   Args: {
-    realm: Omit<RealmInfo, 'url'>;
+    realm: RealmInfo;
     resultsCount: number;
   };
 }

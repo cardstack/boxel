@@ -2008,7 +2008,7 @@ export class MaybeBase64Field extends StringField {
 
 export class CardDef extends BaseDef {
   [isSavedInstance] = false;
-  [realmInfo]: Omit<RealmInfo, 'url'> | undefined = undefined;
+  [realmInfo]: RealmInfo | undefined = undefined;
   [realmURL]: URL | undefined = undefined;
   @field id = contains(IDField);
   @field title = contains(StringField);
