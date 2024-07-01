@@ -1595,14 +1595,16 @@ module('Realm Server', function (hooks) {
   });
 
   module('/_search-prerendered GET request', function (_hooks) {
-    module('instances with no css of its own', function (hooks) {
-      setupPermissionedRealm(
-        hooks,
-        {
-          '*': ['read'],
-        },
-        {
-          'person.gts': `
+    module(
+      'instances with no embedded template css of its own',
+      function (hooks) {
+        setupPermissionedRealm(
+          hooks,
+          {
+            '*': ['read'],
+          },
+          {
+            'person.gts': `
           import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
           import StringCard from "https://cardstack.com/base/string";
 
@@ -1620,66 +1622,67 @@ module('Realm Server', function (hooks) {
             }
           }
         `,
-          'john.json': {
-            data: {
-              attributes: {
-                firstName: 'John',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: './person',
-                  name: 'Person',
+            'john.json': {
+              data: {
+                attributes: {
+                  firstName: 'John',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person',
+                    name: 'Person',
+                  },
                 },
               },
             },
           },
-        },
-      );
-
-      test('returns prerendered instances', async function (assert) {
-        let response = await request
-          .get(`/_search-prerendered`)
-          .set('Accept', 'application/vnd.card+json');
-
-        assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        assert.strictEqual(
-          response.get('X-boxel-realm-url'),
-          testRealmURL.href,
-          'realm url header is correct',
-        );
-        assert.strictEqual(
-          response.get('X-boxel-realm-public-readable'),
-          'true',
-          'realm is public readable',
-        );
-        let json = response.body;
-
-        assert.strictEqual(
-          json.data.length,
-          1,
-          'one card instance is returned in the search results',
         );
 
-        assert.strictEqual(json.data[0].type, 'prerendered-card');
+        test('returns prerendered instances', async function (assert) {
+          let response = await request
+            .get(`/_search-prerendered`)
+            .set('Accept', 'application/vnd.card+json');
 
-        assert.true(
-          json.data[0].attributes.embeddedHtml
-            .replace(/\s+/g, ' ')
-            .includes('Embedded Card Person: John'),
-          'embedded html looks correct',
-        );
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('X-boxel-realm-url'),
+            testRealmURL.href,
+            'realm url header is correct',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-public-readable'),
+            'true',
+            'realm is public readable',
+          );
+          let json = response.body;
 
-        assert.strictEqual(
-          json.data[0].relationships['prerendered-card-css'].data.length,
-          0,
-          'no css is included',
-        );
+          assert.strictEqual(
+            json.data.length,
+            1,
+            'one card instance is returned in the search results',
+          );
 
-        assert.strictEqual(json.meta.page.total, 1, 'total count is correct');
-      });
-    });
+          assert.strictEqual(json.data[0].type, 'prerendered-card');
 
-    module('instances that have css', function (hooks) {
+          assert.true(
+            json.data[0].attributes.embeddedHtml
+              .replace(/\s+/g, ' ')
+              .includes('Embedded Card Person: John'),
+            'embedded html looks correct',
+          );
+
+          assert.strictEqual(
+            json.data[0].relationships['prerendered-card-css'].data.length,
+            0,
+            'no css is included',
+          );
+
+          assert.strictEqual(json.meta.page.total, 1, 'total count is correct');
+        });
+      },
+    );
+
+    module('instances whose embedded template has css', function (hooks) {
       setupPermissionedRealm(
         hooks,
         {
@@ -1788,7 +1791,7 @@ module('Realm Server', function (hooks) {
         },
       );
 
-      test('returns instances with prerendered html + css', async function (assert) {
+      test('returns instances with prerendered embedded html + css', async function (assert) {
         let response = await request
           .get(`/_search-prerendered`)
           .set('Accept', 'application/vnd.card+json');
@@ -1809,7 +1812,7 @@ module('Realm Server', function (hooks) {
         assert.strictEqual(
           json.data.length,
           4,
-          '4 instances are returned in the search results',
+          'returned results count is correct',
         );
 
         // 1st card: Person Aaron
@@ -1934,7 +1937,7 @@ module('Realm Server', function (hooks) {
         assert.strictEqual(json.meta.page.total, 4, 'total count is correct');
       });
 
-      test('can filter', async function (assert) {
+      test('can filter prerendered instances', async function (assert) {
         let query: Query = {
           filter: {
             on: {
@@ -1960,7 +1963,7 @@ module('Realm Server', function (hooks) {
         assert.strictEqual(json.data[0].id, 'http://127.0.0.1:4444/jimmy');
       });
 
-      test('can sort', async function (assert) {
+      test('can sort prerendered instances', async function (assert) {
         let query: Query = {
           sort: [
             {
