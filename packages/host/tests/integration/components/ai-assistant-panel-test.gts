@@ -8,7 +8,7 @@ import { setupWindowMock } from 'ember-window-mock/test-support';
 import { EventStatus } from 'matrix-js-sdk';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { Deferred, baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
@@ -544,8 +544,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await setCardInOperatorModeState(otherCardID);
     await waitFor('[data-test-person="Burcu"]');
+    matrixService.sendReactionDeferred = new Deferred<void>();
     await click('[data-test-ai-bot-retry-button]'); // retry the command with correct card
     assert.dom('[data-test-apply-state="applying"]').exists();
+    matrixService.sendReactionDeferred.fulfill();
 
     await waitFor('[data-test-patch-card-idle]');
     assert.dom('[data-test-apply-state="applied"]').exists();
@@ -858,11 +860,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await waitFor('[data-test-command-apply="ready"]', { count: 3 });
 
+    matrixService.sendReactionDeferred = new Deferred<void>();
     await click('[data-test-message-idx="2"] [data-test-command-apply]');
     assert.dom('[data-test-apply-state="applying"]').exists({ count: 1 });
     assert
       .dom('[data-test-message-idx="2"] [data-test-apply-state="applying"]')
       .exists();
+    matrixService.sendReactionDeferred.fulfill();
 
     await waitFor('[data-test-message-idx="2"] [data-test-patch-card-idle]');
     assert.dom('[data-test-apply-state="applied"]').exists({ count: 1 });
@@ -919,11 +923,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await waitFor('[data-test-command-apply="ready"]', { count: 1 });
 
+    matrixService.sendReactionDeferred = new Deferred<void>();
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
     assert.dom('[data-test-apply-state="applying"]').exists({ count: 1 });
     assert
       .dom('[data-test-message-idx="0"] [data-test-apply-state="applying"]')
       .exists();
+    matrixService.sendReactionDeferred?.fulfill();
 
     await waitFor('[data-test-message-idx="0"] [data-test-patch-card-idle]');
     assert.dom('[data-test-apply-state="applied"]').exists({ count: 1 });

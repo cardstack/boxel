@@ -5,6 +5,8 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import { v4 as uuid } from 'uuid';
 
+import { Deferred } from '@cardstack/runtime-common';
+
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 import { clearAllRealmSessions } from '@cardstack/host/resources/realm-session';
@@ -24,6 +26,7 @@ let cardApi: typeof import('https://cardstack.com/base/card-api');
 let nonce = 0;
 
 export type MockMatrixService = MatrixService & {
+  sendReactionDeferred: Deferred<void>; // used to assert applying state in apply button
   cardAPI: typeof cardApi;
   createAndJoinRoom(roomId: string, roomName?: string): Promise<string>;
 };
@@ -100,6 +103,8 @@ function generateMockMatrixService(
     currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
       new TrackedMap();
 
+    sendReactionDeferred?: Deferred<void>; // used to assert applying state in apply button
+
     async start(_auth?: any) {}
 
     get isLoggedIn() {
@@ -160,6 +165,7 @@ function generateMockMatrixService(
         },
       };
       try {
+        await this.sendReactionDeferred?.promise;
         return await this.sendEvent(roomId, 'm.reaction', content);
       } catch (e) {
         throw new Error(
