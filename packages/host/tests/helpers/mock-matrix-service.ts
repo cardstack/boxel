@@ -1,13 +1,16 @@
 import Service, { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import { TrackedMap } from 'tracked-built-ins';
 
 import { v4 as uuid } from 'uuid';
 
+import { Deferred } from '@cardstack/runtime-common';
+
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 import { clearAllRealmSessions } from '@cardstack/host/resources/realm-session';
+import { RoomResource, getRoom } from '@cardstack/host/resources/room';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -21,6 +24,7 @@ let cardApi: typeof import('https://cardstack.com/base/card-api');
 let nonce = 0;
 
 export type MockMatrixService = MatrixService & {
+  sendReactionDeferred: Deferred<void>; // used to assert applying state in apply button
   cardAPI: typeof cardApi;
   createAndJoinRoom(roomId: string, roomName?: string): Promise<string>;
 };
@@ -89,13 +93,16 @@ function generateMockMatrixService(
 
     profile = getMatrixProfile(this, () => this.userId);
 
-    rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
+    private rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
+    private roomResourcesCache: Map<string, RoomResource> = new Map();
 
     messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
     cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
     failedCommandState: TrackedMap<string, Error> = new TrackedMap();
     currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
       new TrackedMap();
+
+    sendReactionDeferred?: Deferred<void>; // used to assert applying state in apply button
 
     async start(_auth?: any) {}
 
@@ -157,6 +164,7 @@ function generateMockMatrixService(
         },
       };
       try {
+        await this.sendReactionDeferred?.promise;
         return await this.sendEvent(roomId, 'm.reaction', content);
       } catch (e) {
         throw new Error(
@@ -279,6 +287,45 @@ function generateMockMatrixService(
         room.events[room.events.length - 1]?.origin_server_ts ??
         room.created?.getTime()
       );
+    }
+
+    getRoom(roomId: string) {
+      return this.rooms.get(roomId);
+    }
+
+    setRoom(roomId: string, roomPromise: Promise<RoomField>) {
+      this.rooms.set(roomId, roomPromise);
+      this.updateRoomResourcesCache();
+    }
+
+    @cached
+    get roomResources() {
+      let resources: TrackedMap<string, RoomResource> = new TrackedMap();
+      for (let roomId of this.rooms.keys()) {
+        if (!this.roomResourcesCache.get(roomId)) {
+          continue;
+        }
+        resources.set(roomId, this.roomResourcesCache.get(roomId)!);
+      }
+      return resources;
+    }
+
+    private updateRoomResourcesCache() {
+      for (let roomId of this.rooms.keys()) {
+        if (this.roomResourcesCache.has(roomId)) {
+          continue;
+        }
+        this.roomResourcesCache.set(
+          roomId,
+          getRoom(this, () => roomId),
+        );
+      }
+
+      for (let roomResourceId of this.roomResourcesCache.keys()) {
+        if (!this.rooms.has(roomResourceId)) {
+          this.roomResourcesCache.delete(roomResourceId);
+        }
+      }
     }
   }
   return MockMatrixService;

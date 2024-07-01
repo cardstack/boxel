@@ -1,7 +1,7 @@
 import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import Service, { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import format from 'date-fns/format';
 
@@ -56,6 +56,8 @@ import { importResource } from '../resources/import';
 
 import { clearAllRealmSessions } from '../resources/realm-session';
 
+import { RoomResource, getRoom } from '../resources/room';
+
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
 
@@ -82,7 +84,8 @@ export default class MatrixService extends Service {
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
-  rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
+  private rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
+  private roomResourcesCache: Map<string, RoomResource> = new Map();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
   failedCommandState: TrackedMap<string, Error> = new TrackedMap();
@@ -703,6 +706,39 @@ export default class MatrixService extends Service {
       } catch (error2) {
         throw error;
       }
+    }
+  }
+
+  getRoom(roomId: string) {
+    return this.rooms.get(roomId);
+  }
+
+  setRoom(roomId: string, roomPromise: Promise<RoomField>) {
+    this.rooms.set(roomId, roomPromise);
+    this.updateRoomResourcesCache();
+  }
+
+  @cached
+  get roomResources() {
+    let resources: TrackedMap<string, RoomResource> = new TrackedMap();
+    for (let roomId of this.rooms.keys()) {
+      if (!this.roomResourcesCache.get(roomId)) {
+        continue;
+      }
+      resources.set(roomId, this.roomResourcesCache.get(roomId)!);
+    }
+    return resources;
+  }
+
+  private updateRoomResourcesCache() {
+    for (let roomId of this.rooms.keys()) {
+      if (this.roomResourcesCache.has(roomId)) {
+        continue;
+      }
+      this.roomResourcesCache.set(
+        roomId,
+        getRoom(this, () => roomId),
+      );
     }
   }
 
