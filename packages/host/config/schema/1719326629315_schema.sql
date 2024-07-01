@@ -12,13 +12,13 @@
    error_doc BLOB,
    deps BLOB,
    types BLOB,
-   embedded_html TEXT,
    isolated_html TEXT,
    indexed_at,
    is_deleted BOOLEAN,
    source TEXT,
    transpiled_code TEXT,
    last_modified,
+   embedded_html BLOB,
    PRIMARY KEY ( url, realm_version, realm_url, type ) 
 );
 

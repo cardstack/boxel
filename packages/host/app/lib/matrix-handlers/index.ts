@@ -8,10 +8,8 @@ import {
 import { type LooseCardResource, baseRealm } from '@cardstack/runtime-common';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type {
-  RoomField,
-  MatrixEvent as DiscreteMatrixEvent,
-} from 'https://cardstack.com/base/room';
+import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type { RoomField } from 'https://cardstack.com/base/room';
 
 import type LoaderService from '../../services/loader-service';
 import type * as MatrixSDK from 'matrix-js-sdk';

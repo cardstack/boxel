@@ -21,6 +21,8 @@ import {
   trimExecutableExtension,
 } from '../index';
 
+import { coerceTypes } from '../indexer';
+
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { testRealmURL } from './const';
@@ -161,13 +163,9 @@ export async function setupIndex(
       return asExpressions(
         { ...defaultIndexEntry, ...row },
         {
-          jsonFields: [
-            'deps',
-            'types',
-            'pristine_doc',
-            'error_doc',
-            'search_doc',
-          ],
+          jsonFields: [...Object.entries(coerceTypes)]
+            .filter(([_, type]) => type === 'JSON')
+            .map(([column]) => column),
         },
       );
     }),

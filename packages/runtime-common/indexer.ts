@@ -72,7 +72,7 @@ export interface BoxelIndexTable {
   types: string[] | null;
   transpiled_code: string | null;
   source: string | null;
-  embedded_html: string | null;
+  embedded_html: Record<string, string> | null;
   isolated_html: string | null;
   indexed_at: string | null; // pg represents big integers as strings in javascript
   last_modified: string | null; // pg represents big integers as strings in javascript
@@ -113,6 +113,10 @@ export interface IndexedInstance {
   realmVersion: number;
   realmURL: string;
   indexedAt: number | null;
+  // TODO this is used for testing, lets remove this after we have a way to ask
+  // for which card class to use for embedded HTML. This will mean we'll need to
+  // alter the way we test this so that it's a bit more indirect.
+  _embeddedHtmlByClassHierarchy: { [refURL: string]: string } | null;
 }
 interface IndexedError {
   type: 'error';
@@ -152,12 +156,13 @@ export interface QueryResultsMeta {
   };
 }
 
-const coerceTypes = Object.freeze({
+export const coerceTypes = Object.freeze({
   deps: 'JSON',
   types: 'JSON',
   pristine_doc: 'JSON',
   error_doc: 'JSON',
   search_doc: 'JSON',
+  embedded_html: 'JSON',
   is_deleted: 'BOOLEAN',
   last_modified: 'VARCHAR',
   indexed_at: 'VARCHAR',
@@ -281,7 +286,9 @@ export class Indexer {
     opts?: GetEntryOptions,
   ): Promise<IndexedInstanceOrError | undefined> {
     let result = (await this.query([
-      `SELECT i.*
+      `SELECT i.*, embedded_html ->> `,
+      param('default'),
+      ` as default_embedded_html
        FROM boxel_index as i
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
        WHERE`,
@@ -296,8 +303,12 @@ export class Indexer {
           ['i.type =', param('error')],
         ]),
       ]),
-    ] as Expression)) as unknown as BoxelIndexTable[];
-    let maybeResult: BoxelIndexTable | undefined = result[0];
+    ] as Expression)) as unknown as (BoxelIndexTable & {
+      default_embedded_html: string | null;
+    })[];
+    let maybeResult:
+      | (BoxelIndexTable & { default_embedded_html: string | null })
+      | undefined = result[0];
     if (!maybeResult) {
       return undefined;
     }
@@ -313,7 +324,8 @@ export class Indexer {
       url: canonicalURL,
       pristine_doc: instance,
       isolated_html: isolatedHtml,
-      embedded_html: embeddedHtml,
+      default_embedded_html: embeddedHtml,
+      embedded_html: _embeddedHtmlByClassHierarchy,
       search_doc: searchDoc,
       realm_version: realmVersion,
       realm_url: realmURL,
@@ -344,6 +356,9 @@ export class Indexer {
       deps,
       lastModified: parseInt(lastModified),
       realmVersion,
+      // TODO this is used for testing, lets remove this after we have a way to ask
+      // for which card class to use for embedded HTML
+      _embeddedHtmlByClassHierarchy,
     };
   }
 
@@ -1114,7 +1129,7 @@ export interface InstanceEntry {
   resource: CardResource;
   searchData: Record<string, any>;
   isolatedHtml?: string;
-  embeddedHtml?: string;
+  embeddedHtml?: Record<string, string>;
   types: string[];
   deps: Set<string>;
 }
@@ -1212,13 +1227,9 @@ export class Batch {
         indexed_at: number;
       },
       {
-        jsonFields: [
-          'pristine_doc',
-          'search_doc',
-          'deps',
-          'types',
-          'error_doc',
-        ],
+        jsonFields: [...Object.entries(coerceTypes)]
+          .filter(([_, type]) => type === 'JSON')
+          .map(([column]) => column),
       },
     );
 
@@ -1520,20 +1531,23 @@ function isFieldPlural(field: Field): boolean {
   );
 }
 
-function assertIndexEntrySource(obj: BoxelIndexTable): Omit<
-  BoxelIndexTable,
+function assertIndexEntrySource<T>(obj: T): Omit<
+  T,
   'source' | 'last_modified'
 > & {
   source: string;
   last_modified: string;
 } {
+  if (!obj || typeof obj !== 'object') {
+    throw new Error(`expected index entry is null or not an object`);
+  }
   if (!('source' in obj) || typeof obj.source !== 'string') {
     throw new Error(`expected index entry to have "source" string property`);
   }
   if (!('last_modified' in obj) || typeof obj.last_modified !== 'string') {
     throw new Error(`expected index entry to have "last_modified" property`);
   }
-  return obj as Omit<BoxelIndexTable, 'source' | 'last_modified'> & {
+  return obj as Omit<T, 'source' | 'last_modified'> & {
     source: string;
     last_modified: string;
   };
