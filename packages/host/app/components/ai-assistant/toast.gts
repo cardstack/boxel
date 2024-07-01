@@ -21,7 +21,7 @@ import { markdownToHtml } from '@cardstack/runtime-common';
 
 import MatrixService from '@cardstack/host/services/matrix-service';
 
-import { MessageField } from 'https://cardstack.com/base/room';
+import type { MessageField } from 'https://cardstack.com/base/room';
 
 import assistantIcon from './ai-assist-icon.webp';
 
