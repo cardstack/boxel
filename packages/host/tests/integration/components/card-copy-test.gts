@@ -62,7 +62,6 @@ module('Integration | card-copy', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
-  setupMatrixServiceMock(hooks, { autostart: true });
   setupWindowMock(hooks);
 
   hooks.beforeEach(async function () {
@@ -271,6 +270,8 @@ module('Integration | card-copy', function (hooks) {
       } as LooseSingleCardDocument),
     );
   });
+
+  setupMatrixServiceMock(hooks, { autostart: true });
 
   test('copy button does not appear when there is 1 stack for single card item', async function (assert) {
     await setCardInOperatorModeState([
@@ -539,31 +540,35 @@ module('Integration | card-copy', function (hooks) {
       .containsText('Copy 3 Cards', 'button text is correct');
   });
 
-  test('copy button appears when right stack is an index card and left stack is single card item', async function (assert) {
-    await setCardInOperatorModeState(
-      [`${testRealmURL}index`, `${testRealmURL}Person/hassan`],
-      [`${testRealm2URL}index`],
-    );
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-    await waitFor('[data-test-operator-mode-stack="0"] [data-test-person]');
-    await waitFor(
-      '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
-    );
-    await percySnapshot(assert);
-    assert
-      .dom('[data-test-copy-button="right"]')
-      .exists('copy button with right arrow exists');
-    assert
-      .dom('[data-test-copy-button]')
-      .containsText('Copy 1 Card', 'button text is correct');
-  });
+  QUnit.only(
+    'copy button appears when right stack is an index card and left stack is single card item',
+    async function (assert) {
+      await setCardInOperatorModeState(
+        [`${testRealmURL}index`, `${testRealmURL}Person/hassan`],
+        [`${testRealm2URL}index`],
+      );
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      await waitFor('[data-test-operator-mode-stack="0"] [data-test-person]');
+      await waitFor(
+        '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
+      );
+      await this.pauseTest();
+      await percySnapshot(assert);
+      assert
+        .dom('[data-test-copy-button="right"]')
+        .exists('copy button with right arrow exists');
+      assert
+        .dom('[data-test-copy-button]')
+        .containsText('Copy 1 Card', 'button text is correct');
+    },
+  );
 
   test('copy button appears when left stack is an index card and right stack is single card item', async function (assert) {
     await setCardInOperatorModeState(
