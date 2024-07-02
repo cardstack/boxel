@@ -3,15 +3,12 @@ import { service } from '@ember/service';
 
 import ENV from '@cardstack/host/config/environment';
 
-import type CardService from '../services/card-service';
-
 interface Model {
   isFastBoot: boolean;
 }
 
 export default class Application extends Route<Model> {
   @service declare fastboot: { isFastBoot: boolean };
-  @service declare cardService: CardService;
 
   async beforeModel(transition: any): Promise<void> {
     // Override the matrix URL for testing

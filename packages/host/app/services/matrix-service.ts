@@ -298,7 +298,7 @@ export default class MatrixService extends Service {
         try {
           // Our authorization-middleware can login automatically after seeing a
           // 401, but this preemptive login makes it possible to see
-          // mayWrite===true on realms that are publicly readable.
+          // canWrite===true on realms that are publicly readable.
           await this.realm.login(realmURL);
         } catch (err) {
           console.warn(

@@ -3,7 +3,6 @@ import { FetcherMiddlewareHandler } from './fetcher';
 export interface TokenSource {
   token(url: string): string | undefined;
   reauthenticate(realmURL: string): Promise<string | undefined>;
-  ensureRealmMeta(realmURL: string): Promise<void>;
 }
 
 export function authorizationMiddleware(

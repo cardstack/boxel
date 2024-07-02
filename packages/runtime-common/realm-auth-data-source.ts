@@ -57,10 +57,6 @@ export class RealmAuthDataSource {
     return await client.getJWT(); // This will use a cached JWT from the realm auth client or create a new one if it's expired or about to expire
   }
 
-  async ensureRealmMeta(_realmURL: string): Promise<void> {
-    // no-op
-  }
-
   private toRealmURL(url: string): string | undefined {
     if (url.startsWith(this.realmURL)) {
       return this.realmURL;

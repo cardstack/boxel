@@ -20,7 +20,6 @@ import {
   JWTPayload,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
-import { baseRealm } from '@cardstack/runtime-common/constants';
 
 import ENV from '@cardstack/host/config/environment';
 
@@ -35,9 +34,8 @@ interface Meta {
 }
 
 type AuthStatus =
-  | { type: 'failed' }
   | { type: 'logged-in'; token: string; claims: JWTPayload }
-  | { type: 'uninitialized' };
+  | { type: 'anonymous' };
 
 class RealmResource {
   @service private declare matrixService: MatrixService;
@@ -46,7 +44,7 @@ class RealmResource {
   @tracked meta: Meta | undefined;
 
   @tracked
-  private auth: AuthStatus = { type: 'uninitialized' };
+  private auth: AuthStatus = { type: 'anonymous' };
 
   constructor(
     private realmURL: string,
@@ -70,33 +68,14 @@ class RealmResource {
         claims: claimsFromRawToken(value),
       };
     } else {
-      this.auth = this.buildInitialAuthState();
+      this.auth = { type: 'anonymous' };
     }
     SessionStorage.persist(this.realmURL, value);
     this.tokenRefresher.perform();
   }
 
-  private buildInitialAuthState(): AuthStatus {
-    if (this.realmURL === baseRealm.url) {
-      // this special case is an unfortunate necessity so long as the matrix
-      // service cannot start up without accessing things in the base realm.
-      // The base realm is publicly-readable and nobody needs to be logged
-      // into it, so always having no session is acceptable.
-      return { type: 'failed' };
-    }
-    return { type: 'uninitialized' };
-  }
-
   get info() {
     return this.meta?.info;
-  }
-
-  setAuthFailed() {
-    this.auth = {
-      type: 'failed',
-    };
-    SessionStorage.persist(this.realmURL, undefined);
-    this.tokenRefresher.perform();
   }
 
   get claims(): JWTPayload | undefined {
@@ -133,7 +112,7 @@ class RealmResource {
       this.token = token;
     } catch (e) {
       console.error('Failed to login to realm', e);
-      this.setAuthFailed();
+      this.token = undefined;
     } finally {
       this.loggingIn = undefined;
     }
@@ -338,11 +317,7 @@ export default class RealmService extends Service {
   async reauthenticate(realmURL: string): Promise<string | undefined> {
     let resource = this.getOrCreateRealmResource(realmURL);
     resource.logout();
-
-    // TODO: decide how to identify expected login failures vs unexpected ones
-    // here and catch the expected ones.
     await resource.login();
-
     return resource.token;
   }
 
@@ -400,7 +375,6 @@ export default class RealmService extends Service {
   }
 }
 
-// TODO: prefer not export these but a test needs it. Can we do better?
 export const tokenRefreshPeriodSec = 5 * 60; // 5 minutes
 export const sessionLocalStorageKey = 'boxel-session';
 

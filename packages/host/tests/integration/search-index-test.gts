@@ -20,6 +20,7 @@ import { SearchIndex } from '@cardstack/runtime-common/search-index';
 
 import {
   testRealmURL,
+  testRealmInfo,
   cleanWhiteSpace,
   trimCardContainer,
   setupCardLogs,
@@ -34,12 +35,6 @@ const paths = new RealmPaths(new URL(testRealmURL));
 const testModuleRealm = 'http://localhost:4202/test/';
 
 let loader: Loader;
-
-let testRealmInfo = {
-  name: 'Unnamed Workspace',
-  backgroundURL: null,
-  iconURL: null,
-};
 
 module(`Integration | search-index`, function (hooks) {
   setupRenderingTest(hooks);
