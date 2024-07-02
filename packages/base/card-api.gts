@@ -1874,7 +1874,7 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
           visibility: hidden;
         }
       }
-      /* small thumbnail and medium styles embedded card */
+      /* small and medium thumbnail styles embedded card */
       @container embedded-card (223px < height <= 249px) {
         .contents {
           justify-content: center;
