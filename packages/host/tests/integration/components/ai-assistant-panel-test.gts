@@ -1083,6 +1083,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
     );
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
+    assert
+      .dom(`[data-test-room="${room3Id}"]`)
+      .exists(
+        "test room 3 is the most recently created room and it's opened initially",
+      );
+    window.localStorage.removeItem('aiPanelCurrentRoomId'); // Cleanup
   });
 
   test('can close past-sessions list on outside click', async function (assert) {
