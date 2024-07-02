@@ -37,6 +37,7 @@ import {
   type TestContextWithSSE,
 } from '../helpers';
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
+import CardService from '@cardstack/host/services/card-service';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -779,6 +780,8 @@ module('Acceptance | code submode tests', function (hooks) {
   });
 
   test('code submode handles binary files', async function (assert) {
+    let cardService = this.owner.lookup('service:card-service') as CardService;
+    cardService.realmURLs.push('http://localhost:4202/test/');
     await visitOperatorMode({
       submode: 'code',
       codePath: `http://localhost:4202/test/mango.png`,
