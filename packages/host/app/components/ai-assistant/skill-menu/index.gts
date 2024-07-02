@@ -22,16 +22,16 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
       @canAttachCard={{true}}
       @onChooseCard={{@onChooseCard}}
     >
-      <:header-icon>
+      <:headerIcon>
         <span class='header-icon' />
-      </:header-icon>
-      <:header-detail>
+      </:headerIcon>
+      <:headerDetail>
         {{this.activeSkills.length}}
         <span class='maybe-hidden skills-length'>of
           {{@skills.length}}
           Skills Active
         </span>
-      </:header-detail>
+      </:headerDetail>
     </PillMenu>
     <style>
       .skill-menu {

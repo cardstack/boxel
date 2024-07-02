@@ -31,9 +31,9 @@ interface Signature {
     onChooseCard?: (card: CardDef) => void;
   };
   Blocks: {
-    'header-icon': [];
-    'header-detail': [];
-    'header-button': [];
+    headerIcon: [];
+    headerDetail: [];
+    headerButton: [];
     content: [];
   };
 }
@@ -46,10 +46,10 @@ export default class PillMenu extends Component<Signature> {
     >
       <Header class='menu-header' @title={{@title}}>
         <:icon>
-          {{yield to='header-icon'}}
+          {{yield to='headerIcon'}}
         </:icon>
         <:detail>
-          {{yield to='header-detail'}}
+          {{yield to='headerDetail'}}
         </:detail>
         <:actions>
           <button
@@ -62,7 +62,7 @@ export default class PillMenu extends Component<Signature> {
             {{#if @isExpandableHeader}}
               {{if this.isExpanded 'Hide' 'Show'}}
             {{else}}
-              {{yield to='header-button'}}
+              {{yield to='headerButton'}}
             {{/if}}
           </button>
         </:actions>

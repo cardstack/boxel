@@ -88,23 +88,23 @@ export default class PillMenuUsage extends Component {
           @canAttachCard={{this.canAttachCard}}
           @onChooseCard={{this.onChooseCard}}
         >
-          <:header-icon>
+          <:headerIcon>
             <img
               src={{this.headerIconURL}}
               width='18'
               height='18'
-              role='presentation'
+              alt='menu icon'
             />
-          </:header-icon>
-          <:header-detail>
+          </:headerIcon>
+          <:headerDetail>
             {{this.activeItems.length}}
             of
             {{this.items.length}}
             Items Are Active
-          </:header-detail>
-          <:header-button>
+          </:headerDetail>
+          <:headerButton>
             <IconX width='10' height='10' alt='Close' />
-          </:header-button>
+          </:headerButton>
           <:content>
             You have selected the following cards:
           </:content>
