@@ -18,7 +18,10 @@ export function authorizationMiddleware(
 
     let realmURL = response.headers.get('x-boxel-realm-url');
     if (realmURL) {
-      if (response.status === 401) {
+      if (
+        response.status === 401 &&
+        !req.url.startsWith(`${realmURL}_session`)
+      ) {
         token = await tokenSource.reauthenticate(realmURL);
         if (token) {
           req.headers.set('Authorization', token);
