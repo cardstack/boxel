@@ -1856,8 +1856,8 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
 
       /* 
          sadly you can't use css vars in container queries. also be careful of fractional pixel 
-         dimensions in the breakpoints. due to this i use the breakpoint - 1 pixel in the 
-         container query conidtions
+         dimensions in the breakpoints. due to this we use the "breakpoint - 1 pixel" in the 
+         container query conditions
       */
 
       /* row style embedded card */
