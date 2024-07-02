@@ -509,7 +509,6 @@ export default class AiAssistantPanel extends Component<Signature> {
       await this.matrixService.client.leave(roomId);
       await this.matrixService.client.forget(roomId);
       await timeout(eventDebounceMs); // this makes it feel a bit more responsive
-      // this.roomResources.delete(roomId);
 
       if (this.newSessionId === roomId) {
         window.localStorage.removeItem(newSessionIdPersistenceKey);
