@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": null,
+      "title": "Default embedded view with thumbnail",
       "description": null,
       "thumbnailURL": null
     },
