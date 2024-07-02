@@ -42,6 +42,8 @@ import type { RoomField } from 'https://cardstack.com/base/room';
 
 import assistantIcon from './ai-assist-icon.webp';
 
+import { getRoom } from '@cardstack/host/resources/room';
+
 const { matrixServerName } = ENV;
 export const aiBotUserId = `@${aiBotUsername}:${matrixServerName}`;
 
@@ -367,7 +369,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     let persistedRoomId = window.localStorage.getItem(
       currentRoomIdPersistenceKey,
     );
-    if (persistedRoomId && this.roomResources.has(persistedRoomId)) {
+    if (persistedRoomId && this.roomResource.roomId === persistedRoomId) {
       this.currentRoomId = persistedRoomId;
     } else {
       let latestRoom = this.aiSessionRooms[0];
@@ -379,21 +381,16 @@ export default class AiAssistantPanel extends Component<Signature> {
     }
   }
 
-  private get currentRoom() {
-    return this.currentRoomId
-      ? this.roomResources.get(this.currentRoomId)?.room
-      : undefined;
-  }
+  private roomResource = getRoom(this, () => this.currentRoomId);
 
-  @cached
-  private get roomResources() {
-    return this.matrixService.roomResources;
+  private get currentRoom() {
+    return this.currentRoomId ? this.roomResource.room : undefined;
   }
 
   private loadRoomsTask = restartableTask(async () => {
     await this.matrixService.flushMembership;
     await this.matrixService.flushTimeline;
-    await Promise.all([...this.roomResources.values()].map((r) => r.loading));
+    await this.roomResource.loading;
     this.enterRoomInitially();
   });
 
@@ -425,8 +422,8 @@ export default class AiAssistantPanel extends Component<Signature> {
     let id = window.localStorage.getItem(newSessionIdPersistenceKey);
     if (
       id &&
-      this.roomResources.has(id) &&
-      this.roomResources.get(id)?.room?.messages.length === 0
+      this.roomResource.roomId === id &&
+      this.roomResource.room?.messages.length === 0
     ) {
       return id;
     }
@@ -445,12 +442,9 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @cached
   private get aiSessionRooms() {
-    let rooms: RoomField[] = [];
-    for (let resource of this.roomResources.values()) {
-      if (!resource.room) {
-        continue;
-      }
-      let { room } = resource;
+    let sessionRooms = [];
+    let matrixRooms = this.matrixService.listRooms;
+    matrixRooms.forEach((room) => {
       if (!room.created) {
         // there is a race condition in the matrix SDK where newly created
         // rooms don't immediately have a created date
@@ -461,16 +455,14 @@ export default class AiAssistantPanel extends Component<Signature> {
           room.joinedMembers.find((m) => aiBotUserId === m.userId)) &&
         room.joinedMembers.find((m) => this.matrixService.userId === m.userId)
       ) {
-        rooms.push(room);
+        sessionRooms.push(room);
       }
-    }
-    // sort in reverse chronological order of last activity
-    let sorted = rooms.sort(
+    });
+    return sessionRooms.sort(
       (a, b) =>
         this.matrixService.getLastActiveTimestamp(b) -
         this.matrixService.getLastActiveTimestamp(a),
     );
-    return sorted;
   }
 
   @action
@@ -515,7 +507,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       await this.matrixService.client.leave(roomId);
       await this.matrixService.client.forget(roomId);
       await timeout(eventDebounceMs); // this makes it feel a bit more responsive
-      this.roomResources.delete(roomId);
+      // this.roomResources.delete(roomId);
 
       if (this.newSessionId === roomId) {
         window.localStorage.removeItem(newSessionIdPersistenceKey);
