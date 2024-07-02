@@ -84,7 +84,7 @@ export default class MatrixService extends Service {
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
-  private rooms: TrackedMap<string, RoomField> = new TrackedMap();
+  private rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
   private roomResourcesCache: Map<string, RoomResource> = new Map();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
@@ -102,10 +102,6 @@ export default class MatrixService extends Service {
   constructor(owner: Owner) {
     super(owner);
     this.#ready = this.loadSDK.perform();
-  }
-
-  get listRooms() {
-    return Array.from(this.rooms.values());
   }
 
   addEventReadReceipt(eventId: string, receipt: { readAt: Date }) {
