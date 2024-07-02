@@ -715,7 +715,12 @@ export default class MatrixService extends Service {
 
   setRoom(roomId: string, roomPromise: Promise<RoomField>) {
     this.rooms.set(roomId, roomPromise);
-    this.updateRoomResourcesCache();
+    if (!this.roomResourcesCache.has(roomId)) {
+      this.roomResourcesCache.set(
+        roomId,
+        getRoom(this, () => roomId),
+      );
+    }
   }
 
   @cached
@@ -728,18 +733,6 @@ export default class MatrixService extends Service {
       resources.set(roomId, this.roomResourcesCache.get(roomId)!);
     }
     return resources;
-  }
-
-  private updateRoomResourcesCache() {
-    for (let roomId of this.rooms.keys()) {
-      if (this.roomResourcesCache.has(roomId)) {
-        continue;
-      }
-      this.roomResourcesCache.set(
-        roomId,
-        getRoom(this, () => roomId),
-      );
-    }
   }
 
   private resetState() {
