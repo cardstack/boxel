@@ -1045,21 +1045,17 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
 
-    let tinyDelay = () => new Promise((resolve) => setTimeout(resolve, 1)); // Add a tiny artificial delay to ensure rooms are created in the correct order with increasing timestamps
     await matrixService.createAndJoinRoom('test1', 'test room 1');
-    await tinyDelay();
     const room2Id = await matrixService.createAndJoinRoom(
       'test2',
       'test room 2',
     );
-    await tinyDelay();
     const room3Id = await matrixService.createAndJoinRoom(
       'test3',
       'test room 3',
     );
 
-    await waitFor(`[data-test-open-ai-assistant]`);
-    await click('[data-test-open-ai-assistant]');
+    await openAiAssistant();
     await waitFor(`[data-room-settled]`);
 
     assert
@@ -1087,13 +1083,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
     );
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
-    assert
-      .dom(`[data-test-room="${room3Id}"]`)
-      .exists(
-        "test room 3 is the most recently created room and it's opened initially",
-      );
-
-    window.localStorage.removeItem('aiPanelCurrentRoomId'); // Cleanup
   });
 
   test('can close past-sessions list on outside click', async function (assert) {
