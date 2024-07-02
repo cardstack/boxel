@@ -61,6 +61,7 @@ import {
   linksTo,
   linksToMany,
   MarkdownField,
+  MaybeBase64Field,
   NumberField,
   queryableValue,
   setupBaseRealm,
@@ -488,6 +489,69 @@ module('Integration | card-basics', function (hooks) {
           '[data-test-plural-view-item="1"] > [data-test-card-format="atom"]',
         )
         .containsText('Marcus');
+    });
+
+    test('renders a default (CardDef) embedded view', async function (assert) {
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field image = contains(Base64ImageField);
+        @field title = contains(StringField, {
+          computeVia: function (this: Person) {
+            return this.firstName;
+          },
+        });
+        @field thumbnailURL = contains(MaybeBase64Field, {
+          computeVia: function (this: Person) {
+            return this.image.base64;
+          },
+        });
+      }
+      class Driver extends CardDef {
+        @field person = linksTo(Person);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <div class='grid' data-test-viewport='grid'>
+              <@fields.person />
+            </div>
+            <div class='row' data-test-viewport='row'>
+              <@fields.person />
+            </div>
+            <div class='large' data-test-viewport='large'>
+              <@fields.person />
+            </div>
+            <style>
+              .grid {
+                height: 200px;
+                width: 300px;
+              }
+              .row {
+              }
+              .large {
+              }
+            </style>
+          </template>
+        };
+      }
+
+      loader.shimModule(`${testRealmURL}test-cards`, { Person, Driver });
+
+      let mang = new Person({
+        firstName: 'Mango',
+        image: new Base64ImageField({
+          altText: 'Picture of Mango',
+          size: 'contain',
+          width: null,
+          height: 200,
+          base64: `data:image/png;base64,${mango}`,
+        }),
+      });
+      let withThumbnail = new Driver({ person: mang });
+      await renderCard(loader, withThumbnail, 'isolated');
+      debugger;
+      // TODO assert title, card type
+      // use percy for UI check
+
+      let vang = new Person({ firstName: 'Van Gogh' });
     });
 
     test('can set the ID for an unsaved card', async function (assert) {
