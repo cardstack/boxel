@@ -279,8 +279,8 @@ export default class MatrixService extends Service {
 
       try {
         await this._client.startClient();
-        await this.initializeRooms();
         await this.loginToRealms();
+        await this.initializeRooms();
       } catch (e) {
         console.log('Error starting Matrix client', e);
         await this.logout();
