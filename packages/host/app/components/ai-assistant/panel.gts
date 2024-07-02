@@ -34,6 +34,7 @@ import {
   eventDebounceMs,
 } from '@cardstack/host/lib/matrix-utils';
 
+import { getRoom } from '@cardstack/host/resources/room';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -41,8 +42,6 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type { RoomField } from 'https://cardstack.com/base/room';
 
 import assistantIcon from './ai-assist-icon.webp';
-
-import { getRoom } from '@cardstack/host/resources/room';
 
 const { matrixServerName } = ENV;
 export const aiBotUserId = `@${aiBotUsername}:${matrixServerName}`;
@@ -444,6 +443,9 @@ export default class AiAssistantPanel extends Component<Signature> {
   private get aiSessionRooms() {
     let sessionRooms = [];
     let matrixRooms = this.matrixService.listRooms;
+    if (!matrixRooms) {
+      return [];
+    }
     matrixRooms.forEach((room) => {
       if (!room.created) {
         // there is a race condition in the matrix SDK where newly created
