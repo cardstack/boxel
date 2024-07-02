@@ -303,6 +303,10 @@ function generateMockMatrixService(
       }
     }
 
+    get listRooms() {
+      return Array.from(this.rooms.values());
+    }
+
     @cached
     get roomResources() {
       let resources: TrackedMap<string, RoomResource> = new TrackedMap();
