@@ -252,7 +252,7 @@ export function getBoxComponent(
           card boundary.
 
           we need to use height 100% because the container query for embedded cards only
-          works if we use up all the space horizontally and veritically that is available
+          works if we use up all the space horizontally and vertically that is available
           to the card since some of our queries are height queries
         */
         height: 100%;

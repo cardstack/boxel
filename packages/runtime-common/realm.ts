@@ -865,7 +865,6 @@ export class Realm {
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
 
-    /* TODO remove this
     if (!localPath.startsWith(assetsDir)) {
       let useWorkInProgressIndex = Boolean(
         request.headers.get('X-Boxel-Use-WIP-Index'),
@@ -904,7 +903,6 @@ export class Realm {
         }
       }
     }
-      */
 
     try {
       let maybeFileRef = await this.getFileWithFallbacks(

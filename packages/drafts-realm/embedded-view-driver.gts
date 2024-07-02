@@ -9,32 +9,30 @@ export class EmbeddedViewDriver extends CardDef {
   @field card = linksTo(CardDef);
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      {{#if @model.card}}
-        <div class='item'>
-          <div class='desc'>Row thumbnail (226px x 62px)</div>
-          <div class='row thumbnail' data-test-viewport='row'>
-            <@fields.card />
-          </div>
+      <div class='item'>
+        <div class='desc'>Row thumbnail (226px x 62px)</div>
+        <div class='row thumbnail' data-test-viewport='row'>
+          <@fields.card />
         </div>
-        <div class='item'>
-          <div class='desc'>Small thumbnail (164px x 224px)</div>
-          <div class='small thumbnail' data-test-viewport='small'>
-            <@fields.card />
-          </div>
+      </div>
+      <div class='item'>
+        <div class='desc'>Small thumbnail (164px x 224px)</div>
+        <div class='small thumbnail' data-test-viewport='small'>
+          <@fields.card />
         </div>
-        <div class='item'>
-          <div class='desc'>Medium thumbnail (195px x 224px)</div>
-          <div class='medium thumbnail' data-test-viewport='medium'>
-            <@fields.card />
-          </div>
+      </div>
+      <div class='item'>
+        <div class='desc'>Medium thumbnail (195px x 224px)</div>
+        <div class='medium thumbnail' data-test-viewport='medium'>
+          <@fields.card />
         </div>
-        <div class='item'>
-          <div class='desc'>Large thumbnail (350px x 250px)</div>
-          <div class='large thumbnail' data-test-viewport='large'>
-            <@fields.card />
-          </div>
+      </div>
+      <div class='item'>
+        <div class='desc'>Large thumbnail (350px x 250px)</div>
+        <div class='large thumbnail' data-test-viewport='large'>
+          <@fields.card />
         </div>
-      {{/if}}
+      </div>
       <style>
         .small {
           width: 164px;
