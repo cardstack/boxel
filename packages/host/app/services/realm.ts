@@ -373,16 +373,13 @@ export default class RealmService extends Service {
   private identifyRealm = task(
     { maxConcurrency: 1, enqueue: true },
     async (url: string): Promise<void> => {
-      console.log(`starting identify realm`);
       if (this.knownRealm(url)) {
         // could have already been discovered while we were queued
         return;
       }
-      console.log('load start');
       let response = await this.loaderService.loader.fetch(url, {
         method: 'HEAD',
       });
-      console.log('load end');
       let realmURL = response.headers.get('x-boxel-realm-url');
       if (realmURL) {
         this.getOrCreateRealmResource(realmURL);
