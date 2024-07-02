@@ -51,7 +51,12 @@ import type {
 import * as RoomModule from 'https://cardstack.com/base/room';
 import type { RoomField } from 'https://cardstack.com/base/room';
 
-import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
+import {
+  Timeline,
+  Membership,
+  addRoomEvent,
+  Context,
+} from '../lib/matrix-handlers';
 import { importResource } from '../resources/import';
 
 import { clearAllRealmSessions } from '../resources/realm-session';
