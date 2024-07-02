@@ -5,6 +5,8 @@ import {
   type IEvent,
 } from 'matrix-js-sdk';
 
+import { TrackedMap } from 'tracked-built-ins/.';
+
 import { type LooseCardResource, baseRealm } from '@cardstack/runtime-common';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -37,19 +39,20 @@ export type Event = Partial<IEvent> & {
 };
 
 export interface EventSendingContext {
-  setRoom: (roomId: string, roomPromise: Promise<RoomField>) => void;
-  getRoom: (roomId: string) => Promise<RoomField> | undefined;
+  setRoom: (roomId: string, roomPromise: RoomField) => void;
+  getRoom: (roomId: string) => RoomField | undefined;
   cardAPI: typeof CardAPI;
   loaderService: LoaderService;
 }
 
 export interface Context extends EventSendingContext {
+  rooms: TrackedMap<string, RoomField>;
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[];
   timelineQueue: { event: MatrixEvent; oldEventId?: string }[];
-  client: MatrixClient;
-  matrixSDK: typeof MatrixSDK;
+  client: MatrixClient | undefined;
+  matrixSDK: typeof MatrixSDK | undefined;
   handleMessage?: (
     context: Context,
     event: Event,
@@ -89,7 +92,7 @@ export async function addRoomEvent(context: EventSendingContext, event: Event) {
         },
       },
     };
-    room = context.cardAPI.createFromSerialized<typeof RoomField>(
+    room = await context.cardAPI.createFromSerialized<typeof RoomField>(
       data,
       { data },
       undefined,

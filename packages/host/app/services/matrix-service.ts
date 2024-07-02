@@ -51,7 +51,12 @@ import type {
 import * as RoomModule from 'https://cardstack.com/base/room';
 import type { RoomField } from 'https://cardstack.com/base/room';
 
-import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
+import {
+  Timeline,
+  Membership,
+  addRoomEvent,
+  Context,
+} from '../lib/matrix-handlers';
 import { importResource } from '../resources/import';
 
 import { clearAllRealmSessions } from '../resources/realm-session';
@@ -75,7 +80,14 @@ export type OperatorModeContext = {
   openCardIds: string[];
 };
 
-export default class MatrixService extends Service {
+export interface ContextualService<C> {
+  get context(): C;
+}
+
+export default class MatrixService
+  extends Service
+  implements ContextualService<Context>
+{
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare router: RouterService;
@@ -84,7 +96,7 @@ export default class MatrixService extends Service {
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
-  private rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
+  rooms: TrackedMap<string, RoomField> = new TrackedMap();
   private roomResourcesCache: Map<string, RoomResource> = new Map();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
@@ -102,6 +114,27 @@ export default class MatrixService extends Service {
   constructor(owner: Owner) {
     super(owner);
     this.#ready = this.loadSDK.perform();
+  }
+
+  get context(): Context {
+    return {
+      rooms: this.rooms,
+      cardAPI: this.cardAPI,
+      loaderService: this.loaderService,
+      flushTimeline: this.flushTimeline,
+      flushMembership: this.flushMembership,
+      roomMembershipQueue: this.roomMembershipQueue,
+      timelineQueue: this.timelineQueue,
+      client: this._client,
+      matrixSDK: this.#matrixSDK,
+      addEventReadReceipt: this.addEventReadReceipt,
+      setRoom: this.setRoom,
+      getRoom: this.getRoom,
+    };
+  }
+
+  get listRooms() {
+    return Array.from(this.rooms.values());
   }
 
   addEventReadReceipt(eventId: string, receipt: { readAt: Date }) {
@@ -713,8 +746,8 @@ export default class MatrixService extends Service {
     return this.rooms.get(roomId);
   }
 
-  setRoom(roomId: string, roomPromise: Promise<RoomField>) {
-    this.rooms.set(roomId, roomPromise);
+  setRoom(roomId: string, room: RoomField) {
+    this.rooms.set(roomId, room);
     if (!this.roomResourcesCache.has(roomId)) {
       this.roomResourcesCache.set(
         roomId,

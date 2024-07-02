@@ -15,11 +15,13 @@ interface Args {
 }
 
 export class RoomResource extends Resource<Args> {
+  @tracked roomId: string | undefined;
   @tracked room: RoomField | undefined;
   @tracked loading: Promise<void> | undefined;
   @service private declare matrixService: MatrixService;
 
   modify(_positional: never[], named: Args['named']) {
+    this.roomId = named.roomId;
     this.loading = this.load.perform(named.roomId);
   }
 
