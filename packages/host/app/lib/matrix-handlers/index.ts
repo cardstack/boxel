@@ -38,7 +38,7 @@ export type Event = Partial<IEvent> & {
 
 export interface EventSendingContext {
   setRoom: (roomId: string, roomPromise: RoomField) => void;
-  getRoom: (roomId: string) => Promise<RoomField> | undefined;
+  getRoom: (roomId: string) => RoomField | undefined;
   cardAPI: typeof CardAPI;
   loaderService: LoaderService;
 }

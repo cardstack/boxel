@@ -93,7 +93,7 @@ function generateMockMatrixService(
 
     profile = getMatrixProfile(this, () => this.userId);
 
-    private rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
+    private rooms: TrackedMap<string, RoomField> = new TrackedMap();
     private roomResourcesCache: Map<string, RoomResource> = new Map();
 
     messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
@@ -293,8 +293,8 @@ function generateMockMatrixService(
       return this.rooms.get(roomId);
     }
 
-    setRoom(roomId: string, roomPromise: Promise<RoomField>) {
-      this.rooms.set(roomId, roomPromise);
+    setRoom(roomId: string, room: RoomField) {
+      this.rooms.set(roomId, room);
       if (!this.roomResourcesCache.has(roomId)) {
         this.roomResourcesCache.set(
           roomId,
