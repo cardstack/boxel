@@ -295,7 +295,12 @@ function generateMockMatrixService(
 
     setRoom(roomId: string, roomPromise: Promise<RoomField>) {
       this.rooms.set(roomId, roomPromise);
-      this.updateRoomResourcesCache();
+      if (!this.roomResourcesCache.has(roomId)) {
+        this.roomResourcesCache.set(
+          roomId,
+          getRoom(this, () => roomId),
+        );
+      }
     }
 
     @cached
@@ -308,24 +313,6 @@ function generateMockMatrixService(
         resources.set(roomId, this.roomResourcesCache.get(roomId)!);
       }
       return resources;
-    }
-
-    private updateRoomResourcesCache() {
-      for (let roomId of this.rooms.keys()) {
-        if (this.roomResourcesCache.has(roomId)) {
-          continue;
-        }
-        this.roomResourcesCache.set(
-          roomId,
-          getRoom(this, () => roomId),
-        );
-      }
-
-      for (let roomResourceId of this.roomResourcesCache.keys()) {
-        if (!this.rooms.has(roomResourceId)) {
-          this.roomResourcesCache.delete(roomResourceId);
-        }
-      }
     }
   }
   return MockMatrixService;
