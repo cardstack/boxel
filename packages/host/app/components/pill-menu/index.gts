@@ -162,7 +162,7 @@ export default class PillMenu extends Component<Signature> {
     </style>
   </template>
 
-  @tracked isExpanded = !Boolean(this.args.isExpandableHeader);
+  @tracked isExpanded = !this.args.isExpandableHeader;
 
   @action headerAction() {
     if (this.args.isExpandableHeader) {

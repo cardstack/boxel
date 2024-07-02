@@ -8,17 +8,18 @@ import { restartableTask } from 'ember-concurrency';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import { TrackedObject } from 'tracked-built-ins';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import ENV from '@cardstack/host/config/environment';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+
 import headerIcon from '../ai-assistant/ai-assist-icon@2x.webp';
 
 import PillMenu from './index';
+
 import type { PillMenuItem } from './index';
 
 const { ownRealmURL } = ENV;
@@ -148,7 +149,7 @@ export default class PillMenuUsage extends Component {
         />
         <Args.Action
           @name='onChooseCard'
-          @description='Action to take when a card is selected from the catalog. Can only be used if \`@canAttachCard\` is set to true.'
+          @description='Action to take when a card is selected from the catalog. "@canAttachCard" must be set to true.'
         />
       </:api>
     </FreestyleUsage>

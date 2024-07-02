@@ -12,11 +12,10 @@ import AiAssistantCardPicker from '@cardstack/host/components/ai-assistant/card-
 import AiAssistantChatInputUsage from '@cardstack/host/components/ai-assistant/chat-input/usage';
 import AiAssistantMessageUsage from '@cardstack/host/components/ai-assistant/message/usage';
 import AiAssistantSkillMenuUsage from '@cardstack/host/components/ai-assistant/skill-menu/usage';
+import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 import ProfileAvatarIconVisualUsage from '@cardstack/host/components/operator-mode/profile-avatar-icon/usage';
 import PillMenuUsage from '@cardstack/host/components/pill-menu/usage';
 import SearchSheetUsage from '@cardstack/host/components/search-sheet/usage';
-
-import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 
 import formatComponentName from '../helpers/format-component-name';
 
