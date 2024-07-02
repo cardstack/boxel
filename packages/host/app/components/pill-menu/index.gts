@@ -7,6 +7,7 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 
 import { AddButton, Header } from '@cardstack/boxel-ui/components';
+import { cn, not } from '@cardstack/boxel-ui/helpers';
 
 import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
 
@@ -39,7 +40,10 @@ interface Signature {
 
 export default class PillMenu extends Component<Signature> {
   <template>
-    <div class='pill-menu' ...attributes>
+    <div
+      class={{cn 'pill-menu' pill-menu--minimized=(not this.isExpanded)}}
+      ...attributes
+    >
       <Header class='menu-header' @title={{@title}}>
         <:icon>
           {{yield to='header-icon'}}
@@ -48,7 +52,13 @@ export default class PillMenu extends Component<Signature> {
           {{yield to='header-detail'}}
         </:detail>
         <:actions>
-          <button {{on 'click' this.headerAction}} class='header-button'>
+          <button
+            {{on 'click' this.headerAction}}
+            class={{cn
+              'header-button'
+              expandable-header-button=@isExpandableHeader
+            }}
+          >
             {{#if @isExpandableHeader}}
               {{if this.isExpanded 'Hide' 'Show'}}
             {{else}}
@@ -98,24 +108,37 @@ export default class PillMenu extends Component<Signature> {
         --boxel-header-padding: 0 0 0 var(--pill-menu-spacing);
         --boxel-header-detail-max-width: 100%;
         --boxel-header-letter-spacing: var(--boxel-lsp);
+        --button-outline: 2px;
 
         display: grid;
         max-height: 100%;
-        width: 100%;
+        width: var(--boxel-pill-menu-width, 100%);
         background-color: var(--boxel-light);
         border-radius: var(--boxel-border-radius-xl);
         color: var(--boxel-dark);
         font: var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp);
         box-shadow: var(--boxel-box-shadow);
+        overflow: hidden;
       }
       .header-button {
+        margin: var(--button-outline);
         padding: var(--pill-menu-spacing);
         background: none;
         border: none;
-        color: var(--boxel-450);
+        border-radius: var(--boxel-border-radius-xl);
         font: 700 var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-xs);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .header-button:focus:focus-visible {
+        outline-color: var(--boxel-highlight);
+      }
+      .expandable-header-button {
+        width: var(--boxel-pill-menu-expandable-header-button-width, 3.75rem);
+        color: var(--boxel-450);
         text-transform: uppercase;
       }
       .menu-content {
@@ -135,6 +158,9 @@ export default class PillMenu extends Component<Signature> {
         overflow-y: auto;
       }
       .pill-list:deep(.card-pill) {
+        --pill-gap: var(--boxel-sp-xxxs);
+        display: inline-grid;
+        grid-template-columns: auto 1fr auto;
         width: 100%;
       }
       .pill-list:deep(.card-content) {
@@ -143,6 +169,7 @@ export default class PillMenu extends Component<Signature> {
       .add-button {
         --icon-color: var(--boxel-highlight);
         width: max-content;
+        margin: var(--button-outline);
         padding: var(--pill-menu-spacing);
         background: none;
         box-shadow: none;
@@ -158,6 +185,9 @@ export default class PillMenu extends Component<Signature> {
         color: var(--boxel-highlight-hover);
         background: none;
         box-shadow: none;
+      }
+      .add-button:focus:focus-visible {
+        outline-color: var(--boxel-highlight);
       }
     </style>
   </template>

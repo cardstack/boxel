@@ -36,7 +36,6 @@ export default class PillMenuUsage extends Component {
   @tracked isExpandableHeader = false;
   @tracked items: PillMenuItem[] = [];
   @tracked canAttachCard = false;
-  @tracked content = 'You have selected the following cards:';
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);
@@ -107,7 +106,7 @@ export default class PillMenuUsage extends Component {
             <IconX width='10' height='10' alt='Close' />
           </:header-button>
           <:content>
-            {{this.content}}
+            You have selected the following cards:
           </:content>
         </PillMenu>
       </:example>
@@ -133,12 +132,6 @@ export default class PillMenuUsage extends Component {
         <Args.Action
           @name='headerAction'
           @description='Action to take when header button is clicked.'
-        />
-        <Args.String
-          @name='content'
-          @description='Optional inner content block of the pill menu'
-          @value={{this.content}}
-          @onInput={{fn (mut this.content)}}
         />
         <Args.Bool
           @name='canAttachCard'

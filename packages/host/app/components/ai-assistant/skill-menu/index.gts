@@ -35,7 +35,25 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
     </PillMenu>
     <style>
       .skill-menu {
+        --boxel-header-gap: var(--boxel-sp-xxs);
         --boxel-header-detail-margin-left: 0;
+      }
+      :global(.skill-menu.pill-menu--minimized) {
+        --boxel-pill-menu-width: 3.75rem;
+        white-space: nowrap;
+        transition: width 0.2s ease-in;
+      }
+      :global(.skill-menu.pill-menu--minimized:hover) {
+        --boxel-pill-menu-width: 100%;
+      }
+      :global(.skill-menu.pill-menu--minimized .expandable-header-button),
+      :global(.skill-menu.pill-menu--minimized .skills-length) {
+        visibility: collapse;
+        transition: visibility 0.2s ease-in;
+      }
+      :global(.skill-menu.pill-menu--minimized:hover .expandable-header-button),
+      :global(.skill-menu.pill-menu--minimized:hover .skills-length) {
+        visibility: visible;
       }
       .header-icon {
         width: 20px;
