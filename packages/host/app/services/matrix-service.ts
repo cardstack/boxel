@@ -53,9 +53,9 @@ import type { RoomField } from 'https://cardstack.com/base/room';
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
 import { importResource } from '../resources/import';
 
-import RealmService from './realm';
-
 import { RoomResource, getRoom } from '../resources/room';
+
+import RealmService from './realm';
 
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
