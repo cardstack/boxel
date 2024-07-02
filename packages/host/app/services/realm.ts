@@ -98,6 +98,9 @@ class RealmResource {
   private loggingIn: Promise<void> | undefined;
 
   async login(): Promise<void> {
+    if (this.auth.type === 'logged-in') {
+      return;
+    }
     if (!this.loggingIn) {
       this.loggingIn = this.loginTask.perform();
     }
@@ -182,7 +185,10 @@ class RealmResource {
     );
 
     await rawTimeout(refreshMs);
-    await this.login();
+    if (!this.loggingIn) {
+      this.loggingIn = this.loginTask.perform();
+      await this.loggingIn;
+    }
   });
 }
 
