@@ -7,6 +7,7 @@ import { module, test } from 'qunit';
 import {
   baseRealm,
   baseCardRef,
+  internalKeyFor,
   type CodeRef,
   type LooseSingleCardDocument,
   type IndexedInstance,
@@ -1017,6 +1018,57 @@ module(`Integration | search-index`, function (hooks) {
     }
   });
 
+  test('can capture atom html when indexing a card', async function (assert) {
+    let cardApi: typeof import('https://cardstack.com/base/card-api');
+    let string: typeof import('https://cardstack.com/base/string');
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    string = await loader.import(`${baseRealm.url}string`);
+
+    let { field, contains, CardDef, Component } = cardApi;
+    let { default: StringField } = string;
+
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h1><@fields.firstName /></h1>
+        </template>
+      };
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <div class='atom'>{{@model.firstName}}</div>
+        </template>
+      };
+    }
+    let { realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'person.gts': { Person },
+        'vangogh.json': {
+          data: {
+            attributes: {
+              firstName: 'Van Gogh',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person',
+                name: 'Person',
+              },
+            },
+          },
+        },
+      },
+    });
+    let { atomHtml } =
+      (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
+
+    assert.strictEqual(
+      trimCardContainer(stripScopedCSSAttributes(atomHtml!)),
+      cleanWhiteSpace(`<div class="atom">Van Gogh</div>`),
+      'atom html is correct',
+    );
+  });
+
   test('can capture css when indexing a card', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
@@ -1073,6 +1125,102 @@ module(`Integration | search-index`, function (hooks) {
       cleanWhiteSpace(fragment),
       cleanWhiteSpace(`<h2 ${scope}> Mango </h2>`),
       'the HTML is correct',
+    );
+  });
+
+  test(`can generate embedded HTML for instance's card class hierarchy`, async function (assert) {
+    let cardApi: typeof import('https://cardstack.com/base/card-api');
+    let string: typeof import('https://cardstack.com/base/string');
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    string = await loader.import(`${baseRealm.url}string`);
+
+    let { field, contains, CardDef, Component } = cardApi;
+    let { default: StringField } = string;
+
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+      static embedded = class Isolated extends Component<typeof this> {
+        <template>
+          <h1> Person Embedded Card: <@fields.firstName /></h1>
+        </template>
+      };
+    }
+
+    class FancyPerson extends Person {
+      @field favoriteColor = contains(StringField);
+      static embedded = class Isolated extends Component<typeof this> {
+        <template>
+          <h1>
+            Fancy Person Embedded Card:
+            <@fields.firstName />
+            -
+            <@fields.favoriteColor /></h1>
+        </template>
+      };
+    }
+
+    let { realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'person.gts': { Person },
+        'fancy-person.gts': { FancyPerson },
+        'germaine.json': {
+          data: {
+            attributes: {
+              firstName: 'Germaine',
+              favoriteColor: 'hot pink',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './fancy-person',
+                name: 'FancyPerson',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let { embeddedHtml, _embeddedHtmlByClassHierarchy } =
+      (await getInstance(realm, new URL(`${testRealmURL}germaine`))) ?? {};
+    assert.strictEqual(
+      trimCardContainer(stripScopedCSSAttributes(embeddedHtml!)),
+      cleanWhiteSpace(
+        `<h1> Fancy Person Embedded Card: Germaine - hot pink </h1>`,
+      ),
+      'default embedded HTML is correct',
+    );
+    let embeddedHtmls = _embeddedHtmlByClassHierarchy!;
+    let cardDefRefURL = internalKeyFor(baseCardRef, undefined);
+    assert.deepEqual(
+      Object.keys(embeddedHtmls),
+      ['default', `${testRealmURL}person/Person`, cardDefRefURL],
+      'embedded class hierarchy is correct',
+    );
+    assert.strictEqual(
+      trimCardContainer(stripScopedCSSAttributes(embeddedHtmls['default'])),
+      cleanWhiteSpace(
+        `<h1> Fancy Person Embedded Card: Germaine - hot pink </h1>`,
+      ),
+      'default embedded HTML is correct',
+    );
+    assert.strictEqual(
+      trimCardContainer(
+        stripScopedCSSAttributes(embeddedHtmls[`${testRealmURL}person/Person`]),
+      ),
+      cleanWhiteSpace(`<h1> Person Embedded Card: Germaine </h1>`),
+      `${testRealmURL}person/Person embedded HTML is correct`,
+    );
+    assert.strictEqual(
+      trimCardContainer(stripScopedCSSAttributes(embeddedHtmls[cardDefRefURL])),
+      // TODO the default embeded template cards will eventually change as part of CS-6831
+      cleanWhiteSpace(`
+        <div class="missing-embedded-template card">
+          <span data-test-missing-embedded-template-text>Missing embedded component for CardDef: Card</span>
+          <!---->
+        </div>
+      `),
+      `${cardDefRefURL} embedded HTML is correct`,
     );
   });
 

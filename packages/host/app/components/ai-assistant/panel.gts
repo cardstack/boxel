@@ -10,7 +10,6 @@ import { tracked, cached } from '@glimmer/tracking';
 import { restartableTask, timeout } from 'ember-concurrency';
 import { Velcro } from 'ember-velcro';
 import window from 'ember-window-mock';
-import { TrackedMap } from 'tracked-built-ins';
 
 import {
   Button,
@@ -41,8 +40,6 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import type { RoomField } from 'https://cardstack.com/base/room';
 
-import { getRoom, RoomResource } from '../../resources/room';
-
 import assistantIcon from './ai-assist-icon.webp';
 
 const { matrixServerName } = ENV;
@@ -57,7 +54,7 @@ interface Signature {
 }
 
 // Local storage keys
-let currentRoomIdPersistenceKey = 'aiPanelCurrentRoomId';
+export const currentRoomIdPersistenceKey = 'aiPanelCurrentRoomId';
 let newSessionIdPersistenceKey = 'aiPanelNewSessionId';
 
 export default class AiAssistantPanel extends Component<Signature> {
@@ -390,14 +387,7 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @cached
   private get roomResources() {
-    let resources = new TrackedMap<string, RoomResource>();
-    for (let roomId of this.matrixService.rooms.keys()) {
-      resources.set(
-        roomId,
-        getRoom(this, () => roomId),
-      );
-    }
-    return resources;
+    return this.matrixService.roomResources;
   }
 
   private loadRoomsTask = restartableTask(async () => {

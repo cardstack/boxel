@@ -5,7 +5,7 @@ import {
   type CardMessageContent,
   type CardFragmentContent,
   type MatrixEvent as DiscreteMatrixEvent,
-} from 'https://cardstack.com/base/room';
+} from 'https://cardstack.com/base/matrix-event';
 
 import { eventDebounceMs } from '../matrix-utils';
 
@@ -104,7 +104,7 @@ async function processDecryptedEvent(
     return;
   }
 
-  let roomField = await context.rooms.get(roomId);
+  let roomField = await context.getRoom(roomId);
   // patch in any missing room events--this will support dealing with local
   // echoes, migrating older histories as well as handle any matrix syncing gaps
   // that might occur

@@ -126,7 +126,7 @@ export default class CreateFileModal extends Component<Signature> {
                   >
                     <div class='field-contents'>
                       {{#if this.definitionClass}}
-                        <Pill @inert={{true}}>
+                        <Pill class='definition-pill'>
                           {{this.definitionClass.displayName}}
                         </Pill>
                       {{else}}
@@ -314,6 +314,9 @@ export default class CreateFileModal extends Component<Signature> {
       .error-message {
         color: var(--boxel-error-100);
         margin-top: var(--boxel-sp-lg);
+      }
+      .definition-pill {
+        padding-left: var(--boxel-sp-xxxs);
       }
     </style>
   </template>
@@ -780,11 +783,7 @@ class SelectedTypePill extends Component<SelectedTypePillSignature> {
   @service private declare realm: RealmService;
 
   <template>
-    <Pill
-      @inert={{true}}
-      class='selected-type'
-      data-test-selected-type={{@entry.title}}
-    >
+    <Pill class='selected-type' data-test-selected-type={{@entry.title}}>
       <:icon>
         <RealmIcon @realmInfo={{this.realm.info @entry.id}} />
       </:icon>

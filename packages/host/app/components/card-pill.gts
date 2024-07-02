@@ -15,7 +15,7 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 import RealmService from '../services/realm';
 
 interface CardPillSignature {
-  Element: HTMLDivElement;
+  Element: HTMLDivElement | HTMLButtonElement;
   Args: {
     card: CardDef;
     isAutoAttachedCard?: boolean;
@@ -32,10 +32,10 @@ export default class CardPill extends Component<CardPillSignature> {
 
   <template>
     <Pill
-      @inert={{true}}
       class={{cn 'card-pill' is-autoattached=@isAutoAttachedCard}}
       data-test-attached-card={{@card.id}}
       data-test-autoattached-card={{@isAutoAttachedCard}}
+      ...attributes
     >
       <:icon>
         <RealmIcon
@@ -59,6 +59,28 @@ export default class CardPill extends Component<CardPillSignature> {
       </:default>
     </Pill>
     <style>
+      .card-pill {
+        --pill-icon-size: 18px;
+        border: 1px solid var(--boxel-400);
+        height: var(--pill-height, 1.875rem);
+      }
+      .is-autoattached {
+        border-style: dashed;
+      }
+      .card-content {
+        display: flex;
+        max-width: 100px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .card-content > :deep(.atom-format) {
+        background: none;
+        border-radius: 0;
+        white-space: inherit;
+        overflow: inherit;
+        text-overflow: inherit;
+      }
       .remove-button {
         --boxel-icon-button-width: 12px;
         --boxel-icon-button-height: 25px;
@@ -71,31 +93,6 @@ export default class CardPill extends Component<CardPillSignature> {
       .remove-button:focus:not(:disabled),
       .remove-button:hover:not(:disabled) {
         --icon-color: var(--boxel-highlight);
-      }
-      .card-pill {
-        --pill-icon-size: 18px;
-        padding: var(--boxel-sp-5xs);
-        background-color: var(--boxel-light);
-        border: 1px solid var(--boxel-400);
-        height: var(--pill-height);
-      }
-      .card-title {
-        max-width: 10rem;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .is-autoattached {
-        border-style: dashed;
-      }
-      .card-content {
-        display: flex;
-        max-width: 100px;
-      }
-      :deep(.atom-format) {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
       }
     </style>
   </template>

@@ -211,6 +211,7 @@ module('Realm Server', function (hooks) {
             id: `${testRealmHref}person-1`,
             type: 'card',
             attributes: {
+              title: 'Mango',
               firstName: 'Mango',
               description: null,
               thumbnailURL: null,
@@ -1836,6 +1837,7 @@ module('Realm Server', function (hooks) {
             id: `${testRealmHref}new-card`,
             type: 'card',
             attributes: {
+              title: 'Mango',
               firstName: 'Mango',
               description: null,
               thumbnailURL: null,

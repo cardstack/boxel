@@ -50,8 +50,8 @@ export default class RealmDropdown extends Component<Signature> {
           {{#if this.selectedRealm}}
             <RealmIcon
               class='icon'
-              width='20'
-              height='20'
+              width='18'
+              height='18'
               @realmInfo={{this.selectedRealm}}
             />
             <div class='selected-item' data-test-selected-realm>
@@ -60,7 +60,7 @@ export default class RealmDropdown extends Component<Signature> {
           {{else}}
             Select a workspace
           {{/if}}
-          <DropdownArrowDown class='arrow-icon' width='18px' height='18px' />
+          <DropdownArrowDown class='arrow-icon' width='13px' height='13px' />
         </Button>
       </:trigger>
       <:content as |dd|>
@@ -81,14 +81,14 @@ export default class RealmDropdown extends Component<Signature> {
         width: var(--realm-dropdown-width, auto);
         display: flex;
         justify-content: flex-start;
-        gap: var(--boxel-sp-xxxs);
-        padding: var(--boxel-sp-xxxs);
+        gap: var(--boxel-sp-5xs);
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs) var(--boxel-sp-5xs)
+          var(--boxel-sp-5xs);
         border-radius: var(--boxel-border-radius);
       }
       .arrow-icon {
         --icon-color: var(--boxel-highlight);
         margin-left: auto;
-        padding-right: var(--boxel-sp-xxxs);
       }
       .realm-dropdown-trigger[aria-expanded='true'] .arrow-icon {
         transform: scaleY(-1);
@@ -99,7 +99,9 @@ export default class RealmDropdown extends Component<Signature> {
         white-space: nowrap;
       }
       .realm-dropdown-menu {
-        --boxel-menu-item-content-padding: var(--boxel-sp-xs);
+        --boxel-menu-item-content-padding: var(--boxel-sp-xxs)
+          var(--boxel-sp-xxs) var(--boxel-sp-xxs) var(--boxel-sp-xxxs);
+        --boxel-menu-item-gap: var(--boxel-sp-4xs);
         width: var(--realm-dropdown-width, auto);
       }
     </style>

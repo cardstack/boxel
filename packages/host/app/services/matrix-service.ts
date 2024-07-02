@@ -1,7 +1,7 @@
 import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import Service, { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import format from 'date-fns/format';
 
@@ -41,19 +41,21 @@ import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import * as RoomModule from 'https://cardstack.com/base/room';
 import type {
-  RoomField,
   MatrixEvent as DiscreteMatrixEvent,
   CardMessageContent,
   CardFragmentContent,
   ReactionEventContent,
-} from 'https://cardstack.com/base/room';
+} from 'https://cardstack.com/base/matrix-event';
+import * as RoomModule from 'https://cardstack.com/base/room';
+import type { RoomField } from 'https://cardstack.com/base/room';
 
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
 import { importResource } from '../resources/import';
 
 import RealmService from './realm';
+
+import { RoomResource, getRoom } from '../resources/room';
 
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
@@ -83,7 +85,8 @@ export default class MatrixService extends Service {
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
-  rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
+  private rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
+  private roomResourcesCache: Map<string, RoomResource> = new Map();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
   failedCommandState: TrackedMap<string, Error> = new TrackedMap();
@@ -591,7 +594,7 @@ export default class MatrixService extends Service {
         await opts.onMessages(events);
       }
       messages.push(...events);
-    } while (!from);
+    } while (from);
     return messages;
   }
 
@@ -724,6 +727,32 @@ export default class MatrixService extends Service {
         throw error;
       }
     }
+  }
+
+  getRoom(roomId: string) {
+    return this.rooms.get(roomId);
+  }
+
+  setRoom(roomId: string, roomPromise: Promise<RoomField>) {
+    this.rooms.set(roomId, roomPromise);
+    if (!this.roomResourcesCache.has(roomId)) {
+      this.roomResourcesCache.set(
+        roomId,
+        getRoom(this, () => roomId),
+      );
+    }
+  }
+
+  @cached
+  get roomResources() {
+    let resources: TrackedMap<string, RoomResource> = new TrackedMap();
+    for (let roomId of this.rooms.keys()) {
+      if (!this.roomResourcesCache.get(roomId)) {
+        continue;
+      }
+      resources.set(roomId, this.roomResourcesCache.get(roomId)!);
+    }
+    return resources;
   }
 
   private resetState() {

@@ -7,6 +7,5 @@ import './module-syntax-test';
 import './permissions/permission-checker-test';
 import './auth-client-test';
 import './virtual-network-test';
-import './pg-test';
 import './query-test';
 import './queue-test';
