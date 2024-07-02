@@ -75,7 +75,14 @@ export type OperatorModeContext = {
   openCardIds: string[];
 };
 
-export default class MatrixService extends Service {
+export interface ContextualService<C> {
+  get context(): C;
+}
+
+export default class MatrixService
+  extends Service
+  implements ContextualService<Context>
+{
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare router: RouterService;
@@ -102,6 +109,21 @@ export default class MatrixService extends Service {
   constructor(owner: Owner) {
     super(owner);
     this.#ready = this.loadSDK.perform();
+  }
+
+  get context(): Context {
+    return {
+      rooms: this.rooms,
+      cardAPI: this.cardAPI,
+      loaderService: this.loaderService,
+      flushTimeline: this.flushTimeline,
+      flushMembership: this.flushMembership,
+      roomMembershipQueue: this.roomMembershipQueue,
+      timelineQueue: this.timelineQueue,
+      client: this._client,
+      matrixSDK: undefined,
+      addEventReadReceipt: this.addEventReadReceipt,
+    };
   }
 
   get listRooms() {
