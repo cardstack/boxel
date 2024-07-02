@@ -9,7 +9,7 @@ import { restartableTask } from 'ember-concurrency';
 import { AddButton, Header } from '@cardstack/boxel-ui/components';
 import { cn, not } from '@cardstack/boxel-ui/helpers';
 
-import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
+import { chooseCard, baseCardRef, type Query } from '@cardstack/runtime-common';
 
 import CardPill from '@cardstack/host/components/card-pill';
 
@@ -24,10 +24,12 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     title?: string;
+    items: PillMenuItem[];
+    itemDisplayName?: string;
     isExpandableHeader?: boolean;
     headerAction?: () => void;
-    items: PillMenuItem[];
     canAttachCard?: boolean;
+    query?: Query;
     onChooseCard?: (card: CardDef) => void;
   };
   Blocks: {
@@ -96,7 +98,8 @@ export default class PillMenu extends Component<Signature> {
               {{on 'click' this.attachCard}}
               @disabled={{this.doAttachCard.isRunning}}
             >
-              Add Item
+              Add
+              {{if @itemDisplayName @itemDisplayName 'Item'}}
             </AddButton>
           </footer>
         {{/if}}
@@ -112,6 +115,7 @@ export default class PillMenu extends Component<Signature> {
 
         display: grid;
         max-height: 100%;
+        min-height: max-content;
         width: var(--boxel-pill-menu-width, 100%);
         background-color: var(--boxel-light);
         border-radius: var(--boxel-border-radius-xl);
@@ -119,7 +123,12 @@ export default class PillMenu extends Component<Signature> {
         font: var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp);
         box-shadow: var(--boxel-box-shadow);
+      }
+      .menu-header {
         overflow: hidden;
+      }
+      .menu-header :deep(.title) {
+        font: 700 var(--boxel-font);
       }
       .header-button {
         margin: var(--button-outline);
@@ -148,6 +157,7 @@ export default class PillMenu extends Component<Signature> {
         );
         display: grid;
         gap: var(--pill-menu-spacing);
+        overflow: hidden;
       }
       .pill-list {
         display: grid;
@@ -217,9 +227,8 @@ export default class PillMenu extends Component<Signature> {
   }
 
   private doAttachCard = restartableTask(async () => {
-    let card: CardDef | undefined = await chooseCard({
-      filter: { type: baseCardRef },
-    });
+    let query = this.args.query ?? { filter: { type: baseCardRef } };
+    let card: CardDef | undefined = await chooseCard(query);
     if (card) {
       this.args.onChooseCard?.(card);
     }

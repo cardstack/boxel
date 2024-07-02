@@ -10,6 +10,8 @@ import { TrackedObject } from 'tracked-built-ins';
 
 import { IconX } from '@cardstack/boxel-ui/icons';
 
+import { getPlural } from '@cardstack/runtime-common';
+
 import ENV from '@cardstack/host/config/environment';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
@@ -35,6 +37,7 @@ export default class PillMenuUsage extends Component {
   @tracked title = 'Pill Menu';
   @tracked isExpandableHeader = false;
   @tracked items: PillMenuItem[] = [];
+  @tracked itemDisplayName = 'Card';
   @tracked canAttachCard = false;
 
   constructor(owner: Owner, args: {}) {
@@ -82,9 +85,10 @@ export default class PillMenuUsage extends Component {
       <:example>
         <PillMenu
           @title={{this.title}}
+          @items={{this.items}}
+          @itemDisplayName={{this.itemDisplayName}}
           @isExpandableHeader={{this.isExpandableHeader}}
           @headerAction={{this.headerAction}}
-          @items={{this.items}}
           @canAttachCard={{this.canAttachCard}}
           @onChooseCard={{this.onChooseCard}}
         >
@@ -100,7 +104,8 @@ export default class PillMenuUsage extends Component {
             {{this.activeItems.length}}
             of
             {{this.items.length}}
-            Items Are Active
+            {{getPlural this.itemDisplayName}}
+            Are Active
           </:headerDetail>
           <:headerButton>
             <IconX width='10' height='10' alt='Close' />
@@ -122,6 +127,12 @@ export default class PillMenuUsage extends Component {
           @description='Cards to be displayed on the pill menu.'
           @value={{this.items}}
         />
+        <Args.String
+          @name='itemDisplayName'
+          @description='Display name used when referring to menu items'
+          @value={{this.itemDisplayName}}
+          @onInput={{fn (mut this.itemDisplayName)}}
+        />
         <Args.Bool
           @name='isExpandableHeader'
           @description='Whether the menu content can be hidden or shown by clicking the header button.'
@@ -139,6 +150,10 @@ export default class PillMenuUsage extends Component {
           @defaultValue={{false}}
           @value={{this.canAttachCard}}
           @onInput={{fn (mut this.canAttachCard)}}
+        />
+        <Args.Object
+          @name='query'
+          @description='Query for filtering the cards displayed in the catalog.'
         />
         <Args.Action
           @name='onChooseCard'
