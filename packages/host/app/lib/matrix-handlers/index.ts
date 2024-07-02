@@ -13,6 +13,7 @@ import type { RoomField } from 'https://cardstack.com/base/room';
 
 import type LoaderService from '../../services/loader-service';
 import type * as MatrixSDK from 'matrix-js-sdk';
+import { TrackedMap } from 'tracked-built-ins/.';
 
 export * as Membership from './membership';
 export * as Timeline from './timeline';
@@ -44,6 +45,7 @@ export interface EventSendingContext {
 }
 
 export interface Context extends EventSendingContext {
+  rooms: TrackedMap<string, RoomField>;
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[];

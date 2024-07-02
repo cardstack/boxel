@@ -96,7 +96,7 @@ export default class MatrixService
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
-  private rooms: TrackedMap<string, RoomField> = new TrackedMap();
+  rooms: TrackedMap<string, RoomField> = new TrackedMap();
   private roomResourcesCache: Map<string, RoomResource> = new Map();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
@@ -128,6 +128,8 @@ export default class MatrixService
       client: this._client,
       matrixSDK: this.#matrixSDK,
       addEventReadReceipt: this.addEventReadReceipt,
+      setRoom: this.setRoom,
+      getRoom: this.getRoom,
     };
   }
 
