@@ -1208,11 +1208,25 @@ module(`Integration | search-index`, function (hooks) {
     );
     assert.strictEqual(
       trimCardContainer(stripScopedCSSAttributes(embeddedHtmls[cardDefRefURL])),
-      // TODO the default embeded template cards will eventually change as part of CS-6831
       cleanWhiteSpace(`
-        <div class="missing-embedded-template card">
-          <span data-test-missing-embedded-template-text>Missing embedded component for CardDef: Card</span>
-          <!---->
+        <div class="embedded-template">
+          <div class="container">
+            <div class="contents">
+              <div class="thumbnail-section">
+                <div class="card-thumbnail">
+                  <div class="card-thumbnail-text" data-test-card-thumbnail-text>Card</div>
+                </div> 
+                <div class="thumbnail-subsection">
+                  <div class="thumbnail-subsection">
+                    <h3 class="card-title" data-test-card-title></h3>
+                  </div>
+                  <div class="thumbnail-subsection">
+                    <h4 class="card-display-name" data-test-card-display-name>Card</h4>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       `),
       `${cardDefRefURL} embedded HTML is correct`,
@@ -2574,6 +2588,7 @@ module(`Integration | search-index`, function (hooks) {
         description: 'Dog friend',
         friend: {
           id: `${testRealmURL}Friend/hassan`,
+          title: 'Hassan',
           firstName: 'Hassan',
           friend: {
             id: `${testRealmURL}Friend/mango`,
@@ -2749,6 +2764,7 @@ module(`Integration | search-index`, function (hooks) {
               id: vanGoghID,
               firstName: 'Van Gogh',
               friends: [{ id: hassanID }],
+              title: 'Van Gogh',
             },
           ],
         },
@@ -2862,6 +2878,7 @@ module(`Integration | search-index`, function (hooks) {
             {
               id: hassanID,
               firstName: 'Hassan',
+              title: 'Hassan',
               friends: [
                 { id: mangoID },
                 {
@@ -3056,6 +3073,7 @@ module(`Integration | search-index`, function (hooks) {
         'https://packages/@glimmer/tracking',
         'https://packages/ember-concurrency',
         'https://packages/ember-concurrency/-private/async-arrow-runtime',
+        'https://packages/ember-css-url',
         'https://packages/ember-modifier',
         'https://packages/ember-provide-consume-context',
         'https://packages/lodash',
