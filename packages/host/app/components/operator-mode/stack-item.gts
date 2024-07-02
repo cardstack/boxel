@@ -47,7 +47,8 @@ import {
   type Actions,
   cardTypeDisplayName,
   CardContextName,
-  RealmSessionContextName,
+  PermissionsContextName,
+  type Permissions,
   Deferred,
 } from '@cardstack/runtime-common';
 
@@ -57,11 +58,9 @@ import config from '@cardstack/host/config/environment';
 
 import { type StackItem } from '@cardstack/host/lib/stack-item';
 
-import {
-  type RealmSessionResource,
-  getRealmSession,
-} from '@cardstack/host/resources/realm-session';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
+
+import RealmService from '@cardstack/host/services/realm';
 
 import type {
   CardDef,
@@ -106,6 +105,8 @@ export interface RenderedCardForOverlayActions {
 export default class OperatorModeStackItem extends Component<Signature> {
   @service private declare cardService: CardService;
   @service private declare environmentService: EnvironmentService;
+  @service private declare realm: RealmService;
+
   @tracked private selectedCards = new TrackedArray<CardDef>([]);
   @tracked private isHoverOnRealmIcon = false;
   @tracked private isSaving = false;
@@ -116,9 +117,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private contentEl: HTMLElement | undefined;
   private containerEl: HTMLElement | undefined;
 
-  @provide(RealmSessionContextName)
-  private realmSession: RealmSessionResource | undefined;
-
+  @provide(PermissionsContextName)
+  get permissions(): Permissions {
+    return this.realm.permissions(this.card.id);
+  }
   cardTracker = new ElementTracker<{
     card: CardDef;
     format: Format | 'data';
@@ -220,11 +222,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.selectedCards.splice(0, this.selectedCards.length);
   };
 
-  @cached
-  private get iconURL() {
-    return this.fetchRealmInfo.value?.iconURL;
-  }
-
   private get realmName() {
     return this.fetchRealmInfo.value?.name;
   }
@@ -238,22 +235,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.isHoverOnRealmIcon = !this.isHoverOnRealmIcon;
   }
 
-  private get headerIcon() {
-    return {
-      URL: this.iconURL,
-      onMouseEnter: this.hoverOnRealmIcon,
-      onMouseLeave: this.hoverOnRealmIcon,
-    };
-  }
-
   private get headerTitle() {
     return this.isHoverOnRealmIcon && this.realmName
       ? `In ${this.realmName}`
       : cardTypeDisplayName(this.card);
-  }
-
-  private get canWrite() {
-    return this.realmSession?.canWrite;
   }
 
   private get moreOptionsMenuItems() {
@@ -264,7 +249,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         disabled: !this.card.id,
       }),
     ];
-    if (this.canWrite) {
+    if (this.realm.canWrite(this.card.id)) {
       menuItems.push(
         new MenuItem('Delete', 'action', {
           action: () => this.args.publicAPI.delete(this.card),
@@ -284,10 +269,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private loadCard = restartableTask(async () => {
     await this.args.item.ready();
-    this.realmSession = getRealmSession(this, {
-      card: () => this.card,
-    });
-    await this.realmSession.loaded;
   });
 
   private subscribeToCard = task(async () => {
@@ -424,19 +405,20 @@ export default class OperatorModeStackItem extends Component<Signature> {
             data-test-stack-card-header
           >
             <:icon>
-              {{#if this.headerIcon.URL}}
-                <RealmIcon
-                  @realmIconURL={{this.headerIcon.URL}}
-                  @realmName={{this.realmName}}
-                  class='header-icon'
-                  data-test-boxel-header-icon={{this.headerIcon.URL}}
-                  {{on 'mouseenter' this.headerIcon.onMouseEnter}}
-                  {{on 'mouseleave' this.headerIcon.onMouseLeave}}
-                />
-              {{/if}}
+              {{#let (this.realm.info this.card.id) as |realmInfo|}}
+                {{#if realmInfo.iconURL}}
+                  <RealmIcon
+                    @realmInfo={{realmInfo}}
+                    class='header-icon'
+                    data-test-boxel-header-icon={{realmInfo.iconURL}}
+                    {{on 'mouseenter' this.hoverOnRealmIcon}}
+                    {{on 'mouseleave' this.hoverOnRealmIcon}}
+                  />
+                {{/if}}
+              {{/let}}
             </:icon>
             <:actions>
-              {{#if this.canWrite}}
+              {{#if (this.realm.canWrite this.card.id)}}
                 {{#if (eq @item.format 'isolated')}}
                   <Tooltip @placement='top'>
                     <:trigger>

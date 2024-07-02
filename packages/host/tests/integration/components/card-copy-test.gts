@@ -62,7 +62,7 @@ module('Integration | card-copy', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMatrixServiceMock(hooks, { autostart: true });
   setupWindowMock(hooks);
 
   hooks.beforeEach(async function () {

@@ -51,6 +51,7 @@ export * from './stream';
 export * from './realm';
 export * from './fetcher';
 export * from './scoped-css';
+export * from './authorization-middleware';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
 export { RealmPaths, Loader, type LocalPath, type Query };
@@ -70,11 +71,7 @@ export const isNode =
 
 export { SupportedMimeType } from './router';
 export { VirtualNetwork, type ResponseWithNodeStream } from './virtual-network';
-export {
-  IRealmAuthDataSource,
-  RealmAuthDataSource,
-} from './realm-auth-data-source';
-export { addAuthorizationHeader } from './add-authorization-header';
+export { RealmAuthDataSource } from './realm-auth-data-source';
 
 export type {
   Kind,

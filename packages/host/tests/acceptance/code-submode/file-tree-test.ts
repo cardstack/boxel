@@ -25,8 +25,6 @@ import {
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
-let realmPermissions: { [realmURL: string]: ('read' | 'write')[] };
-
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
 
@@ -193,10 +191,10 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks, { realmPermissions: () => realmPermissions });
+  let { setRealmPermissions } = setupMatrixServiceMock(hooks);
 
   hooks.beforeEach(async function () {
-    realmPermissions = { [testRealmURL]: ['read', 'write'] };
+    setRealmPermissions({ [testRealmURL]: ['read', 'write'] });
 
     const numStubFiles = 100;
     let stubFiles: Record<string, string> = {};
@@ -353,7 +351,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
 
   module('when the user lacks write permissions', function (hooks) {
     hooks.beforeEach(function () {
-      realmPermissions = { [testRealmURL]: ['read'] };
+      setRealmPermissions({ [testRealmURL]: ['read'] });
     });
 
     test('it is reflected in the realm header', async function (assert) {
@@ -807,7 +805,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       ],
       submode: 'code',
       fileView: 'browser',
-      codePath: `http://localhost:4201/base/cards-grid.gts`,
+      codePath: `https://cardstack.com/base/cards-grid.gts`,
     });
 
     await waitForCodeEditor();
@@ -818,7 +816,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     assert.dom('[data-test-file="cards-grid.gts"]').hasClass('selected');
   });
 
-  test('can scroll to bottom of the file tree in the base realm', async function (assert) {
+  test('can scroll to bottom of the file tree', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -830,12 +828,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       ],
       submode: 'code',
       fileView: 'browser',
-      // This issue is specific to base realm
-      // because base realm has different resolved ('http://localhost:4201/base')
-      // and unresolved URL ('http://cardstack.com/base'),
-      // if we are not consistent on using the URL as `keyScrollPosition` in `ScrollPositionService`
-      // it can cause the scroll position to jump back to the top.
-      codePath: `http://localhost:4201/base/cards-grid.gts`,
+      codePath: `https://cardstack.com/base/cards-grid.gts`,
     });
 
     await waitFor('[data-test-togglable-left-panel]');

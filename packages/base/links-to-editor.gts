@@ -6,7 +6,7 @@ import {
 } from 'ember-concurrency';
 import {
   DefaultFormatProvider,
-  RealmSessionConsumer,
+  PermissionsConsumer,
   getBoxComponent,
 } from './field-component';
 import {
@@ -25,7 +25,6 @@ import {
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
 import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
 import { consume } from 'ember-provide-consume-context';
-import { and } from '@cardstack/boxel-ui/helpers';
 
 interface Signature {
   Args: {
@@ -38,21 +37,25 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
   @consume(CardContextName) declare cardContext: CardContext;
 
   <template>
-    <RealmSessionConsumer as |realmSession|>
+    <PermissionsConsumer as |permissions|>
       <div class='links-to-editor' data-test-links-to-editor={{@field.name}}>
-        {{#if (and realmSession.canWrite this.isEmpty)}}
-          <AddButton
-            class='add-new'
-            @variant='full-width'
-            @hideIcon={{true}}
-            {{on 'click' this.add}}
-            data-test-add-new
-          >
-            Link
-            {{@field.card.displayName}}
-          </AddButton>
+        {{#if this.isEmpty}}
+          {{#if permissions.canWrite}}
+            <AddButton
+              class='add-new'
+              @variant='full-width'
+              @hideIcon={{true}}
+              {{on 'click' this.add}}
+              data-test-add-new
+            >
+              Link
+              {{@field.card.displayName}}
+            </AddButton>
+          {{else}}
+            - Empty -
+          {{/if}}
         {{else}}
-          {{#if realmSession.canWrite}}
+          {{#if permissions.canWrite}}
             <IconButton
               @variant='primary'
               @icon={{IconMinusCircle}}
@@ -70,7 +73,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
           </DefaultFormatProvider>
         {{/if}}
       </div>
-    </RealmSessionConsumer>
+    </PermissionsConsumer>
     <style>
       .links-to-editor {
         --remove-icon-size: var(--boxel-icon-lg);

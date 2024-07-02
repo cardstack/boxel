@@ -11,7 +11,7 @@ import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
 module('Integration | Component | RoomMessage', function (hooks) {
   setupRenderingTest(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMatrixServiceMock(hooks, { autostart: true });
 
   function setupTestScenario(
     isStreaming: boolean,

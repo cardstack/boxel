@@ -14,11 +14,10 @@ import {
 } from '@cardstack/boxel-ui/icons';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
-import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
-import {
-  type RealmSessionResource,
-  getRealmSession,
-} from '@cardstack/host/resources/realm-session';
+
+import RealmService from '@cardstack/host/services/realm';
+
+import WithLoadedRealm from '../with-loaded-realm';
 
 import Directory from './directory';
 
@@ -30,22 +29,16 @@ interface Signature {
 
 export default class FileTree extends Component<Signature> {
   <template>
-    <div class='realm-info'>
-      <RealmInfoProvider @realmURL={{@realmURL}}>
-        <:ready as |realmInfo|>
-          <RealmIcon
-            @realmIconURL={{realmInfo.iconURL}}
-            @realmName={{realmInfo.name}}
-            class='icon'
-          />
-          {{#let (concat 'In ' realmInfo.name) as |realmTitle|}}
-            <span
-              class='realm-title'
-              data-test-realm-name={{realmInfo.name}}
-              title={{realmTitle}}
-            >{{realmTitle}}</span>
-          {{/let}}
-          {{#if this.canWrite}}
+    <WithLoadedRealm @realmURL={{@realmURL.href}} as |realm|>
+      <div class='realm-info'>
+        <RealmIcon @realmInfo={{realm.info}} class='icon' />
+        {{#let (concat 'In ' realm.info.name) as |realmTitle|}}
+          <span
+            class='realm-title'
+            data-test-realm-name={{realm.info.name}}
+            title={{realmTitle}}
+          >{{realmTitle}}</span>
+          {{#if realm.canWrite}}
             <Tooltip @placement='top' class='editability-icon'>
               <:trigger>
                 <IconPencilNotCrossedOut
@@ -73,17 +66,16 @@ export default class FileTree extends Component<Signature> {
                 Cannot edit files in this workspace
               </:content>
             </Tooltip>
-
           {{/if}}
-        </:ready>
-      </RealmInfoProvider>
-    </div>
-    <nav>
-      <Directory @relativePath='' @realmURL={{@realmURL}} />
-      {{#if this.showMask}}
-        <div class='mask' data-test-file-tree-mask></div>
-      {{/if}}
-    </nav>
+        {{/let}}
+      </div>
+      <nav>
+        <Directory @relativePath='' @realmURL={{@realmURL}} />
+        {{#if this.showMask}}
+          <div class='mask' data-test-file-tree-mask></div>
+        {{/if}}
+      </nav>
+    </WithLoadedRealm>
 
     <style>
       .mask {
@@ -132,16 +124,13 @@ export default class FileTree extends Component<Signature> {
   </template>
 
   @service private declare router: RouterService;
-  @tracked private showMask = true;
+  @service private declare realm: RealmService;
 
-  private realmSession: RealmSessionResource | undefined;
+  @tracked private showMask = true;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.hideMask.perform();
-    this.realmSession = getRealmSession(this, {
-      realmURL: () => this.args.realmURL,
-    });
   }
 
   private hideMask = restartableTask(async () => {
@@ -149,8 +138,4 @@ export default class FileTree extends Component<Signature> {
     await timeout(300);
     this.showMask = false;
   });
-
-  get canWrite() {
-    return this.realmSession?.canWrite;
-  }
 }

@@ -53,7 +53,7 @@ import {
 interface CardRouteSignature {
   Args: {
     controller: CardController;
-    model: CardModel;
+    model: CardModel | null;
   };
 }
 const { ownRealmURL } = ENV;

@@ -21,7 +21,6 @@ import type * as StringFieldMod from 'https://cardstack.com/base/string';
 
 import {
   testRealmURL,
-  testRealmInfo,
   setupCardLogs,
   setupLocalIndexing,
   setupServerSentEvents,
@@ -33,6 +32,12 @@ import {
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 let loader: Loader;
+
+let testRealmInfo = {
+  name: 'Unnamed Workspace',
+  backgroundURL: null,
+  iconURL: null,
+};
 
 module('Integration | realm', function (hooks) {
   setupRenderingTest(hooks);
