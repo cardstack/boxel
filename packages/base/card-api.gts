@@ -1,7 +1,7 @@
 import Modifier from 'ember-modifier';
 import { action } from '@ember/object';
 import GlimmerComponent from '@glimmer/component';
-// @ts-expect-error no types
+// @ts-ignore no types
 import cssUrl from 'ember-css-url';
 import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
@@ -1795,30 +1795,139 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
   };
 }> {
   <template>
-    <div class='default-embedded-template'>
-      <div
-        class='card-thumbnail'
-        style={{cssUrl 'background-image' @model.thumbnailURL}}
-      >
-        {{#unless @model.thumbnailURL}}
-          <div
-            class='card-thumbnail-text'
-            data-test-card-thumbnail-text
-          >{{cardTypeDisplayName @model}}</div>
-        {{/unless}}
+    <div class='embedded-template'>
+      <div class='container'>
+        <div class='contents'>
+          {{#if @model}}
+            <div class='thumbnail-section'>
+              <div
+                class='card-thumbnail'
+                style={{cssUrl 'background-image' @model.thumbnailURL}}
+              >
+                {{#unless @model.thumbnailURL}}
+                  <div
+                    class='card-thumbnail-text'
+                    data-test-card-thumbnail-text
+                  >{{cardTypeDisplayName @model}}</div>
+                {{/unless}}
+              </div>
+            </div>
+            <div class='thumbnail-subsection'>
+              <div class='thumbnail-subsection'>
+                <h3
+                  class='card-title'
+                  data-test-card-title
+                >{{@model.title}}</h3>
+              </div>
+              <div class='thumbnail-subsection'>
+                <h4
+                  class='card-display-name'
+                  data-test-card-display-name
+                >{{cardTypeDisplayName @model}}</h4>
+              </div>
+            </div>
+          {{else}}
+            {{! empty links-to field }}
+            <div data-test-empty-field class='empty-field'></div>
+          {{/if}}
+        </div>
       </div>
-      <h3 class='card-title' data-test-card-title>{{@model.title}}</h3>
-      <h4
-        class='card-display-name'
-        data-test-card-display-name
-      >{{cardTypeDisplayName @model}}</h4>
     </div>
     <style>
-      .default-embedded-template {
-        width: var(--grid-card-width);
-        height: var(--grid-card-height);
-        padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
+      .embedded-template {
+        width: 100%;
+        height: 100%;
+        display: flex;
       }
+      .container {
+        container-name: embedded-card;
+        container-type: size;
+        width: 100%;
+      }
+      .contents {
+        height: 100%;
+        padding: 10px;
+        display: flex;
+        flex-wrap: wrap;
+        padding: 11px;
+        border: var(--boxel-border-card);
+        border-radius: var(--boxel-border-radius-lg);
+      }
+
+      /* 
+         sadly you can't use css vars in container queries. also be careful of fractional pixel 
+         dimensions in the breakpoints. due to this i use the breakpoint - 1 pixel in the 
+         container query conidtions
+      */
+
+      /* row style embedded card */
+      @container embedded-card (height <= 223px) {
+        .contents {
+          column-gap: 10px;
+        }
+        .card-thumbnail {
+          width: var(--row-embedded-thumbnail-width);
+          height: var(--row-embedded-thumbnail-height);
+          border-radius: 6px; /* this annoyingly is a radius that is not part of our style guide */
+        }
+        .card-thumbnail-text {
+          visibility: hidden;
+        }
+      }
+      /* small thumbnail and medium styles embedded card */
+      @container embedded-card (223px < height <= 249px) {
+        .contents {
+          justify-content: center;
+        }
+        .card-title {
+          height: 35px;
+          text-align: center;
+        }
+        .card-display-name {
+          text-align: center;
+        }
+        .card-thumbnail {
+          width: var(--small-embedded-thumbnail-width);
+          height: var(--small-embedded-thumbnail-height);
+          border-radius: var(--boxel-border-radius);
+          margin-bottom: 11px;
+          padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
+        }
+        .thumbnail-section {
+          width: 100%;
+        }
+        .thumbnail-subsection {
+          width: 100%;
+        }
+      }
+
+      /* large thumbnail style embedded card */
+      @container embedded-card (249px < height) and (339px < width) {
+        .contents {
+          justify-content: center;
+        }
+        .card-title {
+          height: 35px;
+          text-align: center;
+        }
+        .card-display-name {
+          text-align: center;
+        }
+        .card-thumbnail {
+          width: var(--large-embedded-thumbnail-width);
+          height: var(--large-embedded-thumbnail-height);
+          border-radius: var(--boxel-border-radius);
+          margin-bottom: 11px;
+          padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
+        }
+        .thumbnail-section {
+          width: 100%;
+        }
+        .thumbnail-subsection {
+          width: 100%;
+        }
+      }
+
       .default-embedded-template > *,
       .card-thumbnail-text {
         display: -webkit-box;
@@ -1829,33 +1938,31 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
       .card-thumbnail {
         display: flex;
         align-items: center;
-        height: var(--grid-card-text-thumbnail-height);
+        justify-content: center;
         background-color: var(--boxel-teal);
         background-position: center;
         background-size: cover;
         background-repeat: no-repeat;
         color: var(--boxel-light);
-        padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
-        border-radius: var(--boxel-border-radius);
         font: 700 var(--boxel-font);
         letter-spacing: var(--boxel-lsp);
       }
       .card-title {
         margin: 0;
         font: 500 var(--boxel-font-sm);
-        text-align: center;
+        line-height: 1.23;
+        text-overflow: ellipsis;
       }
       .card-display-name {
         margin: 0;
         font: 500 var(--boxel-font-xs);
-        text-align: center;
-        color: var(--grid-card-label-color);
+        color: var(--boxel-450);
+        line-height: 1.27;
+        text-overflow: ellipsis;
       }
-      .card-thumbnail + * {
-        margin-top: var(--boxel-sp-lg);
-      }
-      .card-title + .card-display-name {
-        margin-top: 0.2em;
+      .thumbnail-section {
+        display: flex;
+        justify-content: center;
       }
     </style>
   </template>

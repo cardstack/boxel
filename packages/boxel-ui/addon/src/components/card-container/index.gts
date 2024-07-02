@@ -49,9 +49,6 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
         max-width var(--boxel-transition),
         box-shadow var(--boxel-transition);
     }
-    .boundaries {
-      box-shadow: 0 0 0 1px var(--boxel-light-500);
-    }
     .highlighted {
       box-shadow: 0 0 0 2px var(--boxel-highlight);
     }

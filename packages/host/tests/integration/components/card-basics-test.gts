@@ -491,8 +491,33 @@ module('Integration | card-basics', function (hooks) {
         .containsText('Marcus');
     });
 
-    test('renders a default (CardDef) embedded view', async function (assert) {
+    test('can render a card with an empty field', async function (assert) {
+      let EmbeddedViewDriver = embeddedViewDriver();
+
+      loader.shimModule(`${testRealmURL}test-cards`, {
+        EmbeddedViewDriver,
+      });
+
+      let driver = new EmbeddedViewDriver();
+      await renderCard(loader, driver, 'isolated');
+
+      assert.dom('[data-test-viewport="row"] [data-test-empty-field]').exists();
+      assert
+        .dom('[data-test-viewport="small"] [data-test-empty-field]')
+        .exists();
+      assert
+        .dom('[data-test-viewport="medium"] [data-test-empty-field]')
+        .exists();
+      assert
+        .dom('[data-test-viewport="large"] [data-test-empty-field]')
+        .exists();
+
+      await percySnapshot(assert);
+    });
+
+    test('renders a default (CardDef) embedded view for card with thumbnail', async function (assert) {
       class Person extends CardDef {
+        static displayName = 'Person';
         @field firstName = contains(StringField);
         @field image = contains(Base64ImageField);
         @field title = contains(StringField, {
@@ -506,34 +531,13 @@ module('Integration | card-basics', function (hooks) {
           },
         });
       }
-      class Driver extends CardDef {
-        @field person = linksTo(Person);
-        static isolated = class Isolated extends Component<typeof this> {
-          <template>
-            <div class='grid' data-test-viewport='grid'>
-              <@fields.person />
-            </div>
-            <div class='row' data-test-viewport='row'>
-              <@fields.person />
-            </div>
-            <div class='large' data-test-viewport='large'>
-              <@fields.person />
-            </div>
-            <style>
-              .grid {
-                height: 200px;
-                width: 300px;
-              }
-              .row {
-              }
-              .large {
-              }
-            </style>
-          </template>
-        };
-      }
 
-      loader.shimModule(`${testRealmURL}test-cards`, { Person, Driver });
+      let EmbeddedViewDriver = embeddedViewDriver();
+
+      loader.shimModule(`${testRealmURL}test-cards`, {
+        Person,
+        EmbeddedViewDriver,
+      });
 
       let mang = new Person({
         firstName: 'Mango',
@@ -545,13 +549,115 @@ module('Integration | card-basics', function (hooks) {
           base64: `data:image/png;base64,${mango}`,
         }),
       });
-      let withThumbnail = new Driver({ person: mang });
-      await renderCard(loader, withThumbnail, 'isolated');
-      debugger;
-      // TODO assert title, card type
-      // use percy for UI check
+      let driver = new EmbeddedViewDriver({ card: mang });
+      await renderCard(loader, driver, 'isolated');
+
+      assert
+        .dom('[data-test-viewport="row"] [data-test-card-title]')
+        .containsText('Mango');
+      assert
+        .dom('[data-test-viewport="row"] [data-test-card-display-name]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="row"] [data-test-card-thumbnail-text]')
+        .doesNotExist();
+      assert
+        .dom('[data-test-viewport="small"] [data-test-card-title]')
+        .containsText('Mango');
+      assert
+        .dom('[data-test-viewport="small"] [data-test-card-display-name]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="small"] [data-test-card-thumbnail-text]')
+        .doesNotExist();
+      assert
+        .dom('[data-test-viewport="medium"] [data-test-card-title]')
+        .containsText('Mango');
+      assert
+        .dom('[data-test-viewport="medium"] [data-test-card-display-name]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="medium"] [data-test-card-thumbnail-text]')
+        .doesNotExist();
+      assert
+        .dom('[data-test-viewport="large"] [data-test-card-title]')
+        .containsText('Mango');
+      assert
+        .dom('[data-test-viewport="large"] [data-test-card-display-name]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="large"] [data-test-card-thumbnail-text]')
+        .doesNotExist();
+
+      await percySnapshot(assert);
+    });
+
+    test('renders a default (CardDef) embedded view for card without thumbnail', async function (assert) {
+      class Person extends CardDef {
+        static displayName = 'Person';
+        @field firstName = contains(StringField);
+        @field image = contains(Base64ImageField);
+        @field title = contains(StringField, {
+          computeVia: function (this: Person) {
+            return this.firstName;
+          },
+        });
+        @field thumbnailURL = contains(MaybeBase64Field, {
+          computeVia: function (this: Person) {
+            return this.image.base64;
+          },
+        });
+      }
+
+      let EmbeddedViewDriver = embeddedViewDriver();
+
+      loader.shimModule(`${testRealmURL}test-cards`, {
+        Person,
+        EmbeddedViewDriver,
+      });
 
       let vang = new Person({ firstName: 'Van Gogh' });
+      let driver = new EmbeddedViewDriver({ card: vang });
+      await renderCard(loader, driver, 'isolated');
+
+      assert
+        .dom('[data-test-viewport="row"] [data-test-card-title]')
+        .containsText('Van Gogh');
+      assert
+        .dom('[data-test-viewport="row"] [data-test-card-display-name]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="row"] [data-test-card-thumbnail-text]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="small"] [data-test-card-title]')
+        .containsText('Van Gogh');
+      assert
+        .dom('[data-test-viewport="small"] [data-test-card-display-name]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="small"] [data-test-card-thumbnail-text]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="medium"] [data-test-card-title]')
+        .containsText('Van Gogh');
+      assert
+        .dom('[data-test-viewport="medium"] [data-test-card-display-name]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="medium"] [data-test-card-thumbnail-text]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="large"] [data-test-card-title]')
+        .containsText('Van Gogh');
+      assert
+        .dom('[data-test-viewport="large"] [data-test-card-display-name]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="large"] [data-test-card-thumbnail-text]')
+        .containsText('Person');
+
+      await percySnapshot(assert);
     });
 
     test('can set the ID for an unsaved card', async function (assert) {
@@ -2485,3 +2591,67 @@ let assertRadioInput = (
       .isNotChecked('the isCool true radio has correct state');
   }
 };
+
+function embeddedViewDriver() {
+  class EmbeddedViewDriver extends CardDef {
+    @field card = linksTo(CardDef);
+    static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <div class='item'>
+          <div class='desc'>Row thumbnail (226px x 62px)</div>
+          <div class='row thumbnail' data-test-viewport='row'>
+            <@fields.card />
+          </div>
+        </div>
+        <div class='item'>
+          <div class='desc'>Small thumbnail (164px x 224px)</div>
+          <div class='small thumbnail' data-test-viewport='small'>
+            <@fields.card />
+          </div>
+        </div>
+        <div class='item'>
+          <div class='desc'>Medium thumbnail (195px x 224px)</div>
+          <div class='medium thumbnail' data-test-viewport='medium'>
+            <@fields.card />
+          </div>
+        </div>
+        <div class='item'>
+          <div class='desc'>Large thumbnail (350px x 250px)</div>
+          <div class='large thumbnail' data-test-viewport='large'>
+            <@fields.card />
+          </div>
+        </div>
+        <style>
+          .small {
+            width: 164px;
+            height: 224px;
+          }
+          .medium {
+            width: 195px;
+            height: 224px;
+          }
+          .large {
+            width: 350px;
+            height: 250px;
+          }
+          .row {
+            width: 226px;
+            height: 62px;
+          }
+          .thumbnail {
+            background-color: fuchsia;
+            overflow: hidden;
+          }
+          .item {
+            margin: 1rem;
+          }
+          .desc {
+            padding-top: 1rem;
+          }
+        </style>
+      </template>
+    };
+  }
+
+  return EmbeddedViewDriver;
+}
