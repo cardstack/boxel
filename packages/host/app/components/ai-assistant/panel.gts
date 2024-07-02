@@ -441,7 +441,7 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @cached
   private get aiSessionRooms() {
-    let sessionRooms = [];
+    let sessionRooms: RoomField[] = [];
     let matrixRooms = this.matrixService.listRooms;
     if (!matrixRooms) {
       return [];
