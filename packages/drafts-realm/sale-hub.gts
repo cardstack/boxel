@@ -516,6 +516,7 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
   }
 
   get targetPage() {
+    console.log(this.args.model.contactForm);
     return this.args.model.targetPage;
   }
 
@@ -973,8 +974,48 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
         </main>
 
         <aside class='right-panel'>
-          <section class='relationship-tab-panel'>
+          <section>
+            {{#if (eq this.args.model.targetPage 'Account Form')}}
+              {{#if this.shouldShowAccountForm}}
+                {{#if this.shouldShowContactForm}}
+                  <section>
+                    {{! only show required field on contactform embedded mode}}
+                    <h3>Contact Form</h3>
+                    <@fields.contactForm />
+                  </section>
+                {{/if}}
 
+                {{#if this.shouldShowOpportunityForm}}
+                  <section>
+                    {{! only show required field on opportunityForm embedded mode}}
+                    <h3>Opportunity Form</h3>
+                    <@fields.opportunityForm />
+                  </section>
+                {{/if}}
+              {{/if}}
+            {{/if}}
+
+            {{#if (eq this.args.model.targetPage 'Contact Form')}}
+              {{#if this.shouldShowContactForm}}
+                {{#if this.shouldShowOpportunityForm}}
+                  <section>
+                    {{! only show required field on opportunityForm embedded mode}}
+                    <h3>Opportunity Form</h3>
+                    <@fields.opportunityForm />
+                  </section>
+                {{/if}}
+              {{/if}}
+            {{/if}}
+
+            {{#if (eq this.args.model.targetPage 'Opportunity Form')}}
+              {{#if this.shouldShowContactForm}}
+                <section>
+                  {{! only show required field on contactform embedded mode}}
+                  <h3>Contact Form</h3>
+                  <@fields.contactForm />
+                </section>
+              {{/if}}
+            {{/if}}
           </section>
         </aside>
       </section>
@@ -1004,7 +1045,7 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
       .sale-hub-container {
         overflow: hidden;
         display: grid;
-        grid-template-columns: 25% 50% 25%;
+        grid-template-columns: 2fr 4fr 2fr;
         gap: var(--boxel-sp);
         background-color: #007272;
       }
@@ -1024,8 +1065,8 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
         border-radius: var(--boxel-border-radius);
       }
       .right-panel {
-        display: grid;
-        gap: var(--boxel-sp);
+        overflow: auto;
+        padding: var(--boxel-sp-xs);
         background-color: var(--boxel-100);
         border-radius: var(--boxel-border-radius);
       }
@@ -1065,11 +1106,7 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
         padding: var(--boxel-sp-xxs);
         background-color: var(--boxel-200);
       }
-      .relationship-tab-panel {
-        padding: var(--boxel-sp-xs);
-        border-radius: var(--boxel-border-radius);
-        background-color: var(--boxel-100);
-      }
+
       .button {
         display: flex;
         flex: 0 0 auto;
