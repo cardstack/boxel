@@ -139,37 +139,39 @@ class Isolated extends Component<typeof ContactForm> {
 
 class View extends Component<typeof ContactForm> {
   <template>
-    <CardContainer @displayBoundaries={{false}} class='container'>
-      <FieldContainer
-        @tag='label'
-        @label='Title'
-        @vertical={{true}}
-      ><@fields.title /></FieldContainer>
+    <div class='container'>
+      <div class='field-input-group'>
+        <FieldContainer
+          @tag='label'
+          @label='Title'
+          @vertical={{true}}
+        ><@fields.title /></FieldContainer>
 
-      <FieldContainer @tag='label' @label='User' @vertical={{true}}>
-        <@fields.name />
-      </FieldContainer>
+        <FieldContainer @tag='label' @label='User' @vertical={{true}}>
+          <@fields.name />
+        </FieldContainer>
 
-      <FieldContainer @tag='label' @label='Email' @vertical={{true}}>
-        <@fields.email />
-      </FieldContainer>
+        <FieldContainer @tag='label' @label='Email' @vertical={{true}}>
+          <@fields.email />
+        </FieldContainer>
 
-      <FieldContainer @tag='label' @label='Phone' @vertical={{true}}>
-        <@fields.phone />
-      </FieldContainer>
+        <FieldContainer @tag='label' @label='Phone' @vertical={{true}}>
+          <@fields.phone />
+        </FieldContainer>
 
-      <FieldContainer @tag='label' @label='Fax' @vertical={{true}}>
-        <@fields.fax />
-      </FieldContainer>
+        <FieldContainer @tag='label' @label='Fax' @vertical={{true}}>
+          <@fields.fax />
+        </FieldContainer>
 
-      <FieldContainer @tag='label' @label='Department' @vertical={{true}}>
-        <@fields.department />
-      </FieldContainer>
+        <FieldContainer @tag='label' @label='Department' @vertical={{true}}>
+          <@fields.department />
+        </FieldContainer>
 
-      <FieldContainer @tag='label' @label='Address Info' @vertical={{true}}>
-        <@fields.addressInfo />
-      </FieldContainer>
-    </CardContainer>
+        <FieldContainer @tag='label' @label='Address Info' @vertical={{true}}>
+          <@fields.addressInfo />
+        </FieldContainer>
+      </div>
+    </div>
 
     <style>
       .container {
@@ -182,6 +184,13 @@ class View extends Component<typeof ContactForm> {
       }
       h2 {
         margin: 0px;
+      }
+      .field-input-group {
+        overflow: overlay;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-evenly;
+        gap: var(--boxel-sp);
       }
     </style>
   </template>

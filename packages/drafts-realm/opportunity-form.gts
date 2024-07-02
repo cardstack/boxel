@@ -484,6 +484,15 @@ class ViewSecForOpportunityForm extends Component<typeof OpportunityForm> {
         background-color: #fbfbfb;
         overflow: hidden;
       }
+      .field-group-title {
+        font-size: 1rem;
+        font-weight: bold;
+        margin-bottom: 0.75rem;
+        text-decoration: underline;
+        text-decoration-thickness: 2px;
+        text-underline-offset: 4px;
+        color: var(--boxel-dark-teal);
+      }
       .field-input-group {
         overflow: overlay;
         display: flex;

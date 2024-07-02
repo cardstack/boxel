@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "targetPage": "Lead Form",
+      "targetPage": "Contact Form",
       "scheduledTask": [],
       "convertedStatus": null,
       "isLeadFormConverted": true,

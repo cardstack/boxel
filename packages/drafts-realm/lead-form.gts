@@ -162,7 +162,7 @@ class IsolatedSecForLeadForm extends Component<typeof LeadForm> {
 
 class ViewSecForLeadForm extends Component<typeof LeadForm> {
   <template>
-    <div class='container'>
+    <CardContainer @displayBoundaries={{false}} class='container'>
       <section>
         <div class='field-group-title'>About</div>
         <div class='field-input-group'>
@@ -230,12 +230,12 @@ class ViewSecForLeadForm extends Component<typeof LeadForm> {
           </FieldContainer>
         </div>
       </section>
-    </div>
+    </CardContainer>
 
     <style>
       .container {
         display: grid;
-        gap: var(--boxel-sp-lg);
+        gap: var(--boxel-sp-xl);
         overflow: hidden;
       }
       section {
@@ -245,6 +245,10 @@ class ViewSecForLeadForm extends Component<typeof LeadForm> {
         font-size: 1rem;
         font-weight: bold;
         margin-bottom: 0.75rem;
+        text-decoration: underline;
+        text-decoration-thickness: 2px;
+        text-underline-offset: 4px;
+        color: var(--boxel-dark-teal);
       }
       .field-input-group {
         overflow: overlay;
@@ -252,10 +256,6 @@ class ViewSecForLeadForm extends Component<typeof LeadForm> {
         flex-direction: column;
         justify-content: space-evenly;
         gap: var(--boxel-sp);
-        background-color: #fbfbfb;
-        border: 1px solid var(--boxel-300);
-        border-radius: var(--boxel-border-radius);
-        padding: var(--boxel-sp-xxs);
       }
     </style>
   </template>
