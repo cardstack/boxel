@@ -28,8 +28,8 @@ import {
   type Queue,
   type Indexer,
   fetchUserPermissions,
-  addAuthorizationHeader,
   maybeHandleScopedCSSRequest,
+  authorizationMiddleware,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -300,14 +300,13 @@ export class Realm {
         let response = await maybeHandle(request);
         return response || next(request);
       },
-      async (request, next) => {
-        let authHandler = addAuthorizationHeader(
-          fetch,
-          new RealmAuthDataSource(this.#matrixClient, fetch, this.url),
-        );
-        let response = await authHandler(request);
-        return response || next(request);
-      },
+      authorizationMiddleware(
+        new RealmAuthDataSource(
+          this.#matrixClient,
+          virtualNetwork.fetch,
+          this.url,
+        ),
+      ),
     ]);
 
     let loader = new Loader(fetch, virtualNetwork.resolveImport);
@@ -828,6 +827,9 @@ export class Realm {
       if (e instanceof AuthenticationError) {
         return new Response(`${e.message}`, {
           status: 401,
+          headers: {
+            'X-Boxel-Realm-Url': requestContext.realm.url,
+          },
         });
       }
 
@@ -1703,7 +1705,7 @@ export class Realm {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
     let realmConfig = await this.readFileAsText(localPath, undefined);
-    let realmInfo: RealmInfo = {
+    let realmInfo = {
       name: 'Unnamed Workspace',
       backgroundURL: null,
       iconURL: null,
@@ -1722,7 +1724,7 @@ export class Realm {
     }
     let doc = {
       data: {
-        id: this.paths.url.toString(),
+        id: this.url,
         type: 'realm-info',
         attributes: realmInfo,
       },

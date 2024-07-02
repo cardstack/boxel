@@ -13,6 +13,10 @@ import ResizablePanel from './panel.gts';
 export { default as ResizeHandle } from './handle.gts';
 export { default as ResizablePanel } from './panel.gts';
 
+import { buildWaiter } from '@ember/test-waiters';
+
+let waiter = buildWaiter('resizable-panel-group');
+
 function sumArray(array: number[]) {
   return array.reduce((partialSum, a) => partialSum + a, 0);
 }
@@ -99,6 +103,8 @@ export default class ResizablePanelGroup extends Component<Signature> {
   resizablePanelIdCache = new WeakMap<ResizablePanel, number>();
   panels = new TrackedArray<ResizablePanel>();
   resizeHandles = new TrackedArray<ResizeHandle>();
+
+  private initializationWaiter = waiter.beginAsync();
 
   currentResizeHandle: {
     handle: ResizeHandle;
@@ -466,6 +472,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
   onContainerResize(entry?: ResizeObserverEntry, observer?: ResizeObserver) {
     if (!this.panelGroupElement) {
       if (entry) {
+        waiter.endAsync(this.initializationWaiter);
         this.panelGroupElement = entry.target as HTMLDivElement;
         next(this, this.onContainerResize, entry, observer);
       }

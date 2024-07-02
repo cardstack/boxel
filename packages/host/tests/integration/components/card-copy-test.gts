@@ -62,7 +62,6 @@ module('Integration | card-copy', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
-  setupMatrixServiceMock(hooks);
   setupWindowMock(hooks);
 
   hooks.beforeEach(async function () {
@@ -271,6 +270,8 @@ module('Integration | card-copy', function (hooks) {
       } as LooseSingleCardDocument),
     );
   });
+
+  setupMatrixServiceMock(hooks, { autostart: true });
 
   test('copy button does not appear when there is 1 stack for single card item', async function (assert) {
     await setCardInOperatorModeState([

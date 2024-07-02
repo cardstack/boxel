@@ -1,5 +1,6 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { IconButton } from '@cardstack/boxel-ui/components';
@@ -7,10 +8,11 @@ import { cn } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
-import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import Pill from '@cardstack/host/components/pill';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
+
+import RealmService from '../services/realm';
 
 interface CardPillSignature {
   Element: HTMLDivElement | HTMLButtonElement;
@@ -22,6 +24,8 @@ interface CardPillSignature {
 }
 
 export default class CardPill extends Component<CardPillSignature> {
+  @service declare realm: RealmService;
+
   get component() {
     return this.args.card.constructor.getComponent(this.args.card);
   }
@@ -34,16 +38,11 @@ export default class CardPill extends Component<CardPillSignature> {
       ...attributes
     >
       <:icon>
-        <RealmInfoProvider @fileURL={{@card.id}}>
-          <:ready as |realmInfo|>
-            <RealmIcon
-              @realmIconURL={{realmInfo.iconURL}}
-              @realmName={{realmInfo.name}}
-              width='18'
-              height='18'
-            />
-          </:ready>
-        </RealmInfoProvider>
+        <RealmIcon
+          @realmInfo={{this.realm.info @card.id}}
+          width='18'
+          height='18'
+        />
       </:icon>
       <:default>
         <div class='card-content' title={{@card.title}}>

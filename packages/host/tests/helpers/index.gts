@@ -486,6 +486,11 @@ async function setupTestRealm({
 
   realmURL = realmURL ?? testRealmURL;
 
+  let cardService = owner.lookup('service:card-service') as CardService;
+  if (!cardService.realmURLs.includes(realmURL)) {
+    cardService.realmURLs.push(realmURL);
+  }
+
   if (isAcceptanceTest) {
     await visit('/acceptance-test-setup');
   } else {
