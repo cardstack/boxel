@@ -23,6 +23,7 @@ import {
 } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 
+import CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import { claimsFromRawToken } from '@cardstack/host/services/realm';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
@@ -1319,6 +1320,10 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test('visiting 2 stacks from differing realms', async function (assert) {
+      let cardService = this.owner.lookup(
+        'service:card-service',
+      ) as CardService;
+      cardService.realmURLs.push('http://localhost:4202/test/');
       await visitOperatorMode({
         stacks: [
           [

@@ -22,6 +22,7 @@ import {
 
 import { Realm } from '@cardstack/runtime-common/realm';
 
+import CardService from '@cardstack/host/services/card-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
@@ -37,7 +38,6 @@ import {
   type TestContextWithSSE,
 } from '../helpers';
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
-import CardService from '@cardstack/host/services/card-service';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
