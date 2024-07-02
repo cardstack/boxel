@@ -5,6 +5,8 @@ import {
   type IEvent,
 } from 'matrix-js-sdk';
 
+import { TrackedMap } from 'tracked-built-ins/.';
+
 import { type LooseCardResource, baseRealm } from '@cardstack/runtime-common';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -13,7 +15,6 @@ import type { RoomField } from 'https://cardstack.com/base/room';
 
 import type LoaderService from '../../services/loader-service';
 import type * as MatrixSDK from 'matrix-js-sdk';
-import { TrackedMap } from 'tracked-built-ins/.';
 
 export * as Membership from './membership';
 export * as Timeline from './timeline';

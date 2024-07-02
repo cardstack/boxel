@@ -18,12 +18,14 @@ import {
 
 export function onReceipt(context: Context) {
   return async (e: MatrixEvent) => {
-    let userId = context.client?.credentials.userId!;
-    let eventIds = Object.keys(e.getContent());
-    for (let eventId of eventIds) {
-      let receipt = e.getContent()[eventId]['m.read'][userId];
-      if (receipt) {
-        context.addEventReadReceipt(eventId, { readAt: receipt.ts });
+    let userId = context.client?.credentials.userId;
+    if (userId) {
+      let eventIds = Object.keys(e.getContent());
+      for (let eventId of eventIds) {
+        let receipt = e.getContent()[eventId]['m.read'][userId];
+        if (receipt) {
+          context.addEventReadReceipt(eventId, { readAt: receipt.ts });
+        }
       }
     }
   };
