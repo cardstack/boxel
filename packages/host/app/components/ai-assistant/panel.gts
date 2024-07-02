@@ -368,7 +368,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     let persistedRoomId = window.localStorage.getItem(
       currentRoomIdPersistenceKey,
     );
-    if (persistedRoomId && this.roomResource.roomId === persistedRoomId) {
+    if (persistedRoomId) {
       this.currentRoomId = persistedRoomId;
     } else {
       let latestRoom = this.aiSessionRooms[0];
