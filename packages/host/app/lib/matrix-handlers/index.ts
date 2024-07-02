@@ -48,8 +48,8 @@ export interface Context extends EventSendingContext {
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[];
   timelineQueue: { event: MatrixEvent; oldEventId?: string }[];
-  client: MatrixClient;
-  matrixSDK: typeof MatrixSDK;
+  client: MatrixClient | undefined;
+  matrixSDK: typeof MatrixSDK | undefined;
   handleMessage?: (
     context: Context,
     event: Event,

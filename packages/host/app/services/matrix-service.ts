@@ -126,7 +126,7 @@ export default class MatrixService
       roomMembershipQueue: this.roomMembershipQueue,
       timelineQueue: this.timelineQueue,
       client: this._client,
-      matrixSDK: undefined,
+      matrixSDK: this.#matrixSDK,
       addEventReadReceipt: this.addEventReadReceipt,
     };
   }
