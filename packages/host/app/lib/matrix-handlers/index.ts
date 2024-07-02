@@ -37,7 +37,7 @@ export type Event = Partial<IEvent> & {
 };
 
 export interface EventSendingContext {
-  setRoom: (roomId: string, roomPromise: Promise<RoomField>) => void;
+  setRoom: (roomId: string, roomPromise: RoomField) => void;
   getRoom: (roomId: string) => Promise<RoomField> | undefined;
   cardAPI: typeof CardAPI;
   loaderService: LoaderService;
@@ -89,7 +89,7 @@ export async function addRoomEvent(context: EventSendingContext, event: Event) {
         },
       },
     };
-    room = context.cardAPI.createFromSerialized<typeof RoomField>(
+    room = await context.cardAPI.createFromSerialized<typeof RoomField>(
       data,
       { data },
       undefined,
