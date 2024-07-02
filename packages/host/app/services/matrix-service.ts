@@ -713,8 +713,8 @@ export default class MatrixService extends Service {
     return this.rooms.get(roomId);
   }
 
-  setRoom(roomId: string, room: RoomField) {
-    this.rooms.set(roomId, room);
+  setRoom(roomId: string, roomPromise: Promise<RoomField>) {
+    this.rooms.set(roomId, roomPromise);
     if (!this.roomResourcesCache.has(roomId)) {
       this.roomResourcesCache.set(
         roomId,
