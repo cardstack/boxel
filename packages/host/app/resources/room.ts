@@ -97,7 +97,6 @@ export class RoomModel {
   get roomMembers() {
     let roomMembers = roomMemberCache.get(this);
     if (roomMembers) {
-      debugger;
       return [...roomMembers.values()];
     }
     return [];
@@ -119,9 +118,12 @@ export class RoomModel {
     // return o;
     let cache = messageCache.get(this);
     if (cache) {
-      return [...cache.values()].sort(
+      let o = [...cache.values()].sort(
         (a, b) => a.created.getTime() - b.created.getTime(),
       );
+      console.log('sorted cache');
+      console.log(o);
+      return o;
     }
     return [];
   }
@@ -290,10 +292,15 @@ export class RoomResource extends Resource<Args> {
   });
 }
 
-export function getRoom(parent: object, roomId: () => string | undefined) {
+export function getRoom(
+  parent: object,
+  roomId: () => string | undefined,
+  events: () => any | undefined,
+) {
   return RoomResource.from(parent, () => ({
     named: {
       roomId: roomId(),
+      events: events ? events() : [],
     },
   }));
 }
