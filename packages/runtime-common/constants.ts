@@ -22,5 +22,11 @@ export const primitive = Symbol('cardstack-primitive');
 export const aiBotUsername = 'aibot';
 
 export const CardContextName = 'card-context';
-export const RealmSessionContextName = 'realm-session-context';
 export const DefaultFormatContextName = 'default-format-context';
+
+export const PermissionsContextName = 'permissions-context';
+
+export interface Permissions {
+  readonly canRead: boolean;
+  readonly canWrite: boolean;
+}

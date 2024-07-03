@@ -29,14 +29,13 @@ import {
   hasExecutableExtension,
   RealmPaths,
   type ResolvedCodeRef,
-  RealmSessionContextName,
+  PermissionsContextName,
 } from '@cardstack/runtime-common';
 import { SerializedError } from '@cardstack/runtime-common/error';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode/code-submode/editor-indicator';
-import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
@@ -52,7 +51,7 @@ import type CardService from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type RealmInfoService from '@cardstack/host/services/realm-info-service';
+import RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
@@ -119,7 +118,7 @@ export default class CodeSubmode extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare recentFilesService: RecentFilesService;
   @service private declare environmentService: EnvironmentService;
-  @service private declare realmInfoService: RealmInfoService;
+  @service private declare realm: RealmService;
 
   @tracked private loadFileError: string | null = null;
   @tracked private userHasDismissedURLError = false;
@@ -604,10 +603,9 @@ export default class CodeSubmode extends Component<Signature> {
         throw new Error(`bug: CreateFileModal not instantiated`);
       }
       this.isCreateModalOpen = true;
-      await this.realmInfoService.fetchAllKnownRealmInfos.perform();
       let url = await this.createFileModal.createNewFile(
         fileType,
-        new URL(this.realmInfoService.userDefaultRealm.path),
+        new URL(this.realm.userDefaultRealm.path),
         definitionClass,
         sourceInstance,
       );
@@ -664,23 +662,21 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   get isReadOnly() {
-    return !this.readyFile.realmSession.canWrite;
+    return !this.realm.canWrite(this.readyFile.url);
   }
 
-  @provide(RealmSessionContextName)
-  get realmSession() {
-    return this.readyFile.realmSession;
+  @provide(PermissionsContextName)
+  get permissions() {
+    return this.realm.permissions(this.readyFile.url);
   }
 
   <template>
-    <RealmInfoProvider @realmURL={{this.realmURL}}>
-      <:ready as |realmInfo|>
-        <div
-          class='code-mode-background'
-          style={{this.backgroundURLStyle realmInfo.backgroundURL}}
-        ></div>
-      </:ready>
-    </RealmInfoProvider>
+    {{#let (this.realm.info this.realmURL.href) as |realmInfo|}}
+      <div
+        class='code-mode-background'
+        style={{this.backgroundURLStyle realmInfo.backgroundURL}}
+      ></div>
+    {{/let}}
     <SubmodeLayout
       @onCardSelectFromSearch={{this.openSearchResultInEditor}}
       @hideAiAssistant={{true}}
