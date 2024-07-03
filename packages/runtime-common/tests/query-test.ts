@@ -14,36 +14,13 @@ import { type SharedTests } from '../helpers';
 import { type TestIndexRow, setupIndex, getTypes } from '../helpers/indexer';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
+import { cardSrc } from '../etc/test-fixtures';
 
 interface TestCards {
   [name: string]: CardDef;
 }
 
 const tests = Object.freeze({
-  'can get prerendered cards': async (
-    assert,
-    { indexer, loader, testCards },
-  ) => {
-    let { mango, vangogh } = testCards;
-    await setupIndex(indexer, [
-      {
-        card: mango,
-        data: { embedded_html: { default: '<div>Mango</div', deps: 'abc' } },
-      },
-      {
-        card: vangogh,
-        data: { embedded_html: { default: '<div>Mango</div' } },
-      },
-    ]);
-
-    let { prerenderedCards: _prerenderedCards, meta } =
-      await indexer.searchPrerendered(new URL(testRealmURL), {}, loader);
-
-    // TODO: how to test when there is no deps for instances, and no indexed modules in boxel index?
-
-    assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
-  },
-
   'can get all cards with empty filter': async (
     assert,
     { indexer, loader, testCards },
@@ -2461,6 +2438,72 @@ const tests = Object.freeze({
         loader,
       ),
       `'null' is not a permitted value in a 'range' filter`,
+    );
+  },
+  'can get prerendered cards (html + css) from the indexer': async (
+    assert,
+    { indexer, loader, testCards },
+  ) => {
+    let { vangogh } = testCards;
+    await setupIndex(indexer, [
+      {
+        card: vangogh,
+        data: {
+          embedded_html: {
+            default: '<div>Van Gogh</div',
+          },
+          deps: [`${testRealmURL}person`],
+          realm_version: 2, // 2 because we're adding modules to the index after setup
+        },
+      },
+    ]);
+
+    let batch = await indexer.createBatch(new URL(testRealmURL));
+    let now = Date.now();
+    await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
+      type: 'module',
+      source: cardSrc,
+      lastModified: now,
+      deps: new Set(),
+    });
+    await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
+      type: 'css',
+      source: '.foo { color: red; }',
+      lastModified: now,
+      deps: new Set(),
+    });
+    await batch.done();
+
+    let { prerenderedCards, prerenderedCardCssItems, meta } =
+      await indexer.searchPrerendered(new URL(testRealmURL), {}, loader);
+
+    assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.strictEqual(
+      meta.page.realmVersion,
+      2,
+      'the realm version is correct',
+    );
+    assert.strictEqual(
+      prerenderedCards.length,
+      1,
+      'the total results are correct',
+    );
+    assert.strictEqual(
+      prerenderedCards[0].url,
+      'http://test-realm/test/vangogh.json',
+    );
+    assert.deepEqual(prerenderedCards[0].embeddedHtml, {
+      default: '<div>Van Gogh</div',
+    });
+
+    assert.strictEqual(prerenderedCardCssItems.length, 1);
+    assert.strictEqual(
+      prerenderedCardCssItems[0].cssModuleId,
+      'http://test-realm/test/person',
+    );
+    assert.strictEqual(
+      prerenderedCardCssItems[0].source,
+      '.foo { color: red; }',
     );
   },
 } as SharedTests<{
