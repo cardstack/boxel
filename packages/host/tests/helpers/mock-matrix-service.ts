@@ -97,7 +97,7 @@ function generateMockMatrixService(
 
     profile = getMatrixProfile(this, () => this.userId);
 
-    private rooms: TrackedMap<string, RoomField> = new TrackedMap();
+    rooms: TrackedMap<string, RoomField> = new TrackedMap();
     private roomResourcesCache: Map<string, RoomResource> = new Map();
 
     messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
