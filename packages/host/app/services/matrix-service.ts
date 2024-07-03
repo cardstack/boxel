@@ -96,7 +96,7 @@ export default class MatrixService
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
-  rooms: TrackedMap<string, RoomField> = new TrackedMap();
+  private rooms: TrackedMap<string, RoomField> = new TrackedMap();
   private roomResourcesCache: Map<string, RoomResource> = new Map();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
