@@ -46,7 +46,7 @@ export interface EventSendingContext {
 }
 
 export interface Context extends EventSendingContext {
-  rooms: TrackedMap<string, RoomField>;
+  listRooms: RoomField[] | undefined;
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[];
