@@ -16,14 +16,13 @@ import {
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import type { RoomField } from 'https://cardstack.com/base/room';
-
 import AiAssistantPanelPopover from './panel-popover';
+import { RoomModel } from '@cardstack/host/resources/room';
 
 interface Signature {
   Element: HTMLElement;
   Args: {
-    room: RoomField;
+    room: RoomModel;
     onClose: () => void;
   };
 }

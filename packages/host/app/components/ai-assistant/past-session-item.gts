@@ -21,18 +21,17 @@ import {
 } from '@cardstack/boxel-ui/icons';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
-
-import type { RoomField } from 'https://cardstack.com/base/room';
+import { RoomModel } from '@cardstack/host/resources/room';
 
 export type RoomActions = {
   open: (roomId: string) => void;
-  rename: (room: RoomField) => void;
-  delete: (room: RoomField) => void;
+  rename: (room: RoomModel) => void;
+  delete: (room: RoomModel) => void;
 };
 
 interface Signature {
   Args: {
-    room: RoomField;
+    room: RoomModel;
     currentRoomId?: string;
     actions: RoomActions;
   };

@@ -34,12 +34,14 @@ import {
   eventDebounceMs,
 } from '@cardstack/host/lib/matrix-utils';
 
-import { RoomResource, getRoom } from '@cardstack/host/resources/room';
+import {
+  RoomResource,
+  getRoom,
+  RoomModel,
+} from '@cardstack/host/resources/room';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
-
-import type { RoomField } from 'https://cardstack.com/base/room';
 
 import assistantIcon from './ai-assist-icon.webp';
 import { TrackedMap } from 'tracked-built-ins/.';
@@ -349,8 +351,8 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @tracked private currentRoomId: string | undefined;
   @tracked private isShowingPastSessions = false;
-  @tracked private roomToRename: RoomField | undefined = undefined;
-  @tracked private roomToDelete: RoomField | undefined = undefined;
+  @tracked private roomToRename: RoomModel | undefined = undefined;
+  @tracked private roomToDelete: RoomModel | undefined = undefined;
   @tracked private roomDeleteError: string | undefined = undefined;
   @tracked private displayRoomError = false;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
@@ -453,7 +455,7 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @cached
   private get aiSessionRooms() {
-    let rooms: RoomField[] = [];
+    let rooms: RoomModel[] = [];
     for (let resource of this.roomResources.values()) {
       if (!resource.room) {
         continue;
@@ -490,7 +492,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     window.localStorage.setItem(currentRoomIdPersistenceKey, roomId);
   }
 
-  @action private setRoomToRename(room: RoomField | undefined) {
+  @action private setRoomToRename(room: RoomModel | undefined) {
     this.roomToRename = room;
     this.hidePastSessions();
   }
@@ -500,7 +502,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     this.displayPastSessions();
   }
 
-  @action private setRoomToDelete(room: RoomField | undefined) {
+  @action private setRoomToDelete(room: RoomModel | undefined) {
     this.roomDeleteError = undefined;
     this.roomToDelete = room;
   }

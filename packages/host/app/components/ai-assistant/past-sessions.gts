@@ -4,14 +4,13 @@ import { on } from '@ember/modifier';
 import { IconButton } from '@cardstack/boxel-ui/components';
 import { DropdownArrowFilled } from '@cardstack/boxel-ui/icons';
 
-import type { RoomField } from 'https://cardstack.com/base/room';
-
 import AiAssistantPanelPopover from './panel-popover';
 import PastSessionItem, { type RoomActions } from './past-session-item';
+import { RoomModel } from '@cardstack/host/resources/room';
 
 interface Signature {
   Args: {
-    sessions: RoomField[];
+    sessions: RoomModel[];
     roomActions: RoomActions;
     currentRoomId?: string;
     onClose: () => void;

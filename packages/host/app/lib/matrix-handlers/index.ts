@@ -5,14 +5,12 @@ import {
   type IEvent,
 } from 'matrix-js-sdk';
 
-import { type LooseCardResource, baseRealm } from '@cardstack/runtime-common';
-
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
-import type { RoomField } from 'https://cardstack.com/base/room';
 
 import type LoaderService from '../../services/loader-service';
 import type * as MatrixSDK from 'matrix-js-sdk';
+import { RoomModel } from '@cardstack/host/resources/room';
 
 export * as Membership from './membership';
 export * as Timeline from './timeline';
@@ -37,14 +35,14 @@ export type Event = Partial<IEvent> & {
 };
 
 export interface EventSendingContext {
-  setRoom: (roomId: string, room: RoomField) => void;
-  getRoom: (roomId: string) => RoomField | undefined;
+  setRoom: (roomId: string, room: RoomModel) => void;
+  getRoom: (roomId: string) => RoomModel | undefined;
   cardAPI: typeof CardAPI;
   loaderService: LoaderService;
 }
 
 export interface Context extends EventSendingContext {
-  listRooms: RoomField[] | undefined;
+  listRooms: RoomModel[] | undefined;
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[];
@@ -82,31 +80,18 @@ export async function addRoomEvent(context: EventSendingContext, event: Event) {
   }
   let room = context.getRoom(roomId);
   if (!room) {
-    let data: LooseCardResource = {
-      meta: {
-        adoptsFrom: {
-          name: 'RoomField',
-          module: `${baseRealm.url}room`,
-        },
-      },
-    };
-    room = await context.cardAPI.createFromSerialized<typeof RoomField>(
-      data,
-      { data },
-      undefined,
-      context.loaderService.loader,
-    );
-    context.setRoom(roomId, room!);
+    room = new RoomModel();
+    context.setRoom(roomId, room);
   }
   let resolvedRoom = await room;
 
-  // duplicate events may be emitted from matrix, as well as the resolved room card might already contain this event
   if (!resolvedRoom.events.find((e) => e.event_id === eventId)) {
     resolvedRoom.events = [
       ...(resolvedRoom.events ?? []),
       event as unknown as DiscreteMatrixEvent,
     ];
   }
+  await resolvedRoom;
 }
 
 export async function updateRoomEvent(

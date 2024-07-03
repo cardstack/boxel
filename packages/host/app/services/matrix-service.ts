@@ -23,7 +23,6 @@ import {
   aiBotUsername,
   splitStringIntoChunks,
   baseRealm,
-  Loader,
   loaderFor,
 } from '@cardstack/runtime-common';
 import {
@@ -47,8 +46,6 @@ import type {
   CardFragmentContent,
   ReactionEventContent,
 } from 'https://cardstack.com/base/matrix-event';
-import * as RoomModule from 'https://cardstack.com/base/room';
-import type { RoomField } from 'https://cardstack.com/base/room';
 
 import {
   Timeline,
@@ -64,6 +61,7 @@ import type CardService from './card-service';
 import type LoaderService from './loader-service';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
+import { RoomModel } from '../resources/room';
 
 const { matrixURL } = ENV;
 const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
@@ -95,7 +93,7 @@ export default class MatrixService
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
-  rooms: TrackedMap<string, RoomField> = new TrackedMap();
+  rooms: TrackedMap<string, RoomModel> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
   failedCommandState: TrackedMap<string, Error> = new TrackedMap();
@@ -152,11 +150,6 @@ export default class MatrixService
     () => 'https://cardstack.com/base/card-api',
   );
 
-  loaderToRoomModuleLoadingCache = new WeakMap<
-    Loader,
-    Promise<typeof RoomModule>
-  >();
-
   private loadSDK = task(async () => {
     await this.cardAPIModule.loaded;
     // The matrix SDK is VERY big so we only load it when we need it
@@ -178,18 +171,6 @@ export default class MatrixService
       [this.matrixSDK.RoomEvent.Receipt, Timeline.onReceipt(this)],
     ];
   });
-
-  async getRoomModule(loader?: Loader): Promise<typeof RoomModule> {
-    loader = loader ?? this.loaderService.loader;
-    if (!this.loaderToRoomModuleLoadingCache.has(loader)) {
-      let apiPromise = loader.import<typeof RoomModule>(
-        'https://cardstack.com/base/room',
-      );
-      this.loaderToRoomModuleLoadingCache.set(loader, apiPromise);
-      return apiPromise;
-    }
-    return this.loaderToRoomModuleLoadingCache.get(loader)!;
-  }
 
   get isLoggedIn() {
     return this.client.isLoggedIn();
@@ -523,17 +504,16 @@ export default class MatrixService
       );
     }
 
-    let roomModule = await this.getRoomModule();
+    let roomModule = this.rooms.get(roomId);
     let attachedCardsEventIds: string[] = [];
     if (serializedAttachedCards.length > 0) {
       for (let attachedCard of serializedAttachedCards) {
-        let eventId = roomModule.getEventIdForCard(roomId, attachedCard);
-        if (!eventId) {
-          let responses = await this.sendCardFragments(roomId, attachedCard);
-          eventId = responses[0].event_id; // we only care about the first fragment
-        }
-
-        attachedCardsEventIds.push(eventId);
+        // let eventId = roomModule.getEventIdForCard(roomId, attachedCard);
+        // if (!eventId) {
+        //   let responses = await this.sendCardFragments(roomId, attachedCard);
+        //   eventId = responses[0].event_id; // we only care about the first fragment
+        // }
+        // attachedCardsEventIds.push(eventId);
       }
     }
 
@@ -589,13 +569,15 @@ export default class MatrixService
     for (let roomId of joinedRooms) {
       let stateEvents = await this.client.roomState(roomId);
       await Promise.all(
-        stateEvents.map((event) =>
-          addRoomEvent(this, { ...event, status: null }),
-        ),
+        stateEvents.map((event) => {
+          addRoomEvent(this.context, { ...event, status: null });
+        }),
       );
       let messages = await this.allRoomMessages(roomId);
       await Promise.all(
-        messages.map((event) => addRoomEvent(this, { ...event, status: null })),
+        messages.map((event) => {
+          addRoomEvent(this.context, { ...event, status: null });
+        }),
       );
     }
   }
@@ -661,7 +643,7 @@ export default class MatrixService
     }
   }
 
-  getLastActiveTimestamp(room: RoomField) {
+  getLastActiveTimestamp(room: RoomModel) {
     let maybeLastActive = room.events[room.events.length - 1]?.origin_server_ts;
 
     let matrixRoom = this.client.getRoom(room.roomId);
@@ -760,10 +742,13 @@ export default class MatrixService
   }
 
   getRoom(roomId: string) {
+    if (!this.rooms) {
+      console.log('rooms map is undefined');
+    }
     return this.rooms.get(roomId);
   }
 
-  setRoom(roomId: string, room: RoomField) {
+  setRoom(roomId: string, room: RoomModel) {
     this.rooms.set(roomId, room);
   }
 

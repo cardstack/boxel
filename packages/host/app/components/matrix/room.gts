@@ -44,9 +44,9 @@ export default class Room extends Component<Signature> {
       data-test-room-name={{this.room.name}}
       data-test-room={{this.room.roomId}}
     >
-      {{#if this.room.messages}}
+      {{#if this.messages}}
         <AiAssistantConversation>
-          {{#each this.room.messages as |message i|}}
+          {{#each this.messages as |message i|}}
             <RoomMessage
               @room={{this.room}}
               @roomId={{@roomId}}
@@ -152,6 +152,11 @@ export default class Room extends Component<Signature> {
     await this.roomResource.loading;
   });
 
+  private get messages() {
+    console.log('messages', this.roomResource.messages);
+    return this.roomResource.messages;
+  }
+
   private get room() {
     let room = this.roomResource.room;
     return room;
@@ -176,7 +181,7 @@ export default class Room extends Component<Signature> {
       );
     }
 
-    let myMessages = this.room.messages.filter(
+    let myMessages = this.messages.filter(
       (message) => message.author.userId === this.matrixService.userId,
     );
     if (myMessages.length === 0) {
@@ -321,15 +326,13 @@ export default class Room extends Component<Signature> {
           this.autoAttachedCards.size !== 0,
       ) &&
       !!this.room &&
-      !this.room.messages.some((m) => this.isPendingMessage(m))
+      !this.messages.some((m) => this.isPendingMessage(m))
     );
   }
 
   @action
   private isLastMessage(messageIndex: number) {
-    return (
-      (this.room && messageIndex === this.room.messages.length - 1) ?? false
-    );
+    return (this.room && messageIndex === this.messages.length - 1) ?? false;
   }
 
   @action private setCurrentMonacoContainer(index: number | undefined) {
