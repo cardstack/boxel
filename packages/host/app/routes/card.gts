@@ -14,11 +14,11 @@ import MatrixService from '@cardstack/host/services/matrix-service';
 import OperatorModeStateService, {
   SerializedState as OperatorModeSerializedState,
 } from '@cardstack/host/services/operator-mode-state-service';
-import RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
 import type CardService from '../services/card-service';
+import type RealmService from '../services/realm';
 
 const { ownRealmURL, loginMessageTimeoutMs } = ENV;
 
@@ -47,7 +47,7 @@ export default class RenderCard extends Route<Model | null> {
   @service declare router: RouterService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare matrixService: MatrixService;
-  @service declare realmInfoService: RealmInfoService;
+  @service declare realm: RealmService;
 
   hasLoadMatrixBeenExecuted = false;
 
@@ -64,9 +64,8 @@ export default class RenderCard extends Route<Model | null> {
 
     try {
       await this.loadMatrix.perform();
-      let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
-        new URL(ownRealmURL),
-      );
+      await this.realm.ensureRealmMeta(ownRealmURL);
+      let isPublicReadableRealm = this.realm.meta(ownRealmURL).isPublic;
       let model = null;
       if (!isPublicReadableRealm && !this.matrixService.isLoggedIn) {
         return model;
@@ -111,9 +110,8 @@ export default class RenderCard extends Route<Model | null> {
     // Users are not allowed to access guest mode if realm is not publicly readable,
     // so users will be redirected to operator mode.
     // We can update the codes below after we have a clear idea on how to implement authentication in guest mode.
-    let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
-      new URL(ownRealmURL),
-    );
+    await this.realm.ensureRealmMeta(ownRealmURL);
+    let isPublicReadableRealm = this.realm.meta(ownRealmURL).isPublic;
     if (
       !isPublicReadableRealm &&
       !transition.to?.queryParams['operatorModeEnabled']

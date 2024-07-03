@@ -402,195 +402,210 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       .exists('top level containsMany field item has remove button');
   });
 
-  test('render a CardDef field (singular) linked to from a FieldDef', async function (assert) {
-    let { field, contains, linksTo, CardDef, FieldDef, Component } = cardApi;
-    let { default: StringField } = string;
-    let { default: NumberField } = number;
+  module(
+    'with test realm setup for singular linked card test',
+    function (hooks) {
+      hooks.beforeEach(async function () {
+        let { field, contains, linksTo, CardDef, FieldDef, Component } =
+          cardApi;
+        let { default: StringField } = string;
+        let { default: NumberField } = number;
 
-    class CurrencyCard extends CardDef {
-      static displayName = 'Currency';
-      @field denomination = contains(StringField);
-      @field currencyName = contains(StringField);
-      @field icon = contains(StringField);
+        class CurrencyCard extends CardDef {
+          static displayName = 'Currency';
+          @field denomination = contains(StringField);
+          @field currencyName = contains(StringField);
+          @field icon = contains(StringField);
 
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <div class='currency' data-test-currency-embedded>
-            <@fields.icon />
-            <@fields.denomination />
-            -
-            <@fields.currencyName />
-          </div>
-          <style>
-            .currency {
-              display: flex;
-              font-weight: bold;
-            }
-          </style>
-        </template>
-      };
-    }
+          static embedded = class Embedded extends Component<typeof this> {
+            <template>
+              <div class='currency' data-test-currency-embedded>
+                <@fields.icon />
+                <@fields.denomination />
+                -
+                <@fields.currencyName />
+              </div>
+              <style>
+                .currency {
+                  display: flex;
+                  font-weight: bold;
+                }
+              </style>
+            </template>
+          };
+        }
 
-    class TxAmountField extends FieldDef {
-      @field quantity = contains(NumberField);
-      @field denomination = linksTo(CurrencyCard);
-    }
+        class TxAmountField extends FieldDef {
+          @field quantity = contains(NumberField);
+          @field denomination = linksTo(CurrencyCard);
+        }
 
-    class TxCard extends CardDef {
-      static displayName = 'Transaction';
-      @field name = contains(StringField);
-      @field transferAmount = contains(TxAmountField);
-    }
+        class TxCard extends CardDef {
+          static displayName = 'Transaction';
+          @field name = contains(StringField);
+          @field transferAmount = contains(TxAmountField);
+        }
 
-    let usdCard = new CurrencyCard({
-      denomination: 'USD',
-      currencyName: 'United States Dollar',
-      icon: '🇺🇸',
-    });
+        let usdCard = new CurrencyCard({
+          denomination: 'USD',
+          currencyName: 'United States Dollar',
+          icon: '🇺🇸',
+        });
 
-    let txCard = new TxCard({
-      name: 'Transfer',
-      transferAmount: new TxAmountField({
-        quantity: 250,
-        denomination: usdCard,
-      }),
-    });
+        let txCard = new TxCard({
+          name: 'Transfer',
+          transferAmount: new TxAmountField({
+            quantity: 250,
+            denomination: usdCard,
+          }),
+        });
 
-    await setupIntegrationTestRealm({
-      loader,
-      contents: {
-        'currency.gts': { CurrencyCard },
-        'tx.gts': { TxCard },
-        '.realm.json': `{ "name": "Local Workspace" }`,
-        'usd.json': usdCard,
-        'Tx/1.json': txCard,
-      },
-    });
+        await setupIntegrationTestRealm({
+          loader,
+          contents: {
+            'currency.gts': { CurrencyCard },
+            'tx.gts': { TxCard },
+            '.realm.json': `{ "name": "Local Workspace" }`,
+            'usd.json': usdCard,
+            'Tx/1.json': txCard,
+          },
+        });
+      });
+      test('render a CardDef field (singular) linked to from a FieldDef', async function (assert) {
+        await renderComponent(OperatorModeComponent);
+        await setCardInOperatorModeState(`${testRealmURL}Tx/1`, 'edit');
 
-    await renderComponent(OperatorModeComponent);
-    await setCardInOperatorModeState(`${testRealmURL}Tx/1`, 'edit');
+        assert
+          .dom('[data-test-card-format="edit"][data-test-field-component-card]')
+          .exists();
+        assert
+          .dom(
+            '[data-test-field="transferAmount"] > [data-test-boxel-field-label]',
+          )
+          .hasText('Transfer Amount');
+        assert
+          .dom(
+            '[data-test-field="transferAmount"] > [data-test-compound-field-format="edit"] [data-test-field="quantity"] input',
+          )
+          .hasValue('250');
+        assert.dom('[data-test-field="quantity"]').hasClass('vertical');
 
-    assert
-      .dom('[data-test-card-format="edit"][data-test-field-component-card]')
-      .exists();
-    assert
-      .dom('[data-test-field="transferAmount"] > [data-test-boxel-field-label]')
-      .hasText('Transfer Amount');
-    assert
-      .dom(
-        '[data-test-field="transferAmount"] > [data-test-compound-field-format="edit"] [data-test-field="quantity"] input',
-      )
-      .hasValue('250');
-    assert.dom('[data-test-field="quantity"]').hasClass('vertical');
+        assert
+          .dom(
+            '[data-test-field="transferAmount"] [data-test-field="denomination"]',
+          )
+          .exists('linked card is present');
+        assert
+          .dom(
+            '[data-test-field="denomination"] [data-test-links-to-editor] [data-test-currency-embedded]',
+          )
+          .containsText(
+            '🇺🇸 USD - United States Dollar',
+            'linked card content is correct',
+          );
 
-    assert
-      .dom(
-        '[data-test-field="transferAmount"] [data-test-field="denomination"]',
-      )
-      .exists('linked card is present');
-    assert
-      .dom(
-        '[data-test-field="denomination"] [data-test-links-to-editor] [data-test-currency-embedded]',
-      )
-      .containsText(
-        '🇺🇸 USD - United States Dollar',
-        'linked card content is correct',
-      );
+        assert
+          .dom(`[data-test-overlay-card="${testRealmURL}usd"]`)
+          .containsText('Currency');
+        assert
+          .dom(
+            `[data-test-overlay-card="${testRealmURL}usd"] [data-test-embedded-card-edit-button]`,
+          )
+          .exists()
+          .isNotDisabled();
+        assert
+          .dom(
+            `[data-test-overlay-card="${testRealmURL}usd"] [data-test-embedded-card-options-button]`,
+          )
+          .exists()
+          .isNotDisabled();
 
-    assert
-      .dom(`[data-test-overlay-card="${testRealmURL}usd"]`)
-      .containsText('Currency');
-    assert
-      .dom(
-        `[data-test-overlay-card="${testRealmURL}usd"] [data-test-embedded-card-edit-button]`,
-      )
-      .exists()
-      .isNotDisabled();
-    assert
-      .dom(
-        `[data-test-overlay-card="${testRealmURL}usd"] [data-test-embedded-card-options-button]`,
-      )
-      .exists()
-      .isNotDisabled();
+        await click(
+          '[data-test-field="denomination"] [data-test-links-to-editor] [data-test-remove-card]',
+        );
+        assert
+          .dom('[data-test-currency-embedded]')
+          .doesNotExist('currency card is removed');
+        assert
+          .dom('[data-test-field="denomination"] [data-test-links-to-editor]')
+          .containsText('Link Currency', 'empty state is correct');
+      });
+    },
+  );
 
-    await click(
-      '[data-test-field="denomination"] [data-test-links-to-editor] [data-test-remove-card]',
-    );
-    assert
-      .dom('[data-test-currency-embedded]')
-      .doesNotExist('currency card is removed');
-    assert
-      .dom('[data-test-field="denomination"] [data-test-links-to-editor]')
-      .containsText('Link Currency', 'empty state is correct');
-  });
+  module('with test realm setup for plural linked card test', function (hooks) {
+    hooks.beforeEach(async function () {
+      let { field, contains, linksToMany, CardDef, FieldDef } = cardApi;
+      let { default: StringField } = string;
 
-  test('CardDef field (plural) linked to from a FieldDef renders in atom format', async function (assert) {
-    let { field, contains, linksToMany, CardDef, FieldDef } = cardApi;
-    let { default: StringField } = string;
+      class Country extends CardDef {
+        static displayName = 'Country';
+        @field name = contains(StringField);
+        @field title = contains(StringField, {
+          computeVia(this: Country) {
+            return this.name;
+          },
+        });
+      }
+      class Trips extends FieldDef {
+        static displayName = 'Trips';
+        @field countries = linksToMany(Country);
+      }
+      class Person extends CardDef {
+        static displayName = 'Person';
+        @field firstName = contains(StringField);
+        @field trips = contains(Trips);
+      }
 
-    class Country extends CardDef {
-      static displayName = 'Country';
-      @field name = contains(StringField);
-      @field title = contains(StringField, {
-        computeVia(this: Country) {
-          return this.name;
+      let usa = new Country({ name: 'United States' });
+      let japan = new Country({ name: 'Japan' });
+      let fadhlan = new Person({
+        firstName: 'Fadhlan',
+      });
+
+      await setupIntegrationTestRealm({
+        loader,
+        contents: {
+          'country.gts': { Country },
+          'person.gts': { Person },
+          'usa.json': usa,
+          'japan.json': japan,
+          'Person/fadhlan.json': fadhlan,
         },
       });
-    }
-    class Trips extends FieldDef {
-      static displayName = 'Trips';
-      @field countries = linksToMany(Country);
-    }
-    class Person extends CardDef {
-      static displayName = 'Person';
-      @field firstName = contains(StringField);
-      @field trips = contains(Trips);
-    }
-
-    let usa = new Country({ name: 'United States' });
-    let japan = new Country({ name: 'Japan' });
-    let fadhlan = new Person({
-      firstName: 'Fadhlan',
     });
 
-    await setupIntegrationTestRealm({
-      loader,
-      contents: {
-        'country.gts': { Country },
-        'person.gts': { Person },
-        'usa.json': usa,
-        'japan.json': japan,
-        'Person/fadhlan.json': fadhlan,
-      },
+    test('CardDef field (plural) linked to from a FieldDef renders in atom format', async function (assert) {
+      await renderComponent(OperatorModeComponent);
+      await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`, 'edit');
+
+      await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
+      assert.dom('[data-test-field="trips"] [data-test-add-new]').exists();
+      await click('[data-test-links-to-many="countries"] [data-test-add-new]');
+      await waitFor(`[data-test-card-catalog-item="${testRealmURL}japan"]`);
+      await click(`[data-test-select="${testRealmURL}japan"]`);
+      await click('[data-test-card-catalog-go-button]');
+
+      await waitFor('[card-catalog-modal]', { count: 0 });
+
+      assert.dom('[data-test-pill-item]').exists({ count: 1 });
+      assert.dom('[data-test-field="trips"]').containsText('Japan');
+
+      await click('[data-test-links-to-many="countries"] [data-test-add-new]');
+      await waitFor(`[data-test-card-catalog-item="${testRealmURL}usa"]`);
+      await click(`[data-test-select="${testRealmURL}usa"]`);
+      await click('[data-test-card-catalog-go-button]');
+
+      await waitFor('[card-catalog-modal]', { count: 0 });
+      assert.dom('[data-test-pill-item]').exists({ count: 2 });
+      assert
+        .dom('[data-test-field="trips"]')
+        .containsText('Japan United States');
+
+      await click('[data-test-pill-item] [data-test-remove-card]');
+      assert.dom('[data-test-pill-item]').exists({ count: 1 });
+      await click('[data-test-pill-item] [data-test-remove-card]');
+      assert.dom('[data-test-pill-item]').exists({ count: 0 });
     });
-
-    await renderComponent(OperatorModeComponent);
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`, 'edit');
-
-    await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
-    assert.dom('[data-test-field="trips"] [data-test-add-new]').exists();
-    await click('[data-test-links-to-many="countries"] [data-test-add-new]');
-    await waitFor(`[data-test-card-catalog-item="${testRealmURL}japan"]`);
-    await click(`[data-test-select="${testRealmURL}japan"]`);
-    await click('[data-test-card-catalog-go-button]');
-
-    await waitFor('[card-catalog-modal]', { count: 0 });
-
-    assert.dom('[data-test-pill-item]').exists({ count: 1 });
-    assert.dom('[data-test-field="trips"]').containsText('Japan');
-
-    await click('[data-test-links-to-many="countries"] [data-test-add-new]');
-    await waitFor(`[data-test-card-catalog-item="${testRealmURL}usa"]`);
-    await click(`[data-test-select="${testRealmURL}usa"]`);
-    await click('[data-test-card-catalog-go-button]');
-
-    await waitFor('[card-catalog-modal]', { count: 0 });
-    assert.dom('[data-test-pill-item]').exists({ count: 2 });
-    assert.dom('[data-test-field="trips"]').containsText('Japan United States');
-
-    await click('[data-test-pill-item] [data-test-remove-card]');
-    assert.dom('[data-test-pill-item]').exists({ count: 1 });
-    await click('[data-test-pill-item] [data-test-remove-card]');
-    assert.dom('[data-test-pill-item]').exists({ count: 0 });
   });
 });
