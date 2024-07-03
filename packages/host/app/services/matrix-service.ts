@@ -1,7 +1,7 @@
 import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import Service, { service } from '@ember/service';
-import { cached, tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
 import format from 'date-fns/format';
 
@@ -61,8 +61,6 @@ import { importResource } from '../resources/import';
 
 import { clearAllRealmSessions } from '../resources/realm-session';
 
-import { RoomResource, getRoom } from '../resources/room';
-
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
 
@@ -97,7 +95,6 @@ export default class MatrixService
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
   private rooms: TrackedMap<string, RoomField> = new TrackedMap();
-  private roomResourcesCache: Map<string, RoomResource> = new Map();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
   failedCommandState: TrackedMap<string, Error> = new TrackedMap();
@@ -748,24 +745,6 @@ export default class MatrixService
 
   setRoom(roomId: string, room: RoomField) {
     this.rooms.set(roomId, room);
-    if (!this.roomResourcesCache.has(roomId)) {
-      this.roomResourcesCache.set(
-        roomId,
-        getRoom(this, () => roomId),
-      );
-    }
-  }
-
-  @cached
-  get roomResources() {
-    let resources: TrackedMap<string, RoomResource> = new TrackedMap();
-    for (let roomId of this.rooms.keys()) {
-      if (!this.roomResourcesCache.get(roomId)) {
-        continue;
-      }
-      resources.set(roomId, this.roomResourcesCache.get(roomId)!);
-    }
-    return resources;
   }
 
   private resetState() {
