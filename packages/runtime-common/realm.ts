@@ -32,6 +32,7 @@ import {
   maybeHandleScopedCSSRequest,
   PrerenderedCard,
   QueryResultsMeta,
+  PrerenderedCardCssItem,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -1705,33 +1706,32 @@ export class Realm {
 
   private transformResultsToPrerenderedCardsDoc(results: {
     prerenderedCards: PrerenderedCard[];
+    prerenderedCardCssItems: PrerenderedCardCssItem[];
     meta: QueryResultsMeta;
   }) {
-    let { prerenderedCards, meta } = results;
-    let uniqueCssModules = new Map(); // every instance in fetched results will have css (if it exists) - to avoid duplication in the response, we'll store unique css modules here
+    let { prerenderedCards, prerenderedCardCssItems, meta } = results;
 
     let data = prerenderedCards.map((card) => ({
       type: 'prerendered-card',
       id: card.url,
       attributes: {
-        embeddedHtml: card.embeddedHtml,
+        embeddedHtml: card.embeddedHtml.default,
       },
       relationships: {
         'prerendered-card-css': {
-          data: card.prerenderedCardCss.map((css) => {
-            uniqueCssModules.set(css.moduleUrl, css);
+          data: card.cssModuleIds.map((cssModuleId) => {
             return {
               type: 'prerendered-card-css',
-              id: css.moduleUrl,
+              id: cssModuleId,
             };
           }),
         },
       },
     }));
 
-    let included = Array.from(uniqueCssModules.values()).map((css) => ({
+    let included = prerenderedCardCssItems.map((css) => ({
       type: 'prerendered-card-css',
-      id: css.moduleUrl,
+      id: css.cssModuleId,
       attributes: {
         content: css.source,
       },

@@ -1871,11 +1871,11 @@ module('Realm Server', function (hooks) {
           [
             {
               type: 'prerendered-card-css',
-              id: 'http://127.0.0.1:4444/fancy-person',
+              id: 'http://127.0.0.1:4444/person',
             },
             {
               type: 'prerendered-card-css',
-              id: 'http://127.0.0.1:4444/person',
+              id: 'http://127.0.0.1:4444/fancy-person',
             },
           ],
           'instance of type FancyPerson has css from both Person and FancyPerson',
@@ -1899,11 +1899,11 @@ module('Realm Server', function (hooks) {
           [
             {
               type: 'prerendered-card-css',
-              id: 'http://127.0.0.1:4444/fancy-person',
+              id: 'http://127.0.0.1:4444/person',
             },
             {
               type: 'prerendered-card-css',
-              id: 'http://127.0.0.1:4444/person',
+              id: 'http://127.0.0.1:4444/fancy-person',
             },
           ],
           'instance of type FancyPerson has css from both Person and FancyPerson',
@@ -1962,7 +1962,7 @@ module('Realm Server', function (hooks) {
           1,
           'one prerendered card instance is returned in the filtered search results',
         );
-        assert.strictEqual(json.data[0].id, 'http://127.0.0.1:4444/jimmy');
+        assert.strictEqual(json.data[0].id, 'http://127.0.0.1:4444/jimmy.json');
       });
 
       test('can sort prerendered instances', async function (assert) {
@@ -1984,10 +1984,10 @@ module('Realm Server', function (hooks) {
         assert.strictEqual(json.data.length, 4, 'results count is correct');
 
         // firstName descending
-        assert.strictEqual(json.data[0].id, 'http://127.0.0.1:4444/jimmy');
-        assert.strictEqual(json.data[1].id, 'http://127.0.0.1:4444/jane');
-        assert.strictEqual(json.data[2].id, 'http://127.0.0.1:4444/craig');
-        assert.strictEqual(json.data[3].id, 'http://127.0.0.1:4444/aaron');
+        assert.strictEqual(json.data[0].id, 'http://127.0.0.1:4444/jimmy.json');
+        assert.strictEqual(json.data[1].id, 'http://127.0.0.1:4444/jane.json');
+        assert.strictEqual(json.data[2].id, 'http://127.0.0.1:4444/craig.json');
+        assert.strictEqual(json.data[3].id, 'http://127.0.0.1:4444/aaron.json');
       });
     });
   });

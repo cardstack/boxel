@@ -20,6 +20,30 @@ interface TestCards {
 }
 
 const tests = Object.freeze({
+  'can get prerendered cards': async (
+    assert,
+    { indexer, loader, testCards },
+  ) => {
+    let { mango, vangogh } = testCards;
+    await setupIndex(indexer, [
+      {
+        card: mango,
+        data: { embedded_html: { default: '<div>Mango</div', deps: 'abc' } },
+      },
+      {
+        card: vangogh,
+        data: { embedded_html: { default: '<div>Mango</div' } },
+      },
+    ]);
+
+    let { prerenderedCards: _prerenderedCards, meta } =
+      await indexer.searchPrerendered(new URL(testRealmURL), {}, loader);
+
+    // TODO: how to test when there is no deps for instances, and no indexed modules in boxel index?
+
+    assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
+  },
+
   'can get all cards with empty filter': async (
     assert,
     { indexer, loader, testCards },

@@ -185,6 +185,14 @@ module('Unit | query', function (hooks) {
     await indexer.ready();
   });
 
+  test('can get prerendered cards', async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards,
+    });
+  });
+
   test('can get all cards with empty filter', async function (assert) {
     await runSharedTest(queryTests, assert, {
       indexer,
