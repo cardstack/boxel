@@ -1,13 +1,14 @@
 import { waitFor, waitUntil, click, fillIn } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { format } from 'date-fns';
 import { setupRenderingTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { EventStatus } from 'matrix-js-sdk';
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { Deferred, baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
@@ -60,7 +61,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMatrixServiceMock(hooks, { autostart: true });
+
   setupWindowMock(hooks);
   let noop = () => {};
 
@@ -543,8 +545,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await setCardInOperatorModeState(otherCardID);
     await waitFor('[data-test-person="Burcu"]');
+    matrixService.sendReactionDeferred = new Deferred<void>();
     await click('[data-test-ai-bot-retry-button]'); // retry the command with correct card
     assert.dom('[data-test-apply-state="applying"]').exists();
+    matrixService.sendReactionDeferred.fulfill();
 
     await waitFor('[data-test-patch-card-idle]');
     assert.dom('[data-test-apply-state="applied"]').exists();
@@ -857,11 +861,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await waitFor('[data-test-command-apply="ready"]', { count: 3 });
 
+    matrixService.sendReactionDeferred = new Deferred<void>();
     await click('[data-test-message-idx="2"] [data-test-command-apply]');
     assert.dom('[data-test-apply-state="applying"]').exists({ count: 1 });
     assert
       .dom('[data-test-message-idx="2"] [data-test-apply-state="applying"]')
       .exists();
+    matrixService.sendReactionDeferred.fulfill();
 
     await waitFor('[data-test-message-idx="2"] [data-test-patch-card-idle]');
     assert.dom('[data-test-apply-state="applied"]').exists({ count: 1 });
@@ -918,11 +924,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await waitFor('[data-test-command-apply="ready"]', { count: 1 });
 
+    matrixService.sendReactionDeferred = new Deferred<void>();
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
     assert.dom('[data-test-apply-state="applying"]').exists({ count: 1 });
     assert
       .dom('[data-test-message-idx="0"] [data-test-apply-state="applying"]')
       .exists();
+    matrixService.sendReactionDeferred?.fulfill();
 
     await waitFor('[data-test-message-idx="0"] [data-test-patch-card-idle]');
     assert.dom('[data-test-apply-state="applied"]').exists({ count: 1 });
@@ -1892,5 +1900,217 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .containsText(
         'Wednesday Jan 3, 2024, 12:31 PM This is the second message comes after the first message and before the replacement of the first message',
       );
+  });
+
+  test('it displays the streaming indicator when ai bot message is in progress (streaming words)', async function (assert) {
+    await setCardInOperatorModeState();
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    let roomId = await openAiAssistant();
+
+    await addRoomEvent(matrixService, {
+      event_id: 'event0',
+      room_id: roomId,
+      state_key: 'state',
+      type: 'm.room.message',
+      sender: '@matic:boxel',
+      content: {
+        body: 'Say one word.',
+        msgtype: 'org.boxel.message',
+        formatted_body: 'Say one word.',
+        format: 'org.matrix.custom.html',
+      },
+      origin_server_ts: Date.now() - 100,
+      unsigned: {
+        age: 105,
+        transaction_id: '1',
+      },
+      status: null,
+    });
+
+    await addRoomEvent(matrixService, {
+      event_id: 'event1',
+      room_id: roomId,
+      state_key: 'state',
+      type: 'm.room.message',
+      sender: '@aibot:localhost',
+      content: {
+        body: 'French.',
+        msgtype: 'm.text',
+        formatted_body: 'French.',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      origin_server_ts: Date.now() - 99,
+      unsigned: {
+        age: 105,
+        transaction_id: '1',
+      },
+      status: null,
+    });
+
+    await addRoomEvent(matrixService, {
+      event_id: 'event2',
+      room_id: roomId,
+      state_key: 'state',
+      type: 'm.room.message',
+      sender: '@matic:boxel',
+      content: {
+        body: 'What is a french bulldog?',
+        msgtype: 'org.boxel.message',
+        formatted_body: 'What is a french bulldog?',
+        format: 'org.matrix.custom.html',
+      },
+      origin_server_ts: Date.now() - 98,
+      unsigned: {
+        age: 105,
+        transaction_id: '1',
+      },
+      status: null,
+    });
+
+    await addRoomEvent(matrixService, {
+      event_id: 'event3',
+      room_id: roomId,
+      state_key: 'state',
+      type: 'm.room.message',
+      sender: '@aibot:localhost',
+      content: {
+        body: 'French bulldog is a',
+        msgtype: 'm.text',
+        formatted_body: 'French bulldog is a',
+        format: 'org.matrix.custom.html',
+      },
+      origin_server_ts: Date.now() - 97,
+      unsigned: {
+        age: 105,
+        transaction_id: '1',
+      },
+      status: null,
+    });
+
+    await waitFor('[data-test-message-idx="3"]');
+
+    assert
+      .dom('[data-test-message-idx="1"] [data-test-ai-avatar]')
+      .doesNotHaveClass(
+        'ai-avatar-animated',
+        'Answer to my previous question is not in progress',
+      );
+    assert
+      .dom('[data-test-message-idx="3"] [data-test-ai-avatar]')
+      .hasClass(
+        'ai-avatar-animated',
+        'Answer to my current question is in progress',
+      );
+
+    await click('[data-test-past-sessions-button]');
+    assert
+      .dom("[data-test-enter-room='New AI Assistant Chat']")
+      .includesText('Thinking');
+    assert.dom('[data-test-is-streaming]').exists();
+
+    await addRoomEvent(matrixService, {
+      event_id: 'event4',
+      room_id: roomId,
+      state_key: 'state',
+      type: 'm.room.message',
+      sender: '@aibot:localhost',
+      content: {
+        body: 'French bulldog is a French breed of companion dog or toy dog.',
+        msgtype: 'm.text',
+        formatted_body:
+          'French bulldog is a French breed of companion dog or toy dog',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true, // This is an indicator from the ai bot that the message is finalized and the openai is done streaming
+        'm.relates_to': {
+          rel_type: 'm.replace',
+          event_id: 'event3',
+        },
+      },
+      origin_server_ts: Date.now() - 96,
+      unsigned: {
+        age: 105,
+        transaction_id: '1',
+      },
+      status: null,
+    });
+
+    await waitFor('[data-test-message-idx="3"]');
+    assert
+      .dom('[data-test-message-idx="1"] [data-test-ai-avatar]')
+      .doesNotHaveClass(
+        'ai-avatar-animated',
+        'Answer to my previous question is not in progress',
+      );
+    assert
+      .dom('[data-test-message-idx="3"] [data-test-ai-avatar]')
+      .doesNotHaveClass(
+        'ai-avatar-animated',
+        'Answer to my last question is not in progress',
+      );
+
+    assert
+      .dom("[data-test-enter-room='New AI Assistant Chat']")
+      .doesNotContainText('Thinking');
+    assert.dom('[data-test-is-streaming]').doesNotExist();
+  });
+
+  test('it displays a toast if there is an activity that was not seen by the user yet', async function (assert) {
+    await setCardInOperatorModeState();
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await openAiAssistant();
+    await click('[data-test-close-ai-assistant]');
+
+    // Create a new room with some activity
+    let anotherRoomId = await matrixService.createAndJoinRoom('Another Room');
+
+    let date = Date.now() - 98;
+    await addRoomEvent(matrixService, {
+      event_id: 'event2',
+      room_id: anotherRoomId,
+      state_key: 'state',
+      type: 'm.room.message',
+      sender: '@aibot:localhost',
+      content: {
+        body: 'I sent a message from the background.',
+        msgtype: 'm.text',
+        formatted_body: 'A message from the background.',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      origin_server_ts: date,
+      unsigned: {
+        age: 105,
+        transaction_id: '1',
+      },
+      status: null,
+    });
+
+    await waitFor('[data-test-ai-assistant-toast]');
+    assert
+      .dom('[data-test-ai-assistant-toast-header]')
+      .exists(`${format(date, 'dd.MM.yyyy, h:mm aa')}`);
+    assert
+      .dom('[data-test-ai-assistant-toast-content]')
+      .exists(`${format(date, 'dd.MM.yyyy, h:mm aa')}`);
+    await click('[data-test-ai-assistant-toast-button]');
+    assert.dom('[data-test-chat-title]').containsText('Another Room');
+    assert
+      .dom('[data-test-ai-message-content]')
+      .containsText('A message from the background.');
   });
 });

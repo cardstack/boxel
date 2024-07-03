@@ -74,6 +74,7 @@ export interface BoxelIndexTable {
   source: string | null;
   embedded_html: Record<string, string> | null;
   isolated_html: string | null;
+  atom_html: string | null;
   indexed_at: string | null; // pg represents big integers as strings in javascript
   last_modified: string | null; // pg represents big integers as strings in javascript
   is_deleted: boolean | null;
@@ -107,6 +108,7 @@ export interface IndexedInstance {
   lastModified: number;
   isolatedHtml: string | null;
   embeddedHtml: string | null;
+  atomHtml: string | null;
   searchDoc: Record<string, any> | null;
   types: string[] | null;
   deps: string[] | null;
@@ -324,6 +326,7 @@ export class Indexer {
       url: canonicalURL,
       pristine_doc: instance,
       isolated_html: isolatedHtml,
+      atom_html: atomHtml,
       default_embedded_html: embeddedHtml,
       embedded_html: _embeddedHtmlByClassHierarchy,
       search_doc: searchDoc,
@@ -349,6 +352,7 @@ export class Indexer {
       instance,
       isolatedHtml,
       embeddedHtml,
+      atomHtml,
       searchDoc,
       types,
       indexedAt: indexedAt != null ? parseInt(indexedAt) : null,
@@ -1133,6 +1137,7 @@ export interface InstanceEntry {
   searchData: Record<string, any>;
   isolatedHtml?: string;
   embeddedHtml?: Record<string, string>;
+  atomHtml?: string;
   types: string[];
   deps: Set<string>;
 }
@@ -1194,6 +1199,7 @@ export class Batch {
               search_doc: entry.searchData,
               isolated_html: entry.isolatedHtml,
               embedded_html: entry.embeddedHtml,
+              atom_html: entry.atomHtml,
               deps: [...entry.deps],
               types: entry.types,
               source: entry.source,

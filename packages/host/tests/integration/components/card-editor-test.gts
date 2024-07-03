@@ -10,7 +10,11 @@ import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test, skip } from 'qunit';
 
-import { RealmSessionContextName, baseRealm } from '@cardstack/runtime-common';
+import {
+  PermissionsContextName,
+  type Permissions,
+  baseRealm,
+} from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 
@@ -44,9 +48,11 @@ module('Integration | card-editor', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
-    provideConsumeContext(RealmSessionContextName, {
+    let permissions: Permissions = {
       canWrite: true,
-    });
+      canRead: true,
+    };
+    provideConsumeContext(PermissionsContextName, permissions);
 
     loader = lookupLoaderService().loader;
   });
@@ -56,7 +62,7 @@ module('Integration | card-editor', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-  setupMatrixServiceMock(hooks);
+  setupMatrixServiceMock(hooks, { autostart: true });
 
   async function loadCard(url: string): Promise<CardDef> {
     let { createFromSerialized, recompute } = cardApi;
