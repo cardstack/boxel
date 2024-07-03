@@ -88,7 +88,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
         transition:
           background-color var(--boxel-transition),
           color var(--boxel-transition);
-        gap: var(--boxel-sp-xs);
+        gap: var(--boxel-header-gap, var(--boxel-sp-xs));
         padding: var(--boxel-header-padding, var(--default-header-padding));
       }
       header .title {

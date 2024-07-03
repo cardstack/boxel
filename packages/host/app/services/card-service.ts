@@ -10,7 +10,6 @@ import {
   type LooseCardResource,
   isSingleCardDocument,
   isCardCollectionDocument,
-  RealmPaths,
   type CardDocument,
   type SingleCardDocument,
   type LooseSingleCardDocument,
@@ -451,16 +450,6 @@ export default class CardService extends Service {
   async cardsSettled() {
     let api = await this.getAPI();
     await api.flushLogs();
-  }
-
-  getRealmURLFor(url: URL) {
-    for (let realmURL of this.realmURLs) {
-      let path = new RealmPaths(new URL(realmURL));
-      if (path.inRealm(url)) {
-        return new URL(realmURL);
-      }
-    }
-    return undefined;
   }
 
   async getRealmInfoByRealmURL(realmURL: URL): Promise<RealmInfo> {

@@ -394,8 +394,6 @@ const localInheritSource = `
   }
 `;
 
-let realmPermissions: { [realmURL: string]: ('read' | 'write')[] };
-
 module('Acceptance | code submode | inspector tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
@@ -406,10 +404,10 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks, { realmPermissions: () => realmPermissions });
+  let { setRealmPermissions } = setupMatrixServiceMock(hooks);
 
   hooks.beforeEach(async function () {
-    realmPermissions = { [testRealmURL]: ['read', 'write'] };
+    setRealmPermissions({ [testRealmURL]: ['read', 'write'] });
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
@@ -537,11 +535,11 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       },
     }));
 
-    let realmService = this.owner.lookup(
+    let realmInfoService = this.owner.lookup(
       'service:realm-info-service',
     ) as RealmInfoService;
 
-    await realmService.fetchRealmInfo({
+    await realmInfoService.fetchRealmInfo({
       realmURL: new URL(testRealmURL2),
     });
     monacoService = this.owner.lookup(
@@ -888,9 +886,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     // realm selection
     await click(`[data-test-realm-dropdown-trigger]`);
-    await waitFor(
-      '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Base Workspace"]',
-    );
+    await waitFor('[data-test-boxel-menu-item-text="Test Workspace A"]');
     await click('[data-test-boxel-menu-item-text="Test Workspace A"]');
     await waitFor(`[data-test-realm-name="Test Workspace A"]`);
     assert.dom('[data-test-realm-name]').hasText('Test Workspace A');
@@ -2249,7 +2245,7 @@ export class ExportedCard extends ExportedCardParent {
 
   module('when the user lacks write permissions', function (hooks) {
     hooks.beforeEach(async function () {
-      realmPermissions = { [testRealmURL]: ['read'] };
+      setRealmPermissions({ [testRealmURL]: ['read'] });
     });
 
     test('delete button is not displayed for module when user does not have permission to write to realm', async function (assert) {
