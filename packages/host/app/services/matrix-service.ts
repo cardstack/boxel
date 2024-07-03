@@ -118,7 +118,7 @@ export default class MatrixService
 
   get context(): Context {
     return {
-      rooms: this.rooms,
+      listRooms: this.listRooms,
       cardAPI: this.cardAPI,
       loaderService: this.loaderService,
       flushTimeline: this.flushTimeline,
