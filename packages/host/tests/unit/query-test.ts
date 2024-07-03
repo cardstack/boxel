@@ -185,14 +185,6 @@ module('Unit | query', function (hooks) {
     await indexer.ready();
   });
 
-  test('can get prerendered cards', async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
-      loader,
-      testCards,
-    });
-  });
-
   test('can get all cards with empty filter', async function (assert) {
     await runSharedTest(queryTests, assert, {
       indexer,
@@ -530,6 +522,14 @@ module('Unit | query', function (hooks) {
   });
 
   test(`cannot filter 'null' value using 'range'`, async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards,
+    });
+  });
+
+  test('can get prerendered cards (html + css) from the indexer', async function (assert) {
     await runSharedTest(queryTests, assert, {
       indexer,
       loader,

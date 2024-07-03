@@ -35,6 +35,7 @@ import {
   upsert,
   tableValuedFunctionsPlaceholder,
   query,
+  Param,
 } from './expression';
 import {
   type Query,
@@ -428,7 +429,7 @@ export class Indexer {
     { filter, sort, page }: Query,
     loader: Loader,
     opts: QueryOptions,
-    selectStatement: string,
+    selectClauseExpression: CardExpression,
   ): Promise<{
     meta: QueryResultsMeta;
     results: Partial<BoxelIndexTable>[];
@@ -454,7 +455,7 @@ export class Indexer {
 
     let everyCondition = every(conditions);
     let query = [
-      selectStatement,
+      ...selectClauseExpression,
       `FROM boxel_index AS i ${tableValuedFunctionsPlaceholder}`,
       `INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
       'WHERE',
@@ -497,7 +498,9 @@ export class Indexer {
       { filter, sort, page },
       loader,
       opts,
-      'SELECT url, ANY_VALUE(pristine_doc) AS pristine_doc, ANY_VALUE(error_doc) AS error_doc',
+      [
+        'SELECT url, ANY_VALUE(pristine_doc) AS pristine_doc, ANY_VALUE(error_doc) AS error_doc',
+      ],
     );
 
     let cards = results
@@ -544,7 +547,9 @@ export class Indexer {
       { filter, sort, page },
       loader,
       opts,
-      'SELECT url, ANY_VALUE(file_alias) as file_alias, ANY_VALUE(embedded_html) as embedded_html',
+      [
+        'SELECT url, ANY_VALUE(file_alias) as file_alias, ANY_VALUE(embedded_html) as embedded_html',
+      ],
     );
 
     let cardFileAliases = results.map((c) => c.file_alias);
@@ -554,20 +559,20 @@ export class Indexer {
       ['i.realm_version = ', param(realmVersion)],
       ['i.type =', param('instance')],
       [
-        `i.file_alias IN (${cardFileAliases
-          .map((fileAlias) => `'${fileAlias}'`)
-          .join(', ')})`,
+        'i.file_alias IN',
+        ...addExplicitParens(
+          separatedByCommas(
+            cardFileAliases.map((cardFileAlias) => [param(cardFileAlias!)]),
+          ),
+        ),
       ],
     ];
 
     // This query will give us a list of indexed css entries and their corresponding instances that have that particular css module as a dependency
     let cssSourceQuery = [
       `WITH instance_deps AS (
-        SELECT
-          file_alias AS instance_file_alias,
-          jsonb_array_unnested AS dep_url_file_alias -- 'jsonb_array_unnested' is named like that on purpose so that our sqlite adjuster knows to transform it to json_each.value too keep compatibility with sqlite
-        FROM boxel_index i,
-          jsonb_array_elements_text(deps) AS jsonb_array_unnested
+        SELECT file_alias as instance_file_alias, deps_each.value AS instance_dep_file_alias
+        FROM boxel_index i, jsonb_array_elements_text(i.deps) AS deps_each
         WHERE`,
       ...every(conditions),
       `),
@@ -577,7 +582,7 @@ export class Indexer {
           bi.file_alias AS css_module_id,
           array_agg(id.instance_file_alias) AS instances
         FROM boxel_index bi
-        JOIN instance_deps id ON bi.file_alias = id.dep_url_file_alias
+        JOIN instance_deps id ON bi.file_alias = id.instance_dep_file_alias
         WHERE bi.type = 'css'
         GROUP BY bi.source, bi.file_alias
       )
@@ -604,7 +609,11 @@ export class Indexer {
         acc: Record<string, { cssModuleId: string; cssSource: string }[]>,
         row,
       ) => {
-        row.instances.forEach((instance: string) => {
+        let instances =
+          typeof row.instances === 'string'
+            ? JSON.parse(row.instances)
+            : row.instances; // SQLite client returns array as string
+        instances.forEach((instance: string) => {
           if (!acc[instance]) {
             acc[instance] = [];
           }

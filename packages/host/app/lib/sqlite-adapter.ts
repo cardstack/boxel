@@ -215,13 +215,13 @@ export default class SQLiteAdapter implements DBAdapter {
       .replace(/ANY_VALUE\(([^)]*)\)/g, '$1')
       .replace(/CROSS JOIN LATERAL/g, 'CROSS JOIN')
       .replace(/ILIKE/g, 'LIKE') // sqlite LIKE is case insensitive
+      .replace(/jsonb_array_elements_text\(/g, 'json_each(')
       .replace(
         /jsonb_array_elements_text\(([^)]+)\)\s+AS\s+([^\s]+)/g,
         (_match, group) => {
           return `json_each(${group})`;
         },
       )
-      .replace(/jsonb_array_elements_text\(/g, 'json_each(')
       .replace(/jsonb_tree\(/g, 'json_tree(')
       .replace(/([^\s]+\s[^\s]+)_array_element/g, (match, group) => {
         if (group.startsWith('as ')) {

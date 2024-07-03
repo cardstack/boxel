@@ -1,6 +1,9 @@
 import { Deferred } from './deferred';
 import { SearchIndex } from './search-index';
-import { type SingleCardDocument } from './card-document';
+import {
+  transformResultsToPrerenderedCardsDoc,
+  type SingleCardDocument,
+} from './card-document';
 import { Loader } from './loader';
 import { RealmPaths, LocalPath, join } from './paths';
 import {
@@ -1706,46 +1709,6 @@ export class Realm {
     });
   }
 
-  private transformResultsToPrerenderedCardsDoc(results: {
-    prerenderedCards: PrerenderedCard[];
-    prerenderedCardCssItems: PrerenderedCardCssItem[];
-    meta: QueryResultsMeta;
-  }) {
-    let { prerenderedCards, prerenderedCardCssItems, meta } = results;
-
-    let data = prerenderedCards.map((card) => ({
-      type: 'prerendered-card',
-      id: card.url,
-      attributes: {
-        embeddedHtml: card.embeddedHtml.default,
-      },
-      relationships: {
-        'prerendered-card-css': {
-          data: card.cssModuleIds.map((cssModuleId) => {
-            return {
-              type: 'prerendered-card-css',
-              id: cssModuleId,
-            };
-          }),
-        },
-      },
-    }));
-
-    let included = prerenderedCardCssItems.map((css) => ({
-      type: 'prerendered-card-css',
-      id: css.cssModuleId,
-      attributes: {
-        content: css.source,
-      },
-    }));
-
-    return {
-      data,
-      included,
-      meta,
-    };
-  }
-
   private async searchPrerendered(
     request: Request,
     requestContext: RequestContext,
@@ -1759,7 +1722,7 @@ export class Realm {
       useWorkInProgressIndex,
     });
 
-    let doc = this.transformResultsToPrerenderedCardsDoc(results);
+    let doc = transformResultsToPrerenderedCardsDoc(results);
 
     return createResponse({
       body: JSON.stringify(doc, null, 2),
