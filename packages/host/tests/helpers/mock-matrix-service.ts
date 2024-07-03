@@ -1,5 +1,5 @@
 import Service, { service } from '@ember/service';
-import { cached, tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
 import { TrackedMap } from 'tracked-built-ins';
 
@@ -9,7 +9,6 @@ import { Deferred } from '@cardstack/runtime-common';
 
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
-import { RoomResource, getRoom } from '@cardstack/host/resources/room';
 import CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
@@ -98,7 +97,6 @@ function generateMockMatrixService(
     profile = getMatrixProfile(this, () => this.userId);
 
     rooms: TrackedMap<string, RoomField> = new TrackedMap();
-    private roomResourcesCache: Map<string, RoomResource> = new Map();
 
     messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
     cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
@@ -320,28 +318,10 @@ function generateMockMatrixService(
 
     setRoom(roomId: string, room: RoomField) {
       this.rooms.set(roomId, room);
-      if (!this.roomResourcesCache.has(roomId)) {
-        this.roomResourcesCache.set(
-          roomId,
-          getRoom(this, () => roomId),
-        );
-      }
     }
 
     get listRooms() {
       return Array.from(this.rooms.values());
-    }
-
-    @cached
-    get roomResources() {
-      let resources: TrackedMap<string, RoomResource> = new TrackedMap();
-      for (let roomId of this.rooms.keys()) {
-        if (!this.roomResourcesCache.get(roomId)) {
-          continue;
-        }
-        resources.set(roomId, this.roomResourcesCache.get(roomId)!);
-      }
-      return resources;
     }
   }
   return MockMatrixService;
