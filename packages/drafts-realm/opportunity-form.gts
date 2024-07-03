@@ -17,7 +17,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import { CrmAccount } from './crm/account';
+import { Company, CrmAccount } from './crm/account';
 import NumberField from '../base/number';
 
 interface CategorySignature {
@@ -34,7 +34,6 @@ const formatNumber = (val: number) => {
 };
 
 /* Amount */
-
 class EmbeddedSecForAmount extends Component<typeof AmountField> {
   <template>
     <CardContainer @displayBoundaries={{false}} class='container'>
@@ -134,8 +133,8 @@ class AmountField extends FieldDef {
 /* Opportunity Form */
 class IsolatedSecForOpportunityForm extends Component<typeof OpportunityForm> {
   get getCompanyName() {
-    if (!this.args.model.companyName) return '-';
-    return this.args.model.companyName;
+    if (!this.args.model.company) return '-';
+    return this.args.model.company;
   }
 
   get getFormattedAmount() {
@@ -197,7 +196,7 @@ class IsolatedSecForOpportunityForm extends Component<typeof OpportunityForm> {
           <div class='field-input'>
             <label>Company Name: </label>
 
-            {{this.getCompanyName}}
+            <@fields.company />
           </div>
           <div class='field-input'>
             <label>Close Date: </label>
@@ -361,8 +360,8 @@ class EditSecForOpportunityForm extends Component<typeof OpportunityForm> {
         <@fields.accountName @format='edit' />
       </FieldContainer>
 
-      <FieldContainer @tag='label' @label='Company Name' @vertical={{true}}>
-        <@fields.companyName @format='edit' />
+      <FieldContainer @tag='label' @label='Company' @vertical={{true}}>
+        <@fields.company @format='edit' />
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Close Date' @vertical={{true}}>
@@ -443,8 +442,8 @@ class ViewSecForOpportunityForm extends Component<typeof OpportunityForm> {
         <@fields.accountName />
       </FieldContainer>
 
-      <FieldContainer @tag='label' @label='Company Name' @vertical={{true}}>
-        <@fields.companyName />
+      <FieldContainer @tag='label' @label='Company' @vertical={{true}}>
+        <@fields.company />
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Close Date' @vertical={{true}}>
@@ -504,52 +503,21 @@ class ViewSecForOpportunityForm extends Component<typeof OpportunityForm> {
   </template>
 }
 
-export class OpportunityFormField extends FieldDef {
-  static displayName = 'Opportunity Form';
-  @field opportunityName = contains(StringField, {
-    description: `Opportunity Name`,
-  });
-  @field accountName = linksTo(CrmAccount, {
-    description: `Account Name`,
-  });
-  @field companyName = contains(StringField, {
-    description: `Company Name`,
-  });
-  @field closeDate = contains(DateCard, {
-    description: `Close Date`,
-  });
-  @field amount = contains(AmountField, {
-    description: `Amount`,
-  });
-  @field description = contains(MarkdownField, {
-    description: `Description`,
-  });
-  @field stage = contains(StringField, {
-    description: `Stage`,
-  });
-  @field percentage = contains(NumberField, {
-    description: `Percentage`,
-  });
-  @field forecastCategory = contains(StringField, {
-    description: `Forecast Category`,
-  });
-
-  static isolated = IsolatedSecForOpportunityForm;
-  static edit = EditSecForOpportunityForm;
-  static embedded = ViewSecForOpportunityForm;
-  static atom = ViewSecForOpportunityForm;
-}
-
 export class OpportunityForm extends CardDef {
   static displayName = 'Opportunity Form';
+  @field title = contains(StringField, {
+    computeVia: function (this: OpportunityForm) {
+      return this.opportunityName;
+    },
+  });
   @field opportunityName = contains(StringField, {
     description: `Opportunity Name`,
   });
   @field accountName = linksTo(CrmAccount, {
     description: `Account Name`,
   });
-  @field companyName = contains(StringField, {
-    description: `Company Name`,
+  @field company = linksTo(Company, {
+    description: `User's Company Name`,
   });
   @field closeDate = contains(DateCard, {
     description: `Close Date`,

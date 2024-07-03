@@ -2,10 +2,10 @@
   "data": {
     "type": "card",
     "attributes": {
-      "targetPage": "Contact Form",
+      "targetPage": "Lead Form",
       "scheduledTask": [],
       "convertedStatus": null,
-      "isLeadFormConverted": true,
+      "isLeadFormConverted": false,
       "title": null,
       "description": null,
       "thumbnailURL": null
@@ -13,27 +13,27 @@
     "relationships": {
       "leadForm": {
         "links": {
-          "self": "../LeadForm/ca5a2eb1-fb9e-4467-a7aa-54f3ec316ee9"
+          "self": "../LeadForm/ad388806-9aa7-485b-90ed-66331a6da6bb"
         }
       },
       "accountForm": {
         "links": {
-          "self": "../AccountForm/491351ed-d1cf-4f95-b085-acdf45eb45d7"
+          "self": null
         }
       },
       "contactForm": {
         "links": {
-          "self": "../ContactForm/67b66644-5964-4be2-a334-73e5e0d79ce5"
+          "self": null
         }
       },
       "opportunityForm": {
         "links": {
-          "self": "../OpportunityForm/6b8a10a9-0798-436d-9183-42bd6bfe6e38"
+          "self": null
         }
       },
       "recordOwner": {
         "links": {
-          "self": "../MatrixUser/e65ae338-64a1-4a97-9ae8-9b9e773a7095"
+          "self": null
         }
       }
     },

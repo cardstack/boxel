@@ -19,6 +19,7 @@ import { action } from '@ember/object';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { CurrencyAmount } from './currency-amount';
 import { MatrixUser } from './matrix-user';
+import { Company } from './crm/account';
 
 interface CategorySignature {
   name: string;
@@ -361,16 +362,16 @@ class EditSecFoLeadForm extends Component<typeof LeadForm> {
 
   <template>
     <CardContainer @displayBoundaries={{false}} class='container'>
+      <FieldContainer @tag='label' @label='Title' @vertical={{true}}>
+        <@fields.title />
+      </FieldContainer>
+
       <FieldContainer @tag='label' @label='User' @vertical={{true}}>
         <@fields.name />
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Company Name' @vertical={{true}}>
         <@fields.company />
-      </FieldContainer>
-
-      <FieldContainer @tag='label' @label='Title' @vertical={{true}}>
-        <@fields.title />
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Website' @vertical={{true}}>
@@ -466,67 +467,21 @@ class EditSecFoLeadForm extends Component<typeof LeadForm> {
   </template>
 }
 
-export class LeadFormField extends FieldDef {
-  static displayName = 'Lead Form';
-
-  @field name = contains(UserName, {
-    description: `User's Full Name`,
-  });
-  @field company = contains(StringField, {
-    description: `User's Company Name`,
-  });
-  @field title = contains(StringField, {
-    description: `User's Title`,
-  });
-  @field website = contains(StringField, {
-    description: `User's Website`,
-  });
-  @field description = contains(MarkdownField, {
-    description: `User's Description`,
-  });
-  @field leadStatus = contains(StringField, {
-    description: `Lead Status`,
-  });
-  @field leadOwner = linksTo(MatrixUser);
-  @field phone = contains(StringField, {
-    description: `User's phone number`,
-  });
-  @field email = contains(UserEmail, {
-    description: `User's Email`,
-  });
-  @field addressInfo = contains(AddressInfo, {
-    description: `User's AddressInfo`,
-  });
-  @field noOfEmployees = contains(NumberField, {
-    description: `No Of Employees`,
-  });
-  @field annualRevenue = contains(CurrencyAmount, {
-    description: `Annual Revenue`,
-  });
-  @field leadSource = contains(StringField, {
-    description: `Lead Source`,
-  });
-  @field industry = contains(StringField, {
-    description: `Industry`,
-  });
-
-  static isolated = IsolatedSecForLeadForm;
-  static atom = ViewSecForLeadForm;
-  static embedded = ViewSecForLeadForm;
-  static edit = EditSecFoLeadForm;
-}
-
 export class LeadForm extends CardDef {
   static displayName = 'Lead Form';
+  @field title = contains(StringField, {
+    computeVia: function (this: LeadForm) {
+      const { salutation, firstName, lastName } = this.name;
 
+      if (!salutation || !firstName || !lastName) return 'User Not Found';
+      return `${salutation} ${firstName} ${lastName}`;
+    },
+  });
   @field name = contains(UserName, {
     description: `User's Full Name`,
   });
-  @field company = contains(StringField, {
+  @field company = linksTo(Company, {
     description: `User's Company Name`,
-  });
-  @field title = contains(StringField, {
-    description: `User's Title`,
   });
   @field website = contains(StringField, {
     description: `User's Website`,

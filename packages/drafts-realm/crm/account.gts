@@ -4,7 +4,6 @@ import {
   CardDef,
   linksTo,
   Component,
-  FieldDef,
 } from 'https://cardstack.com/base/card-api';
 
 import NumberField from 'https://cardstack.com/base/number';
@@ -30,37 +29,6 @@ export class Company extends CardDef {
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <h3><@fields.name /></h3>
-    </template>
-  };
-}
-
-export class CrmAccountField extends FieldDef {
-  static displayName = 'Crm Account';
-  @field owner = linksTo(MatrixUser);
-  @field accountName = contains(StringField);
-  @field accountAlias = contains(StringField);
-  @field description = contains(StringField);
-  @field contactInformation = contains(Contact);
-  @field billingAddress = contains(Address);
-  @field shippingAddress = contains(Address, {
-    computeVia: function (this: CrmAccount) {
-      return this.billingAddress;
-    },
-  });
-  @field numberOfEmployees = contains(NumberField);
-  @field parentAccount = linksTo(() => CrmAccount);
-  @field company = linksTo(Company);
-  @field title = contains(StringField, {
-    computeVia: function (this: CrmAccount) {
-      return this.accountName;
-    },
-  });
-
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      <GridContainer>
-        <h3><@fields.accountName /></h3>
-      </GridContainer>
     </template>
   };
 }

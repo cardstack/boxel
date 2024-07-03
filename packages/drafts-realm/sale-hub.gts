@@ -39,7 +39,6 @@ import { LeadForm } from './lead-form';
 import { ContactForm } from './contact-form';
 import { MatrixUser } from './matrix-user';
 import { eq } from '@cardstack/boxel-ui/helpers';
-import { AccountForm } from './account-form';
 import type Owner from '@ember/owner';
 
 interface TargetPageLinkSingnature {
@@ -112,7 +111,7 @@ class TaskForm extends FieldDef {
   @field comments = contains(MarkdownField, {
     description: `Comments`,
   });
-  @field relatedTo = linksTo(CrmAccount, {
+  @field relatedTo = linksTo(() => CrmAccount, {
     description: `Related to Crm Account`,
   });
   @field isCompleted = contains(BooleanField, {
@@ -392,6 +391,11 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
   //account-form
   constructor(owner: Owner, args: any) {
     super(owner, args);
+
+    if (!this.args.model.targetPage) {
+      this.args.model.targetPage = 'Lead Form';
+    }
+
     if (!this.args.model.leadForm || !this.args.model.isLeadFormConverted)
       return;
 
@@ -409,7 +413,7 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
 
     if (this.args.model.opportunityForm) {
       const company = this.args.model.leadForm.company;
-      this.args.model.opportunityForm.companyName = `${firstName} ${company}`;
+      this.args.model.opportunityForm.company = company;
     }
   }
 
@@ -451,10 +455,9 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
       this.args.model.opportunityForm &&
       this.args.model.leadForm
     ) {
-      const firstName = this.args.model.leadForm.name.firstName;
       const company = this.args.model.leadForm.company;
 
-      this.args.model.opportunityForm.companyName = `${firstName} ${company}`;
+      this.args.model.opportunityForm.company = company;
     }
   }
 
@@ -575,7 +578,8 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
       (option) => option.name === this.args.model.leadForm?.leadStatus,
     );
 
-    this.initStepOptions.forEach((option, index) => {
+    this.initStepOptions.map((option, index) => {
+      option.isActive = index === currentCompletedStep;
       option.isCompleted =
         index <= currentCompletedStep ||
         this.args.model.leadForm?.leadStatus === 'Qualified';
@@ -1179,7 +1183,7 @@ export class SaleHub extends CardDef {
   @field leadForm = linksTo(LeadForm, {
     description: `Lead form`,
   });
-  @field accountForm = linksTo(AccountForm, {
+  @field accountForm = linksTo(CrmAccount, {
     description: `Account Form`,
   });
   @field contactForm = linksTo(ContactForm, {

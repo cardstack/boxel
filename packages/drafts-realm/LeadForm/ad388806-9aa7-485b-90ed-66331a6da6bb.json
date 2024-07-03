@@ -1,0 +1,52 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": {
+        "salutation": "Mr.",
+        "firstName": "Law",
+        "lastName": "Yung Lom"
+      },
+      "website": "law.com",
+      "description": null,
+      "leadStatus": "Working",
+      "phone": "019999999999",
+      "email": "lawgrocery@g.com",
+      "addressInfo": {
+        "address": null,
+        "zip": null,
+        "city": null,
+        "state": null,
+        "country": null,
+        "countryCode": null,
+        "stateCode": null
+      },
+      "noOfEmployees": 200,
+      "annualRevenue": {
+        "currency": "RM",
+        "totalAmount": 1200000
+      },
+      "leadSource": "Advertisement",
+      "industry": "Biotechnology",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "company": {
+        "links": {
+          "self": "../Company/b57e5ffd-b64f-4531-a7e4-5a1d0420e2bc"
+        }
+      },
+      "leadOwner": {
+        "links": {
+          "self": "../MatrixUser/485ca453-b328-4e85-a761-b2fe7d145430"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../lead-form",
+        "name": "LeadForm"
+      }
+    }
+  }
+}

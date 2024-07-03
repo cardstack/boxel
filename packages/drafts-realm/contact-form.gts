@@ -1,12 +1,7 @@
 import { UserName } from './user-name';
 import { UserEmail } from './user-email';
 import { AddressInfo } from './address-info';
-import {
-  CardDef,
-  field,
-  contains,
-  FieldDef,
-} from 'https://cardstack.com/base/card-api';
+import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import { FieldContainer, CardContainer } from '@cardstack/boxel-ui/components';
@@ -242,39 +237,14 @@ class Edit extends Component<typeof ContactForm> {
   </template>
 }
 
-export class ContactFormField extends FieldDef {
-  @field title = contains(StringField, {
-    description: `Contact Form Title`,
-  });
-  @field name = contains(UserName, {
-    description: `User's Full Name`,
-  });
-  @field email = contains(UserEmail, {
-    description: `User's Email`,
-  });
-  @field phone = contains(StringField, {
-    description: `User's phone number`,
-  });
-  @field fax = contains(StringField, {
-    description: `User's Fax Number`,
-  });
-  @field department = contains(StringField, {
-    description: `User's Department`,
-  });
-  @field addressInfo = contains(AddressInfo, {
-    description: `User's AddressInfo`,
-  });
-
-  static displayName = 'Contact Form';
-  static isolated = Isolated;
-  static embedded = View;
-  static atom = View;
-  static edit = Edit;
-}
-
 export class ContactForm extends CardDef {
   @field title = contains(StringField, {
-    description: `Contact Form Title`,
+    computeVia: function (this: ContactForm) {
+      const { salutation, firstName, lastName } = this.name;
+
+      if (!salutation || !firstName || !lastName) return 'User Not Found';
+      return `${salutation} ${firstName} ${lastName}`;
+    },
   });
   @field name = contains(UserName, {
     description: `User's Full Name`,

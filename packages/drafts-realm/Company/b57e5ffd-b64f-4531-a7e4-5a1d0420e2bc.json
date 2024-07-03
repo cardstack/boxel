@@ -2,10 +2,17 @@
   "data": {
     "type": "card",
     "attributes": {
-      "accountName": null,
-      "accountAlias": null,
-      "description": null,
-      "contactInformation": {
+      "name": "Law Grocery",
+      "regstrationNumber": null,
+      "address": {
+        "streetAddress": null,
+        "city": null,
+        "region": null,
+        "postalCode": null,
+        "poBoxNumber": null,
+        "country": null
+      },
+      "contactPerson": {
         "salutation": null,
         "firstName": null,
         "lastName": null,
@@ -29,38 +36,13 @@
           "value": null
         }
       },
-      "billingAddress": {
-        "streetAddress": null,
-        "city": null,
-        "region": null,
-        "postalCode": null,
-        "poBoxNumber": null,
-        "country": null
-      },
-      "numberOfEmployees": null,
+      "description": null,
       "thumbnailURL": null
-    },
-    "relationships": {
-      "owner": {
-        "links": {
-          "self": null
-        }
-      },
-      "parentAccount": {
-        "links": {
-          "self": null
-        }
-      },
-      "company": {
-        "links": {
-          "self": null
-        }
-      }
     },
     "meta": {
       "adoptsFrom": {
         "module": "../crm/account",
-        "name": "CrmAccount"
+        "name": "Company"
       }
     }
   }

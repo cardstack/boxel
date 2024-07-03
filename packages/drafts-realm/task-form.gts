@@ -25,7 +25,6 @@ interface CategorySignature {
 class IsolatedSecForTaskForm extends Component<typeof TaskForm> {
   <template>
     <CardContainer @displayBoundaries={{false}} class='container'>
-
       <div class='field-input'>
         <label>Subject: </label>
         <div><@fields.subject /></div>
