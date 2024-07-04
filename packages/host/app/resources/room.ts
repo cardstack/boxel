@@ -313,7 +313,7 @@ export class RoomResource extends Resource<Args> {
 export function getRoom(
   parent: object,
   roomId: () => string | undefined,
-  events: () => any | undefined,
+  events: () => any | undefined, //we need this to react to new roomAddEvent
 ) {
   return RoomResource.from(parent, () => ({
     named: {
