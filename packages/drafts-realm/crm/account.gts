@@ -11,7 +11,7 @@ import StringField from 'https://cardstack.com/base/string';
 import { Address } from '../address';
 import { Contact } from './contact';
 import { MatrixUser } from '../matrix-user';
-import { GridContainer } from '@cardstack/boxel-ui/components';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 export class Company extends CardDef {
   static displayName = 'Company';
@@ -57,9 +57,87 @@ export class CrmAccount extends CardDef {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <GridContainer>
+      <div class='container'>
+        <div class='field-input-group'>
+          <FieldContainer
+            @tag='label'
+            @label='Owner'
+            @vertical={{true}}
+          ><@fields.owner /></FieldContainer>
+
+          <FieldContainer
+            @tag='label'
+            @label='Account Name'
+            @vertical={{true}}
+          ><@fields.accountName /></FieldContainer>
+
+          <FieldContainer
+            @tag='label'
+            @label='Account Alias'
+            @vertical={{true}}
+          ><@fields.accountAlias /></FieldContainer>
+
+          <FieldContainer
+            @tag='label'
+            @label='Description'
+            @vertical={{true}}
+          ><@fields.description /></FieldContainer>
+
+          <FieldContainer
+            @tag='label'
+            @label='Contact Information'
+            @vertical={{true}}
+          ><@fields.contactInformation /></FieldContainer>
+
+          <FieldContainer
+            @tag='label'
+            @label='Billing Address'
+            @vertical={{true}}
+          ><@fields.billingAddress /></FieldContainer>
+
+          <FieldContainer
+            @tag='label'
+            @label='Shipping Address'
+            @vertical={{true}}
+          ><@fields.shippingAddress /></FieldContainer>
+
+          <FieldContainer
+            @tag='label'
+            @label='Number of Employees'
+            @vertical={{true}}
+          ><@fields.numberOfEmployees /></FieldContainer>
+
+          <FieldContainer
+            @tag='label'
+            @label='Parent Account'
+            @vertical={{true}}
+          ><@fields.parentAccount /></FieldContainer>
+
+          <FieldContainer
+            @tag='label'
+            @label='Company'
+            @vertical={{true}}
+          ><@fields.company /></FieldContainer>
+        </div>
+      </div>
+      {{! <GridContainer>
         <h3><@fields.accountName /></h3>
-      </GridContainer>
+      </GridContainer> }}
+
+      <style>
+        .container {
+          display: grid;
+          gap: var(--boxel-sp-lg);
+          overflow: hidden;
+        }
+        .field-input-group {
+          overflow: overlay;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-evenly;
+          gap: var(--boxel-sp);
+        }
+      </style>
     </template>
   };
 }

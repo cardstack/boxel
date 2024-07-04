@@ -7,18 +7,10 @@ import StringField from 'https://cardstack.com/base/string';
 import { FieldContainer, CardContainer } from '@cardstack/boxel-ui/components';
 
 class Isolated extends Component<typeof ContactForm> {
-  get hasTitleField() {
-    return this.args.model.title && this.args.model.title.length > 0;
-  }
-
   <template>
     <div class='decorative-header'></div>
 
     <CardContainer @displayBoundaries={{false}} class='container'>
-      {{#if this.hasTitleField}}
-        <h2><@fields.title /></h2>
-      {{/if}}
-
       <div class='card-form-display'>
         <div class='contact-form-details'>
 
@@ -136,12 +128,6 @@ class View extends Component<typeof ContactForm> {
   <template>
     <div class='container'>
       <div class='field-input-group'>
-        <FieldContainer
-          @tag='label'
-          @label='Title'
-          @vertical={{true}}
-        ><@fields.title /></FieldContainer>
-
         <FieldContainer @tag='label' @label='User' @vertical={{true}}>
           <@fields.name />
         </FieldContainer>

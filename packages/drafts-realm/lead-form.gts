@@ -1,7 +1,6 @@
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import {
   CardDef,
-  FieldDef,
   contains,
   field,
   linksTo,

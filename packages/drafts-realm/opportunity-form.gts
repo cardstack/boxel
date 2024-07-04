@@ -17,7 +17,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import { Company, CrmAccount } from './crm/account';
+import { Company } from './crm/account';
 import NumberField from '../base/number';
 
 interface CategorySignature {
@@ -477,10 +477,8 @@ class ViewSecForOpportunityForm extends Component<typeof OpportunityForm> {
 
     <style>
       .container {
-        padding: var(--boxel-sp-lg);
         display: grid;
-        gap: var(--boxel-sp);
-        background-color: #fbfbfb;
+        gap: var(--boxel-sp-lg);
         overflow: hidden;
       }
       .field-group-title {
@@ -513,7 +511,7 @@ export class OpportunityForm extends CardDef {
   @field opportunityName = contains(StringField, {
     description: `Opportunity Name`,
   });
-  @field accountName = linksTo(CrmAccount, {
+  @field accountName = contains(StringField, {
     description: `Account Name`,
   });
   @field company = linksTo(Company, {

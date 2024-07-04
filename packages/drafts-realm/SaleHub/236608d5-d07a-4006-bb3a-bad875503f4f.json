@@ -4,8 +4,8 @@
     "attributes": {
       "targetPage": "Lead Form",
       "scheduledTask": [],
-      "convertedStatus": null,
-      "isLeadFormConverted": false,
+      "convertedStatus": "Qualified",
+      "isLeadFormConverted": true,
       "title": null,
       "description": null,
       "thumbnailURL": null
@@ -18,22 +18,22 @@
       },
       "accountForm": {
         "links": {
-          "self": null
+          "self": "../CrmAccount/a9289420-798a-49cf-b746-9aece2295d70"
         }
       },
       "contactForm": {
         "links": {
-          "self": null
+          "self": "../ContactForm/d13caade-c863-454c-a50d-e335f1840e97"
         }
       },
       "opportunityForm": {
         "links": {
-          "self": null
+          "self": "../OpportunityForm/d4f9ef0b-d19a-461d-a6ed-5a6886e2004b"
         }
       },
       "recordOwner": {
         "links": {
-          "self": null
+          "self": "../MatrixUser/485ca453-b328-4e85-a761-b2fe7d145430"
         }
       }
     },

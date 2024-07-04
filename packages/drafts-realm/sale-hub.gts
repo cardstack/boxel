@@ -111,7 +111,7 @@ class TaskForm extends FieldDef {
   @field comments = contains(MarkdownField, {
     description: `Comments`,
   });
-  @field relatedTo = linksTo(() => CrmAccount, {
+  @field relatedTo = linksTo(CrmAccount, {
     description: `Related to Crm Account`,
   });
   @field isCompleted = contains(BooleanField, {
@@ -155,7 +155,7 @@ class TargetPageLinks extends GlimmerComponent<TargetPageLinksSignature> {
 //*steps
 class Steps extends GlimmerComponent<StepsSignature> {
   @tracked steps = this.args.steps.map((step) => {
-    return { ...step, isCompleted: this.args.isLeadFormConverted };
+    return { ...step };
   });
   @tracked currentStepName = this.steps[0].name || '';
   @tracked currentStepIndex = this.steps[0].step || 0;
@@ -399,10 +399,17 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
     if (!this.args.model.leadForm || !this.args.model.isLeadFormConverted)
       return;
 
-    const { salutation, firstName, lastName } = this.args.model.leadForm.name;
+    //render leadStatus by convertedStatus
+    if (this.args.model.convertedStatus) {
+      this.args.model.leadForm.leadStatus = this.args.model.convertedStatus;
+    }
+
+    const { leadOwner, company, name } = this.args.model.leadForm;
+    const { salutation, firstName, lastName } = name;
 
     if (this.args.model.accountForm) {
       this.args.model.accountForm.accountName = `${salutation} ${firstName} ${lastName}`;
+      this.args.model.accountForm.owner = leadOwner;
     }
 
     if (this.args.model.contactForm) {
@@ -412,8 +419,8 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
     }
 
     if (this.args.model.opportunityForm) {
-      const company = this.args.model.leadForm.company;
       this.args.model.opportunityForm.company = company;
+      this.args.model.opportunityForm.accountName = `${salutation} ${firstName} ${lastName}`;
     }
   }
 
@@ -426,7 +433,6 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
       this.args.model.leadForm
     ) {
       const { salutation, firstName, lastName } = this.args.model.leadForm.name;
-
       this.args.model.accountForm.accountName = `${salutation} ${firstName} ${lastName}`;
     }
   }
@@ -457,6 +463,8 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
     ) {
       const company = this.args.model.leadForm.company;
 
+      this.args.model.opportunityForm.opportunityName =
+        this.opportunityFormName;
       this.args.model.opportunityForm.company = company;
     }
   }
@@ -482,10 +490,7 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
   get opportunityFormName() {
     const { leadForm } = this.args.model;
     if (!leadForm || !leadForm.company) return '';
-    const { firstName } = leadForm.name;
-
-    if (!firstName) return '';
-    return `${firstName} ${leadForm.company}`;
+    return leadForm.company.name;
   }
 
   //targetPageLinks
@@ -519,7 +524,6 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
   }
 
   get targetPage() {
-    console.log(this.args.model.contactForm);
     return this.args.model.targetPage;
   }
 
@@ -579,20 +583,28 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
     );
 
     this.initStepOptions.map((option, index) => {
-      option.isActive = index === currentCompletedStep;
       option.isCompleted =
         index <= currentCompletedStep ||
-        this.args.model.leadForm?.leadStatus === 'Qualified';
+        this.args.model.leadForm?.leadStatus === 'Qualified' ||
+        !!this.args.model.isLeadFormConverted;
       option.isProceedToNextStep = index === currentCompletedStep + 1;
     });
 
     return this.initStepOptions;
+  }
+  @action rerenderState() {
+    this.stepOptions.map((option) => {
+      option.isCompleted = !!this.args.model.isLeadFormConverted;
+    });
+
+    return this.stepOptions;
   }
 
   @action updateLeadStatus(status: string) {
     if (!(this.args.model.leadForm && this.args.model.leadForm.leadStatus))
       return;
 
+    //bug for sync
     this.args.model.leadForm.leadStatus = status;
   }
 
@@ -691,8 +703,8 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
   }
 
   @tracked convertedStatusOptions = [
-    { name: 'Qualified' },
     { name: 'Unqualified' },
+    { name: 'Qualified' },
   ] as Array<CategorySignature>;
 
   @action updateConvertedStatus(type: { name: string }) {
@@ -712,6 +724,7 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
 
   @action convert() {
     this.args.model.isLeadFormConverted = true;
+    this.rerenderState();
     this.closeModal();
   }
 
