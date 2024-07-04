@@ -203,6 +203,10 @@ export default class AiAssistantMessage extends Component<Signature> {
         -moz-osx-font-smoothing: grayscale;
       }
 
+      .is-from-assistant .content :deep(pre) {
+        white-space: pre-wrap;
+      }
+
       .is-pending .content,
       .is-pending .content .cards > :deep(.card-pill),
       .is-pending .content .cards > :deep(.card-pill .boxel-card-container) {
