@@ -11,7 +11,7 @@ import StringField from 'https://cardstack.com/base/string';
 import { Address } from '../address';
 import { Contact } from './contact';
 import { MatrixUser } from '../matrix-user';
-import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { FieldContainer, GridContainer } from '@cardstack/boxel-ui/components';
 
 export class Company extends CardDef {
   static displayName = 'Company';
@@ -57,7 +57,7 @@ export class CrmAccount extends CardDef {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div class='container'>
+      {{!-- <div class='container'>
         <div class='field-input-group'>
           <FieldContainer
             @tag='label'
@@ -119,10 +119,10 @@ export class CrmAccount extends CardDef {
             @vertical={{true}}
           ><@fields.company /></FieldContainer>
         </div>
-      </div>
-      {{! <GridContainer>
+      </div> --}}
+      <GridContainer>
         <h3><@fields.accountName /></h3>
-      </GridContainer> }}
+      </GridContainer>
 
       <style>
         .container {
