@@ -156,17 +156,16 @@ export default class AiAssistantToast extends Component<Signature> {
     };
 
     let lastMessages: Map<string, MessageField> = new Map();
-    let matrixRooms = this.matrixService.listRooms;
-    if (matrixRooms) {
-      this.matrixService.listRooms.forEach((room) => {
-        let finishedMessages = room.messages.filter(
-          (m) => m.isStreamingFinished,
-        );
-        lastMessages.set(
-          room.roomId,
-          finishedMessages[finishedMessages.length - 1],
-        );
-      });
+    for (let resource of this.matrixService.roomResources.values()) {
+      if (!resource.room) {
+        continue;
+      }
+      let { room } = resource;
+      let finishedMessages = room.messages.filter((m) => m.isStreamingFinished);
+      lastMessages.set(
+        room.roomId,
+        finishedMessages[finishedMessages.length - 1],
+      );
     }
 
     let lastMessage =

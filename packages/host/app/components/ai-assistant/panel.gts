@@ -384,18 +384,7 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @cached
   private get roomResources() {
-    let resources = new TrackedMap<string, RoomResource>();
-    for (let roomId of this.matrixService.rooms.keys()) {
-      resources.set(
-        roomId,
-        getRoom(
-          this,
-          () => roomId,
-          () => undefined,
-        ),
-      );
-    }
-    return resources;
+    return this.matrixService.roomResources;
   }
 
   private get roomResource() {

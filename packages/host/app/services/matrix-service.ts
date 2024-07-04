@@ -1,7 +1,7 @@
 import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import Service, { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import format from 'date-fns/format';
 
@@ -61,7 +61,7 @@ import type CardService from './card-service';
 import type LoaderService from './loader-service';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
-import { RoomModel } from '../resources/room';
+import { RoomModel, RoomResource, getRoom } from '../resources/room';
 
 const { matrixURL } = ENV;
 const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
@@ -750,6 +750,22 @@ export default class MatrixService
 
   setRoom(roomId: string, room: RoomModel) {
     this.rooms.set(roomId, room);
+  }
+
+  @cached
+  private get roomResources() {
+    let resources = new TrackedMap<string, RoomResource>();
+    for (let roomId of this.rooms.keys()) {
+      resources.set(
+        roomId,
+        getRoom(
+          this,
+          () => roomId,
+          () => this.getRoom(roomId)?.events,
+        ),
+      );
+    }
+    return resources;
   }
 
   private resetState() {
