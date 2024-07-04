@@ -8,7 +8,13 @@ import { htmlSafe } from '@ember/template';
 
 import Component from '@glimmer/component';
 
-import { format as formatDate, formatISO } from 'date-fns';
+import {
+  format as formatDate,
+  formatISO,
+  isAfter,
+  isEqual,
+  subMinutes,
+} from 'date-fns';
 
 import { resource, use } from 'ember-resources';
 import window from 'ember-window-mock';
@@ -39,7 +45,7 @@ export default class AiAssistantToast extends Component<Signature> {
   <template>
     <div
       class='ai-assistant-toast {{if this.isVisible "visible"}}'
-      data-test-ai-assistant-toast
+      data-test-ai-assistant-toast={{this.isVisible}}
       {{on 'mouseenter' this.blockResetStateValue}}
       {{on 'mouseleave' this.unBlockResetStateValue}}
     >
@@ -176,7 +182,12 @@ export default class AiAssistantToast extends Component<Signature> {
             lastMessage[1].eventId,
           ),
       )[0] ?? null;
-    if (lastMessage) {
+    let fifteenMinutesAgo = subMinutes(new Date(), 15);
+    if (
+      lastMessage &&
+      (isEqual(lastMessage[1].created, fifteenMinutesAgo) ||
+        isAfter(lastMessage[1].created, fifteenMinutesAgo))
+    ) {
       state.value = {
         roomId: lastMessage[0],
         message: lastMessage[1],
@@ -223,7 +234,9 @@ export default class AiAssistantToast extends Component<Signature> {
 
   @action
   private viewInChat() {
+    this.state.isResetStateValueBlocked = true;
     window.localStorage.setItem(currentRoomIdPersistenceKey, this.roomId);
     this.args.onViewInChatClick();
+    this.state.isResetStateValueBlocked = false;
   }
 }
