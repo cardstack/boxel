@@ -74,7 +74,6 @@ const fragmentCache = initSharedState(
 
 export class RoomModel {
   @tracked events: MatrixEvent[] = [];
-  created: undefined;
 
   get roomId() {
     return this.events.length > 0 ? this.events[0].room_id : undefined;
@@ -129,23 +128,34 @@ export class RoomModel {
   }
 }
 
+// The resource is an mirror of the RoomModel
+// RoomModel holds a lot of meta + events
+
+// RoomResource is a cache for RoomModel messages
 export class RoomResource extends Resource<Args> {
-  @tracked roomId: string | undefined;
+  _messageCache: Map<string, MessageField> = new Map();
   @tracked room: RoomModel | undefined;
   @tracked loading: Promise<void> | undefined;
   @service private declare matrixService: MatrixService;
 
   modify(_positional: never[], named: Args['named']) {
     console.log('running resource again');
-    this.roomId = named.roomId;
-    if (this.roomId) {
-      this.loading = this.load.perform(this.roomId);
+    if (named.roomId) {
+      this.loading = this.load.perform(named.roomId);
     }
   }
 
+  get resourceMessages() {
+    if (this._messageCache) {
+      let o = [...this._messageCache.values()].sort(
+        (a, b) => a.created.getTime() - b.created.getTime(),
+      );
+      return o;
+    }
+    return [];
+  }
+
   get events() {
-    // console.log('==== events ===');
-    // console.log(this.room!.events);
     return this.room ? this.room.events : [];
   }
 
@@ -195,8 +205,7 @@ export class RoomResource extends Resource<Args> {
       if (cache.has(event_id) && !update) {
         continue;
       }
-      // =====
-      if (cache.has(event_id) && !update) {
+      if (this._messageCache.has(event_id) && !update) {
         continue;
       }
       let author = upsertRoomMember({ room, userId: event.sender });
@@ -275,6 +284,7 @@ export class RoomResource extends Resource<Args> {
         // because `eventId` can change in certain scenarios,
         // such as when resending a failed message or updating its status from sending to sent.
         cache.set(id, message);
+        this._messageCache.set(id, message);
       }
     }
   }
