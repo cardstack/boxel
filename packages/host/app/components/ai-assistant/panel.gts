@@ -66,7 +66,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     let oneMinuteAgo = new Date(Date.now() - 60 * 1000).getTime();
 
     return this.aiSessionRooms
-      .filter((session) => session.roomId !== this.currentRoom?.roomId)
+      .filter((session) => session.roomId !== this.roomModel?.roomId)
       .some((session) => {
         let isSessionActive =
           this.matrixService.getLastActiveTimestamp(session) > oneMinuteAgo;
@@ -92,7 +92,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       >
         <@resizeHandle />
         <header class='panel-header'>
-          {{#if this.currentRoom.messages}}
+          {{#if this.roomResource.resourceMessages}}
             <div class='panel-title-group'>
               <img
                 alt='AI Assistant'
@@ -101,7 +101,7 @@ export default class AiAssistantPanel extends Component<Signature> {
                 height='20'
               />
               <h3 class='panel-title-text' data-test-chat-title>
-                {{if this.currentRoom.name this.currentRoom.name 'Assistant'}}
+                {{if this.roomModel.name this.roomModel.name 'Assistant'}}
               </h3>
             </div>
           {{/if}}
@@ -120,7 +120,7 @@ export default class AiAssistantPanel extends Component<Signature> {
               class='new-session-button'
               @kind='secondary-dark'
               @size='small'
-              @disabled={{not this.currentRoom.messages.length}}
+              @disabled={{not this.roomResource.resourceMessages.length}}
               {{on 'click' this.createNewSession}}
               data-test-create-room-btn
             >
@@ -388,16 +388,24 @@ export default class AiAssistantPanel extends Component<Signature> {
     for (let roomId of this.matrixService.rooms.keys()) {
       resources.set(
         roomId,
-        getRoom(this, () => roomId),
+        getRoom(
+          this,
+          () => roomId,
+          () => undefined,
+        ),
       );
     }
     return resources;
   }
 
-  private get currentRoom() {
+  private get roomResource() {
     return this.currentRoomId
-      ? this.roomResources.get(this.currentRoomId)?.room
+      ? this.roomResources.get(this.currentRoomId)
       : undefined;
+  }
+
+  private get roomModel() {
+    return this.roomResource ? this.roomResource.room : undefined;
   }
 
   private loadRoomsTask = restartableTask(async () => {

@@ -33,6 +33,7 @@ function initSharedState<T>(key: string, fn: () => T): T {
 interface Args {
   named: {
     roomId: string | undefined;
+    events: any[] | undefined;
   };
 }
 
@@ -120,8 +121,6 @@ export class RoomModel {
       let o = [...cache.values()].sort(
         (a, b) => a.created.getTime() - b.created.getTime(),
       );
-      console.log('sorted cache');
-      console.log(o);
       return o;
     }
     return [];
@@ -139,17 +138,26 @@ export class RoomResource extends Resource<Args> {
   @service private declare matrixService: MatrixService;
 
   modify(_positional: never[], named: Args['named']) {
-    console.log('running resource again');
+    console.log(`running resource again with ${named.roomId}`);
+    console.log(named.events);
+    if (named.roomId === '!MuJJWlGrztdMIxaVwX:localhost') {
+      debugger;
+    }
     if (named.roomId) {
       this.loading = this.load.perform(named.roomId);
     }
   }
 
   get resourceMessages() {
+    if (this.room?.roomId === '!MuJJWlGrztdMIxaVwX:localhost') {
+      debugger;
+    }
     if (this._messageCache) {
       let o = [...this._messageCache.values()].sort(
         (a, b) => a.created.getTime() - b.created.getTime(),
       );
+      console.log(`resource messages from ${this.room?.roomId}`);
+      console.log(o);
       return o;
     }
     return [];
