@@ -52,10 +52,6 @@ interface RoomState {
   created?: number;
 }
 
-const eventCache = initSharedState(
-  'eventCache',
-  () => new WeakMap<RoomModel, Map<string, MatrixEvent>>(),
-);
 const messageCache = initSharedState(
   'messageCache',
   () => new WeakMap<RoomModel, Map<string, MessageField>>(),
@@ -94,21 +90,6 @@ export class RoomModel {
     return;
   }
 
-  get roomMembers() {
-    let roomMembers = roomMemberCache.get(this);
-    if (roomMembers) {
-      return [...roomMembers.values()];
-    }
-    return [];
-  }
-  get invitedMembers() {
-    return this.roomMembers.filter((m) => m.membership === 'invite');
-  }
-
-  get joinedMembers() {
-    return this.roomMembers.filter((m) => m.membership === 'join');
-  }
-
   get messages() {
     // let o = this.events
     //   .filter((e) => e.type === 'm.room.message')
@@ -133,6 +114,7 @@ export class RoomModel {
 // RoomResource is a cache for RoomModel messages
 export class RoomResource extends Resource<Args> {
   _messageCache: Map<string, MessageField> = new Map();
+  _memberCache: Map<string, RoomMemberField> = new Map();
   @tracked room: RoomModel | undefined;
   @tracked loading: Promise<void> | undefined;
   @service private declare matrixService: MatrixService;
@@ -148,6 +130,16 @@ export class RoomResource extends Resource<Args> {
     }
   }
 
+  private load = restartableTask(async (roomId: string | undefined) => {
+    this.room = roomId ? await this.matrixService.getRoom(roomId) : undefined;
+    if (this.room) {
+      await this.loadRoomMembers(this.room);
+      await this.loadRoomMessages(this.room);
+    } else {
+      debugger;
+    }
+  });
+
   get resourceMessages() {
     if (this.room?.roomId === '!MuJJWlGrztdMIxaVwX:localhost') {
       debugger;
@@ -161,6 +153,18 @@ export class RoomResource extends Resource<Args> {
       return o;
     }
     return [];
+  }
+
+  get resourceMembers() {
+    return Array.from(this._memberCache.values()) ?? [];
+  }
+
+  get invitedMembers() {
+    return this.resourceMembers.filter((m) => m.membership === 'invite');
+  }
+
+  get joinedMembers() {
+    return this.resourceMembers.filter((m) => m.membership === 'join');
   }
 
   get events() {
@@ -184,7 +188,7 @@ export class RoomResource extends Resource<Args> {
         membershipTs: event.origin_server_ts || Date.now(),
         membershipInitiator: event.sender,
       };
-      upsertRoomMember({
+      this.upsertRoomMember({
         room,
         ...roomMemberArgs,
       });
@@ -216,7 +220,7 @@ export class RoomResource extends Resource<Args> {
       if (this._messageCache.has(event_id) && !update) {
         continue;
       }
-      let author = upsertRoomMember({ room, userId: event.sender });
+      let author = this.upsertRoomMember({ room, userId: event.sender });
       let cardArgs = {
         author,
         created: new Date(event.origin_server_ts),
@@ -297,17 +301,58 @@ export class RoomResource extends Resource<Args> {
     }
   }
 
-  async loadNewEvents() {}
-
-  private load = restartableTask(async (roomId: string | undefined) => {
-    this.room = roomId ? await this.matrixService.getRoom(roomId) : undefined;
-    if (this.room) {
-      await this.loadRoomMembers(this.room);
-      await this.loadRoomMessages(this.room);
-    } else {
-      debugger;
+  upsertRoomMember({
+    room,
+    userId,
+    displayName,
+    membership,
+    membershipTs,
+    membershipInitiator,
+  }: {
+    room: RoomModel;
+    userId: string;
+    displayName?: string;
+    membership?: 'invite' | 'join' | 'leave';
+    membershipTs?: number;
+    membershipInitiator?: string;
+  }): RoomMemberField {
+    let roomMembers = roomMemberCache.get(room);
+    if (!roomMembers) {
+      roomMembers = new Map();
+      roomMemberCache.set(room, roomMembers);
     }
-  });
+    let member = roomMembers.get(userId);
+    if (
+      member?.membershipDateTime != null &&
+      membershipTs != null &&
+      member.membershipDateTime.getTime() > membershipTs
+    ) {
+      // the member data provided is actually older than what we have in our cache
+      return member;
+    }
+    if (!member) {
+      member = {
+        id: userId,
+        userId,
+        roomId: room.roomId,
+      };
+      this._memberCache.set(userId, member);
+      roomMembers.set(userId, member);
+    }
+    if (displayName) {
+      member.displayName = displayName;
+    }
+    if (membership) {
+      member.membership = membership;
+    }
+    if (membershipTs != null) {
+      member.membershipDateTime = new Date(membershipTs);
+    }
+    if (membershipInitiator) {
+      member.membershipInitiator = membershipInitiator;
+    }
+    return member;
+  }
 }
 
 export function getRoom(
@@ -324,58 +369,6 @@ export function getRoom(
 }
 
 //utils
-
-function upsertRoomMember({
-  room,
-  userId,
-  displayName,
-  membership,
-  membershipTs,
-  membershipInitiator,
-}: {
-  room: RoomModel;
-  userId: string;
-  displayName?: string;
-  membership?: 'invite' | 'join' | 'leave';
-  membershipTs?: number;
-  membershipInitiator?: string;
-}): RoomMemberField {
-  let roomMembers = roomMemberCache.get(room);
-  if (!roomMembers) {
-    roomMembers = new Map();
-    roomMemberCache.set(room, roomMembers);
-  }
-  let member = roomMembers.get(userId);
-  if (
-    member?.membershipDateTime != null &&
-    membershipTs != null &&
-    member.membershipDateTime.getTime() > membershipTs
-  ) {
-    // the member data provided is actually older than what we have in our cache
-    return member;
-  }
-  if (!member) {
-    member = {
-      id: userId,
-      userId,
-      roomId: room.roomId,
-    };
-    roomMembers.set(userId, member);
-  }
-  if (displayName) {
-    member.displayName = displayName;
-  }
-  if (membership) {
-    member.membership = membership;
-  }
-  if (membershipTs != null) {
-    member.membershipDateTime = new Date(membershipTs);
-  }
-  if (membershipInitiator) {
-    member.membershipInitiator = membershipInitiator;
-  }
-  return member;
-}
 
 function createMessageField(event: MatrixEvent): MessageField {
   return {
