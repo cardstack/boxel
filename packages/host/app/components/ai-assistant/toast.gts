@@ -161,7 +161,9 @@ export default class AiAssistantToast extends Component<Signature> {
         continue;
       }
       let { room } = resource;
-      let finishedMessages = room.messages.filter((m) => m.isStreamingFinished);
+      let finishedMessages = resource.resourceMessages.filter(
+        (m) => m.isStreamingFinished,
+      );
       lastMessages.set(
         room.roomId,
         finishedMessages[finishedMessages.length - 1],

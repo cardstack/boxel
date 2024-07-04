@@ -753,7 +753,7 @@ export default class MatrixService
   }
 
   @cached
-  private get roomResources() {
+  get roomResources() {
     let resources = new TrackedMap<string, RoomResource>();
     for (let roomId of this.rooms.keys()) {
       resources.set(

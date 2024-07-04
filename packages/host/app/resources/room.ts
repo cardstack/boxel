@@ -89,23 +89,6 @@ export class RoomModel {
     }
     return;
   }
-
-  get messages() {
-    // let o = this.events
-    //   .filter((e) => e.type === 'm.room.message')
-    //   .map((e) => createMessageField(e))
-    //   .sort((a, b) => a.created.getTime() - b.created.getTime());
-    // console.log(o);
-    // return o;
-    let cache = messageCache.get(this);
-    if (cache) {
-      let o = [...cache.values()].sort(
-        (a, b) => a.created.getTime() - b.created.getTime(),
-      );
-      return o;
-    }
-    return [];
-  }
 }
 
 // The resource is an mirror of the RoomModel
