@@ -207,6 +207,10 @@ export default class AiAssistantMessage extends Component<Signature> {
         white-space: pre-wrap;
       }
 
+      .is-from-assistant .content :deep(pre code) {
+        overflow-wrap: break-word;
+      }
+
       .is-pending .content,
       .is-pending .content .cards > :deep(.card-pill),
       .is-pending .content .cards > :deep(.card-pill .boxel-card-container) {
