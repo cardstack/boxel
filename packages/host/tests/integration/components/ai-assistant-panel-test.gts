@@ -1,4 +1,10 @@
-import { waitFor, waitUntil, click, fillIn } from '@ember/test-helpers';
+import {
+  waitFor,
+  waitUntil,
+  click,
+  fillIn,
+  triggerEvent,
+} from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { format, subMinutes } from 'date-fns';
@@ -2125,9 +2131,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
     });
 
     await waitFor('[data-test-ai-assistant-toast]');
+    // Hovering over the toast prevents it from disappearing
+    await triggerEvent('[data-test-ai-assistant-toast]', 'mouseenter');
     assert
       .dom('[data-test-ai-assistant-toast-header]')
       .containsText(`${format(fourteenMinutesAgo, 'dd.MM.yyyy, h:mm aa')}`);
+    await triggerEvent('[data-test-ai-assistant-toast]', 'mouseleave');
     await click('[data-test-ai-assistant-toast-button]');
     assert.dom('[data-test-chat-title]').containsText('Another Room');
     assert

@@ -1,22 +1,14 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
-import { later } from '@ember/runloop';
-import { Timer } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 
 import Component from '@glimmer/component';
 
-import {
-  format as formatDate,
-  formatISO,
-  isAfter,
-  isEqual,
-  subMinutes,
-} from 'date-fns';
+import { format as formatDate, formatISO, isAfter, subMinutes } from 'date-fns';
+import { pollTask, runTask } from 'ember-lifeline';
 
-import { resource, use } from 'ember-resources';
 import window from 'ember-window-mock';
 
 import { TrackedObject } from 'tracked-built-ins';
@@ -138,7 +130,7 @@ export default class AiAssistantToast extends Component<Signature> {
 
   @service private declare matrixService: MatrixService;
 
-  @use private state = resource(({ on }) => {
+  private get state() {
     const state: {
       value: {
         roomId: string;
@@ -150,15 +142,18 @@ export default class AiAssistantToast extends Component<Signature> {
       isResetStateValueBlocked: false,
     });
 
-    let resetStateValueId: Timer | null;
-    const resetStateValue = function (timeout = 3000): Timer {
-      return later(() => {
-        if (state.isResetStateValueBlocked) {
-          resetStateValueId = resetStateValue(1000);
-          return;
-        }
-        state.value = null;
-      }, timeout);
+    const resetStateValue = (timeout = 3000) => {
+      runTask(
+        this,
+        () => {
+          if (state.isResetStateValueBlocked) {
+            resetStateValue(1000);
+            return;
+          }
+          state.value = null;
+        },
+        timeout,
+      );
     };
 
     let lastMessages: Map<string, MessageField> = new Map();
@@ -183,32 +178,23 @@ export default class AiAssistantToast extends Component<Signature> {
           ),
       )[0] ?? null;
     let fifteenMinutesAgo = subMinutes(new Date(), 15);
-    if (
-      lastMessage &&
-      (isEqual(lastMessage[1].created, fifteenMinutesAgo) ||
-        isAfter(lastMessage[1].created, fifteenMinutesAgo))
-    ) {
+    if (lastMessage && isAfter(lastMessage[1].created, fifteenMinutesAgo)) {
       state.value = {
         roomId: lastMessage[0],
         message: lastMessage[1],
       };
 
-      resetStateValueId = resetStateValue();
-      on.cleanup(() => {
-        if (resetStateValueId) {
-          clearInterval(resetStateValueId);
-        }
-      });
+      pollTask(this, resetStateValue);
     }
 
     return state;
-  });
+  }
 
-  get roomId() {
+  private get roomId() {
     return this.state.value?.roomId ?? '';
   }
 
-  get unseenMessage() {
+  private get unseenMessage() {
     return (
       this.state.value?.message ??
       ({
@@ -218,25 +204,23 @@ export default class AiAssistantToast extends Component<Signature> {
     );
   }
 
-  get isVisible() {
+  private get isVisible() {
     return this.state.value && !this.args.hide;
   }
 
   @action
-  blockResetStateValue() {
+  private blockResetStateValue() {
     this.state.isResetStateValueBlocked = true;
   }
 
   @action
-  unBlockResetStateValue() {
+  private unBlockResetStateValue() {
     this.state.isResetStateValueBlocked = false;
   }
 
   @action
   private viewInChat() {
-    this.state.isResetStateValueBlocked = true;
     window.localStorage.setItem(currentRoomIdPersistenceKey, this.roomId);
     this.args.onViewInChatClick();
-    this.state.isResetStateValueBlocked = false;
   }
 }
