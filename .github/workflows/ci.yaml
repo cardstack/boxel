@@ -103,6 +103,9 @@ jobs:
       - name: Run Playwright tests
         run: pnpm test:group ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         working-directory: packages/matrix
+      - name: list traces?
+        run: find . | grep zip
+        working-directory: packages/matrix
 
       - name: Upload blob report to GitHub Actions Artifacts
         if: ${{ !cancelled() }}
