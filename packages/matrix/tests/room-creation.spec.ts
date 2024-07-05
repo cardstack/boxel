@@ -32,6 +32,7 @@ test.describe('Room creation', () => {
     await registerRealmUsers(synapse);
     await registerUser(synapse, 'user1', 'pass');
     await registerUser(synapse, 'user2', 'pass');
+    await registerUser(synapse, 'xuser', 'pass');
     await clearLocalStorage(page);
   });
   test.afterEach(async ({ page }) => {
