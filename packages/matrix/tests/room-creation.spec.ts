@@ -194,6 +194,36 @@ test.describe('Room creation', () => {
     await page.locator(`[data-test-close-past-sessions]`).click();
   });
 
+  test.only('room names do not persist across different user sessions', async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass');
+
+    let room = await getRoomId(page);
+    await sendMessage(page, room, 'Hello');
+    await openRenameMenu(page, room);
+
+    const newRoomName = 'Room 1';
+    await page.locator(`[data-test-name-field]`).fill(newRoomName);
+    await page.locator('[data-test-save-name-button]').click();
+    await page.locator(`[data-test-close-past-sessions]`).click();
+
+    await openRoom(page, room);
+    await expect(page.locator(`[data-test-chat-title]`)).toHaveText(
+      newRoomName,
+    );
+
+    await logout(page);
+    await login(page, 'xuser', 'pass', {
+      alreadyInOperatorMode: true,
+      skipOpeningAssistant: true,
+    });
+
+    await expect(page.locator(`[data-test-chat-title]`)).not.toHaveText(
+      newRoomName,
+    );
+  });
+
   test('it can delete a room', async ({ page }) => {
     await login(page, 'user1', 'pass');
     let roomsBeforeDeletion = await getRoomsFromSync();

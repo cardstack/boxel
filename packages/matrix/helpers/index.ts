@@ -19,6 +19,8 @@ interface ProfileAssertions {
 interface LoginOptions {
   url?: string;
   expectFailure?: true;
+  alreadyInOperatorMode?: true;
+  skipOpeningAssistant?: true;
 }
 
 export async function registerRealmUsers(synapse: SynapseInstance) {
@@ -226,8 +228,11 @@ export async function login(
   password: string,
   opts?: LoginOptions,
 ) {
-  await openRoot(page, opts?.url);
-  await toggleOperatorMode(page);
+  if (!opts?.alreadyInOperatorMode) {
+    await openRoot(page, opts?.url);
+    await toggleOperatorMode(page);
+  }
+
   await page.waitForFunction(() =>
     document.querySelector('[data-test-username-field]'),
   );
@@ -238,7 +243,9 @@ export async function login(
   if (opts?.expectFailure) {
     await expect(page.locator('[data-test-login-error]')).toHaveCount(1);
   } else {
-    await openAiAssistant(page);
+    if (!opts?.skipOpeningAssistant) {
+      await openAiAssistant(page);
+    }
   }
 }
 
