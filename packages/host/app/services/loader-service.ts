@@ -15,8 +15,6 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import config from '@cardstack/host/config/environment';
 
-import RealmInfoService from '@cardstack/host/services/realm-info-service';
-
 import { shimExternals } from '../lib/externals';
 
 import type RealmService from './realm';
@@ -50,7 +48,6 @@ function getNativeFetch(): typeof fetch {
 
 export default class LoaderService extends Service {
   @service declare fastboot: { isFastBoot: boolean };
-  @service declare realmInfoService: RealmInfoService;
   @service declare realm: RealmService;
 
   @tracked loader = this.makeInstance();

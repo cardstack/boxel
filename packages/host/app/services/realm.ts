@@ -265,6 +265,10 @@ export default class RealmService extends Service {
       get canWrite() {
         return self.canWrite(url);
       },
+      get isPublic() {
+        let resource = self.knownRealm(url);
+        return resource?.meta?.isPublic ?? false;
+      },
     };
   };
 

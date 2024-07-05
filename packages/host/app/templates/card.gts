@@ -12,7 +12,6 @@ import { restartableTask } from 'ember-concurrency';
 // @ts-expect-error no types
 import { keyResponder, onKey } from 'ember-keyboard';
 
-import { trackedFunction } from 'ember-resources/util/function';
 import RouteTemplate from 'ember-route-template';
 import stringify from 'safe-stable-stringify';
 
@@ -39,7 +38,7 @@ import MessageService from '@cardstack/host/services/message-service';
 import OperatorModeStateService, {
   SerializedState as OperatorModeSerializedState,
 } from '@cardstack/host/services/operator-mode-state-service';
-import RealmInfoService from '@cardstack/host/services/realm-info-service';
+import type RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -66,7 +65,7 @@ class CardRouteComponent extends Component<CardRouteSignature> {
   @service declare router: RouterService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare messageService: MessageService;
-  @service declare realmInfoService: RealmInfoService;
+  @service declare realm: RealmService;
 
   constructor(owner: Owner, args: CardRouteSignature['Args']) {
     super(owner, args);
@@ -131,9 +130,8 @@ class CardRouteComponent extends Component<CardRouteSignature> {
   toggleOperatorModeTask = restartableTask(async () => {
     // Users are not allowed to open guest mode
     // if realm is not publicly readable
-    let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
-      new URL(ownRealmURL),
-    );
+    let isPublicReadableRealm =
+      (await this.realm.meta(ownRealmURL)?.isPublic) ?? false;
     if (!isPublicReadableRealm && this.args.controller.operatorModeEnabled) {
       return;
     }
@@ -167,14 +165,8 @@ class CardRouteComponent extends Component<CardRouteSignature> {
   }
 
   get isPublicReadableRealm() {
-    return this.fetchIsPublicReadableStatus.value ?? false;
+    return this.realm.meta(ownRealmURL).isPublic ?? false;
   }
-
-  private fetchIsPublicReadableStatus = trackedFunction(
-    this,
-    async () =>
-      await this.realmInfoService.isPublicReadable(new URL(ownRealmURL)),
-  );
 
   <template>
     {{#if @controller.operatorModeEnabled}}
