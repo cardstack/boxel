@@ -77,21 +77,14 @@ interface CategorySignature {
   name: string;
 }
 
-// interface TaskSignature {
-//   taskId: string | null;
-//   subject: string | null;
-//   dueDate: Date | any;
-//   comments: string | null;
-//   isCompleted: boolean;
-// }
-
 interface GroupedTasksSignature {
-  month: any;
+  month: string | null;
   taskId: string | null;
   subject: string | null;
   dueDate: Date | any;
   comments: string | null;
   isCompleted: boolean;
+  relatedTo: any;
 }
 
 //*task-form
@@ -387,6 +380,23 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
     this.isTaskFormModalVisible = false;
   }
 
+  //task-form modal by Id
+  @tracked selectedTask: GroupedTasksSignature | null = null;
+  @tracked isTaskFormModalByIdVisible = false;
+
+  @action
+  openTaskFormModaById(id: string) {
+    this.isTaskFormModalByIdVisible = true;
+    const filteredTask = this.tasks.find((task) => task.taskId == id);
+    if (!filteredTask) return;
+    this.selectedTask = filteredTask;
+  }
+
+  @action
+  closeTaskFormModalById() {
+    this.isTaskFormModalByIdVisible = false;
+  }
+
   //auto bind form
   @action
   updateAccountForm() {
@@ -566,34 +576,43 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
 
   //upcoming task list
   get tasks() {
-    if (!this.args.model.scheduledTask) return [];
+    const { scheduledTask } = this.args.model;
 
-    const mapTasks = this.args.model.scheduledTask.map((task) => {
+    if (!scheduledTask) return [];
+
+    return scheduledTask.map((task) => {
+      const { taskForm } = task;
       return {
-        month: task.taskForm.dueDate
-          ? this.formatDueDate(task.taskForm.dueDate)
-          : null,
-        taskId: task.taskForm.taskId,
-        subject: task.taskForm.subject,
-        dueDate: task.taskForm.dueDate,
-        comments: task.taskForm.comments,
-        isCompleted: task.taskForm.isCompleted,
+        month: taskForm.dueDate ? this.formatDueDate(taskForm.dueDate) : null,
+        taskId: taskForm.taskId,
+        subject: taskForm.subject,
+        dueDate: taskForm.dueDate,
+        comments: taskForm.comments,
+        isCompleted: taskForm.isCompleted,
+        relatedTo: taskForm.relatedTo,
       };
     });
-    return mapTasks;
   }
 
   get groupedTasks() {
     if (!this.tasks) return;
 
     const groupedTasks: { [key: string]: GroupedTasksSignature[] } =
-      this.tasks.reduce((acc: any, task: GroupedTasksSignature) => {
-        if (!acc[task.month]) {
-          acc[task.month] = [];
-        }
-        acc[task.month].push(task);
-        return acc;
-      }, {});
+      this.tasks.reduce(
+        (
+          acc: { [key: string]: GroupedTasksSignature[] },
+          task: GroupedTasksSignature,
+        ) => {
+          if (!!task.month) {
+            if (!acc[task.month]) {
+              acc[task.month] = [];
+            }
+            acc[task.month].push(task);
+          }
+          return acc;
+        },
+        {},
+      );
 
     const sortedMonths = Object.keys(groupedTasks).sort((a, b) => {
       if (a === 'Upcoming') return -1;
@@ -811,6 +830,50 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
         </div>
       </CardContainer>
     </Modal>
+    <Modal
+      @size={{'large'}}
+      @isOpen={{this.isTaskFormModalByIdVisible}}
+      @onClose={{this.closeTaskFormModalById}}
+      class='dialog'
+    >
+      <CardContainer class='container'>
+        <IconButton
+          @icon={{IconX}}
+          @width='12'
+          @height='12'
+          {{on 'click' this.closeTaskFormModalById}}
+          class='dialog-box__close'
+          aria-label='close modal'
+        />
+        <div class='dialog-box'>
+          <CardContainer @displayBoundaries={{false}}>
+            <FieldContainer @tag='label' @label='Task Id' @vertical={{false}}>
+              {{this.selectedTask.taskId}}
+            </FieldContainer>
+
+            <FieldContainer @tag='label' @label='Subject' @vertical={{false}}>
+              {{this.selectedTask.subject}}
+            </FieldContainer>
+
+            <FieldContainer @tag='label' @label='Comments' @vertical={{false}}>
+              {{this.selectedTask.comments}}
+            </FieldContainer>
+
+            <FieldContainer @tag='label' @label='Due Date' @vertical={{false}}>
+              {{this.selectedTask.dueDate}}
+            </FieldContainer>
+
+            <FieldContainer
+              @tag='label'
+              @label='Related To'
+              @vertical={{false}}
+            >
+              {{this.selectedTask.relatedTo.accountName}}
+            </FieldContainer>
+          </CardContainer>
+        </div>
+      </CardContainer>
+    </Modal>
 
     <div class='sale-hub'>
       <section>
@@ -892,9 +955,6 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
 
           <section class='activity-panel'>
             <div class='activity-button-group'>
-              <button class='button'>
-                New Event
-              </button>
               <button class='button' {{on 'click' this.openTaskFormModal}}>
                 New Task
               </button>
@@ -912,19 +972,29 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
                   <div>
                     {{#each tasks as |task|}}
                       <div class='checkbox-card'>
-                        <label class='checkbox-label'>
-                          <input
-                            type='checkbox'
-                            checked={{task.isCompleted}}
+                        <div>
+                          <label>
+                            <input
+                              type='checkbox'
+                              checked={{task.isCompleted}}
+                              {{on
+                                'change'
+                                (fn this.toggleOnCheckTask task.taskId)
+                              }}
+                            />
+                            <span
+                              class={{if task.isCompleted 'line-through'}}
+                            >You had an event/a task -
+                            </span>
+                          </label>
+                          <span
+                            class='highlight-link'
                             {{on
-                              'change'
-                              (fn this.toggleOnCheckTask task.taskId)
+                              'click'
+                              (fn this.openTaskFormModaById task.taskId)
                             }}
-                          />
-                          <span class={{if task.isCompleted 'line-through'}}>You
-                            had an event/a task -
-                            {{task.subject}}</span>
-                        </label>
+                          >{{task.subject}}</span>
+                        </div>
 
                         <span class='dueDate'>{{this.formatDay
                             task.dueDate
@@ -1141,6 +1211,11 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
         align-items: center;
         justify-content: end;
         gap: var(--boxel-sp-xs);
+      }
+      .highlight-link {
+        text-decoration: underline;
+        font-weight: bold;
+        cursor: pointer;
       }
     </style>
   </template>

@@ -153,6 +153,10 @@ class EditSecForTaskForm extends Component<typeof TaskForm> {
 
   <template>
     <CardContainer @displayBoundaries={{false}} class='container'>
+      <FieldContainer @tag='label' @label='Task Id' @vertical={{true}}>
+        <@fields.taskId />
+      </FieldContainer>
+
       <FieldContainer @tag='label' @label='Subject' @vertical={{true}}>
         <BoxelSelect
           @searchEnabled={{true}}
@@ -196,6 +200,9 @@ class EditSecForTaskForm extends Component<typeof TaskForm> {
 
 export class TaskForm extends CardDef {
   static displayName = 'Task Form';
+  @field taskId = contains(StringField, {
+    description: `Task Id`,
+  });
   @field subject = contains(StringField, {
     description: `Subject`,
   });
