@@ -164,7 +164,9 @@ export default class AiAssistantPanel extends Component<Signature> {
         {{/if}}
 
         {{#if this.displayRoomError}}
-          <NewSession @errorAction={{this.createNewSession}} />
+          <div class='session-error'>
+            <NewSession @errorAction={{this.createNewSession}} />
+          </div>
         {{else if this.isReady}}
           {{! below if statement is covered in 'isReady' check above but added due to glint not realizing it }}
           {{#if this.currentRoomId}}
@@ -219,9 +221,6 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
       :deep(.separator-horizontal:not(:hover) > button) {
         display: none;
-      }
-      :deep(.ai-assistant-conversation) {
-        padding: var(--boxel-sp) var(--boxel-sp-lg);
       }
       :deep(.room-actions) {
         z-index: 1;
@@ -337,6 +336,10 @@ export default class AiAssistantPanel extends Component<Signature> {
         to {
           transform: rotate(360deg);
         }
+      }
+
+      .session-error {
+        padding: var(--boxel-sp);
       }
     </style>
   </template>

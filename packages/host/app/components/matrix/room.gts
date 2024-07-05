@@ -18,13 +18,14 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-
 import type { MessageField } from 'https://cardstack.com/base/message';
+import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import AiAssistantCardPicker from '../ai-assistant/card-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
 import { AiAssistantConversation } from '../ai-assistant/message';
 import NewSession from '../ai-assistant/new-session';
+import AiAssistantSkillMenu from '../ai-assistant/skill-menu';
 
 import RoomMessage from './room-message';
 
@@ -44,12 +45,11 @@ export default class Room extends Component<Signature> {
       data-test-room-name={{this.room.name}}
       data-test-room={{this.room.roomId}}
     >
-      {{#if this.room.messages}}
-        <AiAssistantConversation>
+      <AiAssistantConversation>
+        {{#if this.room.messages}}
           {{#each this.room.messages as |message i|}}
             <RoomMessage
               @room={{this.room}}
-              @roomId={{@roomId}}
               @message={{message}}
               @index={{i}}
               @isPending={{this.isPendingMessage message}}
@@ -61,10 +61,17 @@ export default class Room extends Component<Signature> {
               data-test-message-idx={{i}}
             />
           {{/each}}
-        </AiAssistantConversation>
-      {{else}}
-        <NewSession @sendPrompt={{this.sendPrompt}} />
-      {{/if}}
+        {{else}}
+          <NewSession @sendPrompt={{this.sendPrompt}} />
+        {{/if}}
+        {{#if this.room}}
+          <AiAssistantSkillMenu
+            class='skills'
+            @skills={{this.room.skills}}
+            @onChooseCard={{this.attachSkill}}
+          />
+        {{/if}}
+      </AiAssistantConversation>
 
       <footer class='room-actions'>
         <div class='chat-input-area' data-test-chat-input-area>
@@ -92,15 +99,14 @@ export default class Room extends Component<Signature> {
         height: 100%;
         overflow: hidden;
       }
-      .timeline-start {
-        padding-bottom: var(--boxel-sp);
+      .skills {
+        position: sticky;
+        bottom: var(--boxel-sp-5xs);
+        margin-left: auto;
       }
       .room-actions {
-        padding: var(--boxel-sp);
+        padding: var(--boxel-sp-xxs) var(--boxel-sp) var(--boxel-sp);
         box-shadow: var(--boxel-box-shadow);
-      }
-      .room-actions > * + * {
-        margin-top: var(--boxel-sp-sm);
       }
       .chat-input-area {
         background-color: var(--boxel-light);
@@ -338,6 +344,10 @@ export default class Room extends Component<Signature> {
 
   private isPendingMessage(message: MessageField) {
     return message.status === 'sending' || message.status === 'queued';
+  }
+
+  @action private attachSkill(card: SkillCard) {
+    this.room?.addSkill(card);
   }
 }
 

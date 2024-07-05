@@ -4,6 +4,7 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask } from 'ember-concurrency';
 
 import { AddButton, Header } from '@cardstack/boxel-ui/components';
@@ -44,6 +45,7 @@ export default class PillMenu extends Component<Signature> {
   <template>
     <div
       class={{cn 'pill-menu' pill-menu--minimized=(not this.isExpanded)}}
+      {{onClickOutside this.closeMenu exceptSelector='.card-catalog-modal'}}
       ...attributes
     >
       <Header class='menu-header' @title={{@title}}>
@@ -213,6 +215,13 @@ export default class PillMenu extends Component<Signature> {
 
   @action toggleMenu() {
     this.isExpanded = !this.isExpanded;
+  }
+
+  @action closeMenu() {
+    if (!this.args.isExpandableHeader) {
+      return;
+    }
+    this.isExpanded = false;
   }
 
   @action private toggleActive(item: PillMenuItem) {
