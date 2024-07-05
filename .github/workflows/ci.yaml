@@ -105,6 +105,7 @@ jobs:
         working-directory: packages/matrix
       - name: list traces?
         run: find . | grep zip
+        if: always()
         working-directory: packages/matrix
 
       - name: Upload blob report to GitHub Actions Artifacts
