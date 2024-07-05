@@ -216,7 +216,14 @@ test.describe('Room creation', () => {
     await logout(page);
     await login(page, 'xuser', 'pass', {
       alreadyInOperatorMode: true,
+      skipOpeningAssistant: true,
     });
+
+    // Open assistant without waiting for [data-test-room]… meh
+    await page.locator('[data-test-open-ai-assistant]').click();
+    await page.waitForFunction(() =>
+      document.querySelector('[data-test-close-ai-assistant]'),
+    );
 
     await expect(page.locator(`[data-test-chat-title]`)).not.toHaveText(
       newRoomName,
