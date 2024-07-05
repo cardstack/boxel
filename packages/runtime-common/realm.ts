@@ -32,9 +32,6 @@ import {
   type Indexer,
   fetchUserPermissions,
   maybeHandleScopedCSSRequest,
-  PrerenderedCard,
-  QueryResultsMeta,
-  PrerenderedCardCssItem,
   authorizationMiddleware,
 } from './index';
 import merge from 'lodash/merge';

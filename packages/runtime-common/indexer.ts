@@ -35,7 +35,6 @@ import {
   upsert,
   tableValuedFunctionsPlaceholder,
   query,
-  Param,
 } from './expression';
 import {
   type Query,
