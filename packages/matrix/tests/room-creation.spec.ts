@@ -194,7 +194,7 @@ test.describe('Room creation', () => {
     await page.locator(`[data-test-close-past-sessions]`).click();
   });
 
-  test.only('room names do not persist across different user sessions', async ({
+  test('room names do not persist across different user sessions', async ({
     page,
   }) => {
     await login(page, 'user1', 'pass');
