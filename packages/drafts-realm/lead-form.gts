@@ -36,16 +36,12 @@ class IsolatedSecForLeadForm extends Component<typeof LeadForm> {
         <div class='field-group-title'>About</div>
         <div class='field-input-group'>
           <div class='field-input'>
-            <label>Full Name: </label>
-            <@fields.name />
+            <label>User: </label>
+            <@fields.user />
           </div>
           <div class='field-input'>
             <label>Company: </label>
             <@fields.company />
-          </div>
-          <div class='field-input'>
-            <label>Title: </label>
-            <@fields.title />
           </div>
           <div class='field-input'>
             <label>Website: </label>
@@ -57,7 +53,7 @@ class IsolatedSecForLeadForm extends Component<typeof LeadForm> {
           </div>
           <div class='field-input'>
             <label>Lead Owner: </label>
-            <@fields.leadOwner />
+            <@fields.owner />
           </div>
           <div class='field-input-column description'>
             <label>Description: </label>
@@ -167,13 +163,10 @@ class ViewSecForLeadForm extends Component<typeof LeadForm> {
         <div class='field-group-title'>About</div>
         <div class='field-input-group'>
           <FieldContainer @tag='label' @label='User' @vertical={{true}}>
-            <@fields.name />
+            <@fields.user />
           </FieldContainer>
           <FieldContainer @tag='label' @label='Company' @vertical={{true}}>
             <@fields.company />
-          </FieldContainer>
-          <FieldContainer @tag='label' @label='Title' @vertical={{true}}>
-            <@fields.title />
           </FieldContainer>
           <FieldContainer @tag='label' @label='Website' @vertical={{true}}>
             <@fields.website />
@@ -185,7 +178,7 @@ class ViewSecForLeadForm extends Component<typeof LeadForm> {
             <@fields.leadStatus />
           </FieldContainer>
           <FieldContainer @tag='label' @label='Lead Owner' @vertical={{true}}>
-            <@fields.leadOwner />
+            <@fields.owner />
           </FieldContainer>
         </div>
       </section>
@@ -246,8 +239,8 @@ class ViewSecForLeadForm extends Component<typeof LeadForm> {
         font-weight: bold;
         margin-bottom: 0.75rem;
         text-decoration: underline;
-        text-decoration-thickness: 2px;
-        text-underline-offset: 4px;
+        text-decoration-thickness: 3px;
+        text-underline-offset: 3px;
         color: var(--boxel-dark-teal);
       }
       .field-input-group {
@@ -264,16 +257,15 @@ class ViewSecForLeadForm extends Component<typeof LeadForm> {
 class EditSecFoLeadForm extends Component<typeof LeadForm> {
   /* Lead Status Options */
   get selectedLeadStatus() {
-    return { name: this.args.model.leadStatus || 'None' };
+    return { name: this.args.model.leadStatus };
   }
 
   @tracked leadStatusOptions = [
-    { name: 'None' },
     { name: 'New' },
     { name: 'Working' },
     { name: 'Nurturing' },
-    { name: 'Qualified' },
     { name: 'Unqualified' },
+    { name: 'Qualified' },
   ] as Array<CategorySignature>;
 
   @action updateLeadStatus(type: { name: string }) {
@@ -292,11 +284,10 @@ class EditSecFoLeadForm extends Component<typeof LeadForm> {
 
   /* Lead Source Options */
   get selectedLeadSource() {
-    return { name: this.args.model.leadSource || 'None' };
+    return { name: this.args.model.leadSource };
   }
 
   @tracked leadSourceOptions = [
-    { name: 'None' },
     { name: 'Advertisement' },
     { name: 'Employee Referral' },
     { name: 'External Referral' },
@@ -316,11 +307,10 @@ class EditSecFoLeadForm extends Component<typeof LeadForm> {
 
   /* Industry Options */
   get selectedIndustry() {
-    return { name: this.args.model.industry || 'None' };
+    return { name: this.args.model.industry };
   }
 
   @tracked industryOptions = [
-    { name: 'None' },
     { name: 'Agriculture' },
     { name: 'Apparel' },
     { name: 'Banking' },
@@ -366,7 +356,7 @@ class EditSecFoLeadForm extends Component<typeof LeadForm> {
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='User' @vertical={{true}}>
-        <@fields.name />
+        <@fields.user />
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Company Name' @vertical={{true}}>
@@ -396,7 +386,7 @@ class EditSecFoLeadForm extends Component<typeof LeadForm> {
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Lead Owner' @vertical={{true}}>
-        <@fields.leadOwner />
+        <@fields.owner />
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Phone' @vertical={{true}}>
@@ -470,13 +460,13 @@ export class LeadForm extends CardDef {
   static displayName = 'Lead Form';
   @field title = contains(StringField, {
     computeVia: function (this: LeadForm) {
-      const { salutation, firstName, lastName } = this.name;
+      const { salutation, firstName, lastName } = this.user;
 
       if (!salutation || !firstName || !lastName) return 'User Not Found';
       return `${salutation} ${firstName} ${lastName}`;
     },
   });
-  @field name = contains(UserName, {
+  @field user = contains(UserName, {
     description: `User's Full Name`,
   });
   @field company = linksTo(Company, {
@@ -491,7 +481,9 @@ export class LeadForm extends CardDef {
   @field leadStatus = contains(StringField, {
     description: `Lead Status`,
   });
-  @field leadOwner = linksTo(MatrixUser);
+  @field owner = linksTo(MatrixUser, {
+    description: `Owner`,
+  });
   @field phone = contains(StringField, {
     description: `User's phone number`,
   });

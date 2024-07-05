@@ -1,10 +1,16 @@
 import { UserName } from './user-name';
 import { UserEmail } from './user-email';
 import { AddressInfo } from './address-info';
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+import {
+  CardDef,
+  field,
+  contains,
+  linksTo,
+} from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import { FieldContainer, CardContainer } from '@cardstack/boxel-ui/components';
+import { MatrixUser } from './matrix-user';
 
 class Isolated extends Component<typeof ContactForm> {
   <template>
@@ -15,8 +21,13 @@ class Isolated extends Component<typeof ContactForm> {
         <div class='contact-form-details'>
 
           <div class='field-input'>
-            <label>Full Name: </label>
-            <@fields.name />
+            <label>User: </label>
+            <@fields.user />
+          </div>
+
+          <div class='field-input'>
+            <label>Account Name: </label>
+            <@fields.accountName />
           </div>
 
           <div class='field-input'>
@@ -42,6 +53,11 @@ class Isolated extends Component<typeof ContactForm> {
           <div class='field-input'>
             <label>AddressInfo: </label>
             <@fields.addressInfo />
+          </div>
+
+          <div class='field-input'>
+            <label>Contact Owner: </label>
+            <@fields.owner />
           </div>
 
         </div>
@@ -129,7 +145,11 @@ class View extends Component<typeof ContactForm> {
     <div class='container'>
       <div class='field-input-group'>
         <FieldContainer @tag='label' @label='User' @vertical={{true}}>
-          <@fields.name />
+          <@fields.user />
+        </FieldContainer>
+
+        <FieldContainer @tag='label' @label='Account Name' @vertical={{true}}>
+          <@fields.accountName />
         </FieldContainer>
 
         <FieldContainer @tag='label' @label='Email' @vertical={{true}}>
@@ -150,6 +170,10 @@ class View extends Component<typeof ContactForm> {
 
         <FieldContainer @tag='label' @label='Address Info' @vertical={{true}}>
           <@fields.addressInfo />
+        </FieldContainer>
+
+        <FieldContainer @tag='label' @label='Contact Owner' @vertical={{true}}>
+          <@fields.owner />
         </FieldContainer>
       </div>
     </div>
@@ -184,32 +208,36 @@ class Edit extends Component<typeof ContactForm> {
         @tag='label'
         @label='Title'
         @vertical={{true}}
-      ><@fields.title @format='edit' /></FieldContainer>
+      ><@fields.title /></FieldContainer>
 
       <FieldContainer @tag='label' @label='User' @vertical={{true}}>
-        <@fields.name @format='edit' />
+        <@fields.user />
+      </FieldContainer>
+
+      <FieldContainer @tag='label' @label='Account Name' @vertical={{true}}>
+        <@fields.accountName />
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Email' @vertical={{true}}>
-        <@fields.email @format='edit' />
+        <@fields.email />
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Phone' @vertical={{true}}>
-        <@fields.phone @format='edit' />
+        <@fields.phone />
       </FieldContainer>
 
-      <FieldContainer @tag='label' @label='Fax' @vertical={{true}}><@fields.fax
-          @format='edit'
-        /></FieldContainer>
+      <FieldContainer @tag='label' @label='Fax' @vertical={{true}}>
+        <@fields.fax />
+      </FieldContainer>
 
       <FieldContainer
         @tag='label'
         @label='Department'
         @vertical={{true}}
-      ><@fields.department @format='edit' /></FieldContainer>
+      ><@fields.department /></FieldContainer>
 
       <FieldContainer @tag='label' @label='Address Info' @vertical={{true}}>
-        <@fields.addressInfo @format='edit' />
+        <@fields.addressInfo />
       </FieldContainer>
     </CardContainer>
 
@@ -226,14 +254,17 @@ class Edit extends Component<typeof ContactForm> {
 export class ContactForm extends CardDef {
   @field title = contains(StringField, {
     computeVia: function (this: ContactForm) {
-      const { salutation, firstName, lastName } = this.name;
+      const { salutation, firstName, lastName } = this.user;
 
       if (!salutation || !firstName || !lastName) return 'User Not Found';
       return `${salutation} ${firstName} ${lastName}`;
     },
   });
-  @field name = contains(UserName, {
+  @field user = contains(UserName, {
     description: `User's Full Name`,
+  });
+  @field accountName = contains(StringField, {
+    description: `User's Account Name`,
   });
   @field email = contains(UserEmail, {
     description: `User's Email`,
@@ -249,6 +280,9 @@ export class ContactForm extends CardDef {
   });
   @field addressInfo = contains(AddressInfo, {
     description: `User's AddressInfo`,
+  });
+  @field owner = linksTo(MatrixUser, {
+    description: `Owner`,
   });
 
   static displayName = 'Contact Form';

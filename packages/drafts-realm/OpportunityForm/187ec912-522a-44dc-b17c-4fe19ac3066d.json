@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "opportunityName": "L",
+      "opportunityName": null,
       "accountName": null,
       "closeDate": null,
       "amount": {
@@ -17,6 +17,11 @@
     },
     "relationships": {
       "company": {
+        "links": {
+          "self": null
+        }
+      },
+      "owner": {
         "links": {
           "self": null
         }

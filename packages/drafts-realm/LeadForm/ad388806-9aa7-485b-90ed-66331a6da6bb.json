@@ -2,14 +2,14 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": {
+      "user": {
         "salutation": "Mr.",
         "firstName": "Law",
-        "lastName": "Yung Lom"
+        "lastName": "Yung Lum"
       },
       "website": "law.com",
       "description": null,
-      "leadStatus": "Nurturing",
+      "leadStatus": "New",
       "phone": "019999999999",
       "email": "lawgrocery@g.com",
       "addressInfo": {
@@ -36,7 +36,7 @@
           "self": "../Company/b57e5ffd-b64f-4531-a7e4-5a1d0420e2bc"
         }
       },
-      "leadOwner": {
+      "owner": {
         "links": {
           "self": "../MatrixUser/485ca453-b328-4e85-a761-b2fe7d145430"
         }

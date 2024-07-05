@@ -2,27 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "targetPage": "Opportunity Form",
-      "scheduledTask": [
-        {
-          "taskForm": {
-            "taskId": "0",
-            "subject": "task 0",
-            "dueDate": "2024-07-04",
-            "comments": null,
-            "isCompleted": false
-          }
-        },
-        {
-          "taskForm": {
-            "taskId": "1",
-            "subject": "task 1",
-            "dueDate": "2024-07-27",
-            "comments": null,
-            "isCompleted": false
-          }
-        }
-      ],
+      "targetPage": "Lead Form",
+      "scheduledTask": [],
       "convertedStatus": "Qualified",
       "isLeadFormConverted": true,
       "title": null,
@@ -42,22 +23,12 @@
       },
       "contactForm": {
         "links": {
-          "self": "../ContactForm/d13caade-c863-454c-a50d-e335f1840e97"
+          "self": "../ContactForm/24fad614-e49b-44cf-9bf4-f9ead589ffa5"
         }
       },
       "opportunityForm": {
         "links": {
-          "self": "../OpportunityForm/d4f9ef0b-d19a-461d-a6ed-5a6886e2004b"
-        }
-      },
-      "scheduledTask.0.taskForm.relatedTo": {
-        "links": {
-          "self": "http://localhost:4201/drafts/CrmAccount/4802eeed-bec6-4d7a-8f05-6370866edd40"
-        }
-      },
-      "scheduledTask.1.taskForm.relatedTo": {
-        "links": {
-          "self": "http://localhost:4201/drafts/CardDef/992531db-9912-49eb-9b72-f710cbcdb085"
+          "self": "../OpportunityForm/187ec912-522a-44dc-b17c-4fe19ac3066d"
         }
       },
       "recordOwner": {

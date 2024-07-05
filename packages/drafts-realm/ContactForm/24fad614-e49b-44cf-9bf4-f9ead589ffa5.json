@@ -2,11 +2,12 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": {
+      "user": {
         "salutation": null,
         "firstName": null,
         "lastName": null
       },
+      "accountName": null,
       "email": null,
       "phone": null,
       "fax": null,
@@ -22,6 +23,13 @@
       },
       "description": null,
       "thumbnailURL": null
+    },
+    "relationships": {
+      "owner": {
+        "links": {
+          "self": null
+        }
+      }
     },
     "meta": {
       "adoptsFrom": {

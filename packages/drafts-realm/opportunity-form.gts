@@ -19,6 +19,7 @@ import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { Company } from './crm/account';
 import NumberField from '../base/number';
+import { MatrixUser } from './matrix-user';
 
 interface CategorySignature {
   name: string;
@@ -218,7 +219,10 @@ class IsolatedSecForOpportunityForm extends Component<typeof OpportunityForm> {
             <label>Forecast Category: </label>
             {{this.getForestCategory}}
           </div>
-
+          <div class='field-input'>
+            <label>Opportunity Owner: </label>
+            <@fields.owner />
+          </div>
         </div>
       </div>
 
@@ -353,27 +357,27 @@ class EditSecForOpportunityForm extends Component<typeof OpportunityForm> {
   <template>
     <CardContainer @displayBoundaries={{true}} class='container'>
       <FieldContainer @tag='label' @label='Opportunity Name' @vertical={{true}}>
-        <@fields.opportunityName @format='edit' />
+        <@fields.opportunityName />
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Account Name' @vertical={{true}}>
-        <@fields.accountName @format='edit' />
+        <@fields.accountName />
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Company' @vertical={{true}}>
-        <@fields.company @format='edit' />
+        <@fields.company />
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Close Date' @vertical={{true}}>
-        <@fields.closeDate @format='edit' />
+        <@fields.closeDate />
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Amount' @vertical={{true}}>
-        <@fields.amount @format='edit' />
+        <@fields.amount />
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Description' @vertical={{true}}>
-        <@fields.description @format='edit' />
+        <@fields.description />
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Stage' @vertical={{true}}>
@@ -414,6 +418,14 @@ class EditSecForOpportunityForm extends Component<typeof OpportunityForm> {
         >
           <div>{{item.name}}</div>
         </BoxelSelect>
+      </FieldContainer>
+
+      <FieldContainer
+        @tag='label'
+        @label='Opportunity Owner'
+        @vertical={{true}}
+      >
+        <@fields.owner />
       </FieldContainer>
     </CardContainer>
 
@@ -472,6 +484,13 @@ class ViewSecForOpportunityForm extends Component<typeof OpportunityForm> {
         @vertical={{true}}
       >
         <@fields.forecastCategory />
+      </FieldContainer>
+      <FieldContainer
+        @tag='label'
+        @label='Opportunity Owner'
+        @vertical={{true}}
+      >
+        <@fields.owner />
       </FieldContainer>
     </div>
 
@@ -534,6 +553,9 @@ export class OpportunityForm extends CardDef {
   });
   @field forecastCategory = contains(StringField, {
     description: `Forecast Category`,
+  });
+  @field owner = linksTo(MatrixUser, {
+    description: `Owner`,
   });
 
   static isolated = IsolatedSecForOpportunityForm;

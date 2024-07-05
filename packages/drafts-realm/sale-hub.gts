@@ -39,7 +39,6 @@ import { LeadForm } from './lead-form';
 import { ContactForm } from './contact-form';
 import { MatrixUser } from './matrix-user';
 import { eq } from '@cardstack/boxel-ui/helpers';
-import type Owner from '@ember/owner';
 
 interface TargetPageLinkSingnature {
   name: string;
@@ -167,7 +166,7 @@ class Steps extends GlimmerComponent<StepsSignature> {
   get currentStepStatus() {
     if (this.currentStepIndex >= this.steps.length - 1) {
       if (this.args.isLeadFormConverted) return 'Converted';
-      return 'Convert';
+      return 'Select Converted Status';
     }
     if (this.steps[this.currentStepIndex].isCompleted) return 'Step Completed';
     return 'Mark Status as Complete';
@@ -203,7 +202,7 @@ class Steps extends GlimmerComponent<StepsSignature> {
 
   @action
   handleButtonClick() {
-    if (this.currentStepStatus === 'Convert') {
+    if (this.currentStepStatus === 'Select Converted Status') {
       this.args.handleConvert();
     } else {
       this.handleCompleteStep();
@@ -370,9 +369,9 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
   @action
   handleConvert() {
     this.openModal();
-    this.updateAccountFormAccountName();
-    this.updateContactFormName();
-    this.updateOpportunityAccountName();
+    this.updateAccountForm();
+    this.updateContactForm();
+    this.updateOpportunityAccount();
   }
 
   //task-form modal
@@ -388,109 +387,66 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
     this.isTaskFormModalVisible = false;
   }
 
-  //account-form
-  constructor(owner: Owner, args: any) {
-    super(owner, args);
-
-    if (!this.args.model.targetPage) {
-      this.args.model.targetPage = 'Lead Form';
-    }
-
-    if (!this.args.model.leadForm || !this.args.model.isLeadFormConverted)
-      return;
-
-    //render leadStatus by convertedStatus
-    if (this.args.model.convertedStatus) {
-      this.args.model.leadForm.leadStatus = this.args.model.convertedStatus;
-    }
-
-    const { leadOwner, company, name } = this.args.model.leadForm;
-    const { salutation, firstName, lastName } = name;
-
-    if (this.args.model.accountForm) {
-      this.args.model.accountForm.accountName = `${salutation} ${firstName} ${lastName}`;
-      this.args.model.accountForm.owner = leadOwner;
-    }
-
-    if (this.args.model.contactForm) {
-      this.args.model.contactForm.name.salutation = salutation;
-      this.args.model.contactForm.name.firstName = firstName;
-      this.args.model.contactForm.name.lastName = lastName;
-    }
-
-    if (this.args.model.opportunityForm) {
-      this.args.model.opportunityForm.company = company;
-      this.args.model.opportunityForm.accountName = `${salutation} ${firstName} ${lastName}`;
-    }
-  }
-
   //auto bind form
   @action
-  updateAccountFormAccountName() {
+  updateAccountForm() {
     if (
       this.args.model &&
       this.args.model.accountForm &&
       this.args.model.leadForm
     ) {
-      const { salutation, firstName, lastName } = this.args.model.leadForm.name;
-      this.args.model.accountForm.accountName = `${salutation} ${firstName} ${lastName}`;
+      const { name } = this.args.model.leadForm.company;
+      this.args.model.accountForm.accountName = name;
     }
   }
 
   @action
-  updateContactFormName() {
+  updateContactForm() {
     if (
       this.args.model &&
       this.args.model.contactForm &&
       this.args.model.leadForm
     ) {
-      const salutation = this.args.model.leadForm.name.salutation;
-      const firstName = this.args.model.leadForm.name.firstName;
-      const lastName = this.args.model.leadForm.name.lastName;
+      const { company, user } = this.args.model.leadForm;
+      const { salutation, firstName, lastName } = user;
 
-      this.args.model.contactForm.name.salutation = salutation;
-      this.args.model.contactForm.name.firstName = firstName;
-      this.args.model.contactForm.name.lastName = lastName;
+      this.args.model.contactForm.user.salutation = salutation;
+      this.args.model.contactForm.user.firstName = firstName;
+      this.args.model.contactForm.user.lastName = lastName;
+
+      this.args.model.contactForm.accountName = company.name;
     }
   }
 
   @action
-  updateOpportunityAccountName() {
+  updateOpportunityAccount() {
     if (
       this.args.model &&
       this.args.model.opportunityForm &&
       this.args.model.leadForm
     ) {
-      const company = this.args.model.leadForm.company;
+      const { company } = this.args.model.leadForm;
 
-      this.args.model.opportunityForm.opportunityName =
-        this.opportunityFormName;
+      this.args.model.opportunityForm.opportunityName = company.name;
+      this.args.model.opportunityForm.accountName = company.name;
       this.args.model.opportunityForm.company = company;
     }
   }
 
-  get accountFormAccountName() {
-    const { leadForm } = this.args.model;
-    if (!leadForm || !leadForm.name) return '';
-    const { salutation, firstName, lastName } = leadForm.name;
+  get accountName() {
+    if (!this.args.model.leadForm) return '-';
+    const { company } = this.args.model.leadForm;
 
-    if (!salutation || !firstName || !lastName) return '';
-    return `${salutation} ${firstName} ${lastName}`;
+    if (!company) return '-';
+    return company.name;
   }
 
-  get contactFormAccountName() {
-    const { leadForm } = this.args.model;
-    if (!leadForm || !leadForm.name) return '';
-    const { salutation, firstName, lastName } = leadForm.name;
+  get user() {
+    if (!this.args.model.leadForm || !this.args.model.leadForm.user) return '-';
+    const { salutation, firstName, lastName } = this.args.model.leadForm.user;
 
-    if (!salutation || !firstName || !lastName) return '';
+    if (!salutation || !firstName || !lastName) return 'User Not Found';
     return `${salutation} ${firstName} ${lastName}`;
-  }
-
-  get opportunityFormName() {
-    const { leadForm } = this.args.model;
-    if (!leadForm || !leadForm.company) return '';
-    return leadForm.company.name;
   }
 
   //targetPageLinks
@@ -698,7 +654,7 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
       name:
         this.args.model.convertedStatus ||
         this.convertedStatusOptions[0].name ||
-        'None',
+        null,
     };
   }
 
@@ -770,7 +726,8 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
             @vertical={{true}}
             class='input-container'
           >
-            {{this.accountFormAccountName}}
+            Account Name:
+            {{this.accountName}}
           </FieldContainer>
 
           <FieldContainer
@@ -779,7 +736,8 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
             @vertical={{true}}
             class='input-container'
           >
-            {{this.contactFormAccountName}}
+            User:
+            {{this.user}}
           </FieldContainer>
 
           <FieldContainer
@@ -788,7 +746,8 @@ class IsolatedSecForSaleHub extends Component<typeof SaleHub> {
             @vertical={{true}}
             class='input-container'
           >
-            {{this.opportunityFormName}}
+            Account Name:
+            {{this.accountName}}
           </FieldContainer>
 
           <FieldContainer
