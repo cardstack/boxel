@@ -12,24 +12,6 @@ import type {
 } from 'https://cardstack.com/base/matrix-event';
 import type { MessageField } from 'https://cardstack.com/base/message';
 
-const bucket: Map<string, unknown> = (() => {
-  let g = globalThis as unknown as {
-    __card_api_shared_state: Map<string, unknown> | undefined;
-  };
-  if (!g.__card_api_shared_state) {
-    g.__card_api_shared_state = new Map();
-  }
-  return g.__card_api_shared_state;
-})();
-
-function initSharedState<T>(key: string, fn: () => T): T {
-  if (bucket.has(key)) {
-    return bucket.get(key) as T;
-  }
-  bucket.set(key, fn());
-  return bucket.get(key) as T;
-}
-
 interface Args {
   named: {
     roomId: string | undefined;
@@ -46,10 +28,6 @@ interface RoomMemberField {
   membership?: 'invite' | 'join' | 'leave';
 }
 
-const roomMemberCache = initSharedState(
-  'roomMemberCache',
-  () => new WeakMap<RoomModel, Map<string, RoomMemberField>>(),
-);
 export class RoomModel {
   @tracked events: MatrixEvent[] = [];
 
@@ -265,12 +243,7 @@ export class RoomResource extends Resource<Args> {
     membershipTs?: number;
     membershipInitiator?: string;
   }): RoomMemberField {
-    let roomMembers = roomMemberCache.get(room);
-    if (!roomMembers) {
-      roomMembers = new Map();
-      roomMemberCache.set(room, roomMembers);
-    }
-    let member = roomMembers.get(userId);
+    let member = this._memberCache.get(userId);
     if (
       member?.membershipDateTime != null &&
       membershipTs != null &&
@@ -286,7 +259,6 @@ export class RoomResource extends Resource<Args> {
         roomId: room.roomId,
       };
       this._memberCache.set(userId, member);
-      roomMembers.set(userId, member);
     }
     if (displayName) {
       member.displayName = displayName;
