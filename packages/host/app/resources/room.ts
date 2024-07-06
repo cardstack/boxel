@@ -7,6 +7,7 @@ import { Resource } from 'ember-resources';
 import type MatrixService from '../services/matrix-service';
 import type {
   CardFragmentContent,
+  CardMessageContent,
   MatrixEvent,
   RoomNameEvent,
 } from 'https://cardstack.com/base/matrix-event';
@@ -19,13 +20,37 @@ interface Args {
   };
 }
 
-interface RoomMemberField {
-  userId?: string;
+interface RoomMemberInterface {
+  userId: string;
   roomId?: string;
   displayName?: string;
-  membershipDateTime?: Date;
-  membershipInitiator?: Date;
   membership?: 'invite' | 'join' | 'leave';
+  membershipDateTime?: Date;
+  membershipInitiator?: string;
+}
+
+const ErrorMessage: Record<string, string> = {
+  ['M_TOO_LARGE']: 'Message is too large',
+};
+
+class RoomMemberField implements RoomMemberInterface {
+  userId: string;
+  roomId?: string;
+  displayName?: string;
+  membership?: 'invite' | 'join' | 'leave';
+  membershipDateTime?: Date;
+  membershipInitiator?: string;
+
+  constructor(
+    init: Partial<RoomMemberInterface> & { userId: string } = { userId: '' },
+  ) {
+    this.userId = init.userId;
+    Object.assign(this, init);
+  }
+
+  get name(): string | undefined {
+    return this.displayName ?? this.userId?.split(':')[0].substring(1);
+  }
 }
 
 export class RoomModel {
@@ -124,7 +149,7 @@ export class RoomResource extends Resource<Args> {
         userId,
         displayName: event.content.displayname,
         membership: event.content.membership,
-        membershipTs: event.origin_server_ts || Date.now(),
+        membershipDateTime: event.origin_server_ts || Date.now(),
         membershipInitiator: event.sender,
       };
       this.upsertRoomMember({
@@ -174,7 +199,6 @@ export class RoomResource extends Resource<Args> {
       if ('errorMessage' in event.content) {
         (cardArgs as any).errorMessage = event.content.errorMessage;
       }
-
       let messageField = undefined;
       if (event.content.msgtype === 'org.boxel.message') {
         // =======
@@ -233,45 +257,44 @@ export class RoomResource extends Resource<Args> {
     userId,
     displayName,
     membership,
-    membershipTs,
+    membershipDateTime,
     membershipInitiator,
   }: {
     room: RoomModel;
     userId: string;
     displayName?: string;
     membership?: 'invite' | 'join' | 'leave';
-    membershipTs?: number;
+    membershipDateTime?: number;
     membershipInitiator?: string;
-  }): RoomMemberField {
-    let member = this._memberCache.get(userId);
+  }): RoomMemberField | undefined {
+    let member: RoomMemberField | undefined;
+    member = this._memberCache.get(userId);
     if (
-      member?.membershipDateTime != null &&
-      membershipTs != null &&
-      member.membershipDateTime.getTime() > membershipTs
+      // Create new member if it doesn't exist or if provided data is more recent
+      member?.membershipDateTime &&
+      membershipDateTime &&
+      member.membershipDateTime.getTime() > membershipDateTime
     ) {
-      // the member data provided is actually older than what we have in our cache
       return member;
     }
     if (!member) {
-      member = {
-        // id: userId,
-        userId,
-        roomId: room.roomId,
-      };
+      let member = new RoomMemberField({ userId, roomId: room.roomId });
+      if (displayName) {
+        member.displayName = displayName;
+      }
+      if (membership) {
+        member.membership = membership;
+      }
+      if (membershipDateTime != null) {
+        member.membershipDateTime = new Date(membershipDateTime);
+      }
+      if (membershipInitiator) {
+        member.membershipInitiator = membershipInitiator;
+      }
+
       this._memberCache.set(userId, member);
     }
-    if (displayName) {
-      member.displayName = displayName;
-    }
-    if (membership) {
-      member.membership = membership;
-    }
-    if (membershipTs != null) {
-      member.membershipDateTime = new Date(membershipTs);
-    }
-    if (membershipInitiator) {
-      member.membershipInitiator = membershipInitiator;
-    }
+
     return member;
   }
 }
