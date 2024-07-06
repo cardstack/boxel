@@ -93,17 +93,14 @@ export class RoomResource extends Resource<Args> {
   modify(_positional: never[], named: Args['named']) {
     console.log(`running resource again with ${named.roomId}`);
     console.log(named.events);
-    if (named.roomId) {
-      this.loading = this.load.perform(named.roomId);
-    }
+    this.loading = this.load.perform(named.roomId);
   }
 
   private load = restartableTask(async (roomId: string | undefined) => {
     this.room = roomId ? await this.matrixService.getRoom(roomId) : undefined;
-    if (this.room) {
-      await this.loadRoomMembers(this.room);
-      await this.loadRoomMessages(this.room);
-    } else {
+    if (this.room && this.room.roomId) {
+      await this.loadRoomMembers(this.room.roomId);
+      await this.loadRoomMessages(this.room.roomId);
     }
   });
 
@@ -139,7 +136,7 @@ export class RoomResource extends Resource<Args> {
     return this.room ? this.room.events : [];
   }
 
-  async loadRoomMembers(room: RoomModel) {
+  async loadRoomMembers(roomId: string) {
     for (let event of this.events) {
       if (event.type !== 'm.room.member') {
         continue;
@@ -149,17 +146,17 @@ export class RoomResource extends Resource<Args> {
         userId,
         displayName: event.content.displayname,
         membership: event.content.membership,
-        membershipDateTime: event.origin_server_ts || Date.now(),
+        membershipDateTime: new Date(event.origin_server_ts) || Date.now(),
         membershipInitiator: event.sender,
       };
       this.upsertRoomMember({
-        room,
+        roomId,
         ...roomMemberArgs,
       });
     }
   }
 
-  async loadRoomMessages(room: RoomModel) {
+  async loadRoomMessages(roomId: string) {
     let newMessages = new Map<string, MessageField>();
     for (let event of this.events) {
       if (event.type !== 'm.room.message') {
@@ -175,7 +172,10 @@ export class RoomResource extends Resource<Args> {
       if (this._messageCache.has(event_id) && !update) {
         continue;
       }
-      let author = this.upsertRoomMember({ room, userId: event.sender });
+      let author = this.upsertRoomMember({
+        roomId,
+        userId: event.sender,
+      });
       let cardArgs = {
         author,
         created: new Date(event.origin_server_ts),
@@ -253,20 +253,13 @@ export class RoomResource extends Resource<Args> {
   }
 
   upsertRoomMember({
-    room,
+    roomId,
     userId,
     displayName,
     membership,
     membershipDateTime,
     membershipInitiator,
-  }: {
-    room: RoomModel;
-    userId: string;
-    displayName?: string;
-    membership?: 'invite' | 'join' | 'leave';
-    membershipDateTime?: number;
-    membershipInitiator?: string;
-  }): RoomMemberField | undefined {
+  }: RoomMemberInterface): RoomMemberField | undefined {
     let member: RoomMemberField | undefined;
     member = this._memberCache.get(userId);
     if (
@@ -278,7 +271,7 @@ export class RoomResource extends Resource<Args> {
       return member;
     }
     if (!member) {
-      let member = new RoomMemberField({ userId, roomId: room.roomId });
+      let member = new RoomMemberField({ userId, roomId });
       if (displayName) {
         member.displayName = displayName;
       }
