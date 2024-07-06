@@ -62,7 +62,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     console.log(this.aiSessionRooms);
 
     return this.aiSessionRooms
-      .filter((session) => session.room.roomId !== this.roomModel?.roomId)
+      .filter((session) => session.room?.roomId !== this.roomModel?.roomId)
       .some((session) => {
         let isSessionActive =
           this.matrixService.getLastActiveTimestamp(session.room) >
@@ -151,7 +151,7 @@ export default class AiAssistantPanel extends Component<Signature> {
 
         {{#if this.isShowingPastSessions}}
           <AiAssistantPastSessionsList
-            @sessions={{this.roomModels}}
+            @sessions={{this.aiSessionRooms}}
             @roomActions={{this.roomActions}}
             @onClose={{this.hidePastSessions}}
             @currentRoomId={{this.currentRoomId}}
@@ -481,7 +481,11 @@ export default class AiAssistantPanel extends Component<Signature> {
   }
 
   get roomModels() {
-    return this.aiSessionRooms ? this.aiSessionRooms.map((r) => r.room) : [];
+    return (
+      this.aiSessionRooms
+        ?.map((r) => r.room)
+        .filter((room): room is RoomModel => room !== undefined) ?? []
+    );
   }
 
   @action

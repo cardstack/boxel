@@ -6,11 +6,11 @@ import { DropdownArrowFilled } from '@cardstack/boxel-ui/icons';
 
 import AiAssistantPanelPopover from './panel-popover';
 import PastSessionItem, { type RoomActions } from './past-session-item';
-import { RoomModel } from '@cardstack/host/resources/room';
+import { RoomResource } from '@cardstack/host/resources/room';
 
 interface Signature {
   Args: {
-    sessions: RoomModel[];
+    sessions: RoomResource[];
     roomActions: RoomActions;
     currentRoomId?: string;
     onClose: () => void;
@@ -40,7 +40,7 @@ const AiAssistantPastSessionsList: TemplateOnlyComponent<Signature> = <template>
         <ul class='past-sessions'>
           {{#each @sessions as |session|}}
             <PastSessionItem
-              @room={{session}}
+              @session={{session}}
               @actions={{@roomActions}}
               @currentRoomId={{@currentRoomId}}
             />

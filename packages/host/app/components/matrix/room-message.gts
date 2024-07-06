@@ -35,14 +35,13 @@ import { type ApplyButtonState } from '../ai-assistant/apply-button';
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
-import { RoomModel } from '@cardstack/host/resources/room';
 
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    room: RoomModel;
     roomId: string;
     message: MessageField;
+    messages: MessageField[];
     index?: number;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
@@ -59,8 +58,9 @@ interface SendReadReceiptModifierSignature {
   Args: {
     Named: {
       matrixService: MatrixService;
+      roomId: string;
       message: MessageField;
-      room: RoomModel;
+      messages: MessageField[];
     };
     Positional: [];
   };
@@ -74,10 +74,11 @@ class SendReadReceipt extends Modifier<SendReadReceiptModifierSignature> {
     {
       matrixService,
       message,
-      room,
+      messages,
+      roomId,
     }: NamedArgs<SendReadReceiptModifierSignature>,
   ) {
-    let isLastMessage = room.messages[room.messages.length - 1] === message;
+    let isLastMessage = messages[messages.length - 1] === message;
     if (!isLastMessage) {
       return;
     }
@@ -89,7 +90,7 @@ class SendReadReceipt extends Modifier<SendReadReceiptModifierSignature> {
     // sendReadReceipt expects an actual MatrixEvent (as defined in the matrix SDK), but it' not available to us here - however, we can fake it by adding the necessary methods
     let matrixEvent = {
       getId: () => message.eventId,
-      getRoomId: () => room.roomId,
+      getRoomId: () => roomId,
       getTs: () => message.created.getTime(),
     };
 
@@ -141,8 +142,9 @@ export default class RoomMessage extends Component<Signature> {
       <AiAssistantMessage
         {{SendReadReceipt
           matrixService=this.matrixService
+          roomId=@roomId
           message=@message
-          room=@room
+          messages=@messages
         }}
         id='message-container-{{@index}}'
         class='room-message'

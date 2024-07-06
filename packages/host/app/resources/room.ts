@@ -46,34 +46,19 @@ interface RoomMemberField {
   membership?: 'invite' | 'join' | 'leave';
 }
 
-interface RoomState {
-  name?: string;
-  creator?: RoomMemberField;
-  created?: number;
-}
-
-const messageCache = initSharedState(
-  'messageCache',
-  () => new WeakMap<RoomModel, Map<string, MessageField>>(),
-);
 const roomMemberCache = initSharedState(
   'roomMemberCache',
   () => new WeakMap<RoomModel, Map<string, RoomMemberField>>(),
 );
-const roomStateCache = initSharedState(
-  'roomStateCache',
-  () => new WeakMap<RoomModel, RoomState>(),
-);
-const fragmentCache = initSharedState(
-  'fragmentCache',
-  () => new WeakMap<RoomModel, Map<string, CardFragmentContent>>(),
-);
-
 export class RoomModel {
   @tracked events: MatrixEvent[] = [];
 
   get roomId() {
     return this.events.length > 0 ? this.events[0].room_id : undefined;
+  }
+
+  get createdDate() {
+    return undefined;
   }
 
   get name() {
@@ -105,9 +90,6 @@ export class RoomResource extends Resource<Args> {
   modify(_positional: never[], named: Args['named']) {
     console.log(`running resource again with ${named.roomId}`);
     console.log(named.events);
-    if (named.roomId === '!MuJJWlGrztdMIxaVwX:localhost') {
-      debugger;
-    }
     if (named.roomId) {
       this.loading = this.load.perform(named.roomId);
     }
@@ -119,14 +101,10 @@ export class RoomResource extends Resource<Args> {
       await this.loadRoomMembers(this.room);
       await this.loadRoomMessages(this.room);
     } else {
-      debugger;
     }
   });
 
   get resourceMessages() {
-    if (this.room?.roomId === '!MuJJWlGrztdMIxaVwX:localhost') {
-      debugger;
-    }
     if (this._messageCache) {
       let o = [...this._messageCache.values()].sort(
         (a, b) => a.created.getTime() - b.created.getTime(),
@@ -136,6 +114,10 @@ export class RoomResource extends Resource<Args> {
       return o;
     }
     return [];
+  }
+
+  get messages() {
+    return this.resourceMessages;
   }
 
   get resourceMembers() {
@@ -152,10 +134,6 @@ export class RoomResource extends Resource<Args> {
 
   get events() {
     return this.room ? this.room.events : [];
-  }
-
-  get messages() {
-    return this.room ? this.room.messages : [];
   }
 
   async loadRoomMembers(room: RoomModel) {
@@ -179,12 +157,6 @@ export class RoomResource extends Resource<Args> {
   }
 
   async loadRoomMessages(room: RoomModel) {
-    let cache = messageCache.get(room);
-    if (!cache) {
-      cache = new Map();
-      messageCache.set(room, cache);
-    }
-    let index = cache.size;
     let newMessages = new Map<string, MessageField>();
     for (let event of this.events) {
       if (event.type !== 'm.room.message') {
@@ -197,9 +169,6 @@ export class RoomResource extends Resource<Args> {
         event_id = event.content['m.relates_to'].event_id;
         update = true;
       }
-      if (cache.has(event_id) && !update) {
-        continue;
-      }
       if (this._messageCache.has(event_id) && !update) {
         continue;
       }
@@ -210,7 +179,6 @@ export class RoomResource extends Resource<Args> {
         updated: new Date(), // Changes every time an update from AI bot streaming is received, used for detecting timeouts
         message: event.content.body,
         formattedMessage: event.content.formatted_body,
-        index,
         // These are not guaranteed to exist in the event
         transactionId: event.unsigned?.transaction_id || null,
         attachedCard: null,
@@ -271,14 +239,12 @@ export class RoomResource extends Resource<Args> {
           (event.content as CardMessageContent).clientGeneratedId ?? event_id,
           messageField as any,
         );
-        index++;
       }
       for (let [id, message] of newMessages) {
         // The `id` can either be an `eventId` or `clientGeneratedId`.
         // For messages sent by the user, we prefer to use `clientGeneratedId`
         // because `eventId` can change in certain scenarios,
         // such as when resending a failed message or updating its status from sending to sent.
-        cache.set(id, message);
         this._messageCache.set(id, message);
       }
     }
@@ -315,7 +281,7 @@ export class RoomResource extends Resource<Args> {
     }
     if (!member) {
       member = {
-        id: userId,
+        // id: userId,
         userId,
         roomId: room.roomId,
       };
@@ -353,22 +319,22 @@ export function getRoom(
 
 //utils
 
-function createMessageField(event: MatrixEvent): MessageField {
-  return {
-    // author
-    author: {
-      userId: event.sender, //userId of the author
-    },
-    created: new Date(event.origin_server_ts),
-    updated: new Date(), // Changes every time an update from AI bot streaming is received, used for detecting timeouts
-    message: event.content.body,
-    formattedMessage: event.content.formatted_body,
-    // index,
-    // These are not guaranteed to exist in the event
-    transactionId: event.unsigned?.transaction_id || null,
-    attachedCard: null,
-    command: null,
-    status: event.status,
-    eventId: event.event_id,
-  };
-}
+// function createMessageField(event: MatrixEvent): MessageField {
+//   return {
+//     // author
+//     author: {
+//       userId: event.sender, //userId of the author
+//     },
+//     created: new Date(event.origin_server_ts),
+//     updated: new Date(), // Changes every time an update from AI bot streaming is received, used for detecting timeouts
+//     message: event.content.body,
+//     formattedMessage: event.content.formatted_body,
+//     // index,
+//     // These are not guaranteed to exist in the event
+//     transactionId: event.unsigned?.transaction_id || null,
+//     attachedCard: null,
+//     command: null,
+//     status: event.status,
+//     eventId: event.event_id,
+//   };
+// }
