@@ -162,7 +162,6 @@ export class RoomResource extends Resource<Args> {
       if (event.type !== 'm.room.message') {
         continue;
       }
-      // =====
       let event_id = event.event_id;
       let update = false;
       if (event.content['m.relates_to']?.rel_type === 'm.replace') {
@@ -202,21 +201,21 @@ export class RoomResource extends Resource<Args> {
       let messageField = undefined;
       if (event.content.msgtype === 'org.boxel.message') {
         // Safely skip over cases that don't have attached cards or a data type
-        let cardDocs = event.content.data?.attachedCardsEventIds
-          ? event.content.data.attachedCardsEventIds.map((eventId) =>
-              this.serializedCardFromFragments(eventId),
-            )
-          : [];
-        let attachedCardIds: string[] = [];
-        cardDocs.map((c) => {
-          if (c.data.id) {
-            attachedCardIds.push(c.data.id);
-          }
-        });
-        if (attachedCardIds.length < cardDocs.length) {
-          throw new Error(`cannot handle cards in room without an ID`);
-        }
-        cardArgs.clientGeneratedId = event.content.clientGeneratedId ?? null;
+        // let cardDocs = event.content.data?.attachedCardsEventIds
+        //   ? event.content.data.attachedCardsEventIds.map((eventId) =>
+        //       this.serializedCardFromFragments(eventId),
+        //     )
+        //   : [];
+        // let attachedCardIds: string[] = [];
+        // cardDocs.map((c) => {
+        //   if (c.data.id) {
+        //     attachedCardIds.push(c.data.id);
+        //   }
+        // });
+        // if (attachedCardIds.length < cardDocs.length) {
+        //   throw new Error(`cannot handle cards in room without an ID`);
+        // }
+        // cardArgs.clientGeneratedId = event.content.clientGeneratedId ?? null;
         messageField = {
           ...cardArgs,
           // attachedCardIds,
@@ -303,25 +302,3 @@ export function getRoom(
     },
   }));
 }
-
-//utils
-
-// function createMessageField(event: MatrixEvent): MessageField {
-//   return {
-//     // author
-//     author: {
-//       userId: event.sender, //userId of the author
-//     },
-//     created: new Date(event.origin_server_ts),
-//     updated: new Date(), // Changes every time an update from AI bot streaming is received, used for detecting timeouts
-//     message: event.content.body,
-//     formattedMessage: event.content.formatted_body,
-//     // index,
-//     // These are not guaranteed to exist in the event
-//     transactionId: event.unsigned?.transaction_id || null,
-//     attachedCard: null,
-//     command: null,
-//     status: event.status,
-//     eventId: event.event_id,
-//   };
-// }
