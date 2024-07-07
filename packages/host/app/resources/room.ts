@@ -104,20 +104,13 @@ export class RoomResource extends Resource<Args> {
     }
   });
 
-  get resourceMessages() {
+  get messages() {
     if (this._messageCache) {
-      let o = [...this._messageCache.values()].sort(
+      return [...this._messageCache.values()].sort(
         (a, b) => a.created.getTime() - b.created.getTime(),
       );
-      console.log(`resource messages from ${this.room?.roomId}`);
-      console.log(o);
-      return o;
     }
     return [];
-  }
-
-  get messages() {
-    return this.resourceMessages;
   }
 
   get resourceMembers() {
@@ -231,7 +224,6 @@ export class RoomResource extends Resource<Args> {
       if (messageField) {
         // if the message is a replacement for other messages,
         // use `created` from the oldest one.
-        // =======
         if (newMessages.has(event_id)) {
           messageField.created = newMessages.get(event_id)!.created;
         }

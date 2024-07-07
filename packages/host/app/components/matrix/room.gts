@@ -161,7 +161,7 @@ export default class Room extends Component<Signature> {
   });
 
   private get messages() {
-    return this.roomResource.resourceMessages;
+    return this.roomResource.messages;
   }
 
   private get room() {

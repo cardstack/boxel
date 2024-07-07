@@ -69,8 +69,7 @@ export default class AiAssistantPanel extends Component<Signature> {
           oneMinuteAgo;
 
         let lastMessageEventId =
-          session.resourceMessages[session.resourceMessages.length - 1]
-            ?.eventId;
+          session.messages[session.messages.length - 1]?.eventId;
 
         let hasSeenLastMessage =
           this.matrixService.currentUserEventReadReceipts.has(
@@ -90,7 +89,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       >
         <@resizeHandle />
         <header class='panel-header'>
-          {{#if this.roomResource.resourceMessages}}
+          {{#if this.roomResource.messages}}
             <div class='panel-title-group'>
               <img
                 alt='AI Assistant'
@@ -118,7 +117,7 @@ export default class AiAssistantPanel extends Component<Signature> {
               class='new-session-button'
               @kind='secondary-dark'
               @size='small'
-              @disabled={{not this.roomResource.resourceMessages.length}}
+              @disabled={{not this.roomResource.messages.length}}
               {{on 'click' this.createNewSession}}
               data-test-create-room-btn
             >
@@ -431,7 +430,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     if (
       id &&
       this.roomResources.has(id) &&
-      this.roomResources.get(id)?.resourceMessages.length === 0
+      this.roomResources.get(id)?.messages.length === 0
     ) {
       return id;
     }
