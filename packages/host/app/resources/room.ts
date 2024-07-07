@@ -201,23 +201,22 @@ export class RoomResource extends Resource<Args> {
       }
       let messageField = undefined;
       if (event.content.msgtype === 'org.boxel.message') {
-        // =======
         // Safely skip over cases that don't have attached cards or a data type
-        // let cardDocs = event.content.data?.attachedCardsEventIds
-        //   ? event.content.data.attachedCardsEventIds.map((eventId) =>
-        //       this.serializedCardFromFragments(eventId),
-        //     )
-        //   : [];
-        // let attachedCardIds: string[] = [];
-        // cardDocs.map((c) => {
-        //   if (c.data.id) {
-        //     attachedCardIds.push(c.data.id);
-        //   }
-        // });
-        // if (attachedCardIds.length < cardDocs.length) {
-        //   throw new Error(`cannot handle cards in room without an ID`);
-        // }
-        // cardArgs.clientGeneratedId = event.content.clientGeneratedId ?? null;
+        let cardDocs = event.content.data?.attachedCardsEventIds
+          ? event.content.data.attachedCardsEventIds.map((eventId) =>
+              this.serializedCardFromFragments(eventId),
+            )
+          : [];
+        let attachedCardIds: string[] = [];
+        cardDocs.map((c) => {
+          if (c.data.id) {
+            attachedCardIds.push(c.data.id);
+          }
+        });
+        if (attachedCardIds.length < cardDocs.length) {
+          throw new Error(`cannot handle cards in room without an ID`);
+        }
+        cardArgs.clientGeneratedId = event.content.clientGeneratedId ?? null;
         messageField = {
           ...cardArgs,
           // attachedCardIds,
@@ -266,7 +265,7 @@ export class RoomResource extends Resource<Args> {
       // Create new member if it doesn't exist or if provided data is more recent
       member?.membershipDateTime &&
       membershipDateTime &&
-      member.membershipDateTime.getTime() > membershipDateTime
+      member.membershipDateTime.getTime() > Number(membershipDateTime)
     ) {
       return member;
     }
