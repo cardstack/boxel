@@ -35,6 +35,5 @@
       "include": ["./**"]
     }
   },
-  "include": ["./**/*"],
-  "exclude": ["../base/__boxel/**/*"]
+  "include": ["./**/*"]
 }

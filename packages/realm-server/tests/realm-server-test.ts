@@ -1963,6 +1963,10 @@ module('Realm Server', function (hooks) {
   });
 
   module('BOXEL_HTTP_BASIC_PW env var', function (hooks) {
+    setupPermissionedRealm(hooks, {
+      '*': ['read', 'write'],
+    });
+
     hooks.afterEach(function () {
       delete process.env.BOXEL_HTTP_BASIC_PW;
     });
@@ -2001,7 +2005,9 @@ module('Realm Server', function (hooks) {
         .auth('cardstack', process.env.BOXEL_HTTP_BASIC_PW);
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
       assert.ok(
-        /https?:\/\/[^/]+\/__boxel\/assets\/vendor\.css/.test(response.text),
+        /http:\/\/example.com\/notional-assets-host\/assets\/vendor\.css/.test(
+          response.text,
+        ),
         'the HTML returned is correct',
       );
     });

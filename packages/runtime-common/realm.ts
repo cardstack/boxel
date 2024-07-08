@@ -18,7 +18,6 @@ import {
   hasExecutableExtension,
   isNode,
   isSingleCardDocument,
-  assetsDir,
   logger,
   type CodeRef,
   type LooseSingleCardDocument,
@@ -867,42 +866,40 @@ export class Realm {
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
 
-    if (!localPath.startsWith(assetsDir)) {
-      let useWorkInProgressIndex = Boolean(
-        request.headers.get('X-Boxel-Use-WIP-Index'),
-      );
-      let module = await this.#searchIndex.module(url, {
-        useWorkInProgressIndex,
-      });
-      if (module?.type === 'module') {
-        try {
-          return createResponse({
-            body: module.executableCode,
-            init: {
-              status: 200,
-              headers: { 'content-type': 'text/javascript' },
-            },
-            requestContext,
-          });
-        } finally {
-          this.#logRequestPerformance(request, start, 'cache hit');
-        }
+    let useWorkInProgressIndex = Boolean(
+      request.headers.get('X-Boxel-Use-WIP-Index'),
+    );
+    let module = await this.#searchIndex.module(url, {
+      useWorkInProgressIndex,
+    });
+    if (module?.type === 'module') {
+      try {
+        return createResponse({
+          body: module.executableCode,
+          init: {
+            status: 200,
+            headers: { 'content-type': 'text/javascript' },
+          },
+          requestContext,
+        });
+      } finally {
+        this.#logRequestPerformance(request, start, 'cache hit');
       }
-      if (module?.type === 'error') {
-        try {
-          // using "Not Acceptable" here because no text/javascript representation
-          // can be made and we're sending text/html error page instead
-          return createResponse({
-            body: JSON.stringify(module.error, null, 2),
-            init: {
-              status: 406,
-              headers: { 'content-type': 'text/html' },
-            },
-            requestContext,
-          });
-        } finally {
-          this.#logRequestPerformance(request, start, 'cache hit');
-        }
+    }
+    if (module?.type === 'error') {
+      try {
+        // using "Not Acceptable" here because no text/javascript representation
+        // can be made and we're sending text/html error page instead
+        return createResponse({
+          body: JSON.stringify(module.error, null, 2),
+          init: {
+            status: 406,
+            headers: { 'content-type': 'text/html' },
+          },
+          requestContext,
+        });
+      } finally {
+        this.#logRequestPerformance(request, start, 'cache hit');
       }
     }
 
@@ -916,10 +913,7 @@ export class Realm {
       }
 
       let fileRef = maybeFileRef;
-      if (
-        hasExecutableExtension(fileRef.path) &&
-        !localPath.startsWith(assetsDir)
-      ) {
+      if (hasExecutableExtension(fileRef.path)) {
         if (fileRef[Symbol.for('shimmed-module')]) {
           // this response is ultimately thrown away and only the symbol value
           // is preserved. so what is inside this response is not important

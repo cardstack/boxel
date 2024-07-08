@@ -121,7 +121,6 @@ import type {
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 export const maxLinkDepth = 5;
-export const assetsDir = '__boxel/';
 
 export interface MatrixCardError {
   id?: string;
