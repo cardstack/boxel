@@ -92,10 +92,13 @@ jobs:
       - name: Build boxel-motion
         run: pnpm build
         working-directory: packages/boxel-motion/addon
-      - name: Build host dist/ for fastboot
-        run: pnpm build
+      - name: Start host to serve assets for fastboot
+        run: pnpm start &
         env:
           NODE_OPTIONS: --max_old_space_size=4096
+        working-directory: packages/host
+      - name: Wait for ember-cli to be ready
+        run: pnpm npx wait-for-localhost 4200
         working-directory: packages/host
       - name: Start realm servers
         run: pnpm start:without-matrix &
@@ -204,7 +207,7 @@ jobs:
           NODE_OPTIONS: --max_old_space_size=4096
         working-directory: packages/host
       - name: Wait for ember-cli to be ready
-        run: npx wait-for-localhost 4200
+        run: pnpm npx wait-for-localhost 4200
         working-directory: packages/realm-server
       - name: Start realm servers
         run: pnpm start:all &

@@ -1430,6 +1430,9 @@ importers:
       uuid:
         specifier: ^9.0.1
         version: 9.0.1
+      wait-for-localhost-cli:
+        specifier: ^3.2.0
+        version: 3.2.0
       webpack:
         specifier: ^5.89.0
         version: 5.89.0
