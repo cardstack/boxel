@@ -1210,20 +1210,16 @@ module(`Integration | search-index`, function (hooks) {
       trimCardContainer(stripScopedCSSAttributes(embeddedHtmls[cardDefRefURL])),
       cleanWhiteSpace(`
         <div class="embedded-template">
-          <div class="container">
-            <div class="contents">
-              <div class="thumbnail-section">
-                <div class="card-thumbnail">
-                  <div class="card-thumbnail-text" data-test-card-thumbnail-text>Card</div>
-                </div> 
-                <div class="thumbnail-subsection">
-                  <div class="thumbnail-subsection">
-                    <h3 class="card-title" data-test-card-title></h3>
-                  </div>
-                  <div class="thumbnail-subsection">
-                    <h4 class="card-display-name" data-test-card-display-name>Card</h4>
-                  </div>
-                </div>
+          <div class="thumbnail-section">
+            <div class="card-thumbnail">
+              <div class="card-thumbnail-text" data-test-card-thumbnail-text>Card</div>
+            </div> 
+            <div class="thumbnail-subsection">
+              <div class="thumbnail-subsection">
+                <h3 class="card-title" data-test-card-title></h3>
+              </div>
+              <div class="thumbnail-subsection">
+                <h4 class="card-display-name" data-test-card-display-name>Card</h4>
               </div>
             </div>
           </div>
