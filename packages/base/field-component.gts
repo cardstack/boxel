@@ -256,6 +256,8 @@ export function getBoxComponent(
           to the card since some of our queries are height queries
         */
         height: 100%;
+        container-name: embedded-card;
+        container-type: size;
       }
 
       .field-component-card.atom-format {

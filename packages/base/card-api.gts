@@ -1796,79 +1796,59 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
 }> {
   <template>
     <div class='embedded-template'>
-      <div class='container'>
-        <div class='contents'>
-          {{#if @model}}
-            <div class='thumbnail-section'>
+      {{#if @model}}
+        <div class='thumbnail-section'>
+          <div
+            class='card-thumbnail'
+            style={{cssUrl 'background-image' @model.thumbnailURL}}
+          >
+            {{#unless @model.thumbnailURL}}
               <div
-                class='card-thumbnail'
-                style={{cssUrl 'background-image' @model.thumbnailURL}}
-              >
-                {{#unless @model.thumbnailURL}}
-                  <div
-                    class='card-thumbnail-text'
-                    data-test-card-thumbnail-text
-                  >{{cardTypeDisplayName @model}}</div>
-                {{/unless}}
-              </div>
-            </div>
-            <div class='thumbnail-subsection'>
-              <div class='thumbnail-subsection'>
-                <h3
-                  class='card-title'
-                  data-test-card-title
-                >{{@model.title}}</h3>
-              </div>
-              <div class='thumbnail-subsection'>
-                <h4
-                  class='card-display-name'
-                  data-test-card-display-name
-                >{{cardTypeDisplayName @model}}</h4>
-              </div>
-            </div>
-          {{else}}
-            {{! empty links-to field }}
-            <div data-test-empty-field class='empty-field'></div>
-          {{/if}}
+                class='card-thumbnail-text'
+                data-test-card-thumbnail-text
+              >{{cardTypeDisplayName @model}}</div>
+            {{/unless}}
+          </div>
         </div>
-      </div>
+        <div class='thumbnail-subsection'>
+          <div class='thumbnail-subsection'>
+            <h3 class='card-title' data-test-card-title>{{@model.title}}</h3>
+          </div>
+          <div class='thumbnail-subsection'>
+            <h4
+              class='card-display-name'
+              data-test-card-display-name
+            >{{cardTypeDisplayName @model}}</h4>
+          </div>
+        </div>
+      {{else}}
+        {{! empty links-to field }}
+        <div data-test-empty-field class='empty-field'></div>
+      {{/if}}
     </div>
     <style>
       .embedded-template {
         width: 100%;
         height: 100%;
         display: flex;
-      }
-      .container {
-        container-name: embedded-card;
-        container-type: size;
-        width: 100%;
-      }
-      .contents {
-        height: 100%;
-        padding: 10px;
-        display: flex;
         flex-wrap: wrap;
-        padding: 11px;
-        border: var(--boxel-border-card);
-        border-radius: var(--boxel-border-radius-lg);
       }
-
       /* 
          sadly you can't use css vars in container queries. also be careful of fractional pixel 
          dimensions in the breakpoints. due to this we use the "breakpoint - 1 pixel" in the 
          container query conditions
       */
 
-      /* row style embedded card */
+      /* strip style embedded card */
       @container embedded-card (height <= 223px) {
-        .contents {
+        .embedded-template {
           column-gap: 10px;
+          padding: 5px;
         }
         .card-thumbnail {
-          width: var(--row-embedded-thumbnail-width);
-          height: var(--row-embedded-thumbnail-height);
-          border-radius: 6px; /* this annoyingly is a radius that is not part of our style guide */
+          width: var(--strip-embedded-thumbnail-width);
+          height: var(--strip-embedded-thumbnail-height);
+          border-radius: 6px;
         }
         .card-thumbnail-text {
           visibility: hidden;
@@ -1876,8 +1856,9 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
       }
       /* small and medium thumbnail styles embedded card */
       @container embedded-card (223px < height <= 249px) {
-        .contents {
+        .embedded-template {
           justify-content: center;
+          padding: 10px;
         }
         .card-title {
           height: 35px;
@@ -1903,8 +1884,9 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
 
       /* large thumbnail style embedded card */
       @container embedded-card (249px < height) and (339px < width) {
-        .contents {
+        .embedded-template {
           justify-content: center;
+          padding: 10px;
         }
         .card-title {
           height: 35px;

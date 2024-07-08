@@ -84,8 +84,8 @@
   --boxel-xxl-container: 83.76rem; /* 1340px */
 
   /* embedded card */
-  --row-embedded-thumbnail-height: 41px;
-  --row-embedded-thumbnail-width: 41px;
+  --strip-embedded-thumbnail-height: 30px;
+  --strip-embedded-thumbnail-width: 30px;
   --small-embedded-thumbnail-height: 142px;
   --small-embedded-thumbnail-width: 142px;
   --large-embedded-thumbnail-height: 166px;

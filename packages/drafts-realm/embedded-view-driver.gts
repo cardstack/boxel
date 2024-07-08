@@ -10,9 +10,18 @@ export class EmbeddedViewDriver extends CardDef {
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <div class='item'>
-        <div class='desc'>Row thumbnail (226px x 62px)</div>
-        <div class='row thumbnail' data-test-viewport='row'>
+        <div class='desc'>Strip thumbnail (226px x 40px)<span
+            class='highlight'
+          >*</span></div>
+        <div class='strip thumbnail' data-test-viewport='strip'>
           <@fields.card />
+        </div>
+        <div class='remark'><span class='highlight'>*</span>
+          Note that I specifically overrode the design docs for the "strip"
+          style, as they don't take into account the edit format for an embedded
+          card. In this format we need to fit a strip style card into a 40px
+          tall space. Our design docs will need to reflect this (or we need to
+          change how the edit format's form looks.)
         </div>
       </div>
       <div class='item'>
@@ -46,15 +55,27 @@ export class EmbeddedViewDriver extends CardDef {
           width: 350px;
           height: 250px;
         }
-        .row {
+        .strip {
+          height: 40px;
           width: 226px;
-          height: 62px;
+        }
+        .remark {
+          margin-top: 1rem;
+          font: 300 var(--boxel-font-xs);
+        }
+        .highlight {
+          color: fuchsia;
+          font-weight: bold;
         }
         .thumbnail {
           /* this is a whacky background color so that we can see from visual inspection 
              if the embedded card doesn't use all the space that has been yielded to it
           */
           background-color: fuchsia;
+          /* this is how a border would appear around a card.
+             note that a card is not supposed to draw its own border 
+          */
+          box-shadow: 0 0 0 1px var(--boxel-light-500);
           overflow: hidden;
         }
         .item {
