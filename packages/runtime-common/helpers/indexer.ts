@@ -187,11 +187,11 @@ export async function setupIndex(
         ...row,
       };
 
-      // Make sure all table columns are present in the data object, even if they are null. This is to assure
+      // Make sure all table columns are present in the data object, even if their value is undefined. This is to assure
       // that the order of the columns in the insert statement is consistent for all types of resources
       // that get passed into setupIndex.
       let dataObject = Object.fromEntries(
-        columnNames.map((column) => [column, valuesToInsert[column] ?? null]),
+        columnNames.map((column) => [column, valuesToInsert[column]]),
       );
 
       return asExpressions(dataObject, {
