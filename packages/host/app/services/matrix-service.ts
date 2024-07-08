@@ -37,7 +37,6 @@ import { Submode } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
-import { getRealmSession } from '@cardstack/host/resources/realm-session';
 
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
@@ -54,9 +53,9 @@ import type { RoomField } from 'https://cardstack.com/base/room';
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
 import { importResource } from '../resources/import';
 
-import { clearAllRealmSessions } from '../resources/realm-session';
-
 import { RoomResource, getRoom } from '../resources/room';
+
+import RealmService from './realm';
 
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
@@ -78,6 +77,8 @@ export type OperatorModeContext = {
 export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
+  @service declare realm: RealmService;
+
   @service declare router: RouterService;
   @tracked private _client: MatrixClient | undefined;
   private realmSessionTasks: Map<string, Promise<string>> = new Map(); // key: realmURL, value: promise for JWT
@@ -201,7 +202,7 @@ export default class MatrixService extends Service {
       await this.flushMembership;
       await this.flushTimeline;
       clearAuth();
-      clearAllRealmSessions();
+      this.realm.logout();
       this.unbindEventListeners();
       await this.client.logout(true);
     } catch (e) {
@@ -278,12 +279,35 @@ export default class MatrixService extends Service {
 
       try {
         await this._client.startClient();
+        await this.loginToRealms();
         await this.initializeRooms();
       } catch (e) {
         console.log('Error starting Matrix client', e);
         await this.logout();
       }
     }
+  }
+
+  private async loginToRealms() {
+    // This is where we would actually load user-specific choices out of the
+    // user's profile based on this.client.getUserId();
+    let activeRealms = this.cardService.realmURLs;
+
+    await Promise.all(
+      activeRealms.map(async (realmURL) => {
+        try {
+          // Our authorization-middleware can login automatically after seeing a
+          // 401, but this preemptive login makes it possible to see
+          // canWrite===true on realms that are publicly readable.
+          await this.realm.login(realmURL);
+        } catch (err) {
+          console.warn(
+            `Unable to establish session with realm ${realmURL}`,
+            err,
+          );
+        }
+      }),
+    );
   }
 
   public async createRealmSession(realmURL: URL) {
@@ -430,11 +454,7 @@ export default class MatrixService extends Service {
           this.cardAPI,
           mappings,
         );
-        let realmSession = getRealmSession(this, {
-          card: () => attachedOpenCard,
-        });
-        await realmSession.loaded;
-        if (realmSession.canWrite) {
+        if (this.realm.canWrite(attachedOpenCard.id)) {
           tools.push({
             type: 'function',
             function: {
@@ -715,7 +735,12 @@ export default class MatrixService extends Service {
 
   setRoom(roomId: string, roomPromise: Promise<RoomField>) {
     this.rooms.set(roomId, roomPromise);
-    this.updateRoomResourcesCache();
+    if (!this.roomResourcesCache.has(roomId)) {
+      this.roomResourcesCache.set(
+        roomId,
+        getRoom(this, () => roomId),
+      );
+    }
   }
 
   @cached
@@ -728,18 +753,6 @@ export default class MatrixService extends Service {
       resources.set(roomId, this.roomResourcesCache.get(roomId)!);
     }
     return resources;
-  }
-
-  private updateRoomResourcesCache() {
-    for (let roomId of this.rooms.keys()) {
-      if (this.roomResourcesCache.has(roomId)) {
-        continue;
-      }
-      this.roomResourcesCache.set(
-        roomId,
-        getRoom(this, () => roomId),
-      );
-    }
   }
 
   private resetState() {

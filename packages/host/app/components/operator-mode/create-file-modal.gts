@@ -37,14 +37,19 @@ import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common/code-ref';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
+import type RealmService from '@cardstack/host/services/realm';
+
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
-import CardPill from '../card-pill';
 import ModalContainer from '../modal-container';
 
 import Pill from '../pill';
 import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
+
+import WithKnownRealmsLoaded from '../with-known-realms-loaded';
+
+import RealmIcon from './realm-icon';
 
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
@@ -75,178 +80,189 @@ interface Signature {
 
 export default class CreateFileModal extends Component<Signature> {
   <template>
-    <ModalContainer
-      class='create-file-modal'
-      @cardContainerClass='create-file'
-      @title='{{if
-        (eq this.maybeFileType.id "duplicate-instance")
-        "Duplicate"
-        "New"
-      }} {{this.maybeFileType.displayName}}'
-      @size='medium'
-      @isOpen={{this.isModalOpen}}
-      @onClose={{this.onCancel}}
-      {{focusTrap
-        isActive=this.onSetup.isIdle
-        focusTrapOptions=(hash
-          initialFocus=this.initialFocusSelector allowOutsideClick=true
-        )
-      }}
-      data-test-ready={{this.onSetup.isIdle}}
-      data-test-create-file-modal
-    >
-      <:content>
-        {{#if this.isModalOpen}}
-          {{#if this.onSetup.isRunning}}
-            <LoadingIndicator />
-          {{else}}
-            <FieldContainer @label='Create In' @tag='label' class='field'>
-              <RealmDropdown
-                @dropdownWidth='15rem'
-                @selectedRealmURL={{this.selectedRealmURL}}
-                @onSelect={{this.onSelectRealm}}
-              />
-            </FieldContainer>
-            {{#unless (eq this.fileType.id 'duplicate-instance')}}
-              <FieldContainer
-                @label={{if
-                  (eq this.maybeFileType.id 'card-instance')
-                  'Adopted From'
-                  'Inherits From'
+    <WithKnownRealmsLoaded>
+      <:default>
+        <ModalContainer
+          class='create-file-modal'
+          @cardContainerClass='create-file'
+          @title='{{if
+            (eq this.maybeFileType.id "duplicate-instance")
+            "Duplicate"
+            "New"
+          }} {{this.maybeFileType.displayName}}'
+          @size='medium'
+          @isOpen={{this.isModalOpen}}
+          @onClose={{this.onCancel}}
+          {{focusTrap
+            isActive=this.onSetup.isIdle
+            focusTrapOptions=(hash
+              initialFocus=this.initialFocusSelector allowOutsideClick=true
+            )
+          }}
+          data-test-ready={{this.onSetup.isIdle}}
+          data-test-create-file-modal
+        >
+          <:content>
+            {{#if this.isModalOpen}}
+              {{#if this.onSetup.isRunning}}
+                <LoadingIndicator />
+              {{else}}
+                <FieldContainer @label='Create In' @tag='label' class='field'>
+                  <RealmDropdown
+                    @dropdownWidth='15rem'
+                    @selectedRealmURL={{this.selectedRealmURL}}
+                    @onSelect={{this.onSelectRealm}}
+                  />
+                </FieldContainer>
+                {{#unless (eq this.fileType.id 'duplicate-instance')}}
+                  <FieldContainer
+                    @label={{if
+                      (eq this.maybeFileType.id 'card-instance')
+                      'Adopted From'
+                      'Inherits From'
+                    }}
+                    class='field'
+                    data-test-inherits-from-field
+                  >
+                    <div class='field-contents'>
+                      {{#if this.definitionClass}}
+                        <Pill class='definition-pill'>
+                          {{this.definitionClass.displayName}}
+                        </Pill>
+                      {{else}}
+                        {{#if this.selectedCatalogEntry}}
+                          <SelectedTypePill
+                            @entry={{this.selectedCatalogEntry}}
+                          />
+                        {{/if}}
+                        <Button
+                          class={{if
+                            this.selectedCatalogEntry
+                            'change-trigger'
+                          }}
+                          @kind='text-only'
+                          @size='small'
+                          @disabled={{this.isCreateRunning}}
+                          {{on 'click' (perform this.chooseType)}}
+                          data-test-select-card-type
+                        >
+                          {{if this.selectedCatalogEntry 'Change' 'Select'}}
+                        </Button>
+                      {{/if}}
+                    </div>
+                  </FieldContainer>
+                {{/unless}}
+                {{#if
+                  (or
+                    (eq this.fileType.id 'card-definition')
+                    (eq this.fileType.id 'field-definition')
+                  )
                 }}
-                class='field'
-                data-test-inherits-from-field
-              >
-                <div class='field-contents'>
-                  {{#if this.definitionClass}}
-                    <Pill class='definition-pill'>
-                      {{this.definitionClass.displayName}}
-                    </Pill>
-                  {{else}}
-                    {{#if this.selectedCatalogEntry}}
-                      <CardPill
-                        @card={{this.selectedCatalogEntry}}
-                        data-test-selected-type={{this.selectedCatalogEntry.title}}
-                      />
-                    {{/if}}
+                  <FieldContainer
+                    @label='Display Name'
+                    @tag='label'
+                    class='field'
+                  >
+                    <BoxelInput
+                      data-test-display-name-field
+                      placeholder={{if
+                        (eq this.fileType.id 'card-definition')
+                        'My Card'
+                        'My Field'
+                      }}
+                      @value={{this.displayName}}
+                      @onInput={{this.setDisplayName}}
+                    />
+                  </FieldContainer>
+                  <FieldContainer
+                    @label='File Name'
+                    @tag='label'
+                    class='field gts-extension'
+                  >
+                    <BoxelInput
+                      data-test-file-name-field
+                      placeholder={{if
+                        (eq this.fileType.id 'card-definition')
+                        'my-card.gts'
+                        'my-field.gts'
+                      }}
+                      @value={{this.fileName}}
+                      @state={{this.fileNameInputState}}
+                      @errorMessage={{this.fileNameError}}
+                      @onInput={{this.setFileName}}
+                    />
+                  </FieldContainer>
+                {{/if}}
+              {{/if}}
+            {{/if}}
+            {{#if this.saveError}}
+              <div class='error-message' data-test-error-message>
+                {{this.saveError}}
+              </div>
+            {{/if}}
+          </:content>
+          <:footer>
+            {{#if this.isModalOpen}}
+              {{#unless this.onSetup.isRunning}}
+                <div class='footer-buttons'>
+                  <Button
+                    {{on 'click' this.onCancel}}
+                    {{onKeyMod 'Escape'}}
+                    @size='tall'
+                    data-test-cancel-create-file
+                  >
+                    Cancel
+                  </Button>
+                  {{#if (eq this.fileType.id 'card-instance')}}
                     <Button
-                      class={{if this.selectedCatalogEntry 'change-trigger'}}
-                      @kind='text-only'
-                      @size='small'
-                      @disabled={{this.isCreateRunning}}
-                      {{on 'click' (perform this.chooseType)}}
-                      data-test-select-card-type
+                      @kind='primary'
+                      @size='tall'
+                      @loading={{this.createCardInstance.isRunning}}
+                      @disabled={{this.isCreateCardInstanceButtonDisabled}}
+                      {{on 'click' (perform this.createCardInstance)}}
+                      {{onKeyMod 'Enter'}}
+                      data-test-create-card-instance
                     >
-                      {{if this.selectedCatalogEntry 'Change' 'Select'}}
+                      Create
+                    </Button>
+                  {{else if (eq this.fileType.id 'duplicate-instance')}}
+                    <Button
+                      @kind='primary'
+                      @size='tall'
+                      @loading={{this.duplicateCardInstance.isRunning}}
+                      @disabled={{this.isDuplicateCardInstanceButtonDisabled}}
+                      {{on 'click' (perform this.duplicateCardInstance)}}
+                      {{onKeyMod 'Enter'}}
+                      data-test-duplicate-card-instance
+                    >
+                      Duplicate
+                    </Button>
+                  {{else if
+                    (or
+                      (eq this.fileType.id 'card-definition')
+                      (eq this.fileType.id 'field-definition')
+                    )
+                  }}
+                    <Button
+                      @kind='primary'
+                      @size='tall'
+                      @loading={{this.createDefinition.isRunning}}
+                      @disabled={{this.isCreateDefinitionButtonDisabled}}
+                      {{on 'click' (perform this.createDefinition)}}
+                      {{onKeyMod 'Enter'}}
+                      data-test-create-definition
+                    >
+                      Create
                     </Button>
                   {{/if}}
                 </div>
-              </FieldContainer>
-            {{/unless}}
-            {{#if
-              (or
-                (eq this.fileType.id 'card-definition')
-                (eq this.fileType.id 'field-definition')
-              )
-            }}
-              <FieldContainer @label='Display Name' @tag='label' class='field'>
-                <BoxelInput
-                  data-test-display-name-field
-                  placeholder={{if
-                    (eq this.fileType.id 'card-definition')
-                    'My Card'
-                    'My Field'
-                  }}
-                  @value={{this.displayName}}
-                  @onInput={{this.setDisplayName}}
-                />
-              </FieldContainer>
-              <FieldContainer
-                @label='File Name'
-                @tag='label'
-                class='field gts-extension'
-              >
-                <BoxelInput
-                  data-test-file-name-field
-                  placeholder={{if
-                    (eq this.fileType.id 'card-definition')
-                    'my-card.gts'
-                    'my-field.gts'
-                  }}
-                  @value={{this.fileName}}
-                  @state={{this.fileNameInputState}}
-                  @errorMessage={{this.fileNameError}}
-                  @onInput={{this.setFileName}}
-                />
-              </FieldContainer>
+              {{/unless}}
             {{/if}}
-          {{/if}}
-        {{/if}}
-        {{#if this.saveError}}
-          <div class='error-message' data-test-error-message>
-            {{this.saveError}}
-          </div>
-        {{/if}}
-      </:content>
-      <:footer>
-        {{#if this.isModalOpen}}
-          {{#unless this.onSetup.isRunning}}
-            <div class='footer-buttons'>
-              <Button
-                {{on 'click' this.onCancel}}
-                {{onKeyMod 'Escape'}}
-                @size='tall'
-                data-test-cancel-create-file
-              >
-                Cancel
-              </Button>
-              {{#if (eq this.fileType.id 'card-instance')}}
-                <Button
-                  @kind='primary'
-                  @size='tall'
-                  @loading={{this.createCardInstance.isRunning}}
-                  @disabled={{this.isCreateCardInstanceButtonDisabled}}
-                  {{on 'click' (perform this.createCardInstance)}}
-                  {{onKeyMod 'Enter'}}
-                  data-test-create-card-instance
-                >
-                  Create
-                </Button>
-              {{else if (eq this.fileType.id 'duplicate-instance')}}
-                <Button
-                  @kind='primary'
-                  @size='tall'
-                  @loading={{this.duplicateCardInstance.isRunning}}
-                  @disabled={{this.isDuplicateCardInstanceButtonDisabled}}
-                  {{on 'click' (perform this.duplicateCardInstance)}}
-                  {{onKeyMod 'Enter'}}
-                  data-test-duplicate-card-instance
-                >
-                  Duplicate
-                </Button>
-              {{else if
-                (or
-                  (eq this.fileType.id 'card-definition')
-                  (eq this.fileType.id 'field-definition')
-                )
-              }}
-                <Button
-                  @kind='primary'
-                  @size='tall'
-                  @loading={{this.createDefinition.isRunning}}
-                  @disabled={{this.isCreateDefinitionButtonDisabled}}
-                  {{on 'click' (perform this.createDefinition)}}
-                  {{onKeyMod 'Enter'}}
-                  data-test-create-definition
-                >
-                  Create
-                </Button>
-              {{/if}}
-            </div>
-          {{/unless}}
-        {{/if}}
-      </:footer>
-    </ModalContainer>
+          </:footer>
+        </ModalContainer>
+      </:default>
+      <:loading></:loading>
+    </WithKnownRealmsLoaded>
     <style>
       .create-file-modal > :deep(.boxel-modal__inner) {
         display: flex;
@@ -755,4 +771,34 @@ export function convertToClassName(input: string) {
   }
 
   return className;
+}
+
+interface SelectedTypePillSignature {
+  Args: {
+    entry: CatalogEntry;
+  };
+}
+
+class SelectedTypePill extends Component<SelectedTypePillSignature> {
+  @service private declare realm: RealmService;
+
+  <template>
+    <Pill class='selected-type' data-test-selected-type={{@entry.title}}>
+      <:icon>
+        <RealmIcon @realmInfo={{this.realm.info @entry.id}} />
+      </:icon>
+      <:default>
+        {{@entry.title}}
+      </:default>
+    </Pill>
+    <style>
+      .selected-type {
+        padding: var(--boxel-sp-xxxs);
+        gap: var(--boxel-sp-xxxs);
+      }
+      .selected-type :deep(.icon) {
+        margin-right: 0;
+      }
+    </style>
+  </template>
 }

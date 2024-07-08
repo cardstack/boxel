@@ -10,7 +10,8 @@ import {
   baseRealm,
   NotLoaded,
   type LooseSingleCardDocument,
-  RealmSessionContextName,
+  PermissionsContextName,
+  type Permissions,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
@@ -63,9 +64,11 @@ module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
   hooks.beforeEach(async function () {
-    provideConsumeContext(RealmSessionContextName, {
+    let permissions: Permissions = {
       canWrite: true,
-    });
+      canRead: true,
+    };
+    provideConsumeContext(PermissionsContextName, permissions);
 
     loader = lookupLoaderService().loader;
   });

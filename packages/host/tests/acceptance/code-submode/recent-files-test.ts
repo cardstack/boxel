@@ -1,4 +1,12 @@
-import { click, waitFor, fillIn, triggerKeyEvent } from '@ember/test-helpers';
+import {
+  click,
+  waitFor,
+  fillIn,
+  triggerKeyEvent,
+  findAll,
+} from '@ember/test-helpers';
+
+import { waitUntil } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
@@ -298,6 +306,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     await waitFor('[data-test-file]');
     await waitFor('[data-test-directory]');
 
+    await waitUntil(() => findAll('[data-test-recent-file]').length === 2);
     assert.dom('[data-test-recent-file]').exists({ count: 2 });
 
     await waitFor(

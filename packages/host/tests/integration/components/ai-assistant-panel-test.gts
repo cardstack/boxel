@@ -61,7 +61,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMatrixServiceMock(hooks, { autostart: true });
+
   setupWindowMock(hooks);
   let noop = () => {};
 
@@ -505,7 +506,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
       content: {
         body: 'i am the body',
         msgtype: 'org.boxel.command',
-        formatted_body: 'A patch',
+        formatted_body:
+          'A patch<pre><code>https://www.example.com/path/to/resource?query=param1value&anotherQueryParam=anotherValue&additionalParam=additionalValue&longparameter1=someLongValue1</code></pre>',
         format: 'org.matrix.custom.html',
         data: JSON.stringify({
           command: {

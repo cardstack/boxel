@@ -14,7 +14,7 @@ import {
 import {
   BoxComponentSignature,
   DefaultFormatConsumer,
-  RealmSessionConsumer,
+  PermissionsConsumer,
   getBoxComponent,
 } from './field-component';
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
@@ -135,7 +135,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
   }
 
   <template>
-    <RealmSessionConsumer as |realmSession|>
+    <PermissionsConsumer as |permissions|>
       {{#if @arrayField.children.length}}
         <ul class='list' {{sortableGroup onChange=(fn this.setItems)}}>
           {{#each @arrayField.children as |boxedElement i|}}
@@ -144,7 +144,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
               data-test-item={{i}}
               {{sortableItem model=boxedElement.value}}
             >
-              {{#if realmSession.canWrite}}
+              {{#if permissions.canWrite}}
                 <IconButton
                   {{sortableHandle}}
                   @variant='primary'
@@ -183,7 +183,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         </ul>
       {{/if}}
 
-      {{#if realmSession.canWrite}}
+      {{#if permissions.canWrite}}
         <AddButton
           class='add-new'
           @variant='full-width'
@@ -194,7 +194,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
           {{getPlural @field.card.displayName}}
         </AddButton>
       {{/if}}
-    </RealmSessionConsumer>
+    </PermissionsConsumer>
     <style>
       .list {
         list-style: none;
