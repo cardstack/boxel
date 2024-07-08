@@ -119,6 +119,7 @@ jobs:
           name: playwright-traces-${{ matrix.shardIndex }}
           path: packages/matrix/test-results/**/trace.zip
           retention-days: 30
+          if-no-files-found: ignore
 
   matrix-client-merge-reports-and-publish:
     name: Merge Matrix reports and publish
