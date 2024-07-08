@@ -220,7 +220,7 @@ test.describe('Room creation', () => {
       skipOpeningAssistant: true,
     });
 
-    // Open assistant without waiting for [data-test-room]… meh
+    // Open assistant without waiting for [data-test-room] which won’t show on a new account
     await page.locator('[data-test-open-ai-assistant]').click();
     await page.waitForFunction(() =>
       document.querySelector('[data-test-close-ai-assistant]'),
