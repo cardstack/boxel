@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "instructions": null,
+      "instructions": "Optimize given content for search engines. Suggest a list of keywords and meta tags to improve search engine ranking.",
       "title": "SEO",
       "description": null,
       "thumbnailURL": null

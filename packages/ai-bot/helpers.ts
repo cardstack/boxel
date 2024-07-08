@@ -1,4 +1,7 @@
-import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
+import type {
+  CardResource,
+  LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardFragmentContent,
@@ -68,6 +71,15 @@ export function constructHistory(history: IRoomEvent[]) {
       ) {
         event.content.data.attachedCards =
           event.content.data.attachedCardsEventIds!.map((id) =>
+            serializedCardFromFragments(id, fragments),
+          );
+      }
+      if (
+        event.content.data.attachedSkillEventIds &&
+        event.content.data.attachedSkillEventIds.length > 0
+      ) {
+        event.content.data.skillCards =
+          event.content.data.attachedSkillEventIds!.map((id) =>
             serializedCardFromFragments(id, fragments),
           );
       }
@@ -142,11 +154,33 @@ export interface OpenAIPromptMessage {
   role: 'system' | 'user' | 'assistant';
 }
 
+function setSortedRelevantCards(cards: LooseSingleCardDocument[]) {
+  let relevantCards: Map<string, CardResource> = new Map();
+  for (let card of cards) {
+    if (card.data.id) {
+      relevantCards.set(card.data.id, card.data as CardResource);
+    } else {
+      throw new Error(`bug: don't know how to handle card without ID`);
+    }
+  }
+  // Return the cards in a consistent manner
+  let sortedCards = Array.from(relevantCards.values()).sort((a, b) => {
+    return a.id.localeCompare(b.id);
+  });
+  return sortedCards;
+}
+
 export function getRelevantCards(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ) {
-  let relevantCards: Map<string, any> = new Map();
+  let relevantCards: {
+    attachedCards: CardResource[];
+    skillCards: CardResource[];
+  } = {
+    attachedCards: [],
+    skillCards: [],
+  };
   for (let event of history) {
     if (event.type !== 'm.room.message') {
       continue;
@@ -155,22 +189,14 @@ export function getRelevantCards(
       let { content } = event;
       if (content.msgtype === 'org.boxel.message') {
         const attachedCards = content.data?.attachedCards || [];
-        for (let card of attachedCards) {
-          if (card.data.id) {
-            relevantCards.set(card.data.id, card.data);
-          } else {
-            throw new Error(`bug: don't know how to handle card without ID`);
-          }
-        }
+        relevantCards.attachedCards = setSortedRelevantCards(attachedCards);
+
+        const skillCards = content.data?.skillCards || [];
+        relevantCards.skillCards = setSortedRelevantCards(skillCards);
       }
     }
   }
-
-  // Return the cards in a consistent manner
-  let sortedCards = Array.from(relevantCards.values()).sort((a, b) => {
-    return a.id.localeCompare(b.id);
-  });
-  return sortedCards;
+  return relevantCards;
 }
 
 export function getTools(history: DiscreteMatrixEvent[], aiBotUserId: string) {
@@ -227,12 +253,20 @@ export function getModifyPrompt(
     }
   }
 
+  let { attachedCards, skillCards } = getRelevantCards(history, aiBotUserId);
   let systemMessage =
     MODIFY_SYSTEM_MESSAGE +
     `
   The user currently has given you the following data to work with:
   Cards:\n`;
-  systemMessage += attachedCardsToMessage(history, aiBotUserId);
+  systemMessage += attachedCardsToMessage(attachedCards);
+
+  if (skillCards.length) {
+    systemMessage +=
+      'The user has given you the following instructions. You must obey these instructions when responding to the user:\n';
+    systemMessage += skillCardsToMessage(skillCards);
+  }
+
   if (tools.length == 0) {
     systemMessage +=
       'You are unable to edit any cards, the user has not given you access, they need to open the card on the stack and let it be auto-attached';
@@ -249,12 +283,13 @@ export function getModifyPrompt(
   return messages;
 }
 
-export const attachedCardsToMessage = (
-  history: DiscreteMatrixEvent[],
-  aiBotUserId: string,
-) => {
-  return `Full card data: ${JSON.stringify(
-    getRelevantCards(history, aiBotUserId),
+export const attachedCardsToMessage = (cards: CardResource[]) => {
+  return `Full card data: ${JSON.stringify(cards)}`;
+};
+
+export const skillCardsToMessage = (cards: CardResource[]) => {
+  return `${JSON.stringify(
+    cards.map((card) => card.attributes?.instructions),
   )}`;
 };
 
