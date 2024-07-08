@@ -2442,37 +2442,42 @@ const tests = Object.freeze({
   },
   'can get prerendered cards (html + css) from the indexer': async (
     assert,
-    { indexer, loader, testCards },
+    { indexer, loader },
   ) => {
-    let { vangogh } = testCards;
     await setupIndex(indexer, [
       {
-        card: vangogh,
-        data: {
-          embedded_html: {
-            default: '<div>Van Gogh</div',
-          },
-          deps: [`${testRealmURL}person`],
-          realm_version: 2, // 2 because we're adding modules to the index after setup
+        url: `${testRealmURL}vangogh.json`,
+        file_alias: `${testRealmURL}vangogh.json`,
+        type: 'instance',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        deps: [`${testRealmURL}person`],
+        types: [],
+        embedded_html: {
+          default: '<div>Van Gogh</div',
         },
       },
+      {
+        url: `${testRealmURL}person.gts`,
+        type: 'module',
+        file_alias: `${testRealmURL}person`,
+        realm_version: 1,
+        realm_url: testRealmURL,
+        source: cardSrc,
+        deps: [],
+        types: [],
+      },
+      {
+        url: `${testRealmURL}person.gts`,
+        file_alias: `${testRealmURL}person`,
+        type: 'css',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        source: '.foo { color: red; }',
+        deps: [],
+        types: [],
+      },
     ]);
-
-    let batch = await indexer.createBatch(new URL(testRealmURL));
-    let now = Date.now();
-    await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
-      type: 'module',
-      source: cardSrc,
-      lastModified: now,
-      deps: new Set(),
-    });
-    await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
-      type: 'css',
-      source: '.foo { color: red; }',
-      lastModified: now,
-      deps: new Set(),
-    });
-    await batch.done();
 
     let { prerenderedCards, prerenderedCardCssItems, meta } =
       await indexer.searchPrerendered(new URL(testRealmURL), {}, loader);
@@ -2480,7 +2485,7 @@ const tests = Object.freeze({
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
     assert.strictEqual(
       meta.page.realmVersion,
-      2,
+      1,
       'the realm version is correct',
     );
     assert.strictEqual(
