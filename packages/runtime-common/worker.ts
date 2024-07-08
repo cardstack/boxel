@@ -115,7 +115,6 @@ export class Worker {
   #fromScratch:
     | ((realmURL: URL, boom?: true) => Promise<IndexResults>)
     | undefined;
-  #realmAdapter: RealmAdapter;
   #incremental:
     | ((
         url: URL,
@@ -145,10 +144,18 @@ export class Worker {
     this.#realmURL = realmURL;
     this.#queue = queue;
     this.#indexer = indexer;
-    this.#realmAdapter = realmAdapter;
     this.#reader = {
-      readdir: this.#realmAdapter.readdir.bind(this.#realmAdapter),
-      readFileAsText: this.readFileAsText.bind(this),
+      readdir: realmAdapter.readdir.bind(realmAdapter),
+      readFileAsText: (
+        path: LocalPath,
+        opts: { withFallbacks?: true } = {},
+      ): Promise<TextFileRef | undefined> => {
+        return readFileAsText(
+          path,
+          realmAdapter.openFile.bind(realmAdapter),
+          opts,
+        );
+      },
     };
     this.runnerOptsMgr = runnerOptsManager;
     this.#runner = indexRunner;
@@ -166,17 +173,6 @@ export class Worker {
     await this.#queue.register(
       `incremental-index:${this.#realmURL}`,
       this.incremental,
-    );
-  }
-
-  private async readFileAsText(
-    path: LocalPath,
-    opts: { withFallbacks?: true } = {},
-  ): Promise<TextFileRef | undefined> {
-    return readFileAsText(
-      path,
-      this.#realmAdapter.openFile.bind(this.#realmAdapter),
-      opts,
     );
   }
 

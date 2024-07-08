@@ -1,4 +1,3 @@
-import type Owner from '@ember/owner';
 import { click, fillIn, waitFor } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
@@ -6,8 +5,6 @@ import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
-
-import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import {
   percySnapshot,
@@ -193,18 +190,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     );
   }
 
-  async function visitOperatorMode(
-    owner: Owner,
-    codePath = `${testRealmURL}index.json`,
-  ) {
-    let realmInfoService = owner.lookup(
-      'service:realm-info-service',
-    ) as RealmInfoService;
-
-    await realmInfoService.fetchRealmInfo({
-      realmURL: new URL(testRealmURL2),
-    });
-
+  async function visitOperatorMode(codePath = `${testRealmURL}index.json`) {
     await _visitOperatorMode({
       submode: 'code',
       codePath,
@@ -251,7 +237,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     });
 
     test('new file button has options to create card def, field def, and card instance files', async function (assert) {
-      await visitOperatorMode(this.owner);
+      await visitOperatorMode();
       await waitFor('[data-test-code-mode][data-test-save-idle]');
       await waitFor('[data-test-new-file-button]');
       await click('[data-test-new-file-button]');
@@ -281,7 +267,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     test<TestContextWithSave>('can create new card-instance file in local realm with card type from same realm', async function (assert) {
       const baseRealmIconURL = 'https://i.postimg.cc/d0B9qMvy/icon.png';
       assert.expect(13);
-      await visitOperatorMode(this.owner);
+      await visitOperatorMode();
       await openNewFileModal('Card Instance');
       assert.dom('[data-test-realm-name]').hasText('Test Workspace A');
       await waitFor(`[data-test-selected-type="General Card"]`);
@@ -356,7 +342,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     });
 
     test<TestContextWithSave>('an error when creating a new card instance is shown', async function (assert) {
-      await visitOperatorMode(this.owner);
+      await visitOperatorMode();
       await openNewFileModal('Card Instance');
       await waitFor(`[data-test-selected-type="General Card"]`);
 
@@ -386,7 +372,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
     test<TestContextWithSave>('can create new card-instance file in local realm with card type from a remote realm', async function (assert) {
       assert.expect(8);
-      await visitOperatorMode(this.owner);
+      await visitOperatorMode();
       await openNewFileModal('Card Instance');
       assert.dom('[data-test-realm-name]').hasText('Test Workspace A');
       await waitFor(`[data-test-selected-type="General Card"]`);
@@ -438,7 +424,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
     test<TestContextWithSave>('can create new card-instance file in a remote realm with card type from another realm', async function (assert) {
       assert.expect(8);
-      await visitOperatorMode(this.owner);
+      await visitOperatorMode();
       await openNewFileModal('Card Instance');
       await waitFor(`[data-test-selected-type="General Card"]`);
 
@@ -495,7 +481,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
     test<TestContextWithSave>('can create new card-instance file in a remote realm with card type from a local realm', async function (assert) {
       assert.expect(8);
-      await visitOperatorMode(this.owner);
+      await visitOperatorMode();
       await openNewFileModal('Card Instance');
 
       // realm selection
@@ -583,7 +569,7 @@ export class TrèsTestCard extends CardDef {
   }
   */
 }`.trim();
-      await visitOperatorMode(this.owner);
+      await visitOperatorMode();
       await openNewFileModal('Card Definition');
       assert.dom('[data-test-selected-type]').hasText('General Card');
       assert
@@ -634,7 +620,7 @@ export class TrèsTestCard extends CardDef {
 
     test<TestContextWithSave>('can create a new card definition in same realm as inherited definition', async function (assert) {
       assert.expect(1);
-      await visitOperatorMode(this.owner);
+      await visitOperatorMode();
       await openNewFileModal('Card Definition');
 
       await click('[data-test-select-card-type]');
@@ -690,7 +676,7 @@ export class TestCard extends Person {
 
     test<TestContextWithSave>('can create new card definition in different realm than realm of current file opened in code mode', async function (assert) {
       let done = assert.async();
-      await visitOperatorMode(this.owner, `${baseRealm.url}card-api.gts`);
+      await visitOperatorMode(`${baseRealm.url}card-api.gts`);
       await openNewFileModal('Card Definition');
 
       await click('[data-test-select-card-type]');
@@ -716,7 +702,7 @@ export class TestCard extends Person {
     });
 
     test('an error when creating a new card definition is shown', async function (assert) {
-      await visitOperatorMode(this.owner);
+      await visitOperatorMode();
       await openNewFileModal('Card Definition');
 
       await click('[data-test-select-card-type]');
@@ -746,7 +732,7 @@ export class TestCard extends Person {
 
     test<TestContextWithSave>('can create a new field definition that extends field definition that uses default export', async function (assert) {
       assert.expect(3);
-      await visitOperatorMode(this.owner);
+      await visitOperatorMode();
       await openNewFileModal('Field Definition');
       assert.dom('[data-test-selected-type]').hasText('General Field');
       await click('[data-test-select-card-type]');
@@ -803,7 +789,7 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
     });
 
     test('an error when creating a new field definition is shown', async function (assert) {
-      await visitOperatorMode(this.owner);
+      await visitOperatorMode();
       await openNewFileModal('Field Definition');
       await click('[data-test-select-card-type]');
       await waitFor('[data-test-card-catalog-modal]');
@@ -831,7 +817,7 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
 
     test<TestContextWithSave>('can create a new definition that extends card definition which uses default export', async function (assert) {
       assert.expect(1);
-      await visitOperatorMode(this.owner);
+      await visitOperatorMode();
       await openNewFileModal('Card Definition');
 
       // select card type
@@ -888,7 +874,7 @@ export class TestCard extends Pet {
 
     test<TestContextWithSave>('can reconcile a classname collision with the selected name of extending a card definition which uses a default export', async function (assert) {
       assert.expect(1);
-      await visitOperatorMode(this.owner);
+      await visitOperatorMode();
       await openNewFileModal('Card Definition');
 
       // select card type
@@ -944,7 +930,7 @@ export class Pet extends PetParent {
 
     test<TestContextWithSave>('can reconcile a classname collision with a javascript builtin object', async function (assert) {
       assert.expect(1);
-      await visitOperatorMode(this.owner);
+      await visitOperatorMode();
       await openNewFileModal('Card Definition');
 
       // select card type
@@ -1025,7 +1011,7 @@ export class TestCard extends CardDef {
   */
 }`.trim();
 
-      await visitOperatorMode(this.owner);
+      await visitOperatorMode();
       await openNewFileModal('Card Definition');
 
       await fillIn('[data-test-display-name-field]', 'Test Card');
@@ -1078,7 +1064,7 @@ export class TestCard extends CardDef {
   */
 }`.trim();
 
-      await visitOperatorMode(this.owner);
+      await visitOperatorMode();
       await openNewFileModal('Card Definition');
 
       await fillIn('[data-test-display-name-field]', 'Test Card');
@@ -1131,7 +1117,7 @@ export class TestCard extends CardDef {
   */
 }`.trim();
 
-      await visitOperatorMode(this.owner);
+      await visitOperatorMode();
       await openNewFileModal('Card Definition');
 
       await fillIn('[data-test-display-name-field]', 'Test Card');
@@ -1190,21 +1176,21 @@ export class TestCard extends CardDef {
       });
 
       test('read only realm is not present in realm drop down when creating card definition', async function (assert) {
-        await visitOperatorMode(this.owner);
+        await visitOperatorMode();
         await openNewFileModal('Card Definition');
         await waitFor(`[data-test-selected-type="General Card"]`);
         await assertRealmDropDownIsCorrect(assert);
       });
 
       test('read only realm is not present in realm drop down when creating card instance', async function (assert) {
-        await visitOperatorMode(this.owner);
+        await visitOperatorMode();
         await openNewFileModal('Card Instance');
         await waitFor(`[data-test-selected-type="General Card"]`);
         await assertRealmDropDownIsCorrect(assert);
       });
 
       test('read only realm is not present in realm drop down when duplicating card instance', async function (assert) {
-        await visitOperatorMode(this.owner, `${testRealmURL}Pet/mango.json`);
+        await visitOperatorMode(`${testRealmURL}Pet/mango.json`);
         await waitForCodeEditor();
         await waitFor(`[data-test-action-button="Duplicate"]`);
         await click('[data-test-action-button="Duplicate"]');
@@ -1212,7 +1198,7 @@ export class TestCard extends CardDef {
       });
 
       test('read only realm is not present in realm drop down when inheriting card definition', async function (assert) {
-        await visitOperatorMode(this.owner, `${testRealmURL}pet.gts`);
+        await visitOperatorMode(`${testRealmURL}pet.gts`);
         await waitForCodeEditor();
         await waitFor(`[data-test-action-button="Inherit"]`);
         await click('[data-test-action-button="Inherit"]');
@@ -1220,7 +1206,7 @@ export class TestCard extends CardDef {
       });
 
       test('read only realm is not present in realm drop down when creating instance of card definition', async function (assert) {
-        await visitOperatorMode(this.owner, `${testRealmURL}pet.gts`);
+        await visitOperatorMode(`${testRealmURL}pet.gts`);
         await waitForCodeEditor();
         await waitFor(`[data-test-action-button="Create Instance"]`);
         await click('[data-test-action-button="Create Instance"]');
@@ -1261,21 +1247,21 @@ export class TestCard extends CardDef {
       });
 
       test('read only realm is not present in realm drop down when creating card definition', async function (assert) {
-        await visitOperatorMode(this.owner);
+        await visitOperatorMode();
         await openNewFileModal('Card Definition', 'Test Workspace B');
         await waitFor(`[data-test-selected-type="General Card"]`);
         await assertRealmDropDownIsCorrect(assert);
       });
 
       test('read only realm is not present in realm drop down when creating card instance', async function (assert) {
-        await visitOperatorMode(this.owner);
+        await visitOperatorMode();
         await openNewFileModal('Card Instance', 'Test Workspace B');
         await waitFor(`[data-test-selected-type="General Card"]`);
         await assertRealmDropDownIsCorrect(assert);
       });
 
       test('read only realm is not present in realm drop down when duplicating card instance', async function (assert) {
-        await visitOperatorMode(this.owner, `${testRealmURL}Pet/mango.json`);
+        await visitOperatorMode(`${testRealmURL}Pet/mango.json`);
         await waitForCodeEditor();
         await waitFor(`[data-test-action-button="Duplicate"]`);
         await click('[data-test-action-button="Duplicate"]');
@@ -1283,7 +1269,7 @@ export class TestCard extends CardDef {
       });
 
       test('read only realm is not present in realm drop down when inheriting card definition', async function (assert) {
-        await visitOperatorMode(this.owner, `${testRealmURL}pet.gts`);
+        await visitOperatorMode(`${testRealmURL}pet.gts`);
         await waitForCodeEditor();
         await waitFor(`[data-test-action-button="Inherit"]`);
         await click('[data-test-action-button="Inherit"]');
@@ -1291,7 +1277,7 @@ export class TestCard extends CardDef {
       });
 
       test('read only realm is not present in realm drop down when creating instance of card definition', async function (assert) {
-        await visitOperatorMode(this.owner, `${testRealmURL}pet.gts`);
+        await visitOperatorMode(`${testRealmURL}pet.gts`);
         await waitForCodeEditor();
         await waitFor(`[data-test-action-button="Create Instance"]`);
         await click('[data-test-action-button="Create Instance"]');
