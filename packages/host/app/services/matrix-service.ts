@@ -1,3 +1,4 @@
+import { inject as controller } from '@ember/controller';
 import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import Service, { service } from '@ember/service';
@@ -35,6 +36,7 @@ import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
+import CardController from '@cardstack/host/controllers/card';
 
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
@@ -78,6 +80,8 @@ export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare realm: RealmService;
+
+  @controller declare cardController: CardController;
 
   @service declare router: RouterService;
   @tracked private _client: MatrixClient | undefined;
