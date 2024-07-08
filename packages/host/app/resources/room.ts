@@ -113,16 +113,16 @@ export class RoomResource extends Resource<Args> {
     return [];
   }
 
-  get resourceMembers() {
+  get members() {
     return Array.from(this._memberCache.values()) ?? [];
   }
 
   get invitedMembers() {
-    return this.resourceMembers.filter((m) => m.membership === 'invite');
+    return this.members.filter((m) => m.membership === 'invite');
   }
 
   get joinedMembers() {
-    return this.resourceMembers.filter((m) => m.membership === 'join');
+    return this.members.filter((m) => m.membership === 'join');
   }
 
   get events() {
