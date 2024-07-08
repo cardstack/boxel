@@ -11,9 +11,8 @@ import {
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
 import { RealmServer } from './server';
-import { resolve, join } from 'path';
+import { resolve } from 'path';
 import { makeFastBootIndexRunner } from './fastboot';
-import { readFileSync } from 'fs-extra';
 import { shimExternals } from './lib/externals';
 import * as Sentry from '@sentry/node';
 import { setErrorReporter } from '@cardstack/runtime-common/realm';

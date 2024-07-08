@@ -1,4 +1,4 @@
-import { writeFileSync, writeJSONSync, readFileSync } from 'fs-extra';
+import { writeFileSync, writeJSONSync } from 'fs-extra';
 import { NodeAdapter } from '../../node-realm';
 import { resolve, join } from 'path';
 import {
