@@ -19,8 +19,8 @@ interface ProfileAssertions {
 interface LoginOptions {
   url?: string;
   expectFailure?: true;
-  alreadyInOperatorMode?: true;
   skipOpeningAssistant?: true;
+  skipOpeningOperatorMode?: true;
 }
 
 export async function registerRealmUsers(synapse: SynapseInstance) {
@@ -228,7 +228,7 @@ export async function login(
   password: string,
   opts?: LoginOptions,
 ) {
-  if (!opts?.alreadyInOperatorMode) {
+  if (!opts?.skipOpeningOperatorMode) {
     await openRoot(page, opts?.url);
     await toggleOperatorMode(page);
   }
