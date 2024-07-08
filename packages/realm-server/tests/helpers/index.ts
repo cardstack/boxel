@@ -12,7 +12,6 @@ import {
   type MatrixConfig,
   type Queue,
   type IndexRunner,
-  assetsDir,
   insertPermissions,
 } from '@cardstack/runtime-common';
 import { makeFastBootIndexRunner } from '../../fastboot';
@@ -31,11 +30,13 @@ const testMatrix: MatrixConfig = {
   username: 'node-test_realm',
   password: 'password',
 };
-let distPath = resolve(__dirname, '..', '..', '..', 'host', 'dist');
+
 let basePath = resolve(join(__dirname, '..', '..', '..', 'base'));
 
 let manager = new RunnerOptionsManager();
-let getRunner: IndexRunner | undefined;
+let fastbootState:
+  | { getRunner: IndexRunner; getIndexHTML: () => Promise<string> }
+  | undefined;
 
 export async function prepareTestDB() {
   process.env.PGDATABASE = `test_db_${Math.floor(10000000 * Math.random())}`;
@@ -132,13 +133,13 @@ export async function createRealm({
 }): Promise<Realm> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
-  if (!getRunner) {
-    ({ getRunner } = await makeFastBootIndexRunner(
-      distPath,
+  if (!fastbootState) {
+    fastbootState = await makeFastBootIndexRunner(
+      new URL('http://localhost:4200/'),
       manager.getOptions.bind(manager),
-    ));
+    );
   }
-  let indexRunner = getRunner;
+  let indexRunner = fastbootState.getRunner;
   for (let [filename, contents] of Object.entries(fileSystem)) {
     if (typeof contents === 'string') {
       writeFileSync(join(dir, filename), contents);
@@ -152,8 +153,7 @@ export async function createRealm({
     {
       url: realmURL,
       adapter,
-      getIndexHTML: async () =>
-        readFileSync(join(distPath, 'index.html')).toString(),
+      getIndexHTML: fastbootState.getIndexHTML,
       matrix: matrixConfig,
       realmSecretSeed: "shhh! it's a secret",
       virtualNetwork,
@@ -171,7 +171,7 @@ export async function createRealm({
         });
         await worker.run();
       },
-      assetsURL: new URL(`${realmURL}${assetsDir}`),
+      assetsURL: new URL(`http://example.com/notional-assets-host/`),
     },
     { deferStartUp },
   );

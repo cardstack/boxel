@@ -5,8 +5,6 @@ import {
   VirtualNetwork,
   logger,
   RunnerOptionsManager,
-  baseRealm,
-  assetsDir,
   permissionsExist,
   insertPermissions,
 } from '@cardstack/runtime-common';
@@ -48,8 +46,7 @@ if (!REALM_SECRET_SEED) {
 
 let {
   port,
-  distDir = join(__dirname, '..', 'host', 'dist'),
-  distURL,
+  distURL = 'http://localhost:4200',
   path: paths,
   fromUrl: fromUrls,
   toUrl: toUrls,
@@ -79,11 +76,6 @@ let {
       description: 'realm directory path',
       demandOption: true,
       type: 'array',
-    },
-    distDir: {
-      description:
-        "the dist/ folder of the host app. Defaults to '../host/dist'",
-      type: 'string',
     },
     distURL: {
       description:
@@ -149,26 +141,7 @@ for (let [from, to] of urlMappings) {
   virtualNetwork.addURLMapping(from, to);
 }
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
-let dist: string | URL;
-if (distURL) {
-  dist = new URL(distURL);
-} else {
-  dist = resolve(distDir);
-}
-
-let assetsURL;
-
-if (distURL) {
-  assetsURL = new URL(distURL);
-} else {
-  // Default to the base dist URL for assets
-  let baseRealmDistUrlPair = hrefs!.find((pair) => pair[0] == baseRealm.url);
-  if (baseRealmDistUrlPair) {
-    assetsURL = new URL(`${baseRealmDistUrlPair[1]}${assetsDir}`); // Final resolved absolute URL for assets
-  } else {
-    throw new Error(`Base realm dist URL not found.`);
-  }
-}
+let dist: URL = new URL(distURL);
 
 (async () => {
   let realms: Realm[] = [];
@@ -197,7 +170,7 @@ if (distURL) {
       console.error(`missing password for realm ${url}`);
       process.exit(-1);
     }
-    let { getRunner, distPath } = await makeFastBootIndexRunner(
+    let { getRunner, getIndexHTML } = await makeFastBootIndexRunner(
       dist,
       manager.getOptions.bind(manager),
     );
@@ -207,8 +180,7 @@ if (distURL) {
       {
         url,
         adapter: realmAdapter,
-        getIndexHTML: async () =>
-          readFileSync(join(distPath, 'index.html')).toString(),
+        getIndexHTML,
         matrix: { url: new URL(matrixURL), username, password },
         realmSecretSeed: REALM_SECRET_SEED,
         virtualNetwork,
@@ -232,7 +204,7 @@ if (distURL) {
           });
           await worker.run();
         },
-        assetsURL,
+        assetsURL: dist,
       },
       {
         deferStartUp: true,
@@ -261,7 +233,7 @@ if (distURL) {
       log.info(`    ${from} => ${to}`);
     }
   }
-  log.info(`Using host dist path: '${distDir}' for card pre-rendering`);
+  log.info(`Using host url: '${dist}' for card pre-rendering`);
 
   for (let realm of realms) {
     log.info(`Starting realm ${realm.url}...`);

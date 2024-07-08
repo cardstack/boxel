@@ -1,5 +1,3 @@
-//@ts-expect-error no types for fastboot
-import FastBoot from 'fastboot';
 import { type FastBootInstance } from './fastboot-from-deployed';
 import { instantiateFastBoot } from './fastboot-from-deployed';
 import {
@@ -9,12 +7,14 @@ import {
 import { JSDOM } from 'jsdom';
 import { type ErrorReporter } from '@cardstack/runtime-common/realm';
 import { performance } from 'perf_hooks';
+import { readFileSync } from 'fs-extra';
+import { join } from 'path';
 
 const appName = '@cardstack/host';
 export async function makeFastBootIndexRunner(
-  dist: URL | string,
+  dist: URL,
   getRunnerOpts: (optsId: number) => RunnerOpts,
-): Promise<{ getRunner: IndexRunner; distPath: string }> {
+): Promise<{ getRunner: IndexRunner; getIndexHTML: () => Promise<string> }> {
   let fastboot: FastBootInstance;
   let distPath: string;
 
@@ -22,46 +22,25 @@ export async function makeFastBootIndexRunner(
     __boxelErrorReporter: ErrorReporter;
   };
 
-  if (typeof dist === 'string') {
-    distPath = dist;
-    fastboot = new FastBoot({
-      distPath,
-      resilient: false,
-      buildSandboxGlobals(defaultGlobals: any) {
-        return Object.assign({}, defaultGlobals, {
-          __boxelErrorReporter: globalWithErrorReporter.__boxelErrorReporter,
-          URL: globalThis.URL,
-          Request: globalThis.Request,
-          Response: globalThis.Response,
-          btoa,
-          atob,
-          performance,
-          getRunnerOpts,
-          _logDefinitions: (globalThis as any)._logDefinitions,
-          jsdom: new JSDOM(''),
-        });
-      },
-    }) as FastBootInstance;
-  } else {
-    ({ fastboot, distPath } = await instantiateFastBoot(
-      appName,
-      dist,
-      (defaultGlobals: any) => {
-        return Object.assign({}, defaultGlobals, {
-          __boxelErrorReporter: globalWithErrorReporter.__boxelErrorReporter,
-          URL: globalThis.URL,
-          Request: globalThis.Request,
-          Response: globalThis.Response,
-          btoa,
-          atob,
-          performance,
-          getRunnerOpts,
-          _logDefinitions: (globalThis as any)._logDefinitions,
-          jsdom: new JSDOM(''),
-        });
-      },
-    ));
-  }
+  ({ fastboot, distPath } = await instantiateFastBoot(
+    appName,
+    dist,
+    (defaultGlobals: any) => {
+      return Object.assign({}, defaultGlobals, {
+        __boxelErrorReporter: globalWithErrorReporter.__boxelErrorReporter,
+        URL: globalThis.URL,
+        Request: globalThis.Request,
+        Response: globalThis.Response,
+        btoa,
+        atob,
+        performance,
+        getRunnerOpts,
+        _logDefinitions: (globalThis as any)._logDefinitions,
+        jsdom: new JSDOM(''),
+      });
+    },
+  ));
+
   return {
     getRunner: async (optsId: number) => {
       await fastboot.visit(`/indexer/${optsId}`, {
@@ -69,7 +48,8 @@ export async function makeFastBootIndexRunner(
         request: { headers: { host: 'localhost:4200' } },
       });
     },
-    distPath,
+    getIndexHTML: async () =>
+      readFileSync(join(distPath, 'index.html')).toString(),
   };
 }
 
