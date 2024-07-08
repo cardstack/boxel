@@ -246,8 +246,7 @@ export function getBoxComponent(
           The cards themselves need to be in charge of the styles within the card boundary
           in order for the container queries to make sense--otherwise we need to do style 
           math to figure out what the actual breakpoints are. please resist the urge to add 
-          padding, borders, etc--bascially anything that alters the geometry inside of the 
-          card boundary.
+          padding or anything that alters the geometry inside of the card boundary.
 
           we need to use height 100% because the container query for embedded cards only
           works if we use up all the space horizontally and vertically that is available
