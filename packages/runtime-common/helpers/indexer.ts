@@ -161,31 +161,11 @@ export async function setupIndex(
       row.type = row.type ?? 'instance';
       row.last_modified = String(row.last_modified ?? now);
 
-      let columnNames = [
-        'url',
-        'file_alias',
-        'type',
-        'realm_version',
-        'realm_url',
-        'pristine_doc',
-        'search_doc',
-        'error_doc',
-        'deps',
-        'types',
-        'isolated_html',
-        'indexed_at',
-        'is_deleted',
-        'source',
-        'transpiled_code',
-        'last_modified',
-        'embedded_html',
-        'atom_html',
-      ];
-
       let valuesToInsert: { [key: string]: unknown } = {
         ...defaultIndexEntry,
         ...row,
       };
+      let columnNames = await client.getColumnNames('boxel_index');
 
       // Make sure all table columns are present in the data object, even if their value is undefined. This is to assure
       // that the order of the columns in the insert statement is consistent for all types of resources

@@ -251,6 +251,10 @@ export class Indexer {
     };
   }
 
+  async getColumnNames(tableName: string) {
+    return this.dbAdapter.getColumnNames(tableName);
+  }
+
   private async getModuleOrCSS(
     url: URL,
     type: 'module' | 'css',

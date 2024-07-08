@@ -122,6 +122,14 @@ export default class SQLiteAdapter implements DBAdapter {
     }
   }
 
+  async getColumnNames(tableName: string): Promise<string[]> {
+    let result = await this.execute('SELECT name FROM pragma_table_info($1);', {
+      bind: [tableName],
+    });
+
+    return result.map((row) => row.name) as string[];
+  }
+
   private get sqlite() {
     if (!this._sqlite) {
       throw new Error(
