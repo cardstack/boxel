@@ -9,6 +9,7 @@ import type {
   CardFragmentContent,
   CardMessageContent,
   MatrixEvent,
+  RoomCreateEvent,
   RoomNameEvent,
 } from 'https://cardstack.com/base/matrix-event';
 import type { MessageField } from 'https://cardstack.com/base/message';
@@ -60,8 +61,14 @@ export class RoomModel {
     return this.events.length > 0 ? this.events[0].room_id : undefined;
   }
 
-  get createdDate() {
-    return undefined;
+  get created() {
+    let event = this.events.find((e) => e.type === 'm.room.create') as
+      | RoomCreateEvent
+      | undefined;
+    if (event) {
+      return new Date(event.origin_server_ts);
+    }
+    return new Date();
   }
 
   get name() {
