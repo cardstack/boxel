@@ -65,23 +65,16 @@ export function constructHistory(history: IRoomEvent[]) {
       fragments.set(eventId, event.content);
       continue;
     } else if (event.content.msgtype === 'org.boxel.message') {
-      if (
-        event.content.data.attachedCardsEventIds &&
-        event.content.data.attachedCardsEventIds.length > 0
-      ) {
-        event.content.data.attachedCards =
-          event.content.data.attachedCardsEventIds!.map((id) =>
-            serializedCardFromFragments(id, fragments),
-          );
+      let { attachedCardsEventIds, attachedSkillEventIds } = event.content.data;
+      if (attachedCardsEventIds && attachedCardsEventIds.length > 0) {
+        event.content.data.attachedCards = attachedCardsEventIds.map((id) =>
+          serializedCardFromFragments(id, fragments),
+        );
       }
-      if (
-        event.content.data.attachedSkillEventIds &&
-        event.content.data.attachedSkillEventIds.length > 0
-      ) {
-        event.content.data.skillCards =
-          event.content.data.attachedSkillEventIds!.map((id) =>
-            serializedCardFromFragments(id, fragments),
-          );
+      if (attachedSkillEventIds && attachedSkillEventIds.length > 0) {
+        event.content.data.skillCards = attachedSkillEventIds.map((id) =>
+          serializedCardFromFragments(id, fragments),
+        );
       }
     }
 
@@ -154,33 +147,26 @@ export interface OpenAIPromptMessage {
   role: 'system' | 'user' | 'assistant';
 }
 
-function setSortedRelevantCards(cards: LooseSingleCardDocument[]) {
-  let relevantCards: Map<string, CardResource> = new Map();
+function setRelevantCards(
+  cardMap: Map<string, CardResource> = new Map(),
+  cards: LooseSingleCardDocument[] = [],
+) {
   for (let card of cards) {
     if (card.data.id) {
-      relevantCards.set(card.data.id, card.data as CardResource);
+      cardMap.set(card.data.id, card.data as CardResource);
     } else {
       throw new Error(`bug: don't know how to handle card without ID`);
     }
   }
-  // Return the cards in a consistent manner
-  let sortedCards = Array.from(relevantCards.values()).sort((a, b) => {
-    return a.id.localeCompare(b.id);
-  });
-  return sortedCards;
+  return cardMap;
 }
 
 export function getRelevantCards(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ) {
-  let relevantCards: {
-    attachedCards: CardResource[];
-    skillCards: CardResource[];
-  } = {
-    attachedCards: [],
-    skillCards: [],
-  };
+  let attachedCardMap = new Map<string, CardResource>();
+  let skillCardMap = new Map<string, CardResource>();
   for (let event of history) {
     if (event.type !== 'm.room.message') {
       continue;
@@ -188,15 +174,21 @@ export function getRelevantCards(
     if (event.sender !== aiBotUserId) {
       let { content } = event;
       if (content.msgtype === 'org.boxel.message') {
-        const attachedCards = content.data?.attachedCards || [];
-        relevantCards.attachedCards = setSortedRelevantCards(attachedCards);
-
-        const skillCards = content.data?.skillCards || [];
-        relevantCards.skillCards = setSortedRelevantCards(skillCards);
+        setRelevantCards(attachedCardMap, content.data?.attachedCards);
+        setRelevantCards(skillCardMap, content.data?.skillCards);
       }
     }
   }
-  return relevantCards;
+  let attachedCards = Array.from(attachedCardMap.values()).sort((a, b) =>
+    a.id.localeCompare(b.id),
+  );
+  let skillCards = Array.from(skillCardMap.values()).sort((a, b) =>
+    a.id.localeCompare(b.id),
+  );
+  return {
+    attachedCards,
+    skillCards,
+  };
 }
 
 export function getTools(history: DiscreteMatrixEvent[], aiBotUserId: string) {

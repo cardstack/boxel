@@ -162,6 +162,15 @@ interface CardMessageEvent extends BaseMatrixEvent {
   };
 }
 
+export interface Tool {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: Schema;
+  };
+}
+
 export interface CardMessageContent {
   'm.relates_to'?: {
     rel_type: string;
@@ -187,14 +196,7 @@ export interface CardMessageContent {
     skillCards?: LooseSingleCardDocument[];
     context: {
       openCardIds?: string[];
-      tools: {
-        type: 'function';
-        function: {
-          name: string;
-          description: string;
-          parameters: Schema;
-        };
-      }[];
+      tools: Tool[];
       submode: string | undefined;
     };
   };
