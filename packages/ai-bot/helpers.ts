@@ -26,6 +26,9 @@ If a user asks you about things in the world, use your existing knowledge to hel
 If you need access to the cards the user can see, you can ask them to attach the cards. \
 If you encounter JSON structures, please enclose them within backticks to ensure they are displayed stylishly in Markdown.';
 
+export const SKILL_INSTRUCTIONS_MESSAGE =
+  '\nThe user has given you the following instructions. You must obey these instructions when responding to the user:\n';
+
 type CommandMessage = {
   type: 'command';
   content: any;
@@ -254,9 +257,9 @@ export function getModifyPrompt(
   systemMessage += attachedCardsToMessage(attachedCards);
 
   if (skillCards.length) {
-    systemMessage +=
-      'The user has given you the following instructions. You must obey these instructions when responding to the user:\n';
+    systemMessage += SKILL_INSTRUCTIONS_MESSAGE;
     systemMessage += skillCardsToMessage(skillCards);
+    systemMessage += '\n';
   }
 
   if (tools.length == 0) {
