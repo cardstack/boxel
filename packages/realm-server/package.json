@@ -65,6 +65,7 @@
     "typescript": "~5.1.6",
     "typescript-memoize": "^1.1.1",
     "uuid": "^9.0.1",
+    "wait-for-localhost-cli": "^3.2.0",
     "yargs": "^17.5.1"
   },
   "scripts": {
@@ -79,7 +80,6 @@
     "setup:base-in-deployment": "mkdir -p /persistent/base && cp --verbose --update --recursive ../base/. /persistent/base/",
     "setup:drafts-in-deployment": "mkdir -p /persistent/drafts && cp --verbose --update --recursive ../drafts-realm/. /persistent/drafts/",
     "setup:published-in-deployment": "mkdir -p /persistent/published && cp --verbose --update --recursive ../published-realm/. /persistent/published/",
-    "setup:base-assets": "ts-node --transpileOnly ./scripts/setup-base.ts",
     "start": "PGPORT=5435 NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
     "start:base": "./scripts/start-base.sh",
     "start:test-realms": "./scripts/start-test-realms.sh",

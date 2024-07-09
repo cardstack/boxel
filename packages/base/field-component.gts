@@ -242,9 +242,25 @@ export function getBoxComponent(
       }
 
       .field-component-card.embedded-format {
-        padding: var(--boxel-sp);
+        /*
+          The cards themselves need to be in charge of the styles within the card boundary
+          in order for the container queries to make sense--otherwise we need to do style 
+          math to figure out what the actual breakpoints are. please resist the urge to add 
+          padding or anything that alters the geometry inside of the card boundary.
+
+          we need to use height 100% because the container query for embedded cards only
+          works if we use up all the space horizontally and vertically that is available
+          to the card since some of our queries are height queries
+        */
+        height: 100%;
+        container-name: embedded-card;
+        container-type: size;
       }
 
+      /* 
+        TODO: regarding the atom format styling below, we probably want to refactor to move 
+        any styles that effect the inside of the card boundary into the CardDef's atom template
+      */
       .field-component-card.atom-format {
         font: 700 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);

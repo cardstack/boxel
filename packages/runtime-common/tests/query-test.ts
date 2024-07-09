@@ -14,6 +14,7 @@ import { type SharedTests } from '../helpers';
 import { type TestIndexRow, setupIndex, getTypes } from '../helpers/indexer';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
+import { cardSrc } from '../etc/test-fixtures';
 
 interface TestCards {
   [name: string]: CardDef;
@@ -2437,6 +2438,77 @@ const tests = Object.freeze({
         loader,
       ),
       `'null' is not a permitted value in a 'range' filter`,
+    );
+  },
+  'can get prerendered cards (html + css) from the indexer': async (
+    assert,
+    { indexer, loader },
+  ) => {
+    await setupIndex(indexer, [
+      {
+        url: `${testRealmURL}vangogh.json`,
+        file_alias: `${testRealmURL}vangogh.json`,
+        type: 'instance',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        deps: [`${testRealmURL}person`],
+        types: [],
+        embedded_html: {
+          default: '<div>Van Gogh</div',
+        },
+      },
+      {
+        url: `${testRealmURL}person.gts`,
+        type: 'module',
+        file_alias: `${testRealmURL}person`,
+        realm_version: 1,
+        realm_url: testRealmURL,
+        source: cardSrc,
+        deps: [],
+        types: [],
+      },
+      {
+        url: `${testRealmURL}person.gts`,
+        file_alias: `${testRealmURL}person`,
+        type: 'css',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        source: '.foo { color: red; }',
+        deps: [],
+        types: [],
+      },
+    ]);
+
+    let { prerenderedCards, prerenderedCardCssItems, meta } =
+      await indexer.searchPrerendered(new URL(testRealmURL), {}, loader);
+
+    assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.strictEqual(
+      meta.page.realmVersion,
+      1,
+      'the realm version is correct',
+    );
+    assert.strictEqual(
+      prerenderedCards.length,
+      1,
+      'the total results are correct',
+    );
+    assert.strictEqual(
+      prerenderedCards[0].url,
+      'http://test-realm/test/vangogh.json',
+    );
+    assert.deepEqual(prerenderedCards[0].embeddedHtml, {
+      default: '<div>Van Gogh</div',
+    });
+
+    assert.strictEqual(prerenderedCardCssItems.length, 1);
+    assert.strictEqual(
+      prerenderedCardCssItems[0].cssModuleId,
+      'http://test-realm/test/person',
+    );
+    assert.strictEqual(
+      prerenderedCardCssItems[0].source,
+      '.foo { color: red; }',
     );
   },
 } as SharedTests<{

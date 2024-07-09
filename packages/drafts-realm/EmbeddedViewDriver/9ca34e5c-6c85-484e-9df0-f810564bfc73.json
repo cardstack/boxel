@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Default embedded view with thumbnail",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "card": {
+        "links": {
+          "self": "../PuppyCard/4884f71e-4574-432b-a994-d2d2e5dec8b9"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../embedded-view-driver",
+        "name": "EmbeddedViewDriver"
+      }
+    }
+  }
+}

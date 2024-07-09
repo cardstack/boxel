@@ -24,7 +24,6 @@ import {
   type RunnerRegistration,
   type IndexRunner,
   type IndexResults,
-  assetsDir,
   insertPermissions,
 } from '@cardstack/runtime-common';
 
@@ -535,7 +534,7 @@ async function setupTestRealm({
       });
       await worker.run();
     },
-    assetsURL: new URL(`${realmURL}${assetsDir}`),
+    assetsURL: new URL(`http://example.com/notional-assets-host/`),
   });
   virtualNetwork.mount(realm.maybeHandle);
 

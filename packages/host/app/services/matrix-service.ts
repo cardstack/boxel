@@ -33,6 +33,7 @@ import {
 
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
+import { currentRoomIdPersistenceKey } from '@cardstack/host/components/ai-assistant/panel';
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
@@ -758,6 +759,7 @@ export default class MatrixService extends Service {
   private resetState() {
     this.rooms = new TrackedMap();
     this.roomMembershipQueue = [];
+    this.roomResourcesCache.clear();
     this.timelineQueue = [];
     this.flushMembership = undefined;
     this.flushTimeline = undefined;
@@ -793,6 +795,7 @@ function saveAuth(auth: LoginResponse) {
 
 function clearAuth() {
   localStorage.removeItem('auth');
+  localStorage.removeItem(currentRoomIdPersistenceKey);
 }
 
 function getAuth(): LoginResponse | undefined {
