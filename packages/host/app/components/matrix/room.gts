@@ -147,6 +147,16 @@ export default class Room extends Component<Signature> {
   };
 
   @action isMessageStreaming(message: MessageField, messageIndex: number) {
+    console.log('isMessageStreaming');
+    console.log('====');
+    console.log(message);
+    console.log(messageIndex);
+    console.log('!isStreamingFinished', !message.isStreamingFinished);
+    console.log('isLastMessage', this.isLastMessage(messageIndex));
+    console.log(
+      'backward compat',
+      (new Date().getTime() - message.created.getTime()) / 1000 < 60,
+    );
     return (
       !message.isStreamingFinished &&
       this.isLastMessage(messageIndex) &&

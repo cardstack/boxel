@@ -35,13 +35,14 @@ import { type ApplyButtonState } from '../ai-assistant/apply-button';
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
+import { RoomMessageField } from '@cardstack/host/resources/room';
 
 interface Signature {
   Element: HTMLDivElement;
   Args: {
     roomId: string;
-    message: MessageField;
-    messages: MessageField[];
+    message: RoomMessageField;
+    messages: RoomMessageField[];
     index?: number;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;

@@ -6,18 +6,20 @@ import { Resource } from 'ember-resources';
 
 import type MatrixService from '../services/matrix-service';
 import type {
-  CardFragmentContent,
   CardMessageContent,
-  MatrixEvent,
   RoomCreateEvent,
   RoomNameEvent,
 } from 'https://cardstack.com/base/matrix-event';
-import type { MessageField } from 'https://cardstack.com/base/message';
+import { CardDef } from 'https://cardstack.com/base/card-api';
+import { getCard } from '@cardstack/runtime-common';
+import { EventStatus } from 'matrix-js-sdk';
+import { TrackedMap } from 'tracked-built-ins';
+import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
 interface Args {
   named: {
     roomId: string | undefined;
-    events: any[] | undefined;
+    events: DiscreteMatrixEvent[] | undefined;
   };
 }
 
@@ -54,8 +56,73 @@ class RoomMemberField implements RoomMemberInterface {
   }
 }
 
+interface RoomMessageInterface {
+  message?: string;
+  eventId?: string;
+  author?: RoomMemberField;
+  created?: Date;
+  updated?: Date;
+  attachedCardIds?: string[];
+  index?: number;
+  transactionId?: string | null;
+  isStreamingFinished?: boolean;
+  formattedMessage?: string;
+  errorMessage?: string;
+  clientGeneratedId?: string | null;
+  status?: EventStatus | null;
+}
+
+type AttachedCardResource = {
+  card: CardDef | undefined;
+  loaded?: Promise<void>;
+  cardError?: { id: string; error: Error };
+};
+
+export class RoomMessageField implements RoomMessageInterface {
+  message?: string;
+  eventId?: string;
+  author?: RoomMemberField;
+  created?: Date;
+  updated?: Date;
+  attachedCardIds?: string[];
+  index?: number;
+  transactionId?: string | null;
+  isStreamingFinished?: boolean;
+  formattedMessage?: string;
+  errorMessage?: string;
+  clientGeneratedId?: string | null;
+  status?: EventStatus | null;
+  constructor(init: Partial<RoomMessageInterface>) {
+    Object.assign(this, init);
+  }
+  get isRetryable() {
+    return (
+      this.errorMessage && this.errorMessage !== ErrorMessage['M_TOO_LARGE']
+    );
+  }
+  get attachedResources(): AttachedCardResource[] | undefined {
+    if (!this.attachedCardIds?.length) {
+      return undefined;
+    }
+    let cards = this.attachedCardIds.map((id) => {
+      let card = getCard(new URL(id));
+      if (!card) {
+        return {
+          card: undefined,
+          cardError: {
+            id,
+            error: new Error(`cannot find card for id "${id}"`),
+          },
+        };
+      }
+      return card;
+    });
+    return cards;
+  }
+}
+
 export class RoomModel {
-  @tracked events: MatrixEvent[] = [];
+  @tracked events: DiscreteMatrixEvent[] = [];
 
   get roomId() {
     return this.events.length > 0 ? this.events[0].room_id : undefined;
@@ -91,8 +158,8 @@ export class RoomModel {
 
 // RoomResource is a cache for RoomModel messages
 export class RoomResource extends Resource<Args> {
-  _messageCache: Map<string, MessageField> = new Map();
-  _memberCache: Map<string, RoomMemberField> = new Map();
+  _messageCache: TrackedMap<string, RoomMessageField> = new TrackedMap();
+  _memberCache: TrackedMap<string, RoomMemberField> = new TrackedMap();
   @tracked room: RoomModel | undefined;
   @tracked loading: Promise<void> | undefined;
   @service private declare matrixService: MatrixService;
@@ -157,7 +224,8 @@ export class RoomResource extends Resource<Args> {
   }
 
   async loadRoomMessages(roomId: string) {
-    let newMessages = new Map<string, MessageField>();
+    let index = this._messageCache.size;
+    let newMessages = new Map<string, RoomMessageField>();
     for (let event of this.events) {
       if (event.type !== 'm.room.message') {
         continue;
@@ -175,7 +243,7 @@ export class RoomResource extends Resource<Args> {
         roomId,
         userId: event.sender,
       });
-      let cardArgs = {
+      let cardArgs = new RoomMessageField({
         author,
         created: new Date(event.origin_server_ts),
         updated: new Date(), // Changes every time an update from AI bot streaming is received, used for detecting timeouts
@@ -187,7 +255,8 @@ export class RoomResource extends Resource<Args> {
         command: null,
         status: event.status,
         eventId: event.event_id,
-      };
+        index,
+      });
       if (event.status === 'cancelled' || event.status === 'not_sent') {
         (cardArgs as any).errorMessage =
           event.error?.data.errcode &&
@@ -287,6 +356,41 @@ export class RoomResource extends Resource<Args> {
 
     return member;
   }
+
+  // private serializedCardFromFragments(
+  //   eventId: string,
+  // ): LooseSingleCardDocument {
+  //   let cache = fragmentCache.get(this);
+  //   if (!cache) {
+  //     throw new Error(`No card fragment cache exists for this room`);
+  //   }
+
+  //   let fragments: CardFragmentContent[] = [];
+  //   let currentFragment: string | undefined = eventId;
+  //   do {
+  //     let fragment = cache.get(currentFragment);
+  //     if (!fragment) {
+  //       throw new Error(
+  //         `No card fragment found in cache for event id ${eventId}`,
+  //       );
+  //     }
+  //     fragments.push(fragment);
+  //     currentFragment = fragment.data.nextFragment;
+  //   } while (currentFragment);
+
+  //   fragments.sort((a, b) => (a.data.index = b.data.index));
+  //   if (fragments.length !== fragments[0].data.totalParts) {
+  //     throw new Error(
+  //       `Expected to find ${fragments[0].data.totalParts} fragments for fragment of event id ${eventId} but found ${fragments.length} fragments`,
+  //     );
+  //   }
+
+  //   let cardDoc = JSON.parse(
+  //     fragments.map((f) => f.data.cardFragment).join(''),
+  //   ) as LooseSingleCardDocument;
+  //   cardHashes.set(generateCardHashKey(this.roomId, cardDoc), eventId);
+  //   return cardDoc;
+  // }
 }
 
 export function getRoom(
