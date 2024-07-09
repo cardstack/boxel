@@ -22,4 +22,5 @@ export interface DBAdapter {
     opts?: ExecuteOptions,
   ) => Promise<Record<string, PgPrimitive>[]>;
   close: () => Promise<void>;
+  getColumnNames: (tableName: string) => Promise<string[]>;
 }

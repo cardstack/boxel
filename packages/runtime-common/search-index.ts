@@ -187,6 +187,17 @@ export class SearchIndex {
     return doc;
   }
 
+  async searchPrerendered(query: Query, opts?: Options) {
+    let results = await this.#indexer.searchPrerendered(
+      new URL(this.#realm.url),
+      query,
+      this.loader,
+      opts,
+    );
+
+    return results;
+  }
+
   public isIgnored(url: URL): boolean {
     // TODO this may be called before search index is ready in which case we
     // should provide a default ignore list. But really we should decouple the

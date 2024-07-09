@@ -1,6 +1,9 @@
 import { Deferred } from './deferred';
 import { SearchIndex } from './search-index';
-import { type SingleCardDocument } from './card-document';
+import {
+  transformResultsToPrerenderedCardsDoc,
+  type SingleCardDocument,
+} from './card-document';
 import { Loader } from './loader';
 import { RealmPaths, LocalPath, join } from './paths';
 import {
@@ -332,6 +335,11 @@ export class Realm {
       )
       .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
       .get('/_search', SupportedMimeType.CardJson, this.search.bind(this))
+      .get(
+        '/_search-prerendered',
+        SupportedMimeType.CardJson,
+        this.searchPrerendered.bind(this),
+      )
       .post(
         '/_session',
         SupportedMimeType.Session,
@@ -1683,6 +1691,30 @@ export class Realm {
       parseQueryString(new URL(request.url).search.slice(1)),
       { loadLinks: true, useWorkInProgressIndex },
     );
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: { 'content-type': SupportedMimeType.CardJson },
+      },
+      requestContext,
+    });
+  }
+
+  private async searchPrerendered(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let useWorkInProgressIndex = Boolean(
+      request.headers.get('X-Boxel-Use-WIP-Index'),
+    );
+    let query = parseQueryString(new URL(request.url).search.slice(1));
+
+    let results = await this.#searchIndex.searchPrerendered(query, {
+      useWorkInProgressIndex,
+    });
+
+    let doc = transformResultsToPrerenderedCardsDoc(results);
+
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {
