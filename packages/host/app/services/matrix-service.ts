@@ -745,7 +745,6 @@ export default class MatrixService
 
   getRoom(roomId: string) {
     if (!this.rooms) {
-      console.log('rooms map is undefined');
       return;
     }
     return this.rooms.get(roomId);

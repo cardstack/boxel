@@ -56,13 +56,10 @@ export class RoomMessageModel implements RoomMessageInterface {
     );
   }
   get attachedResources(): AttachedCardResource[] | undefined {
-    console.log('getting attached resource');
     if (!this.attachedCardIds?.length) {
       return undefined;
     }
     let cards = this.attachedCardIds.map((id) => {
-      console.log('attached card id');
-      console.log(id);
       let card = getCard(new URL(id));
       if (!card) {
         return {

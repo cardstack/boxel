@@ -74,12 +74,23 @@ export class RoomResource extends Resource<Args> {
   @tracked room: RoomModel | undefined;
   @tracked loading: Promise<void> | undefined;
   @service private declare matrixService: MatrixService;
+  indexingCount = 0;
 
   modify(_positional: never[], named: Args['named']) {
     this.loading = this.load.perform(named.roomId);
   }
 
   private load = restartableTask(async (roomId: string | undefined) => {
+    // keep track of count
+    if (roomId) {
+      this.indexingCount++;
+      console.log(
+        'indexing count',
+        roomId,
+        // this.room?.name,
+        this.indexingCount,
+      );
+    }
     this.room = roomId ? await this.matrixService.getRoom(roomId) : undefined;
     if (this.room && this.room.roomId) {
       await this.loadRoomMembers(this.room.roomId);
@@ -89,10 +100,9 @@ export class RoomResource extends Resource<Args> {
 
   get messages() {
     if (this._messageCache) {
-      return [...this._messageCache.values()];
-      // .sort(
-      //   (a, b) => a.created.getTime() - b.created.getTime(),
-      // );
+      return [...this._messageCache.values()].sort(
+        (a, b) => a.created.getTime() - b.created.getTime(),
+      );
     }
     return [];
   }
