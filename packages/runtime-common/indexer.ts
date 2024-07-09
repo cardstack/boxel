@@ -135,7 +135,18 @@ interface WIPOptions {
   useWorkInProgressIndex?: boolean;
 }
 
-interface QueryResultsMeta {
+export interface PrerenderedCardCssItem {
+  cssModuleId: string;
+  source: string;
+}
+
+export interface PrerenderedCard {
+  url: string;
+  embeddedHtml: Record<string, string>;
+  cssModuleIds: string[];
+}
+
+export interface QueryResultsMeta {
   // TODO SQLite doesn't let us use cursors in the classic sense so we need to
   // keep track of page size and index number--note it is possible for the index
   // to mutate between pages. Perhaps consider querying a specific realm version
@@ -240,13 +251,17 @@ export class Indexer {
     };
   }
 
+  async getColumnNames(tableName: string) {
+    return this.dbAdapter.getColumnNames(tableName);
+  }
+
   private async getModuleOrCSS(
     url: URL,
     type: 'module' | 'css',
     opts?: GetEntryOptions,
   ): Promise<BoxelIndexTable | undefined> {
     let result = (await this.query([
-      `SELECT i.* 
+      `SELECT i.*
        FROM boxel_index as i
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
        WHERE`,
@@ -279,7 +294,7 @@ export class Indexer {
     let result = (await this.query([
       `SELECT i.*, embedded_html ->> `,
       param('default'),
-      ` as default_embedded_html 
+      ` as default_embedded_html
        FROM boxel_index as i
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
        WHERE`,
@@ -412,28 +427,24 @@ export class Indexer {
   // client may be serving a live index or a WIP index that is being built up
   // which could have conflicting loaders. It is up to the caller to provide the
   // loader that we should be using.
-  async search(
+  private async _search(
     realmURL: URL,
     { filter, sort, page }: Query,
     loader: Loader,
-    opts?: QueryOptions,
-    // TODO this should be returning a CardCollectionDocument--handle that in
-    // subsequent PR where we start storing card documents in "pristine_doc"
-  ): Promise<{ cards: CardResource[]; meta: QueryResultsMeta }> {
+    opts: QueryOptions,
+    selectClauseExpression: CardExpression,
+  ): Promise<{
+    meta: QueryResultsMeta;
+    results: Partial<BoxelIndexTable>[];
+  }> {
     let version: number;
     if (page?.realmVersion) {
       version = page.realmVersion;
     } else {
-      let [{ current_version }] = (await this.query([
-        'SELECT current_version FROM realm_versions WHERE realm_url =',
-        param(realmURL.href),
-      ])) as Pick<RealmVersionsTable, 'current_version'>[];
-      if (current_version == null) {
-        throw new Error(`No current version found for realm ${realmURL.href}`);
-      }
+      let currentRealmVersion = await this.fetchCurrentRealmVersion(realmURL);
       version = opts?.useWorkInProgressIndex
-        ? current_version + 1
-        : current_version;
+        ? currentRealmVersion + 1
+        : currentRealmVersion;
     }
     let conditions: CardExpression[] = [
       ['i.realm_url = ', param(realmURL.href)],
@@ -447,7 +458,7 @@ export class Indexer {
 
     let everyCondition = every(conditions);
     let query = [
-      `SELECT url, ANY_VALUE(pristine_doc) AS pristine_doc, ANY_VALUE(error_doc) AS error_doc`,
+      ...selectClauseExpression,
       `FROM boxel_index AS i ${tableValuedFunctionsPlaceholder}`,
       `INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
       'WHERE',
@@ -464,20 +475,41 @@ export class Indexer {
       ...everyCondition,
     ];
 
-    let [totalResults, results] = await Promise.all([
-      this.queryCards(queryCount, loader) as Promise<{ total: number }[]>,
-      this.queryCards(query, loader) as Promise<
-        Pick<BoxelIndexTable, 'pristine_doc' | 'url' | 'error_doc'>[]
-      >,
+    let [results, totalResults] = await Promise.all([
+      this.queryCards(query, loader),
+      this.queryCards(queryCount, loader),
     ]);
+
+    return {
+      results,
+      meta: {
+        page: { total: Number(totalResults[0].total), realmVersion: version },
+      },
+    };
+  }
+
+  async search(
+    realmURL: URL,
+    { filter, sort, page }: Query,
+    loader: Loader,
+    opts: QueryOptions = {},
+    // TODO this should be returning a CardCollectionDocument--handle that in
+    // subsequent PR where we start storing card documents in "pristine_doc"
+  ): Promise<{ cards: CardResource[]; meta: QueryResultsMeta }> {
+    let { results, meta } = await this._search(
+      realmURL,
+      { filter, sort, page },
+      loader,
+      opts,
+      [
+        'SELECT url, ANY_VALUE(pristine_doc) AS pristine_doc, ANY_VALUE(error_doc) AS error_doc',
+      ],
+    );
 
     let cards = results
       .map((r) => r.pristine_doc)
       .filter(Boolean) as CardResource[];
-    let meta: QueryResultsMeta = {
-      // postgres returns the `COUNT()` aggregate function as a string
-      page: { total: Number(totalResults[0].total), realmVersion: version },
-    };
+
     return { cards, meta };
   }
 
@@ -501,6 +533,132 @@ export class Indexer {
         ['url COLLATE "POSIX"'],
       ]),
     ];
+  }
+
+  async searchPrerendered(
+    realmURL: URL,
+    { filter, sort, page }: Query,
+    loader: Loader,
+    opts: QueryOptions = {},
+  ): Promise<{
+    prerenderedCards: PrerenderedCard[];
+    prerenderedCardCssItems: PrerenderedCardCssItem[];
+    meta: QueryResultsMeta;
+  }> {
+    let { results, meta } = await this._search(
+      realmURL,
+      { filter, sort, page },
+      loader,
+      opts,
+      [
+        'SELECT url, ANY_VALUE(file_alias) as file_alias, ANY_VALUE(embedded_html) as embedded_html',
+      ],
+    );
+
+    let cardFileAliases = results.map((c) => c.file_alias);
+    let realmVersion = meta.page.realmVersion;
+
+    let conditions: CardExpression[] = [
+      ['i.realm_version = ', param(realmVersion)],
+      ['i.type =', param('instance')],
+      [
+        'i.file_alias IN',
+        ...addExplicitParens(
+          separatedByCommas(
+            cardFileAliases.map((cardFileAlias) => [param(cardFileAlias!)]),
+          ),
+        ),
+      ],
+    ];
+
+    // This query will give us a list of indexed css entries and their corresponding instances that have that particular css module as a dependency
+    let cssSourceQuery = [
+      `WITH instance_deps AS (
+        SELECT file_alias as instance_file_alias, deps_each.value AS instance_dep_file_alias
+        FROM boxel_index i, jsonb_array_elements_text(i.deps) AS deps_each
+        WHERE`,
+      ...every(conditions),
+      `),
+      css_deps AS (
+        SELECT
+          bi.source AS css_source,
+          bi.file_alias AS css_module_id,
+          array_agg(id.instance_file_alias) AS instances
+        FROM boxel_index bi
+        JOIN instance_deps id ON bi.file_alias = id.instance_dep_file_alias
+        WHERE bi.type = 'css'
+        GROUP BY bi.source, bi.file_alias
+      )
+      SELECT
+        css_module_id,
+        array_to_json(instances) AS instances,
+        css_source
+      FROM css_deps;
+      `,
+    ];
+
+    let groupedCssInstanceData = (await this.queryCards(
+      cssSourceQuery,
+      loader,
+    )) as {
+      css_module_id: string;
+      instances: string[];
+      css_source: string;
+    }[];
+
+    // Prepare a structure where we can easily access css entries for deps of a particular card
+    let cardInstanceCss = groupedCssInstanceData.reduce(
+      (
+        acc: Record<string, { cssModuleId: string; cssSource: string }[]>,
+        row,
+      ) => {
+        let instances =
+          typeof row.instances === 'string'
+            ? JSON.parse(row.instances)
+            : row.instances; // SQLite client returns array as string
+        instances.forEach((instance: string) => {
+          if (!acc[instance]) {
+            acc[instance] = [];
+          }
+          acc[instance].push({
+            cssModuleId: row.css_module_id,
+            cssSource: row.css_source,
+          });
+        });
+        return acc;
+      },
+      {},
+    );
+
+    let prerenderedCards = results.map((card) => {
+      return {
+        url: card.url!,
+        embeddedHtml: card.embedded_html!,
+        cssModuleIds:
+          cardInstanceCss[card.file_alias!]?.map((item) => item.cssModuleId) ??
+          [],
+      };
+    });
+
+    let prerenderedCardCssItems = groupedCssInstanceData.map((cssRecord) => {
+      return {
+        cssModuleId: cssRecord.css_module_id,
+        source: cssRecord.css_source,
+      };
+    });
+
+    return { prerenderedCards, prerenderedCardCssItems, meta };
+  }
+
+  private async fetchCurrentRealmVersion(realmURL: URL) {
+    let [{ current_version }] = (await this.query([
+      'SELECT current_version FROM realm_versions WHERE realm_url =',
+      param(realmURL.href),
+    ])) as Pick<RealmVersionsTable, 'current_version'>[];
+    if (current_version == null) {
+      throw new Error(`No current version found for realm ${realmURL.href}`);
+    }
+    return current_version;
   }
 
   private filterCondition(filter: Filter, onRef: CodeRef): CardExpression {

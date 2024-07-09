@@ -1,6 +1,9 @@
 import { Deferred } from './deferred';
 import { SearchIndex } from './search-index';
-import { type SingleCardDocument } from './card-document';
+import {
+  transformResultsToPrerenderedCardsDoc,
+  type SingleCardDocument,
+} from './card-document';
 import { Loader } from './loader';
 import { RealmPaths, LocalPath, join } from './paths';
 import {
@@ -18,7 +21,6 @@ import {
   hasExecutableExtension,
   isNode,
   isSingleCardDocument,
-  assetsDir,
   logger,
   type CodeRef,
   type LooseSingleCardDocument,
@@ -333,6 +335,11 @@ export class Realm {
       )
       .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
       .get('/_search', SupportedMimeType.CardJson, this.search.bind(this))
+      .get(
+        '/_search-prerendered',
+        SupportedMimeType.CardJson,
+        this.searchPrerendered.bind(this),
+      )
       .post(
         '/_session',
         SupportedMimeType.Session,
@@ -867,42 +874,40 @@ export class Realm {
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
 
-    if (!localPath.startsWith(assetsDir)) {
-      let useWorkInProgressIndex = Boolean(
-        request.headers.get('X-Boxel-Use-WIP-Index'),
-      );
-      let module = await this.#searchIndex.module(url, {
-        useWorkInProgressIndex,
-      });
-      if (module?.type === 'module') {
-        try {
-          return createResponse({
-            body: module.executableCode,
-            init: {
-              status: 200,
-              headers: { 'content-type': 'text/javascript' },
-            },
-            requestContext,
-          });
-        } finally {
-          this.#logRequestPerformance(request, start, 'cache hit');
-        }
+    let useWorkInProgressIndex = Boolean(
+      request.headers.get('X-Boxel-Use-WIP-Index'),
+    );
+    let module = await this.#searchIndex.module(url, {
+      useWorkInProgressIndex,
+    });
+    if (module?.type === 'module') {
+      try {
+        return createResponse({
+          body: module.executableCode,
+          init: {
+            status: 200,
+            headers: { 'content-type': 'text/javascript' },
+          },
+          requestContext,
+        });
+      } finally {
+        this.#logRequestPerformance(request, start, 'cache hit');
       }
-      if (module?.type === 'error') {
-        try {
-          // using "Not Acceptable" here because no text/javascript representation
-          // can be made and we're sending text/html error page instead
-          return createResponse({
-            body: JSON.stringify(module.error, null, 2),
-            init: {
-              status: 406,
-              headers: { 'content-type': 'text/html' },
-            },
-            requestContext,
-          });
-        } finally {
-          this.#logRequestPerformance(request, start, 'cache hit');
-        }
+    }
+    if (module?.type === 'error') {
+      try {
+        // using "Not Acceptable" here because no text/javascript representation
+        // can be made and we're sending text/html error page instead
+        return createResponse({
+          body: JSON.stringify(module.error, null, 2),
+          init: {
+            status: 406,
+            headers: { 'content-type': 'text/html' },
+          },
+          requestContext,
+        });
+      } finally {
+        this.#logRequestPerformance(request, start, 'cache hit');
       }
     }
 
@@ -916,10 +921,7 @@ export class Realm {
       }
 
       let fileRef = maybeFileRef;
-      if (
-        hasExecutableExtension(fileRef.path) &&
-        !localPath.startsWith(assetsDir)
-      ) {
+      if (hasExecutableExtension(fileRef.path)) {
         if (fileRef[Symbol.for('shimmed-module')]) {
           // this response is ultimately thrown away and only the symbol value
           // is preserved. so what is inside this response is not important
@@ -1689,6 +1691,30 @@ export class Realm {
       parseQueryString(new URL(request.url).search.slice(1)),
       { loadLinks: true, useWorkInProgressIndex },
     );
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: { 'content-type': SupportedMimeType.CardJson },
+      },
+      requestContext,
+    });
+  }
+
+  private async searchPrerendered(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let useWorkInProgressIndex = Boolean(
+      request.headers.get('X-Boxel-Use-WIP-Index'),
+    );
+    let query = parseQueryString(new URL(request.url).search.slice(1));
+
+    let results = await this.#searchIndex.searchPrerendered(query, {
+      useWorkInProgressIndex,
+    });
+
+    let doc = transformResultsToPrerenderedCardsDoc(results);
+
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {

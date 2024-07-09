@@ -145,6 +145,16 @@ export default class PgAdapter implements DBAdapter {
     }
   }
 
+  async getColumnNames(tableName: string): Promise<string[]> {
+    let result = await this.execute(
+      'SELECT column_name FROM information_schema.columns WHERE table_name = $1',
+      {
+        bind: [tableName],
+      },
+    );
+    return result.map((row) => row.column_name) as string[];
+  }
+
   private async migrateDb() {
     const config = postgresConfig();
     let client = new Client(

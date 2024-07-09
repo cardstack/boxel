@@ -122,6 +122,14 @@ export default class SQLiteAdapter implements DBAdapter {
     }
   }
 
+  async getColumnNames(tableName: string): Promise<string[]> {
+    let result = await this.execute('SELECT name FROM pragma_table_info($1);', {
+      bind: [tableName],
+    });
+
+    return result.map((row) => row.name) as string[];
+  }
+
   private get sqlite() {
     if (!this._sqlite) {
       throw new Error(
@@ -226,7 +234,9 @@ export default class SQLiteAdapter implements DBAdapter {
       .replace(/\.text_value/g, '.value')
       .replace(/\.jsonb_value/g, '.value')
       .replace(/= 'null'::jsonb/g, 'IS NULL')
-      .replace(/COLLATE "POSIX"/g, '');
+      .replace(/COLLATE "POSIX"/g, '')
+      .replace(/array_agg\(/g, 'json_group_array(')
+      .replace(/array_to_json\(/g, 'json(');
   }
 
   private assertNotClosed() {

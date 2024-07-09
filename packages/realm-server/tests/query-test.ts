@@ -471,4 +471,12 @@ module('query', function (hooks) {
       testCards: await makeTestCards(loader),
     });
   });
+
+  test('can get prerendered cards (html + css) from the indexer', async function (assert) {
+    await runSharedTest(queryTests, assert, {
+      indexer,
+      loader,
+      testCards: await makeTestCards(loader),
+    });
+  });
 });

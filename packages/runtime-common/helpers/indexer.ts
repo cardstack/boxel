@@ -160,14 +160,25 @@ export async function setupIndex(
       );
       row.type = row.type ?? 'instance';
       row.last_modified = String(row.last_modified ?? now);
-      return asExpressions(
-        { ...defaultIndexEntry, ...row },
-        {
-          jsonFields: [...Object.entries(coerceTypes)]
-            .filter(([_, type]) => type === 'JSON')
-            .map(([column]) => column),
-        },
+
+      let valuesToInsert: { [key: string]: unknown } = {
+        ...defaultIndexEntry,
+        ...row,
+      };
+      let columnNames = await client.getColumnNames('boxel_index');
+
+      // Make sure all table columns are present in the data object, even if their value is undefined. This is to assure
+      // that the order of the columns in the insert statement is consistent for all types of resources
+      // that get passed into setupIndex.
+      let dataObject = Object.fromEntries(
+        columnNames.map((column) => [column, valuesToInsert[column]]),
       );
+
+      return asExpressions(dataObject, {
+        jsonFields: [...Object.entries(coerceTypes)]
+          .filter(([_, type]) => type === 'JSON')
+          .map(([column]) => column),
+      });
     }),
   );
   let versionExpressions = versionRows.map((r) => asExpressions(r));
