@@ -27,7 +27,6 @@ import {
   setupLocalIndexing,
   type CardDocFiles,
   setupIntegrationTestRealm,
-  getDbAdapter,
   lookupLoaderService,
 } from '../helpers';
 
@@ -691,52 +690,8 @@ module(`Integration | search-index`, function (hooks) {
           );
         }
       }
-    }
-
-    {
       // perform a new index to assert that render stack is still consistent
-      (await getDbAdapter()).reset();
-      let cardApi: typeof import('https://cardstack.com/base/card-api');
-      let string: typeof import('https://cardstack.com/base/string');
-      cardApi = await loader.import(`${baseRealm.url}card-api`);
-      string = await loader.import(`${baseRealm.url}string`);
-
-      let { field, contains, CardDef, Component } = cardApi;
-      let { default: StringField } = string;
-
-      class Person extends CardDef {
-        @field firstName = contains(StringField);
-        static isolated = class Isolated extends Component<typeof this> {
-          <template>
-            <h1><@fields.firstName /></h1>
-          </template>
-        };
-        static embedded = class Isolated extends Component<typeof this> {
-          <template>
-            <h1> Person Embedded Card: <@fields.firstName /></h1>
-          </template>
-        };
-      }
-      let { realm } = await setupIntegrationTestRealm({
-        loader,
-        contents: {
-          'person.gts': { Person },
-          'vangogh.json': {
-            data: {
-              attributes: {
-                firstName: 'Van Gogh',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: './person',
-                  name: 'Person',
-                },
-              },
-            },
-          },
-        },
-      });
-      let indexer = realm.searchIndex;
+      await indexer.fullIndex();
       {
         let entry = await indexer.cardDocument(
           new URL(`${testRealmURL}vangogh`),
