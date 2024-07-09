@@ -798,7 +798,35 @@ module('getModifyPrompt', () => {
           data: {
             context: {
               // @ts-expect-error purposefully using old format
-              openCards: ['http://localhost:4201/drafts/Friend/1'],
+              openCards: [
+                {
+                  data: {
+                    type: 'card',
+                    id: 'http://localhost:4201/drafts/Friend/1',
+                    attributes: {
+                      firstName: 'Hassan',
+                      thumbnailURL: null,
+                    },
+                    relationships: {
+                      friend: {
+                        links: {
+                          self: './2',
+                        },
+                        data: {
+                          type: 'card',
+                          id: 'http://localhost:4201/drafts/Friend/2',
+                        },
+                      },
+                    },
+                    meta: {
+                      adoptsFrom: {
+                        module: '../friend',
+                        name: 'Friend',
+                      },
+                    },
+                  },
+                },
+              ],
               tools: [
                 getPatchTool('http://localhost:4201/drafts/Friend/1', {
                   firstName: { type: 'string' },
