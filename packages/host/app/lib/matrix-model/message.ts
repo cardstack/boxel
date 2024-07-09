@@ -2,6 +2,7 @@ import { RoomMember } from './member';
 import { EventStatus } from 'matrix-js-sdk';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { getCard } from '@cardstack/runtime-common';
+import { tracked } from '@glimmer/tracking';
 
 const ErrorMessage: Record<string, string> = {
   ['M_TOO_LARGE']: 'Message is too large',
@@ -31,12 +32,12 @@ interface RoomMessageInterface {
 }
 
 export class RoomMessageModel implements RoomMessageInterface {
+  attachedCardIds?: string[] | null;
   message?: string;
   eventId?: string;
   author?: RoomMember;
   created?: Date;
   updated?: Date;
-  attachedCardIds?: string[] | null;
   index?: number;
   transactionId?: string | null;
   isStreamingFinished?: boolean;
@@ -55,10 +56,13 @@ export class RoomMessageModel implements RoomMessageInterface {
     );
   }
   get attachedResources(): AttachedCardResource[] | undefined {
+    console.log('getting attached resource');
     if (!this.attachedCardIds?.length) {
       return undefined;
     }
     let cards = this.attachedCardIds.map((id) => {
+      console.log('attached card id');
+      console.log(id);
       let card = getCard(new URL(id));
       if (!card) {
         return {

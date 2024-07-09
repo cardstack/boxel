@@ -14,7 +14,6 @@ import type {
 import { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { TrackedMap } from 'tracked-built-ins';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
-import { md5 } from 'super-fast-md5';
 import {
   RoomMember,
   type RoomMemberInterface,
@@ -77,8 +76,6 @@ export class RoomResource extends Resource<Args> {
   @service private declare matrixService: MatrixService;
 
   modify(_positional: never[], named: Args['named']) {
-    console.log(`running resource again with ${named.roomId}`);
-    console.log(named.events);
     this.loading = this.load.perform(named.roomId);
   }
 
@@ -208,16 +205,16 @@ export class RoomResource extends Resource<Args> {
           throw new Error(`cannot handle cards in room without an ID`);
         }
         messageArgs.clientGeneratedId = event.content.clientGeneratedId ?? null;
-        messageField = {
+        messageField = new RoomMessageModel({
           ...messageArgs,
           attachedCardIds,
-        };
+        });
       } else {
         // Text from the AI bot
         if (event.content.msgtype === 'm.text') {
           messageArgs.isStreamingFinished = !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
         }
-        messageField = { ...messageArgs };
+        messageField = new RoomMessageModel({ ...messageArgs });
       }
 
       if (messageField) {
@@ -306,13 +303,8 @@ export class RoomResource extends Resource<Args> {
     let cardDoc = JSON.parse(
       fragments.map((f) => f.data.cardFragment).join(''),
     ) as LooseSingleCardDocument;
-    // cardHashes.set(generateCardHashKey(this.roomId, cardDoc), eventId);
     return cardDoc;
   }
-}
-
-function generateCardHashKey(roomId: string, cardDoc: LooseSingleCardDocument) {
-  return md5(roomId + JSON.stringify(cardDoc));
 }
 
 export function getRoom(

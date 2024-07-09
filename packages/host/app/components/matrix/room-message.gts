@@ -308,6 +308,7 @@ export default class RoomMessage extends Component<Signature> {
   private loadMessageResources = trackedFunction(this, async () => {
     let cards: CardDef[] = [];
     let errors: { id: string; error: Error }[] = [];
+    console.log('loading message resources');
 
     let promises = this.args.message.attachedResources?.map(
       async (resource) => {
@@ -328,6 +329,9 @@ export default class RoomMessage extends Component<Signature> {
       await Promise.all(promises);
     }
 
+    console.log('resources in message');
+    console.log(this.args.message.attachedResources);
+    console.log(cards);
     return {
       cards: cards.length ? cards : undefined,
       errors: errors.length ? errors : undefined,

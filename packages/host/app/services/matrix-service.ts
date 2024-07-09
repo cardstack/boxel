@@ -504,16 +504,18 @@ export default class MatrixService
       );
     }
 
-    let roomModule = this.rooms.get(roomId);
+    // let roomModule = this.rooms.get(roomId);
     let attachedCardsEventIds: string[] = [];
     if (serializedAttachedCards.length > 0) {
       for (let attachedCard of serializedAttachedCards) {
+        // console.log('attachedCard');
+        // console.log(attachedCard);
         // let eventId = roomModule.getEventIdForCard(roomId, attachedCard);
         // if (!eventId) {
-        //   let responses = await this.sendCardFragments(roomId, attachedCard);
-        //   eventId = responses[0].event_id; // we only care about the first fragment
+        let responses = await this.sendCardFragments(roomId, attachedCard);
+        let eventId = responses[0].event_id; // we only care about the first fragment
         // }
-        // attachedCardsEventIds.push(eventId);
+        attachedCardsEventIds.push(eventId);
       }
     }
 
