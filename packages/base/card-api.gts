@@ -1,6 +1,8 @@
 import Modifier from 'ember-modifier';
 import { action } from '@ember/object';
 import GlimmerComponent from '@glimmer/component';
+// @ts-ignore no types
+import cssUrl from 'ember-css-url';
 import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
@@ -26,6 +28,7 @@ import {
   isNotLoadedError,
   CardError,
   CardContextName,
+  cardTypeDisplayName,
   NotLoaded,
   getField,
   isField,
@@ -1783,6 +1786,170 @@ class DefaultCardDefTemplate extends GlimmerComponent<{
   </template>
 }
 
+class DefaultEmbeddedTemplate extends GlimmerComponent<{
+  Args: {
+    cardOrField: typeof BaseDef;
+    model: CardDef;
+    fields: Record<string, new () => GlimmerComponent>;
+    context?: CardContext;
+  };
+}> {
+  <template>
+    <div class='embedded-template'>
+      {{#if @model}}
+        <div class='thumbnail-section'>
+          <div
+            class='card-thumbnail'
+            style={{cssUrl 'background-image' @model.thumbnailURL}}
+          >
+            {{#unless @model.thumbnailURL}}
+              <div
+                class='card-thumbnail-text'
+                data-test-card-thumbnail-text
+              >{{cardTypeDisplayName @model}}</div>
+            {{/unless}}
+          </div>
+        </div>
+        <div class='thumbnail-subsection'>
+          <div class='thumbnail-subsection'>
+            <h3 class='card-title' data-test-card-title>{{@model.title}}</h3>
+          </div>
+          <div class='thumbnail-subsection'>
+            <h4
+              class='card-display-name'
+              data-test-card-display-name
+            >{{cardTypeDisplayName @model}}</h4>
+          </div>
+        </div>
+      {{else}}
+        {{! empty links-to field }}
+        <div data-test-empty-field class='empty-field'></div>
+      {{/if}}
+    </div>
+    <style>
+      .embedded-template {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-wrap: wrap;
+      }
+      /* 
+         sadly you can't use css vars in container queries. also be careful of fractional pixel 
+         dimensions in the breakpoints. due to this we use the "breakpoint - 1 pixel" in the 
+         container query conditions
+      */
+
+      /* strip style embedded card */
+      @container embedded-card (height <= 223px) {
+        .embedded-template {
+          column-gap: 10px;
+          padding: 5px;
+        }
+        .card-thumbnail {
+          width: var(--strip-embedded-thumbnail-width);
+          height: var(--strip-embedded-thumbnail-height);
+          border-radius: 6px;
+        }
+        .card-thumbnail-text {
+          visibility: hidden;
+        }
+      }
+      /* small and medium thumbnail styles embedded card */
+      @container embedded-card (223px < height <= 249px) {
+        .embedded-template {
+          justify-content: center;
+          padding: 10px;
+        }
+        .card-title {
+          height: 35px;
+          text-align: center;
+        }
+        .card-display-name {
+          text-align: center;
+        }
+        .card-thumbnail {
+          width: var(--small-embedded-thumbnail-width);
+          height: var(--small-embedded-thumbnail-height);
+          border-radius: var(--boxel-border-radius);
+          margin-bottom: 11px;
+          padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
+        }
+        .thumbnail-section {
+          width: 100%;
+        }
+        .thumbnail-subsection {
+          width: 100%;
+        }
+      }
+
+      /* large thumbnail style embedded card */
+      @container embedded-card (249px < height) and (339px < width) {
+        .embedded-template {
+          justify-content: center;
+          padding: 10px;
+        }
+        .card-title {
+          height: 35px;
+          text-align: center;
+        }
+        .card-display-name {
+          text-align: center;
+        }
+        .card-thumbnail {
+          width: var(--large-embedded-thumbnail-width);
+          height: var(--large-embedded-thumbnail-height);
+          border-radius: var(--boxel-border-radius);
+          margin-bottom: 11px;
+          padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
+        }
+        .thumbnail-section {
+          width: 100%;
+        }
+        .thumbnail-subsection {
+          width: 100%;
+        }
+      }
+
+      .default-embedded-template > *,
+      .card-thumbnail-text {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .card-thumbnail {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: var(--boxel-teal);
+        background-position: center;
+        background-size: cover;
+        background-repeat: no-repeat;
+        color: var(--boxel-light);
+        font: 700 var(--boxel-font);
+        letter-spacing: var(--boxel-lsp);
+      }
+      .card-title {
+        margin: 0;
+        font: 500 var(--boxel-font-sm);
+        line-height: 1.23;
+        text-overflow: ellipsis;
+      }
+      .card-display-name {
+        margin: 0;
+        font: 500 var(--boxel-font-xs);
+        color: var(--boxel-450);
+        line-height: 1.27;
+        text-overflow: ellipsis;
+      }
+      .thumbnail-section {
+        display: flex;
+        justify-content: center;
+      }
+    </style>
+  </template>
+}
+
 class MissingEmbeddedTemplate extends GlimmerComponent<{
   Args: {
     cardOrField: typeof BaseDef;
@@ -2044,7 +2211,7 @@ export class CardDef extends BaseDef {
     }
   }
 
-  static embedded: BaseDefComponent = MissingEmbeddedTemplate;
+  static embedded: BaseDefComponent = DefaultEmbeddedTemplate;
   static isolated: BaseDefComponent = DefaultCardDefTemplate;
   static edit: BaseDefComponent = DefaultCardDefTemplate;
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
