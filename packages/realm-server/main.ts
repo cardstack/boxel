@@ -215,7 +215,7 @@ let dist: URL = new URL(distURL);
       },
     );
     realms.push(realm);
-    virtualNetwork.mount(realm.maybeExternalHandle);
+    virtualNetwork.mount(realm.handle);
   }
 
   let server = new RealmServer(realms, virtualNetwork);

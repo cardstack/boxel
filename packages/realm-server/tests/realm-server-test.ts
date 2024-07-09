@@ -2095,7 +2095,7 @@ module('Realm Server', function (hooks) {
     setupDB(hooks, {
       beforeEach: async (dbAdapter, queue) => {
         if (testRealm2) {
-          virtualNetwork.unmount(testRealm2.maybeExternalHandle);
+          virtualNetwork.unmount(testRealm2.handle);
         }
         ({ testRealm: testRealm2, testRealmServer: testRealmServer2 } =
           await runTestRealmServer({
@@ -2650,7 +2650,7 @@ module('Realm server serving multiple realms', function (hooks) {
         dbAdapter,
         deferStartUp: true,
       });
-      virtualNetwork.mount(base.maybeExternalHandle);
+      virtualNetwork.mount(base.handle);
 
       testRealm = await createRealm({
         dir: dir.name,
@@ -2660,7 +2660,7 @@ module('Realm server serving multiple realms', function (hooks) {
         dbAdapter,
         deferStartUp: true,
       });
-      virtualNetwork.mount(testRealm.maybeExternalHandle);
+      virtualNetwork.mount(testRealm.handle);
 
       testRealmServer = new RealmServer(
         [base, testRealm],
