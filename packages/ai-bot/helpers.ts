@@ -170,6 +170,9 @@ export function getRelevantCards(
 ) {
   let attachedCardMap = new Map<string, CardResource>();
   let skillCardMap = new Map<string, CardResource>();
+  let latestMessageEventId = history
+    .filter((ev) => ev.sender !== aiBotUserId && ev.type === 'm.room.message')
+    .slice(-1)[0]?.event_id;
   for (let event of history) {
     if (event.type !== 'm.room.message') {
       continue;
@@ -178,7 +181,11 @@ export function getRelevantCards(
       let { content } = event;
       if (content.msgtype === 'org.boxel.message') {
         setRelevantCards(attachedCardMap, content.data?.attachedCards);
-        setRelevantCards(skillCardMap, content.data?.skillCards);
+
+        // setting skill card instructions only based on the latest boxel message event (not cumulative)
+        if (event.event_id === latestMessageEventId) {
+          setRelevantCards(skillCardMap, content.data?.skillCards);
+        }
       }
     }
   }

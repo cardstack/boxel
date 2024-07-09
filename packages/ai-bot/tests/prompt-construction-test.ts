@@ -224,7 +224,7 @@ module('getModifyPrompt', () => {
           age: 115498,
           transaction_id: '1',
         },
-        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        event_id: '1',
         status: EventStatus.SENT,
       },
       {
@@ -277,7 +277,7 @@ module('getModifyPrompt', () => {
           age: 115498,
           transaction_id: '2',
         },
-        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        event_id: '2',
         status: EventStatus.SENT,
       },
     ];
@@ -324,7 +324,7 @@ module('getModifyPrompt', () => {
           age: 115498,
           transaction_id: '1',
         },
-        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        event_id: '1',
         status: EventStatus.SENT,
       },
       {
@@ -349,7 +349,7 @@ module('getModifyPrompt', () => {
           age: 115498,
           transaction_id: '2',
         },
-        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        event_id: '2',
         status: EventStatus.SENT,
       },
     ];
@@ -435,71 +435,6 @@ module('getModifyPrompt', () => {
   });
 
   test('Gets multiple uploaded cards', () => {
-    const card1: SingleCardDocument = {
-      data: {
-        type: 'card',
-        id: 'http://localhost:4201/drafts/Author/1',
-        attributes: {
-          firstName: 'Terry',
-          lastName: 'Pratchett',
-        },
-        meta: {
-          adoptsFrom: {
-            module: '../author',
-            name: 'Author',
-          },
-        },
-      },
-    };
-    const card2: SingleCardDocument = {
-      data: {
-        type: 'card',
-        id: 'http://localhost:4201/drafts/Author/2',
-        attributes: {
-          firstName: 'Mr',
-          lastName: 'T',
-        },
-        meta: {
-          adoptsFrom: {
-            module: '../author',
-            name: 'Author',
-          },
-        },
-      },
-    };
-    const skillCard1: SingleCardDocument = {
-      data: {
-        type: 'card',
-        id: 'http://localhost:4201/drafts/SkillCard/1',
-        attributes: {
-          title: 'Talk Like a Pirate',
-          instructions:
-            "Use pirate colloquialism when responding. End every sentence with 'Arrrr!'",
-        },
-        meta: {
-          adoptsFrom: {
-            module: 'https://cardstack.com/base/skill-card',
-            name: 'SkillCard',
-          },
-        },
-      },
-    };
-    const skillCard2: SingleCardDocument = {
-      data: {
-        type: 'card',
-        id: 'http://localhost:4201/drafts/SkillCard/2',
-        attributes: {
-          title: 'SEO',
-          instructions: 'Optimize given content for search engines.',
-        },
-        meta: {
-          adoptsFrom: {
-            module: 'https://cardstack.com/base/skill-card',
-            name: 'SkillCard',
-          },
-        },
-      },
-    };
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -511,8 +446,43 @@ module('getModifyPrompt', () => {
           body: 'Hey',
           formatted_body: 'Hey',
           data: {
-            attachedCards: [card1],
-            skillCards: [skillCard1],
+            attachedCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Author/1',
+                  attributes: {
+                    firstName: 'Terry',
+                    lastName: 'Pratchett',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../author',
+                      name: 'Author',
+                    },
+                  },
+                },
+              },
+            ],
+            skillCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/SkillCard/1',
+                  attributes: {
+                    title: 'Talk Like a Pirate',
+                    instructions:
+                      "Use pirate colloquialism when responding. End every sentence with 'Arrrr!'",
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'https://cardstack.com/base/skill-card',
+                      name: 'SkillCard',
+                    },
+                  },
+                },
+              },
+            ],
             context: {
               openCardIds: [],
               tools: [],
@@ -530,7 +500,7 @@ module('getModifyPrompt', () => {
       },
       {
         type: 'm.room.message',
-        event_id: '1',
+        event_id: '2',
         origin_server_ts: 1234567890,
         content: {
           msgtype: 'org.boxel.message',
@@ -538,8 +508,42 @@ module('getModifyPrompt', () => {
           body: 'Hey',
           formatted_body: 'Hey',
           data: {
-            attachedCards: [card2],
-            skillCards: [skillCard2],
+            attachedCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Author/2',
+                  attributes: {
+                    firstName: 'Mr',
+                    lastName: 'T',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../author',
+                      name: 'Author',
+                    },
+                  },
+                },
+              },
+            ],
+            skillCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/SkillCard/2',
+                  attributes: {
+                    title: 'SEO',
+                    instructions: 'Optimize given content for search engines.',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'https://cardstack.com/base/skill-card',
+                      name: 'SkillCard',
+                    },
+                  },
+                },
+              },
+            ],
             context: {
               openCardIds: [],
               tools: [],
@@ -561,77 +565,14 @@ module('getModifyPrompt', () => {
       '@aibot:localhost',
     );
     assert.equal(attachedCards.length, 2);
-    assert.equal(skillCards.length, 2);
+    assert.equal(skillCards.length, 1); // only take into account the latest message event for skill cards
+    assert.equal(skillCards[0].id, 'http://localhost:4201/drafts/SkillCard/2');
   });
 
   test('Gets multiple uploaded cards in the system prompt', () => {
-    const card1: SingleCardDocument = {
-      data: {
-        type: 'card',
-        id: 'http://localhost:4201/drafts/Author/1',
-        attributes: {
-          firstName: 'Terry',
-          lastName: 'Pratchett',
-        },
-        meta: {
-          adoptsFrom: {
-            module: '../author',
-            name: 'Author',
-          },
-        },
-      },
-    };
-    const card2: SingleCardDocument = {
-      data: {
-        type: 'card',
-        id: 'http://localhost:4201/drafts/Author/2',
-        attributes: {
-          firstName: 'Mr',
-          lastName: 'T',
-        },
-        meta: {
-          adoptsFrom: {
-            module: '../author',
-            name: 'Author',
-          },
-        },
-      },
-    };
     const instructions1 =
       "Use pirate colloquialism when responding. End every sentence with 'Arrrr!'";
-    const skillCard1: SingleCardDocument = {
-      data: {
-        type: 'card',
-        id: 'http://localhost:4201/drafts/SkillCard/1',
-        attributes: {
-          title: 'Talk Like a Pirate',
-          instructions: instructions1,
-        },
-        meta: {
-          adoptsFrom: {
-            module: 'https://cardstack.com/base/skill-card',
-            name: 'SkillCard',
-          },
-        },
-      },
-    };
     const instructions2 = 'Optimize given content for search engines.';
-    const skillCard2: SingleCardDocument = {
-      data: {
-        type: 'card',
-        id: 'http://localhost:4201/drafts/SkillCard/2',
-        attributes: {
-          title: 'SEO',
-          instructions: instructions2,
-        },
-        meta: {
-          adoptsFrom: {
-            module: 'https://cardstack.com/base/skill-card',
-            name: 'SkillCard',
-          },
-        },
-      },
-    };
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -643,8 +584,42 @@ module('getModifyPrompt', () => {
           body: 'Hey',
           formatted_body: 'Hey',
           data: {
-            attachedCards: [card1],
-            skillCards: [skillCard1],
+            attachedCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Author/1',
+                  attributes: {
+                    firstName: 'Terry',
+                    lastName: 'Pratchett',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../author',
+                      name: 'Author',
+                    },
+                  },
+                },
+              },
+            ],
+            skillCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/SkillCard/1',
+                  attributes: {
+                    title: 'Talk Like a Pirate',
+                    instructions: instructions1,
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'https://cardstack.com/base/skill-card',
+                      name: 'SkillCard',
+                    },
+                  },
+                },
+              },
+            ],
             context: {
               openCardIds: [],
               tools: [],
@@ -662,7 +637,7 @@ module('getModifyPrompt', () => {
       },
       {
         type: 'm.room.message',
-        event_id: '1',
+        event_id: '2',
         origin_server_ts: 1234567890,
         content: {
           msgtype: 'org.boxel.message',
@@ -670,8 +645,42 @@ module('getModifyPrompt', () => {
           body: 'Hey',
           formatted_body: 'Hey',
           data: {
-            attachedCards: [card2],
-            skillCards: [skillCard2],
+            attachedCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Author/2',
+                  attributes: {
+                    firstName: 'Mr',
+                    lastName: 'T',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../author',
+                      name: 'Author',
+                    },
+                  },
+                },
+              },
+            ],
+            skillCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/SkillCard/2',
+                  attributes: {
+                    title: 'SEO',
+                    instructions: instructions2,
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'https://cardstack.com/base/skill-card',
+                      name: 'SkillCard',
+                    },
+                  },
+                },
+              },
+            ],
             context: {
               openCardIds: [],
               tools: [],
@@ -698,7 +707,7 @@ module('getModifyPrompt', () => {
     assert.true(
       systemMessage?.content?.includes('http://localhost:4201/drafts/Author/2'),
     );
-    assert.true(systemMessage?.content?.includes(instructions1));
+    assert.false(systemMessage?.content?.includes(instructions1));
     assert.true(systemMessage?.content?.includes(instructions2));
   });
 
@@ -755,7 +764,7 @@ module('getModifyPrompt', () => {
           age: 115498,
           transaction_id: '1',
         },
-        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        event_id: '1',
         status: EventStatus.SENT,
       },
       {
@@ -774,7 +783,7 @@ module('getModifyPrompt', () => {
           age: 115498,
           transaction_id: '2',
         },
-        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        event_id: '2',
         status: EventStatus.SENT,
       },
     ];
@@ -848,7 +857,7 @@ module('getModifyPrompt', () => {
           age: 115498,
           transaction_id: '1',
         },
-        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        event_id: '1',
         status: EventStatus.SENT,
       },
       {
@@ -873,7 +882,7 @@ module('getModifyPrompt', () => {
           age: 115498,
           transaction_id: '2',
         },
-        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        event_id: '2',
         status: EventStatus.SENT,
       },
     ];
@@ -947,7 +956,7 @@ module('getModifyPrompt', () => {
     });
   });
 
-  test('should include relevant instructions in system prompt for skill cards', () => {
+  test('should include instructions in system prompt for skill cards', () => {
     const instructions1 =
       "Use pirate colloquialism when responding. End every sentence with 'Arrrr!'";
     const skillCard1: SingleCardDocument = {
@@ -1117,7 +1126,7 @@ module('getModifyPrompt', () => {
           age: 115498,
           transaction_id: '1',
         },
-        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        event_id: '1',
         status: EventStatus.SENT,
       },
       {
@@ -1159,7 +1168,7 @@ module('getModifyPrompt', () => {
           age: 115498,
           transaction_id: '2',
         },
-        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        event_id: '2',
         status: EventStatus.SENT,
       },
     ];
@@ -1184,6 +1193,257 @@ module('getModifyPrompt', () => {
     const result = getModifyPrompt(history, '@aibot:localhost');
     assert.false(result[0].content?.includes(instructions1));
     assert.true(result[0].content?.includes(instructions2));
+  });
+
+  test('should update system prompt based on included skill cards', () => {
+    const instructions1 =
+      "Use pirate colloquialism when responding. End every sentence with 'Arrrr!'";
+    const skillCard1: SingleCardDocument = {
+      data: {
+        type: 'card',
+        id: 'http://localhost:4201/drafts/SkillCard/1',
+        attributes: {
+          title: 'Talk Like a Pirate',
+          instructions: instructions1,
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/skill-card',
+            name: 'SkillCard',
+          },
+        },
+      },
+    };
+    const instructions2 = 'Optimize given content for search engines.';
+    const skillCard2: SingleCardDocument = {
+      data: {
+        type: 'card',
+        id: 'http://localhost:4201/drafts/SkillCard/2',
+        attributes: {
+          title: 'SEO',
+          instructions: instructions2,
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/skill-card',
+            name: 'SkillCard',
+          },
+        },
+      },
+    };
+
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1234567890,
+        content: {
+          msgtype: 'org.boxel.message',
+          format: 'org.matrix.custom.html',
+          body: 'Hi',
+          formatted_body: 'Hi',
+          data: {
+            context: {
+              tools: [],
+              submode: undefined,
+            },
+            skillCards: [skillCard1],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    let { skillCards } = getRelevantCards(history, '@aibot:localhost');
+    assert.equal(skillCards.length, 1);
+
+    let result = getModifyPrompt(history, '@aibot:localhost');
+    assert.true(result[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
+    assert.true(result[0].content?.includes(instructions1));
+    assert.false(result[0].content?.includes(instructions2));
+
+    history.push(
+      {
+        type: 'm.room.message',
+        event_id: '2',
+        origin_server_ts: 1234567890,
+        content: {
+          msgtype: 'org.boxel.message',
+          format: 'org.matrix.custom.html',
+          body: 'Hi',
+          formatted_body: 'Hi',
+          data: {
+            context: {
+              tools: [],
+              submode: undefined,
+            },
+            skillCards: [skillCard1, skillCard2],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '2',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: '3',
+        origin_server_ts: 1234567890,
+        content: {
+          msgtype: 'm.text',
+          format: 'org.matrix.custom.html',
+          body: 'How may I assist you?',
+          formatted_body: 'How may I assist you?',
+          isStreamingFinished: true,
+        },
+        // ai-bot sends a message
+        sender: '@aibot:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '3',
+        },
+        status: EventStatus.SENT,
+      },
+    );
+
+    skillCards = getRelevantCards(history, '@aibot:localhost').skillCards;
+    assert.equal(skillCards.length, 2);
+
+    result = getModifyPrompt(history, '@aibot:localhost');
+    assert.true(result[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
+    assert.true(result[0].content?.includes(instructions1));
+    assert.true(result[0].content?.includes(instructions2));
+
+    history.push({
+      type: 'm.room.message',
+      event_id: '4',
+      origin_server_ts: 1234567890,
+      content: {
+        msgtype: 'm.text',
+        format: 'org.matrix.custom.html',
+        body: 'Hey',
+        formatted_body: 'Hey',
+        isStreamingFinished: true,
+      },
+      sender: '@user:localhost',
+      room_id: 'room1',
+      unsigned: {
+        age: 1000,
+        transaction_id: '4',
+      },
+      status: EventStatus.SENT,
+    });
+
+    skillCards = getRelevantCards(history, '@aibot:localhost').skillCards;
+    assert.equal(skillCards.length, 0);
+
+    result = getModifyPrompt(history, '@aibot:localhost');
+    assert.false(result[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
+    assert.false(result[0].content?.includes(instructions1));
+    assert.false(result[0].content?.includes(instructions2));
+  });
+
+  test('If there are no skill cards in the last message from the user, remove from system prompt', () => {
+    const instructions1 =
+      "Use pirate colloquialism when responding. End every sentence with 'Arrrr!'";
+    const skillCard1: SingleCardDocument = {
+      data: {
+        type: 'card',
+        id: 'http://localhost:4201/drafts/SkillCard/1',
+        attributes: {
+          title: 'Talk Like a Pirate',
+          instructions: instructions1,
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/skill-card',
+            name: 'SkillCard',
+          },
+        },
+      },
+    };
+    const instructions2 = 'Optimize given content for search engines.';
+    const skillCard2: SingleCardDocument = {
+      data: {
+        type: 'card',
+        id: 'http://localhost:4201/drafts/SkillCard/2',
+        attributes: {
+          title: 'SEO',
+          instructions: instructions2,
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/skill-card',
+            name: 'SkillCard',
+          },
+        },
+      },
+    };
+
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1234567890,
+        content: {
+          msgtype: 'org.boxel.message',
+          format: 'org.matrix.custom.html',
+          body: 'Hi',
+          formatted_body: 'Hi',
+          data: {
+            context: {
+              tools: [],
+              submode: undefined,
+            },
+            skillCards: [skillCard1, skillCard2],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: '3',
+        origin_server_ts: 1234567890,
+        content: {
+          msgtype: 'm.text',
+          format: 'org.matrix.custom.html',
+          body: 'Hey',
+          formatted_body: 'Hey',
+          isStreamingFinished: true,
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const { skillCards } = getRelevantCards(history, '@aibot:localhost');
+    assert.equal(skillCards.length, 0);
+
+    const result = getModifyPrompt(history, '@aibot:localhost');
+    assert.false(result[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
+    assert.false(result[0].content?.includes(instructions1));
+    assert.false(result[0].content?.includes(instructions2));
   });
 
   test('Create patch function calls when there is a cardSpec', () => {
@@ -1279,7 +1539,7 @@ module('getModifyPrompt', () => {
           age: 115498,
           transaction_id: '1',
         },
-        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        event_id: '1',
         status: EventStatus.SENT,
       },
       {
@@ -1308,7 +1568,7 @@ module('getModifyPrompt', () => {
           age: 115498,
           transaction_id: '2',
         },
-        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        event_id: '2',
         status: EventStatus.SENT,
       },
     ];
