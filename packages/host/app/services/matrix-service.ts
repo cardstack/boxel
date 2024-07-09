@@ -744,16 +744,10 @@ export default class MatrixService
   }
 
   getRoom(roomId: string) {
-    if (!this.rooms) {
-      return;
-    }
     return this.rooms.get(roomId);
   }
 
   setRoom(roomId: string, room: RoomModel) {
-    if (!this.rooms) {
-      return;
-    }
     this.rooms.set(roomId, room);
   }
 
