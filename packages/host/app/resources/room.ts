@@ -180,11 +180,6 @@ export class RoomResource extends Resource<Args> {
       let messageField = undefined;
 
       if (event.content.msgtype === 'org.boxel.cardFragment') {
-        if (roomId === '!HzclIzWipXmSVfocAv:localhost') {
-          debugger;
-        }
-        console.log('roomId in cardFragment');
-        console.log(roomId);
         if (!this._fragmentCache.has(event_id)) {
           this._fragmentCache.set(event_id, event.content);
         }
