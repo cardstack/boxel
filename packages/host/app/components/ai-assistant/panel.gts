@@ -95,7 +95,10 @@ export default class AiAssistantPanel extends Component<Signature> {
               width='20'
               height='20'
             />
-            <h3 class='panel-title-text' data-test-chat-title>
+            <h3
+              class='panel-title-text'
+              data-test-chat-title={{if this.currentRoom.messages true false}}
+            >
               {{if this.currentRoom.name this.currentRoom.name 'Assistant'}}
             </h3>
           </div>
