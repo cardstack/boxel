@@ -279,13 +279,9 @@ export default class AiAssistantPanel extends Component<Signature> {
       .new-session-button {
         margin-right: var(--boxel-sp-xxxs);
       }
-
-      .past-sessions-button .icon {
-        margin-left: var(--boxel-sp-xs);
-      }
-
       .past-sessions-button svg {
         --icon-color: var(--boxel-light);
+        margin-left: var(--boxel-sp-xs);
       }
 
       .past-sessions-button-active::before {
