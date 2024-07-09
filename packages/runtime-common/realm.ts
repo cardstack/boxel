@@ -25,7 +25,7 @@ import {
   type DirectoryEntryRelationship,
   type DBAdapter,
   type Queue,
-  type Indexer,
+  type IndexUpdater,
   fetchUserPermissions,
   maybeHandleScopedCSSRequest,
   authorizationMiddleware,
@@ -225,7 +225,9 @@ export class Realm {
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
 
-  #onIndexer: ((indexer: Indexer) => Promise<void>) | undefined;
+  #onIndexUpdaterReady:
+    | ((indexUpdater: IndexUpdater) => Promise<void>)
+    | undefined;
   #publicEndpoints: RouteTable<true> = new Map([
     [
       SupportedMimeType.Session,
@@ -266,7 +268,7 @@ export class Realm {
       dbAdapter,
       queue,
       virtualNetwork,
-      onIndexer,
+      onIndexUpdaterReady,
       assetsURL,
     }: {
       url: string;
@@ -277,7 +279,7 @@ export class Realm {
       dbAdapter: DBAdapter;
       queue: Queue;
       virtualNetwork: VirtualNetwork;
-      onIndexer?: (indexer: Indexer) => Promise<void>;
+      onIndexUpdaterReady?: (indexUpdater: IndexUpdater) => Promise<void>;
       assetsURL: URL;
     },
     opts?: Options,
@@ -314,7 +316,7 @@ export class Realm {
     this.loaderTemplate = loader;
 
     this.#adapter = adapter;
-    this.#onIndexer = onIndexer;
+    this.#onIndexUpdaterReady = onIndexUpdaterReady;
     this.#searchIndex = new SearchIndex({
       realm: this,
       dbAdapter,
@@ -542,7 +544,7 @@ export class Realm {
 
   async #startup() {
     await Promise.resolve();
-    await this.#searchIndex.run(this.#onIndexer);
+    await this.#searchIndex.run(this.#onIndexUpdaterReady);
     this.sendServerEvent({ type: 'index', data: { type: 'full' } });
     this.#perfLog.debug(
       `realm server startup in ${Date.now() - this.#startTime}ms`,
