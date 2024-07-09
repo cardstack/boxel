@@ -59,7 +59,6 @@ let newSessionIdPersistenceKey = 'aiPanelNewSessionId';
 export default class AiAssistantPanel extends Component<Signature> {
   get hasOtherActiveSessions() {
     let oneMinuteAgo = new Date(Date.now() - 60 * 1000).getTime();
-    console.log(this.aiSessionRooms);
 
     return this.aiSessionRooms
       .filter((session) => session.room?.roomId !== this.roomModel?.roomId)

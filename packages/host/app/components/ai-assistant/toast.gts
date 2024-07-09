@@ -21,11 +21,10 @@ import { markdownToHtml } from '@cardstack/runtime-common';
 
 import MatrixService from '@cardstack/host/services/matrix-service';
 
-import { type MessageField } from 'https://cardstack.com/base/message';
-
 import assistantIcon from './ai-assist-icon.webp';
 
 import { currentRoomIdPersistenceKey } from './panel';
+import { RoomMessageModel } from '@cardstack/host/lib/matrix-model/message';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -136,7 +135,7 @@ export default class AiAssistantToast extends Component<Signature> {
     const state: {
       value: {
         roomId: string;
-        message: MessageField;
+        message: RoomMessageModel;
       } | null;
       isResetStateValueBlocked: boolean;
     } = new TrackedObject({
@@ -155,7 +154,7 @@ export default class AiAssistantToast extends Component<Signature> {
       }, timeout);
     };
 
-    let lastMessages: Map<string, MessageField> = new Map();
+    let lastMessages: Map<string, RoomMessageModel> = new Map();
     for (let resource of this.matrixService.roomResources.values()) {
       if (!resource.room) {
         continue;
@@ -205,7 +204,7 @@ export default class AiAssistantToast extends Component<Signature> {
       ({
         formattedMessage: '',
         created: new Date(),
-      } as MessageField)
+      } as RoomMessageModel)
     );
   }
 

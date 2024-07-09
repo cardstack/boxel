@@ -28,21 +28,20 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-import { type MessageField } from 'https://cardstack.com/base/message';
 
 import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
-import { RoomMessageField } from '@cardstack/host/resources/room';
+import { RoomMessageModel } from '@cardstack/host/lib/matrix-model/message';
 
 interface Signature {
   Element: HTMLDivElement;
   Args: {
     roomId: string;
-    message: RoomMessageField;
-    messages: RoomMessageField[];
+    message: RoomMessageModel;
+    messages: RoomMessageModel[];
     index?: number;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
@@ -60,8 +59,8 @@ interface SendReadReceiptModifierSignature {
     Named: {
       matrixService: MatrixService;
       roomId: string;
-      message: MessageField;
-      messages: MessageField[];
+      message: RoomMessageModel;
+      messages: RoomMessageModel[];
     };
     Positional: [];
   };

@@ -19,14 +19,13 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
-import type { MessageField } from 'https://cardstack.com/base/message';
-
 import AiAssistantCardPicker from '../ai-assistant/card-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
 import { AiAssistantConversation } from '../ai-assistant/message';
 import NewSession from '../ai-assistant/new-session';
 
 import RoomMessage from './room-message';
+import { RoomMessageModel } from '@cardstack/host/lib/matrix-model/message';
 
 interface Signature {
   Args: {
@@ -139,24 +138,14 @@ export default class Room extends Component<Signature> {
     this.doMatrixEventFlush.perform();
   }
 
-  maybeRetryAction = (messageIndex: number, message: MessageField) => {
+  maybeRetryAction = (messageIndex: number, message: RoomMessageModel) => {
     if (this.isLastMessage(messageIndex) && message.isRetryable) {
       return this.resendLastMessage;
     }
     return undefined;
   };
 
-  @action isMessageStreaming(message: MessageField, messageIndex: number) {
-    console.log('isMessageStreaming');
-    console.log('====');
-    console.log(message);
-    console.log(messageIndex);
-    console.log('!isStreamingFinished', !message.isStreamingFinished);
-    console.log('isLastMessage', this.isLastMessage(messageIndex));
-    console.log(
-      'backward compat',
-      (new Date().getTime() - message.created.getTime()) / 1000 < 60,
-    );
+  @action isMessageStreaming(message: RoomMessageModel, messageIndex: number) {
     return (
       !message.isStreamingFinished &&
       this.isLastMessage(messageIndex) &&
@@ -356,7 +345,7 @@ export default class Room extends Component<Signature> {
     this.currentMonacoContainer = index;
   }
 
-  private isPendingMessage(message: MessageField) {
+  private isPendingMessage(message: RoomMessageModel) {
     return message.status === 'sending' || message.status === 'queued';
   }
 }
