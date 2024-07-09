@@ -48,6 +48,10 @@ export class IndexUpdater {
     return batch;
   }
 
+  async getColumnNames(tableName: string) {
+    return this.dbAdapter.getColumnNames(tableName);
+  }
+
   async itemsThatReference(
     alias: string,
     realmVersion: number,

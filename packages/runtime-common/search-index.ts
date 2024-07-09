@@ -193,7 +193,7 @@ export class SearchIndex {
   }
 
   async searchPrerendered(query: Query, opts?: Options) {
-    let results = await this.#indexer.searchPrerendered(
+    let results = await this.#indexQueryEngine.searchPrerendered(
       new URL(this.#realm.url),
       query,
       this.loader,

@@ -19,7 +19,7 @@ import {
   identifyCard,
   moduleFrom,
   isCardDef,
-  type Indexer,
+  IndexUpdater,
   type Batch,
   type LooseCardResource,
   type InstanceEntry,
@@ -75,7 +75,7 @@ export class CurrentRun {
   #typesCache = new WeakMap<typeof CardDef, Promise<TypesWithErrors>>();
   #indexingInstances = new Map<string, Promise<void>>();
   #reader: Reader;
-  #indexer: Indexer;
+  #indexUpdater: IndexUpdater;
   #batch: Batch | undefined;
   #realmPaths: RealmPaths;
   #ignoreData: Record<string, string>;
@@ -92,17 +92,17 @@ export class CurrentRun {
   constructor({
     realmURL,
     reader,
-    indexer,
+    indexUpdater,
     ignoreData = {},
     renderCard,
   }: {
     realmURL: URL;
     reader: Reader;
-    indexer: Indexer;
+    indexUpdater: IndexUpdater;
     ignoreData?: Record<string, string>;
     renderCard: RenderCard;
   }) {
-    this.#indexer = indexer;
+    this.#indexUpdater = indexUpdater;
     this.#realmPaths = new RealmPaths(realmURL);
     this.#reader = reader;
     this.#realmURL = realmURL;
@@ -114,7 +114,9 @@ export class CurrentRun {
     await current.whileIndexing(async () => {
       let start = Date.now();
       log.debug(`starting from scratch indexing`);
-      current.#batch = await current.#indexer.createBatch(current.realmURL);
+      current.#batch = await current.#indexUpdater.createBatch(
+        current.realmURL,
+      );
       await current.batch.makeNewGeneration();
       await current.visitDirectory(current.realmURL);
       await current.batch.done();
@@ -137,7 +139,7 @@ export class CurrentRun {
     let start = Date.now();
     log.debug(`starting from incremental indexing for ${url.href}`);
 
-    current.#batch = await current.#indexer.createBatch(current.realmURL);
+    current.#batch = await current.#indexUpdater.createBatch(current.realmURL);
     let invalidations = (await current.batch.invalidate(url)).map(
       (href) => new URL(href),
     );

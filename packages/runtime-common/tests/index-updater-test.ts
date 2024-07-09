@@ -1,5 +1,5 @@
 import {
-  Indexer,
+  IndexUpdater,
   internalKeyFor,
   baseCardRef,
   type LooseCardResource,
@@ -14,16 +14,17 @@ import { setupIndex } from '../helpers/indexer';
 import { testRealmURL } from '../helpers/const';
 import stripScopedCSSGlimmerAttributes from '../helpers/strip-scoped-css-glimmer-attributes';
 import '../helpers/code-equality-assertion';
+import { IndexQueryEngine } from '../index-query-engine';
 
 const testRealmURL2 = `http://test-realm/test2/`;
 
 const tests = Object.freeze({
   'can perform invalidations for a instance entry': async (
     assert,
-    { indexer, adapter },
+    { indexUpdater, adapter },
   ) => {
     await setupIndex(
-      indexer,
+      indexUpdater,
       [
         { realm_url: testRealmURL, current_version: 1 },
         { realm_url: testRealmURL2, current_version: 5 },
@@ -68,7 +69,7 @@ const tests = Object.freeze({
       ],
     );
 
-    let batch = await indexer.createBatch(new URL(testRealmURL));
+    let batch = await indexUpdater.createBatch(new URL(testRealmURL));
     let invalidations = await batch.invalidate(
       new URL(`${testRealmURL}4.json`),
     );
@@ -143,10 +144,10 @@ const tests = Object.freeze({
 
   'can perform invalidations for a module entry': async (
     assert,
-    { indexer },
+    { indexUpdater },
   ) => {
     await setupIndex(
-      indexer,
+      indexUpdater,
       [
         { realm_url: testRealmURL, current_version: 1 },
         { realm_url: testRealmURL2, current_version: 5 },
@@ -195,7 +196,7 @@ const tests = Object.freeze({
       ],
     );
 
-    let batch = await indexer.createBatch(new URL(testRealmURL));
+    let batch = await indexUpdater.createBatch(new URL(testRealmURL));
     let invalidations = await batch.invalidate(
       new URL(`${testRealmURL}person.gts`),
     );
@@ -210,10 +211,10 @@ const tests = Object.freeze({
 
   'only invalidates latest version of content': async (
     assert,
-    { indexer, adapter },
+    { indexUpdater, adapter },
   ) => {
     await setupIndex(
-      indexer,
+      indexUpdater,
       [{ realm_url: testRealmURL, current_version: 2 }],
       [
         {
@@ -255,7 +256,7 @@ const tests = Object.freeze({
       ],
     );
 
-    let batch = await indexer.createBatch(new URL(testRealmURL));
+    let batch = await indexUpdater.createBatch(new URL(testRealmURL));
     let invalidations = await batch.invalidate(
       new URL(`${testRealmURL}4.json`),
     );
@@ -281,10 +282,10 @@ const tests = Object.freeze({
 
   'can prevent concurrent batch invalidations from colliding': async (
     assert,
-    { indexer },
+    { indexUpdater },
   ) => {
     await setupIndex(
-      indexer,
+      indexUpdater,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
@@ -309,8 +310,8 @@ const tests = Object.freeze({
     );
 
     // both batches have the same WIP version number
-    let batch1 = await indexer.createBatch(new URL(testRealmURL));
-    let batch2 = await indexer.createBatch(new URL(testRealmURL));
+    let batch1 = await indexUpdater.createBatch(new URL(testRealmURL));
+    let batch2 = await indexUpdater.createBatch(new URL(testRealmURL));
     await batch1.invalidate(new URL(`${testRealmURL}1.json`));
 
     try {
@@ -327,9 +328,9 @@ const tests = Object.freeze({
   },
 
   'can prevent concurrent batch invalidations from colliding when making new generation':
-    async (assert, { indexer, adapter }) => {
+    async (assert, { indexUpdater, adapter }) => {
       await setupIndex(
-        indexer,
+        indexUpdater,
         [{ realm_url: testRealmURL, current_version: 1 }],
         [
           {
@@ -348,8 +349,8 @@ const tests = Object.freeze({
       );
 
       // both batches have the same WIP version number
-      let batch1 = await indexer.createBatch(new URL(testRealmURL));
-      let batch2 = await indexer.createBatch(new URL(testRealmURL));
+      let batch1 = await indexUpdater.createBatch(new URL(testRealmURL));
+      let batch2 = await indexUpdater.createBatch(new URL(testRealmURL));
       await batch1.invalidate(new URL(`${testRealmURL}1.json`));
       {
         let index = await adapter.execute(
@@ -428,9 +429,9 @@ const tests = Object.freeze({
       }
     },
 
-  'can update an index entry': async (assert, { indexer, adapter }) => {
+  'can update an index entry': async (assert, { indexUpdater, adapter }) => {
     await setupIndex(
-      indexer,
+      indexUpdater,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
@@ -472,7 +473,7 @@ const tests = Object.freeze({
         },
       },
     };
-    let batch = await indexer.createBatch(new URL(testRealmURL));
+    let batch = await indexUpdater.createBatch(new URL(testRealmURL));
     await batch.invalidate(new URL(`${testRealmURL}1.json`));
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance',
@@ -612,10 +613,10 @@ const tests = Object.freeze({
 
   'can create a new generation of index entries': async (
     assert,
-    { indexer, adapter },
+    { indexUpdater, adapter },
   ) => {
     await setupIndex(
-      indexer,
+      indexUpdater,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
@@ -641,7 +642,7 @@ const tests = Object.freeze({
       ],
     );
 
-    let batch = await indexer.createBatch(new URL(testRealmURL));
+    let batch = await indexUpdater.createBatch(new URL(testRealmURL));
     await batch.makeNewGeneration();
 
     let index = await adapter.execute(
@@ -758,8 +759,11 @@ const tests = Object.freeze({
     );
   },
 
-  'can get an error doc': async (assert, { indexer }) => {
-    await setupIndex(indexer, [
+  'can get an error doc': async (
+    assert,
+    { indexUpdater, indexQueryEngine },
+  ) => {
+    await setupIndex(indexUpdater, [
       {
         url: `${testRealmURL}1.json`,
         realm_version: 1,
@@ -772,7 +776,7 @@ const tests = Object.freeze({
         },
       },
     ]);
-    let entry = await indexer.getInstance(new URL(`${testRealmURL}1`));
+    let entry = await indexQueryEngine.getInstance(new URL(`${testRealmURL}1`));
     if (entry?.type === 'error') {
       assert.deepEqual(entry, {
         type: 'error',
@@ -787,7 +791,10 @@ const tests = Object.freeze({
     }
   },
 
-  'can get "production" index entry': async (assert, { indexer }) => {
+  'can get "production" index entry': async (
+    assert,
+    { indexUpdater, indexQueryEngine },
+  ) => {
     let originalModified = Date.now();
     let originalResource: LooseCardResource = {
       id: `${testRealmURL}1`,
@@ -804,7 +811,7 @@ const tests = Object.freeze({
     };
     let originalSource = JSON.stringify(originalResource);
     await setupIndex(
-      indexer,
+      indexUpdater,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
@@ -831,7 +838,7 @@ const tests = Object.freeze({
         },
       },
     };
-    let batch = await indexer.createBatch(new URL(testRealmURL));
+    let batch = await indexUpdater.createBatch(new URL(testRealmURL));
     await batch.invalidate(new URL(`${testRealmURL}1.json`));
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance',
@@ -843,7 +850,7 @@ const tests = Object.freeze({
       types: [],
     });
 
-    let entry = await indexer.getInstance(new URL(`${testRealmURL}1`));
+    let entry = await indexQueryEngine.getInstance(new URL(`${testRealmURL}1`));
     if (entry?.type === 'instance') {
       assert.deepEqual(entry, {
         type: 'instance',
@@ -879,9 +886,12 @@ const tests = Object.freeze({
     }
   },
 
-  'can get work in progress card': async (assert, { indexer }) => {
+  'can get work in progress card': async (
+    assert,
+    { indexUpdater, indexQueryEngine },
+  ) => {
     await setupIndex(
-      indexer,
+      indexUpdater,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
@@ -917,7 +927,7 @@ const tests = Object.freeze({
       },
     };
     let source = JSON.stringify(resource);
-    let batch = await indexer.createBatch(new URL(testRealmURL));
+    let batch = await indexUpdater.createBatch(new URL(testRealmURL));
     let now = Date.now();
     await batch.invalidate(new URL(`${testRealmURL}1.json`));
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
@@ -930,9 +940,12 @@ const tests = Object.freeze({
       types: [],
     });
 
-    let entry = await indexer.getInstance(new URL(`${testRealmURL}1`), {
-      useWorkInProgressIndex: true,
-    });
+    let entry = await indexQueryEngine.getInstance(
+      new URL(`${testRealmURL}1`),
+      {
+        useWorkInProgressIndex: true,
+      },
+    );
     if (entry?.type === 'instance') {
       assert.ok(entry?.indexedAt, 'the indexed_at field was set');
       delete (entry as Partial<IndexedInstance>)?.indexedAt;
@@ -971,10 +984,10 @@ const tests = Object.freeze({
 
   'returns undefined when getting a deleted card': async (
     assert,
-    { indexer },
+    { indexUpdater, indexQueryEngine },
   ) => {
     await setupIndex(
-      indexer,
+      indexUpdater,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
@@ -986,12 +999,12 @@ const tests = Object.freeze({
       ],
     );
 
-    let entry = await indexer.getInstance(new URL(`${testRealmURL}1`));
+    let entry = await indexQueryEngine.getInstance(new URL(`${testRealmURL}1`));
     assert.strictEqual(entry, undefined, 'deleted entries return undefined');
   },
 
   'can perform invalidations for an instance with deps more than a thousand':
-    async (assert, { indexer, adapter }) => {
+    async (assert, { indexUpdater, adapter }) => {
       let indexRows: (Pick<BoxelIndexTable, 'url'> &
         Partial<Omit<BoxelIndexTable, 'url' | 'pristine_doc'>>)[] = [];
       for (let i = 1; i <= 1002; i++) {
@@ -1004,12 +1017,12 @@ const tests = Object.freeze({
       }
       indexRows.sort((a, b) => a.url.localeCompare(b.url));
       await setupIndex(
-        indexer,
+        indexUpdater,
         [{ realm_url: testRealmURL, current_version: 1 }],
         indexRows,
       );
 
-      let batch = await indexer.createBatch(new URL(testRealmURL));
+      let batch = await indexUpdater.createBatch(new URL(testRealmURL));
       let invalidations = await batch.invalidate(
         new URL(`${testRealmURL}1.json`),
       );
@@ -1062,9 +1075,9 @@ const tests = Object.freeze({
     },
 
   'can get compiled module and source when requested with file extension':
-    async (assert, { indexer }) => {
-      await setupIndex(indexer);
-      let batch = await indexer.createBatch(new URL(testRealmURL));
+    async (assert, { indexUpdater, indexQueryEngine }) => {
+      await setupIndex(indexUpdater);
+      let batch = await indexUpdater.createBatch(new URL(testRealmURL));
       let now = Date.now();
       await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
         type: 'module',
@@ -1074,7 +1087,7 @@ const tests = Object.freeze({
       });
       await batch.done();
 
-      let result = await indexer.getModule(
+      let result = await indexQueryEngine.getModule(
         new URL(`${testRealmURL}person.gts`),
       );
       if (result?.type === 'module') {
@@ -1092,9 +1105,9 @@ const tests = Object.freeze({
     },
 
   'can get compiled module and source when requested without file extension':
-    async (assert, { indexer }) => {
-      await setupIndex(indexer);
-      let batch = await indexer.createBatch(new URL(testRealmURL));
+    async (assert, { indexUpdater, indexQueryEngine }) => {
+      await setupIndex(indexUpdater);
+      let batch = await indexUpdater.createBatch(new URL(testRealmURL));
       let now = Date.now();
       await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
         type: 'module',
@@ -1104,7 +1117,9 @@ const tests = Object.freeze({
       });
       await batch.done();
 
-      let result = await indexer.getModule(new URL(`${testRealmURL}person`));
+      let result = await indexQueryEngine.getModule(
+        new URL(`${testRealmURL}person`),
+      );
       if (result?.type === 'module') {
         let { executableCode, source, lastModified } = result;
         assert.codeEqual(
@@ -1121,10 +1136,10 @@ const tests = Object.freeze({
 
   'can get compiled module and source from WIP index': async (
     assert,
-    { indexer },
+    { indexUpdater, indexQueryEngine },
   ) => {
-    await setupIndex(indexer);
-    let batch = await indexer.createBatch(new URL(testRealmURL));
+    await setupIndex(indexUpdater);
+    let batch = await indexUpdater.createBatch(new URL(testRealmURL));
     let now = Date.now();
     await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
       type: 'module',
@@ -1133,9 +1148,12 @@ const tests = Object.freeze({
       deps: new Set(),
     });
 
-    let result = await indexer.getModule(new URL(`${testRealmURL}person.gts`), {
-      useWorkInProgressIndex: true,
-    });
+    let result = await indexQueryEngine.getModule(
+      new URL(`${testRealmURL}person.gts`),
+      {
+        useWorkInProgressIndex: true,
+      },
+    );
     if (result?.type === 'module') {
       let { executableCode, source, lastModified } = result;
       assert.codeEqual(
@@ -1149,7 +1167,7 @@ const tests = Object.freeze({
       assert.ok(false, `expected module not to be an error document`);
     }
 
-    let noResult = await indexer.getModule(
+    let noResult = await indexQueryEngine.getModule(
       new URL(`${testRealmURL}person.gts`),
     );
     assert.strictEqual(
@@ -1159,8 +1177,11 @@ const tests = Object.freeze({
     );
   },
 
-  'can get error doc for module': async (assert, { indexer }) => {
-    await setupIndex(indexer, [
+  'can get error doc for module': async (
+    assert,
+    { indexUpdater, indexQueryEngine },
+  ) => {
+    await setupIndex(indexUpdater, [
       {
         url: `${testRealmURL}person.gts`,
         realm_version: 1,
@@ -1173,7 +1194,9 @@ const tests = Object.freeze({
         },
       },
     ]);
-    let result = await indexer.getModule(new URL(`${testRealmURL}person.gts`));
+    let result = await indexQueryEngine.getModule(
+      new URL(`${testRealmURL}person.gts`),
+    );
     if (result?.type === 'error') {
       assert.deepEqual(result, {
         type: 'error',
@@ -1190,9 +1213,9 @@ const tests = Object.freeze({
 
   'returns undefined when getting a deleted module': async (
     assert,
-    { indexer },
+    { indexUpdater, indexQueryEngine },
   ) => {
-    await setupIndex(indexer, [
+    await setupIndex(indexUpdater, [
       {
         url: `${testRealmURL}person.gts`,
         type: 'module',
@@ -1202,16 +1225,18 @@ const tests = Object.freeze({
       },
     ]);
 
-    let entry = await indexer.getModule(new URL(`${testRealmURL}person.gts`));
+    let entry = await indexQueryEngine.getModule(
+      new URL(`${testRealmURL}person.gts`),
+    );
     assert.strictEqual(entry, undefined, 'deleted modules return undefined');
   },
 
   'can get css when requested with file extension': async (
     assert,
-    { indexer },
+    { indexUpdater, indexQueryEngine },
   ) => {
-    await setupIndex(indexer);
-    let batch = await indexer.createBatch(new URL(testRealmURL));
+    await setupIndex(indexUpdater);
+    let batch = await indexUpdater.createBatch(new URL(testRealmURL));
     let now = Date.now();
     await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
       type: 'css',
@@ -1221,7 +1246,9 @@ const tests = Object.freeze({
     });
     await batch.done();
 
-    let result = await indexer.getCSS(new URL(`${testRealmURL}person.gts`));
+    let result = await indexQueryEngine.getCSS(
+      new URL(`${testRealmURL}person.gts`),
+    );
     if (result?.type === 'css') {
       let { source, lastModified } = result;
       assert.strictEqual(source, `.person { color: red; }`, 'css is correct');
@@ -1233,10 +1260,10 @@ const tests = Object.freeze({
 
   'can get css when requested without file extension': async (
     assert,
-    { indexer },
+    { indexUpdater, indexQueryEngine },
   ) => {
-    await setupIndex(indexer);
-    let batch = await indexer.createBatch(new URL(testRealmURL));
+    await setupIndex(indexUpdater);
+    let batch = await indexUpdater.createBatch(new URL(testRealmURL));
     let now = Date.now();
     await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
       type: 'css',
@@ -1246,7 +1273,9 @@ const tests = Object.freeze({
     });
     await batch.done();
 
-    let result = await indexer.getCSS(new URL(`${testRealmURL}person`));
+    let result = await indexQueryEngine.getCSS(
+      new URL(`${testRealmURL}person`),
+    );
     if (result?.type === 'css') {
       let { source, lastModified } = result;
       assert.strictEqual(source, `.person { color: red; }`, 'css is correct');
@@ -1256,9 +1285,12 @@ const tests = Object.freeze({
     }
   },
 
-  'can get css from WIP index': async (assert, { indexer }) => {
-    await setupIndex(indexer);
-    let batch = await indexer.createBatch(new URL(testRealmURL));
+  'can get css from WIP index': async (
+    assert,
+    { indexUpdater, indexQueryEngine },
+  ) => {
+    await setupIndex(indexUpdater);
+    let batch = await indexUpdater.createBatch(new URL(testRealmURL));
     let now = Date.now();
     await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
       type: 'css',
@@ -1267,9 +1299,12 @@ const tests = Object.freeze({
       deps: new Set(),
     });
 
-    let result = await indexer.getCSS(new URL(`${testRealmURL}person.gts`), {
-      useWorkInProgressIndex: true,
-    });
+    let result = await indexQueryEngine.getCSS(
+      new URL(`${testRealmURL}person.gts`),
+      {
+        useWorkInProgressIndex: true,
+      },
+    );
     if (result?.type === 'css') {
       let { source, lastModified } = result;
       assert.strictEqual(source, `.person { color: red; }`, 'css is correct');
@@ -1278,7 +1313,9 @@ const tests = Object.freeze({
       assert.ok(false, `expected module not to be an error document`);
     }
 
-    let noResult = await indexer.getCSS(new URL(`${testRealmURL}person.gts`));
+    let noResult = await indexQueryEngine.getCSS(
+      new URL(`${testRealmURL}person.gts`),
+    );
     assert.strictEqual(
       noResult,
       undefined,
@@ -1286,8 +1323,11 @@ const tests = Object.freeze({
     );
   },
 
-  'can get error doc for css': async (assert, { indexer }) => {
-    await setupIndex(indexer, [
+  'can get error doc for css': async (
+    assert,
+    { indexUpdater, indexQueryEngine },
+  ) => {
+    await setupIndex(indexUpdater, [
       {
         url: `${testRealmURL}person.gts`,
         realm_version: 1,
@@ -1300,7 +1340,9 @@ const tests = Object.freeze({
         },
       },
     ]);
-    let result = await indexer.getCSS(new URL(`${testRealmURL}person.gts`));
+    let result = await indexQueryEngine.getCSS(
+      new URL(`${testRealmURL}person.gts`),
+    );
     if (result?.type === 'error') {
       assert.deepEqual(result, {
         type: 'error',
@@ -1315,8 +1357,11 @@ const tests = Object.freeze({
     }
   },
 
-  'returns undefined when getting deleted css': async (assert, { indexer }) => {
-    await setupIndex(indexer, [
+  'returns undefined when getting deleted css': async (
+    assert,
+    { indexUpdater, indexQueryEngine },
+  ) => {
+    await setupIndex(indexUpdater, [
       {
         url: `${testRealmURL}person.gts`,
         type: 'css',
@@ -1326,10 +1371,16 @@ const tests = Object.freeze({
       },
     ]);
 
-    let entry = await indexer.getCSS(new URL(`${testRealmURL}person.gts`));
+    let entry = await indexQueryEngine.getCSS(
+      new URL(`${testRealmURL}person.gts`),
+    );
     assert.strictEqual(entry, undefined, 'deleted css return undefined');
   },
-} as SharedTests<{ indexer: Indexer; adapter: DBAdapter }>);
+} as SharedTests<{
+  indexUpdater: IndexUpdater;
+  indexQueryEngine: IndexQueryEngine;
+  adapter: DBAdapter;
+}>);
 
 export default tests;
 
