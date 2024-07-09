@@ -1,6 +1,9 @@
 import { Deferred } from './deferred';
 import { SearchIndex } from './search-index';
-import { type SingleCardDocument } from './card-document';
+import {
+  transformResultsToPrerenderedCardsDoc,
+  type SingleCardDocument,
+} from './card-document';
 import { Loader } from './loader';
 import { RealmPaths, LocalPath, join } from './paths';
 import {
@@ -292,14 +295,15 @@ export class Realm {
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
     this.#assetsURL = assetsURL;
 
-    let maybeHandle = this.maybeHandle.bind(this);
     let fetch = fetcher(virtualNetwork.fetch, [
       async (req, next) => {
         return (await maybeHandleScopedCSSRequest(req)) || next(req);
       },
       async (request, next) => {
-        let response = await maybeHandle(request);
-        return response || next(request);
+        if (!this.paths.inRealm(new URL(request.url))) {
+          return next(request);
+        }
+        return await this.internalHandle(request, true);
       },
       authorizationMiddleware(
         new RealmAuthDataSource(
@@ -334,6 +338,11 @@ export class Realm {
       )
       .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
       .get('/_search', SupportedMimeType.CardJson, this.search.bind(this))
+      .get(
+        '/_search-prerendered',
+        SupportedMimeType.CardJson,
+        this.searchPrerendered.bind(this),
+      )
       .post(
         '/_session',
         SupportedMimeType.Session,
@@ -555,6 +564,7 @@ export class Realm {
     return this.#startedUp.promise;
   }
 
+  // TODO get rid of this
   maybeHandle = async (
     request: Request,
   ): Promise<ResponseWithNodeStream | null> => {
@@ -564,20 +574,12 @@ export class Realm {
     return await this.internalHandle(request, true);
   };
 
-  // This is scaffolding that should be deleted once we can finish the isolated
-  // loader refactor
-  maybeExternalHandle = async (
-    request: Request,
-  ): Promise<ResponseWithNodeStream | null> => {
+  handle = async (request: Request): Promise<ResponseWithNodeStream | null> => {
     if (!this.paths.inRealm(new URL(request.url))) {
       return null;
     }
     return await this.internalHandle(request, false);
   };
-
-  async handle(request: Request): Promise<ResponseWithNodeStream> {
-    return this.internalHandle(request, false);
-  }
 
   private async createSession(
     request: Request,
@@ -863,7 +865,10 @@ export class Realm {
     return undefined;
   }
 
-  async fallbackHandle(request: Request, requestContext: RequestContext) {
+  private async fallbackHandle(
+    request: Request,
+    requestContext: RequestContext,
+  ) {
     let start = Date.now();
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
@@ -1685,6 +1690,30 @@ export class Realm {
       parseQueryString(new URL(request.url).search.slice(1)),
       { loadLinks: true, useWorkInProgressIndex },
     );
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: { 'content-type': SupportedMimeType.CardJson },
+      },
+      requestContext,
+    });
+  }
+
+  private async searchPrerendered(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let useWorkInProgressIndex = Boolean(
+      request.headers.get('X-Boxel-Use-WIP-Index'),
+    );
+    let query = parseQueryString(new URL(request.url).search.slice(1));
+
+    let results = await this.#searchIndex.searchPrerendered(query, {
+      useWorkInProgressIndex,
+    });
+
+    let doc = transformResultsToPrerenderedCardsDoc(results);
+
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {
