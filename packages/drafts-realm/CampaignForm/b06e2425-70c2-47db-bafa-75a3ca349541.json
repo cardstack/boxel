@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Test Email Campaign 2",
+      "status": "Planned",
+      "active": false,
+      "type": "Advertisement",
+      "description": "This is a test form",
+      "startDate": "2024-05-01",
+      "endDate": "2024-05-31",
+      "numberSent": 1000,
+      "expectedResponsePercentage": 100,
+      "expectedRevenue": 10000,
+      "budgetedCost": 500000,
+      "actualCost": 100000,
+      "title": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "parentCampaign": {
+        "links": {
+          "self": "./4ee4a9ff-f61b-476f-9140-27308934024c"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../campaign-form",
+        "name": "CampaignForm"
+      }
+    }
+  }
+}
