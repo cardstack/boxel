@@ -15,9 +15,8 @@ export default class SQLiteAdapter implements DBAdapter {
   private _dbId: string | undefined;
   private primaryKeys = new Map<string, string>();
   private tables: string[] = [];
-  private started = this.#startClient();
-
   #isClosed = false;
+  private started = this.#startClient();
 
   // TODO: one difference that I'm seeing is that it looks like "json_each" is
   // actually similar to "json_each_text" in postgres. i think we might need to

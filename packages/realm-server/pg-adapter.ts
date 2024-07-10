@@ -21,10 +21,9 @@ function config() {
 }
 
 export default class PgAdapter implements DBAdapter {
+  #isClosed = false;
   private pool: Pool;
   private started = this.#startClient();
-
-  #isClosed = false;
 
   constructor() {
     let { user, host, database, password, port } = config();
