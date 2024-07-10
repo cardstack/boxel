@@ -1,0 +1,49 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "law bom bom",
+      "regstrationNumber": null,
+      "address": {
+        "streetAddress": null,
+        "city": null,
+        "region": null,
+        "postalCode": null,
+        "poBoxNumber": null,
+        "country": null
+      },
+      "contactPerson": {
+        "salutation": null,
+        "firstName": null,
+        "lastName": null,
+        "address": {
+          "streetAddress": null,
+          "city": null,
+          "region": null,
+          "postalCode": null,
+          "poBoxNumber": null,
+          "country": null
+        },
+        "phoneNumber": {
+          "country": null,
+          "area": null,
+          "number": null
+        },
+        "email": {
+          "value": null
+        },
+        "website": {
+          "value": null
+        }
+      },
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm/account",
+        "name": "Company"
+      }
+    }
+  }
+}

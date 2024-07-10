@@ -1,30 +1,33 @@
 import { UserName } from './user-name';
 import { UserEmail } from './user-email';
 import { AddressInfo } from './address-info';
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+import {
+  CardDef,
+  field,
+  contains,
+  linksTo,
+} from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import { FieldContainer, CardContainer } from '@cardstack/boxel-ui/components';
+import { MatrixUser } from './matrix-user';
 
 class Isolated extends Component<typeof ContactForm> {
-  get hasTitleField() {
-    return this.args.model.title && this.args.model.title.length > 0;
-  }
-
   <template>
     <div class='decorative-header'></div>
 
     <CardContainer @displayBoundaries={{false}} class='container'>
-      {{#if this.hasTitleField}}
-        <h2><@fields.title /></h2>
-      {{/if}}
-
       <div class='card-form-display'>
         <div class='contact-form-details'>
 
           <div class='field-input'>
-            <label>Full Name: </label>
-            <@fields.name />
+            <label>User: </label>
+            <@fields.user />
+          </div>
+
+          <div class='field-input'>
+            <label>Account Name: </label>
+            <@fields.accountName />
           </div>
 
           <div class='field-input'>
@@ -50,6 +53,11 @@ class Isolated extends Component<typeof ContactForm> {
           <div class='field-input'>
             <label>AddressInfo: </label>
             <@fields.addressInfo />
+          </div>
+
+          <div class='field-input'>
+            <label>Contact Owner: </label>
+            <@fields.owner />
           </div>
 
         </div>
@@ -134,19 +142,47 @@ class Isolated extends Component<typeof ContactForm> {
 
 class View extends Component<typeof ContactForm> {
   <template>
-    <CardContainer @displayBoundaries={{true}} class='container'>
-      <div class='content'>
-        <label>User</label>
-        <h2><@fields.name /></h2>
+    <div class='container'>
+      <div class='field-input-group'>
+        <FieldContainer @tag='label' @label='User' @vertical={{true}}>
+          <@fields.user />
+        </FieldContainer>
+
+        <FieldContainer @tag='label' @label='Account Name' @vertical={{true}}>
+          <@fields.accountName />
+        </FieldContainer>
+
+        <FieldContainer @tag='label' @label='Email' @vertical={{true}}>
+          <@fields.email />
+        </FieldContainer>
+
+        <FieldContainer @tag='label' @label='Phone' @vertical={{true}}>
+          <@fields.phone />
+        </FieldContainer>
+
+        <FieldContainer @tag='label' @label='Fax' @vertical={{true}}>
+          <@fields.fax />
+        </FieldContainer>
+
+        <FieldContainer @tag='label' @label='Department' @vertical={{true}}>
+          <@fields.department />
+        </FieldContainer>
+
+        <FieldContainer @tag='label' @label='Address Info' @vertical={{true}}>
+          <@fields.addressInfo />
+        </FieldContainer>
+
+        <FieldContainer @tag='label' @label='Contact Owner' @vertical={{true}}>
+          <@fields.owner />
+        </FieldContainer>
       </div>
-    </CardContainer>
+    </div>
 
     <style>
       .container {
-        padding: var(--boxel-sp-lg);
         display: grid;
-        gap: var(--boxel-sp);
-        background-color: #eeeeee50;
+        gap: var(--boxel-sp-lg);
+        overflow: hidden;
       }
       .content {
         color: var(--boxel-700);
@@ -154,12 +190,12 @@ class View extends Component<typeof ContactForm> {
       h2 {
         margin: 0px;
       }
-      .icon-profile {
-        position: absolute;
-        top: 1px;
-        right: 1px;
-        width: 50px;
-        height: 50px;
+      .field-input-group {
+        overflow: overlay;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-evenly;
+        gap: var(--boxel-sp);
       }
     </style>
   </template>
@@ -175,7 +211,11 @@ class Edit extends Component<typeof ContactForm> {
       ><@fields.title /></FieldContainer>
 
       <FieldContainer @tag='label' @label='User' @vertical={{true}}>
-        <@fields.name />
+        <@fields.user />
+      </FieldContainer>
+
+      <FieldContainer @tag='label' @label='Account Name' @vertical={{true}}>
+        <@fields.accountName />
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Email' @vertical={{true}}>
@@ -186,8 +226,9 @@ class Edit extends Component<typeof ContactForm> {
         <@fields.phone />
       </FieldContainer>
 
-      <FieldContainer @tag='label' @label='Fax' @vertical={{true}}><@fields.fax
-        /></FieldContainer>
+      <FieldContainer @tag='label' @label='Fax' @vertical={{true}}>
+        <@fields.fax />
+      </FieldContainer>
 
       <FieldContainer
         @tag='label'
@@ -212,10 +253,18 @@ class Edit extends Component<typeof ContactForm> {
 
 export class ContactForm extends CardDef {
   @field title = contains(StringField, {
-    description: `Contact Form Title`,
+    computeVia: function (this: ContactForm) {
+      const { salutation, firstName, lastName } = this.user;
+
+      if (!salutation || !firstName || !lastName) return 'User Not Found';
+      return `${salutation} ${firstName} ${lastName}`;
+    },
   });
-  @field name = contains(UserName, {
+  @field user = contains(UserName, {
     description: `User's Full Name`,
+  });
+  @field accountName = contains(StringField, {
+    description: `User's Account Name`,
   });
   @field email = contains(UserEmail, {
     description: `User's Email`,
@@ -231,6 +280,9 @@ export class ContactForm extends CardDef {
   });
   @field addressInfo = contains(AddressInfo, {
     description: `User's AddressInfo`,
+  });
+  @field owner = linksTo(MatrixUser, {
+    description: `Owner`,
   });
 
   static displayName = 'Contact Form';

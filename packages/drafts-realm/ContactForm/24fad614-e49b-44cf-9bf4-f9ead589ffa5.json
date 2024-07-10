@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "user": {
+        "salutation": null,
+        "firstName": null,
+        "lastName": null
+      },
+      "accountName": null,
+      "email": null,
+      "phone": null,
+      "fax": null,
+      "department": null,
+      "addressInfo": {
+        "address": null,
+        "zip": null,
+        "city": null,
+        "state": null,
+        "country": null,
+        "countryCode": null,
+        "stateCode": null
+      },
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "owner": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contact-form",
+        "name": "ContactForm"
+      }
+    }
+  }
+}

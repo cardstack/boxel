@@ -17,8 +17,9 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import { CrmAccount } from './crm/account';
+import { Company } from './crm/account';
 import NumberField from '../base/number';
+import { MatrixUser } from './matrix-user';
 
 interface CategorySignature {
   name: string;
@@ -34,6 +35,18 @@ const formatNumber = (val: number) => {
 };
 
 /* Amount */
+class EmbeddedSecForAmount extends Component<typeof AmountField> {
+  <template>
+    <CardContainer @displayBoundaries={{false}} class='container'>
+      <FieldContainer @tag='label' @vertical={{true}}><@fields.currency
+        /></FieldContainer>
+
+      <FieldContainer @tag='label' @vertical={{true}}><@fields.totalAmount
+        /></FieldContainer>
+    </CardContainer>
+  </template>
+}
+
 class EditSecForAmount extends Component<typeof AmountField> {
   @tracked currencyOptions = ['Select', 'RM'];
   get selectedCurrency() {
@@ -114,11 +127,17 @@ class AmountField extends FieldDef {
     description: `Total Amount`,
   });
 
+  static embedded = EmbeddedSecForAmount;
   static edit = EditSecForAmount;
 }
 
 /* Opportunity Form */
 class IsolatedSecForOpportunityForm extends Component<typeof OpportunityForm> {
+  get getCompanyName() {
+    if (!this.args.model.company) return '-';
+    return this.args.model.company;
+  }
+
   get getFormattedAmount() {
     const amount = this.args.model.amount;
     const hasAmount = amount && amount.totalAmount;
@@ -169,13 +188,17 @@ class IsolatedSecForOpportunityForm extends Component<typeof OpportunityForm> {
       </div>
 
       <div class='right-box'>
-
         <div class='field-input-column'>
           <label>Account Name: </label>
           <@fields.accountName />
         </div>
 
         <div class='field-input-group'>
+          <div class='field-input'>
+            <label>Company Name: </label>
+
+            <@fields.company />
+          </div>
           <div class='field-input'>
             <label>Close Date: </label>
             <@fields.closeDate />
@@ -191,11 +214,14 @@ class IsolatedSecForOpportunityForm extends Component<typeof OpportunityForm> {
           <div class='field-input'>
             <label>Percentage: </label>
             {{this.getFormattedPercentage}}
-
           </div>
           <div class='field-input'>
             <label>Forecast Category: </label>
             {{this.getForestCategory}}
+          </div>
+          <div class='field-input'>
+            <label>Opportunity Owner: </label>
+            <@fields.owner />
           </div>
         </div>
       </div>
@@ -329,13 +355,17 @@ class EditSecForOpportunityForm extends Component<typeof OpportunityForm> {
   }
 
   <template>
-    <CardContainer @displayBoundaries={{false}} class='container'>
+    <CardContainer @displayBoundaries={{true}} class='container'>
       <FieldContainer @tag='label' @label='Opportunity Name' @vertical={{true}}>
         <@fields.opportunityName />
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Account Name' @vertical={{true}}>
         <@fields.accountName />
+      </FieldContainer>
+
+      <FieldContainer @tag='label' @label='Company' @vertical={{true}}>
+        <@fields.company />
       </FieldContainer>
 
       <FieldContainer @tag='label' @label='Close Date' @vertical={{true}}>
@@ -389,6 +419,14 @@ class EditSecForOpportunityForm extends Component<typeof OpportunityForm> {
           <div>{{item.name}}</div>
         </BoxelSelect>
       </FieldContainer>
+
+      <FieldContainer
+        @tag='label'
+        @label='Opportunity Owner'
+        @vertical={{true}}
+      >
+        <@fields.owner />
+      </FieldContainer>
     </CardContainer>
 
     <style>
@@ -407,18 +445,76 @@ class EditSecForOpportunityForm extends Component<typeof OpportunityForm> {
 
 class ViewSecForOpportunityForm extends Component<typeof OpportunityForm> {
   <template>
-    {{#if this.args.model.opportunityName}}
-      <CardContainer @displayBoundaries={{true}} class='container'>
+    <div class='field-input-group'>
+      <FieldContainer @tag='label' @label='Opportunity Name' @vertical={{true}}>
         <@fields.opportunityName />
-      </CardContainer>
-    {{/if}}
+      </FieldContainer>
+
+      <FieldContainer @tag='label' @label='Account Name' @vertical={{true}}>
+        <@fields.accountName />
+      </FieldContainer>
+
+      <FieldContainer @tag='label' @label='Company' @vertical={{true}}>
+        <@fields.company />
+      </FieldContainer>
+
+      <FieldContainer @tag='label' @label='Close Date' @vertical={{true}}>
+        <@fields.closeDate />
+      </FieldContainer>
+
+      <FieldContainer @tag='label' @label='Amount' @vertical={{true}}>
+        <@fields.amount />
+      </FieldContainer>
+
+      <FieldContainer @tag='label' @label='Description' @vertical={{true}}>
+        <@fields.description />
+      </FieldContainer>
+
+      <FieldContainer @tag='label' @label='Stage' @vertical={{true}}>
+        <@fields.stage />
+      </FieldContainer>
+
+      <FieldContainer @tag='label' @label='Percentage' @vertical={{true}}>
+        <@fields.percentage />
+      </FieldContainer>
+
+      <FieldContainer
+        @tag='label'
+        @label='Forecast Category'
+        @vertical={{true}}
+      >
+        <@fields.forecastCategory />
+      </FieldContainer>
+      <FieldContainer
+        @tag='label'
+        @label='Opportunity Owner'
+        @vertical={{true}}
+      >
+        <@fields.owner />
+      </FieldContainer>
+    </div>
 
     <style>
       .container {
-        padding: var(--boxel-sp-lg);
         display: grid;
+        gap: var(--boxel-sp-lg);
+        overflow: hidden;
+      }
+      .field-group-title {
+        font-size: 1rem;
+        font-weight: bold;
+        margin-bottom: 0.75rem;
+        text-decoration: underline;
+        text-decoration-thickness: 2px;
+        text-underline-offset: 4px;
+        color: var(--boxel-dark-teal);
+      }
+      .field-input-group {
+        overflow: overlay;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-evenly;
         gap: var(--boxel-sp);
-        background-color: #fbfbfb;
       }
     </style>
   </template>
@@ -426,11 +522,19 @@ class ViewSecForOpportunityForm extends Component<typeof OpportunityForm> {
 
 export class OpportunityForm extends CardDef {
   static displayName = 'Opportunity Form';
+  @field title = contains(StringField, {
+    computeVia: function (this: OpportunityForm) {
+      return this.opportunityName;
+    },
+  });
   @field opportunityName = contains(StringField, {
     description: `Opportunity Name`,
   });
-  @field accountName = linksTo(CrmAccount, {
+  @field accountName = contains(StringField, {
     description: `Account Name`,
+  });
+  @field company = linksTo(Company, {
+    description: `User's Company Name`,
   });
   @field closeDate = contains(DateCard, {
     description: `Close Date`,
@@ -449,6 +553,9 @@ export class OpportunityForm extends CardDef {
   });
   @field forecastCategory = contains(StringField, {
     description: `Forecast Category`,
+  });
+  @field owner = linksTo(MatrixUser, {
+    description: `Owner`,
   });
 
   static isolated = IsolatedSecForOpportunityForm;

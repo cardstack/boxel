@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "opportunityName": null,
+      "accountName": null,
+      "closeDate": null,
+      "amount": {
+        "currency": null,
+        "totalAmount": null
+      },
+      "description": null,
+      "stage": null,
+      "percentage": null,
+      "forecastCategory": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "company": {
+        "links": {
+          "self": null
+        }
+      },
+      "owner": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../opportunity-form",
+        "name": "OpportunityForm"
+      }
+    }
+  }
+}

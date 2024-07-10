@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "username": "Law Yung Lom",
+      "email": {
+        "value": "lawyunglom@gmail.com"
+      },
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-user",
+        "name": "MatrixUser"
+      }
+    }
+  }
+}
