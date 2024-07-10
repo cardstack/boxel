@@ -159,10 +159,10 @@ export async function createRealm({
       virtualNetwork,
       dbAdapter,
       queue,
-      onIndexer: async (indexer) => {
+      onIndexUpdaterReady: async (indexUpdater) => {
         let worker = new Worker({
           realmURL: new URL(realmURL!),
-          indexer,
+          indexUpdater,
           queue,
           realmAdapter: adapter,
           runnerOptsManager: manager,

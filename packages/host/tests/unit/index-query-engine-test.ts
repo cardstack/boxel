@@ -4,14 +4,15 @@ import {
   Loader,
   VirtualNetwork,
   baseRealm,
-  Indexer,
+  IndexQueryEngine,
+  IndexUpdater,
   fetcher,
   maybeHandleScopedCSSRequest,
 } from '@cardstack/runtime-common';
 
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
 // eslint-disable-next-line ember/no-test-import-export
-import queryTests from '@cardstack/runtime-common/tests/query-test';
+import indexQueryEngineTests from '@cardstack/runtime-common/tests/index-query-engine-test';
 
 import ENV from '@cardstack/host/config/environment';
 import { shimExternals } from '@cardstack/host/lib/externals';
@@ -31,7 +32,8 @@ let { resolvedBaseRealmURL } = ENV;
 
 module('Unit | query', function (hooks) {
   let adapter: SQLiteAdapter;
-  let indexer: Indexer;
+  let indexQueryEngine: IndexQueryEngine;
+  let indexUpdater: IndexUpdater;
   let loader: Loader;
   let testCards: { [name: string]: CardDef } = {};
 
@@ -181,357 +183,403 @@ module('Unit | query', function (hooks) {
     }
 
     await adapter.reset();
-    indexer = new Indexer(adapter);
-    await indexer.ready();
+    indexQueryEngine = new IndexQueryEngine(adapter);
+    indexUpdater = new IndexUpdater(adapter);
+    await indexUpdater.ready();
+    await indexQueryEngine.ready();
   });
 
   test('can get all cards with empty filter', async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test('deleted cards are not included in results', async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test('error docs are not included in results', async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test('can filter by type', async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`can filter using 'eq'`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`can filter using 'eq' thru nested fields`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`can use 'eq' to match multiple fields`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`can use 'eq' to find 'null' values`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`can use 'eq' to match against number type`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`can use 'eq' to match against boolean type`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test('can filter eq from a code ref query value', async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test('can filter eq from a date query value', async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`can search with a 'not' filter`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test('can handle a filter with double negatives', async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`can use a 'contains' filter`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`contains filter is case insensitive`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`can use 'contains' to match multiple fields`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`can use a 'contains' filter to match 'null'`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`can use 'every' to combine multiple filters`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`can use 'any' to combine multiple filters`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`gives a good error when query refers to missing card`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`gives a good error when query refers to missing field`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`it can filter on a plural primitive field using 'eq'`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`it can filter on a nested field within a plural composite field using 'eq'`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test('it can match a null in a plural field', async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test('it can match a leaf plural field nested in a plural composite field', async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test('it can match thru a plural nested composite field that is field of a singular composite field', async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`can return a single result for a card when there are multiple matches within a result's search doc`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test('can perform query against WIP version of the index', async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test('can perform query against "production" version of the index', async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test('can sort search results', async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test('can sort descending', async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test('nulls are sorted to the end of search results', async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test('can get paginated results that are stable during index mutations', async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`can filter using 'gt'`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`can filter using 'gte'`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`can filter using 'gt' thru nested fields`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`can filter using 'gt' thru a plural primitive field`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`can filter using 'gt' thru a plural composite field`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`can filter using 'lt'`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`can filter using 'lte'`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`can combine 'range' filter`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test(`cannot filter 'null' value using 'range'`, async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });
   });
 
   test('can get prerendered cards (html + css) from the indexer', async function (assert) {
-    await runSharedTest(queryTests, assert, {
-      indexer,
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      indexUpdater,
       loader,
       testCards,
     });

@@ -8,13 +8,8 @@ import {
   loadCard,
   internalKeyFor,
   identifyCard,
-  hasExecutableExtension,
-  trimExecutableExtension,
-  RealmPaths,
 } from './index';
-import { transpileJS } from './transpile';
 import {
-  type PgPrimitive,
   type Expression,
   type CardExpression,
   type FieldQuery,
@@ -26,13 +21,11 @@ import {
   tableValuedTree,
   separatedByCommas,
   addExplicitParens,
-  asExpressions,
   any,
   every,
   fieldQuery,
   fieldValue,
   fieldArity,
-  upsert,
   tableValuedFunctionsPlaceholder,
   query,
 } from './expression';
@@ -53,37 +46,11 @@ import { type DBAdapter } from './db';
 
 import type { BaseDef, Field } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-
-export interface BoxelIndexTable {
-  url: string;
-  file_alias: string;
-  realm_version: number;
-  realm_url: string;
-  type: 'instance' | 'module' | 'css' | 'error';
-  // TODO in followup PR update this to be a document not a resource
-  pristine_doc: CardResource | null;
-  error_doc: SerializedError | null;
-  search_doc: Record<string, PgPrimitive> | null;
-  // `deps` is a list of URLs that the card depends on, either card URL's or
-  // module URL's
-  deps: string[] | null;
-  // `types` is the adoption chain for card where each code ref is serialized
-  // using `internalKeyFor()`
-  types: string[] | null;
-  transpiled_code: string | null;
-  source: string | null;
-  embedded_html: Record<string, string> | null;
-  isolated_html: string | null;
-  atom_html: string | null;
-  indexed_at: string | null; // pg represents big integers as strings in javascript
-  last_modified: string | null; // pg represents big integers as strings in javascript
-  is_deleted: boolean | null;
-}
-
-export interface RealmVersionsTable {
-  realm_url: string;
-  current_version: number;
-}
+import {
+  coerceTypes,
+  type BoxelIndexTable,
+  type RealmVersionsTable,
+} from './index-structure';
 
 interface IndexedModule {
   type: 'module';
@@ -158,19 +125,7 @@ export interface QueryResultsMeta {
   };
 }
 
-export const coerceTypes = Object.freeze({
-  deps: 'JSON',
-  types: 'JSON',
-  pristine_doc: 'JSON',
-  error_doc: 'JSON',
-  search_doc: 'JSON',
-  embedded_html: 'JSON',
-  is_deleted: 'BOOLEAN',
-  last_modified: 'VARCHAR',
-  indexed_at: 'VARCHAR',
-});
-
-export class Indexer {
+export class IndexQueryEngine {
   #ready: Promise<void>;
   constructor(private dbAdapter: DBAdapter) {
     this.#ready = this.dbAdapter.startClient();
@@ -249,10 +204,6 @@ export class Indexer {
       source,
       lastModified: parseInt(lastModified),
     };
-  }
-
-  async getColumnNames(tableName: string) {
-    return this.dbAdapter.getColumnNames(tableName);
   }
 
   private async getModuleOrCSS(
@@ -368,12 +319,6 @@ export class Indexer {
       // for which card class to use for embedded HTML
       _embeddedHtmlByClassHierarchy,
     };
-  }
-
-  async createBatch(realmURL: URL) {
-    let batch = new Batch(this, realmURL);
-    await batch.ready;
-    return batch;
   }
 
   async itemsThatReference(
@@ -1136,350 +1081,6 @@ export class Indexer {
       );
     }
     return expression;
-  }
-}
-
-export type IndexEntry = InstanceEntry | ModuleEntry | CSSEntry | ErrorEntry;
-
-export interface InstanceEntry {
-  type: 'instance';
-  source: string;
-  lastModified: number;
-  resource: CardResource;
-  searchData: Record<string, any>;
-  isolatedHtml?: string;
-  embeddedHtml?: Record<string, string>;
-  atomHtml?: string;
-  types: string[];
-  deps: Set<string>;
-}
-
-export interface ErrorEntry {
-  type: 'error';
-  error: SerializedError;
-}
-
-interface ModuleEntry {
-  type: 'module';
-  source: string;
-  lastModified: number;
-  deps: Set<string>;
-}
-
-interface CSSEntry {
-  type: 'css';
-  source: string;
-  lastModified: number;
-  deps: Set<string>;
-}
-
-export class Batch {
-  readonly ready: Promise<void>;
-  private touched = new Set<string>();
-  private isNewGeneration = false;
-  private declare realmVersion: number;
-
-  constructor(
-    private client: Indexer,
-    private realmURL: URL, // this assumes that we only index cards in our own realm...
-  ) {
-    this.ready = this.setNextRealmVersion();
-  }
-
-  async updateEntry(url: URL, entry: IndexEntry): Promise<void> {
-    if (!new RealmPaths(this.realmURL).inRealm(url)) {
-      // TODO this is a workaround for CS-6886. after we have solved that issue we can
-      // drop this band-aid
-      return;
-    }
-    let href = url.href;
-    this.touched.add(href);
-    let { nameExpressions, valueExpressions } = asExpressions(
-      {
-        url: href,
-        file_alias: trimExecutableExtension(url).href.replace(/\.json$/, ''),
-        realm_version: this.realmVersion,
-        realm_url: this.realmURL.href,
-        is_deleted: false,
-        indexed_at: Date.now(),
-        ...(entry.type === 'instance'
-          ? {
-              // TODO in followup PR we need to alter the SearchEntry type to use
-              // a document instead of a resource
-              type: 'instance',
-              pristine_doc: entry.resource,
-              search_doc: entry.searchData,
-              isolated_html: entry.isolatedHtml,
-              embedded_html: entry.embeddedHtml,
-              atom_html: entry.atomHtml,
-              deps: [...entry.deps],
-              types: entry.types,
-              source: entry.source,
-              last_modified: entry.lastModified,
-            }
-          : entry.type === 'module'
-          ? {
-              type: 'module',
-              deps: [...entry.deps],
-              source: entry.source,
-              last_modified: entry.lastModified,
-              transpiled_code: transpileJS(
-                entry.source,
-                new RealmPaths(this.realmURL).local(url),
-              ),
-            }
-          : entry.type === 'css'
-          ? {
-              type: 'css',
-              deps: [...entry.deps],
-              source: entry.source,
-              last_modified: entry.lastModified,
-            }
-          : {
-              type: 'error',
-              error_doc: entry.error,
-              deps: entry.error.deps,
-            }),
-      } as Omit<BoxelIndexTable, 'last_modified' | 'indexed_at'> & {
-        // we do this because pg automatically casts big ints into strings, so
-        // we unwind that to accurately type the structure that we want to pass
-        // _in_ to the DB
-        last_modified: number;
-        indexed_at: number;
-      },
-      {
-        jsonFields: [...Object.entries(coerceTypes)]
-          .filter(([_, type]) => type === 'JSON')
-          .map(([column]) => column),
-      },
-    );
-
-    await this.client.query([
-      ...upsert(
-        'boxel_index',
-        'boxel_index_pkey',
-        nameExpressions,
-        valueExpressions,
-      ),
-    ]);
-  }
-
-  async makeNewGeneration() {
-    await this.setNextGenerationRealmVersion();
-    this.isNewGeneration = true;
-    let cols = [
-      'url',
-      'file_alias',
-      'type',
-      'realm_url',
-      'realm_version',
-      'is_deleted',
-    ].map((c) => [c]);
-    await this.detectUniqueConstraintError(
-      () =>
-        // create tombstones for all card URLs
-        this.client.query([
-          `INSERT INTO boxel_index`,
-          ...addExplicitParens(separatedByCommas(cols)),
-          `SELECT i.url, i.file_alias, i.type, i.realm_url, ${this.realmVersion} as realm_version, true as is_deleted`,
-          'FROM boxel_index as i',
-          'INNER JOIN realm_versions r ON i.realm_url = r.realm_url',
-          'WHERE i.realm_url =',
-          param(this.realmURL.href),
-          'AND',
-          ...realmVersionExpression({ useWorkInProgressIndex: false }),
-        ] as Expression),
-      { isMakingNewGeneration: true },
-    );
-  }
-
-  async done(): Promise<void> {
-    let { nameExpressions, valueExpressions } = asExpressions({
-      realm_url: this.realmURL.href,
-      current_version: this.realmVersion,
-    } as RealmVersionsTable);
-    // Make the batch updates live
-    await this.client.query([
-      ...upsert(
-        'realm_versions',
-        'realm_versions_pkey',
-        nameExpressions,
-        valueExpressions,
-      ),
-    ]);
-
-    // prune obsolete generation index entries
-    if (this.isNewGeneration) {
-      await this.client.query([
-        `DELETE FROM boxel_index`,
-        'WHERE',
-        ...every([
-          ['realm_version <', param(this.realmVersion)],
-          ['realm_url =', param(this.realmURL.href)],
-        ]),
-      ] as Expression);
-    }
-  }
-
-  private async setNextRealmVersion() {
-    let [row] = (await this.client.query([
-      'SELECT current_version FROM realm_versions WHERE realm_url =',
-      param(this.realmURL.href),
-    ])) as Pick<RealmVersionsTable, 'current_version'>[];
-    if (!row) {
-      let { nameExpressions, valueExpressions } = asExpressions({
-        realm_url: this.realmURL.href,
-        current_version: 0,
-      } as RealmVersionsTable);
-      // Make the batch updates live
-      await this.client.query([
-        ...upsert(
-          'realm_versions',
-          'realm_versions_pkey',
-          nameExpressions,
-          valueExpressions,
-        ),
-      ]);
-      this.realmVersion = 1;
-    } else {
-      this.realmVersion = row.current_version + 1;
-    }
-  }
-
-  // this will use a version higher than any in-progress indexing in case there
-  // are artifacts left over from a failed index
-  private async setNextGenerationRealmVersion() {
-    let [maxVersionRow] = (await this.client.query([
-      'SELECT MAX(realm_version) as max_version FROM boxel_index WHERE realm_url =',
-      param(this.realmURL.href),
-    ])) as { max_version: number }[];
-    let maxVersion = (maxVersionRow?.max_version ?? 0) + 1;
-    let nextVersion = Math.max(this.realmVersion, maxVersion);
-    this.realmVersion = nextVersion;
-  }
-
-  async invalidate(url: URL): Promise<string[]> {
-    await this.ready;
-    let alias = trimExecutableExtension(url).href;
-    let invalidations = [
-      ...new Set([
-        url.href,
-        ...(alias ? await this.calculateInvalidations(alias) : []),
-      ]),
-    ];
-
-    // insert tombstone into next version of the realm index
-    let columns = [
-      'url',
-      'file_alias',
-      'type',
-      'realm_version',
-      'realm_url',
-      'is_deleted',
-    ].map((c) => [c]);
-    let rows = invalidations.map((id) =>
-      [
-        id,
-        trimExecutableExtension(new URL(id)).href,
-        hasExecutableExtension(id) ? 'module' : 'instance',
-        this.realmVersion,
-        this.realmURL.href,
-        true,
-      ].map((v) => [param(v)]),
-    );
-
-    await this.detectUniqueConstraintError(
-      () =>
-        this.client.query([
-          `INSERT INTO boxel_index`,
-          ...addExplicitParens(separatedByCommas(columns)),
-          'VALUES',
-          ...separatedByCommas(
-            rows.map((value) => addExplicitParens(separatedByCommas(value))),
-          ),
-        ] as Expression),
-      { url, invalidations },
-    );
-
-    this.touched = new Set([...this.touched, ...invalidations]);
-    return invalidations;
-  }
-
-  // invalidate will throw if 2 batches try to insert intersecting invalidation
-  // graph. If this happens we should cancel the job that threw because of
-  // primary key constraint violation and re-add it to the job queue with the
-  // original notifier to try again
-  private async detectUniqueConstraintError(
-    fn: () => Promise<unknown>,
-    opts?: {
-      url?: URL;
-      invalidations?: string[];
-      isMakingNewGeneration?: boolean;
-    },
-  ) {
-    try {
-      return await fn();
-    } catch (e: any) {
-      if (
-        e.message?.includes('violates unique constraint') || // postgres
-        e.result?.message?.includes('UNIQUE constraint failed') // sqlite
-      ) {
-        let message = `Invalidation conflict error in realm ${this.realmURL.href} version ${this.realmVersion}`;
-        if (opts?.url && opts?.invalidations) {
-          message =
-            `${message}: the invalidation ${
-              opts.url.href
-            } resulted in invalidation graph: ${JSON.stringify(
-              opts.invalidations,
-            )} that collides with unfinished indexing. The most likely reason this happens is that there ` +
-            `was an error encountered during incremental indexing that prevented the indexing from completing ` +
-            `(and realm version increasing), then there was another incremental update to the same document ` +
-            `that collided with the WIP artifacts from the indexing that never completed. Removing the WIP ` +
-            `indexing artifacts (the rows(s) that triggered the unique constraint will solve the immediate ` +
-            `problem, but likely the issue that triggered the unfinished indexing will need to be fixed to ` +
-            `prevent this from happening in the future.`;
-        } else if (opts?.isMakingNewGeneration) {
-          message =
-            `${message}. created a new generation while there was still unfinished indexing. ` +
-            `The most likely reason this happens is that there was an error encountered during incremental ` +
-            `indexing that prevented the indexing from completing (and realm version increasing), ` +
-            `then the realm was restarted and the left over WIP indexing artifact(s) collided with the ` +
-            `from-scratch indexing. To resolve this issue delete the WIP indexing artifacts (the row(s) ` +
-            `that triggered the unique constraint) and restart the realm.`;
-        }
-        throw new Error(message);
-      }
-      throw e;
-    }
-  }
-
-  private async calculateInvalidations(
-    alias: string,
-    visited: string[] = [],
-  ): Promise<string[]> {
-    if (visited.includes(alias)) {
-      return [];
-    }
-    let childInvalidations = await this.client.itemsThatReference(
-      alias,
-      this.realmVersion,
-    );
-    let invalidations = childInvalidations.map(({ url }) => url);
-    let aliases = childInvalidations.map(({ alias: moduleAlias, type, url }) =>
-      // for instances we expect that the deps for an entry always includes .json extension
-      type === 'instance' ? url : moduleAlias,
-    );
-    let results = [
-      ...invalidations,
-      ...flatten(
-        await Promise.all(
-          aliases.map((a) =>
-            this.calculateInvalidations(a, [...visited, alias]),
-          ),
-        ),
-      ),
-    ];
-    return [...new Set(results)];
   }
 }
 
