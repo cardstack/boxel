@@ -276,7 +276,7 @@ export function transformResultsToPrerenderedCardsDoc(results: {
     type: 'prerendered-card',
     id: card.url,
     attributes: {
-      embeddedHtml: card.embeddedHtml.default,
+      html: card.html,
     },
     relationships: {
       'prerendered-card-css': {

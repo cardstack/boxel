@@ -55,7 +55,7 @@ import {
   SupportedMimeType,
   lookupRouteTable,
 } from './router';
-import { parseQueryString } from './query';
+import { Query, parseQueryString } from './query';
 import type { Readable } from 'stream';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -1707,10 +1707,25 @@ export class Realm {
     let useWorkInProgressIndex = Boolean(
       request.headers.get('X-Boxel-Use-WIP-Index'),
     );
-    let query = parseQueryString(new URL(request.url).search.slice(1));
+
+    let query: Query = parseQueryString(new URL(request.url).search.slice(1));
+
+    let htmlFormat = query.prerenderedHtmlFormat as string;
+
+    if (!htmlFormat || (htmlFormat !== 'embedded' && htmlFormat !== 'atom')) {
+      return badRequest(
+        JSON.stringify({
+          errors: [
+            `Must include a 'htmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint.`,
+          ],
+        }),
+        requestContext,
+      );
+    }
 
     let results = await this.#searchIndex.searchPrerendered(query, {
       useWorkInProgressIndex,
+      htmlFormat,
     });
 
     let doc = transformResultsToPrerenderedCardsDoc(results);

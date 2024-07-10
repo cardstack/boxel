@@ -1639,9 +1639,23 @@ module('Realm Server', function (hooks) {
           },
         );
 
-        test('returns prerendered instances', async function (assert) {
+        test('endpoint will respond with a bad request if html format is not provided', async function (assert) {
           let response = await request
             .get(`/_search-prerendered`)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 400, 'HTTP 200 status');
+
+          assert.ok(
+            response.body.errors[0].detail.includes(
+              "Must include a 'htmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint",
+            ),
+          );
+        });
+
+        test('returns prerendered instances', async function (assert) {
+          let response = await request
+            .get(`/_search-prerendered?prerenderedHtmlFormat=embedded`)
             .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -1666,7 +1680,7 @@ module('Realm Server', function (hooks) {
           assert.strictEqual(json.data[0].type, 'prerendered-card');
 
           assert.true(
-            json.data[0].attributes.embeddedHtml
+            json.data[0].attributes.html
               .replace(/\s+/g, ' ')
               .includes('Embedded Card Person: John'),
             'embedded html looks correct',
@@ -1794,7 +1808,7 @@ module('Realm Server', function (hooks) {
 
       test('returns instances with prerendered embedded html + css', async function (assert) {
         let response = await request
-          .get(`/_search-prerendered`)
+          .get(`/_search-prerendered?prerenderedHtmlFormat=embedded`)
           .set('Accept', 'application/vnd.card+json');
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -1819,7 +1833,7 @@ module('Realm Server', function (hooks) {
         // 1st card: Person Aaron
         assert.strictEqual(json.data[0].type, 'prerendered-card');
         assert.true(
-          json.data[0].attributes.embeddedHtml
+          json.data[0].attributes.html
             .replace(/\s+/g, ' ')
             .includes('Embedded Card Person: Aaron'),
           'embedded html looks correct',
@@ -1838,7 +1852,7 @@ module('Realm Server', function (hooks) {
         // 2nd card: Person Craig
         assert.strictEqual(json.data[1].type, 'prerendered-card');
         assert.true(
-          json.data[1].attributes.embeddedHtml
+          json.data[1].attributes.html
             .replace(/\s+/g, ' ')
             .includes('Embedded Card Person: Craig'),
           'embedded html for Craig looks correct',
@@ -1857,7 +1871,7 @@ module('Realm Server', function (hooks) {
         // 3rd card: FancyPerson Jane
         assert.strictEqual(json.data[2].type, 'prerendered-card');
         assert.true(
-          json.data[2].attributes.embeddedHtml
+          json.data[2].attributes.html
             .replace(/\s+/g, ' ')
             .includes('Embedded Card FancyPerson: Jane'),
           'embedded html for Jane looks correct',
@@ -1885,7 +1899,7 @@ module('Realm Server', function (hooks) {
         // 4th card: FancyPerson Jimmy
         assert.strictEqual(json.data[3].type, 'prerendered-card');
         assert.true(
-          json.data[3].attributes.embeddedHtml
+          json.data[3].attributes.html
             .replace(/\s+/g, ' ')
             .includes('Embedded Card FancyPerson: Jimmy'),
           'embedded html for Jimmy looks correct',
@@ -1951,6 +1965,7 @@ module('Realm Server', function (hooks) {
               firstName: 'Jimmy',
             },
           },
+          prerenderedHtmlFormat: 'embedded',
         };
         let response = await request
           .get(`/_search-prerendered?${stringify(query)}`)
@@ -1975,6 +1990,7 @@ module('Realm Server', function (hooks) {
               direction: 'desc',
             },
           ],
+          prerenderedHtmlFormat: 'embedded',
         };
         let response = await request
           .get(`/_search-prerendered?${stringify(query)}`)

@@ -12,6 +12,7 @@ export interface Query {
     size: number;
     realmVersion?: number;
   };
+  prerenderedHtmlFormat?: 'embedded' | 'atom';
 }
 
 export type CardURL = string;
@@ -143,6 +144,15 @@ export function assertQuery(
         break;
       case 'page':
         assertPage(value, pointer.concat('page'));
+        break;
+      case 'prerenderedHtmlFormat':
+        if (value && typeof value !== 'string') {
+          throw new Error(
+            `${
+              pointer.concat('prerenderedHtmlFormat').join('/') || '/'
+            }: prerenderedHtmlFormat must be a string`,
+          );
+        }
         break;
       default:
         throw new Error(`unknown field in query: ${key}`);

@@ -2454,8 +2454,9 @@ const tests = Object.freeze({
         deps: [`${testRealmURL}person`],
         types: [],
         embedded_html: {
-          default: '<div>Van Gogh</div',
+          default: '<div>Van Gogh</div>',
         },
+        atom_html: 'Van Gogh',
       },
       {
         url: `${testRealmURL}person.gts`,
@@ -2479,8 +2480,11 @@ const tests = Object.freeze({
       },
     ]);
 
+    // Requesting embedded template
     let { prerenderedCards, prerenderedCardCssItems, meta } =
-      await indexer.searchPrerendered(new URL(testRealmURL), {}, loader);
+      await indexer.searchPrerendered(new URL(testRealmURL), {}, loader, {
+        htmlFormat: 'embedded',
+      });
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
     assert.strictEqual(
@@ -2497,9 +2501,40 @@ const tests = Object.freeze({
       prerenderedCards[0].url,
       'http://test-realm/test/vangogh.json',
     );
-    assert.deepEqual(prerenderedCards[0].embeddedHtml, {
-      default: '<div>Van Gogh</div',
-    });
+    assert.strictEqual(prerenderedCards[0].html, '<div>Van Gogh</div>');
+
+    assert.strictEqual(prerenderedCardCssItems.length, 1);
+    assert.strictEqual(
+      prerenderedCardCssItems[0].cssModuleId,
+      'http://test-realm/test/person',
+    );
+    assert.strictEqual(
+      prerenderedCardCssItems[0].source,
+      '.foo { color: red; }',
+    );
+
+    // Requesting atom template
+    ({ prerenderedCards, prerenderedCardCssItems, meta } =
+      await indexer.searchPrerendered(new URL(testRealmURL), {}, loader, {
+        htmlFormat: 'atom',
+      }));
+
+    assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.strictEqual(
+      meta.page.realmVersion,
+      1,
+      'the realm version is correct',
+    );
+    assert.strictEqual(
+      prerenderedCards.length,
+      1,
+      'the total results are correct',
+    );
+    assert.strictEqual(
+      prerenderedCards[0].url,
+      'http://test-realm/test/vangogh.json',
+    );
+    assert.strictEqual(prerenderedCards[0].html, 'Van Gogh');
 
     assert.strictEqual(prerenderedCardCssItems.length, 1);
     assert.strictEqual(
