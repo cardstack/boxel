@@ -1713,7 +1713,7 @@ export class Realm {
       return badRequest(
         JSON.stringify({
           errors: [
-            `Must include a 'htmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint.`,
+            `Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint.`,
           ],
         }),
         requestContext,
