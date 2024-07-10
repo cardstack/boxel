@@ -214,7 +214,7 @@ export async function runBaseRealmServer(
     dbAdapter,
     permissions,
   });
-  virtualNetwork.mount(testBaseRealm.maybeExternalHandle);
+  virtualNetwork.mount(testBaseRealm.handle);
   await testBaseRealm.ready;
   let testBaseRealmServer = new RealmServer([testBaseRealm], virtualNetwork);
   return testBaseRealmServer.listen(parseInt(localBaseRealmURL.port));
@@ -249,7 +249,7 @@ export async function runTestRealmServer({
     queue,
     dbAdapter,
   });
-  virtualNetwork.mount(testRealm.maybeExternalHandle);
+  virtualNetwork.mount(testRealm.handle);
   await testRealm.ready;
   let testRealmServer = await new RealmServer(
     [testRealm],
