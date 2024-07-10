@@ -158,29 +158,49 @@ export default class PgAdapter implements DBAdapter {
         [config.database],
       );
       if (!response.rows[0].has_database) {
-        await client.query(`create database ${config.database}`);
+        try {
+          await client.query(`create database ${config.database}`);
+        } catch (err: any) {
+          if (!err.message?.includes('violates unique constraint')) {
+            throw err;
+          }
+          // our read and create are not atomic. If somebody elses created it in
+          // between, we're fine with that.
+        }
       }
     } finally {
       client.end();
     }
 
-    await migrate({
-      direction: 'up',
-      migrationsTable: 'migrations',
-      singleTransaction: true,
-      checkOrder: false,
-      databaseUrl: {
-        user: config.user,
-        host: config.host,
-        database: config.database,
-        password: config.password,
-        port: config.port,
-      },
-      count: Infinity,
-      dir: join(__dirname, 'migrations'),
-      ignorePattern: '.*\\.eslintrc\\.js',
-      log: (...args) => log.info(...args),
-    });
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      try {
+        await migrate({
+          direction: 'up',
+          migrationsTable: 'migrations',
+          singleTransaction: true,
+          checkOrder: false,
+          databaseUrl: {
+            user: config.user,
+            host: config.host,
+            database: config.database,
+            password: config.password,
+            port: config.port,
+          },
+          count: Infinity,
+          dir: join(__dirname, 'migrations'),
+          ignorePattern: '.*\\.eslintrc\\.js',
+          log: (...args) => log.info(...args),
+        });
+        return;
+      } catch (err: any) {
+        if (!err.message?.includes('Another migration is already running')) {
+          throw err;
+        }
+        log.info(`saw another migration running, will retry`);
+        await new Promise<void>((resolve) => setTimeout(() => resolve(), 500));
+      }
+    }
   }
 }
 
