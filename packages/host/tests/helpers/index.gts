@@ -345,8 +345,8 @@ export function setupServerSentEvents(hooks: NestedHooks) {
           },
         }),
       );
-      if (!response.ok) {
-        throw new Error(`failed to connect to realm: ${response.status}`);
+      if (!response?.ok) {
+        throw new Error(`failed to connect to realm: ${response?.status}`);
       }
       let reader = response.body!.getReader();
       let timeout = setTimeout(
