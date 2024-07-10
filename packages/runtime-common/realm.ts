@@ -61,7 +61,6 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
-import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import { MatrixClient, waitForMatrixMessage } from './matrix-client';
 import { Sha256 } from '@aws-crypto/sha256-js';
 
@@ -1774,7 +1773,6 @@ export class Realm {
       doc.data,
       doc,
       relativeTo,
-      this.loader as unknown as LoaderType,
     )) as CardDef;
     await api.flushLogs();
     let data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds

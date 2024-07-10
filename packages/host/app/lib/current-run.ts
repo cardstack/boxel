@@ -46,7 +46,6 @@ import { type Reader, type Stats } from '@cardstack/runtime-common/worker';
 import {
   CardDef,
   type IdentityContext as IdentityContextType,
-  LoaderType,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
@@ -409,7 +408,6 @@ export class CurrentRun {
         adjustedResource,
         { data: adjustedResource },
         new URL(fileURL),
-        this.loaderService.loader as unknown as LoaderType,
         {
           identityContext,
         },
@@ -549,7 +547,6 @@ export class CurrentRun {
         resourceForType,
         { data: resourceForType },
         new URL(resource.id),
-        this.loaderService.loader as unknown as LoaderType,
         {
           identityContext: modifiedContext,
         },
