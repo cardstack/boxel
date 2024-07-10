@@ -48,7 +48,7 @@ export default class PillMenu extends Component<Signature> {
       {{onClickOutside this.closeMenu exceptSelector='.card-catalog-modal'}}
       ...attributes
     >
-      <Header class='menu-header' @title={{@title}}>
+      <Header class='menu-header' @title={{@title}} data-test-pill-menu-header>
         <:icon>
           {{yield to='headerIcon'}}
         </:icon>
@@ -62,6 +62,7 @@ export default class PillMenu extends Component<Signature> {
               'header-button'
               expandable-header-button=@isExpandableHeader
             }}
+            data-test-pill-menu-header-button
           >
             {{#if @isExpandableHeader}}
               {{if this.isExpanded 'Hide' 'Show'}}
@@ -83,6 +84,7 @@ export default class PillMenu extends Component<Signature> {
                     @card={{item.card}}
                     @onToggle={{fn this.toggleActive item}}
                     @isEnabled={{item.isActive}}
+                    data-test-pill-menu-item={{item.card.id}}
                   />
                 </li>
               {{/each}}
@@ -99,6 +101,7 @@ export default class PillMenu extends Component<Signature> {
               @iconHeight='15px'
               {{on 'click' this.attachCard}}
               @disabled={{this.doAttachCard.isRunning}}
+              data-test-pill-menu-add-button
             >
               Add
               {{if @itemDisplayName @itemDisplayName 'Item'}}

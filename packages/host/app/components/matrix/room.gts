@@ -69,6 +69,7 @@ export default class Room extends Component<Signature> {
             class='skills'
             @skills={{this.room.skills}}
             @onChooseCard={{this.attachSkill}}
+            data-test-skill-menu
           />
         {{/if}}
       </AiAssistantConversation>

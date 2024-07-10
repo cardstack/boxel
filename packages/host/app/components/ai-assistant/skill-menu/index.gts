@@ -1,6 +1,8 @@
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
+import { eq } from '@cardstack/boxel-ui/helpers';
+
 import { skillCardRef, type Query } from '@cardstack/runtime-common';
 
 import PillMenu from '@cardstack/host/components/pill-menu';
@@ -38,7 +40,8 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         {{this.activeSkills.length}}
         <span class='skills-length'>of
           {{@skills.length}}
-          Skills Active
+          {{if (eq @skills.length 1) 'Skill' 'Skills'}}
+          Active
         </span>
       </:headerDetail>
     </PillMenu>
