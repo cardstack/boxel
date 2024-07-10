@@ -24,7 +24,7 @@ const tests = Object.freeze({
     { indexUpdater, adapter },
   ) => {
     await setupIndex(
-      indexUpdater,
+      adapter,
       [
         { realm_url: testRealmURL, current_version: 1 },
         { realm_url: testRealmURL2, current_version: 5 },
@@ -144,10 +144,10 @@ const tests = Object.freeze({
 
   'can perform invalidations for a module entry': async (
     assert,
-    { indexUpdater },
+    { indexUpdater, adapter },
   ) => {
     await setupIndex(
-      indexUpdater,
+      adapter,
       [
         { realm_url: testRealmURL, current_version: 1 },
         { realm_url: testRealmURL2, current_version: 5 },
@@ -214,7 +214,7 @@ const tests = Object.freeze({
     { indexUpdater, adapter },
   ) => {
     await setupIndex(
-      indexUpdater,
+      adapter,
       [{ realm_url: testRealmURL, current_version: 2 }],
       [
         {
@@ -282,10 +282,10 @@ const tests = Object.freeze({
 
   'can prevent concurrent batch invalidations from colliding': async (
     assert,
-    { indexUpdater },
+    { indexUpdater, adapter },
   ) => {
     await setupIndex(
-      indexUpdater,
+      adapter,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
@@ -330,7 +330,7 @@ const tests = Object.freeze({
   'can prevent concurrent batch invalidations from colliding when making new generation':
     async (assert, { indexUpdater, adapter }) => {
       await setupIndex(
-        indexUpdater,
+        adapter,
         [{ realm_url: testRealmURL, current_version: 1 }],
         [
           {
@@ -431,7 +431,7 @@ const tests = Object.freeze({
 
   'can update an index entry': async (assert, { indexUpdater, adapter }) => {
     await setupIndex(
-      indexUpdater,
+      adapter,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
@@ -616,7 +616,7 @@ const tests = Object.freeze({
     { indexUpdater, adapter },
   ) => {
     await setupIndex(
-      indexUpdater,
+      adapter,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
@@ -759,11 +759,8 @@ const tests = Object.freeze({
     );
   },
 
-  'can get an error doc': async (
-    assert,
-    { indexUpdater, indexQueryEngine },
-  ) => {
-    await setupIndex(indexUpdater, [
+  'can get an error doc': async (assert, { indexQueryEngine, adapter }) => {
+    await setupIndex(adapter, [
       {
         url: `${testRealmURL}1.json`,
         realm_version: 1,
@@ -793,7 +790,7 @@ const tests = Object.freeze({
 
   'can get "production" index entry': async (
     assert,
-    { indexUpdater, indexQueryEngine },
+    { indexUpdater, indexQueryEngine, adapter },
   ) => {
     let originalModified = Date.now();
     let originalResource: LooseCardResource = {
@@ -811,7 +808,7 @@ const tests = Object.freeze({
     };
     let originalSource = JSON.stringify(originalResource);
     await setupIndex(
-      indexUpdater,
+      adapter,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
@@ -888,10 +885,10 @@ const tests = Object.freeze({
 
   'can get work in progress card': async (
     assert,
-    { indexUpdater, indexQueryEngine },
+    { indexUpdater, indexQueryEngine, adapter },
   ) => {
     await setupIndex(
-      indexUpdater,
+      adapter,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
@@ -984,10 +981,10 @@ const tests = Object.freeze({
 
   'returns undefined when getting a deleted card': async (
     assert,
-    { indexUpdater, indexQueryEngine },
+    { adapter, indexQueryEngine },
   ) => {
     await setupIndex(
-      indexUpdater,
+      adapter,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
@@ -1017,7 +1014,7 @@ const tests = Object.freeze({
       }
       indexRows.sort((a, b) => a.url.localeCompare(b.url));
       await setupIndex(
-        indexUpdater,
+        adapter,
         [{ realm_url: testRealmURL, current_version: 1 }],
         indexRows,
       );
@@ -1075,8 +1072,8 @@ const tests = Object.freeze({
     },
 
   'can get compiled module and source when requested with file extension':
-    async (assert, { indexUpdater, indexQueryEngine }) => {
-      await setupIndex(indexUpdater);
+    async (assert, { indexUpdater, indexQueryEngine, adapter }) => {
+      await setupIndex(adapter);
       let batch = await indexUpdater.createBatch(new URL(testRealmURL));
       let now = Date.now();
       await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
@@ -1105,8 +1102,8 @@ const tests = Object.freeze({
     },
 
   'can get compiled module and source when requested without file extension':
-    async (assert, { indexUpdater, indexQueryEngine }) => {
-      await setupIndex(indexUpdater);
+    async (assert, { indexUpdater, indexQueryEngine, adapter }) => {
+      await setupIndex(adapter);
       let batch = await indexUpdater.createBatch(new URL(testRealmURL));
       let now = Date.now();
       await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
@@ -1136,9 +1133,9 @@ const tests = Object.freeze({
 
   'can get compiled module and source from WIP index': async (
     assert,
-    { indexUpdater, indexQueryEngine },
+    { indexUpdater, indexQueryEngine, adapter },
   ) => {
-    await setupIndex(indexUpdater);
+    await setupIndex(adapter);
     let batch = await indexUpdater.createBatch(new URL(testRealmURL));
     let now = Date.now();
     await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
@@ -1179,9 +1176,9 @@ const tests = Object.freeze({
 
   'can get error doc for module': async (
     assert,
-    { indexUpdater, indexQueryEngine },
+    { indexQueryEngine, adapter },
   ) => {
-    await setupIndex(indexUpdater, [
+    await setupIndex(adapter, [
       {
         url: `${testRealmURL}person.gts`,
         realm_version: 1,
@@ -1213,9 +1210,9 @@ const tests = Object.freeze({
 
   'returns undefined when getting a deleted module': async (
     assert,
-    { indexUpdater, indexQueryEngine },
+    { indexQueryEngine, adapter },
   ) => {
-    await setupIndex(indexUpdater, [
+    await setupIndex(adapter, [
       {
         url: `${testRealmURL}person.gts`,
         type: 'module',
@@ -1233,9 +1230,9 @@ const tests = Object.freeze({
 
   'can get css when requested with file extension': async (
     assert,
-    { indexUpdater, indexQueryEngine },
+    { indexUpdater, indexQueryEngine, adapter },
   ) => {
-    await setupIndex(indexUpdater);
+    await setupIndex(adapter);
     let batch = await indexUpdater.createBatch(new URL(testRealmURL));
     let now = Date.now();
     await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
@@ -1260,9 +1257,9 @@ const tests = Object.freeze({
 
   'can get css when requested without file extension': async (
     assert,
-    { indexUpdater, indexQueryEngine },
+    { indexUpdater, indexQueryEngine, adapter },
   ) => {
-    await setupIndex(indexUpdater);
+    await setupIndex(adapter);
     let batch = await indexUpdater.createBatch(new URL(testRealmURL));
     let now = Date.now();
     await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
@@ -1287,9 +1284,9 @@ const tests = Object.freeze({
 
   'can get css from WIP index': async (
     assert,
-    { indexUpdater, indexQueryEngine },
+    { indexUpdater, indexQueryEngine, adapter },
   ) => {
-    await setupIndex(indexUpdater);
+    await setupIndex(adapter);
     let batch = await indexUpdater.createBatch(new URL(testRealmURL));
     let now = Date.now();
     await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
@@ -1325,9 +1322,9 @@ const tests = Object.freeze({
 
   'can get error doc for css': async (
     assert,
-    { indexUpdater, indexQueryEngine },
+    { indexQueryEngine, adapter },
   ) => {
-    await setupIndex(indexUpdater, [
+    await setupIndex(adapter, [
       {
         url: `${testRealmURL}person.gts`,
         realm_version: 1,
@@ -1359,9 +1356,9 @@ const tests = Object.freeze({
 
   'returns undefined when getting deleted css': async (
     assert,
-    { indexUpdater, indexQueryEngine },
+    { indexQueryEngine, adapter },
   ) => {
-    await setupIndex(indexUpdater, [
+    await setupIndex(adapter, [
       {
         url: `${testRealmURL}person.gts`,
         type: 'css',

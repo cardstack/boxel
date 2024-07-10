@@ -25,78 +25,12 @@ import {
 } from './index-structure';
 
 export class IndexUpdater {
-  #ready: Promise<void>;
-  constructor(private dbAdapter: DBAdapter) {
-    this.#ready = this.dbAdapter.startClient();
-  }
-
-  async ready() {
-    return this.#ready;
-  }
-
-  async teardown() {
-    await this.dbAdapter.close();
-  }
-
-  async query(expression: Expression) {
-    return await query(this.dbAdapter, expression, coerceTypes);
-  }
+  constructor(private dbAdapter: DBAdapter) {}
 
   async createBatch(realmURL: URL) {
-    let batch = new Batch(this, realmURL);
+    let batch = new Batch(this.dbAdapter, realmURL);
     await batch.ready;
     return batch;
-  }
-
-  async getColumnNames(tableName: string) {
-    return this.dbAdapter.getColumnNames(tableName);
-  }
-
-  async itemsThatReference(
-    alias: string,
-    realmVersion: number,
-  ): Promise<
-    { url: string; alias: string; type: 'instance' | 'module' | 'error' }[]
-  > {
-    const pageSize = 1000;
-    let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-      type: 'instance' | 'module' | 'error';
-    })[] = [];
-    let rows: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-      type: 'instance' | 'module' | 'error';
-    })[] = [];
-    let pageNumber = 0;
-    do {
-      // SQLite does not support cursors when used in the worker thread since
-      // the API for using cursors cannot be serialized over the postMessage
-      // boundary. so we use a handcrafted paging approach that leverages
-      // realm_version to keep the result set stable across pages
-      rows = (await this.query([
-        'SELECT i.url, i.file_alias, i.type',
-        'FROM boxel_index as i',
-        'CROSS JOIN LATERAL jsonb_array_elements_text(i.deps) as deps_array_element',
-        'INNER JOIN realm_versions r ON i.realm_url = r.realm_url',
-        'WHERE',
-        ...every([
-          [`deps_array_element =`, param(alias)],
-          realmVersionExpression({ withMaxVersion: realmVersion }),
-          // css is a subset of modules, so there won't by any references that
-          // are css entries that aren't already represented by a module entry
-          [`i.type != 'css'`],
-        ]),
-        'ORDER BY i.url COLLATE "POSIX"',
-        `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
-      ] as Expression)) as (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-        type: 'instance' | 'module' | 'error';
-      })[];
-      results = [...results, ...rows];
-      pageNumber++;
-    } while (rows.length === pageSize);
-    return results.map(({ url, file_alias, type }) => ({
-      url,
-      alias: file_alias,
-      type,
-    }));
   }
 }
 
@@ -141,10 +75,14 @@ export class Batch {
   private declare realmVersion: number;
 
   constructor(
-    private client: IndexUpdater,
+    private dbAdapter: DBAdapter,
     private realmURL: URL, // this assumes that we only index cards in our own realm...
   ) {
     this.ready = this.setNextRealmVersion();
+  }
+
+  private query(expression: Expression) {
+    return query(this.dbAdapter, expression, coerceTypes);
   }
 
   async updateEntry(url: URL, entry: IndexEntry): Promise<void> {
@@ -215,7 +153,7 @@ export class Batch {
       },
     );
 
-    await this.client.query([
+    await this.query([
       ...upsert(
         'boxel_index',
         'boxel_index_pkey',
@@ -239,7 +177,7 @@ export class Batch {
     await this.detectUniqueConstraintError(
       () =>
         // create tombstones for all card URLs
-        this.client.query([
+        this.query([
           `INSERT INTO boxel_index`,
           ...addExplicitParens(separatedByCommas(cols)),
           `SELECT i.url, i.file_alias, i.type, i.realm_url, ${this.realmVersion} as realm_version, true as is_deleted`,
@@ -260,7 +198,7 @@ export class Batch {
       current_version: this.realmVersion,
     } as RealmVersionsTable);
     // Make the batch updates live
-    await this.client.query([
+    await this.query([
       ...upsert(
         'realm_versions',
         'realm_versions_pkey',
@@ -271,7 +209,7 @@ export class Batch {
 
     // prune obsolete generation index entries
     if (this.isNewGeneration) {
-      await this.client.query([
+      await this.query([
         `DELETE FROM boxel_index`,
         'WHERE',
         ...every([
@@ -283,7 +221,7 @@ export class Batch {
   }
 
   private async setNextRealmVersion() {
-    let [row] = (await this.client.query([
+    let [row] = (await this.query([
       'SELECT current_version FROM realm_versions WHERE realm_url =',
       param(this.realmURL.href),
     ])) as Pick<RealmVersionsTable, 'current_version'>[];
@@ -293,7 +231,7 @@ export class Batch {
         current_version: 0,
       } as RealmVersionsTable);
       // Make the batch updates live
-      await this.client.query([
+      await this.query([
         ...upsert(
           'realm_versions',
           'realm_versions_pkey',
@@ -310,7 +248,7 @@ export class Batch {
   // this will use a version higher than any in-progress indexing in case there
   // are artifacts left over from a failed index
   private async setNextGenerationRealmVersion() {
-    let [maxVersionRow] = (await this.client.query([
+    let [maxVersionRow] = (await this.query([
       'SELECT MAX(realm_version) as max_version FROM boxel_index WHERE realm_url =',
       param(this.realmURL.href),
     ])) as { max_version: number }[];
@@ -351,7 +289,7 @@ export class Batch {
 
     await this.detectUniqueConstraintError(
       () =>
-        this.client.query([
+        this.query([
           `INSERT INTO boxel_index`,
           ...addExplicitParens(separatedByCommas(columns)),
           'VALUES',
@@ -414,6 +352,53 @@ export class Batch {
     }
   }
 
+  private async itemsThatReference(
+    alias: string,
+    realmVersion: number,
+  ): Promise<
+    { url: string; alias: string; type: 'instance' | 'module' | 'error' }[]
+  > {
+    const pageSize = 1000;
+    let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
+      type: 'instance' | 'module' | 'error';
+    })[] = [];
+    let rows: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
+      type: 'instance' | 'module' | 'error';
+    })[] = [];
+    let pageNumber = 0;
+    do {
+      // SQLite does not support cursors when used in the worker thread since
+      // the API for using cursors cannot be serialized over the postMessage
+      // boundary. so we use a handcrafted paging approach that leverages
+      // realm_version to keep the result set stable across pages
+      rows = (await this.query([
+        'SELECT i.url, i.file_alias, i.type',
+        'FROM boxel_index as i',
+        'CROSS JOIN LATERAL jsonb_array_elements_text(i.deps) as deps_array_element',
+        'INNER JOIN realm_versions r ON i.realm_url = r.realm_url',
+        'WHERE',
+        ...every([
+          [`deps_array_element =`, param(alias)],
+          realmVersionExpression({ withMaxVersion: realmVersion }),
+          // css is a subset of modules, so there won't by any references that
+          // are css entries that aren't already represented by a module entry
+          [`i.type != 'css'`],
+        ]),
+        'ORDER BY i.url COLLATE "POSIX"',
+        `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
+      ] as Expression)) as (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
+        type: 'instance' | 'module' | 'error';
+      })[];
+      results = [...results, ...rows];
+      pageNumber++;
+    } while (rows.length === pageSize);
+    return results.map(({ url, file_alias, type }) => ({
+      url,
+      alias: file_alias,
+      type,
+    }));
+  }
+
   private async calculateInvalidations(
     alias: string,
     visited: string[] = [],
@@ -421,7 +406,7 @@ export class Batch {
     if (visited.includes(alias)) {
       return [];
     }
-    let childInvalidations = await this.client.itemsThatReference(
+    let childInvalidations = await this.itemsThatReference(
       alias,
       this.realmVersion,
     );

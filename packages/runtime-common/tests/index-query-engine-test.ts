@@ -2,12 +2,13 @@ import format from 'date-fns/format';
 import {
   baseRealm,
   IndexQueryEngine,
-  IndexUpdater,
   internalKeyFor,
   type CodeRef,
   type LooseCardResource,
   type Loader,
   type ResolvedCodeRef,
+  DBAdapter,
+  IndexUpdater,
 } from '../index';
 import { serializeCard } from '../helpers/indexer';
 import { testRealmURL } from '../helpers/const';
@@ -24,10 +25,10 @@ interface TestCards {
 const tests = Object.freeze({
   'can get all cards with empty filter': async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, paper } = testCards;
-    await setupIndex(indexUpdater, [mango, vangogh, paper]);
+    await setupIndex(dbAdapter, [mango, vangogh, paper]);
 
     let { cards: results, meta } = await indexQueryEngine.search(
       new URL(testRealmURL),
@@ -48,10 +49,10 @@ const tests = Object.freeze({
 
   'deleted cards are not included in results': async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, paper } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       { card: mango, data: { is_deleted: false } },
       { card: vangogh, data: { is_deleted: null } },
       { card: paper, data: { is_deleted: true } },
@@ -67,10 +68,10 @@ const tests = Object.freeze({
 
   'error docs are not included in results': async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         url: `${testRealmURL}1.json`,
         type: 'error',
@@ -118,11 +119,11 @@ const tests = Object.freeze({
 
   'can filter by type': async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, paper } = testCards;
 
-    await setupIndex(indexUpdater, [mango, vangogh, paper]);
+    await setupIndex(dbAdapter, [mango, vangogh, paper]);
 
     let type = await personCardType(testCards);
     let { cards: results, meta } = await indexQueryEngine.search(
@@ -141,10 +142,10 @@ const tests = Object.freeze({
 
   "can filter using 'eq'": async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, paper } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       { card: mango, data: { search_doc: { name: 'Mango' } } },
       { card: vangogh, data: { search_doc: { name: 'Van Gogh' } } },
       // this card's "name" field doesn't match our filter since our filter
@@ -170,10 +171,10 @@ const tests = Object.freeze({
 
   "can filter using 'eq' thru nested fields": async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -234,10 +235,10 @@ const tests = Object.freeze({
 
   "can use 'eq' to match multiple fields": async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -276,10 +277,10 @@ const tests = Object.freeze({
 
   "can use 'eq' to find 'null' values": async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -324,10 +325,10 @@ const tests = Object.freeze({
 
   "can use 'eq' to match against number type": async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -366,10 +367,10 @@ const tests = Object.freeze({
 
   "can use 'eq' to match against boolean type": async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -461,10 +462,10 @@ const tests = Object.freeze({
 
   'can filter eq from a code ref query value': async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { stringFieldEntry, numberFieldEntry } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: stringFieldEntry,
         data: {
@@ -512,10 +513,10 @@ const tests = Object.freeze({
 
   'can filter eq from a date query value': async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mangoBirthday, vangoghBirthday } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mangoBirthday,
         data: {
@@ -562,10 +563,10 @@ const tests = Object.freeze({
 
   "can search with a 'not' filter": async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -614,10 +615,10 @@ const tests = Object.freeze({
 
   'can handle a filter with double negatives': async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -666,10 +667,10 @@ const tests = Object.freeze({
 
   "can use a 'contains' filter": async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -718,10 +719,10 @@ const tests = Object.freeze({
 
   'contains filter is case insensitive': async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -766,10 +767,10 @@ const tests = Object.freeze({
 
   "can use 'contains' to match multiple fields": async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -808,10 +809,10 @@ const tests = Object.freeze({
 
   "can use a 'contains' filter to match 'null'": async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -848,10 +849,10 @@ const tests = Object.freeze({
 
   "can use 'every' to combine multiple filters": async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -915,10 +916,10 @@ const tests = Object.freeze({
 
   "can use 'any' to combine multiple filters": async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -967,9 +968,9 @@ const tests = Object.freeze({
 
   'gives a good error when query refers to missing card': async (
     assert,
-    { indexQueryEngine, indexUpdater, loader },
+    { indexQueryEngine, dbAdapter, loader },
   ) => {
-    await setupIndex(indexUpdater, []);
+    await setupIndex(dbAdapter, []);
 
     try {
       await indexQueryEngine.search(
@@ -1026,9 +1027,9 @@ const tests = Object.freeze({
 
   'gives a good error when query refers to missing field': async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
-    await setupIndex(indexUpdater, []);
+    await setupIndex(dbAdapter, []);
     let type = await personCardType(testCards);
 
     try {
@@ -1058,10 +1059,10 @@ const tests = Object.freeze({
 
   "it can filter on a plural primitive field using 'eq'": async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -1099,9 +1100,9 @@ const tests = Object.freeze({
   },
 
   "it can filter on a nested field within a plural composite field using 'eq'":
-    async (assert, { indexQueryEngine, indexUpdater, loader, testCards }) => {
+    async (assert, { indexQueryEngine, dbAdapter, loader, testCards }) => {
       let { mango, vangogh } = testCards;
-      await setupIndex(indexUpdater, [
+      await setupIndex(dbAdapter, [
         {
           card: mango,
           data: {
@@ -1174,10 +1175,10 @@ const tests = Object.freeze({
 
   'it can match a null in a plural field': async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -1216,10 +1217,10 @@ const tests = Object.freeze({
 
   'it can match a leaf plural field nested in a plural composite field': async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -1263,9 +1264,9 @@ const tests = Object.freeze({
   },
 
   'it can match thru a plural nested composite field that is field of a singular composite field':
-    async (assert, { indexQueryEngine, indexUpdater, loader, testCards }) => {
+    async (assert, { indexQueryEngine, dbAdapter, loader, testCards }) => {
       let { mango, vangogh } = testCards;
-      await setupIndex(indexUpdater, [
+      await setupIndex(dbAdapter, [
         {
           card: mango,
           data: {
@@ -1310,9 +1311,9 @@ const tests = Object.freeze({
     },
 
   "can return a single result for a card when there are multiple matches within a result's search doc":
-    async (assert, { indexQueryEngine, indexUpdater, loader, testCards }) => {
+    async (assert, { indexQueryEngine, dbAdapter, loader, testCards }) => {
       let { mango } = testCards;
-      await setupIndex(indexUpdater, [
+      await setupIndex(dbAdapter, [
         {
           card: mango,
           data: {
@@ -1349,11 +1350,11 @@ const tests = Object.freeze({
 
   'can perform query against WIP version of the index': async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(
-      indexUpdater,
+      dbAdapter,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
@@ -1407,11 +1408,11 @@ const tests = Object.freeze({
 
   'can perform query against "production" version of the index': async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(
-      indexUpdater,
+      dbAdapter,
       [{ realm_url: testRealmURL, current_version: 1 }],
       [
         {
@@ -1456,10 +1457,10 @@ const tests = Object.freeze({
 
   'can sort search results': async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -1510,10 +1511,10 @@ const tests = Object.freeze({
 
   'can sort descending': async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -1565,10 +1566,10 @@ const tests = Object.freeze({
 
   'nulls are sorted to the end of search results': async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -1651,7 +1652,7 @@ const tests = Object.freeze({
 
   'can get paginated results that are stable during index mutations': async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango } = testCards;
     let Card = mango.constructor as typeof CardDef;
@@ -1663,7 +1664,7 @@ const tests = Object.freeze({
       });
     }
 
-    await setupIndex(indexUpdater, testData);
+    await setupIndex(dbAdapter, testData);
 
     // page 1
     let type = await personCardType(testCards);
@@ -1737,7 +1738,9 @@ const tests = Object.freeze({
     }
 
     // mutate the index
-    let batch = await indexUpdater.createBatch(new URL(testRealmURL));
+    let batch = await new IndexUpdater(dbAdapter).createBatch(
+      new URL(testRealmURL),
+    );
     await batch.invalidate(new URL(`${testRealmURL}mango3.json`));
     await batch.done();
 
@@ -1822,10 +1825,10 @@ const tests = Object.freeze({
 
   "can filter using 'gt'": async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -1889,10 +1892,10 @@ const tests = Object.freeze({
 
   "can filter using 'gt' thru nested fields": async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -1960,10 +1963,10 @@ const tests = Object.freeze({
 
   "can filter using 'gt' thru a plural primitive field": async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -2034,7 +2037,7 @@ const tests = Object.freeze({
 
   "can filter using 'gt' thru a plural composite field": async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     let mangoDoc = {
@@ -2061,7 +2064,7 @@ const tests = Object.freeze({
       },
       age: 25,
     };
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -2117,10 +2120,10 @@ const tests = Object.freeze({
 
   "can filter using 'gte'": async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -2191,10 +2194,10 @@ const tests = Object.freeze({
 
   "can filter using 'lt'": async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -2265,10 +2268,10 @@ const tests = Object.freeze({
 
   "can filter using 'lte'": async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -2339,10 +2342,10 @@ const tests = Object.freeze({
 
   "can combine 'range' filter": async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -2409,10 +2412,10 @@ const tests = Object.freeze({
 
   "cannot filter 'null' value using 'range'": async (
     assert,
-    { indexQueryEngine, indexUpdater, loader, testCards },
+    { indexQueryEngine, dbAdapter, loader, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         card: mango,
         data: {
@@ -2471,9 +2474,9 @@ const tests = Object.freeze({
   },
   'can get prerendered cards (html + css) from the indexer': async (
     assert,
-    { indexQueryEngine, indexUpdater, loader },
+    { indexQueryEngine, dbAdapter, loader },
   ) => {
-    await setupIndex(indexUpdater, [
+    await setupIndex(dbAdapter, [
       {
         url: `${testRealmURL}vangogh.json`,
         file_alias: `${testRealmURL}vangogh.json`,
@@ -2546,7 +2549,7 @@ const tests = Object.freeze({
   },
 } as SharedTests<{
   indexQueryEngine: IndexQueryEngine;
-  indexUpdater: IndexUpdater;
+  dbAdapter: DBAdapter;
   loader: Loader;
   testCards: TestCards;
 }>);

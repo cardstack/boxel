@@ -126,20 +126,9 @@ export interface QueryResultsMeta {
 }
 
 export class IndexQueryEngine {
-  #ready: Promise<void>;
-  constructor(private dbAdapter: DBAdapter) {
-    this.#ready = this.dbAdapter.startClient();
-  }
+  constructor(private dbAdapter: DBAdapter) {}
 
-  async ready() {
-    return this.#ready;
-  }
-
-  async teardown() {
-    await this.dbAdapter.close();
-  }
-
-  async query(expression: Expression) {
+  private async query(expression: Expression) {
     return await query(this.dbAdapter, expression, coerceTypes);
   }
 
@@ -319,53 +308,6 @@ export class IndexQueryEngine {
       // for which card class to use for embedded HTML
       _embeddedHtmlByClassHierarchy,
     };
-  }
-
-  async itemsThatReference(
-    alias: string,
-    realmVersion: number,
-  ): Promise<
-    { url: string; alias: string; type: 'instance' | 'module' | 'error' }[]
-  > {
-    const pageSize = 1000;
-    let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-      type: 'instance' | 'module' | 'error';
-    })[] = [];
-    let rows: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-      type: 'instance' | 'module' | 'error';
-    })[] = [];
-    let pageNumber = 0;
-    do {
-      // SQLite does not support cursors when used in the worker thread since
-      // the API for using cursors cannot be serialized over the postMessage
-      // boundary. so we use a handcrafted paging approach that leverages
-      // realm_version to keep the result set stable across pages
-      rows = (await this.query([
-        'SELECT i.url, i.file_alias, i.type',
-        'FROM boxel_index as i',
-        'CROSS JOIN LATERAL jsonb_array_elements_text(i.deps) as deps_array_element',
-        'INNER JOIN realm_versions r ON i.realm_url = r.realm_url',
-        'WHERE',
-        ...every([
-          [`deps_array_element =`, param(alias)],
-          realmVersionExpression({ withMaxVersion: realmVersion }),
-          // css is a subset of modules, so there won't by any references that
-          // are css entries that aren't already represented by a module entry
-          [`i.type != 'css'`],
-        ]),
-        'ORDER BY i.url COLLATE "POSIX"',
-        `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
-      ] as Expression)) as (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-        type: 'instance' | 'module' | 'error';
-      })[];
-      results = [...results, ...rows];
-      pageNumber++;
-    } while (rows.length === pageSize);
-    return results.map(({ url, file_alias, type }) => ({
-      url,
-      alias: file_alias,
-      type,
-    }));
   }
 
   // we pass the loader in so there is no ambiguity which loader to use as this

@@ -15,12 +15,10 @@ module('index-updater', function (hooks) {
     adapter = new PgAdapter();
     indexUpdater = new IndexUpdater(adapter);
     indexQueryEngine = new IndexQueryEngine(adapter);
-    await indexUpdater.ready();
-    await indexQueryEngine.ready();
   });
 
   hooks.afterEach(async function () {
-    await indexUpdater.teardown();
+    await adapter.close();
   });
 
   test('can perform invalidations for a instance entry', async function (assert) {

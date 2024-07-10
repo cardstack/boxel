@@ -1,7 +1,6 @@
 import isEqual from 'lodash/isEqual';
 
 import {
-  IndexUpdater,
   asExpressions,
   addExplicitParens,
   separatedByCommas,
@@ -19,6 +18,8 @@ import {
   type RealmVersionsTable,
   LooseCardResource,
   trimExecutableExtension,
+  DBAdapter,
+  query,
 } from '../index';
 
 import { coerceTypes } from '../index-structure';
@@ -103,18 +104,18 @@ export type TestIndexRow =
 //
 // the realm version table will default to version 1 of the testRealmURL if no
 // value is supplied
-export async function setupIndex(client: IndexUpdater): Promise<void>;
+export async function setupIndex(client: DBAdapter): Promise<void>;
 export async function setupIndex(
-  client: IndexUpdater,
+  client: DBAdapter,
   indexRows: TestIndexRow[],
 ): Promise<void>;
 export async function setupIndex(
-  client: IndexUpdater,
+  client: DBAdapter,
   versionRows: RealmVersionsTable[],
   indexRows: TestIndexRow[],
 ): Promise<void>;
 export async function setupIndex(
-  client: IndexUpdater,
+  client: DBAdapter,
   maybeVersionRows: RealmVersionsTable[] | TestIndexRow[] = [],
   indexRows?: TestIndexRow[],
 ): Promise<void> {
@@ -184,32 +185,40 @@ export async function setupIndex(
   let versionExpressions = versionRows.map((r) => asExpressions(r));
 
   if (indexedCardsExpressions.length > 0) {
-    await client.query([
-      `INSERT INTO boxel_index`,
-      ...addExplicitParens(
-        separatedByCommas(indexedCardsExpressions[0].nameExpressions),
-      ),
-      'VALUES',
-      ...separatedByCommas(
-        indexedCardsExpressions.map((row) =>
-          addExplicitParens(separatedByCommas(row.valueExpressions)),
+    await query(
+      client,
+      [
+        `INSERT INTO boxel_index`,
+        ...addExplicitParens(
+          separatedByCommas(indexedCardsExpressions[0].nameExpressions),
         ),
-      ),
-    ] as Expression);
+        'VALUES',
+        ...separatedByCommas(
+          indexedCardsExpressions.map((row) =>
+            addExplicitParens(separatedByCommas(row.valueExpressions)),
+          ),
+        ),
+      ] as Expression,
+      coerceTypes,
+    );
   }
 
   if (versionExpressions.length > 0) {
-    await client.query([
-      `INSERT INTO realm_versions`,
-      ...addExplicitParens(
-        separatedByCommas(versionExpressions[0].nameExpressions),
-      ),
-      'VALUES',
-      ...separatedByCommas(
-        versionExpressions.map((row) =>
-          addExplicitParens(separatedByCommas(row.valueExpressions)),
+    await query(
+      client,
+      [
+        `INSERT INTO realm_versions`,
+        ...addExplicitParens(
+          separatedByCommas(versionExpressions[0].nameExpressions),
         ),
-      ),
-    ] as Expression);
+        'VALUES',
+        ...separatedByCommas(
+          versionExpressions.map((row) =>
+            addExplicitParens(separatedByCommas(row.valueExpressions)),
+          ),
+        ),
+      ] as Expression,
+      coerceTypes,
+    );
   }
 }
