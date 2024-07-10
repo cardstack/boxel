@@ -12,8 +12,13 @@ import {
 
 import cssVar from '../../helpers/css-var.ts';
 import BoxelField from '../field-container/index.gts';
-import { type InputValidationState } from '../input/index.gts';
+import {
+  type InputValidationState,
+  InputValidationStates,
+} from '../input/index.gts';
 import BoxelInputGroup from './index.gts';
+
+const validStates = Object.values(InputValidationStates);
 
 interface Token {
   icon: string;
@@ -123,10 +128,10 @@ export default class BoxelInputGroupUsage extends Component {
           @onInput={{fn (mut this.disabled)}}
           @value={{this.disabled}}
         />
-        <Args.Bool
+        <Args.String
           @name='state'
-          @description='The input state'
-          @defaultValue={{false}}
+          @description='The validation state of the input'
+          @options={{validStates}}
           @onInput={{fn (mut this.state)}}
           @value={{this.state}}
         />
