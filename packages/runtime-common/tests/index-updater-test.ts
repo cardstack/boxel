@@ -760,7 +760,7 @@ const tests = Object.freeze({
   },
 
   'can get an error doc': async (assert, { indexQueryEngine, adapter }) => {
-    setupIndex(adapter, [
+    await setupIndex(adapter, [
       {
         url: `${testRealmURL}1.json`,
         realm_version: 1,
@@ -1178,7 +1178,7 @@ const tests = Object.freeze({
     assert,
     { indexQueryEngine, adapter },
   ) => {
-    setupIndex(adapter, [
+    await setupIndex(adapter, [
       {
         url: `${testRealmURL}person.gts`,
         realm_version: 1,
@@ -1212,7 +1212,7 @@ const tests = Object.freeze({
     assert,
     { indexQueryEngine, adapter },
   ) => {
-    setupIndex(adapter, [
+    await setupIndex(adapter, [
       {
         url: `${testRealmURL}person.gts`,
         type: 'module',
@@ -1324,7 +1324,7 @@ const tests = Object.freeze({
     assert,
     { indexQueryEngine, adapter },
   ) => {
-    setupIndex(adapter, [
+    await setupIndex(adapter, [
       {
         url: `${testRealmURL}person.gts`,
         realm_version: 1,
@@ -1358,7 +1358,7 @@ const tests = Object.freeze({
     assert,
     { indexQueryEngine, adapter },
   ) => {
-    setupIndex(adapter, [
+    await setupIndex(adapter, [
       {
         url: `${testRealmURL}person.gts`,
         type: 'css',
