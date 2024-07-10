@@ -1033,7 +1033,6 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       json.data,
       json,
       new URL(json.data.id),
-      myLoader(),
       {
         identityContext,
       },
@@ -1448,7 +1447,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
           json.data,
           json,
           new URL(json.data.id),
-          myLoader(),
           {
             identityContext,
           },
@@ -2650,7 +2648,6 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   resource: LooseCardResource,
   doc: LooseSingleCardDocument | CardDocument,
   relativeTo: URL | undefined,
-  loader: Loader,
   opts?: { identityContext?: IdentityContext },
 ): Promise<BaseInstanceType<T>> {
   let identityContext = opts?.identityContext ?? new IdentityContext();
@@ -2658,7 +2655,7 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
     meta: { adoptsFrom },
   } = resource;
   let card: typeof BaseDef | undefined = await loadCard(adoptsFrom, {
-    loader,
+    loader: myLoader(),
     relativeTo,
   });
   if (!card) {

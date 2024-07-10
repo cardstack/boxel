@@ -57,7 +57,6 @@ module('Integration | card-delete', function (hooks) {
       result.doc.data,
       result.doc,
       new URL(url),
-      loader,
     );
     await recompute(card, { loadFields: true });
     return card;

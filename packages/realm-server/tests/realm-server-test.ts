@@ -2130,7 +2130,6 @@ module('Realm Server', function (hooks) {
         doc.data,
         doc,
         undefined,
-        loader,
       );
       assert.strictEqual(person.firstName, 'Mango', 'card data is correct');
     });
@@ -2154,7 +2153,6 @@ module('Realm Server', function (hooks) {
         doc.data,
         doc,
         undefined,
-        loader,
       );
       assert.strictEqual(person.firstName, 'Mango', 'card data is correct');
     });
@@ -2179,7 +2177,6 @@ module('Realm Server', function (hooks) {
         doc.data,
         doc,
         undefined,
-        loader,
       );
       assert.deepEqual(testCard.ref, ref, 'card data is correct');
     });

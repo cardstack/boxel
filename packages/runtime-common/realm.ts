@@ -1771,7 +1771,6 @@ export class Realm {
       doc.data,
       doc,
       relativeTo,
-      this.loader,
     )) as CardDef;
     await api.flushLogs();
     let data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds

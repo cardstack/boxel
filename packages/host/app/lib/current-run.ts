@@ -406,7 +406,6 @@ export class CurrentRun {
         adjustedResource,
         { data: adjustedResource },
         new URL(fileURL),
-        this.loaderService.loader,
         {
           identityContext,
         },
@@ -546,7 +545,6 @@ export class CurrentRun {
         resourceForType,
         { data: resourceForType },
         new URL(resource.id),
-        this.loaderService.loader,
         {
           identityContext: modifiedContext,
         },
