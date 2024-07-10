@@ -84,6 +84,8 @@ export default class AiAssistantPanel extends Component<Signature> {
       <div
         class='ai-assistant-panel'
         data-test-ai-assistant-panel
+        data-test-room-has-messages={{if this.currentRoom.messages true false}}
+        data-test-room-is-empty={{if this.currentRoom.messages false true}}
         ...attributes
       >
         <@resizeHandle />
