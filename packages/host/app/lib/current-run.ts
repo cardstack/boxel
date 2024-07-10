@@ -412,20 +412,24 @@ export class CurrentRun {
           identityContext,
         },
       );
-      isolatedHtml = await this.#renderCard({
-        card,
-        format: 'isolated',
-        visit: this.visitFile.bind(this),
-        identityContext,
-        realmPath: this.#realmPaths,
-      });
-      atomHtml = await this.#renderCard({
-        card,
-        format: 'atom',
-        visit: this.visitFile.bind(this),
-        identityContext,
-        realmPath: this.#realmPaths,
-      });
+      isolatedHtml = sanitizeHTML(
+        await this.#renderCard({
+          card,
+          format: 'isolated',
+          visit: this.visitFile.bind(this),
+          identityContext,
+          realmPath: this.#realmPaths,
+        }),
+      );
+      atomHtml = sanitizeHTML(
+        await this.#renderCard({
+          card,
+          format: 'atom',
+          visit: this.visitFile.bind(this),
+          identityContext,
+          realmPath: this.#realmPaths,
+        }),
+      );
       cardType = Reflect.getPrototypeOf(card)?.constructor as typeof CardDef;
       let data = api.serializeCard(card, { includeComputeds: true });
       // prepare the document for index serialization
@@ -548,13 +552,15 @@ export class CurrentRun {
           identityContext: modifiedContext,
         },
       );
-      let embeddedHtml = await this.#renderCard({
-        card,
-        format: 'embedded',
-        visit: this.visitFile.bind(this),
-        identityContext: modifiedContext,
-        realmPath: this.#realmPaths,
-      });
+      let embeddedHtml = sanitizeHTML(
+        await this.#renderCard({
+          card,
+          format: 'embedded',
+          visit: this.visitFile.bind(this),
+          identityContext: modifiedContext,
+          realmPath: this.#realmPaths,
+        }),
+      );
       let ref = refURL === types[0].refURL ? 'default' : refURL;
       result[ref] = embeddedHtml;
     }
@@ -622,6 +628,11 @@ export class CurrentRun {
     deferred.fulfill(result);
     return result;
   }
+}
+
+function sanitizeHTML(html: string): string {
+  // currently this only involves removing auto-generated ember ID's
+  return html.replace(/\s+id="ember[0-9]+"/g, '');
 }
 
 function assertURLEndsWithJSON(url: URL): URL {
