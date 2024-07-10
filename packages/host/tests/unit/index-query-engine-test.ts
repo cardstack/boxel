@@ -5,7 +5,6 @@ import {
   VirtualNetwork,
   baseRealm,
   IndexQueryEngine,
-  IndexUpdater,
   fetcher,
   maybeHandleScopedCSSRequest,
 } from '@cardstack/runtime-common';
@@ -31,14 +30,13 @@ let codeRef: typeof import('https://cardstack.com/base/code-ref');
 let { resolvedBaseRealmURL } = ENV;
 
 module('Unit | query', function (hooks) {
-  let adapter: SQLiteAdapter;
+  let dbAdapter: SQLiteAdapter;
   let indexQueryEngine: IndexQueryEngine;
-  let indexUpdater: IndexUpdater;
   let loader: Loader;
   let testCards: { [name: string]: CardDef } = {};
 
   hooks.before(async function () {
-    adapter = await getDbAdapter();
+    dbAdapter = await getDbAdapter();
   });
 
   hooks.beforeEach(async function () {
@@ -182,17 +180,14 @@ module('Unit | query', function (hooks) {
       setCardAsSavedForTest(card);
     }
 
-    await adapter.reset();
-    indexQueryEngine = new IndexQueryEngine(adapter);
-    indexUpdater = new IndexUpdater(adapter);
-    await indexUpdater.ready();
-    await indexQueryEngine.ready();
+    await dbAdapter.reset();
+    indexQueryEngine = new IndexQueryEngine(dbAdapter);
   });
 
   test('can get all cards with empty filter', async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -201,7 +196,7 @@ module('Unit | query', function (hooks) {
   test('deleted cards are not included in results', async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -210,7 +205,7 @@ module('Unit | query', function (hooks) {
   test('error docs are not included in results', async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -219,7 +214,7 @@ module('Unit | query', function (hooks) {
   test('can filter by type', async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -228,7 +223,7 @@ module('Unit | query', function (hooks) {
   test(`can filter using 'eq'`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -237,7 +232,7 @@ module('Unit | query', function (hooks) {
   test(`can filter using 'eq' thru nested fields`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -246,7 +241,7 @@ module('Unit | query', function (hooks) {
   test(`can use 'eq' to match multiple fields`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -255,7 +250,7 @@ module('Unit | query', function (hooks) {
   test(`can use 'eq' to find 'null' values`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -264,7 +259,7 @@ module('Unit | query', function (hooks) {
   test(`can use 'eq' to match against number type`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -273,7 +268,7 @@ module('Unit | query', function (hooks) {
   test(`can use 'eq' to match against boolean type`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -282,7 +277,7 @@ module('Unit | query', function (hooks) {
   test('can filter eq from a code ref query value', async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -291,7 +286,7 @@ module('Unit | query', function (hooks) {
   test('can filter eq from a date query value', async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -300,7 +295,7 @@ module('Unit | query', function (hooks) {
   test(`can search with a 'not' filter`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -309,7 +304,7 @@ module('Unit | query', function (hooks) {
   test('can handle a filter with double negatives', async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -318,7 +313,7 @@ module('Unit | query', function (hooks) {
   test(`can use a 'contains' filter`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -327,7 +322,7 @@ module('Unit | query', function (hooks) {
   test(`contains filter is case insensitive`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -336,7 +331,7 @@ module('Unit | query', function (hooks) {
   test(`can use 'contains' to match multiple fields`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -345,7 +340,7 @@ module('Unit | query', function (hooks) {
   test(`can use a 'contains' filter to match 'null'`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -354,7 +349,7 @@ module('Unit | query', function (hooks) {
   test(`can use 'every' to combine multiple filters`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -363,7 +358,7 @@ module('Unit | query', function (hooks) {
   test(`can use 'any' to combine multiple filters`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -372,7 +367,7 @@ module('Unit | query', function (hooks) {
   test(`gives a good error when query refers to missing card`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -381,7 +376,7 @@ module('Unit | query', function (hooks) {
   test(`gives a good error when query refers to missing field`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -390,7 +385,7 @@ module('Unit | query', function (hooks) {
   test(`it can filter on a plural primitive field using 'eq'`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -399,7 +394,7 @@ module('Unit | query', function (hooks) {
   test(`it can filter on a nested field within a plural composite field using 'eq'`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -408,7 +403,7 @@ module('Unit | query', function (hooks) {
   test('it can match a null in a plural field', async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -417,7 +412,7 @@ module('Unit | query', function (hooks) {
   test('it can match a leaf plural field nested in a plural composite field', async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -426,7 +421,7 @@ module('Unit | query', function (hooks) {
   test('it can match thru a plural nested composite field that is field of a singular composite field', async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -435,7 +430,7 @@ module('Unit | query', function (hooks) {
   test(`can return a single result for a card when there are multiple matches within a result's search doc`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -444,7 +439,7 @@ module('Unit | query', function (hooks) {
   test('can perform query against WIP version of the index', async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -453,7 +448,7 @@ module('Unit | query', function (hooks) {
   test('can perform query against "production" version of the index', async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -462,7 +457,7 @@ module('Unit | query', function (hooks) {
   test('can sort search results', async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -471,7 +466,7 @@ module('Unit | query', function (hooks) {
   test('can sort descending', async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -480,7 +475,7 @@ module('Unit | query', function (hooks) {
   test('nulls are sorted to the end of search results', async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -489,7 +484,7 @@ module('Unit | query', function (hooks) {
   test('can get paginated results that are stable during index mutations', async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -498,7 +493,7 @@ module('Unit | query', function (hooks) {
   test(`can filter using 'gt'`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -507,7 +502,7 @@ module('Unit | query', function (hooks) {
   test(`can filter using 'gte'`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -516,7 +511,7 @@ module('Unit | query', function (hooks) {
   test(`can filter using 'gt' thru nested fields`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -525,7 +520,7 @@ module('Unit | query', function (hooks) {
   test(`can filter using 'gt' thru a plural primitive field`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -534,7 +529,7 @@ module('Unit | query', function (hooks) {
   test(`can filter using 'gt' thru a plural composite field`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -543,7 +538,7 @@ module('Unit | query', function (hooks) {
   test(`can filter using 'lt'`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -552,7 +547,7 @@ module('Unit | query', function (hooks) {
   test(`can filter using 'lte'`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -561,7 +556,7 @@ module('Unit | query', function (hooks) {
   test(`can combine 'range' filter`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -570,7 +565,7 @@ module('Unit | query', function (hooks) {
   test(`cannot filter 'null' value using 'range'`, async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });
@@ -579,7 +574,7 @@ module('Unit | query', function (hooks) {
   test('can get prerendered cards (html + css) from the indexer', async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
-      indexUpdater,
+      dbAdapter,
       loader,
       testCards,
     });

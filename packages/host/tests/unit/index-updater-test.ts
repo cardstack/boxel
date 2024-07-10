@@ -22,8 +22,6 @@ module('Unit | index-updater', function (hooks) {
     await adapter.reset();
     indexUpdater = new IndexUpdater(adapter);
     indexQueryEngine = new IndexQueryEngine(adapter);
-    await indexUpdater.ready();
-    await indexQueryEngine.ready();
   });
 
   test('can perform invalidations for a instance entry', async function (assert) {

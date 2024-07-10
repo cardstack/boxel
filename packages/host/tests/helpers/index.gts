@@ -108,7 +108,6 @@ export async function getDbAdapter() {
     | undefined;
   if (!dbAdapter) {
     dbAdapter = new SQLiteAdapter(sqlSchema);
-    await dbAdapter.startClient();
     (globalThis as any).__sqliteAdapter = dbAdapter;
   }
   return dbAdapter;

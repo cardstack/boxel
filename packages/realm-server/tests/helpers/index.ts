@@ -63,7 +63,6 @@ export function setupDB(
     prepareTestDB();
     dbAdapter = new PgAdapter();
     queue = new PgQueue(dbAdapter);
-    await dbAdapter.startClient();
   };
 
   const runAfterHook = async () => {

@@ -15,8 +15,8 @@ export default class SQLiteAdapter implements DBAdapter {
   private _dbId: string | undefined;
   private primaryKeys = new Map<string, string>();
   private tables: string[] = [];
-  private start: Promise<void> | undefined;
-  #hasStarted = false;
+  private started = this.#startClient();
+
   #isClosed = false;
 
   // TODO: one difference that I'm seeing is that it looks like "json_each" is
@@ -32,17 +32,7 @@ export default class SQLiteAdapter implements DBAdapter {
     return this.#isClosed;
   }
 
-  async startClient() {
-    if (this.#hasStarted) {
-      return;
-    }
-    if (this.start) {
-      await this.start;
-      return;
-    }
-    let deferred = new Deferred<void>();
-    this.start = deferred.promise;
-
+  async #startClient() {
     this.assertNotClosed();
     let ready = new Deferred<typeof SQLiteWorker>();
     const promisedWorker = sqlite3Worker1Promiser({
@@ -99,30 +89,32 @@ export default class SQLiteAdapter implements DBAdapter {
         this.primaryKeys.set(table_name, primary_keys);
       }
     }
-    this.#hasStarted = true;
-    deferred.fulfill();
   }
 
   async execute(sql: string, opts?: ExecuteOptions) {
     this.assertNotClosed();
+    await this.started;
     sql = this.adjustSQL(sql);
     return await this.query(sql, opts);
   }
 
   async close() {
     this.assertNotClosed();
+    await this.started;
     await this.sqlite('close', { dbId: this.dbId });
     this.#isClosed = true;
   }
 
   async reset() {
     this.assertNotClosed();
+    await this.started;
     for (let table of this.tables) {
       await this.execute(`DELETE FROM ${table};`);
     }
   }
 
   async getColumnNames(tableName: string): Promise<string[]> {
+    await this.started;
     let result = await this.execute('SELECT name FROM pragma_table_info($1);', {
       bind: [tableName],
     });

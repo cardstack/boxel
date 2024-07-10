@@ -5,7 +5,6 @@ import {
   type Expression,
   expressionToSql,
   logger,
-  Deferred,
 } from '@cardstack/runtime-common';
 import migrate from 'node-pg-migrate';
 import { join } from 'path';
@@ -23,8 +22,8 @@ function config() {
 
 export default class PgAdapter implements DBAdapter {
   private pool: Pool;
-  private start: Promise<void> | undefined;
-  #hasStarted = false;
+  private started = this.#startClient();
+
   #isClosed = false;
 
   constructor() {
@@ -45,33 +44,20 @@ export default class PgAdapter implements DBAdapter {
     return this.#isClosed;
   }
 
-  async startClient() {
-    if (this.#hasStarted) {
-      return;
-    }
-    if (this.start) {
-      await this.start;
-      return;
-    }
-    let deferred = new Deferred<void>();
-    this.start = deferred.promise;
-
+  async #startClient() {
     await this.migrateDb();
-
-    this.#hasStarted = true;
-    deferred.fulfill();
   }
 
   async close() {
-    if (this.pool) {
-      await this.pool.end();
-    }
+    await this.started;
+    await this.pool.end();
   }
 
   async execute(
     sql: string,
     opts?: ExecuteOptions,
   ): Promise<Record<string, PgPrimitive>[]> {
+    await this.started;
     let client = await this.pool.connect();
     log.debug(
       `executing sql: ${sql}, with bindings: ${JSON.stringify(opts?.bind)}`,
@@ -100,6 +86,8 @@ export default class PgAdapter implements DBAdapter {
     handler: (notification: Notification) => void,
     fn: () => Promise<void>,
   ) {
+    await this.started;
+
     // we have found that LISTEN/NOTIFY doesn't work reliably on connections from the
     // Pool, and this is substantiated by commentary on GitHub:
     //   https://github.com/brianc/node-postgres/issues/1543#issuecomment-353622236
@@ -131,6 +119,8 @@ export default class PgAdapter implements DBAdapter {
       query: (e: Expression) => Promise<Record<string, PgPrimitive>[]>;
     }) => Promise<T>,
   ): Promise<T> {
+    await this.started;
+
     let client = await this.pool.connect();
     let query = async (expression: Expression) => {
       let sql = expressionToSql(expression);
@@ -146,6 +136,8 @@ export default class PgAdapter implements DBAdapter {
   }
 
   async getColumnNames(tableName: string): Promise<string[]> {
+    await this.started;
+
     let result = await this.execute(
       'SELECT column_name FROM information_schema.columns WHERE table_name = $1',
       {

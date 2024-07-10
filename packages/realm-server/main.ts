@@ -146,7 +146,6 @@ let dist: URL = new URL(distURL);
   let realms: Realm[] = [];
   let dbAdapter = new PgAdapter();
   let queue = new PgQueue(dbAdapter);
-  await dbAdapter.startClient();
 
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];

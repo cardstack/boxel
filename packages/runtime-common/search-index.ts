@@ -106,7 +106,6 @@ export class SearchIndex {
     onIndexUpdaterReady?: (indexUpdater: IndexUpdater) => Promise<void>,
   ) {
     await this.#queue.start();
-    await this.#indexUpdater.ready();
     if (onIndexUpdaterReady) {
       await onIndexUpdaterReady(this.#indexUpdater);
     }

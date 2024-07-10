@@ -164,13 +164,12 @@ export class Worker {
 
   async run() {
     await this.#queue.start();
-    await this.#indexUpdater.ready();
 
-    await this.#queue.register(
+    this.#queue.register(
       `from-scratch-index:${this.#realmURL}`,
       this.fromScratch,
     );
-    await this.#queue.register(
+    this.#queue.register(
       `incremental-index:${this.#realmURL}`,
       this.incremental,
     );
