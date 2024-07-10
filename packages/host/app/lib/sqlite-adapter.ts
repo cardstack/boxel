@@ -70,11 +70,11 @@ export default class SQLiteAdapter implements DBAdapter {
       }
 
       this.tables = (
-        (await this.execute(
+        (await this.internalExecute(
           `SELECT name FROM pragma_table_list WHERE schema = 'main' AND name != 'sqlite_schema'`,
         )) as { name: string }[]
       ).map((r) => r.name);
-      let pks = (await this.execute(
+      let pks = (await this.internalExecute(
         `
         SELECT m.name AS table_name,
         GROUP_CONCAT(p.name, ', ') AS primary_keys
@@ -93,6 +93,10 @@ export default class SQLiteAdapter implements DBAdapter {
   async execute(sql: string, opts?: ExecuteOptions) {
     this.assertNotClosed();
     await this.started;
+    return await this.internalExecute(sql, opts);
+  }
+
+  private async internalExecute(sql: string, opts?: ExecuteOptions) {
     sql = this.adjustSQL(sql);
     return await this.query(sql, opts);
   }
