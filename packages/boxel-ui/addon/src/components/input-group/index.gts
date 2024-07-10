@@ -4,8 +4,8 @@ import Component from '@glimmer/component';
 
 import cn from '../../helpers/cn.ts';
 import { and, bool, eq, or } from '../../helpers/truth-helpers.ts';
-import SuccessBordered from '../../icons/check-mark.gts';
 import FailureBordered from '../../icons/failure-bordered.gts';
+import SuccessBordered from '../../icons/success-bordered.gts';
 import type { Icon } from '../../icons/types.ts';
 import { type InputValidationState } from '../input/index.gts';
 import LoadingIndicator from '../loading-indicator/index.gts';
