@@ -89,7 +89,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: all-host-reports
-          pattern: host-test-report-*
+          pattern: host-test-report-${{ matrix.browser }}-*
           merge-multiple: true
 
       - run: ls
