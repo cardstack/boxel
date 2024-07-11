@@ -55,7 +55,7 @@ import {
   SupportedMimeType,
   lookupRouteTable,
 } from './router';
-import { Query, assertQuery, parseQueryString } from './query';
+import { assertQuery } from './query';
 import type { Readable } from 'stream';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
