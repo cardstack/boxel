@@ -62,6 +62,7 @@ export default class CardPill extends Component<CardPillSignature> {
             <span class='boxel-sr-only'>{{@card.title}}</span>
             <input
               {{on 'click' @onToggle}}
+              {{on 'keypress' @onToggle}}
               class='toggle-switch'
               type='checkbox'
               switch

@@ -31,6 +31,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
       @isExpandableHeader={{true}}
       @canAttachCard={{true}}
       @onChooseCard={{this.attachSkill}}
+      tabindex='0'
       ...attributes
     >
       <:headerIcon>
@@ -55,7 +56,11 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         white-space: nowrap;
         transition: width 0.2s ease-in;
       }
-      :global(.skill-menu.pill-menu--minimized:hover) {
+      :global(.skill-menu.pill-menu--minimized:focus) {
+        outline: 0;
+      }
+      :global(.skill-menu.pill-menu--minimized:hover),
+      :global(.skill-menu.pill-menu--minimized:focus-within) {
         --boxel-pill-menu-width: 100%;
       }
       :global(.skill-menu.pill-menu--minimized .expandable-header-button),
@@ -64,7 +69,12 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         transition: visibility 0.2s ease-in;
       }
       :global(.skill-menu.pill-menu--minimized:hover .expandable-header-button),
-      :global(.skill-menu.pill-menu--minimized:hover .skills-length) {
+      :global(.skill-menu.pill-menu--minimized:hover .skills-length),
+      :global(
+          .skill-menu.pill-menu--minimized:focus-within
+            .expandable-header-button
+        ),
+      :global(.skill-menu.pill-menu--minimized:focus-within .skills-length) {
         visibility: visible;
       }
       .header-icon {

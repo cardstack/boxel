@@ -8,7 +8,7 @@ import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask } from 'ember-concurrency';
 
 import { AddButton, Header } from '@cardstack/boxel-ui/components';
-import { cn, not } from '@cardstack/boxel-ui/helpers';
+import { cn, not, or } from '@cardstack/boxel-ui/helpers';
 
 import { chooseCard, baseCardRef, type Query } from '@cardstack/runtime-common';
 
@@ -73,24 +73,26 @@ export default class PillMenu extends Component<Signature> {
         </:actions>
       </Header>
       {{#if this.isExpanded}}
-        <div class='menu-content'>
-          {{yield to='content'}}
+        {{#if (or (has-block 'content') @items.length)}}
+          <div class='menu-content'>
+            {{yield to='content'}}
 
-          {{#if @items.length}}
-            <ul class='pill-list'>
-              {{#each @items as |item|}}
-                <li>
-                  <CardPill
-                    @card={{item.card}}
-                    @onToggle={{fn this.toggleActive item}}
-                    @isEnabled={{item.isActive}}
-                    data-test-pill-menu-item={{item.card.id}}
-                  />
-                </li>
-              {{/each}}
-            </ul>
-          {{/if}}
-        </div>
+            {{#if @items.length}}
+              <ul class='pill-list'>
+                {{#each @items as |item|}}
+                  <li>
+                    <CardPill
+                      @card={{item.card}}
+                      @onToggle={{fn this.toggleActive item}}
+                      @isEnabled={{item.isActive}}
+                      data-test-pill-menu-item={{item.card.id}}
+                    />
+                  </li>
+                {{/each}}
+              </ul>
+            {{/if}}
+          </div>
+        {{/if}}
 
         {{#if @canAttachCard}}
           <footer class='menu-footer'>
