@@ -1,3 +1,4 @@
+import { service } from '@ember/service';
 import { cached } from '@glimmer/tracking';
 
 import ignore, { type Ignore } from 'ignore';
@@ -6,28 +7,30 @@ import isEqual from 'lodash/isEqual';
 import merge from 'lodash/merge';
 
 import {
-  Loader,
   baseRealm,
   logger,
   baseCardRef,
-  LooseCardResource,
   isCardResource,
   internalKeyFor,
   trimExecutableExtension,
   hasExecutableExtension,
   SupportedMimeType,
-  Indexer,
-  Batch,
   loadCard,
   identifyCard,
-  isBaseDef,
   moduleFrom,
-  type SearchEntryWithErrors,
+  isCardDef,
+  IndexUpdater,
+  type Batch,
+  type LooseCardResource,
+  type InstanceEntry,
+  type ErrorEntry,
   type CodeRef,
   type RealmInfo,
   type IndexResults,
   type SingleCardDocument,
+  type CardResource,
   type Relationship,
+  type TextFileRef,
 } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import {
@@ -43,88 +46,76 @@ import { type Reader, type Stats } from '@cardstack/runtime-common/worker';
 import {
   CardDef,
   type IdentityContext as IdentityContextType,
-  LoaderType,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
+import LoaderService from '../services/loader-service';
 import { type RenderCard } from '../services/render-service';
+
+import { getScopedCss } from './scoped-css';
 
 const log = logger('current-run');
 
-interface Module {
-  url: string;
-  consumes: string[];
+interface CardType {
+  refURL: string;
+  codeRef: CodeRef;
 }
-
-type ModuleWithErrors =
-  | { type: 'module'; module: Module }
-  | { type: 'error'; moduleURL: string; error: SerializedError };
-
 type TypesWithErrors =
-  | { type: 'types'; types: string[] }
-  | { type: 'error'; error: SerializedError };
+  | {
+      type: 'types';
+      types: CardType[];
+    }
+  | {
+      type: 'error';
+      error: SerializedError;
+    };
 
 export class CurrentRun {
-  #modules = new Map<string, ModuleWithErrors>();
-  #moduleWorkingCache = new Map<string, Promise<Module>>();
   #typesCache = new WeakMap<typeof CardDef, Promise<TypesWithErrors>>();
   #indexingInstances = new Map<string, Promise<void>>();
   #reader: Reader;
-  #indexer: Indexer;
+  #indexUpdater: IndexUpdater;
   #batch: Batch | undefined;
   #realmPaths: RealmPaths;
   #ignoreData: Record<string, string>;
-  #loader: Loader;
   #renderCard: RenderCard;
   #realmURL: URL;
   #realmInfo?: RealmInfo;
-  #isIndexing = false;
   readonly stats: Stats = {
     instancesIndexed: 0,
     instanceErrors: 0,
     moduleErrors: 0,
   };
+  @service declare loaderService: LoaderService;
 
   constructor({
     realmURL,
     reader,
-    indexer,
+    indexUpdater,
     ignoreData = {},
-    loader,
     renderCard,
   }: {
     realmURL: URL;
     reader: Reader;
-    indexer: Indexer;
+    indexUpdater: IndexUpdater;
     ignoreData?: Record<string, string>;
-    loader: Loader;
     renderCard: RenderCard;
   }) {
-    this.#indexer = indexer;
+    this.#indexUpdater = indexUpdater;
     this.#realmPaths = new RealmPaths(realmURL);
     this.#reader = reader;
     this.#realmURL = realmURL;
     this.#ignoreData = ignoreData;
     this.#renderCard = renderCard;
-    // we are intentionally using the same loader as the LoaderService.loader
-    // because our WIP header needs to be used anywhere the loader service's
-    // loader is being used (specifically in the render-service).
-    this.#loader = loader;
-    this.loader.prependURLHandlers([
-      async (req) => {
-        if (this.#isIndexing) {
-          req.headers.set('X-Boxel-Use-WIP-Index', 'true');
-        }
-        return null;
-      },
-    ]);
   }
 
   static async fromScratch(current: CurrentRun): Promise<IndexResults> {
     await current.whileIndexing(async () => {
       let start = Date.now();
       log.debug(`starting from scratch indexing`);
-      current.#batch = await current.#indexer.createBatch(current.realmURL);
+      current.#batch = await current.#indexUpdater.createBatch(
+        current.realmURL,
+      );
       await current.batch.makeNewGeneration();
       await current.visitDirectory(current.realmURL);
       await current.batch.done();
@@ -134,37 +125,20 @@ export class CurrentRun {
     return { invalidations: [], stats, ignoreData };
   }
 
-  static async incremental({
-    url,
-    realmURL,
-    operation,
-    ignoreData,
-    reader,
-    loader,
-    renderCard,
-    indexer,
-  }: {
-    url: URL;
-    realmURL: URL;
-    operation: 'update' | 'delete';
-    ignoreData: Record<string, string>;
-    reader: Reader;
-    loader: Loader;
-    renderCard: RenderCard;
-    indexer: Indexer;
-  }): Promise<IndexResults> {
+  static async incremental(
+    current: CurrentRun,
+    {
+      url,
+      operation,
+    }: {
+      url: URL;
+      operation: 'update' | 'delete';
+    },
+  ): Promise<IndexResults> {
     let start = Date.now();
     log.debug(`starting from incremental indexing for ${url.href}`);
 
-    let current = new this({
-      realmURL,
-      reader,
-      indexer,
-      ignoreData: { ...ignoreData },
-      loader,
-      renderCard,
-    });
-    current.#batch = await current.#indexer.createBatch(current.realmURL);
+    current.#batch = await current.#indexUpdater.createBatch(current.realmURL);
     let invalidations = (await current.batch.invalidate(url)).map(
       (href) => new URL(href),
     );
@@ -206,9 +180,9 @@ export class CurrentRun {
   }
 
   private async whileIndexing(doIndexing: () => Promise<void>) {
-    this.#isIndexing = true;
+    this.loaderService.setIsIndexing(true);
     await doIndexing();
-    this.#isIndexing = false;
+    this.loaderService.setIsIndexing(false);
   }
 
   private get batch() {
@@ -218,20 +192,12 @@ export class CurrentRun {
     return this.#batch;
   }
 
-  get modules() {
-    return this.#modules;
-  }
-
   get ignoreData() {
     return this.#ignoreData;
   }
 
   get realmURL() {
     return this.#realmURL;
-  }
-
-  public get loader() {
-    return this.#loader;
   }
 
   @cached
@@ -277,30 +243,26 @@ export class CurrentRun {
     }
     let start = Date.now();
     log.debug(`begin visiting file ${url.href}`);
-    if (
-      hasExecutableExtension(url.href) ||
-      // handle modules with no extension too
-      !url.href.split('/').pop()!.includes('.')
-    ) {
-      await this.indexCardSource(url);
-    } else {
-      let localPath = this.#realmPaths.local(url);
+    let localPath = this.#realmPaths.local(url);
 
-      let fileRef = await this.#reader.readFileAsText(localPath, {});
-      if (!fileRef) {
-        let error = new CardError(`missing file ${url.href}`, { status: 404 });
-        error.deps = [url.href];
-        throw error;
-      }
+    let fileRef = await this.#reader.readFileAsText(localPath);
+    if (!fileRef) {
+      let error = new CardError(`missing file ${url.href}`, { status: 404 });
+      error.deps = [url.href];
+      throw error;
+    }
+    let { content, lastModified } = fileRef;
+    if (hasExecutableExtension(url.href)) {
+      await this.indexModule(url, fileRef);
+    } else {
       if (!identityContext) {
-        let api = await this.#loader.import<typeof CardAPI>(
+        let api = await this.loaderService.loader.import<typeof CardAPI>(
           `${baseRealm.url}card-api`,
         );
         let { IdentityContext } = api;
         identityContext = new IdentityContext();
       }
 
-      let { content, lastModified } = fileRef;
       if (url.href.endsWith('.json')) {
         let resource;
 
@@ -312,29 +274,30 @@ export class CurrentRun {
         }
 
         if (resource && isCardResource(resource)) {
-          await this.indexCard(
-            localPath,
+          await this.indexCard({
+            path: localPath,
+            source: content,
             lastModified,
             resource,
             identityContext,
-          );
+          });
         }
       }
     }
     log.debug(`completed visiting file ${url.href} in ${Date.now() - start}ms`);
   }
 
-  private async indexCardSource(url: URL): Promise<void> {
+  private async indexModule(url: URL, ref: TextFileRef): Promise<void> {
     let module: Record<string, unknown>;
     try {
-      module = await this.loader.import(url.href);
+      module = await this.loaderService.loader.import(url.href);
     } catch (err: any) {
       this.stats.moduleErrors++;
       log.warn(
         `encountered error loading module "${url.href}": ${err.message}`,
       );
       let deps = await (
-        await this.loader.getConsumedModules(url.href)
+        await this.loaderService.loader.getConsumedModules(url.href)
       ).filter((u) => u !== url.href);
       await this.batch.updateEntry(new URL(url), {
         type: 'error',
@@ -345,36 +308,55 @@ export class CurrentRun {
           deps,
         },
       });
-      this.#modules.set(url.href, {
-        type: 'error',
-        moduleURL: url.href,
-        error: {
-          status: 500,
-          detail: `encountered error loading module "${url.href}": ${err.message}`,
-          additionalErrors: null,
-          deps,
-        },
-      });
       return;
     }
 
-    let refs = Object.values(module)
-      .filter((maybeCard) => isBaseDef(maybeCard))
-      .map((card) => identifyCard(card))
-      .filter(Boolean) as CodeRef[];
-    for (let ref of refs) {
-      if (!('type' in ref)) {
-        await this.buildModule(ref.module, url);
+    if (module) {
+      for (let exportName of Object.keys(module)) {
+        module[exportName]; // we do this so that we can allow code ref identifies to be wired up in the loader
       }
+    }
+    if (ref.isShimmed) {
+      log.debug(`skipping indexing of shimmed module ${url.href}`);
+      return;
+    }
+    let consumes = (
+      await this.loaderService.loader.getConsumedModules(url.href)
+    ).filter((u) => u !== url.href);
+    let deps = consumes.map((d) => trimExecutableExtension(new URL(d)).href);
+    await this.batch.updateEntry(url, {
+      type: 'module',
+      source: ref.content,
+      lastModified: ref.lastModified,
+      deps: new Set(deps),
+    });
+
+    let request = await this.loaderService.loader.fetch(url.href);
+    let transpiledSrc = await request.text();
+    let css = getScopedCss(transpiledSrc);
+    if (css) {
+      await this.batch.updateEntry(url, {
+        type: 'css',
+        source: css,
+        lastModified: ref.lastModified,
+        deps: new Set(deps),
+      });
     }
   }
 
-  private async indexCard(
-    path: LocalPath,
-    lastModified: number,
-    resource: LooseCardResource,
-    identityContext: IdentityContextType,
-  ): Promise<void> {
+  private async indexCard({
+    path,
+    source,
+    lastModified,
+    resource,
+    identityContext,
+  }: {
+    path: LocalPath;
+    source: string;
+    lastModified: number;
+    resource: LooseCardResource;
+    identityContext: IdentityContextType;
+  }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
     let indexingInstance = this.#indexingInstances.get(fileURL);
     if (indexingInstance) {
@@ -395,44 +377,59 @@ export class CurrentRun {
     let searchData: Record<string, any> | undefined;
     let cardType: typeof CardDef | undefined;
     let isolatedHtml: string | undefined;
+    let atomHtml: string | undefined;
+    let adjustedResource: CardResource | undefined;
     try {
-      let api = await this.#loader.import<typeof CardAPI>(
+      let api = await this.loaderService.loader.import<typeof CardAPI>(
         `${baseRealm.url}card-api`,
       );
 
       if (!this.#realmInfo) {
-        let realmInfoResponse = await this.#loader.fetch(
+        let realmInfoResponse = await this.loaderService.loader.fetch(
           `${this.realmURL}_info`,
           { headers: { Accept: SupportedMimeType.RealmInfo } },
         );
         this.#realmInfo = (await realmInfoResponse.json())?.data?.attributes;
       }
 
-      let res = { ...resource, ...{ id: instanceURL.href } };
+      adjustedResource = {
+        ...resource,
+        ...{ id: instanceURL.href, type: 'card' },
+      };
       //Realm info may be used by a card to render field values.
       //Example: catalog-entry-card
-      merge(res, {
+      merge(adjustedResource, {
         meta: {
           realmInfo: this.#realmInfo,
           realmURL: this.realmURL,
         },
       });
       let card = await api.createFromSerialized<typeof CardDef>(
-        res,
-        { data: res },
+        adjustedResource,
+        { data: adjustedResource },
         new URL(fileURL),
-        this.#loader as unknown as LoaderType,
         {
           identityContext,
         },
       );
-      isolatedHtml = await this.#renderCard({
-        card,
-        format: 'isolated',
-        visit: this.visitFile.bind(this),
-        identityContext,
-        realmPath: this.#realmPaths,
-      });
+      isolatedHtml = sanitizeHTML(
+        await this.#renderCard({
+          card,
+          format: 'isolated',
+          visit: this.visitFile.bind(this),
+          identityContext,
+          realmPath: this.#realmPaths,
+        }),
+      );
+      atomHtml = sanitizeHTML(
+        await this.#renderCard({
+          card,
+          format: 'atom',
+          visit: this.visitFile.bind(this),
+          identityContext,
+          realmPath: this.#realmPaths,
+        }),
+      );
       cardType = Reflect.getPrototypeOf(card)?.constructor as typeof CardDef;
       let data = api.serializeCard(card, { includeComputeds: true });
       // prepare the document for index serialization
@@ -474,22 +471,32 @@ export class CurrentRun {
     if (!uncaughtError && cardType) {
       typesMaybeError = await this.getTypes(cardType);
     }
+    let embeddedHtml: Record<string, string> | undefined;
+    if (adjustedResource && typesMaybeError?.type === 'types') {
+      embeddedHtml = await this.buildEmbeddedHtml(
+        adjustedResource,
+        typesMaybeError.types,
+        identityContext,
+      );
+    }
     if (searchData && doc && typesMaybeError?.type === 'types') {
       await this.updateEntry(instanceURL, {
-        type: 'entry',
-        entry: {
-          resource: doc.data,
-          searchData,
-          isolatedHtml,
-          types: typesMaybeError.types,
-          deps: new Set([
-            moduleURL,
-            ...(await this.loader.getConsumedModules(moduleURL)),
-          ]),
-        },
+        type: 'instance',
+        source,
+        resource: doc.data,
+        searchData,
+        isolatedHtml,
+        atomHtml,
+        embeddedHtml,
+        lastModified,
+        types: typesMaybeError.types.map(({ refURL }) => refURL),
+        deps: new Set([
+          moduleURL,
+          ...(await this.loaderService.loader.getConsumedModules(moduleURL)),
+        ]),
       });
     } else if (uncaughtError || typesMaybeError?.type === 'error') {
-      let error: SearchEntryWithErrors;
+      let error: ErrorEntry;
       if (uncaughtError) {
         error = {
           type: 'error',
@@ -519,61 +526,56 @@ export class CurrentRun {
     deferred.fulfill();
   }
 
-  private async updateEntry(instanceURL: URL, entry: SearchEntryWithErrors) {
+  private async buildEmbeddedHtml(
+    resource: CardResource,
+    types: CardType[],
+    identityContext: IdentityContextType,
+  ): Promise<{ [refURL: string]: string }> {
+    let api = await this.loaderService.loader.import<typeof CardAPI>(
+      `${baseRealm.url}card-api`,
+    );
+    let result: { [refURL: string]: string } = {};
+    for (let { codeRef, refURL } of types) {
+      // we need to remove ourselves from the identity context so that we don't
+      // revive a cached instance with the original card class
+      let clonedIdentities = new Map([...identityContext.identities]);
+      clonedIdentities.delete(resource.id);
+      let modifiedContext = { identities: clonedIdentities };
+
+      let resourceForType = merge(resource, { meta: { adoptsFrom: codeRef } });
+      let card = await api.createFromSerialized<typeof CardDef>(
+        resourceForType,
+        { data: resourceForType },
+        new URL(resource.id),
+        {
+          identityContext: modifiedContext,
+        },
+      );
+      let embeddedHtml = sanitizeHTML(
+        await this.#renderCard({
+          card,
+          format: 'embedded',
+          visit: this.visitFile.bind(this),
+          identityContext: modifiedContext,
+          realmPath: this.#realmPaths,
+        }),
+      );
+      let ref = refURL === types[0].refURL ? 'default' : refURL;
+      result[ref] = embeddedHtml;
+    }
+    return result;
+  }
+
+  private async updateEntry(
+    instanceURL: URL,
+    entry: InstanceEntry | ErrorEntry,
+  ) {
     await this.batch.updateEntry(assertURLEndsWithJSON(instanceURL), entry);
-    if (entry.type === 'entry') {
+    if (entry.type === 'instance') {
       this.stats.instancesIndexed++;
     } else {
       this.stats.instanceErrors++;
     }
-  }
-
-  public async buildModule(
-    moduleIdentifier: string,
-    relativeTo = this.#realmURL,
-  ): Promise<void> {
-    let url = new URL(moduleIdentifier, relativeTo).href;
-    let existing = this.#modules.get(url);
-    if (existing?.type === 'error') {
-      throw new Error(
-        `bug: card definition has errors which should never happen since the card already executed successfully: ${url}`,
-      );
-    }
-    if (existing) {
-      return;
-    }
-
-    let working = this.#moduleWorkingCache.get(url);
-    if (working) {
-      await working;
-      return;
-    }
-
-    let deferred = new Deferred<Module>();
-    this.#moduleWorkingCache.set(url, deferred.promise);
-    let m = await this.#loader.import<Record<string, any>>(moduleIdentifier);
-    if (m) {
-      for (let exportName of Object.keys(m)) {
-        m[exportName];
-      }
-    }
-    let consumes = (await this.loader.getConsumedModules(url)).filter(
-      (u) => u !== url,
-    );
-    let module: Module = {
-      url,
-      consumes,
-    };
-    await this.batch.updateEntry(new URL(url), {
-      type: 'module',
-      module: {
-        deps: new Set(
-          consumes.map((d) => trimExecutableExtension(new URL(d)).href),
-        ),
-      },
-    });
-    this.#modules.set(url, { type: 'module', module });
-    deferred.fulfill(module);
   }
 
   private async getTypes(card: typeof CardDef): Promise<TypesWithErrors> {
@@ -587,12 +589,19 @@ export class CurrentRun {
     }
     let deferred = new Deferred<TypesWithErrors>();
     this.#typesCache.set(card, deferred.promise);
-    let types: string[] = [];
+    let types: CardType[] = [];
     let fullRef: CodeRef = ref;
     while (fullRef) {
-      let loadedCard, loadedCardRef;
+      let loadedCard: typeof CardAPI.CardDef,
+        loadedCardRef: CodeRef | undefined;
       try {
-        loadedCard = await loadCard(fullRef, { loader: this.loader });
+        let maybeCard = await loadCard(fullRef, {
+          loader: this.loaderService.loader,
+        });
+        if (!isCardDef(maybeCard)) {
+          throw new Error(`The definition at ${fullRef} is not a CardDef`);
+        }
+        loadedCard = maybeCard;
         loadedCardRef = identifyCard(loadedCard);
         if (!loadedCardRef) {
           throw new Error(`could not identify card ${loadedCard.name}`);
@@ -601,7 +610,10 @@ export class CurrentRun {
         return { type: 'error', error: serializableError(error) };
       }
 
-      types.push(internalKeyFor(loadedCardRef, undefined));
+      types.push({
+        refURL: internalKeyFor(loadedCardRef, undefined),
+        codeRef: loadedCardRef,
+      });
       if (!isEqual(loadedCardRef, baseCardRef)) {
         fullRef = {
           type: 'ancestorOf',
@@ -615,6 +627,11 @@ export class CurrentRun {
     deferred.fulfill(result);
     return result;
   }
+}
+
+function sanitizeHTML(html: string): string {
+  // currently this only involves removing auto-generated ember ID's
+  return html.replace(/\s+id="ember[0-9]+"/g, '');
 }
 
 function assertURLEndsWithJSON(url: URL): URL {

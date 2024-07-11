@@ -19,7 +19,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
-import type { MessageField } from 'https://cardstack.com/base/room';
+import type { MessageField } from 'https://cardstack.com/base/message';
 
 import AiAssistantCardPicker from '../ai-assistant/card-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
@@ -48,6 +48,7 @@ export default class Room extends Component<Signature> {
         <AiAssistantConversation>
           {{#each this.room.messages as |message i|}}
             <RoomMessage
+              @room={{this.room}}
               @roomId={{@roomId}}
               @message={{message}}
               @index={{i}}
@@ -315,7 +316,7 @@ export default class Room extends Component<Signature> {
     return (
       !this.doSendMessage.isRunning &&
       Boolean(
-        this.messageToSend ||
+        this.messageToSend?.trim() ||
           this.cardsToAttach?.length ||
           this.autoAttachedCards.size !== 0,
       ) &&

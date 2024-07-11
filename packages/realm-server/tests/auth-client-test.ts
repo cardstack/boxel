@@ -35,12 +35,11 @@ module('realm-auth-client', function (assert) {
     } as RealmAuthMatrixClientInterface;
 
     let virtualNetwork = new VirtualNetwork();
-    let loader = virtualNetwork.createLoader();
 
     client = new RealmAuthClient(
       new URL('http://testrealm.com/'),
       mockMatrixClient,
-      loader,
+      virtualNetwork.fetch,
     ) as any;
 
     // [] notation is a hack to make TS happy so we can set private properties with mocks
@@ -84,13 +83,13 @@ module('realm-auth-client', function (assert) {
 
   test('it refreshes the jwt if it is about to expire in the client', async function (assert) {
     let jwtFromClient = createJWT('10s'); // Expires very soon, so the client will first refresh it
-    client['jwt'] = jwtFromClient;
+    client['_jwt'] = jwtFromClient;
     assert.notEqual(jwtFromClient, await client.getJWT(), 'jwt got refreshed');
   });
 
   test('it refreshes the jwt if it expired in the client', async function (assert) {
     let jwtFromClient = createJWT(-1); // Expired 1 second ago
-    client['jwt'] = jwtFromClient;
+    client['_jwt'] = jwtFromClient;
     assert.notEqual(jwtFromClient, await client.getJWT(), 'jwt got refreshed');
   });
 });

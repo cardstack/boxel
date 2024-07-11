@@ -14,7 +14,7 @@ import {
 import {
   BoxComponentSignature,
   DefaultFormatConsumer,
-  RealmSessionConsumer,
+  PermissionsConsumer,
   getBoxComponent,
 } from './field-component';
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
@@ -29,9 +29,16 @@ import {
   getPlural,
   CardContextName,
 } from '@cardstack/runtime-common';
-import { IconMinusCircle, IconX } from '@cardstack/boxel-ui/icons';
+import { IconMinusCircle, IconX, FourLines } from '@cardstack/boxel-ui/icons';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { consume } from 'ember-provide-consume-context';
+import {
+  SortableGroupModifier as sortableGroup,
+  SortableHandleModifier as sortableHandle,
+  SortableItemModifier as sortableItem,
+} from '@cardstack/boxel-ui/modifiers';
+
+import { action } from '@ember/object';
 
 interface Signature {
   Args: {
@@ -122,13 +129,33 @@ interface LinksToManyStandardEditorSignature {
 class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEditorSignature> {
   @consume(CardContextName) declare cardContext: CardContext;
 
+  @action
+  setItems(items: any) {
+    (this.args.model.value as any)[this.args.field.name] = items;
+  }
+
   <template>
-    <RealmSessionConsumer as |realmSession|>
+    <PermissionsConsumer as |permissions|>
       {{#if @arrayField.children.length}}
-        <ul class='list'>
+        <ul class='list' {{sortableGroup onChange=(fn this.setItems)}}>
           {{#each @arrayField.children as |boxedElement i|}}
-            <li class='editor' data-test-item={{i}}>
-              {{#if realmSession.canWrite}}
+            <li
+              class='editor'
+              data-test-item={{i}}
+              {{sortableItem model=boxedElement.value}}
+            >
+              {{#if permissions.canWrite}}
+                <IconButton
+                  {{sortableHandle}}
+                  @variant='primary'
+                  @icon={{FourLines}}
+                  @width='18px'
+                  @height='18px'
+                  class='sort'
+                  aria-label='Sort'
+                  data-test-sort-card
+                  data-test-sort={{i}}
+                />
                 <IconButton
                   @variant='primary'
                   @icon={{IconMinusCircle}}
@@ -156,7 +183,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         </ul>
       {{/if}}
 
-      {{#if realmSession.canWrite}}
+      {{#if permissions.canWrite}}
         <AddButton
           class='add-new'
           @variant='full-width'
@@ -167,7 +194,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
           {{getPlural @field.card.displayName}}
         </AddButton>
       {{/if}}
-    </RealmSessionConsumer>
+    </PermissionsConsumer>
     <style>
       .list {
         list-style: none;
@@ -175,7 +202,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         margin: 0 0 var(--boxel-sp);
       }
       .list > li + li {
-        margin-top: var(--boxel-sp);
+        padding-top: var(--boxel-sp);
       }
       .editor {
         position: relative;
@@ -187,7 +214,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       }
       .remove {
         --icon-color: var(--boxel-light);
-        align-self: center;
+        align-self: auto;
         outline: 0;
       }
       .remove:focus,
@@ -203,6 +230,24 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       }
       .add-new {
         width: calc(100% - var(--boxel-icon-lg));
+      }
+      .sort {
+        position: absolute;
+        top: 0;
+        left: calc(-1 * var(--boxel-sp-xxl));
+
+        cursor: move;
+        cursor: grab;
+      }
+      .list > li + li > .sort {
+        top: var(--boxel-sp);
+      }
+      .sort:active {
+        cursor: grabbing;
+      }
+      :deep(.is-dragging) {
+        z-index: 99;
+        transform: translateY(var(--boxel-sp));
       }
     </style>
   </template>

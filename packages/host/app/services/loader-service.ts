@@ -1,36 +1,63 @@
 import Service, { service } from '@ember/service';
+import { buildWaiter } from '@ember/test-waiters';
 import { tracked } from '@glimmer/tracking';
 
 import {
   VirtualNetwork,
   baseRealm,
-  addAuthorizationHeader,
-  IRealmAuthDataSource,
+  fetcher,
+  maybeHandleScopedCSSRequest,
+  RunnerOpts,
+  FetcherMiddlewareHandler,
+  authorizationMiddleware,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import config from '@cardstack/host/config/environment';
-import {
-  type RealmSessionResource,
-  getRealmSession,
-} from '@cardstack/host/resources/realm-session';
-import MatrixService from '@cardstack/host/services/matrix-service';
+
 import RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import { shimExternals } from '../lib/externals';
 
+import type RealmService from './realm';
+
+const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
+
+let virtualNetworkFetchWaiter = buildWaiter('virtual-network-fetch');
+
+function getNativeFetch(): typeof fetch {
+  if (isFastBoot) {
+    let optsId = (globalThis as any).runnerOptsId;
+    if (optsId == null) {
+      throw new Error(`Runner Options Identifier was not set`);
+    }
+    let getRunnerOpts = (globalThis as any).getRunnerOpts as (
+      optsId: number,
+    ) => RunnerOpts;
+    return getRunnerOpts(optsId)._fetch;
+  } else {
+    let fetchWithWaiter: typeof globalThis.fetch = async (...args) => {
+      let token = virtualNetworkFetchWaiter.beginAsync();
+      try {
+        return await fetch(...args);
+      } finally {
+        virtualNetworkFetchWaiter.endAsync(token);
+      }
+    };
+    return fetchWithWaiter;
+  }
+}
+
 export default class LoaderService extends Service {
   @service declare fastboot: { isFastBoot: boolean };
-  @service private declare matrixService: MatrixService;
   @service declare realmInfoService: RealmInfoService;
+  @service declare realm: RealmService;
 
   @tracked loader = this.makeInstance();
-  // This resources all have the same owner, it's safe to reuse cache.
-  // The owner is the service, which stays around for the whole lifetime of the host app,
-  // which in turn assures the resources will not get torn down.
-  private realmSessions: Map<string, RealmSessionResource> = new Map();
 
-  virtualNetwork = new VirtualNetwork();
+  private isIndexing = false;
+
+  virtualNetwork = this.makeVirtualNetwork();
 
   reset() {
     if (this.loader) {
@@ -40,58 +67,39 @@ export default class LoaderService extends Service {
     }
   }
 
-  private makeInstance() {
-    if (this.fastboot.isFastBoot) {
-      let loader = this.virtualNetwork.createLoader();
-      shimExternals(this.virtualNetwork);
-      return loader;
-    }
-
-    let loader = this.virtualNetwork.createLoader();
-    this.virtualNetwork.addURLMapping(
-      new URL(baseRealm.url),
-      new URL(config.resolvedBaseRealmURL),
-    );
-    loader.prependURLHandlers([
-      addAuthorizationHeader(loader, {
-        realmURL: undefined,
-        getJWT: async (realmURL: string) => {
-          return (await this.getRealmSession(new URL(realmURL))).rawRealmToken!;
-        },
-        getRealmInfo: async (url: string) => {
-          let realmURL = await this.realmInfoService.fetchRealmURL(url);
-          if (!realmURL) {
-            return null;
-          }
-          let isPublicReadable = await this.realmInfoService.isPublicReadable(
-            realmURL,
-          );
-          return {
-            url: realmURL.href,
-            isPublicReadable,
-          };
-        },
-        resetAuth: async (realmURL: string) => {
-          return (await this.getRealmSession(new URL(realmURL))).refreshToken();
-        },
-      } as IRealmAuthDataSource),
-    ]);
-    shimExternals(this.virtualNetwork);
-
-    return loader;
+  setIsIndexing(value: boolean) {
+    this.isIndexing = value;
   }
 
-  private async getRealmSession(realmURL: URL) {
-    let realmURLString = realmURL.href;
-    let realmSession = this.realmSessions.get(realmURLString);
-
-    if (!realmSession) {
-      realmSession = getRealmSession(this, {
-        realmURL: () => realmURL,
-      });
-      await realmSession.loaded;
-      this.realmSessions.set(realmURLString, realmSession);
+  private makeVirtualNetwork() {
+    let virtualNetwork = new VirtualNetwork(getNativeFetch());
+    if (!this.fastboot.isFastBoot) {
+      virtualNetwork.addURLMapping(
+        new URL(baseRealm.url),
+        new URL(config.resolvedBaseRealmURL),
+      );
     }
-    return realmSession;
+    shimExternals(virtualNetwork);
+    return virtualNetwork;
+  }
+
+  private makeInstance() {
+    let middlewareStack: FetcherMiddlewareHandler[] = [];
+    middlewareStack.push(async (req, next) => {
+      if (this.isIndexing) {
+        req.headers.set('X-Boxel-Use-WIP-Index', 'true');
+      }
+      return next(req);
+    });
+    middlewareStack.push(async (req, next) => {
+      return (await maybeHandleScopedCSSRequest(req)) || next(req);
+    });
+
+    if (!this.fastboot.isFastBoot) {
+      middlewareStack.push(authorizationMiddleware(this.realm));
+    }
+    let fetch = fetcher(this.virtualNetwork.fetch, middlewareStack);
+    let loader = new Loader(fetch, this.virtualNetwork.resolveImport);
+    return loader;
   }
 }

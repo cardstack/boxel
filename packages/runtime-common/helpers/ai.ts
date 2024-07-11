@@ -19,7 +19,7 @@ export type ObjectSchema = {
   };
 };
 
-export type RelationshipSchema = {
+export type LinksToSchema = {
   type: 'object';
   description?: string;
   properties: {
@@ -34,11 +34,19 @@ export type RelationshipSchema = {
   required: ['links'];
 };
 
+type LinksToManySchema = {
+  type: 'array';
+  description?: string;
+  items: LinksToSchema;
+};
+
+export type RelationshipSchema = LinksToSchema | LinksToManySchema;
+
 export type RelationshipsSchema = {
   type: 'object';
   description?: string;
   properties: {
-    [fieldName: string]: RelationshipSchema;
+    [fieldName: string]: LinksToSchema | LinksToManySchema;
   };
   required: string[]; // fieldName array;
 };
@@ -172,8 +180,7 @@ function generatePatchCallSpecification(
   def: typeof CardAPI.BaseDef,
   cardApi: typeof CardAPI,
   mappings: Map<typeof CardAPI.FieldDef, Schema>,
-  relationshipsOnly = false,
-): Schema | RelationshipsSchema | undefined {
+): Schema | undefined {
   // If we're looking at a primitive field we can get the schema
   if (primitive in def) {
     return getPrimitiveType(def, mappings);
@@ -181,19 +188,10 @@ function generatePatchCallSpecification(
 
   // If it's not a primitive, it contains other fields
   // and should be represented by an object
-  let schema: ObjectSchema | RelationshipsSchema;
-  if (relationshipsOnly) {
-    schema = {
-      type: 'object',
-      properties: {},
-      required: [],
-    };
-  } else {
-    schema = {
-      type: 'object',
-      properties: {},
-    };
-  }
+  let schema: ObjectSchema = {
+    type: 'object',
+    properties: {},
+  };
 
   const { id: _removedIdField, ...fields } = cardApi.getFields(def, {
     usedFieldsOnly: false,
@@ -201,61 +199,124 @@ function generatePatchCallSpecification(
 
   for (let [fieldName, field] of Object.entries(fields)) {
     // We're generating patch data, so computeds should be skipped
-    // Currently also skipping linksToMany fields
+    // We'll be handling relationships separately in `generatePatchCallRelationshipsSpecification`
     if (
       field.computeVia ||
       field.fieldType == 'linksTo' ||
       field.fieldType == 'linksToMany'
     ) {
-      if (relationshipsOnly && field.fieldType == 'linksTo') {
-        (schema as RelationshipsSchema).required.push(fieldName);
-        schema.properties[fieldName] = {
-          type: 'object',
-          properties: {
-            links: {
-              type: 'object',
-              properties: {
-                self: { type: 'string' },
-              },
-              required: ['self'],
-            },
-          },
-          required: ['links'],
-        };
-        if (field.description) {
-          schema.properties[fieldName].description = field.description;
-        }
-      } else {
-        continue;
-      }
+      continue;
     }
 
-    if (!relationshipsOnly) {
-      let fieldSchemaForSingleItem = generatePatchCallSpecification(
-        field.card,
-        cardApi,
-        mappings,
-      ) as Schema | undefined;
-      // This happens when we have no known schema for the field type
-      if (fieldSchemaForSingleItem == undefined) {
-        continue;
-      }
+    let fieldSchemaForSingleItem = generatePatchCallSpecification(
+      field.card,
+      cardApi,
+      mappings,
+    ) as Schema | undefined;
+    // This happens when we have no known schema for the field type
+    if (fieldSchemaForSingleItem == undefined) {
+      continue;
+    }
 
-      if (field.fieldType == 'containsMany') {
-        schema.properties[fieldName] = {
-          type: 'array',
-          items: fieldSchemaForSingleItem,
-        };
-      } else if (field.fieldType == 'contains') {
-        schema.properties[fieldName] = fieldSchemaForSingleItem;
-      }
+    if (field.fieldType == 'containsMany') {
+      schema.properties[fieldName] = {
+        type: 'array',
+        items: fieldSchemaForSingleItem,
+      };
+    } else if (field.fieldType == 'contains') {
+      schema.properties[fieldName] = fieldSchemaForSingleItem;
+    }
 
-      if (field.description) {
-        schema.properties[fieldName].description = field.description;
-      }
+    if (field.description) {
+      schema.properties[fieldName].description = field.description;
     }
   }
   return schema;
+}
+
+type RelationshipFieldInfo = {
+  flatFieldName: string;
+  fieldType: 'linksTo' | 'linksToMany';
+  description?: string;
+};
+
+function generatePatchCallRelationshipsSpecification(
+  def: typeof CardAPI.BaseDef,
+  cardApi: typeof CardAPI,
+): RelationshipsSchema | undefined {
+  let relationships: RelationshipFieldInfo[] = generateRelationshipFieldsInfo(
+    def,
+    cardApi,
+  );
+  if (!relationships.length) {
+    return;
+  }
+  let schema: RelationshipsSchema = {
+    type: 'object',
+    properties: {},
+    required: [],
+  };
+  for (let rel of relationships) {
+    let relSchema: LinksToSchema = {
+      type: 'object',
+      properties: {
+        links: {
+          type: 'object',
+          properties: {
+            self: { type: 'string' },
+          },
+          required: ['self'],
+        },
+      },
+      required: ['links'],
+    };
+    schema.properties[rel.flatFieldName] =
+      rel.fieldType === 'linksTo'
+        ? relSchema
+        : {
+            type: 'array',
+            items: relSchema,
+          };
+    schema.required.push(rel.flatFieldName);
+    if (rel.description) {
+      schema.properties[rel.flatFieldName].description = rel.description;
+    }
+  }
+  return schema;
+}
+
+function generateRelationshipFieldsInfo(
+  def: typeof CardAPI.BaseDef,
+  cardApi: typeof CardAPI,
+  relationships: RelationshipFieldInfo[] = [],
+  fieldName?: string,
+) {
+  const { id: _removedIdField, ...fields } = cardApi.getFields(def, {
+    usedFieldsOnly: false,
+  });
+  for (let [fName, fValue] of Object.entries(fields)) {
+    let flatFieldName = fieldName ? `${fieldName}.${fName}` : fName;
+    if (fValue.computeVia) {
+      continue;
+    } else if (
+      fValue.fieldType === 'linksTo' ||
+      fValue.fieldType === 'linksToMany'
+    ) {
+      relationships.push({
+        flatFieldName,
+        fieldType: fValue.fieldType,
+        description: fValue.description,
+      });
+    } else {
+      relationships = generateRelationshipFieldsInfo(
+        fValue.card,
+        cardApi,
+        relationships,
+        flatFieldName,
+      );
+    }
+  }
+  return relationships;
 }
 
 /**
@@ -288,11 +349,9 @@ export function generateCardPatchCallSpecification(
       },
     };
   } else {
-    let relationships = generatePatchCallSpecification(
+    let relationships = generatePatchCallRelationshipsSpecification(
       def,
       cardApi,
-      mappings,
-      true,
     );
     if (
       !relationships ||

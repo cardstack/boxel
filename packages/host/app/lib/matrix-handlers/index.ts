@@ -8,12 +8,9 @@ import {
 import { type LooseCardResource, baseRealm } from '@cardstack/runtime-common';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type {
-  RoomField,
-  MatrixEvent as DiscreteMatrixEvent,
-} from 'https://cardstack.com/base/room';
+import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type { RoomField } from 'https://cardstack.com/base/room';
 
-import type LoaderService from '../../services/loader-service';
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 export * as Membership from './membership';
@@ -39,9 +36,9 @@ export type Event = Partial<IEvent> & {
 };
 
 export interface EventSendingContext {
-  rooms: Map<string, Promise<RoomField>>;
+  setRoom: (roomId: string, roomPromise: Promise<RoomField>) => void;
+  getRoom: (roomId: string) => Promise<RoomField> | undefined;
   cardAPI: typeof CardAPI;
-  loaderService: LoaderService;
 }
 
 export interface Context extends EventSendingContext {
@@ -56,6 +53,7 @@ export interface Context extends EventSendingContext {
     event: Event,
     roomId: string,
   ) => Promise<void>;
+  addEventReadReceipt(eventId: string, receipt: { readAt: Date }): void;
 }
 
 export async function addRoomEvent(context: EventSendingContext, event: Event) {
@@ -79,7 +77,7 @@ export async function addRoomEvent(context: EventSendingContext, event: Event) {
       `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
     );
   }
-  let room = context.rooms.get(roomId);
+  let room = context.getRoom(roomId);
   if (!room) {
     let data: LooseCardResource = {
       meta: {
@@ -93,9 +91,8 @@ export async function addRoomEvent(context: EventSendingContext, event: Event) {
       data,
       { data },
       undefined,
-      context.loaderService.loader,
     );
-    context.rooms.set(roomId, room);
+    context.setRoom(roomId, room!);
   }
   let resolvedRoom = await room;
 
@@ -128,7 +125,7 @@ export async function updateRoomEvent(
       `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
     );
   }
-  let room = context.rooms.get(roomId);
+  let room = context.getRoom(roomId);
   if (!room) {
     throw new Error(
       `bug: unknown room for event ${JSON.stringify(event, null, 2)}`,

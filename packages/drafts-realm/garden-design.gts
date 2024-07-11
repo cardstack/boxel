@@ -1,57 +1,22 @@
 import NumberField from 'https://cardstack.com/base/number';
 import StringField from 'https://cardstack.com/base/string';
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+import {
+  CardDef,
+  field,
+  contains,
+  realmURL,
+  containsMany,
+} from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
+import { Coordinate } from 'https://cardstack.com/base/coordinate';
+import { PositionedCard } from 'https://cardstack.com/base/positioned-card';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { htmlSafe } from '@ember/template';
 import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
-
-interface Option {
-  name: string;
-  id: string;
-  symbol: string;
-}
-
-const OPTIONS: Option[] = [
-  {
-    name: 'Smooth Penstemon',
-    id: 'smooth-penstemon',
-    symbol: 'A',
-  },
-  {
-    name: 'Purple Coneflower',
-    id: 'purple-coneflower',
-    symbol: 'B',
-  },
-  {
-    name: 'Royal Catchfly',
-    id: 'royal-catchfly',
-    symbol: 'C',
-  },
-  {
-    name: 'Black-Eyed Susan',
-    id: 'black-eyed-susan',
-    symbol: 'D',
-  },
-  {
-    name: 'Lavender Hyssop',
-    id: 'lavender-hyssop',
-    symbol: 'E',
-  },
-  {
-    name: 'Prairie Smoke',
-    id: 'prairie-smoke',
-    symbol: 'F',
-  },
-  {
-    name: 'Birdbath',
-    id: 'birdbath',
-    symbol: 'BB',
-  },
-];
+import { baseRealm, getLiveCards } from '@cardstack/runtime-common';
 
 class Isolated extends Component<typeof GardenDesign> {
   <template>
@@ -73,9 +38,9 @@ class Isolated extends Component<typeof GardenDesign> {
               {{#if gridItem.content}}
                 <button
                   {{on 'dragstart' this.dragStartFromGrid}}
-                  id={{gridItem.content.id}}
+                  id={{gridItem.content.gardenItemId}}
                   draggable='true'
-                  class='option {{gridItem.content.id}}'
+                  class='option {{gridItem.content.gardenItemId}}'
                 >
                   {{gridItem.content.symbol}}
                 </button>
@@ -84,19 +49,21 @@ class Isolated extends Component<typeof GardenDesign> {
           {{/each}}
         </div>
         <ul class='list'>
-          {{#each OPTIONS as |option|}}
+          {{#each this.options as |option|}}
             <li>
               <button
                 {{on 'dragstart' this.dragStart}}
-                id={{option.id}}
+                id={{option.gardenItemId}}
                 draggable='true'
-                class='option {{option.id}}'
+                class='option {{option.gardenItemId}}'
               >
                 {{option.symbol}}
               </button>
               {{option.name}}
             </li>
-          {{/each}}
+          {{else}}{{#if this.liveQuery.isLoading}}
+              Loading...
+            {{/if}}{{/each}}
         </ul>
         <button class='reset' {{on 'click' this.reset}}>Reset</button>
         <hr />
@@ -218,7 +185,6 @@ class Isolated extends Component<typeof GardenDesign> {
 
   defaultCount = 10;
   defaultUnitSize = 50;
-  optionsMap = new Map(OPTIONS.map((el) => [el.id, el]));
 
   @tracked cols = this.args.model.columns ?? this.defaultCount;
   @tracked rows = this.args.model.rows ?? this.defaultCount;
@@ -226,19 +192,62 @@ class Isolated extends Component<typeof GardenDesign> {
     grid-template-columns: repeat(${this.cols}, ${this.defaultUnitSize}px);
     grid-template-rows: repeat(${this.rows}, ${this.defaultUnitSize}px);
   `);
-  @tracked gridMap: TrackedMap<string, Option | null>;
+  @tracked gridMap: TrackedMap<string, GardenItem | null>;
+
+  @tracked
+  private declare liveQuery: {
+    instances: CardDef[];
+    isLoading: boolean;
+  };
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
     this.gridMap = new TrackedMap(
       this.generateGridIds().map((id) => {
         let maybeOption = this._gridModel.find(
-          (el: [string, Option | null]) => el[0] === id,
+          (el) => this.composeId(el.coordinate.x, el.coordinate.y) === id,
         );
-        return [id, maybeOption ? maybeOption[1] : null];
+        return [id, maybeOption ? (maybeOption.card as GardenItem) : null];
       }),
     );
     this.updateGridModel();
+    this.liveQuery = getLiveCards(
+      {
+        filter: {
+          eq: {
+            _cardType: 'Garden Item',
+          },
+        },
+        sort: [
+          {
+            on: {
+              module: `${baseRealm.url}card-api`,
+              name: 'CardDef',
+            },
+            by: 'title',
+          },
+        ],
+      },
+      this.args.model[realmURL] ? [this.args.model[realmURL].href] : undefined,
+      async (ready: Promise<void> | undefined) => {
+        if (this.args.context?.actions) {
+          this.args.context.actions.doWithStableScroll(
+            this.args.model as CardDef,
+            async () => {
+              await ready;
+            },
+          );
+        }
+      },
+    );
+  }
+
+  get options() {
+    if (!this.liveQuery) {
+      return;
+    }
+
+    return this.liveQuery.instances as GardenItem[];
   }
 
   get title() {
@@ -249,26 +258,51 @@ class Isolated extends Component<typeof GardenDesign> {
     let ids: string[] = [];
     for (let row = 0; row < this.rows; row++) {
       for (let col = 0; col < this.cols; col++) {
-        ids.push(`r${row}-c${col}`);
+        ids.push(this.composeId(row, col));
       }
     }
     return ids;
   };
 
+  composeId(x: number, y: number) {
+    return `r${x}-c${y}`;
+  }
+
+  decomposeId(id: string): { x: number; y: number } {
+    let arr = id.replace('r', '').replace('c', '').split('-');
+    if (!arr[0] || !arr[1]) {
+      throw new Error(`Unknown id format: ${id}. Expected format: rx-cy`);
+    }
+
+    return {
+      x: Number(arr[0]),
+      y: Number(arr[1]),
+    };
+  }
+
   get _gridModel() {
-    return JSON.parse(this.args.model.grid ?? '[]');
+    return this.args.model.items ?? [];
   }
 
   updateGridModel() {
-    let newValues = JSON.stringify([...this.gridMap.entries()]);
-    if (this.args.model.grid === newValues) {
+    let newValues = [...this.gridMap.entries()]
+      .filter((el) => el[1] != null)
+      .map((el) => {
+        let coordinate = new Coordinate(this.decomposeId(el[0]));
+        let positionedGardenItem = new PositionedCard({
+          coordinate,
+          card: el[1],
+        });
+        return positionedGardenItem;
+      });
+    if (JSON.stringify(this.args.model.items) === JSON.stringify(newValues)) {
       return;
     }
-    this.args.model.grid = newValues;
+    this.args.model.items = newValues;
   }
 
   get gridItems() {
-    let items: { id: string; content: Option | null }[] = [];
+    let items: { id: string; content: GardenItem | null }[] = [];
     [...this.gridMap.entries()].map(([key, val]) => {
       items.push({
         id: key,
@@ -307,12 +341,17 @@ class Isolated extends Component<typeof GardenDesign> {
     let dragItem;
     let maybeCurrentValue;
 
+    let optionsMap = this.options
+      ? new Map(
+          this.options.map((opt) => [(opt as GardenItem).gardenItemId, opt]),
+        )
+      : new Map();
     if (dragItemId) {
-      dragItem = this.optionsMap.get(dragItemId);
+      dragItem = optionsMap.get(dragItemId);
       // in dragStartFromGrid, dragItemId is set to the grid location id
       maybeCurrentValue = this.gridMap.get(dragItemId);
     }
-    if (this.optionsMap.has(dropTargetId)) {
+    if (optionsMap.has(dropTargetId)) {
       // if the drop target has content, we need to get its grid location id
       dropTargetId = (ev.target as HTMLElement)?.parentElement?.id;
     }
@@ -339,23 +378,31 @@ class Isolated extends Component<typeof GardenDesign> {
   }
 }
 
+export class GardenItem extends CardDef {
+  @field gardenItemId = contains(StringField);
+  @field name = contains(StringField);
+  @field symbol = contains(StringField);
+  @field title = contains(StringField, {
+    computeVia: function (this: GardenItem) {
+      return this.symbol;
+    },
+  });
+
+  static displayName = 'Garden Item';
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <span>
+        <@fields.symbol />
+      </span>
+    </template>
+  };
+}
+
 export class GardenDesign extends CardDef {
   @field rows = contains(NumberField);
   @field columns = contains(NumberField);
-  @field grid = contains(StringField);
+  @field items = containsMany(PositionedCard);
   static displayName = 'Garden Design';
   static isolated = Isolated;
-  /*
-  static embedded = class Embedded extends Component<typeof this> {
-    <template></template>
-  }
-
-  static atom = class Atom extends Component<typeof this> {
-    <template></template>
-  }
-
-  static edit = class Edit extends Component<typeof this> {
-    <template></template>
-  }
-  */
 }

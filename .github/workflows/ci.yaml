@@ -92,10 +92,13 @@ jobs:
       - name: Build boxel-motion
         run: pnpm build
         working-directory: packages/boxel-motion/addon
-      - name: Build host dist/ for fastboot
-        run: pnpm build
+      - name: Start host to serve assets for fastboot
+        run: pnpm start &
         env:
           NODE_OPTIONS: --max_old_space_size=4096
+        working-directory: packages/host
+      - name: Wait for ember-cli to be ready
+        run: pnpm npx wait-for-localhost 4200
         working-directory: packages/host
       - name: Start realm servers
         run: pnpm start:without-matrix &
@@ -111,6 +114,15 @@ jobs:
           name: blob-report-${{ matrix.shardIndex }}
           path: packages/matrix/blob-report
           retention-days: 1
+
+      - name: Upload Playwright traces
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces-${{ matrix.shardIndex }}
+          path: packages/matrix/test-results/**/trace.zip
+          retention-days: 30
+          if-no-files-found: ignore
 
   matrix-client-merge-reports-and-publish:
     name: Merge Matrix reports and publish
@@ -198,11 +210,14 @@ jobs:
       - name: Build boxel-ui
         run: pnpm build
         working-directory: packages/boxel-ui/addon
-      - name: Build host dist/ for fastboot
-        run: pnpm build
+      - name: Start host to serve assets for fastboot
+        run: pnpm start &
         env:
           NODE_OPTIONS: --max_old_space_size=4096
         working-directory: packages/host
+      - name: Wait for ember-cli to be ready
+        run: pnpm npx wait-for-localhost 4200
+        working-directory: packages/realm-server
       - name: Start realm servers
         run: pnpm start:all &
         working-directory: packages/realm-server
@@ -234,17 +249,12 @@ jobs:
               - '.github/workflows/deploy-host.yml'
               - '.github/workflows/manual-deploy.yml'
               - '.github/workflows/ci.yaml'
+              - 'packages/ai-bot/**'
               - 'packages/base/**'
               - 'packages/boxel-ui/**'
               - 'packages/host/**'
               - 'packages/realm-server/**'
               - 'packages/runtime-common/**'
-              - 'pnpm-lock.yaml'
-            ai-bot:
-              - '.github/workflows/manual-ai-bot.yml'
-              - '.github/workflows/ci.yaml'
-              - 'packages/runtime-common/**'
-              - 'packages/ai-bot/**'
               - 'pnpm-lock.yaml'
 
   deploy:
@@ -252,19 +262,10 @@ jobs:
     if: ${{ needs.change-check.outputs.boxel == 'true' }}
     needs:
       - change-check
+      - ai-bot-test
       - boxel-ui-test
       - realm-server-test
     uses: ./.github/workflows/manual-deploy.yml
-    secrets: inherit
-    with:
-      environment: "staging"
-
-  deploy-ai-bot:
-    needs:
-      - ai-bot-test
-      - change-check
-    if: ${{ needs.change-check.outputs.ai-bot == 'true' }}
-    uses: ./.github/workflows/manual-ai-bot.yml
     secrets: inherit
     with:
       environment: "staging"

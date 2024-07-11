@@ -21,13 +21,11 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 import {
   baseRealm,
   primitive,
-  RealmSessionContextName,
+  PermissionsContextName,
 } from '@cardstack/runtime-common';
 
 import { cardTypeDisplayName, type CodeRef } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
-
-import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type {
   BaseDef,
@@ -41,6 +39,7 @@ import {
   setupCardLogs,
   saveCard,
   provideConsumeContext,
+  lookupLoaderService,
 } from '../../helpers';
 import {
   Base64ImageField,
@@ -62,6 +61,7 @@ import {
   linksTo,
   linksToMany,
   MarkdownField,
+  MaybeBase64Field,
   NumberField,
   queryableValue,
   setupBaseRealm,
@@ -71,23 +71,23 @@ import {
   unsubscribeFromChanges,
 } from '../../helpers/base-realm';
 import { mango } from '../../helpers/image-fixture';
+import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderCard } from '../../helpers/render-component';
 
 let loader: Loader;
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
+  setupMatrixServiceMock(hooks, { autostart: true });
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    loader = lookupLoaderService().loader;
   });
 
-  setupCardLogs(
-    hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
-  );
+  setupCardLogs(hooks, async () => {
+    return await loader.import(`${baseRealm.url}card-api`);
+  });
 
   module('cards are read-only', function (_hooks) {
     test('input fields are disabled', async function (assert) {
@@ -140,7 +140,7 @@ module('Integration | card-basics', function (hooks) {
 
   module('cards allowed to be edited', function (hooks) {
     hooks.beforeEach(function () {
-      provideConsumeContext(RealmSessionContextName, {
+      provideConsumeContext(PermissionsContextName, {
         canWrite: true,
       });
     });
@@ -490,6 +490,175 @@ module('Integration | card-basics', function (hooks) {
           '[data-test-plural-view-item="1"] > [data-test-card-format="atom"]',
         )
         .containsText('Marcus');
+    });
+
+    test('can render a card with an empty field', async function (assert) {
+      let EmbeddedViewDriver = embeddedViewDriver();
+
+      loader.shimModule(`${testRealmURL}test-cards`, {
+        EmbeddedViewDriver,
+      });
+
+      let driver = new EmbeddedViewDriver();
+      await renderCard(loader, driver, 'isolated');
+
+      assert.dom('[data-test-viewport="row"] [data-test-empty-field]').exists();
+      assert
+        .dom('[data-test-viewport="small"] [data-test-empty-field]')
+        .exists();
+      assert
+        .dom('[data-test-viewport="medium"] [data-test-empty-field]')
+        .exists();
+      assert
+        .dom('[data-test-viewport="large"] [data-test-empty-field]')
+        .exists();
+
+      await percySnapshot(assert);
+    });
+
+    test('renders a default (CardDef) embedded view for card with thumbnail', async function (assert) {
+      class Person extends CardDef {
+        static displayName = 'Person';
+        @field firstName = contains(StringField);
+        @field image = contains(Base64ImageField);
+        @field title = contains(StringField, {
+          computeVia: function (this: Person) {
+            return this.firstName;
+          },
+        });
+        @field thumbnailURL = contains(MaybeBase64Field, {
+          computeVia: function (this: Person) {
+            return this.image.base64;
+          },
+        });
+      }
+
+      let EmbeddedViewDriver = embeddedViewDriver();
+
+      loader.shimModule(`${testRealmURL}test-cards`, {
+        Person,
+        EmbeddedViewDriver,
+      });
+
+      let mang = new Person({
+        firstName: 'Mango',
+        image: new Base64ImageField({
+          altText: 'Picture of Mango',
+          size: 'contain',
+          width: null,
+          height: 200,
+          base64: `data:image/png;base64,${mango}`,
+        }),
+      });
+      let driver = new EmbeddedViewDriver({ card: mang });
+      await renderCard(loader, driver, 'isolated');
+
+      assert
+        .dom('[data-test-viewport="row"] [data-test-card-title]')
+        .containsText('Mango');
+      assert
+        .dom('[data-test-viewport="row"] [data-test-card-display-name]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="row"] [data-test-card-thumbnail-text]')
+        .doesNotExist();
+      assert
+        .dom('[data-test-viewport="small"] [data-test-card-title]')
+        .containsText('Mango');
+      assert
+        .dom('[data-test-viewport="small"] [data-test-card-display-name]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="small"] [data-test-card-thumbnail-text]')
+        .doesNotExist();
+      assert
+        .dom('[data-test-viewport="medium"] [data-test-card-title]')
+        .containsText('Mango');
+      assert
+        .dom('[data-test-viewport="medium"] [data-test-card-display-name]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="medium"] [data-test-card-thumbnail-text]')
+        .doesNotExist();
+      assert
+        .dom('[data-test-viewport="large"] [data-test-card-title]')
+        .containsText('Mango');
+      assert
+        .dom('[data-test-viewport="large"] [data-test-card-display-name]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="large"] [data-test-card-thumbnail-text]')
+        .doesNotExist();
+
+      await percySnapshot(assert);
+    });
+
+    test('renders a default (CardDef) embedded view for card without thumbnail', async function (assert) {
+      class Person extends CardDef {
+        static displayName = 'Person';
+        @field firstName = contains(StringField);
+        @field image = contains(Base64ImageField);
+        @field title = contains(StringField, {
+          computeVia: function (this: Person) {
+            return this.firstName;
+          },
+        });
+        @field thumbnailURL = contains(MaybeBase64Field, {
+          computeVia: function (this: Person) {
+            return this.image.base64;
+          },
+        });
+      }
+
+      let EmbeddedViewDriver = embeddedViewDriver();
+
+      loader.shimModule(`${testRealmURL}test-cards`, {
+        Person,
+        EmbeddedViewDriver,
+      });
+
+      let vang = new Person({ firstName: 'Van Gogh' });
+      let driver = new EmbeddedViewDriver({ card: vang });
+      await renderCard(loader, driver, 'isolated');
+
+      assert
+        .dom('[data-test-viewport="row"] [data-test-card-title]')
+        .containsText('Van Gogh');
+      assert
+        .dom('[data-test-viewport="row"] [data-test-card-display-name]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="row"] [data-test-card-thumbnail-text]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="small"] [data-test-card-title]')
+        .containsText('Van Gogh');
+      assert
+        .dom('[data-test-viewport="small"] [data-test-card-display-name]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="small"] [data-test-card-thumbnail-text]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="medium"] [data-test-card-title]')
+        .containsText('Van Gogh');
+      assert
+        .dom('[data-test-viewport="medium"] [data-test-card-display-name]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="medium"] [data-test-card-thumbnail-text]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="large"] [data-test-card-title]')
+        .containsText('Van Gogh');
+      assert
+        .dom('[data-test-viewport="large"] [data-test-card-display-name]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="large"] [data-test-card-thumbnail-text]')
+        .containsText('Person');
+
+      await percySnapshot(assert);
     });
 
     test('can set the ID for an unsaved card', async function (assert) {
@@ -2423,3 +2592,67 @@ let assertRadioInput = (
       .isNotChecked('the isCool true radio has correct state');
   }
 };
+
+function embeddedViewDriver() {
+  class EmbeddedViewDriver extends CardDef {
+    @field card = linksTo(CardDef);
+    static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <div class='item'>
+          <div class='desc'>Row thumbnail (226px x 62px)</div>
+          <div class='row thumbnail' data-test-viewport='row'>
+            <@fields.card />
+          </div>
+        </div>
+        <div class='item'>
+          <div class='desc'>Small thumbnail (164px x 224px)</div>
+          <div class='small thumbnail' data-test-viewport='small'>
+            <@fields.card />
+          </div>
+        </div>
+        <div class='item'>
+          <div class='desc'>Medium thumbnail (195px x 224px)</div>
+          <div class='medium thumbnail' data-test-viewport='medium'>
+            <@fields.card />
+          </div>
+        </div>
+        <div class='item'>
+          <div class='desc'>Large thumbnail (350px x 250px)</div>
+          <div class='large thumbnail' data-test-viewport='large'>
+            <@fields.card />
+          </div>
+        </div>
+        <style>
+          .small {
+            width: 164px;
+            height: 224px;
+          }
+          .medium {
+            width: 195px;
+            height: 224px;
+          }
+          .large {
+            width: 350px;
+            height: 250px;
+          }
+          .row {
+            width: 226px;
+            height: 62px;
+          }
+          .thumbnail {
+            background-color: fuchsia;
+            overflow: hidden;
+          }
+          .item {
+            margin: 1rem;
+          }
+          .desc {
+            padding-top: 1rem;
+          }
+        </style>
+      </template>
+    };
+  }
+
+  return EmbeddedViewDriver;
+}

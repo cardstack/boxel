@@ -13,7 +13,6 @@ import {
   isNotLoadedError,
   NotLoaded,
 } from '@cardstack/runtime-common/not-loaded';
-import { isNotReadyError, NotReady } from '@cardstack/runtime-common/not-ready';
 
 import config from '@cardstack/host/config/environment';
 
@@ -67,34 +66,24 @@ export default class RenderService extends Service {
     let component = card.constructor.getComponent(card);
 
     let element = getIsolatedRenderElement(this.document);
-    // TODO: consider consolidating the NotReady and NotLoaded objects into a single object
-    let notReady: NotReady | undefined;
     let notLoaded: NotLoaded | undefined;
     let tries = 0;
     do {
-      notReady = undefined;
       notLoaded = undefined;
       try {
         render(component, element, this.owner, format);
       } catch (err: any) {
-        notReady = err.additionalErrors?.find((e: any) =>
-          isNotReadyError(e),
-        ) as NotReady | undefined;
         notLoaded = err.additionalErrors?.find((e: any) =>
           isNotLoadedError(e),
         ) as NotLoaded | undefined;
-        if (isCardError(err) && (notReady || notLoaded)) {
-          let errorInstance = notReady?.instance ?? notLoaded?.instance;
+        if (isCardError(err) && notLoaded) {
+          let errorInstance = notLoaded?.instance;
           if (!errorInstance) {
-            throw new Error(
-              `bug: could not determine NotLoaded/NotReady card instance`,
-            );
+            throw new Error(`bug: could not determine NotLoaded card instance`);
           }
-          let fieldName = notReady?.fieldName ?? notLoaded?.fieldName;
+          let fieldName = notLoaded?.fieldName;
           if (!fieldName) {
-            throw new Error(
-              `bug: could not determine NotLoaded/NotReady field`,
-            );
+            throw new Error(`bug: could not determine NotLoaded field`);
           }
           await this.resolveField({
             card: errorInstance,
@@ -107,14 +96,14 @@ export default class RenderService extends Service {
           throw err;
         }
       }
-    } while ((notLoaded || notReady) && tries++ <= maxRenderThreshold);
+    } while (notLoaded && tries++ <= maxRenderThreshold);
 
     // This guards against bugs that may trigger render cycles
     if (tries > maxRenderThreshold) {
       let error = new CardError(
         `detected a cycle trying to render card ${card.constructor.name} (id: ${card.id})`,
       );
-      error.additionalErrors = [(notLoaded ?? notReady)!];
+      error.additionalErrors = [notLoaded!];
       throw error;
     }
 

@@ -11,7 +11,7 @@ import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
 module('Integration | Component | RoomMessage', function (hooks) {
   setupRenderingTest(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMatrixServiceMock(hooks, { autostart: true });
 
   function setupTestScenario(
     isStreaming: boolean,
@@ -29,6 +29,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
     let testScenario = {
       message,
       isStreaming,
+      room: { messages: [message] },
       monacoSDK: {},
       currentEditor: {},
       setCurrentMonacoContainer: null,
@@ -48,6 +49,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
         @currentEditor={{testScenario.currentEditor}}
         @setCurrentEditor={{testScenario.setCurrentMonacoContainer}}
         @retryAction={{testScenario.maybeRetryAction}}
+        @room={{testScenario.room}}
         data-test-message-idx='1'
       />
     </template>);

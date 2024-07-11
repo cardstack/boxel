@@ -22,8 +22,7 @@ import { Submodes } from '@cardstack/host/components/submode-switcher';
 import {
   tokenRefreshPeriodSec,
   sessionLocalStorageKey,
-} from '@cardstack/host/resources/realm-session';
-import type LoaderService from '@cardstack/host/services/loader-service';
+} from '@cardstack/host/services/realm';
 
 import {
   percySnapshot,
@@ -33,13 +32,12 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  lookupLoaderService,
 } from '../helpers';
 import {
   MockMatrixService,
   setupMatrixServiceMock,
 } from '../helpers/mock-matrix-service';
-
-let sessionExpirationSec: number;
 
 module('Acceptance | operator mode tests', function (hooks) {
   setupApplicationTest(hooks);
@@ -47,13 +45,12 @@ module('Acceptance | operator mode tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks, { expiresInSec: () => sessionExpirationSec });
+  let { setExpiresInSec } = setupMatrixServiceMock(hooks);
 
   hooks.beforeEach(async function () {
-    sessionExpirationSec = 60 * 60;
+    setExpiresInSec(60 * 60);
 
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    let loader = lookupLoaderService().loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
@@ -562,53 +559,17 @@ module('Acceptance | operator mode tests', function (hooks) {
       )
       .hasText('Missing embedded component for FieldDef: Address');
     assert
-      .dom(
-        '[data-test-country-with-no-embedded] [data-test-missing-embedded-template-text]',
-      )
-      .hasText('Missing embedded component for CardDef: Country');
+      .dom('[data-test-country-with-no-embedded] [data-test-empty-field]')
+      .exists();
 
     await click(
       '[data-test-address-with-no-embedded] [data-test-open-code-submode]',
     );
+    await waitUntil(() =>
+      currentURL().includes('address-with-no-embedded-template.gts'),
+    );
     assert.operatorModeParametersMatch(currentURL(), {
-      stacks: [
-        [
-          {
-            id: `${testRealmURL}Person/fadhlan`,
-            format: 'isolated',
-          },
-        ],
-      ],
-      submode: Submodes.Code,
       codePath: `${testRealmURL}address-with-no-embedded-template.gts`,
-      fileView: 'inspector',
-      openDirs: {},
-    });
-
-    // Toggle back to interactive mode
-    await waitFor('[data-test-submode-switcher]');
-    await click('[data-test-submode-switcher] button');
-    await click('[data-test-boxel-menu-item-text="Interact"]');
-
-    await waitFor(
-      '[data-test-address-with-no-embedded] [data-test-open-code-submode]',
-    );
-    await click(
-      '[data-test-country-with-no-embedded] [data-test-open-code-submode]',
-    );
-    assert.operatorModeParametersMatch(currentURL(), {
-      stacks: [
-        [
-          {
-            id: `${testRealmURL}Person/fadhlan`,
-            format: 'isolated',
-          },
-        ],
-      ],
-      submode: Submodes.Code,
-      codePath: `${testRealmURL}country-with-no-embedded-template.gts`,
-      fileView: 'inspector',
-      openDirs: {},
     });
   });
 
@@ -642,20 +603,6 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       // Submode is reflected in the URL
       assert.operatorModeParametersMatch(currentURL(), {
-        stacks: [
-          [
-            {
-              id: `${testRealmURL}Person/fadhlan`,
-              format: 'isolated',
-            },
-          ],
-          [
-            {
-              id: `${testRealmURL}Pet/mango`,
-              format: 'isolated',
-            },
-          ],
-        ],
         submode: Submodes.Code,
         codePath: `${testRealmURL}Pet/mango.json`,
         fileView: 'inspector',
@@ -673,23 +620,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       // Submode is reflected in the URL
       assert.operatorModeParametersMatch(currentURL(), {
-        stacks: [
-          [
-            {
-              id: `${testRealmURL}Person/fadhlan`,
-              format: 'isolated',
-            },
-          ],
-          [
-            {
-              id: `${testRealmURL}Pet/mango`,
-              format: 'isolated',
-            },
-          ],
-        ],
         submode: Submodes.Interact,
-        fileView: 'inspector',
-        openDirs: { [testRealmURL]: ['Pet/'] },
       });
     });
   });
@@ -698,7 +629,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     let refreshInSec = 2;
 
     hooks.beforeEach(async function () {
-      sessionExpirationSec = tokenRefreshPeriodSec + refreshInSec;
+      setExpiresInSec(tokenRefreshPeriodSec + refreshInSec);
     });
 
     test('realm session refreshes within 5 minute window of expiration', async function (assert) {

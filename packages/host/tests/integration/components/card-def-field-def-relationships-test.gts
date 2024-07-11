@@ -3,12 +3,15 @@ import { click, waitFor } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
-import { RealmSessionContextName, baseRealm } from '@cardstack/runtime-common';
+import {
+  PermissionsContextName,
+  type Permissions,
+  baseRealm,
+} from '@cardstack/runtime-common';
 import { type Loader } from '@cardstack/runtime-common/loader';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
-import type LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
@@ -18,6 +21,7 @@ import {
   testRealmURL,
   setupIntegrationTestRealm,
   provideConsumeContext,
+  lookupLoaderService,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent, renderCard } from '../../helpers/render-component';
@@ -45,14 +49,15 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-  setupMatrixServiceMock(hooks);
+  setupMatrixServiceMock(hooks, { autostart: true });
 
   hooks.beforeEach(async function () {
-    provideConsumeContext(RealmSessionContextName, {
+    let permissions: Permissions = {
       canWrite: true,
-    });
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+      canRead: true,
+    };
+    provideConsumeContext(PermissionsContextName, permissions);
+    loader = lookupLoaderService().loader;
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     number = await loader.import(`${baseRealm.url}number`);

@@ -10,7 +10,6 @@ import { tracked, cached } from '@glimmer/tracking';
 import { restartableTask, timeout } from 'ember-concurrency';
 import { Velcro } from 'ember-velcro';
 import window from 'ember-window-mock';
-import { TrackedMap } from 'tracked-built-ins';
 
 import {
   Button,
@@ -41,8 +40,6 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import type { RoomField } from 'https://cardstack.com/base/room';
 
-import { getRoom, RoomResource } from '../../resources/room';
-
 import assistantIcon from './ai-assist-icon.webp';
 
 const { matrixServerName } = ENV;
@@ -57,10 +54,31 @@ interface Signature {
 }
 
 // Local storage keys
-let currentRoomIdPersistenceKey = 'aiPanelCurrentRoomId';
+export const currentRoomIdPersistenceKey = 'aiPanelCurrentRoomId';
 let newSessionIdPersistenceKey = 'aiPanelNewSessionId';
 
 export default class AiAssistantPanel extends Component<Signature> {
+  get hasOtherActiveSessions() {
+    let oneMinuteAgo = new Date(Date.now() - 60 * 1000).getTime();
+
+    return this.aiSessionRooms
+      .filter((session) => session.roomId !== this.currentRoom?.roomId)
+      .some((session) => {
+        let isSessionActive =
+          this.matrixService.getLastActiveTimestamp(session) > oneMinuteAgo;
+
+        let lastMessageEventId =
+          session.messages[session.messages.length - 1]?.eventId;
+
+        let hasSeenLastMessage =
+          this.matrixService.currentUserEventReadReceipts.has(
+            lastMessageEventId,
+          );
+
+        return isSessionActive && !hasSeenLastMessage;
+      });
+  }
+
   <template>
     <Velcro @placement='bottom' @offsetOptions={{-50}} as |popoverVelcro|>
       <div
@@ -109,15 +127,21 @@ export default class AiAssistantPanel extends Component<Signature> {
               <LoadingIndicator @color='var(--boxel-light)' />
             {{else}}
               <Button
-                class='past-sessions-button'
+                class='past-sessions-button
+                  {{if
+                    this.hasOtherActiveSessions
+                    "past-sessions-button-active"
+                  }}'
                 @kind='secondary-dark'
                 @size='small'
                 @disabled={{this.displayRoomError}}
                 {{on 'click' this.displayPastSessions}}
                 data-test-past-sessions-button
+                data-test-has-active-sessions={{this.hasOtherActiveSessions}}
               >
-                Past Sessions
+                All Sessions
                 <DropdownArrowFilled width='10' height='10' />
+
               </Button>
             {{/if}}
           </div>
@@ -128,6 +152,7 @@ export default class AiAssistantPanel extends Component<Signature> {
             @sessions={{this.aiSessionRooms}}
             @roomActions={{this.roomActions}}
             @onClose={{this.hidePastSessions}}
+            @currentRoomId={{this.currentRoomId}}
             {{popoverVelcro.loop}}
           />
         {{else if this.roomToRename}}
@@ -185,7 +210,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
       :deep(.separator-horizontal) {
         min-width: calc(
-          var(--boxel-panel-resize-handler-width) +
+          var(--boxel-panel-resize-handle-width) +
             calc(var(--boxel-sp-xxxs) * 2)
         );
         position: absolute;
@@ -257,8 +282,61 @@ export default class AiAssistantPanel extends Component<Signature> {
         --icon-color: var(--boxel-light);
         margin-left: var(--boxel-sp-xs);
       }
+
+      .past-sessions-button-active::before {
+        content: '';
+        position: absolute;
+        top: -105px;
+        left: -55px;
+        width: 250px;
+        height: 250px;
+        background: conic-gradient(
+          #ffcc8f 0deg,
+          #ff3966 45deg,
+          #ff309e 90deg,
+          #aa1dc9 135deg,
+          #d7fad6 180deg,
+          #5fdfea 225deg,
+          #3d83f2 270deg,
+          #5145e8 315deg,
+          #ffcc8f 360deg
+        );
+        z-index: -1;
+        animation: spin 4s infinite linear;
+      }
+
+      .past-sessions-button-active::after {
+        content: '';
+        position: absolute;
+        top: 1px;
+        left: 1px;
+        right: 1px;
+        bottom: 1px;
+        background: var(--boxel-700);
+        border-radius: inherit;
+        z-index: -1;
+      }
+
+      .past-sessions-button-active {
+        position: relative;
+        display: inline-block;
+        border-radius: 3rem;
+        color: white;
+        background: var(--boxel-700);
+        border: none;
+        cursor: pointer;
+        z-index: 1;
+        overflow: hidden;
+      }
+
       .loading-new-session {
         padding: var(--boxel-sp);
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
       }
     </style>
   </template>
@@ -309,14 +387,7 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @cached
   private get roomResources() {
-    let resources = new TrackedMap<string, RoomResource>();
-    for (let roomId of this.matrixService.rooms.keys()) {
-      resources.set(
-        roomId,
-        getRoom(this, () => roomId),
-      );
-    }
-    return resources;
+    return this.matrixService.roomResources;
   }
 
   private loadRoomsTask = restartableTask(async () => {

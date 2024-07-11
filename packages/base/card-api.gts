@@ -1,6 +1,8 @@
 import Modifier from 'ember-modifier';
 import { action } from '@ember/object';
 import GlimmerComponent from '@glimmer/component';
+// @ts-ignore no types
+import cssUrl from 'ember-css-url';
 import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
@@ -24,11 +26,10 @@ import {
   isSingleCardDocument,
   isRelationship,
   isNotLoadedError,
-  isNotReadyError,
   CardError,
   CardContextName,
+  cardTypeDisplayName,
   NotLoaded,
-  NotReady,
   getField,
   isField,
   primitive,
@@ -95,7 +96,7 @@ export type FieldType = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
 type Setter = (value: any) => void;
 
 interface Options {
-  computeVia?: string | (() => unknown);
+  computeVia?: () => unknown;
   description?: string;
   // there exists cards that we only ever run in the host without
   // the isolated renderer (RoomField), which means that we cannot
@@ -136,27 +137,6 @@ function isNotLoadedValue(val: any): val is NotLoadedValue {
     return false;
   }
   return type === 'not-loaded';
-}
-
-interface NotReadyValue {
-  type: 'not-ready';
-  instance: BaseDef;
-  fieldName: string;
-}
-
-function isNotReadyValue(value: any): value is NotReadyValue {
-  if (value && typeof value === 'object') {
-    return (
-      'type' in value &&
-      value.type === 'not-ready' &&
-      'instance' in value &&
-      isCardOrField(value.instance) &&
-      'fieldName' in value &&
-      typeof value.fieldName === 'string'
-    );
-  } else {
-    return false;
-  }
 }
 
 interface StaleValue {
@@ -293,7 +273,7 @@ export interface Field<
   card: CardT;
   name: string;
   fieldType: FieldType;
-  computeVia: undefined | string | (() => unknown);
+  computeVia: undefined | (() => unknown);
   description: undefined | string;
   // there exists cards that we only ever run in the host without
   // the isolated renderer (RoomField), which means that we cannot
@@ -393,19 +373,9 @@ function getter<CardT extends BaseDefConstructor>(
     let value = deserialized.get(field.name);
     if (isStaleValue(value)) {
       value = value.staleValue;
-    } else if (
-      !deserialized.has(field.name) &&
-      typeof field.computeVia === 'function' &&
-      field.computeVia.constructor.name !== 'AsyncFunction'
-    ) {
+    } else if (!deserialized.has(field.name)) {
       value = field.computeVia.bind(instance)();
       deserialized.set(field.name, value);
-    } else if (
-      !deserialized.has(field.name) &&
-      (typeof field.computeVia === 'string' ||
-        typeof field.computeVia === 'function')
-    ) {
-      throw new NotReady(instance, field.name, field.computeVia);
     }
     return value;
   } else {
@@ -424,7 +394,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
   readonly fieldType = 'containsMany';
   constructor(
     private cardThunk: () => FieldT,
-    readonly computeVia: undefined | string | (() => unknown),
+    readonly computeVia: undefined | (() => unknown),
     readonly name: string,
     readonly description: string | undefined,
     readonly isUsed: undefined | true,
@@ -658,7 +628,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   readonly fieldType = 'contains';
   constructor(
     private cardThunk: () => CardT,
-    readonly computeVia: undefined | string | (() => unknown),
+    readonly computeVia: undefined | (() => unknown),
     readonly name: string,
     readonly description: string | undefined,
     readonly isUsed: undefined | true,
@@ -804,7 +774,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   readonly fieldType = 'linksTo';
   constructor(
     private cardThunk: () => CardT,
-    readonly computeVia: undefined | string | (() => unknown),
+    readonly computeVia: undefined | (() => unknown),
     readonly name: string,
     readonly description: string | undefined,
     readonly isUsed: undefined | true,
@@ -933,10 +903,9 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         }' cannot deserialize non-relationship value ${JSON.stringify(value)}`,
       );
     }
-    if (value?.links?.self == null) {
+    if (value?.links?.self == null || value.links.self === '') {
       return null;
     }
-    let loader = Loader.getLoaderFor(this.card)!;
     let cachedInstance = identityContext.identities.get(
       new URL(value.links.self, relativeTo).href,
     );
@@ -965,7 +934,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     );
     deserialized[isSavedInstance] = true;
     deserialized = trackCard(
-      loader,
+      myLoader(),
       deserialized,
       deserialized[realmURL]!,
     ) as BaseInstanceType<CardT>;
@@ -1038,13 +1007,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       maybeRelativeReference as string,
       instance.id ?? relativeTo, // new instances may not yet have an ID, in that case fallback to the relativeTo
     ).href;
-    let loader = Loader.getLoaderFor(createFromSerialized);
-
-    if (!loader) {
-      throw new Error('Could not find a loader, this should not happen');
-    }
-
-    let response = await loader.fetch(reference, {
+    let response = await fetch(reference, {
       headers: { Accept: SupportedMimeType.CardJson },
     });
     if (!response.ok) {
@@ -1070,7 +1033,6 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       json.data,
       json,
       new URL(json.data.id),
-      loader,
       {
         identityContext,
       },
@@ -1121,7 +1083,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
   readonly fieldType = 'linksToMany';
   constructor(
     private cardThunk: () => FieldT,
-    readonly computeVia: undefined | string | (() => unknown),
+    readonly computeVia: undefined | (() => unknown),
     readonly name: string,
     readonly description: string | undefined,
     readonly isUsed: undefined | true,
@@ -1287,7 +1249,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
         if (value.links.self == null) {
           return null;
         }
-        let loader = Loader.getLoaderFor(this.card)!;
         let cachedInstance = identityContext.identities.get(
           new URL(value.links.self, relativeTo).href,
         );
@@ -1324,7 +1285,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
         );
         deserialized[isSavedInstance] = true;
         deserialized = trackCard(
-          loader,
+          myLoader(),
           deserialized,
           deserialized[realmURL]!,
         ) as BaseInstanceType<FieldT>;
@@ -1457,17 +1418,11 @@ class LinksToMany<FieldT extends CardDefConstructor>
     let refs = (notLoaded.reference as string[]).map(
       (ref) => new URL(ref, instance.id ?? relativeTo).href, // new instances may not yet have an ID, in that case fallback to the relativeTo
     );
-    let loader = Loader.getLoaderFor(createFromSerialized);
-
-    if (!loader) {
-      throw new Error('Could not find a loader, this should not happen');
-    }
-
     let errors = [];
     let fieldInstances: CardDef[] = [];
 
     for (let reference of refs) {
-      let response = await loader.fetch(reference, {
+      let response = await fetch(reference, {
         headers: { Accept: SupportedMimeType.CardJson },
       });
       if (!response.ok) {
@@ -1492,7 +1447,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
           json.data,
           json,
           new URL(json.data.id),
-          loader,
           {
             identityContext,
           },
@@ -1816,6 +1770,170 @@ class DefaultCardDefTemplate extends GlimmerComponent<{
   </template>
 }
 
+class DefaultEmbeddedTemplate extends GlimmerComponent<{
+  Args: {
+    cardOrField: typeof BaseDef;
+    model: CardDef;
+    fields: Record<string, new () => GlimmerComponent>;
+    context?: CardContext;
+  };
+}> {
+  <template>
+    <div class='embedded-template'>
+      {{#if @model}}
+        <div class='thumbnail-section'>
+          <div
+            class='card-thumbnail'
+            style={{cssUrl 'background-image' @model.thumbnailURL}}
+          >
+            {{#unless @model.thumbnailURL}}
+              <div
+                class='card-thumbnail-text'
+                data-test-card-thumbnail-text
+              >{{cardTypeDisplayName @model}}</div>
+            {{/unless}}
+          </div>
+        </div>
+        <div class='thumbnail-subsection'>
+          <div class='thumbnail-subsection'>
+            <h3 class='card-title' data-test-card-title>{{@model.title}}</h3>
+          </div>
+          <div class='thumbnail-subsection'>
+            <h4
+              class='card-display-name'
+              data-test-card-display-name
+            >{{cardTypeDisplayName @model}}</h4>
+          </div>
+        </div>
+      {{else}}
+        {{! empty links-to field }}
+        <div data-test-empty-field class='empty-field'></div>
+      {{/if}}
+    </div>
+    <style>
+      .embedded-template {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-wrap: wrap;
+      }
+      /*
+         sadly you can't use css vars in container queries. also be careful of fractional pixel
+         dimensions in the breakpoints. due to this we use the "breakpoint - 1 pixel" in the
+         container query conditions
+      */
+
+      /* strip style embedded card */
+      @container embedded-card (height <= 223px) {
+        .embedded-template {
+          column-gap: 10px;
+          padding: 5px;
+        }
+        .card-thumbnail {
+          width: var(--strip-embedded-thumbnail-width);
+          height: var(--strip-embedded-thumbnail-height);
+          border-radius: 6px;
+        }
+        .card-thumbnail-text {
+          visibility: hidden;
+        }
+      }
+      /* small and medium thumbnail styles embedded card */
+      @container embedded-card (223px < height <= 249px) {
+        .embedded-template {
+          justify-content: center;
+          padding: 10px;
+        }
+        .card-title {
+          height: 35px;
+          text-align: center;
+        }
+        .card-display-name {
+          text-align: center;
+        }
+        .card-thumbnail {
+          width: var(--small-embedded-thumbnail-width);
+          height: var(--small-embedded-thumbnail-height);
+          border-radius: var(--boxel-border-radius);
+          margin-bottom: 11px;
+          padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
+        }
+        .thumbnail-section {
+          width: 100%;
+        }
+        .thumbnail-subsection {
+          width: 100%;
+        }
+      }
+
+      /* large thumbnail style embedded card */
+      @container embedded-card (249px < height) and (339px < width) {
+        .embedded-template {
+          justify-content: center;
+          padding: 10px;
+        }
+        .card-title {
+          height: 35px;
+          text-align: center;
+        }
+        .card-display-name {
+          text-align: center;
+        }
+        .card-thumbnail {
+          width: var(--large-embedded-thumbnail-width);
+          height: var(--large-embedded-thumbnail-height);
+          border-radius: var(--boxel-border-radius);
+          margin-bottom: 11px;
+          padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
+        }
+        .thumbnail-section {
+          width: 100%;
+        }
+        .thumbnail-subsection {
+          width: 100%;
+        }
+      }
+
+      .default-embedded-template > *,
+      .card-thumbnail-text {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .card-thumbnail {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: var(--boxel-teal);
+        background-position: center;
+        background-size: cover;
+        background-repeat: no-repeat;
+        color: var(--boxel-light);
+        font: 700 var(--boxel-font);
+        letter-spacing: var(--boxel-lsp);
+      }
+      .card-title {
+        margin: 0;
+        font: 500 var(--boxel-font-sm);
+        line-height: 1.23;
+        text-overflow: ellipsis;
+      }
+      .card-display-name {
+        margin: 0;
+        font: 500 var(--boxel-font-xs);
+        color: var(--boxel-450);
+        line-height: 1.27;
+        text-overflow: ellipsis;
+      }
+      .thumbnail-section {
+        display: flex;
+        justify-content: center;
+      }
+    </style>
+  </template>
+}
+
 class MissingEmbeddedTemplate extends GlimmerComponent<{
   Args: {
     cardOrField: typeof BaseDef;
@@ -1897,10 +2015,14 @@ class DefaultAtomViewTemplate extends GlimmerComponent<{
   };
 }> {
   get text() {
-    return (
-      this.args.model.title?.trim() ||
-      `Untitled ${this.args.model.constructor.displayName}`
-    );
+    let title =
+      typeof this.args.model.title === 'string'
+        ? this.args.model.title.trim()
+        : null;
+
+    return title
+      ? title
+      : `Untitled ${this.args.model.constructor.displayName}`;
   }
   <template>
     {{this.text}}
@@ -2073,7 +2195,7 @@ export class CardDef extends BaseDef {
     }
   }
 
-  static embedded: BaseDefComponent = MissingEmbeddedTemplate;
+  static embedded: BaseDefComponent = DefaultEmbeddedTemplate;
   static isolated: BaseDefComponent = DefaultCardDefTemplate;
   static edit: BaseDefComponent = DefaultCardDefTemplate;
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
@@ -2510,11 +2632,6 @@ export function serializeCard(
   return doc;
 }
 
-// you may need to use this type for the loader passed in the opts
-export type LoaderType = NonNullable<
-  NonNullable<Parameters<typeof createFromSerialized>[3]>
->;
-
 // TODO Currently our deserialization process performs 2 tasks that probably
 // need to be disentangled:
 // 1. convert the data from a wire format to the native format
@@ -2531,7 +2648,6 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   resource: LooseCardResource,
   doc: LooseSingleCardDocument | CardDocument,
   relativeTo: URL | undefined,
-  loader: Loader,
   opts?: { identityContext?: IdentityContext },
 ): Promise<BaseInstanceType<T>> {
   let identityContext = opts?.identityContext ?? new IdentityContext();
@@ -2539,19 +2655,19 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
     meta: { adoptsFrom },
   } = resource;
   let card: typeof BaseDef | undefined = await loadCard(adoptsFrom, {
-    loader,
+    loader: myLoader(),
     relativeTo,
   });
   if (!card) {
     throw new Error(`could not find card: '${humanReadable(adoptsFrom)}'`);
   }
-  return await _createFromSerialized(
-    card as T,
-    resource as any,
-    doc,
+
+  return card[deserialize](
+    resource,
     relativeTo,
+    doc as CardDocument,
     identityContext,
-  );
+  ) as BaseInstanceType<T>;
 }
 
 // Crawls all fields for cards and populates the identityContext
@@ -2627,9 +2743,6 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   _relativeTo: URL | undefined,
   identityContext: IdentityContext = new IdentityContext(),
 ): Promise<BaseInstanceType<T>> {
-  if (primitive in card) {
-    return card[deserialize](data, _relativeTo);
-  }
   let resource: LooseCardResource | undefined;
   if (isCardResource(data)) {
     resource = data;
@@ -2823,15 +2936,12 @@ async function cardClassFromResource<CardT extends BaseDefConstructor>(
     );
   }
   if (resource && !isEqual(resource.meta.adoptsFrom, cardIdentity)) {
-    let loader = Loader.getLoaderFor(fallback);
-
-    if (!loader) {
-      throw new Error('Could not find a loader, this should not happen');
-    }
-
     let card: typeof BaseDef | undefined = await loadCard(
       resource.meta.adoptsFrom,
-      { loader, relativeTo: resource.id ? new URL(resource.id) : relativeTo },
+      {
+        loader: myLoader(),
+        relativeTo: resource.id ? new URL(resource.id) : relativeTo,
+      },
     );
     if (!card) {
       throw new Error(
@@ -2986,7 +3096,7 @@ export async function recompute(
           undefined,
           opts,
         );
-        if (!isNotReadyValue(value) && !isStaleValue(value)) {
+        if (!isStaleValue(value)) {
           pendingFields.delete(fieldName);
           if (recomputePromises.get(card) !== recomputePromise) {
             return;
@@ -3021,7 +3131,7 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
   fieldName: K,
   compute: () => T[K] | Promise<T[K]> = () => instance[fieldName],
   opts?: RecomputeOptions,
-): Promise<T[K] | T[K][] | NotReadyValue | StaleValue | undefined> {
+): Promise<T[K] | T[K][] | StaleValue | undefined> {
   let result: T[K] | T[K][] | undefined;
   let deserialized = getDataBucket(instance);
   let maybeStale = deserialized.get(fieldName as string);
@@ -3045,11 +3155,8 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
         }`,
       );
     }
-    let computeVia = _computeVia as (() => T[K] | Promise<T[K]>) | string;
-    compute =
-      typeof computeVia === 'function'
-        ? computeVia.bind(instance)
-        : () => (instance as any)[computeVia as string]();
+    let computeVia = _computeVia as () => T[K] | Promise<T[K]>;
+    compute = computeVia.bind(instance);
   }
   try {
     //To avoid race conditions,
@@ -3069,14 +3176,6 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
         | T[K]
         | T[K][]
         | undefined;
-    } else if (isNotReadyError(e)) {
-      let { instance: depModel, computeVia, fieldName: depField } = e;
-      let nestedCompute =
-        typeof computeVia === 'function'
-          ? computeVia.bind(depModel)
-          : () => depModel[computeVia as string]();
-      await getIfReady(depModel, depField, nestedCompute, opts);
-      return { type: 'not-ready', instance, fieldName: fieldName as string };
     } else {
       throw e;
     }
@@ -3301,4 +3400,15 @@ declare module 'ember-provide-consume-context/context-registry' {
   export default interface ContextRegistry {
     [CardContextName]: CardContext;
   }
+}
+
+function myLoader(): Loader {
+  // we know this code is always loaded by an instance of our Loader, which sets
+  // import.meta.loader.
+
+  // When type-checking realm-server, tsc sees this file and thinks
+  // it will be transpiled to CommonJS and so it complains about this line. But
+  // this file is always loaded through our loader and always has access to import.meta.
+  // @ts-ignore
+  return (import.meta as any).loader;
 }

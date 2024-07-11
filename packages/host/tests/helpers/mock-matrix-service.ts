@@ -1,38 +1,48 @@
 import Service, { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import { TrackedMap } from 'tracked-built-ins';
 
 import { v4 as uuid } from 'uuid';
 
+import { Deferred } from '@cardstack/runtime-common';
+
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
-import { clearAllRealmSessions } from '@cardstack/host/resources/realm-session';
+import { RoomResource, getRoom } from '@cardstack/host/resources/room';
+import CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { OperatorModeContext } from '@cardstack/host/services/matrix-service';
 
+import RealmService from '@cardstack/host/services/realm';
+
 import { CardDef } from 'https://cardstack.com/base/card-api';
-import type {
-  RoomField,
-  ReactionEventContent,
-} from 'https://cardstack.com/base/room';
+import type { ReactionEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RoomField } from 'https://cardstack.com/base/room';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let nonce = 0;
 
 export type MockMatrixService = MatrixService & {
+  sendReactionDeferred: Deferred<void>; // used to assert applying state in apply button
   cardAPI: typeof cardApi;
   createAndJoinRoom(roomId: string, roomName?: string): Promise<string>;
 };
 
 class MockClient {
+  matrixService: MockMatrixService;
   lastSentEvent: any;
   userId?: string;
   displayname?: string;
 
-  constructor(userId?: string, displayname?: string) {
+  constructor(
+    matrixService: MockMatrixService,
+    userId?: string,
+    displayname?: string,
+  ) {
+    this.matrixService = matrixService;
     this.userId = userId;
     this.displayname = displayname;
   }
@@ -62,31 +72,66 @@ class MockClient {
   public getUserId() {
     return this.userId;
   }
+
+  public sendReadReceipt(event: { getId: () => string }) {
+    this.matrixService.addEventReadReceipt(event.getId(), {
+      readAt: new Date(),
+    });
+  }
 }
 function generateMockMatrixService(
   realmPermissions?: () => {
     [realmURL: string]: ('read' | 'write')[];
   },
-  expiresInSec?: () => number,
+  expiresInSec?: () => number | undefined,
 ) {
   class MockMatrixService extends Service implements MockMatrixService {
+    @service declare cardService: CardService;
+    @service declare realm: RealmService;
     @service declare loaderService: LoaderService;
 
     // @ts-ignore
-    @tracked client: MockClient = new MockClient('@testuser:staging', '');
+    @tracked client: MockClient = new MockClient(this, '@testuser:staging', '');
     // @ts-ignore
     cardAPI!: typeof cardApi;
 
     profile = getMatrixProfile(this, () => this.userId);
 
-    // These will be empty in the tests, but we need to define them to satisfy the interface
-    rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
+    private rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
+    private roomResourcesCache: Map<string, RoomResource> = new Map();
 
     messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
     cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
     failedCommandState: TrackedMap<string, Error> = new TrackedMap();
+    currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
+      new TrackedMap();
 
-    async start(_auth?: any) {}
+    async start(_auth?: any) {
+      await this.loginToRealms();
+    }
+
+    private async loginToRealms() {
+      // This is where we would actually load user-specific choices out of the
+      // user's profile based on this.client.getUserId();
+      let activeRealms = this.cardService.realmURLs;
+
+      await Promise.all(
+        activeRealms.map(async (realmURL) => {
+          try {
+            // Our authorization-middleware can login automatically after seeing a
+            // 401, but this preemptive login makes it possible to see
+            // canWrite==true on realms that are publicly readable.
+            await this.realm.login(realmURL);
+          } catch (err) {
+            console.warn(
+              `Unable to establish session with realm ${realmURL}`,
+              err,
+            );
+          }
+        }),
+      );
+    }
+    sendReactionDeferred?: Deferred<void>; // used to assert applying state in apply button
 
     get isLoggedIn() {
       return this.userId !== undefined;
@@ -98,9 +143,7 @@ function generateMockMatrixService(
     async createRealmSession(realmURL: URL) {
       let secret = "shhh! it's a secret";
       let nowInSeconds = Math.floor(Date.now() / 1000);
-      let expires =
-        nowInSeconds +
-        (typeof expiresInSec === 'function' ? expiresInSec() : 60 * 60);
+      let expires = nowInSeconds + (expiresInSec?.() ?? 60 * 60);
       let header = { alg: 'none', typ: 'JWT' };
       let payload = {
         iat: nowInSeconds,
@@ -120,6 +163,10 @@ function generateMockMatrixService(
       // this is our silly JWT--we don't sign with crypto since we are running in the
       // browser so the secret is the signature
       return Promise.resolve(`${headerAndPayload}.${secret}`);
+    }
+
+    addEventReadReceipt(eventId: string, readAt: Date) {
+      this.currentUserEventReadReceipts.set(eventId, { readAt });
     }
 
     async createRoom(
@@ -142,6 +189,7 @@ function generateMockMatrixService(
         },
       };
       try {
+        await this.sendReactionDeferred?.promise;
         return await this.sendEvent(roomId, 'm.reaction', content);
       } catch (e) {
         throw new Error(
@@ -194,7 +242,7 @@ function generateMockMatrixService(
     }
 
     async logout() {
-      this.client = new MockClient(undefined);
+      this.client = new MockClient(this as any, undefined);
     }
 
     async setDisplayName(displayName: string) {
@@ -262,8 +310,34 @@ function generateMockMatrixService(
     getLastActiveTimestamp(room: RoomField) {
       return (
         room.events[room.events.length - 1]?.origin_server_ts ??
-        room.created.getTime()
+        room.created?.getTime()
       );
+    }
+
+    getRoom(roomId: string) {
+      return this.rooms.get(roomId);
+    }
+
+    setRoom(roomId: string, roomPromise: Promise<RoomField>) {
+      this.rooms.set(roomId, roomPromise);
+      if (!this.roomResourcesCache.has(roomId)) {
+        this.roomResourcesCache.set(
+          roomId,
+          getRoom(this, () => roomId),
+        );
+      }
+    }
+
+    @cached
+    get roomResources() {
+      let resources: TrackedMap<string, RoomResource> = new TrackedMap();
+      for (let roomId of this.rooms.keys()) {
+        if (!this.roomResourcesCache.get(roomId)) {
+          continue;
+        }
+        resources.set(roomId, this.roomResourcesCache.get(roomId)!);
+      }
+      return resources;
     }
   }
   return MockMatrixService;
@@ -271,28 +345,58 @@ function generateMockMatrixService(
 
 export function setupMatrixServiceMock(
   hooks: NestedHooks,
-  opts?: {
-    realmPermissions?: () => {
-      [realmURL: string]: ('read' | 'write')[];
-    };
-    expiresInSec?: () => number;
-  },
+  // "autostart: true" is recommended for integration tests. Acceptance tests
+  // can rely on the real app's start behavior.
+  opts: { autostart: boolean } = { autostart: false },
 ) {
-  hooks.beforeEach(function () {
+  let realmService: RealmService;
+  let currentPermissions: Record<string, ('read' | 'write')[]> = {};
+  let currentExpiresInSec: number | undefined;
+
+  hooks.beforeEach(async function () {
+    currentPermissions = {};
+    currentExpiresInSec = undefined;
+    realmService = this.owner.lookup('service:realm') as RealmService;
     // clear any session refresh timers that may bleed into tests
-    clearAllRealmSessions();
+    realmService.logout();
     this.owner.register(
       'service:matrixService',
-      generateMockMatrixService(opts?.realmPermissions, opts?.expiresInSec),
+      generateMockMatrixService(
+        () => currentPermissions,
+        () => currentExpiresInSec,
+      ),
     );
     let matrixService = this.owner.lookup(
       'service:matrixService',
     ) as MockMatrixService;
     matrixService.cardAPI = cardApi;
+    if (opts.autostart) {
+      await matrixService.start();
+    }
   });
 
   hooks.afterEach(function () {
     // clear any session refresh timers that may bleed into other tests
-    clearAllRealmSessions();
+    realmService?.logout();
+    currentPermissions = {};
+    currentExpiresInSec = undefined;
   });
+
+  const setRealmPermissions = (permissions: {
+    [realmURL: string]: ('read' | 'write')[];
+  }) => {
+    currentPermissions = permissions;
+    // indexing may have already caused the realm service to establish a
+    // session, so when we change permissions we need to re-authenticate. This
+    // could stop being a problem if we make the test realm's indexing stay
+    // separate from the normal host loader.
+    realmService.logout();
+  };
+
+  const setExpiresInSec = (expiresInSec: number) => {
+    currentExpiresInSec = expiresInSec;
+    realmService.logout();
+  };
+
+  return { setRealmPermissions, setExpiresInSec };
 }

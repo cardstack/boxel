@@ -32,6 +32,7 @@ test.describe('Room creation', () => {
     await registerRealmUsers(synapse);
     await registerUser(synapse, 'user1', 'pass');
     await registerUser(synapse, 'user2', 'pass');
+    await registerUser(synapse, 'xuser', 'pass');
     await clearLocalStorage(page);
   });
   test.afterEach(async ({ page }) => {
@@ -194,6 +195,40 @@ test.describe('Room creation', () => {
     await page.locator(`[data-test-close-past-sessions]`).click();
   });
 
+  test('room names do not persist across different user sessions', async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass');
+
+    let room = await getRoomId(page);
+    await sendMessage(page, room, 'Hello');
+    await openRenameMenu(page, room);
+
+    const newRoomName = 'Room 1';
+    await page.locator(`[data-test-name-field]`).fill(newRoomName);
+    await page.locator('[data-test-save-name-button]').click();
+    await page.locator(`[data-test-close-past-sessions]`).click();
+
+    await openRoom(page, room);
+    await expect(page.locator(`[data-test-chat-title]`)).toHaveText(
+      newRoomName,
+    );
+
+    await logout(page);
+    await login(page, 'xuser', 'pass', {
+      skipOpeningOperatorMode: true,
+      skipOpeningAssistant: true,
+    });
+
+    // Open assistant without waiting for [data-test-room] which won’t show on a new account
+    await page.locator('[data-test-open-ai-assistant]').click();
+    await page.waitForFunction(() =>
+      document.querySelector('[data-test-close-ai-assistant]'),
+    );
+
+    await expect(page.locator(`[data-test-chat-title]`)).toHaveCount(0);
+  });
+
   test('it can delete a room', async ({ page }) => {
     await login(page, 'user1', 'pass');
     let roomsBeforeDeletion = await getRoomsFromSync();
@@ -242,7 +277,9 @@ test.describe('Room creation', () => {
     expect(roomsAfterDeletionKeys.length).toEqual(
       roomsBeforeDeletionKeys.length,
     );
-    expect(roomsAfterDeletionKeys.includes(roomsBeforeDeletionKeys[1])).toBeFalsy(); // Deleted room
+    expect(roomsAfterDeletionKeys, 'room1 check').not.toContain(room1);
+    expect(roomsAfterDeletionKeys, 'room2 check').not.toContain(room2);
+    expect(roomsAfterDeletionKeys, 'room3 check').not.toContain(room3);
   });
 
   test('it can cancel deleting a room', async ({ page }) => {

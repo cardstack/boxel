@@ -20,7 +20,6 @@ import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import EditFieldModal from '@cardstack/host/components/operator-mode/edit-field-modal';
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
-import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import RemoveFieldModal from '@cardstack/host/components/operator-mode/remove-field-modal';
 import Pill from '@cardstack/host/components/pill';
 import {
@@ -35,6 +34,7 @@ import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import RealmService from '@cardstack/host/services/realm';
 import {
   isOwnField,
   calculateTotalOwnFields,
@@ -160,11 +160,6 @@ export default class CardSchemaEditor extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-xs);
       }
 
-      .realm-icon > img {
-        height: 20px;
-        width: 20px;
-      }
-
       .header {
         display: flex;
         justify-content: space-between;
@@ -254,18 +249,12 @@ export default class CardSchemaEditor extends Component<Signature> {
           <Tooltip @placement='bottom'>
             <:trigger>
               <Pill
+                @kind='button'
                 {{on 'click' (fn @goToDefinition codeRef @cardType.localName)}}
                 data-test-card-schema-navigational-button
               >
                 <:icon>
-                  <RealmInfoProvider @fileURL={{@cardType.module}}>
-                    <:ready as |realmInfo|>
-                      <RealmIcon
-                        @realmIconURL={{realmInfo.iconURL}}
-                        @realmName={{realmInfo.name}}
-                      />
-                    </:ready>
-                  </RealmInfoProvider>
+                  <RealmIcon @realmInfo={{this.realm.info @cardType.module}} />
                 </:icon>
                 <:default>
                   {{@cardType.displayName}}
@@ -340,6 +329,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                       <Tooltip @placement='bottom'>
                         <:trigger>
                           <Pill
+                            @kind='button'
                             {{on
                               'click'
                               (fn @goToDefinition codeRef field.card.localName)
@@ -360,14 +350,9 @@ export default class CardSchemaEditor extends Component<Signature> {
                                   <IconLink width='16px' height='16px' />
                                 </span>
                               {{/if}}
-                              <RealmInfoProvider @fileURL={{moduleUrl}}>
-                                <:ready as |realmInfo|>
-                                  <RealmIcon
-                                    @realmIconURL={{realmInfo.iconURL}}
-                                    @realmName={{realmInfo.name}}
-                                  />
-                                </:ready>
-                              </RealmInfoProvider>
+                              <RealmIcon
+                                @realmInfo={{this.realm.info moduleUrl}}
+                              />
                             </:icon>
                             <:default>
                               {{#let
@@ -454,6 +439,7 @@ export default class CardSchemaEditor extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
+  @service private declare realm: RealmService;
 
   @tracked editFieldModalShown = false;
   @tracked removeFieldModalShown = false;

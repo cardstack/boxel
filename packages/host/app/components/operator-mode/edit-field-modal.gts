@@ -32,13 +32,14 @@ import {
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
-import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import Pill from '@cardstack/host/components/pill';
 import { FieldOfType, Type } from '@cardstack/host/resources/card-type';
 
 import { Ready } from '@cardstack/host/resources/file';
 import LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
+import type RealmService from '@cardstack/host/services/realm';
 
 import { BaseDef, FieldType } from 'https://cardstack.com/base/card-api';
 
@@ -66,6 +67,7 @@ export default class EditFieldModal extends Component<Signature> {
   @tracked fieldNameErrorMessage: string | undefined;
   @service declare loaderService: LoaderService;
   @service declare operatorModeStateService: OperatorModeStateService;
+  @service private declare realm: RealmService;
 
   cardinalityItems = [
     {
@@ -313,32 +315,6 @@ export default class EditFieldModal extends Component<Signature> {
         margin-left: auto;
       }
 
-      .pill {
-        border: 1px solid var(--boxel-400);
-        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
-        border-radius: 8px;
-        background-color: white;
-        font-weight: 600;
-        display: inline-flex;
-      }
-
-      .pill > div {
-        display: flex;
-      }
-
-      .pill > div > span {
-        margin: auto;
-      }
-
-      .realm-icon {
-        margin-right: var(--boxel-sp-xxxs);
-      }
-
-      .realm-icon > img {
-        height: 20px;
-        width: 20px;
-      }
-
       .card-chooser-area {
         display: flex;
       }
@@ -371,18 +347,19 @@ export default class EditFieldModal extends Component<Signature> {
         <FieldContainer @label='Field Type'>
           <div class='card-chooser-area'>
             {{#if this.fieldCard}}
-              <Pill @inert={{true}} data-test-selected-field-realm-icon>
+              <Pill data-test-selected-field-realm-icon>
                 <:icon>
                   {{#if this.fieldModuleURL.href}}
-                    <RealmInfoProvider @fileURL={{this.fieldModuleURL.href}}>
-                      <:ready as |realmInfo|>
-                        <img
-                          src={{realmInfo.iconURL}}
-                          alt='Workspace icon'
-                          data-test-realm-icon-url={{realmInfo.iconURL}}
-                        />
-                      </:ready>
-                    </RealmInfoProvider>
+                    {{#let
+                      (this.realm.info this.fieldModuleURL.href)
+                      as |realmInfo|
+                    }}
+                      <img
+                        src={{realmInfo.iconURL}}
+                        alt='Workspace icon'
+                        data-test-realm-icon-url={{realmInfo.iconURL}}
+                      />
+                    {{/let}}
                   {{/if}}
                 </:icon>
                 <:default>

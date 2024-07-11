@@ -2,12 +2,9 @@ import TransformModulesAmdPlugin from 'transform-modules-amd-plugin';
 import { transformSync } from '@babel/core';
 import { Deferred } from './deferred';
 import { trimExecutableExtension, logger } from './index';
-import { time, timeStart, timeEnd } from './helpers/time';
 
 import { CardError } from './error';
 import flatMap from 'lodash/flatMap';
-import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
-import jsEscapeString from 'js-string-escape';
 
 type FetchingModule = {
   state: 'fetching';
@@ -98,7 +95,6 @@ export class Loader {
   nonce = nonce++; // the nonce is a useful debugging tool that let's us compare loaders
   private log = logger('loader');
   private modules = new Map<string, Module>();
-  private urlHandlers: RequestHandler[] = [maybeHandleScopedCSSRequest];
 
   private moduleShims = new Map<string, Record<string, any>>();
   private identities = new WeakMap<
@@ -122,19 +118,10 @@ export class Loader {
 
   static cloneLoader(loader: Loader): Loader {
     let clone = new Loader(loader.fetchImplementation, loader.resolveImport);
-    clone.urlHandlers = loader.urlHandlers;
     for (let [moduleIdentifier, module] of loader.moduleShims) {
       clone.shimModule(moduleIdentifier, module);
     }
     return clone;
-  }
-
-  registerURLHandler(handler: RequestHandler) {
-    this.urlHandlers.push(handler);
-  }
-
-  prependURLHandlers(handlers: RequestHandler[]) {
-    this.urlHandlers = [...handlers, ...this.urlHandlers];
   }
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
@@ -279,7 +266,7 @@ export class Loader {
 
       outer_switch: switch (module?.state) {
         case undefined:
-          await time('fetchModule', this.fetchModule(resolvedURL));
+          await this.fetchModule(resolvedURL);
           break;
         case 'fetching':
           await module.deferred.promise;
@@ -439,39 +426,11 @@ export class Loader {
     return new Request(urlOrRequest, init);
   }
 
-  async fetch(
+  fetch = async (
     urlOrRequest: string | URL | Request,
     init?: RequestInit,
-  ): Promise<Response> {
-    let mergedHeaders: HeadersInit =
-      urlOrRequest instanceof Request
-        ? headersFromRequest(urlOrRequest)
-        : init?.headers ?? {};
+  ): Promise<Response> => {
     try {
-      for (let handler of this.urlHandlers) {
-        let request = this.asRequest(urlOrRequest, init);
-        mergedHeaders = { ...mergedHeaders, ...headersFromRequest(request) };
-        setHeaders(request, mergedHeaders);
-
-        timeStart('fetch:handler');
-        let result = await handler(request);
-        timeEnd('fetch:handler');
-
-        // the handler is allowed to mutate the headers, so we merge any updated headers
-        mergedHeaders = { ...mergedHeaders, ...headersFromRequest(request) };
-
-        if (result) {
-          timeStart('fetch:followRedirections');
-          let followed = await followRedirections(
-            request,
-            result,
-            this.fetch.bind(this),
-          );
-          timeEnd('fetch:followRedirections');
-          return followed;
-        }
-      }
-
       let shimmedModule = this.moduleShims.get(
         this.asRequest(urlOrRequest, init).url,
       );
@@ -481,18 +440,8 @@ export class Loader {
         return response;
       }
 
-      timeStart('fetch:asRequest');
       let request = this.asRequest(urlOrRequest, init);
-      timeEnd('fetch:asRequest');
-
-      timeStart('fetch:setHeaders');
-      setHeaders(request, mergedHeaders);
-      timeEnd('fetch:setHeaders');
-
-      timeStart('fetch:actualFetch');
-      let actualFetch = await this.fetchImplementation(request);
-      timeEnd('fetch:actualFetch');
-      return actualFetch;
+      return await this.fetchImplementation(request);
     } catch (err: any) {
       let url =
         urlOrRequest instanceof Request
@@ -505,7 +454,7 @@ export class Loader {
         statusText: err.message,
       });
     }
-  }
+  };
 
   private getModule(moduleIdentifier: string): Module | undefined {
     return this.modules.get(trimModuleIdentifier(moduleIdentifier));
@@ -555,7 +504,6 @@ export class Loader {
       | { type: 'shimmed'; module: Record<string, unknown> };
 
     try {
-      timeStart('fetchModule:load');
       loaded = await this.load(moduleURL);
     } catch (exception) {
       this.setModule(moduleIdentifier, {
@@ -564,8 +512,6 @@ export class Loader {
         consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
       });
       throw exception;
-    } finally {
-      timeEnd('fetchModule:load');
     }
 
     if (loaded.type === 'shimmed') {
@@ -585,7 +531,6 @@ export class Loader {
 
     let src: string | null | undefined = loaded.source;
 
-    timeStart('fetchModule:transformSync');
     src = transformSync(src, {
       plugins: [
         [
@@ -596,7 +541,6 @@ export class Loader {
       sourceMaps: 'inline',
       filename: moduleIdentifier,
     })?.code;
-    timeEnd('fetchModule:transformSync');
     if (!src) {
       throw new Error(`bug: should never get here`);
     }
@@ -626,7 +570,6 @@ export class Loader {
       implementation = impl;
     };
 
-    timeStart('fetchModule:eval');
     try {
       eval(src); // + "\n//# sourceURL=" + moduleIdentifier);
     } catch (exception) {
@@ -636,8 +579,6 @@ export class Loader {
         consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
       });
       throw exception;
-    } finally {
-      timeEnd('fetchModule:eval');
     }
 
     let registeredModule: RegisteredModule = {
@@ -722,7 +663,6 @@ export class Loader {
     | { type: 'shimmed'; module: Record<string, unknown> }
   > {
     let response: Response;
-    timeStart('load:fetch');
     try {
       response = await this.fetch(moduleURL);
     } catch (err) {
@@ -731,8 +671,6 @@ export class Loader {
       // "broken" state, since the server hosting the module is likely down. it
       // might be a good idea to be able to try again in this case...
       throw err;
-    } finally {
-      timeEnd('load:fetch');
     }
     if (!response.ok) {
       let error = await CardError.fromFetchResponse(moduleURL.href, response);
@@ -790,77 +728,4 @@ function isEvaluatable(
     return false;
   }
   return stateOrder[module.state] >= stateOrder['registered-completing-deps'];
-}
-
-function headersFromRequest(request: Request): HeadersInit {
-  let headers: HeadersInit = {};
-  for (let [header, value] of request.headers.entries()) {
-    headers[header] = value;
-  }
-  return headers;
-}
-
-function setHeaders(request: Request, headers: HeadersInit) {
-  for (let [header, value] of Object.entries(headers)) {
-    request.headers.set(header, value);
-  }
-}
-
-async function maybeHandleScopedCSSRequest(req: Request) {
-  if (isScopedCSSRequest(req.url)) {
-    // isFastBoot doesn’t work here because this runs outside FastBoot but inside Node
-    if (typeof (globalThis as any).document == 'undefined') {
-      return Promise.resolve(new Response('', { status: 200 }));
-    } else {
-      let decodedCSS = decodeScopedCSSRequest(req.url).css;
-      return Promise.resolve(
-        new Response(`
-          let styleNode = document.createElement('style');
-          let styleText = document.createTextNode('${jsEscapeString(
-            decodedCSS,
-          )}');
-          styleNode.appendChild(styleText);
-          document.head.appendChild(styleNode);
-        `),
-      );
-    }
-  } else {
-    return Promise.resolve(null);
-  }
-}
-
-export async function followRedirections(
-  request: Request,
-  result: Response,
-  fetchImplementation: typeof fetch, // argument purposively not named `fetch` to avoid shadowing the global fetch
-): Promise<Response> {
-  const urlString = request.url;
-  let redirectedHeaderKey = 'simulated-fetch-redirected'; // Temporary header to track if the request was redirected in the redirection chain
-
-  if (result.status >= 300 && result.status < 400) {
-    const location = result.headers.get('location');
-    if (location) {
-      request.headers.set(redirectedHeaderKey, 'true');
-      return await fetchImplementation(new URL(location, urlString), request);
-    }
-  }
-
-  // We are using Object.defineProperty because `url` and `redirected`
-  // response properties are read-only. We are overriding these properties to
-  // conform to the Fetch API specification where the `url` property is set to
-  // the final URL and the `redirected` property is set to true if the request
-  // was redirected. Normally, when using a native fetch, these properties are
-  // set automatically by the client, but in this case, we are simulating the
-  // fetch and need to set these properties manually.
-
-  if (request.url && !result.url) {
-    Object.defineProperty(result, 'url', { value: urlString });
-
-    if (request.headers.get(redirectedHeaderKey) === 'true') {
-      Object.defineProperty(result, 'redirected', { value: true });
-      request.headers.delete(redirectedHeaderKey);
-    }
-  }
-
-  return result;
 }

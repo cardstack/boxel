@@ -10,13 +10,13 @@ import {
   type LooseCardResource,
   isSingleCardDocument,
   isCardCollectionDocument,
-  RealmPaths,
   type CardDocument,
   type SingleCardDocument,
   type LooseSingleCardDocument,
   type RealmInfo,
   type Loader,
   type PatchData,
+  type Relationship,
 } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 
@@ -123,14 +123,9 @@ export default class CardService extends Service {
     relativeTo?: URL | undefined,
   ): Promise<CardDef> {
     let api = await this.getAPI();
-    let card = await api.createFromSerialized(
-      resource,
-      doc,
-      relativeTo,
-      this.loaderService.loader,
-    );
+    let card = await api.createFromSerialized(resource, doc, relativeTo);
     // it's important that we absorb the field async here so that glimmer won't
-    // encounter NotReady errors, since we don't have the luxury of the indexer
+    // encounter NotLoaded errors, since we don't have the luxury of the indexer
     // being able to inform us of which fields are used or not at this point.
     // (this is something that the card compiler could optimize for us in the
     // future)
@@ -257,15 +252,24 @@ export default class CardService extends Service {
     let api = await this.getAPI();
     let linkedCards = await this.loadPatchedCards(patchData, new URL(card.id));
     for (let [field, value] of Object.entries(linkedCards)) {
-      if (field.includes('.') || Array.isArray(value)) {
-        // TODO [wip] linksToMany and nested linksTo
-        throw new Error('Not implemented.');
+      if (field.includes('.')) {
+        let parts = field.split('.');
+        let leaf = parts.pop();
+        if (!leaf) {
+          throw new Error(`bug: error in field name "${field}"`);
+        }
+        let inner = card;
+        for (let part of parts) {
+          inner = (inner as any)[part];
+        }
+        (inner as any)[leaf.match(/^\d+$/) ? Number(leaf) : leaf] = value;
+      } else {
+        // TODO this could trigger a save. perhaps instead we could
+        // introduce a new option to updateFromSerialized to accept a list of
+        // fields to pre-load? which in this case would be any relationships that
+        // were patched in
+        (card as any)[field] = value;
       }
-      // TODO perhaps instead we could
-      // introduce a new option to updateFromSerialized to accept a list of
-      // fields to pre-load? which in this case would be any relationships that
-      // were patched in
-      (card as any)[field] = value;
     }
     let updatedCard = await api.updateFromSerialized<typeof CardDef>(card, doc);
     // TODO setting `this` as an owner until we can have a better solution here...
@@ -273,27 +277,47 @@ export default class CardService extends Service {
     return await this.saveModel(this, updatedCard);
   }
 
+  private async loadRelationshipCard(rel: Relationship, relativeTo: URL) {
+    if (!rel.links.self) {
+      return;
+    }
+    let id = rel.links.self;
+    let cardResource = getCard(this, () => new URL(id, relativeTo).href);
+    await cardResource.loaded;
+    if (!cardResource.card && cardResource.cardError) {
+      throw cardResource.cardError;
+    }
+    return cardResource.card;
+  }
+
   private async loadPatchedCards(
     patchData: PatchData,
     relativeTo: URL,
   ): Promise<{
-    [fieldName: string]: CardDef;
+    [fieldName: string]: CardDef | CardDef[];
   }> {
     if (!patchData?.relationships) {
       return {};
     }
-    let result: { [fieldName: string]: CardDef } = {};
+    let result: { [fieldName: string]: CardDef | CardDef[] } = {};
     await Promise.all(
       Object.entries(patchData.relationships).map(async ([fieldName, rel]) => {
-        if (!rel.links.self) {
-          return;
-        }
-
-        let id = rel.links.self;
-        let cardResource = getCard(this, () => new URL(id, relativeTo).href);
-        await cardResource.loaded;
-        if (cardResource.card) {
-          result[fieldName] = cardResource.card;
+        if (Array.isArray(rel)) {
+          let cards: CardDef[] = [];
+          await Promise.all(
+            rel.map(async (r) => {
+              let card = await this.loadRelationshipCard(r, relativeTo);
+              if (card) {
+                cards.push(card);
+              }
+            }),
+          );
+          result[fieldName] = cards;
+        } else {
+          let card = await this.loadRelationshipCard(rel, relativeTo);
+          if (card) {
+            result[fieldName] = card;
+          }
         }
       }),
     );
@@ -322,7 +346,6 @@ export default class CardService extends Service {
   }
 
   async copyCard(source: CardDef, destinationRealm: URL): Promise<CardDef> {
-    let loader = this.loaderService.loader;
     let api = await this.getAPI();
     let serialized = await this.serializeCard(source, {
       maybeRelativeURL: null, // forces URL's to be absolute.
@@ -333,7 +356,6 @@ export default class CardService extends Service {
       json.data,
       json,
       new URL(json.data.id),
-      loader,
     )) as CardDef;
     if (this.subscriber) {
       this.subscriber(new URL(json.data.id), json);
@@ -421,16 +443,6 @@ export default class CardService extends Service {
   async cardsSettled() {
     let api = await this.getAPI();
     await api.flushLogs();
-  }
-
-  getRealmURLFor(url: URL) {
-    for (let realmURL of this.realmURLs) {
-      let path = new RealmPaths(new URL(realmURL));
-      if (path.inRealm(url)) {
-        return new URL(realmURL);
-      }
-    }
-    return undefined;
   }
 
   async getRealmInfoByRealmURL(realmURL: URL): Promise<RealmInfo> {

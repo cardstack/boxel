@@ -6,7 +6,7 @@ import { module, test } from 'qunit';
 
 import { validate as uuidValidate } from 'uuid';
 
-import { baseRealm, CodeRef } from '@cardstack/runtime-common';
+import { baseRealm, CodeRef, Realm } from '@cardstack/runtime-common';
 import { isSingleCardDocument } from '@cardstack/runtime-common/card-document';
 import {
   cardSrc,
@@ -15,8 +15,6 @@ import {
 
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
 import { Loader } from '@cardstack/runtime-common/loader';
-
-import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as StringFieldMod from 'https://cardstack.com/base/string';
@@ -29,6 +27,7 @@ import {
   setupServerSentEvents,
   type TestContextWithSSE,
   setupIntegrationTestRealm,
+  lookupLoaderService,
 } from '../helpers';
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -39,8 +38,7 @@ module('Integration | realm', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    loader = lookupLoaderService().loader;
   });
 
   setupServerSentEvents(hooks);
@@ -49,6 +47,14 @@ module('Integration | realm', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
+
+  async function handle(realm: Realm, ...args: Parameters<Realm['handle']>) {
+    let result = await realm.handle(...args);
+    if (!result) {
+      throw new Error(`realm didn't handle request`);
+    }
+    return result;
+  }
 
   test('realm can serve GET card requests', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
@@ -67,7 +73,8 @@ module('Integration | realm', function (hooks) {
       },
     });
 
-    let response = await realm.handle(
+    let response = await handle(
+      realm,
       new Request(`${testRealmURL}dir/empty`, {
         headers: {
           Accept: 'application/vnd.card+json',
@@ -150,7 +157,8 @@ module('Integration | realm', function (hooks) {
       },
     });
 
-    let response = await realm.handle(
+    let response = await handle(
+      realm,
       new Request(`${testRealmURL}dir/mango`, {
         headers: {
           Accept: 'application/vnd.card+json',
@@ -256,7 +264,8 @@ module('Integration | realm', function (hooks) {
       },
     });
 
-    let response = await realm.handle(
+    let response = await handle(
+      realm,
       new Request(`${testRealmURL}dir/mango`, {
         headers: {
           Accept: 'application/vnd.card+json',
@@ -354,7 +363,8 @@ module('Integration | realm', function (hooks) {
       realmURL: `${testRealmURL}root/`,
     });
     {
-      let response = await realm.handle(
+      let response = await handle(
+        realm,
         new Request(`${testRealmURL}root/dir/empty`, {
           headers: {
             Accept: 'application/vnd.card+json',
@@ -370,7 +380,8 @@ module('Integration | realm', function (hooks) {
       );
     }
     {
-      let response = await realm.handle(
+      let response = await handle(
+        realm,
         new Request(`${testRealmURL}root/_search`, {
           headers: {
             Accept: 'application/vnd.card+json',
@@ -396,7 +407,8 @@ module('Integration | realm', function (hooks) {
       loader,
       contents: {},
     });
-    let response = await realm.handle(
+    let response = await handle(
+      realm,
       new Request(testRealmURL, {
         method: 'POST',
         headers: {
@@ -441,7 +453,7 @@ module('Integration | realm', function (hooks) {
     }
 
     let searchIndex = realm.searchIndex;
-    let result = await searchIndex.card(new URL(json.data.links.self));
+    let result = await searchIndex.cardDocument(new URL(json.data.links.self));
     if (result?.type === 'error') {
       throw new Error(
         `unexpected error when getting card from index: ${result.error.detail}`,
@@ -475,7 +487,8 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let response = await realm.handle(
+    let response = await handle(
+      realm,
       new Request(testRealmURL, {
         method: 'POST',
         headers: {
@@ -643,7 +656,8 @@ module('Integration | realm', function (hooks) {
       realm,
       expectedEvents,
       callback: async () => {
-        let response = realm.handle(
+        let response = handle(
+          realm,
           new Request(`${testRealmURL}dir/card`, {
             method: 'PATCH',
             headers: {
@@ -727,7 +741,7 @@ module('Integration | realm', function (hooks) {
     }
 
     let searchIndex = realm.searchIndex;
-    let result = await searchIndex.card(new URL(json.data.links.self));
+    let result = await searchIndex.cardDocument(new URL(json.data.links.self));
     if (result?.type === 'error') {
       throw new Error(
         `unexpected error when getting card from index: ${result.error.detail}`,
@@ -787,7 +801,8 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let response = await realm.handle(
+    let response = await handle(
+      realm,
       new Request(`${testRealmURL}ski-trip`, {
         method: 'PATCH',
         headers: {
@@ -959,7 +974,8 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let response = await realm.handle(
+    let response = await handle(
+      realm,
       new Request(`${testRealmURL}jackie`, {
         method: 'PATCH',
         headers: {
@@ -1165,7 +1181,8 @@ module('Integration | realm', function (hooks) {
       },
     });
 
-    let response = await realm.handle(
+    let response = await handle(
+      realm,
       new Request(`${testRealmURL}jackie`, {
         method: 'PATCH',
         headers: { Accept: 'application/vnd.card+json' },
@@ -1288,7 +1305,8 @@ module('Integration | realm', function (hooks) {
       },
     });
 
-    let response = await realm.handle(
+    let response = await handle(
+      realm,
       new Request(`${testRealmURL}jackie`, {
         method: 'PATCH',
         headers: { Accept: 'application/vnd.card+json' },
@@ -1402,7 +1420,8 @@ module('Integration | realm', function (hooks) {
       },
     });
 
-    let response = await realm.handle(
+    let response = await handle(
+      realm,
       new Request(`${testRealmURL}jackie`, {
         method: 'PATCH',
         headers: { Accept: 'application/vnd.card+json' },
@@ -1516,7 +1535,8 @@ module('Integration | realm', function (hooks) {
     });
 
     // changing linksTo field only
-    let response = await realm.handle(
+    let response = await handle(
+      realm,
       new Request(`${testRealmURL}jackie`, {
         method: 'PATCH',
         headers: { Accept: 'application/vnd.card+json' },
@@ -1655,7 +1675,8 @@ module('Integration | realm', function (hooks) {
       },
     });
 
-    let response = await realm.handle(
+    let response = await handle(
+      realm,
       new Request(`${testRealmURL}jackie`, {
         method: 'PATCH',
         headers: { Accept: 'application/vnd.card+json' },
@@ -1780,7 +1801,8 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let response = await realm.handle(
+    let response = await handle(
+      realm,
       new Request(`${testRealmURL}dir/mango`, {
         method: 'PATCH',
         headers: {
@@ -1943,7 +1965,9 @@ module('Integration | realm', function (hooks) {
     let { data: cards } = await searchIndex.search({});
     assert.strictEqual(cards.length, 2, 'two cards found');
 
-    let result = await searchIndex.card(new URL(`${testRealmURL}cards/2`));
+    let result = await searchIndex.cardDocument(
+      new URL(`${testRealmURL}cards/2`),
+    );
     if (result?.type === 'error') {
       throw new Error(
         `unexpected error when getting card from index: ${result.error.detail}`,
@@ -1969,7 +1993,8 @@ module('Integration | realm', function (hooks) {
       realm,
       expectedEvents,
       callback: async () => {
-        let response = realm.handle(
+        let response = handle(
+          realm,
           new Request(`${testRealmURL}cards/2`, {
             method: 'DELETE',
             headers: {
@@ -1983,10 +2008,10 @@ module('Integration | realm', function (hooks) {
     });
     assert.strictEqual(response.status, 204, 'status was 204');
 
-    result = await searchIndex.card(new URL(`${testRealmURL}cards/2`));
+    result = await searchIndex.cardDocument(new URL(`${testRealmURL}cards/2`));
     assert.strictEqual(result, undefined, 'card was deleted');
 
-    result = await searchIndex.card(new URL(`${testRealmURL}cards/1`));
+    result = await searchIndex.cardDocument(new URL(`${testRealmURL}cards/1`));
     if (result?.type === 'error') {
       throw new Error(
         `unexpected error when getting card from index: ${result.error.detail}`,
@@ -2009,7 +2034,8 @@ module('Integration | realm', function (hooks) {
         'dir/person.gts': cardSrc,
       },
     });
-    let response = await realm.handle(
+    let response = await handle(
+      realm,
       new Request(`${testRealmURL}dir/person.gts`, {
         headers: {
           Accept: 'application/vnd.card+source',
@@ -2032,7 +2058,8 @@ module('Integration | realm', function (hooks) {
         'dir/person.gts': cardSrc,
       },
     });
-    let response = await realm.handle(
+    let response = await handle(
+      realm,
       new Request(`${testRealmURL}dir/person`, {
         headers: {
           Accept: 'application/vnd.card+source',
@@ -2052,7 +2079,8 @@ module('Integration | realm', function (hooks) {
       loader,
       contents: {},
     });
-    let response = await realm.handle(
+    let response = await handle(
+      realm,
       new Request(`${testRealmURL}dir/person`, {
         headers: {
           Accept: 'application/vnd.card+source',
@@ -2083,7 +2111,8 @@ module('Integration | realm', function (hooks) {
         realm,
         expectedEvents,
         callback: async () => {
-          let response = realm.handle(
+          let response = handle(
+            realm,
             new Request(`${testRealmURL}dir/person.gts`, {
               method: 'POST',
               headers: {
@@ -2104,7 +2133,8 @@ module('Integration | realm', function (hooks) {
       );
     }
     {
-      let response = await realm.handle(
+      let response = await handle(
+        realm,
         new Request(`${testRealmURL}dir/person.gts`, {
           headers: {
             Accept: 'application/vnd.card+source',
@@ -2151,7 +2181,8 @@ module('Integration | realm', function (hooks) {
       realm,
       expectedEvents,
       callback: async () => {
-        let response = realm.handle(
+        let response = handle(
+          realm,
           new Request(`${testRealmURL}person`, {
             headers: {
               Accept: 'application/vnd.card+source',
@@ -2161,7 +2192,8 @@ module('Integration | realm', function (hooks) {
         await realm.flushUpdateEvents();
         assert.strictEqual((await response).status, 302, 'file exists');
 
-        response = realm.handle(
+        response = handle(
+          realm,
           new Request(`${testRealmURL}person`, {
             method: 'DELETE',
             headers: {
@@ -2175,7 +2207,8 @@ module('Integration | realm', function (hooks) {
     });
     assert.strictEqual(response.status, 204, 'file is deleted');
 
-    response = await realm.handle(
+    response = await handle(
+      realm,
       new Request(`${testRealmURL}person`, {
         headers: {
           Accept: 'application/vnd.card+source',
@@ -2192,7 +2225,10 @@ module('Integration | realm', function (hooks) {
         'dir/person.gts': cardSrc,
       },
     });
-    let response = await realm.handle(new Request(`${testRealmURL}dir/person`));
+    let response = await handle(
+      realm,
+      new Request(`${testRealmURL}dir/person`),
+    );
     assert.strictEqual(response.status, 200, 'HTTP 200 status code');
     let compiledJS = await response.text();
     assert.codeEqual(
@@ -2209,7 +2245,8 @@ module('Integration | realm', function (hooks) {
         'dir/person.gts': cardSrc,
       },
     });
-    let response = await realm.handle(
+    let response = await handle(
+      realm,
       new Request(`${testRealmURL}dir/person.gts`),
     );
     assert.strictEqual(response.status, 200, 'HTTP 200 status code');
@@ -2235,7 +2272,8 @@ module('Integration | realm', function (hooks) {
         'dir/index.html': html,
       },
     });
-    let response = await realm.handle(
+    let response = await handle(
+      realm,
       new Request(`${testRealmURL}dir/index.html`),
     );
     assert.strictEqual(response.status, 200, 'HTTP 200 status code');
@@ -2260,7 +2298,8 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let response = await realm.handle(
+    let response = await handle(
+      realm,
       new Request(`${testRealmURL}_search`, {
         headers: {
           Accept: 'application/vnd.card+json',
@@ -2346,7 +2385,8 @@ module('Integration | realm', function (hooks) {
       },
     });
 
-    let response = await realm.handle(
+    let response = await handle(
+      realm,
       new Request(
         `${testRealmURL}_search?${stringify({
           sort: [
@@ -2515,7 +2555,8 @@ module('Integration | realm', function (hooks) {
         'dir/subdir/file.txt': '',
       },
     });
-    let response = await realm.handle(
+    let response = await handle(
+      realm,
       new Request(`${testRealmURL}dir/`, {
         headers: {
           Accept: 'application/vnd.api+json',
@@ -2579,7 +2620,8 @@ posts/ignore-me.gts
     });
 
     {
-      let response = await realm.handle(
+      let response = await handle(
+        realm,
         new Request(
           `${testRealmURL}_typeOf?${stringify({
             type: 'exportedCard',
@@ -2597,7 +2639,8 @@ posts/ignore-me.gts
       assert.strictEqual(response.status, 404, 'HTTP 404 response');
     }
     {
-      let response = await realm.handle(
+      let response = await handle(
+        realm,
         new Request(`${testRealmURL}dir/`, {
           headers: {
             Accept: 'application/vnd.api+json',
@@ -2607,7 +2650,8 @@ posts/ignore-me.gts
       assert.strictEqual(response.status, 404, 'HTTP 404 response');
     }
     {
-      let response = await realm.handle(
+      let response = await handle(
+        realm,
         new Request(testRealmURL, {
           headers: {
             Accept: 'application/vnd.api+json',
@@ -2623,7 +2667,8 @@ posts/ignore-me.gts
       );
     }
     {
-      let response = await realm.handle(
+      let response = await handle(
+        realm,
         new Request(`${testRealmURL}posts/`, {
           headers: {
             Accept: 'application/vnd.api+json',
@@ -2651,7 +2696,8 @@ posts/ignore-me.gts
         }`,
       },
     });
-    let response = await realm.handle(
+    let response = await handle(
+      realm,
       new Request(`${testRealmURL}_info`, {
         headers: {
           Accept: 'application/vnd.api+json',
@@ -2681,7 +2727,8 @@ posts/ignore-me.gts
       loader,
       contents: {},
     });
-    let response = await realm.handle(
+    let response = await handle(
+      realm,
       new Request(`${testRealmURL}_info`, {
         headers: {
           Accept: 'application/vnd.api+json',
@@ -2709,7 +2756,8 @@ posts/ignore-me.gts
         '.realm.json': `Some example content that is not valid json`,
       },
     });
-    let response = await realm.handle(
+    let response = await handle(
+      realm,
       new Request(`${testRealmURL}_info`, {
         headers: {
           Accept: 'application/vnd.api+json',

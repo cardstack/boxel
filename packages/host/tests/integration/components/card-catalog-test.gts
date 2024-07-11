@@ -15,7 +15,6 @@ import { baseRealm } from '@cardstack/runtime-common';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
@@ -23,6 +22,7 @@ import {
   setupLocalIndexing,
   setupIntegrationTestRealm,
   setupServerSentEvents,
+  lookupLoaderService,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
@@ -33,13 +33,12 @@ module('Integration | card-catalog', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMatrixServiceMock(hooks, { autostart: true });
 
   const noop = () => {};
 
   hooks.beforeEach(async function () {
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    let loader = lookupLoaderService().loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
     let textArea: typeof import('https://cardstack.com/base/text-area');

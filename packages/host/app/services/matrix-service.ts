@@ -1,7 +1,7 @@
 import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import Service, { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import format from 'date-fns/format';
 
@@ -33,28 +33,30 @@ import {
 
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
+import { currentRoomIdPersistenceKey } from '@cardstack/host/components/ai-assistant/panel';
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
-import { getRealmSession } from '@cardstack/host/resources/realm-session';
 
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import * as RoomModule from 'https://cardstack.com/base/room';
 import type {
-  RoomField,
   MatrixEvent as DiscreteMatrixEvent,
   CardMessageContent,
   CardFragmentContent,
   ReactionEventContent,
-} from 'https://cardstack.com/base/room';
+} from 'https://cardstack.com/base/matrix-event';
+import * as RoomModule from 'https://cardstack.com/base/room';
+import type { RoomField } from 'https://cardstack.com/base/room';
 
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
 import { importResource } from '../resources/import';
 
-import { clearAllRealmSessions } from '../resources/realm-session';
+import { RoomResource, getRoom } from '../resources/room';
+
+import RealmService from './realm';
 
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
@@ -76,13 +78,16 @@ export type OperatorModeContext = {
 export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
+  @service declare realm: RealmService;
+
   @service declare router: RouterService;
   @tracked private _client: MatrixClient | undefined;
   private realmSessionTasks: Map<string, Promise<string>> = new Map(); // key: realmURL, value: promise for JWT
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
-  rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
+  private rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
+  private roomResourcesCache: Map<string, RoomResource> = new Map();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
   failedCommandState: TrackedMap<string, Error> = new TrackedMap();
@@ -93,10 +98,16 @@ export default class MatrixService extends Service {
   #ready: Promise<void>;
   #matrixSDK: typeof MatrixSDK | undefined;
   #eventBindings: [EmittedEvents, (...arg: any[]) => void][] | undefined;
+  currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
+    new TrackedMap();
 
   constructor(owner: Owner) {
     super(owner);
     this.#ready = this.loadSDK.perform();
+  }
+
+  addEventReadReceipt(eventId: string, receipt: { readAt: Date }) {
+    this.currentUserEventReadReceipts.set(eventId, receipt);
   }
 
   get ready() {
@@ -135,6 +146,7 @@ export default class MatrixService extends Service {
         this.matrixSDK.RoomEvent.LocalEchoUpdated,
         Timeline.onUpdateEventStatus(this),
       ],
+      [this.matrixSDK.RoomEvent.Receipt, Timeline.onReceipt(this)],
     ];
   });
 
@@ -191,7 +203,7 @@ export default class MatrixService extends Service {
       await this.flushMembership;
       await this.flushTimeline;
       clearAuth();
-      clearAllRealmSessions();
+      this.realm.logout();
       this.unbindEventListeners();
       await this.client.logout(true);
     } catch (e) {
@@ -268,12 +280,35 @@ export default class MatrixService extends Service {
 
       try {
         await this._client.startClient();
+        await this.loginToRealms();
         await this.initializeRooms();
       } catch (e) {
         console.log('Error starting Matrix client', e);
         await this.logout();
       }
     }
+  }
+
+  private async loginToRealms() {
+    // This is where we would actually load user-specific choices out of the
+    // user's profile based on this.client.getUserId();
+    let activeRealms = this.cardService.realmURLs;
+
+    await Promise.all(
+      activeRealms.map(async (realmURL) => {
+        try {
+          // Our authorization-middleware can login automatically after seeing a
+          // 401, but this preemptive login makes it possible to see
+          // canWrite===true on realms that are publicly readable.
+          await this.realm.login(realmURL);
+        } catch (err) {
+          console.warn(
+            `Unable to establish session with realm ${realmURL}`,
+            err,
+          );
+        }
+      }),
+    );
   }
 
   public async createRealmSession(realmURL: URL) {
@@ -288,7 +323,7 @@ export default class MatrixService extends Service {
     let realmAuthClient = new RealmAuthClient(
       realmURL,
       this.client,
-      this.loaderService.loader,
+      this.loaderService.loader.fetch,
     );
 
     let jwtPromise = realmAuthClient.getJWT();
@@ -420,16 +455,12 @@ export default class MatrixService extends Service {
           this.cardAPI,
           mappings,
         );
-        let realmSession = getRealmSession(this, {
-          card: () => attachedOpenCard,
-        });
-        await realmSession.loaded;
-        if (realmSession.canWrite) {
+        if (this.realm.canWrite(attachedOpenCard.id)) {
           tools.push({
             type: 'function',
             function: {
               name: 'patchCard',
-              description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property to null. Ensure the description explains what change you are making`,
+              description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.`,
               parameters: {
                 type: 'object',
                 properties: {
@@ -564,7 +595,7 @@ export default class MatrixService extends Service {
         await opts.onMessages(events);
       }
       messages.push(...events);
-    } while (!from);
+    } while (from);
     return messages;
   }
 
@@ -699,9 +730,36 @@ export default class MatrixService extends Service {
     }
   }
 
+  getRoom(roomId: string) {
+    return this.rooms.get(roomId);
+  }
+
+  setRoom(roomId: string, roomPromise: Promise<RoomField>) {
+    this.rooms.set(roomId, roomPromise);
+    if (!this.roomResourcesCache.has(roomId)) {
+      this.roomResourcesCache.set(
+        roomId,
+        getRoom(this, () => roomId),
+      );
+    }
+  }
+
+  @cached
+  get roomResources() {
+    let resources: TrackedMap<string, RoomResource> = new TrackedMap();
+    for (let roomId of this.rooms.keys()) {
+      if (!this.roomResourcesCache.get(roomId)) {
+        continue;
+      }
+      resources.set(roomId, this.roomResourcesCache.get(roomId)!);
+    }
+    return resources;
+  }
+
   private resetState() {
     this.rooms = new TrackedMap();
     this.roomMembershipQueue = [];
+    this.roomResourcesCache.clear();
     this.timelineQueue = [];
     this.flushMembership = undefined;
     this.flushTimeline = undefined;
@@ -737,6 +795,7 @@ function saveAuth(auth: LoginResponse) {
 
 function clearAuth() {
   localStorage.removeItem('auth');
+  localStorage.removeItem(currentRoomIdPersistenceKey);
 }
 
 function getAuth(): LoginResponse | undefined {
