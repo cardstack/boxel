@@ -8,7 +8,7 @@ import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask } from 'ember-concurrency';
 
 import { AddButton, Header } from '@cardstack/boxel-ui/components';
-import { cn, not, or } from '@cardstack/boxel-ui/helpers';
+import { cn, gt, not, or } from '@cardstack/boxel-ui/helpers';
 
 import { chooseCard, baseCardRef, type Query } from '@cardstack/runtime-common';
 
@@ -73,7 +73,7 @@ export default class PillMenu extends Component<Signature> {
         </:actions>
       </Header>
       {{#if this.isExpanded}}
-        {{#if (or (has-block 'content') @items.length)}}
+        {{#if (or (has-block 'content') (gt @items.length 0))}}
           <div class='menu-content'>
             {{yield to='content'}}
 
