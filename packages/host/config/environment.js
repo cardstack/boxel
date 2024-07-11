@@ -20,6 +20,7 @@ module.exports = function (environment) {
     },
 
     APP: {
+      rootElement: '#main-app-target',
       // Here you can pass flags/options to your application instance
       // when it is created
       experimentalAIEnabled:

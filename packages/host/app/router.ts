@@ -19,6 +19,7 @@ let path = new URL(resolvedOwnRealmURL ?? ownRealmURL).pathname.replace(
 Router.map(function () {
   this.route('host-freestyle', { path: '/_freestyle' });
   this.route('indexer', { path: '/indexer/:id' });
+  this.route('prerender', { path: '/prerender/:card_url' });
   this.route('card', { path: '/*path' });
 
   // this route is empty but lets the application.hbs render, so that the CardPrerender

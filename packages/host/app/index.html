@@ -18,14 +18,17 @@
     {{content-for "head-footer"}}
   </head>
   <body>
-    <!-- in case embercli's hooks insn't run,
+    <div id="my-prerender-target"></div>
+    <div id="main-app-target">
+      <!-- in case embercli's hooks insn't run,
          we embed the following div manually -->
-    <div id="ember-basic-dropdown-wormhole"></div>
-    {{content-for "body"}}
+      <div id="ember-basic-dropdown-wormhole"></div>
+      {{content-for "body"}}
 
-    <script src="{{rootURL}}assets/vendor.js"></script>
-    <script src="{{rootURL}}assets/@cardstack/host.js"></script>
+      <script src="{{rootURL}}assets/vendor.js"></script>
+      <script src="{{rootURL}}assets/@cardstack/host.js"></script>
 
-    {{content-for "body-footer"}}
+      {{content-for "body-footer"}}
+    </div>
   </body>
 </html>
