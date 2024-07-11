@@ -4,7 +4,7 @@ import {
   QueryResultsMeta,
   PrerenderedCard,
   PrerenderedCardCssItem,
-} from './indexer';
+} from './index-query-engine';
 
 export type Saved = string;
 export type Unsaved = string | undefined;
