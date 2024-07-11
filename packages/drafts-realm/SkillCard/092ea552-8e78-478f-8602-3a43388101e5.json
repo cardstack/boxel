@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "instructions": "You are now allowed to edit and change the title and description of any open card. You must inform the user of the changes you made. If asked to revert changes, you must do so.",
-      "title": "Card Title & Description Editing",
+      "instructions": "Generate concise but engaging title and description for card. The description should be no longer than 2 sentences.",
+      "title": "Card Title & Description Generator",
       "description": null,
       "thumbnailURL": null
     },
