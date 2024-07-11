@@ -1955,7 +1955,7 @@ module('Realm Server', function (hooks) {
       });
 
       test('can filter prerendered instances', async function (assert) {
-        let query: Query = {
+        let query: Query & { prerenderedHtmlFormat: string } = {
           filter: {
             on: {
               module: `${testRealmHref}person`,
@@ -1982,7 +1982,7 @@ module('Realm Server', function (hooks) {
       });
 
       test('can sort prerendered instances', async function (assert) {
-        let query: Query = {
+        let query: Query & { prerenderedHtmlFormat: string } = {
           sort: [
             {
               by: 'firstName',

@@ -55,7 +55,7 @@ import {
   SupportedMimeType,
   lookupRouteTable,
 } from './router';
-import { Query, parseQueryString } from './query';
+import { Query, assertQuery, parseQueryString } from './query';
 import type { Readable } from 'stream';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -71,6 +71,8 @@ import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
 
 import { RealmAuthDataSource } from './realm-auth-data-source';
 import { fetcher } from './fetcher';
+
+import qs from 'qs';
 
 export interface RealmSession {
   canRead: boolean;
@@ -1684,10 +1686,14 @@ export class Realm {
     let useWorkInProgressIndex = Boolean(
       request.headers.get('X-Boxel-Use-WIP-Index'),
     );
-    let doc = await this.#searchIndex.search(
-      parseQueryString(new URL(request.url).search.slice(1)),
-      { loadLinks: true, useWorkInProgressIndex },
-    );
+
+    let cardsQuery = qs.parse(new URL(request.url).search.slice(1));
+    assertQuery(cardsQuery);
+
+    let doc = await this.#searchIndex.search(cardsQuery, {
+      loadLinks: true,
+      useWorkInProgressIndex,
+    });
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {
@@ -1705,10 +1711,8 @@ export class Realm {
       request.headers.get('X-Boxel-Use-WIP-Index'),
     );
 
-    let query: Query = parseQueryString(new URL(request.url).search.slice(1));
-
-    let htmlFormat = query.prerenderedHtmlFormat as string;
-
+    let parsedQueryString = qs.parse(new URL(request.url).search.slice(1));
+    let htmlFormat = parsedQueryString.prerenderedHtmlFormat as string;
     if (!htmlFormat || (htmlFormat !== 'embedded' && htmlFormat !== 'atom')) {
       return badRequest(
         JSON.stringify({
@@ -1719,8 +1723,13 @@ export class Realm {
         requestContext,
       );
     }
+    // prerenederedHtmlFormat is a special parameter only for this endpoint so don't include it in our Query for card search
+    delete parsedQueryString.prerenderedHtmlFormat;
 
-    let results = await this.#searchIndex.searchPrerendered(query, {
+    let cardsQuery = parsedQueryString;
+    assertQuery(parsedQueryString);
+
+    let results = await this.#searchIndex.searchPrerendered(cardsQuery, {
       useWorkInProgressIndex,
       htmlFormat,
     });
