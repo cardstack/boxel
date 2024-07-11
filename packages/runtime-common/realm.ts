@@ -28,7 +28,7 @@ import {
   type DirectoryEntryRelationship,
   type DBAdapter,
   type Queue,
-  type Indexer,
+  type IndexUpdater,
   fetchUserPermissions,
   maybeHandleScopedCSSRequest,
   authorizationMiddleware,
@@ -61,7 +61,6 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
-import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import { MatrixClient, waitForMatrixMessage } from './matrix-client';
 import { Sha256 } from '@aws-crypto/sha256-js';
 
@@ -228,7 +227,9 @@ export class Realm {
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
 
-  #onIndexer: ((indexer: Indexer) => Promise<void>) | undefined;
+  #onIndexUpdaterReady:
+    | ((indexUpdater: IndexUpdater) => Promise<void>)
+    | undefined;
   #publicEndpoints: RouteTable<true> = new Map([
     [
       SupportedMimeType.Session,
@@ -269,7 +270,7 @@ export class Realm {
       dbAdapter,
       queue,
       virtualNetwork,
-      onIndexer,
+      onIndexUpdaterReady,
       assetsURL,
     }: {
       url: string;
@@ -280,7 +281,7 @@ export class Realm {
       dbAdapter: DBAdapter;
       queue: Queue;
       virtualNetwork: VirtualNetwork;
-      onIndexer?: (indexer: Indexer) => Promise<void>;
+      onIndexUpdaterReady?: (indexUpdater: IndexUpdater) => Promise<void>;
       assetsURL: URL;
     },
     opts?: Options,
@@ -293,14 +294,15 @@ export class Realm {
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
     this.#assetsURL = assetsURL;
 
-    let maybeHandle = this.maybeHandle.bind(this);
     let fetch = fetcher(virtualNetwork.fetch, [
       async (req, next) => {
         return (await maybeHandleScopedCSSRequest(req)) || next(req);
       },
       async (request, next) => {
-        let response = await maybeHandle(request);
-        return response || next(request);
+        if (!this.paths.inRealm(new URL(request.url))) {
+          return next(request);
+        }
+        return await this.internalHandle(request, true);
       },
       authorizationMiddleware(
         new RealmAuthDataSource(
@@ -317,7 +319,7 @@ export class Realm {
     this.loaderTemplate = loader;
 
     this.#adapter = adapter;
-    this.#onIndexer = onIndexer;
+    this.#onIndexUpdaterReady = onIndexUpdaterReady;
     this.#searchIndex = new SearchIndex({
       realm: this,
       dbAdapter,
@@ -550,7 +552,7 @@ export class Realm {
 
   async #startup() {
     await Promise.resolve();
-    await this.#searchIndex.run(this.#onIndexer);
+    await this.#searchIndex.run(this.#onIndexUpdaterReady);
     this.sendServerEvent({ type: 'index', data: { type: 'full' } });
     this.#perfLog.debug(
       `realm server startup in ${Date.now() - this.#startTime}ms`,
@@ -561,6 +563,7 @@ export class Realm {
     return this.#startedUp.promise;
   }
 
+  // TODO get rid of this
   maybeHandle = async (
     request: Request,
   ): Promise<ResponseWithNodeStream | null> => {
@@ -570,20 +573,12 @@ export class Realm {
     return await this.internalHandle(request, true);
   };
 
-  // This is scaffolding that should be deleted once we can finish the isolated
-  // loader refactor
-  maybeExternalHandle = async (
-    request: Request,
-  ): Promise<ResponseWithNodeStream | null> => {
+  handle = async (request: Request): Promise<ResponseWithNodeStream | null> => {
     if (!this.paths.inRealm(new URL(request.url))) {
       return null;
     }
     return await this.internalHandle(request, false);
   };
-
-  async handle(request: Request): Promise<ResponseWithNodeStream> {
-    return this.internalHandle(request, false);
-  }
 
   private async createSession(
     request: Request,
@@ -869,7 +864,10 @@ export class Realm {
     return undefined;
   }
 
-  async fallbackHandle(request: Request, requestContext: RequestContext) {
+  private async fallbackHandle(
+    request: Request,
+    requestContext: RequestContext,
+  ) {
     let start = Date.now();
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
@@ -1775,7 +1773,6 @@ export class Realm {
       doc.data,
       doc,
       relativeTo,
-      this.loader as unknown as LoaderType,
     )) as CardDef;
     await api.flushLogs();
     let data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds

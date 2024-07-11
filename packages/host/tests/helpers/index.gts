@@ -20,7 +20,7 @@ import {
   RunnerOptionsManager,
   type RealmInfo,
   type TokenClaims,
-  type Indexer,
+  type IndexUpdater,
   type RunnerRegistration,
   type IndexRunner,
   type IndexResults,
@@ -108,7 +108,6 @@ export async function getDbAdapter() {
     | undefined;
   if (!dbAdapter) {
     dbAdapter = new SQLiteAdapter(sqlSchema);
-    await dbAdapter.startClient();
     (globalThis as any).__sqliteAdapter = dbAdapter;
   }
   return dbAdapter;
@@ -198,7 +197,7 @@ async function makeRenderer() {
 class MockLocalIndexer extends Service {
   url = new URL(testRealmURL);
   #adapter: RealmAdapter | undefined;
-  #indexer: Indexer | undefined;
+  #indexUpdater: IndexUpdater | undefined;
   #fromScratch: ((realmURL: URL) => Promise<IndexResults>) | undefined;
   #incremental:
     | ((
@@ -223,7 +222,7 @@ class MockLocalIndexer extends Service {
   async configureRunner(
     registerRunner: RunnerRegistration,
     adapter: RealmAdapter,
-    indexer: Indexer,
+    indexUpdater: IndexUpdater,
   ) {
     if (!this.#fromScratch || !this.#incremental) {
       throw new Error(
@@ -231,7 +230,7 @@ class MockLocalIndexer extends Service {
       );
     }
     this.#adapter = adapter;
-    this.#indexer = indexer;
+    this.#indexUpdater = indexUpdater;
     await registerRunner(
       this.#fromScratch.bind(this),
       this.#incremental.bind(this),
@@ -243,11 +242,11 @@ class MockLocalIndexer extends Service {
     }
     return this.#adapter;
   }
-  get indexer() {
-    if (!this.#indexer) {
-      throw new Error(`indexer not registered with MockLocalIndexer`);
+  get indexUpdater() {
+    if (!this.#indexUpdater) {
+      throw new Error(`indexUpdater not registered with MockLocalIndexer`);
     }
-    return this.#indexer;
+    return this.#indexUpdater;
   }
 }
 
@@ -345,8 +344,8 @@ export function setupServerSentEvents(hooks: NestedHooks) {
           },
         }),
       );
-      if (!response.ok) {
-        throw new Error(`failed to connect to realm: ${response.status}`);
+      if (!response?.ok) {
+        throw new Error(`failed to connect to realm: ${response?.status}`);
       }
       let reader = response.body!.getReader();
       let timeout = setTimeout(
@@ -506,8 +505,8 @@ async function setupTestRealm({
 
   let adapter = new TestRealmAdapter(contents, new URL(realmURL));
   let indexRunner: IndexRunner = async (optsId) => {
-    let { registerRunner, indexer } = runnerOptsMgr.getOptions(optsId);
-    await localIndexer.configureRunner(registerRunner, adapter, indexer);
+    let { registerRunner, indexUpdater } = runnerOptsMgr.getOptions(optsId);
+    await localIndexer.configureRunner(registerRunner, adapter, indexUpdater);
   };
 
   let dbAdapter = await getDbAdapter();
@@ -522,10 +521,10 @@ async function setupTestRealm({
     virtualNetwork,
     dbAdapter,
     queue,
-    onIndexer: async (indexer) => {
+    onIndexUpdaterReady: async (indexUpdater) => {
       let worker = new Worker({
         realmURL: new URL(realmURL!),
-        indexer,
+        indexUpdater,
         queue,
         realmAdapter: adapter,
         runnerOptsManager: runnerOptsMgr,

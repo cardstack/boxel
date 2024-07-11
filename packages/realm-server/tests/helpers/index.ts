@@ -38,7 +38,7 @@ let fastbootState:
   | { getRunner: IndexRunner; getIndexHTML: () => Promise<string> }
   | undefined;
 
-export async function prepareTestDB() {
+export function prepareTestDB(): void {
   process.env.PGDATABASE = `test_db_${Math.floor(10000000 * Math.random())}`;
 }
 
@@ -63,7 +63,6 @@ export function setupDB(
     prepareTestDB();
     dbAdapter = new PgAdapter();
     queue = new PgQueue(dbAdapter);
-    await dbAdapter.startClient();
   };
 
   const runAfterHook = async () => {
@@ -159,10 +158,10 @@ export async function createRealm({
       virtualNetwork,
       dbAdapter,
       queue,
-      onIndexer: async (indexer) => {
+      onIndexUpdaterReady: async (indexUpdater) => {
         let worker = new Worker({
           realmURL: new URL(realmURL!),
-          indexer,
+          indexUpdater,
           queue,
           realmAdapter: adapter,
           runnerOptsManager: manager,
@@ -214,7 +213,7 @@ export async function runBaseRealmServer(
     dbAdapter,
     permissions,
   });
-  virtualNetwork.mount(testBaseRealm.maybeExternalHandle);
+  virtualNetwork.mount(testBaseRealm.handle);
   await testBaseRealm.ready;
   let testBaseRealmServer = new RealmServer([testBaseRealm], virtualNetwork);
   return testBaseRealmServer.listen(parseInt(localBaseRealmURL.port));
@@ -249,7 +248,7 @@ export async function runTestRealmServer({
     queue,
     dbAdapter,
   });
-  virtualNetwork.mount(testRealm.maybeExternalHandle);
+  virtualNetwork.mount(testRealm.handle);
   await testRealm.ready;
   let testRealmServer = await new RealmServer(
     [testRealm],
