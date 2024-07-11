@@ -631,6 +631,69 @@ module('Integration | realm', function (hooks) {
     );
   });
 
+  test('realm returns 400 error for POST requests that set the value of a polymorphic field to an incompatible type', async function (assert) {
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+    }
+    class Car extends FieldDef {
+      @field make = contains(StringField);
+      @field model = contains(StringField);
+      @field year = contains(StringField);
+    }
+    class Driver extends CardDef {
+      @field card = contains(Person);
+    }
+    let { realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'driver.gts': { Driver },
+        'person.gts': { Person },
+        'car.gts': { Car },
+      },
+    });
+    let response = await handle(
+      realm,
+      new Request(testRealmURL, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+        body: JSON.stringify(
+          {
+            data: {
+              type: 'card',
+              attributes: {
+                card: {
+                  firstName: null,
+                  make: 'Mercedes Benz',
+                  model: 'C300',
+                  year: '2024',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}driver`,
+                  name: 'Driver',
+                },
+                fields: {
+                  card: {
+                    adoptsFrom: {
+                      module: `${testRealmURL}car`,
+                      name: 'Car',
+                    },
+                  },
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      }),
+    );
+    assert.strictEqual(response.status, 400, '400 server error');
+  });
+
   test<TestContextWithSSE>('realm can serve patch card requests', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,

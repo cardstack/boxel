@@ -1361,16 +1361,22 @@ export class Realm {
       `/${join(new URL(this.url).pathname, name, uuidV4() + '.json')}`,
     );
     let localPath = this.paths.local(fileURL);
+    let fileSerialization: LooseSingleCardDocument | undefined;
+    try {
+      fileSerialization = await this.fileSerialization(
+        merge(json, { data: { meta: { realmURL: this.url } } }),
+        fileURL,
+      );
+    } catch (err: any) {
+      if (err.message.startsWith('field validation error')) {
+        return badRequest(err.message, requestContext);
+      } else {
+        return systemError(requestContext, err.message, err);
+      }
+    }
     let { lastModified } = await this.write(
       localPath,
-      JSON.stringify(
-        await this.fileSerialization(
-          merge(json, { data: { meta: { realmURL: this.url } } }),
-          fileURL,
-        ),
-        null,
-        2,
-      ),
+      JSON.stringify(fileSerialization, null, 2),
     );
     let newURL = fileURL.href.replace(/\.json$/, '');
     let entry = await this.#searchIndex.cardDocument(new URL(newURL), {
