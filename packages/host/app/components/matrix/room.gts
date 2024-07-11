@@ -8,6 +8,7 @@ import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
 import { v4 as uuidv4 } from 'uuid';
 
+import { RoomMessageModel } from '@cardstack/host/lib/matrix-model/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
 import { getRoom } from '@cardstack/host/resources/room';
@@ -18,8 +19,6 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-
-import type { MessageField } from 'https://cardstack.com/base/message';
 
 import AiAssistantCardPicker from '../ai-assistant/card-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
@@ -42,14 +41,14 @@ export default class Room extends Component<Signature> {
       data-room-settled={{this.doWhenRoomChanges.isIdle}}
       data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
       data-test-room-name={{this.room.name}}
-      data-test-room={{this.room.roomId}}
+      data-test-room={{@roomId}}
     >
-      {{#if this.room.messages}}
+      {{#if this.messages}}
         <AiAssistantConversation>
-          {{#each this.room.messages as |message i|}}
+          {{#each this.messages as |message i|}}
             <RoomMessage
-              @room={{this.room}}
               @roomId={{@roomId}}
+              @messages={{this.messages}}
               @message={{message}}
               @index={{i}}
               @isPending={{this.isPendingMessage message}}
@@ -73,7 +72,7 @@ export default class Room extends Component<Signature> {
             @onInput={{this.setMessage}}
             @onSend={{this.sendMessage}}
             @canSend={{this.canSend}}
-            data-test-message-field={{this.room.roomId}}
+            data-test-message-field={{@roomId}}
           />
           <AiAssistantCardPicker
             @autoAttachedCards={{this.autoAttachedCards}}
@@ -117,7 +116,11 @@ export default class Room extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
 
-  private roomResource = getRoom(this, () => this.args.roomId);
+  private roomResource = getRoom(
+    this,
+    () => this.args.roomId,
+    () => this.matrixService.getRoom(this.args.roomId)?.events,
+  );
   private autoAttachmentResource = getAutoAttachment(
     this,
     () => this.topMostStackItems,
@@ -131,14 +134,14 @@ export default class Room extends Component<Signature> {
     this.doMatrixEventFlush.perform();
   }
 
-  maybeRetryAction = (messageIndex: number, message: MessageField) => {
+  maybeRetryAction = (messageIndex: number, message: RoomMessageModel) => {
     if (this.isLastMessage(messageIndex) && message.isRetryable) {
       return this.resendLastMessage;
     }
     return undefined;
   };
 
-  @action isMessageStreaming(message: MessageField, messageIndex: number) {
+  @action isMessageStreaming(message: RoomMessageModel, messageIndex: number) {
     return (
       !message.isStreamingFinished &&
       this.isLastMessage(messageIndex) &&
@@ -151,6 +154,10 @@ export default class Room extends Component<Signature> {
     await this.matrixService.flushTimeline;
     await this.roomResource.loading;
   });
+
+  private get messages() {
+    return this.roomResource.messages;
+  }
 
   private get room() {
     let room = this.roomResource.room;
@@ -176,7 +183,7 @@ export default class Room extends Component<Signature> {
       );
     }
 
-    let myMessages = this.room.messages.filter(
+    let myMessages = this.messages.filter(
       (message) => message.author.userId === this.matrixService.userId,
     );
     if (myMessages.length === 0) {
@@ -321,22 +328,20 @@ export default class Room extends Component<Signature> {
           this.autoAttachedCards.size !== 0,
       ) &&
       !!this.room &&
-      !this.room.messages.some((m) => this.isPendingMessage(m))
+      !this.messages.some((m) => this.isPendingMessage(m))
     );
   }
 
   @action
   private isLastMessage(messageIndex: number) {
-    return (
-      (this.room && messageIndex === this.room.messages.length - 1) ?? false
-    );
+    return (this.room && messageIndex === this.messages.length - 1) ?? false;
   }
 
   @action private setCurrentMonacoContainer(index: number | undefined) {
     this.currentMonacoContainer = index;
   }
 
-  private isPendingMessage(message: MessageField) {
+  private isPendingMessage(message: RoomMessageModel) {
     return message.status === 'sending' || message.status === 'queued';
   }
 }

@@ -29,6 +29,8 @@ import Room from '@cardstack/host/components/matrix/room';
 import DeleteModal from '@cardstack/host/components/operator-mode/delete-modal';
 
 import ENV from '@cardstack/host/config/environment';
+import { RoomMessageModel } from '@cardstack/host/lib/matrix-model/message';
+import { RoomModel } from '@cardstack/host/lib/matrix-model/room';
 import {
   isMatrixError,
   eventDebounceMs,
@@ -37,8 +39,6 @@ import {
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
-
-import type { RoomField } from 'https://cardstack.com/base/room';
 
 import assistantIcon from './ai-assist-icon.webp';
 
@@ -53,6 +53,14 @@ interface Signature {
   };
 }
 
+export interface SessionRoomData {
+  roomId: string;
+  room: RoomModel;
+  name: string;
+  lastMessage: RoomMessageModel | undefined;
+  created: Date;
+}
+
 // Local storage keys
 export const currentRoomIdPersistenceKey = 'aiPanelCurrentRoomId';
 let newSessionIdPersistenceKey = 'aiPanelNewSessionId';
@@ -62,18 +70,20 @@ export default class AiAssistantPanel extends Component<Signature> {
     let oneMinuteAgo = new Date(Date.now() - 60 * 1000).getTime();
 
     return this.aiSessionRooms
-      .filter((session) => session.roomId !== this.currentRoom?.roomId)
+      .filter((session) => session.room?.roomId !== this.roomModel?.roomId)
       .some((session) => {
-        let isSessionActive =
-          this.matrixService.getLastActiveTimestamp(session) > oneMinuteAgo;
+        let isSessionActive = false;
+        isSessionActive =
+          this.matrixService.getLastActiveTimestamp(session.room) >
+          oneMinuteAgo;
 
-        let lastMessageEventId =
-          session.messages[session.messages.length - 1]?.eventId;
+        let lastMessageEventId = session.lastMessage?.eventId;
 
-        let hasSeenLastMessage =
-          this.matrixService.currentUserEventReadReceipts.has(
-            lastMessageEventId,
-          );
+        let hasSeenLastMessage = lastMessageEventId
+          ? this.matrixService.currentUserEventReadReceipts.has(
+              lastMessageEventId,
+            )
+          : false;
 
         return isSessionActive && !hasSeenLastMessage;
       });
@@ -88,7 +98,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       >
         <@resizeHandle />
         <header class='panel-header'>
-          {{#if this.currentRoom.messages}}
+          {{#if this.roomResource.messages}}
             <div class='panel-title-group'>
               <img
                 alt='AI Assistant'
@@ -97,7 +107,7 @@ export default class AiAssistantPanel extends Component<Signature> {
                 height='20'
               />
               <h3 class='panel-title-text' data-test-chat-title>
-                {{if this.currentRoom.name this.currentRoom.name 'Assistant'}}
+                {{if this.roomModel.name this.roomModel.name 'Assistant'}}
               </h3>
             </div>
           {{/if}}
@@ -116,7 +126,7 @@ export default class AiAssistantPanel extends Component<Signature> {
               class='new-session-button'
               @kind='secondary-dark'
               @size='small'
-              @disabled={{not this.currentRoom.messages.length}}
+              @disabled={{not this.roomResource.messages.length}}
               {{on 'click' this.createNewSession}}
               data-test-create-room-btn
             >
@@ -152,7 +162,6 @@ export default class AiAssistantPanel extends Component<Signature> {
             @sessions={{this.aiSessionRooms}}
             @roomActions={{this.roomActions}}
             @onClose={{this.hidePastSessions}}
-            @currentRoomId={{this.currentRoomId}}
             {{popoverVelcro.loop}}
           />
         {{else if this.roomToRename}}
@@ -347,8 +356,8 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @tracked private currentRoomId: string | undefined;
   @tracked private isShowingPastSessions = false;
-  @tracked private roomToRename: RoomField | undefined = undefined;
-  @tracked private roomToDelete: RoomField | undefined = undefined;
+  @tracked private roomToRename: SessionRoomData | undefined = undefined;
+  @tracked private roomToDelete: SessionRoomData | undefined = undefined;
   @tracked private roomDeleteError: string | undefined = undefined;
   @tracked private displayRoomError = false;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
@@ -360,17 +369,16 @@ export default class AiAssistantPanel extends Component<Signature> {
   }
 
   private enterRoomInitially() {
-    if (this.currentRoomId) {
-      return;
-    }
-
     let persistedRoomId = window.localStorage.getItem(
       currentRoomIdPersistenceKey,
     );
-    if (persistedRoomId && this.roomResources.has(persistedRoomId)) {
+    if (
+      persistedRoomId &&
+      this.aiSessionRooms.find((r) => r.roomId === persistedRoomId)
+    ) {
       this.currentRoomId = persistedRoomId;
     } else {
-      let latestRoom = this.aiSessionRooms[0];
+      let latestRoom = this.latestRoom;
       if (latestRoom) {
         this.currentRoomId = latestRoom.roomId;
       } else {
@@ -379,21 +387,25 @@ export default class AiAssistantPanel extends Component<Signature> {
     }
   }
 
-  private get currentRoom() {
-    return this.currentRoomId
-      ? this.roomResources.get(this.currentRoomId)?.room
-      : undefined;
-  }
-
   @cached
   private get roomResources() {
     return this.matrixService.roomResources;
   }
 
+  private get roomResource() {
+    return this.currentRoomId
+      ? this.roomResources.get(this.currentRoomId)
+      : undefined;
+  }
+
+  private get roomModel() {
+    return this.roomResource ? this.roomResource.room : undefined;
+  }
+
   private loadRoomsTask = restartableTask(async () => {
     await this.matrixService.flushMembership;
     await this.matrixService.flushTimeline;
-    await Promise.all([...this.roomResources.values()].map((r) => r.loading));
+    await Promise.all([...this.roomResources.values()].map((r) => r.loading)); //does this even do anything?
     this.enterRoomInitially();
   });
 
@@ -426,7 +438,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     if (
       id &&
       this.roomResources.has(id) &&
-      this.roomResources.get(id)?.room?.messages.length === 0
+      this.roomResources.get(id)?.messages.length === 0
     ) {
       return id;
     }
@@ -445,30 +457,35 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @cached
   private get aiSessionRooms() {
-    let rooms: RoomField[] = [];
+    let sessions: SessionRoomData[] = [];
     for (let resource of this.roomResources.values()) {
       if (!resource.room) {
         continue;
       }
-      let { room } = resource;
-      if (!room.created) {
-        // there is a race condition in the matrix SDK where newly created
-        // rooms don't immediately have a created date
-        room.created = new Date();
-      }
+      let room = resource.room;
       if (
-        (room.invitedMembers.find((m) => aiBotUserId === m.userId) ||
-          room.joinedMembers.find((m) => aiBotUserId === m.userId)) &&
-        room.joinedMembers.find((m) => this.matrixService.userId === m.userId)
+        (resource.invitedMembers.find((m) => aiBotUserId === m.userId) ||
+          resource.joinedMembers.find((m) => aiBotUserId === m.userId)) &&
+        resource.joinedMembers.find(
+          (m) => this.matrixService.userId === m.userId,
+        ) &&
+        room.name &&
+        room.roomId
       ) {
-        rooms.push(room);
+        sessions.push({
+          roomId: room.roomId,
+          room: room,
+          name: room.name,
+          lastMessage: resource.messages[resource.messages.length - 1],
+          created: room.created,
+        });
       }
     }
     // sort in reverse chronological order of last activity
-    let sorted = rooms.sort(
+    let sorted = sessions.sort(
       (a, b) =>
-        this.matrixService.getLastActiveTimestamp(b) -
-        this.matrixService.getLastActiveTimestamp(a),
+        this.matrixService.getLastActiveTimestamp(b.room) -
+        this.matrixService.getLastActiveTimestamp(a.room),
     );
     return sorted;
   }
@@ -482,7 +499,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     window.localStorage.setItem(currentRoomIdPersistenceKey, roomId);
   }
 
-  @action private setRoomToRename(room: RoomField | undefined) {
+  @action private setRoomToRename(room: SessionRoomData) {
     this.roomToRename = room;
     this.hidePastSessions();
   }
@@ -492,7 +509,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     this.displayPastSessions();
   }
 
-  @action private setRoomToDelete(room: RoomField | undefined) {
+  @action private setRoomToDelete(room: SessionRoomData | undefined) {
     this.roomDeleteError = undefined;
     this.roomToDelete = room;
   }
@@ -510,12 +527,19 @@ export default class AiAssistantPanel extends Component<Signature> {
     this.doLeaveRoom.perform(roomId);
   }
 
+  get latestRoom() {
+    if (this.aiSessionRooms.length !== 0) {
+      return this.aiSessionRooms[0];
+    }
+    return undefined;
+  }
+
   private doLeaveRoom = restartableTask(async (roomId: string) => {
     try {
       await this.matrixService.client.leave(roomId);
       await this.matrixService.client.forget(roomId);
       await timeout(eventDebounceMs); // this makes it feel a bit more responsive
-      this.roomResources.delete(roomId);
+      this.matrixService.roomResourcesCache.delete(roomId);
 
       if (this.newSessionId === roomId) {
         window.localStorage.removeItem(newSessionIdPersistenceKey);
@@ -523,9 +547,8 @@ export default class AiAssistantPanel extends Component<Signature> {
 
       if (this.currentRoomId === roomId) {
         window.localStorage.removeItem(currentRoomIdPersistenceKey);
-        let latestRoom = this.aiSessionRooms[0];
-        if (latestRoom) {
-          this.enterRoom(latestRoom.roomId, false);
+        if (this.latestRoom) {
+          this.enterRoom(this.latestRoom.roomId, false);
         } else {
           this.createNewSession();
         }

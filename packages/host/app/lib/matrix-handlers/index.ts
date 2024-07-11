@@ -5,11 +5,10 @@ import {
   type IEvent,
 } from 'matrix-js-sdk';
 
-import { type LooseCardResource, baseRealm } from '@cardstack/runtime-common';
+import { RoomModel } from '@cardstack/host/lib/matrix-model/room';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
-import type { RoomField } from 'https://cardstack.com/base/room';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
@@ -36,8 +35,8 @@ export type Event = Partial<IEvent> & {
 };
 
 export interface EventSendingContext {
-  setRoom: (roomId: string, roomPromise: Promise<RoomField>) => void;
-  getRoom: (roomId: string) => Promise<RoomField> | undefined;
+  setRoom: (roomId: string, room: RoomModel) => void;
+  getRoom: (roomId: string) => RoomModel | undefined;
   cardAPI: typeof CardAPI;
 }
 
@@ -46,8 +45,8 @@ export interface Context extends EventSendingContext {
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[];
   timelineQueue: { event: MatrixEvent; oldEventId?: string }[];
-  client: MatrixClient;
-  matrixSDK: typeof MatrixSDK;
+  client: MatrixClient | undefined;
+  matrixSDK: typeof MatrixSDK | undefined;
   handleMessage?: (
     context: Context,
     event: Event,
@@ -79,24 +78,12 @@ export async function addRoomEvent(context: EventSendingContext, event: Event) {
   }
   let room = context.getRoom(roomId);
   if (!room) {
-    let data: LooseCardResource = {
-      meta: {
-        adoptsFrom: {
-          name: 'RoomField',
-          module: `${baseRealm.url}room`,
-        },
-      },
-    };
-    room = context.cardAPI.createFromSerialized<typeof RoomField>(
-      data,
-      { data },
-      undefined,
-    );
-    context.setRoom(roomId, room!);
+    room = new RoomModel();
+    context.setRoom(roomId, room);
   }
+  // duplicate events may be emitted from matrix, as well as the resolved room card might already contain this event
   let resolvedRoom = await room;
 
-  // duplicate events may be emitted from matrix, as well as the resolved room card might already contain this event
   if (!resolvedRoom.events.find((e) => e.event_id === eventId)) {
     resolvedRoom.events = [
       ...(resolvedRoom.events ?? []),
