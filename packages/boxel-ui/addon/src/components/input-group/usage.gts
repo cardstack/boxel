@@ -1,3 +1,4 @@
+import { CheckMark, IconX } from '@cardstack/boxel-ui/icons';
 import { A } from '@ember/array';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
@@ -11,6 +12,7 @@ import {
 } from 'ember-freestyle/decorators/css-variable';
 
 import cssVar from '../../helpers/css-var.ts';
+import type { Icon } from '../../icons/types.ts';
 import BoxelField from '../field-container/index.gts';
 import {
   type InputValidationState,
@@ -19,6 +21,12 @@ import {
 import BoxelInputGroup from './index.gts';
 
 const validStates = Object.values(InputValidationStates);
+
+const validIconDescriptions = ['default', 'checkmark'];
+const validIconValues = [null, CheckMark];
+
+const invalidIconDescriptions = ['default', 'x'];
+const invalidIconValues = [null, IconX];
 
 interface Token {
   icon: string;
@@ -36,6 +44,12 @@ export default class BoxelInputGroupUsage extends Component {
   @tracked disabled = false;
   @tracked state: InputValidationState = 'initial';
   @tracked isShowingCopiedConfirmation = false;
+
+  @tracked validIcon: Icon | undefined;
+  @tracked validIconDescription = 'default';
+
+  @tracked invalidIcon: Icon | undefined;
+  @tracked invalidIconDescription = 'default';
 
   cssClassName = 'boxel-input-group';
   @cssVariable declare boxelInputGroupPaddingX: CSSVariableInfo;
@@ -57,6 +71,16 @@ export default class BoxelInputGroupUsage extends Component {
 
   @action log(s: string, _ev: Event): void {
     console.log(s);
+  }
+
+  @action onChooseValidIcon(s: keyof typeof validIconDescriptions) {
+    this.validIconDescription = s;
+    this.validIcon = validIconValues[validIconDescriptions.indexOf(s)];
+  }
+
+  @action onChooseInvalidIcon(s: keyof typeof invalidIconDescriptions) {
+    this.invalidIconDescription = s;
+    this.invalidIcon = invalidIconValues[invalidIconDescriptions.indexOf(s)];
   }
 
   @action onChooseToken(token: Token) {
@@ -99,6 +123,8 @@ export default class BoxelInputGroupUsage extends Component {
           @inputmode={{this.inputmode}}
           @onInput={{this.set}}
           @state={{this.state}}
+          @validIcon={{this.validIcon}}
+          @invalidIcon={{this.invalidIcon}}
           @errorMessage={{this.errorMessage}}
           @helperText={{this.helperText}}
           style={{cssVar
@@ -134,6 +160,20 @@ export default class BoxelInputGroupUsage extends Component {
           @options={{validStates}}
           @onInput={{fn (mut this.state)}}
           @value={{this.state}}
+        />
+        <Args.String
+          @name='validIcon'
+          @description='Override the default valid icon'
+          @options={{validIconDescriptions}}
+          @onInput={{fn this.onChooseValidIcon}}
+          @value={{this.validIconDescription}}
+        />
+        <Args.String
+          @name='inalidIcon'
+          @description='Override the default invalid icon'
+          @options={{invalidIconDescriptions}}
+          @onInput={{fn this.onChooseInvalidIcon}}
+          @value={{this.invalidIconDescription}}
         />
         <Args.String
           @name='helperText'

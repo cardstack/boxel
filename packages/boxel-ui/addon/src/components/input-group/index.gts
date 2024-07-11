@@ -34,6 +34,7 @@ export interface Signature {
     helperText?: string;
     id?: string;
     inputmode?: string;
+    invalidIcon?: Icon;
     onBlur?: (ev: Event) => void;
     onFocus?: (ev: Event) => void;
     onInput?: (val: string) => void;
@@ -41,6 +42,7 @@ export interface Signature {
     readonly?: boolean;
     required?: boolean;
     state?: InputValidationState;
+    validIcon?: Icon;
     value?: string;
   };
   Blocks: {
@@ -67,9 +69,9 @@ export default class InputGroup extends Component<Signature> {
     }
     switch (this.args.state) {
       case 'valid':
-        return SuccessBordered;
+        return this.args.validIcon ?? SuccessBordered;
       case 'invalid':
-        return FailureBordered;
+        return this.args.invalidIcon ?? FailureBordered;
       default:
         return undefined;
     }
