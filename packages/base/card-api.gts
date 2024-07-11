@@ -586,35 +586,38 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     });
   }
 
-  validate(instance: BaseDef, value: any) {
-    if (value && !Array.isArray(value)) {
+  validate(instance: BaseDef, values: any[] | null) {
+    if (values && !Array.isArray(values)) {
       throw new Error(
         `field validation error: Expected array for field value of field '${this.name}'`,
       );
     }
+    if (values == null) {
+      return values;
+    }
+
     if (primitive in this.card) {
       // todo: primitives could implement a validation symbol
-    } else if (value) {
-      for (let [index, item] of (value as any[]).entries()) {
+    } else {
+      for (let [index, item] of values.entries()) {
         if (item != null && !(item instanceof this.card)) {
           throw new Error(
-            `field validation error: tried set instance of ${value.constructor.name} at index ${index} of field '${this.name}' but it is not an instance of ${this.card.name}`,
+            `field validation error: tried set instance of ${values.constructor.name} at index ${index} of field '${this.name}' but it is not an instance of ${this.card.name}`,
           );
         }
       }
-
-      return new WatchedArray((oldValue, value) => {
-        applySubscribersToInstanceValue(
-          instance,
-          this,
-          oldValue as BaseDef[],
-          value as BaseDef[],
-        );
-        notifySubscribers(instance, this.name, value);
-        logger.log(recompute(instance));
-      }, value);
     }
-    return null;
+
+    return new WatchedArray((oldValue, value) => {
+      applySubscribersToInstanceValue(
+        instance,
+        this,
+        oldValue as BaseDef[],
+        value as BaseDef[],
+      );
+      notifySubscribers(instance, this.name, value);
+      logger.log(recompute(instance));
+    }, values);
   }
 
   async handleNotLoadedError<T extends BaseDef>(instance: T, _e: NotLoaded) {
