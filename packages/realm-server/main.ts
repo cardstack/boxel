@@ -43,6 +43,12 @@ if (!REALM_SECRET_SEED) {
   process.exit(-1);
 }
 
+if (process.env.DISABLE_MODULE_CACHING === 'true') {
+  console.warn(
+    `module caching has been disabled, module executables will be served directly from the filesystem`,
+  );
+}
+
 let {
   port,
   distURL = 'http://localhost:4200',
@@ -207,6 +213,9 @@ let dist: URL = new URL(distURL);
       },
       {
         deferStartUp: true,
+        ...(process.env.DISABLE_MODULE_CACHING === 'true'
+          ? { disableModuleCaching: true }
+          : {}),
         ...(useTestingDomain
           ? {
               useTestingDomain,

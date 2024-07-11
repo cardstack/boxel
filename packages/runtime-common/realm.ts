@@ -144,6 +144,7 @@ export interface RealmAdapter {
 interface Options {
   deferStartUp?: true;
   useTestingDomain?: true;
+  disableModuleCaching?: true;
 }
 
 interface IndexHTMLOptions {
@@ -227,6 +228,7 @@ export class Realm {
   #flushUpdateEvents: Promise<void> | undefined;
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
+  #disableModuleCaching = false;
 
   #onIndexer: ((indexer: Indexer) => Promise<void>) | undefined;
   #publicEndpoints: RouteTable<true> = new Map([
@@ -292,6 +294,7 @@ export class Realm {
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
     this.#assetsURL = assetsURL;
+    this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
 
     let fetch = fetcher(virtualNetwork.fetch, [
       async (req, next) => {
@@ -871,40 +874,42 @@ export class Realm {
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
 
-    let useWorkInProgressIndex = Boolean(
-      request.headers.get('X-Boxel-Use-WIP-Index'),
-    );
-    let module = await this.#searchIndex.module(url, {
-      useWorkInProgressIndex,
-    });
-    if (module?.type === 'module') {
-      try {
-        return createResponse({
-          body: module.executableCode,
-          init: {
-            status: 200,
-            headers: { 'content-type': 'text/javascript' },
-          },
-          requestContext,
-        });
-      } finally {
-        this.#logRequestPerformance(request, start, 'cache hit');
+    if (!this.#disableModuleCaching) {
+      let useWorkInProgressIndex = Boolean(
+        request.headers.get('X-Boxel-Use-WIP-Index'),
+      );
+      let module = await this.#searchIndex.module(url, {
+        useWorkInProgressIndex,
+      });
+      if (module?.type === 'module') {
+        try {
+          return createResponse({
+            body: module.executableCode,
+            init: {
+              status: 200,
+              headers: { 'content-type': 'text/javascript' },
+            },
+            requestContext,
+          });
+        } finally {
+          this.#logRequestPerformance(request, start, 'cache hit');
+        }
       }
-    }
-    if (module?.type === 'error') {
-      try {
-        // using "Not Acceptable" here because no text/javascript representation
-        // can be made and we're sending text/html error page instead
-        return createResponse({
-          body: JSON.stringify(module.error, null, 2),
-          init: {
-            status: 406,
-            headers: { 'content-type': 'text/html' },
-          },
-          requestContext,
-        });
-      } finally {
-        this.#logRequestPerformance(request, start, 'cache hit');
+      if (module?.type === 'error') {
+        try {
+          // using "Not Acceptable" here because no text/javascript representation
+          // can be made and we're sending text/html error page instead
+          return createResponse({
+            body: JSON.stringify(module.error, null, 2),
+            init: {
+              status: 406,
+              headers: { 'content-type': 'text/html' },
+            },
+            requestContext,
+          });
+        } finally {
+          this.#logRequestPerformance(request, start, 'cache hit');
+        }
       }
     }
 
