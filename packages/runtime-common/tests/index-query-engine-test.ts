@@ -2552,9 +2552,14 @@ const tests = Object.freeze({
 
     // Requesting atom template
     ({ prerenderedCards, prerenderedCardCssItems, meta } =
-      await indexer.searchPrerendered(new URL(testRealmURL), {}, loader, {
-        htmlFormat: 'atom',
-      }));
+      await indexQueryEngine.searchPrerendered(
+        new URL(testRealmURL),
+        {},
+        loader,
+        {
+          htmlFormat: 'atom',
+        },
+      ));
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
     assert.strictEqual(
