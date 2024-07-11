@@ -7,18 +7,9 @@
       "ref": {
         "module": "../pet",
         "name": "Pet"
-      },
-      "demo": {}
+      }
     },
     "meta": {
-      "fields": {
-        "demo": {
-          "adoptsFrom": {
-            "module": "../pet",
-            "name": "Pet"
-          }
-        }
-      },
       "adoptsFrom": {
         "module": "https://cardstack.com/base/catalog-entry",
         "name": "CatalogEntry"

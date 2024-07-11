@@ -594,7 +594,9 @@ export class CurrentRun {
           loader: this.loaderService.loader,
         });
         if (!isCardDef(maybeCard)) {
-          throw new Error(`The definition at ${fullRef} is not a CardDef`);
+          throw new Error(
+            `The definition at ${JSON.stringify(fullRef)} is not a CardDef`,
+          );
         }
         loadedCard = maybeCard;
         loadedCardRef = identifyCard(loadedCard);
