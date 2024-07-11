@@ -53,7 +53,11 @@ export default class CardPill extends Component<CardPillSignature> {
         {{#if @onToggle}}
           <label
             class={{cn 'toggle' checked=@isEnabled}}
-            data-test-card-pill-toggle={{@card.id}}
+            data-test-card-pill-toggle='{{@card.id}}-{{if
+              @isEnabled
+              "on"
+              "off"
+            }}'
           >
             <span class='boxel-sr-only'>{{@card.title}}</span>
             <input

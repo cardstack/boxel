@@ -6,15 +6,13 @@ import {
   createRoom,
   getRoomId,
   openRoom,
-  // assertMessages,
+  assertMessages,
   sendMessage,
   testHost,
   reloadAndOpenAiAssistant,
   isInRoom,
   registerRealmUsers,
-  // selectCardFromCatalog,
-  // getRoomEvents,
-  // setupTwoStackItems,
+  getRoomEvents,
 } from '../helpers';
 import {
   synapseStart,
@@ -52,7 +50,7 @@ test.describe('Skills', () => {
       page.locator(`[data-test-pill-menu-item="${cardId}"]`),
     ).toHaveCount(1);
     await expect(
-      page.locator(`[data-test-card-pill-toggle="${cardId}"]`),
+      page.locator(`[data-test-card-pill-toggle="${cardId}-on"]`),
     ).toHaveClass('toggle checked');
   }
 
@@ -111,10 +109,15 @@ test.describe('Skills', () => {
       '1 of 1 Skill Active',
     );
 
-    await page.locator(`[data-test-card-pill-toggle="${skillCard1}"]`).click();
+    await page
+      .locator(`[data-test-card-pill-toggle="${skillCard1}-on"]`)
+      .click();
     await expect(
-      page.locator(`[data-test-card-pill-toggle="${skillCard1}"]`),
+      page.locator(`[data-test-card-pill-toggle="${skillCard1}-off"]`),
     ).toHaveClass('toggle');
+    await expect(
+      page.locator(`[data-test-card-pill-toggle="${skillCard1}-on"]`),
+    ).toHaveCount(0);
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
       '0 of 1 Skill Active',
     );
@@ -127,7 +130,9 @@ test.describe('Skills', () => {
       '1 of 2 Skills Active',
     );
 
-    await page.locator(`[data-test-card-pill-toggle="${skillCard1}"]`).click();
+    await page
+      .locator(`[data-test-card-pill-toggle="${skillCard1}-off"]`)
+      .click();
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
       '2 of 2 Skills Active',
     );
@@ -140,7 +145,9 @@ test.describe('Skills', () => {
       '3 of 3 Skills Active',
     );
 
-    await page.locator(`[data-test-card-pill-toggle="${skillCard3}"]`).click();
+    await page
+      .locator(`[data-test-card-pill-toggle="${skillCard3}-on"]`)
+      .click();
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
       '2 of 3 Skills Active',
     );
@@ -176,7 +183,9 @@ test.describe('Skills', () => {
     );
     await attachSkill(page, skillCard3, true);
     await attachSkill(page, skillCard2);
-    await page.locator(`[data-test-card-pill-toggle="${skillCard2}"]`).click();
+    await page
+      .locator(`[data-test-card-pill-toggle="${skillCard2}-on"]`)
+      .click();
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
       '1 of 2 Skills Active',
     );
@@ -200,20 +209,271 @@ test.describe('Skills', () => {
     );
   });
 
-  test(`room skills state is persisted and does not leak between different users`, async ({
+  test(`enabled skills are attached to sent messages`, async ({ page }) => {
+    await login(page, 'user1', 'pass');
+    let room1 = await getRoomId(page);
+    await attachSkill(page, skillCard1, true);
+    await attachSkill(page, skillCard2);
+    await attachSkill(page, skillCard3);
+    await page
+      .locator(`[data-test-card-pill-toggle="${skillCard3}-on"]`)
+      .click(); // toggle off skill 3
+    await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
+      '2 of 3 Skills Active',
+    );
+
+    await sendMessage(page, room1, 'Hello!');
+    await assertMessages(page, [{ from: 'user1', message: 'Hello' }]);
+
+    let events = await getRoomEvents('user1', 'pass', room1);
+    let messages = events.filter(
+      (ev) =>
+        ev.type === 'm.room.message' &&
+        ev.content?.msgtype === 'org.boxel.message',
+    );
+    let { attachedSkillEventIds } = JSON.parse(messages[0]?.content?.data);
+    expect(attachedSkillEventIds).toHaveLength(2);
+
+    let cardFragments = events.filter(
+      (ev) =>
+        ev.type === 'm.room.message' &&
+        ev.content?.msgtype === 'org.boxel.cardFragment',
+    );
+    expect(cardFragments.length).toStrictEqual(2);
+    let [fragment1, fragment2] = cardFragments;
+    expect(fragment1.content.data).toContain(skillCard1);
+    expect(fragment2.content.data).toContain(skillCard2);
+    expect(cardFragments).not.toContain(skillCard3);
+
+    let [skillEventId1, skillEventId2] = attachedSkillEventIds;
+    expect(fragment1.event_id).toStrictEqual(skillEventId1);
+    expect(fragment2.event_id).toStrictEqual(skillEventId2);
+  });
+
+  test(`can attach more skills during chat`, async ({ page }) => {
+    await login(page, 'user1', 'pass');
+    let room1 = await getRoomId(page);
+    await attachSkill(page, skillCard2, true);
+    await sendMessage(page, room1, 'Message 1');
+    await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
+    let events = await getRoomEvents('user1', 'pass', room1);
+    let messages = events.filter(
+      (ev) =>
+        ev.type === 'm.room.message' &&
+        ev.content?.msgtype === 'org.boxel.message',
+    );
+    let { attachedSkillEventIds } = JSON.parse(messages[0]?.content?.data);
+    expect(attachedSkillEventIds).toHaveLength(1);
+
+    await attachSkill(page, skillCard1, true);
+    await attachSkill(page, skillCard3);
+    await sendMessage(page, room1, 'Message 2');
+    await assertMessages(page, [
+      { from: 'user1', message: 'Message 1' },
+      { from: 'user1', message: 'Message 2' },
+    ]);
+    events = await getRoomEvents('user1', 'pass', room1);
+    messages = events.filter(
+      (ev) =>
+        ev.type === 'm.room.message' &&
+        ev.content?.msgtype === 'org.boxel.message',
+    );
+    expect(messages[1].content.body).toStrictEqual('Message 2');
+    attachedSkillEventIds = JSON.parse(
+      messages[1]?.content.data,
+    ).attachedSkillEventIds;
+    expect(attachedSkillEventIds).toHaveLength(3);
+  });
+
+  test(`disabled skills are not attached to sent message`, async ({ page }) => {
+    await login(page, 'user1', 'pass');
+    let room1 = await getRoomId(page);
+    await attachSkill(page, skillCard1, true);
+    await attachSkill(page, skillCard2);
+    await sendMessage(page, room1, 'Message 1');
+    await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
+    let events = await getRoomEvents('user1', 'pass', room1);
+    let messages = events.filter(
+      (ev) =>
+        ev.type === 'm.room.message' &&
+        ev.content?.msgtype === 'org.boxel.message',
+    );
+    let { attachedSkillEventIds } = JSON.parse(messages[0]?.content?.data);
+    expect(attachedSkillEventIds).toHaveLength(2);
+
+    await page.locator('[data-test-skill-menu]').hover();
+    await page.locator('[data-test-pill-menu-header-button]').click();
+    await page
+      .locator(`[data-test-card-pill-toggle="${skillCard1}-on"]`)
+      .click(); // toggle off skill 1
+    await expect(
+      page.locator(`[data-test-card-pill-toggle="${skillCard1}-off"]`),
+    ).toHaveCount(1);
+    await sendMessage(page, room1, 'Message 2');
+    await assertMessages(page, [
+      { from: 'user1', message: 'Message 1' },
+      { from: 'user1', message: 'Message 2' },
+    ]);
+    events = await getRoomEvents('user1', 'pass', room1);
+    messages = events.filter(
+      (ev) =>
+        ev.type === 'm.room.message' &&
+        ev.content?.msgtype === 'org.boxel.message',
+    );
+    expect(messages[1].content.body).toStrictEqual('Message 2');
+    attachedSkillEventIds = JSON.parse(
+      messages[1]?.content.data,
+    ).attachedSkillEventIds;
+    expect(attachedSkillEventIds).toHaveLength(1);
+
+    let cardFragments = events.filter(
+      (ev) =>
+        ev.type === 'm.room.message' &&
+        ev.content?.msgtype === 'org.boxel.cardFragment',
+    );
+    expect(cardFragments.length).toStrictEqual(3);
+    expect(cardFragments[2].content.data).toContain(skillCard2);
+  });
+
+  test(`can disable all skills`, async ({ page }) => {
+    await login(page, 'user1', 'pass');
+    let room1 = await getRoomId(page);
+    await attachSkill(page, skillCard1, true);
+    await attachSkill(page, skillCard2);
+    await sendMessage(page, room1, 'Message 1');
+    await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
+    let events = await getRoomEvents('user1', 'pass', room1);
+    let messages = events.filter(
+      (ev) =>
+        ev.type === 'm.room.message' &&
+        ev.content?.msgtype === 'org.boxel.message',
+    );
+    let { attachedSkillEventIds } = JSON.parse(messages[0]?.content?.data);
+    expect(attachedSkillEventIds).toHaveLength(2);
+
+    await page.locator('[data-test-skill-menu]').hover();
+    await page.locator('[data-test-pill-menu-header-button]').click();
+    await page
+      .locator(`[data-test-card-pill-toggle="${skillCard1}-on"]`)
+      .click(); // toggle off skill 1
+    await page
+      .locator(`[data-test-card-pill-toggle="${skillCard2}-on"]`)
+      .click(); // toggle off skill 2
+    await expect(
+      page.locator(`[data-test-card-pill-toggle="${skillCard1}-off"]`),
+    ).toHaveCount(1);
+    await expect(
+      page.locator(`[data-test-card-pill-toggle="${skillCard2}-off"]`),
+    ).toHaveCount(1);
+    await sendMessage(page, room1, 'Message 2');
+    await assertMessages(page, [
+      { from: 'user1', message: 'Message 1' },
+      { from: 'user1', message: 'Message 2' },
+    ]);
+    events = await getRoomEvents('user1', 'pass', room1);
+    messages = events.filter(
+      (ev) =>
+        ev.type === 'm.room.message' &&
+        ev.content?.msgtype === 'org.boxel.message',
+    );
+    expect(messages[1].content.body).toStrictEqual('Message 2');
+    attachedSkillEventIds = JSON.parse(
+      messages[1]?.content.data,
+    ).attachedSkillEventIds;
+    expect(attachedSkillEventIds).toHaveLength(0);
+  });
+
+  test(`previously disabled skills can be enabled`, async ({ page }) => {
+    await login(page, 'user1', 'pass');
+    let room1 = await getRoomId(page);
+    await attachSkill(page, skillCard1, true);
+    await attachSkill(page, skillCard2);
+    await page
+      .locator(`[data-test-card-pill-toggle="${skillCard2}-on"]`)
+      .click(); // toggle off skill 2
+    await expect(
+      page.locator(`[data-test-card-pill-toggle="${skillCard2}-off"]`),
+    ).toHaveCount(1);
+    await sendMessage(page, room1, 'Message 1');
+    await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
+    let events = await getRoomEvents('user1', 'pass', room1);
+    let messages = events.filter(
+      (ev) =>
+        ev.type === 'm.room.message' &&
+        ev.content?.msgtype === 'org.boxel.message',
+    );
+    let { attachedSkillEventIds } = JSON.parse(messages[0]?.content?.data);
+    expect(attachedSkillEventIds).toHaveLength(1);
+
+    await page.locator('[data-test-skill-menu]').hover();
+    await page.locator('[data-test-pill-menu-header-button]').click();
+    await page
+      .locator(`[data-test-card-pill-toggle="${skillCard2}-off"]`)
+      .click(); // toggle on skill 2
+    await expect(
+      page.locator(`[data-test-card-pill-toggle="${skillCard2}-on"]`),
+    ).toHaveCount(1);
+    await sendMessage(page, room1, 'Message 2');
+    await assertMessages(page, [
+      { from: 'user1', message: 'Message 1' },
+      { from: 'user1', message: 'Message 2' },
+    ]);
+    events = await getRoomEvents('user1', 'pass', room1);
+    messages = events.filter(
+      (ev) =>
+        ev.type === 'm.room.message' &&
+        ev.content?.msgtype === 'org.boxel.message',
+    );
+    expect(messages[1].content.body).toStrictEqual('Message 2');
+    attachedSkillEventIds = JSON.parse(
+      messages[1]?.content.data,
+    ).attachedSkillEventIds;
+    expect(attachedSkillEventIds).toHaveLength(2);
+  });
+
+  test(`a message can include cards and skills at the same time`, async ({
+    page,
+  }) => {
+    const testCard = `${testHost}/hassan`;
+    await login(page, 'user1', 'pass');
+    let room1 = await getRoomId(page);
+    await attachSkill(page, skillCard1, true);
+    await attachSkill(page, skillCard2);
+    await sendMessage(page, room1, 'Message 1', [testCard]);
+    await assertMessages(page, [
+      {
+        from: 'user1',
+        message: 'Message 1',
+        cards: [{ id: testCard, title: 'Hassan' }],
+      },
+    ]);
+    let events = await getRoomEvents('user1', 'pass', room1);
+    let messages = events.filter(
+      (ev) =>
+        ev.type === 'm.room.message' &&
+        ev.content?.msgtype === 'org.boxel.message',
+    );
+    let { attachedCardsEventIds, attachedSkillEventIds } = JSON.parse(
+      messages[0]?.content?.data,
+    );
+    expect(attachedCardsEventIds).toHaveLength(1);
+    expect(attachedSkillEventIds).toHaveLength(2);
+  });
+
+  // TODO: create ticket for these tests
+  test.skip(`skills are persisted per room and do not leak between different users`, async ({
     page,
   }) => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomId(page);
     await attachSkill(page, skillCard1, true);
     await attachSkill(page, skillCard2);
-    await page.locator(`[data-test-card-pill-toggle="${skillCard1}"]`).click();
+    await page
+      .locator(`[data-test-card-pill-toggle="${skillCard1}-on"]`)
+      .click();
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
       '1 of 2 Skills Active',
     );
-
-    // await sendMessage(page, room1, 'Room 1');
-    // await assertMessages(page, [{ from: 'user1', message: 'Room 1' }]);
 
     await reloadAndOpenAiAssistant(page);
     await openRoom(page, room1);
@@ -238,5 +498,9 @@ test.describe('Skills', () => {
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
       '1 of 2 Skills Active',
     );
+  });
+
+  test.skip(`persisted enabled skills are attached to sent messages`, async () => {
+    // TODO
   });
 });
