@@ -64,7 +64,6 @@ module('Integration | text-input-validator', function (hooks) {
       result.doc.data,
       result.doc,
       new URL(result.doc.data.id),
-      loader,
     );
     await recompute(card, { loadFields: true });
     return card;

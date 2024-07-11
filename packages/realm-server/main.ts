@@ -146,7 +146,6 @@ let dist: URL = new URL(distURL);
   let realms: Realm[] = [];
   let dbAdapter = new PgAdapter();
   let queue = new PgQueue(dbAdapter);
-  await dbAdapter.startClient();
 
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
@@ -185,7 +184,7 @@ let dist: URL = new URL(distURL);
         virtualNetwork,
         dbAdapter,
         queue,
-        onIndexer: async (indexer) => {
+        onIndexUpdaterReady: async (indexUpdater) => {
           // Note for future: we are taking advantage of the fact that the realm
           // does not need to auth with itself and are passing in the realm's
           // loader which includes a url handler for internal requests that
@@ -194,7 +193,7 @@ let dist: URL = new URL(distURL);
           // indexing.
           let worker = new Worker({
             realmURL: new URL(url),
-            indexer,
+            indexUpdater,
             queue,
             realmAdapter,
             runnerOptsManager: manager,

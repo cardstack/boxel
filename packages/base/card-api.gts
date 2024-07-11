@@ -924,7 +924,6 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     if (value?.links?.self == null || value.links.self === '') {
       return null;
     }
-    let loader = Loader.getLoaderFor(this.card)!;
     let cachedInstance = identityContext.identities.get(
       new URL(value.links.self, relativeTo).href,
     );
@@ -953,7 +952,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     );
     deserialized[isSavedInstance] = true;
     deserialized = trackCard(
-      loader,
+      myLoader(),
       deserialized,
       deserialized[realmURL]!,
     ) as BaseInstanceType<CardT>;
@@ -1026,13 +1025,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       maybeRelativeReference as string,
       instance.id ?? relativeTo, // new instances may not yet have an ID, in that case fallback to the relativeTo
     ).href;
-    let loader = Loader.getLoaderFor(createFromSerialized);
-
-    if (!loader) {
-      throw new Error('Could not find a loader, this should not happen');
-    }
-
-    let response = await loader.fetch(reference, {
+    let response = await fetch(reference, {
       headers: { Accept: SupportedMimeType.CardJson },
     });
     if (!response.ok) {
@@ -1058,7 +1051,6 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       json.data,
       json,
       new URL(json.data.id),
-      loader,
       {
         identityContext,
       },
@@ -1275,7 +1267,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
         if (value.links.self == null) {
           return null;
         }
-        let loader = Loader.getLoaderFor(this.card)!;
         let cachedInstance = identityContext.identities.get(
           new URL(value.links.self, relativeTo).href,
         );
@@ -1312,7 +1303,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
         );
         deserialized[isSavedInstance] = true;
         deserialized = trackCard(
-          loader,
+          myLoader(),
           deserialized,
           deserialized[realmURL]!,
         ) as BaseInstanceType<FieldT>;
@@ -1451,17 +1442,11 @@ class LinksToMany<FieldT extends CardDefConstructor>
     let refs = (notLoaded.reference as string[]).map(
       (ref) => new URL(ref, instance.id ?? relativeTo).href, // new instances may not yet have an ID, in that case fallback to the relativeTo
     );
-    let loader = Loader.getLoaderFor(createFromSerialized);
-
-    if (!loader) {
-      throw new Error('Could not find a loader, this should not happen');
-    }
-
     let errors = [];
     let fieldInstances: CardDef[] = [];
 
     for (let reference of refs) {
-      let response = await loader.fetch(reference, {
+      let response = await fetch(reference, {
         headers: { Accept: SupportedMimeType.CardJson },
       });
       if (!response.ok) {
@@ -1486,7 +1471,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
           json.data,
           json,
           new URL(json.data.id),
-          loader,
           {
             identityContext,
           },
@@ -1857,9 +1841,9 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
         display: flex;
         flex-wrap: wrap;
       }
-      /* 
-         sadly you can't use css vars in container queries. also be careful of fractional pixel 
-         dimensions in the breakpoints. due to this we use the "breakpoint - 1 pixel" in the 
+      /*
+         sadly you can't use css vars in container queries. also be careful of fractional pixel
+         dimensions in the breakpoints. due to this we use the "breakpoint - 1 pixel" in the
          container query conditions
       */
 
@@ -2672,11 +2656,6 @@ export function serializeCard(
   return doc;
 }
 
-// you may need to use this type for the loader passed in the opts
-export type LoaderType = NonNullable<
-  NonNullable<Parameters<typeof createFromSerialized>[3]>
->;
-
 // TODO Currently our deserialization process performs 2 tasks that probably
 // need to be disentangled:
 // 1. convert the data from a wire format to the native format
@@ -2693,7 +2672,6 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   resource: LooseCardResource,
   doc: LooseSingleCardDocument | CardDocument,
   relativeTo: URL | undefined,
-  loader: Loader,
   opts?: { identityContext?: IdentityContext },
 ): Promise<BaseInstanceType<T>> {
   let identityContext = opts?.identityContext ?? new IdentityContext();
@@ -2701,7 +2679,7 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
     meta: { adoptsFrom },
   } = resource;
   let card: typeof BaseDef | undefined = await loadCard(adoptsFrom, {
-    loader,
+    loader: myLoader(),
     relativeTo,
   });
   if (!card) {
@@ -2983,15 +2961,12 @@ async function cardClassFromResource<CardT extends BaseDefConstructor>(
     );
   }
   if (resource && !isEqual(resource.meta.adoptsFrom, cardIdentity)) {
-    let loader = Loader.getLoaderFor(fallback);
-
-    if (!loader) {
-      throw new Error('Could not find a loader, this should not happen');
-    }
-
     let card: typeof BaseDef | undefined = await loadCard(
       resource.meta.adoptsFrom,
-      { loader, relativeTo: resource.id ? new URL(resource.id) : relativeTo },
+      {
+        loader: myLoader(),
+        relativeTo: resource.id ? new URL(resource.id) : relativeTo,
+      },
     );
     if (!card) {
       throw new Error(
@@ -3450,4 +3425,15 @@ declare module 'ember-provide-consume-context/context-registry' {
   export default interface ContextRegistry {
     [CardContextName]: CardContext;
   }
+}
+
+function myLoader(): Loader {
+  // we know this code is always loaded by an instance of our Loader, which sets
+  // import.meta.loader.
+
+  // When type-checking realm-server, tsc sees this file and thinks
+  // it will be transpiled to CommonJS and so it complains about this line. But
+  // this file is always loaded through our loader and always has access to import.meta.
+  // @ts-ignore
+  return (import.meta as any).loader;
 }

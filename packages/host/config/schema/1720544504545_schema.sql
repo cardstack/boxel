@@ -28,7 +28,7 @@
    username TEXT NOT NULL,
    read BOOLEAN NOT NULL,
    write BOOLEAN NOT NULL,
-   PRIMARY KEY ( realm_url, username, read, write ) 
+   PRIMARY KEY ( realm_url, username ) 
 );
 
  CREATE TABLE IF NOT EXISTS realm_versions (

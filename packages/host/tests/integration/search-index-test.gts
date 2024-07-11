@@ -27,7 +27,6 @@ import {
   setupLocalIndexing,
   type CardDocFiles,
   setupIntegrationTestRealm,
-  getDbAdapter,
   lookupLoaderService,
 } from '../helpers';
 import {
@@ -665,44 +664,8 @@ module(`Integration | search-index`, function (hooks) {
           );
         }
       }
-    }
-
-    {
       // perform a new index to assert that render stack is still consistent
-      (await getDbAdapter()).reset();
-      class Person extends CardDef {
-        @field firstName = contains(StringField);
-        static isolated = class Isolated extends Component<typeof this> {
-          <template>
-            <h1><@fields.firstName /></h1>
-          </template>
-        };
-        static embedded = class Isolated extends Component<typeof this> {
-          <template>
-            <h1> Person Embedded Card: <@fields.firstName /></h1>
-          </template>
-        };
-      }
-      let { realm } = await setupIntegrationTestRealm({
-        loader,
-        contents: {
-          'person.gts': { Person },
-          'vangogh.json': {
-            data: {
-              attributes: {
-                firstName: 'Van Gogh',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: './person',
-                  name: 'Person',
-                },
-              },
-            },
-          },
-        },
-      });
-      let indexer = realm.searchIndex;
+      await indexer.fullIndex();
       {
         let entry = await indexer.cardDocument(
           new URL(`${testRealmURL}vangogh`),
@@ -952,8 +915,18 @@ module(`Integration | search-index`, function (hooks) {
         cleanWhiteSpace(`<h1> Van Gogh </h1>`),
       );
       assert.strictEqual(
+        false,
+        isolatedHtml!.includes('id="ember'),
+        `isolated HTML does not include ember ID's`,
+      );
+      assert.strictEqual(
         trimCardContainer(stripScopedCSSAttributes(embeddedHtml!)),
         cleanWhiteSpace(`<h1> Person Embedded Card: Van Gogh </h1>`),
+      );
+      assert.strictEqual(
+        false,
+        embeddedHtml!.includes('id="ember'),
+        `embeddedHtml HTML does not include ember ID's`,
       );
     } else {
       assert.ok(
@@ -1003,6 +976,11 @@ module(`Integration | search-index`, function (hooks) {
       trimCardContainer(stripScopedCSSAttributes(atomHtml!)),
       cleanWhiteSpace(`<div class="atom">Van Gogh</div>`),
       'atom html is correct',
+    );
+    assert.strictEqual(
+      false,
+      atomHtml!.includes('id="ember'),
+      `atom HTML does not include ember ID's`,
     );
   });
 
@@ -1113,6 +1091,11 @@ module(`Integration | search-index`, function (hooks) {
     let { embeddedHtml, _embeddedHtmlByClassHierarchy } =
       (await getInstance(realm, new URL(`${testRealmURL}germaine`))) ?? {};
     assert.strictEqual(
+      false,
+      embeddedHtml!.includes('id="ember'),
+      `HTML does not include ember ID's`,
+    );
+    assert.strictEqual(
       trimCardContainer(stripScopedCSSAttributes(embeddedHtml!)),
       cleanWhiteSpace(
         `<h1> Fancy Person Embedded Card: Germaine - hot pink </h1>`,
@@ -1134,11 +1117,21 @@ module(`Integration | search-index`, function (hooks) {
       'default embedded HTML is correct',
     );
     assert.strictEqual(
+      false,
+      embeddedHtmls['default'].includes('id="ember'),
+      `default embedded HTML does not include ember ID's`,
+    );
+    assert.strictEqual(
       trimCardContainer(
         stripScopedCSSAttributes(embeddedHtmls[`${testRealmURL}person/Person`]),
       ),
       cleanWhiteSpace(`<h1> Person Embedded Card: Germaine </h1>`),
       `${testRealmURL}person/Person embedded HTML is correct`,
+    );
+    assert.strictEqual(
+      false,
+      embeddedHtmls[`${testRealmURL}person/Person`].includes('id="ember'),
+      `${testRealmURL}person/Person embedded HTML does not include ember ID's`,
     );
     assert.strictEqual(
       trimCardContainer(stripScopedCSSAttributes(embeddedHtmls[cardDefRefURL])),
@@ -1160,6 +1153,11 @@ module(`Integration | search-index`, function (hooks) {
         </div>
       `),
       `${cardDefRefURL} embedded HTML is correct`,
+    );
+    assert.strictEqual(
+      false,
+      embeddedHtmls[cardDefRefURL].includes('id="ember'),
+      `${cardDefRefURL} embedded HTML does not include ember ID's`,
     );
   });
 

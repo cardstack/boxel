@@ -1,6 +1,6 @@
 import * as JSONTypes from 'json-typescript';
 import {
-  Indexer,
+  IndexUpdater,
   Loader,
   readFileAsText,
   Deferred,
@@ -48,7 +48,7 @@ export interface RunnerOpts {
   _fetch: typeof fetch;
   reader: Reader;
   registerRunner: RunnerRegistration;
-  indexer: Indexer;
+  indexUpdater: IndexUpdater;
 }
 
 export interface FromScratchArgs extends JSONTypes.Object {
@@ -109,7 +109,7 @@ export class Worker {
   #runner: IndexRunner;
   runnerOptsMgr: RunnerOptionsManager;
   #reader: Reader;
-  #indexer: Indexer;
+  #indexUpdater: IndexUpdater;
   #queue: Queue;
   #loader: Loader;
   #fromScratch:
@@ -126,7 +126,7 @@ export class Worker {
 
   constructor({
     realmURL,
-    indexer,
+    indexUpdater,
     queue,
     indexRunner,
     runnerOptsManager,
@@ -134,7 +134,7 @@ export class Worker {
     loader,
   }: {
     realmURL: URL;
-    indexer: Indexer;
+    indexUpdater: IndexUpdater;
     queue: Queue;
     indexRunner: IndexRunner;
     runnerOptsManager: RunnerOptionsManager;
@@ -143,7 +143,7 @@ export class Worker {
   }) {
     this.#realmURL = realmURL;
     this.#queue = queue;
-    this.#indexer = indexer;
+    this.#indexUpdater = indexUpdater;
     this.#reader = {
       readdir: realmAdapter.readdir.bind(realmAdapter),
       readFileAsText: (
@@ -164,13 +164,12 @@ export class Worker {
 
   async run() {
     await this.#queue.start();
-    await this.#indexer.ready();
 
-    await this.#queue.register(
+    this.#queue.register(
       `from-scratch-index:${this.#realmURL}`,
       this.fromScratch,
     );
-    await this.#queue.register(
+    this.#queue.register(
       `incremental-index:${this.#realmURL}`,
       this.incremental,
     );
@@ -181,7 +180,7 @@ export class Worker {
     let optsId = this.runnerOptsMgr.setOptions({
       _fetch: this.#loader.fetch.bind(this.#loader),
       reader: this.#reader,
-      indexer: this.#indexer,
+      indexUpdater: this.#indexUpdater,
       registerRunner: async (fromScratch, incremental) => {
         this.#fromScratch = fromScratch;
         this.#incremental = incremental;
