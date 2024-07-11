@@ -22,11 +22,19 @@ import BoxelInputGroup from './index.gts';
 
 const validStates = Object.values(InputValidationStates);
 
-const validIconDescriptions = ['default', 'checkmark'];
-const validIconValues = [null, CheckMark];
+const ValidIcons = {
+  default: undefined,
+  checkmark: CheckMark,
+};
 
-const invalidIconDescriptions = ['default', 'x'];
-const invalidIconValues = [null, IconX];
+const validIconDescriptions = Object.keys(ValidIcons);
+
+const InvalidIcons = {
+  default: undefined,
+  x: IconX,
+};
+
+const invalidIconDescriptions = Object.keys(InvalidIcons);
 
 interface Token {
   icon: string;
@@ -46,10 +54,10 @@ export default class BoxelInputGroupUsage extends Component {
   @tracked isShowingCopiedConfirmation = false;
 
   @tracked validIcon: Icon | undefined;
-  @tracked validIconDescription = 'default';
+  @tracked validIconDescription: keyof typeof ValidIcons = 'default';
 
   @tracked invalidIcon: Icon | undefined;
-  @tracked invalidIconDescription = 'default';
+  @tracked invalidIconDescription: keyof typeof InvalidIcons = 'default';
 
   cssClassName = 'boxel-input-group';
   @cssVariable declare boxelInputGroupPaddingX: CSSVariableInfo;
@@ -73,14 +81,14 @@ export default class BoxelInputGroupUsage extends Component {
     console.log(s);
   }
 
-  @action onChooseValidIcon(s: keyof typeof validIconDescriptions) {
+  @action onChooseValidIcon(s: keyof typeof ValidIcons) {
     this.validIconDescription = s;
-    this.validIcon = validIconValues[validIconDescriptions.indexOf(s)];
+    this.validIcon = ValidIcons[s];
   }
 
-  @action onChooseInvalidIcon(s: keyof typeof invalidIconDescriptions) {
+  @action onChooseInvalidIcon(s: keyof typeof InvalidIcons) {
     this.invalidIconDescription = s;
-    this.invalidIcon = invalidIconValues[invalidIconDescriptions.indexOf(s)];
+    this.invalidIcon = InvalidIcons[s];
   }
 
   @action onChooseToken(token: Token) {
