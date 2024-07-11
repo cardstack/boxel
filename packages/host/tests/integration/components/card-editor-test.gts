@@ -66,7 +66,7 @@ module('Integration | card-editor', function (hooks) {
 
   async function loadCard(url: string): Promise<CardDef> {
     let { createFromSerialized, recompute } = cardApi;
-    let result = await realm.searchIndex.cardDocument(new URL(url));
+    let result = await realm.realmIndexQueryEngine.cardDocument(new URL(url));
     if (!result || result.type === 'error') {
       throw new Error(
         `cannot get instance ${url} from the index: ${

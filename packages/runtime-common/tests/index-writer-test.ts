@@ -1,5 +1,5 @@
 import {
-  IndexUpdater,
+  IndexWriter,
   internalKeyFor,
   baseCardRef,
   type LooseCardResource,
@@ -21,7 +21,7 @@ const testRealmURL2 = `http://test-realm/test2/`;
 const tests = Object.freeze({
   'can perform invalidations for a instance entry': async (
     assert,
-    { indexUpdater, adapter },
+    { indexWriter, adapter },
   ) => {
     await setupIndex(
       adapter,
@@ -69,7 +69,7 @@ const tests = Object.freeze({
       ],
     );
 
-    let batch = await indexUpdater.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
     let invalidations = await batch.invalidate(
       new URL(`${testRealmURL}4.json`),
     );
@@ -144,7 +144,7 @@ const tests = Object.freeze({
 
   'can perform invalidations for a module entry': async (
     assert,
-    { indexUpdater, adapter },
+    { indexWriter, adapter },
   ) => {
     await setupIndex(
       adapter,
@@ -196,7 +196,7 @@ const tests = Object.freeze({
       ],
     );
 
-    let batch = await indexUpdater.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
     let invalidations = await batch.invalidate(
       new URL(`${testRealmURL}person.gts`),
     );
@@ -211,7 +211,7 @@ const tests = Object.freeze({
 
   'only invalidates latest version of content': async (
     assert,
-    { indexUpdater, adapter },
+    { indexWriter, adapter },
   ) => {
     await setupIndex(
       adapter,
@@ -256,7 +256,7 @@ const tests = Object.freeze({
       ],
     );
 
-    let batch = await indexUpdater.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
     let invalidations = await batch.invalidate(
       new URL(`${testRealmURL}4.json`),
     );
@@ -282,7 +282,7 @@ const tests = Object.freeze({
 
   'can prevent concurrent batch invalidations from colliding': async (
     assert,
-    { indexUpdater, adapter },
+    { indexWriter, adapter },
   ) => {
     await setupIndex(
       adapter,
@@ -310,8 +310,8 @@ const tests = Object.freeze({
     );
 
     // both batches have the same WIP version number
-    let batch1 = await indexUpdater.createBatch(new URL(testRealmURL));
-    let batch2 = await indexUpdater.createBatch(new URL(testRealmURL));
+    let batch1 = await indexWriter.createBatch(new URL(testRealmURL));
+    let batch2 = await indexWriter.createBatch(new URL(testRealmURL));
     await batch1.invalidate(new URL(`${testRealmURL}1.json`));
 
     try {
@@ -328,7 +328,7 @@ const tests = Object.freeze({
   },
 
   'can prevent concurrent batch invalidations from colliding when making new generation':
-    async (assert, { indexUpdater, adapter }) => {
+    async (assert, { indexWriter, adapter }) => {
       await setupIndex(
         adapter,
         [{ realm_url: testRealmURL, current_version: 1 }],
@@ -349,8 +349,8 @@ const tests = Object.freeze({
       );
 
       // both batches have the same WIP version number
-      let batch1 = await indexUpdater.createBatch(new URL(testRealmURL));
-      let batch2 = await indexUpdater.createBatch(new URL(testRealmURL));
+      let batch1 = await indexWriter.createBatch(new URL(testRealmURL));
+      let batch2 = await indexWriter.createBatch(new URL(testRealmURL));
       await batch1.invalidate(new URL(`${testRealmURL}1.json`));
       {
         let index = await adapter.execute(
@@ -429,7 +429,7 @@ const tests = Object.freeze({
       }
     },
 
-  'can update an index entry': async (assert, { indexUpdater, adapter }) => {
+  'can update an index entry': async (assert, { indexWriter, adapter }) => {
     await setupIndex(
       adapter,
       [{ realm_url: testRealmURL, current_version: 1 }],
@@ -473,7 +473,7 @@ const tests = Object.freeze({
         },
       },
     };
-    let batch = await indexUpdater.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
     await batch.invalidate(new URL(`${testRealmURL}1.json`));
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance',
@@ -613,7 +613,7 @@ const tests = Object.freeze({
 
   'can create a new generation of index entries': async (
     assert,
-    { indexUpdater, adapter },
+    { indexWriter, adapter },
   ) => {
     await setupIndex(
       adapter,
@@ -642,7 +642,7 @@ const tests = Object.freeze({
       ],
     );
 
-    let batch = await indexUpdater.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
     await batch.makeNewGeneration();
 
     let index = await adapter.execute(
@@ -790,7 +790,7 @@ const tests = Object.freeze({
 
   'can get "production" index entry': async (
     assert,
-    { indexUpdater, indexQueryEngine, adapter },
+    { indexWriter, indexQueryEngine, adapter },
   ) => {
     let originalModified = Date.now();
     let originalResource: LooseCardResource = {
@@ -835,7 +835,7 @@ const tests = Object.freeze({
         },
       },
     };
-    let batch = await indexUpdater.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
     await batch.invalidate(new URL(`${testRealmURL}1.json`));
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance',
@@ -885,7 +885,7 @@ const tests = Object.freeze({
 
   'can get work in progress card': async (
     assert,
-    { indexUpdater, indexQueryEngine, adapter },
+    { indexWriter, indexQueryEngine, adapter },
   ) => {
     await setupIndex(
       adapter,
@@ -924,7 +924,7 @@ const tests = Object.freeze({
       },
     };
     let source = JSON.stringify(resource);
-    let batch = await indexUpdater.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
     let now = Date.now();
     await batch.invalidate(new URL(`${testRealmURL}1.json`));
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
@@ -1001,7 +1001,7 @@ const tests = Object.freeze({
   },
 
   'can perform invalidations for an instance with deps more than a thousand':
-    async (assert, { indexUpdater, adapter }) => {
+    async (assert, { indexWriter, adapter }) => {
       let indexRows: (Pick<BoxelIndexTable, 'url'> &
         Partial<Omit<BoxelIndexTable, 'url' | 'pristine_doc'>>)[] = [];
       for (let i = 1; i <= 1002; i++) {
@@ -1019,7 +1019,7 @@ const tests = Object.freeze({
         indexRows,
       );
 
-      let batch = await indexUpdater.createBatch(new URL(testRealmURL));
+      let batch = await indexWriter.createBatch(new URL(testRealmURL));
       let invalidations = await batch.invalidate(
         new URL(`${testRealmURL}1.json`),
       );
@@ -1072,9 +1072,9 @@ const tests = Object.freeze({
     },
 
   'can get compiled module and source when requested with file extension':
-    async (assert, { indexUpdater, indexQueryEngine, adapter }) => {
+    async (assert, { indexWriter, indexQueryEngine, adapter }) => {
       await setupIndex(adapter);
-      let batch = await indexUpdater.createBatch(new URL(testRealmURL));
+      let batch = await indexWriter.createBatch(new URL(testRealmURL));
       let now = Date.now();
       await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
         type: 'module',
@@ -1102,9 +1102,9 @@ const tests = Object.freeze({
     },
 
   'can get compiled module and source when requested without file extension':
-    async (assert, { indexUpdater, indexQueryEngine, adapter }) => {
+    async (assert, { indexWriter, indexQueryEngine, adapter }) => {
       await setupIndex(adapter);
-      let batch = await indexUpdater.createBatch(new URL(testRealmURL));
+      let batch = await indexWriter.createBatch(new URL(testRealmURL));
       let now = Date.now();
       await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
         type: 'module',
@@ -1133,10 +1133,10 @@ const tests = Object.freeze({
 
   'can get compiled module and source from WIP index': async (
     assert,
-    { indexUpdater, indexQueryEngine, adapter },
+    { indexWriter, indexQueryEngine, adapter },
   ) => {
     await setupIndex(adapter);
-    let batch = await indexUpdater.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
     let now = Date.now();
     await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
       type: 'module',
@@ -1230,10 +1230,10 @@ const tests = Object.freeze({
 
   'can get css when requested with file extension': async (
     assert,
-    { indexUpdater, indexQueryEngine, adapter },
+    { indexWriter, indexQueryEngine, adapter },
   ) => {
     await setupIndex(adapter);
-    let batch = await indexUpdater.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
     let now = Date.now();
     await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
       type: 'css',
@@ -1257,10 +1257,10 @@ const tests = Object.freeze({
 
   'can get css when requested without file extension': async (
     assert,
-    { indexUpdater, indexQueryEngine, adapter },
+    { indexWriter, indexQueryEngine, adapter },
   ) => {
     await setupIndex(adapter);
-    let batch = await indexUpdater.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
     let now = Date.now();
     await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
       type: 'css',
@@ -1284,10 +1284,10 @@ const tests = Object.freeze({
 
   'can get css from WIP index': async (
     assert,
-    { indexUpdater, indexQueryEngine, adapter },
+    { indexWriter, indexQueryEngine, adapter },
   ) => {
     await setupIndex(adapter);
-    let batch = await indexUpdater.createBatch(new URL(testRealmURL));
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
     let now = Date.now();
     await batch.updateEntry(new URL(`${testRealmURL}person.gts`), {
       type: 'css',
@@ -1374,7 +1374,7 @@ const tests = Object.freeze({
     assert.strictEqual(entry, undefined, 'deleted css return undefined');
   },
 } as SharedTests<{
-  indexUpdater: IndexUpdater;
+  indexWriter: IndexWriter;
   indexQueryEngine: IndexQueryEngine;
   adapter: DBAdapter;
 }>);

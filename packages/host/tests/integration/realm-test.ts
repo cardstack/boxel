@@ -452,8 +452,8 @@ module('Integration | realm', function (hooks) {
       assert.ok(false, 'card document is missing an ID');
     }
 
-    let searchIndex = realm.searchIndex;
-    let result = await searchIndex.cardDocument(new URL(json.data.links.self));
+    let queryEngine = realm.realmIndexQueryEngine;
+    let result = await queryEngine.cardDocument(new URL(json.data.links.self));
     if (result?.type === 'error') {
       throw new Error(
         `unexpected error when getting card from index: ${result.error.detail}`,
@@ -740,8 +740,8 @@ module('Integration | realm', function (hooks) {
       assert.ok(false, 'response body is not a card document');
     }
 
-    let searchIndex = realm.searchIndex;
-    let result = await searchIndex.cardDocument(new URL(json.data.links.self));
+    let queryEngine = realm.realmIndexQueryEngine;
+    let result = await queryEngine.cardDocument(new URL(json.data.links.self));
     if (result?.type === 'error') {
       throw new Error(
         `unexpected error when getting card from index: ${result.error.detail}`,
@@ -763,7 +763,7 @@ module('Integration | realm', function (hooks) {
       'field value is correct',
     );
 
-    let { data: cards } = await searchIndex.search({
+    let { data: cards } = await queryEngine.search({
       filter: {
         on: {
           module: `http://localhost:4202/test/person`,
@@ -1960,12 +1960,12 @@ module('Integration | realm', function (hooks) {
       },
     });
 
-    let searchIndex = realm.searchIndex;
+    let queryEngine = realm.realmIndexQueryEngine;
 
-    let { data: cards } = await searchIndex.search({});
+    let { data: cards } = await queryEngine.search({});
     assert.strictEqual(cards.length, 2, 'two cards found');
 
-    let result = await searchIndex.cardDocument(
+    let result = await queryEngine.cardDocument(
       new URL(`${testRealmURL}cards/2`),
     );
     if (result?.type === 'error') {
@@ -2008,10 +2008,10 @@ module('Integration | realm', function (hooks) {
     });
     assert.strictEqual(response.status, 204, 'status was 204');
 
-    result = await searchIndex.cardDocument(new URL(`${testRealmURL}cards/2`));
+    result = await queryEngine.cardDocument(new URL(`${testRealmURL}cards/2`));
     assert.strictEqual(result, undefined, 'card was deleted');
 
-    result = await searchIndex.cardDocument(new URL(`${testRealmURL}cards/1`));
+    result = await queryEngine.cardDocument(new URL(`${testRealmURL}cards/1`));
     if (result?.type === 'error') {
       throw new Error(
         `unexpected error when getting card from index: ${result.error.detail}`,
@@ -2023,7 +2023,7 @@ module('Integration | realm', function (hooks) {
       'card 1 is still there',
     );
 
-    cards = (await searchIndex.search({})).data;
+    cards = (await queryEngine.search({})).data;
     assert.strictEqual(cards.length, 1, 'only one card remains');
   });
 
