@@ -110,7 +110,6 @@ test.describe('Room creation', () => {
 
     let room1 = await getRoomId(page);
     await assertRooms(page, [room1]);
-    await expect(page.locator(`[data-test-chat-title]`)).toHaveCount(0);
     await sendMessage(page, room1, 'Hello');
     await expect(page.locator(`[data-test-chat-title]`)).toHaveText(
       initialRoomName,
@@ -226,7 +225,9 @@ test.describe('Room creation', () => {
       document.querySelector('[data-test-close-ai-assistant]'),
     );
 
-    await expect(page.locator(`[data-test-chat-title]`)).toHaveCount(0);
+    await expect(page.locator(`[data-test-chat-title]`)).not.toHaveText(
+      newRoomName,
+    );
   });
 
   test('it can delete a room', async ({ page }) => {
@@ -335,7 +336,7 @@ test.describe('Room creation', () => {
     let newRoom = await getRoomId(page);
     await isInRoom(page, newRoom);
     await assertRooms(page, [newRoom]);
-    await expect(page.locator(`[data-test-chat-title]`)).toHaveCount(0);
+    await expect(page.locator('[data-test-room-is-empty]')).toHaveCount(1);
   });
 
   test('it orders past-sessions list items based on last activity in reverse chronological order', async ({

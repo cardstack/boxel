@@ -196,17 +196,22 @@ module('Integration | card-prerender', function (hooks) {
   });
 
   test('can get prerendered cards with their html + css', async function (assert) {
-    let results = await realm.searchIndex.searchPrerendered({
-      filter: {
-        on: {
-          module: `${testRealmURL}fancy-person`,
-          name: 'FancyPerson',
-        },
-        eq: {
-          firstName: 'Jimmy',
+    let results = await realm.searchIndex.searchPrerendered(
+      {
+        filter: {
+          on: {
+            module: `${testRealmURL}fancy-person`,
+            name: 'FancyPerson',
+          },
+          eq: {
+            firstName: 'Jimmy',
+          },
         },
       },
-    });
+      {
+        htmlFormat: 'embedded',
+      },
+    );
 
     assert.strictEqual(
       results.meta.page.total,
@@ -253,9 +258,7 @@ module('Integration | card-prerender', function (hooks) {
     );
 
     assert.ok(
-      results.prerenderedCards[0].embeddedHtml.default.includes(
-        'Embedded Card FancyPerson',
-      ),
+      results.prerenderedCards[0].html.includes('Embedded Card FancyPerson'),
       'the embedded card html looks correct',
     );
   });
