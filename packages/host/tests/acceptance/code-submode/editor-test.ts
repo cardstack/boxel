@@ -28,6 +28,7 @@ import {
   setupAcceptanceTestRealm,
   visitOperatorMode,
   waitForCodeEditor,
+  waitForSyntaxHighlighting,
   type TestContextWithSSE,
   type TestContextWithSave,
 } from '../../helpers';
@@ -324,7 +325,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     // TODO we often timeout waiting for syntax highlighting, so i'm commenting
     // out this assertion and creating a ticket to research this: CS-6770
 
-    // await waitForSyntaxHighlighting('"Pet"', 'rgb(4, 81, 165)');
+    await waitForSyntaxHighlighting('"Pet"', 'rgb(4, 81, 165)');
     // await percySnapshot(assert);
   });
 
@@ -790,10 +791,9 @@ module('Acceptance | code submode | editor tests', function (hooks) {
 
       assert.dom('[data-test-realm-indicator-not-writable]').exists();
       assert.strictEqual(
-        find('.monaco-editor')
-          ?.computedStyleMap()
-          .get('background-color')!
-          .toString(),
+        window
+          .getComputedStyle(find('.monaco-editor')!)
+          .getPropertyValue('background-color')!,
         'rgb(235, 234, 237)', // equivalent to #ebeaed
         'monaco editor is greyed out when read-only',
       );
