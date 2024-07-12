@@ -339,7 +339,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
 
       .session-error {
-        padding: var(--boxel-sp);
+        padding: 0 var(--boxel-sp);
       }
     </style>
   </template>

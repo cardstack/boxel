@@ -63,9 +63,9 @@ export default class NewSession extends Component<Signature> {
       .intro {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-lg);
+        gap: var(--boxel-sp-xl);
         height: 100%;
-        padding: 0 var(--boxel-sp-sm);
+        padding: var(--boxel-sp) var(--boxel-sp-xxxs) 0;
         color: var(--boxel-light);
         letter-spacing: var(--boxel-lsp);
         overflow: auto;
