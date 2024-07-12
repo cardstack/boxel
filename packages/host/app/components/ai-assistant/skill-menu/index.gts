@@ -51,30 +51,28 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         --boxel-header-gap: var(--boxel-sp-xxs);
         --boxel-header-detail-margin-left: 0;
       }
-      :global(.skill-menu.pill-menu--minimized) {
+      .skill-menu.pill-menu--minimized {
         --boxel-pill-menu-width: 3.75rem;
         white-space: nowrap;
         transition: width 0.2s ease-in;
       }
-      :global(.skill-menu.pill-menu--minimized:focus) {
+      .skill-menu.pill-menu--minimized:focus {
         outline: 0;
       }
-      :global(.skill-menu.pill-menu--minimized:hover),
-      :global(.skill-menu.pill-menu--minimized:focus-within) {
+      .skill-menu.pill-menu--minimized:hover,
+      .skill-menu.pill-menu--minimized:focus-within {
         --boxel-pill-menu-width: 100%;
       }
-      :global(.skill-menu.pill-menu--minimized .expandable-header-button),
-      :global(.skill-menu.pill-menu--minimized .skills-length) {
+      .skill-menu.pill-menu--minimized :deep(.expandable-header-button),
+      .skill-menu.pill-menu--minimized :deep(.skills-length) {
         visibility: collapse;
         transition: visibility 0.2s ease-in;
       }
-      :global(.skill-menu.pill-menu--minimized:hover .expandable-header-button),
-      :global(.skill-menu.pill-menu--minimized:hover .skills-length),
-      :global(
-          .skill-menu.pill-menu--minimized:focus-within
-            .expandable-header-button
-        ),
-      :global(.skill-menu.pill-menu--minimized:focus-within .skills-length) {
+      .skill-menu.pill-menu--minimized:hover :deep(.expandable-header-button),
+      .skill-menu.pill-menu--minimized:hover :deep(.skills-length),
+      .skill-menu.pill-menu--minimized:focus-within
+        :deep(.expandable-header-button),
+      .skill-menu.pill-menu--minimized:focus-within :deep(.skills-length) {
         visibility: visible;
       }
       .header-icon {
