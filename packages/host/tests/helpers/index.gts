@@ -137,7 +137,7 @@ export async function waitForSyntaxHighlighting(
   await waitUntil(
     () =>
       window
-        .getComputedStyle(finalHighlightedToken)
+        .getComputedStyle(finalHighlightedToken!)
         .getPropertyValue('color') === color,
     {
       timeout: 2000,
