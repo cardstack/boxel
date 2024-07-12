@@ -8,6 +8,7 @@ import { simulateNetworkBehaviors } from './fetcher';
 export interface ResponseWithNodeStream extends Response {
   nodeStream?: Readable;
 }
+import { time } from './helpers/time';
 
 export type Handler = (req: Request) => Promise<ResponseWithNodeStream | null>;
 
@@ -134,10 +135,14 @@ export class VirtualNetwork {
     request: Request,
     direction: 'virtual-to-real' | 'real-to-virtual',
   ) {
-    let remappedUrl = this.resolveURLMapping(request.url, direction);
+    let remappedUrl = await time('mapRequest:resolveURLMapping', () =>
+      this.resolveURLMapping(request.url, direction),
+    );
 
     if (remappedUrl) {
-      return await buildRequest(remappedUrl, request);
+      return await time('mapRequest:buildRequest', () =>
+        buildRequest(remappedUrl, request),
+      );
     } else {
       return request;
     }
