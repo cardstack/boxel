@@ -1848,7 +1848,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
-    await waitFor('[data-test-person]');
+    await waitFor('[data-test-boxel-header-icon]');
     assert.dom('[data-test-boxel-header-title]').hasText('Person');
     assert
       .dom(`[data-test-boxel-header-icon="https://example-icon.test"]`)
