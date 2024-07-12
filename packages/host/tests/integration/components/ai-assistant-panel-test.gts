@@ -1741,16 +1741,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
   });
 
   test('it displays the streaming indicator when ai bot message is in progress (streaming words)', async function (assert) {
-    await setCardInOperatorModeState();
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-    let roomId = await openAiAssistant();
+    let roomId = await renderAiAssistantPanel();
 
     await addRoomEvent(matrixService, {
       event_id: 'event0',
