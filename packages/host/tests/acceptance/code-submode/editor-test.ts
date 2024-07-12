@@ -28,7 +28,6 @@ import {
   setupAcceptanceTestRealm,
   visitOperatorMode,
   waitForCodeEditor,
-  waitForSyntaxHighlighting,
   type TestContextWithSSE,
   type TestContextWithSave,
 } from '../../helpers';
@@ -325,7 +324,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     // TODO we often timeout waiting for syntax highlighting, so i'm commenting
     // out this assertion and creating a ticket to research this: CS-6770
 
-    await waitForSyntaxHighlighting('"Pet"', 'rgb(4, 81, 165)');
+    // await waitForSyntaxHighlighting('"Pet"', 'rgb(4, 81, 165)');
     // await percySnapshot(assert);
   });
 

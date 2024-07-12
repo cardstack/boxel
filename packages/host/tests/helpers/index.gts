@@ -136,8 +136,9 @@ export async function waitForSyntaxHighlighting(
 
   await waitUntil(
     () =>
-      finalHighlightedToken?.computedStyleMap()?.get('color')?.toString() ===
-      color,
+      window
+        .getComputedStyle(finalHighlightedToken)
+        .getPropertyValue('color') === color,
     {
       timeout: 2000,
       timeoutMessage: 'timed out waiting for syntax highlighting',
