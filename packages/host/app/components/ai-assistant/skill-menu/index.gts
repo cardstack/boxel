@@ -90,9 +90,10 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
   </template>
 
   private get query(): Query {
-    let selectedCardIds = this.args.skills?.map((skill: SkillField) => ({
-      not: { eq: { id: skill.card.id } },
-    }));
+    let selectedCardIds =
+      this.args.skills?.map((skill: SkillField) => ({
+        not: { eq: { id: skill.card.id } },
+      })) ?? [];
     // query for only displaying skill cards that are not already selected
     return {
       filter: {
