@@ -32,6 +32,7 @@ import {
   fetchUserPermissions,
   maybeHandleScopedCSSRequest,
   authorizationMiddleware,
+  internalKeyFor,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -1362,16 +1363,22 @@ export class Realm {
       `/${join(new URL(this.url).pathname, name, uuidV4() + '.json')}`,
     );
     let localPath = this.paths.local(fileURL);
+    let fileSerialization: LooseSingleCardDocument | undefined;
+    try {
+      fileSerialization = await this.fileSerialization(
+        merge(json, { data: { meta: { realmURL: this.url } } }),
+        fileURL,
+      );
+    } catch (err: any) {
+      if (err.message.startsWith('field validation error')) {
+        return badRequest(err.message, requestContext);
+      } else {
+        return systemError(requestContext, err.message, err);
+      }
+    }
     let { lastModified } = await this.write(
       localPath,
-      JSON.stringify(
-        await this.fileSerialization(
-          merge(json, { data: { meta: { realmURL: this.url } } }),
-          fileURL,
-        ),
-        null,
-        2,
-      ),
+      JSON.stringify(fileSerialization, null, 2),
     );
     let newURL = fileURL.href.replace(/\.json$/, '');
     let entry = await this.#searchIndex.cardDocument(new URL(newURL), {
@@ -1438,9 +1445,21 @@ export class Realm {
         requestContext,
       );
     }
-    // prevent the client from changing the card type or ID in the patch
-    delete (patch as any).data.meta;
+    if (
+      internalKeyFor(patch.data.meta.adoptsFrom, url) !==
+      internalKeyFor(originalClone.data.meta.adoptsFrom, url)
+    ) {
+      return badRequest(
+        `Cannot change card instance type to ${JSON.stringify(
+          patch.data.meta.adoptsFrom,
+        )}`,
+        requestContext,
+      );
+    }
+
     delete (patch as any).data.type;
+    delete (patch as any).data.meta.realmInfo;
+    delete (patch as any).data.meta.realmURL;
 
     let card = mergeWith(
       originalClone,
@@ -1466,16 +1485,22 @@ export class Realm {
 
     delete (card as any).data.id; // don't write the ID to the file
     let path: LocalPath = `${localPath}.json`;
+    let fileSerialization: LooseSingleCardDocument | undefined;
+    try {
+      fileSerialization = await this.fileSerialization(
+        merge(card, { data: { meta: { realmURL: this.url } } }),
+        url,
+      );
+    } catch (err: any) {
+      if (err.message.startsWith('field validation error')) {
+        return badRequest(err.message, requestContext);
+      } else {
+        return systemError(requestContext, err.message, err);
+      }
+    }
     let { lastModified } = await this.write(
       path,
-      JSON.stringify(
-        await this.fileSerialization(
-          merge(card, { data: { meta: { realmURL: this.url } } }),
-          url,
-        ),
-        null,
-        2,
-      ),
+      JSON.stringify(fileSerialization, null, 2),
       request.headers.get('X-Boxel-Client-Request-Id'),
     );
     let instanceURL = url.href.replace(/\.json$/, '');
