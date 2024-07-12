@@ -460,7 +460,7 @@ test.describe('Skills', () => {
     expect(attachedSkillEventIds).toHaveLength(2);
   });
 
-  // TODO: create ticket for these tests
+  // TODO: CS-6985
   test.skip(`skills are persisted per room and do not leak between different users`, async ({
     page,
   }) => {
@@ -500,7 +500,6 @@ test.describe('Skills', () => {
     );
   });
 
-  test.skip(`persisted enabled skills are attached to sent messages`, async () => {
-    // TODO
-  });
+  // TODO: CS-6985
+  test.skip(`persisted enabled skills are attached to sent messages`, async () => {});
 });
