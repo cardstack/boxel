@@ -1,0 +1,18 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "prefersWideFormat": true,
+      "headerColor": "#ffd73c",
+      "title": "AI App Generator",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../ai-app-generator",
+        "name": "AiAppGenerator"
+      }
+    }
+  }
+}

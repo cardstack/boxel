@@ -70,6 +70,25 @@ export class StackItem {
     );
   }
 
+  get isWideFormat() {
+    return (
+      this.card &&
+      'prefersWideFormat' in this.card &&
+      this.card.prefersWideFormat
+    );
+  }
+
+  get headerColor() {
+    if (
+      this.card &&
+      'headerColor' in this.card &&
+      this.card.headerColor != null
+    ) {
+      return this.card.headerColor;
+    }
+    return;
+  }
+
   get card(): CardDef {
     if (this.newCard) {
       return this.newCard;

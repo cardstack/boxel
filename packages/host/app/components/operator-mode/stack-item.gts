@@ -33,7 +33,7 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
-import { cn, eq, optional } from '@cardstack/boxel-ui/helpers';
+import { cn, cssVar, eq, optional } from '@cardstack/boxel-ui/helpers';
 
 import {
   IconPencil,
@@ -167,10 +167,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
     let invertedIndex = itemsOnStackCount - this.args.index - 1;
     let widthReductionPercent = 5; // Every new card on the stack is 5% wider than the previous one
     let offsetPx = 30; // Every new card on the stack is 30px lower than the previous one
+    let width = this.args.item.isWideFormat
+      ? '100%'
+      : `calc(50rem * ${100 - invertedIndex * widthReductionPercent} / 100)`;
 
     return htmlSafe(`
       height: calc(100% - ${offsetPx}px * ${this.args.index});
-      width: ${100 - invertedIndex * widthReductionPercent}%;
+      width: ${width};
       z-index: ${itemsOnStackCount - invertedIndex};
       margin-top: calc(${offsetPx}px * ${this.args.index});
     `); // using margin-top instead of padding-top to hide scrolled content from view
@@ -374,7 +377,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   <template>
     <div
-      class='item {{if this.isBuried "buried"}}'
+      class={{cn 'item' buried=this.isBuried}}
       data-test-stack-card-index={{@index}}
       data-test-stack-card={{this.cardIdentifier}}
       {{! In order to support scrolling cards into view
@@ -395,6 +398,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
           <Header
             @size='large'
             @title={{this.headerTitle}}
+            @hasBackground={{true}}
             class={{cn 'header' header--icon-hovered=this.isHoverOnRealmIcon}}
             {{on
               'click'
@@ -402,6 +406,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                 (if this.isBuried (fn @dismissStackedCardsAbove @index))
               )
             }}
+            style={{cssVar boxel-header-background-color=@item.headerColor}}
             data-test-stack-card-header
           >
             <:icon>
@@ -541,8 +546,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
         --boxel-header-padding: var(--boxel-sp-sm);
         --boxel-header-text-font: var(--boxel-font-med);
         --boxel-header-border-radius: var(--boxel-border-radius-xl);
+        --boxel-header-background-color: var(--boxel-light);
         z-index: 1;
-        background-color: var(--boxel-light);
         max-width: max-content;
         height: fit-content;
         min-width: 100%;
@@ -578,6 +583,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
         height: inherit;
         z-index: 0;
         pointer-events: none;
+      }
+      .item.full-screen {
+        max-width: 100%;
       }
 
       .card {
