@@ -84,23 +84,23 @@ export default class AiAssistantPanel extends Component<Signature> {
       <div
         class='ai-assistant-panel'
         data-test-ai-assistant-panel
+        data-test-room-has-messages={{if this.currentRoom.messages true false}}
+        data-test-room-is-empty={{if this.currentRoom.messages false true}}
         ...attributes
       >
         <@resizeHandle />
         <header class='panel-header'>
-          {{#if this.currentRoom.messages}}
-            <div class='panel-title-group'>
-              <img
-                alt='AI Assistant'
-                src={{assistantIcon}}
-                width='20'
-                height='20'
-              />
-              <h3 class='panel-title-text' data-test-chat-title>
-                {{if this.currentRoom.name this.currentRoom.name 'Assistant'}}
-              </h3>
-            </div>
-          {{/if}}
+          <div class='panel-title-group'>
+            <img
+              alt='AI Assistant'
+              src={{assistantIcon}}
+              width='20'
+              height='20'
+            />
+            <h3 class='panel-title-text' data-test-chat-title>
+              {{if this.currentRoom.name this.currentRoom.name 'Assistant'}}
+            </h3>
+          </div>
           <IconButton
             class='close-ai-panel'
             @variant='primary'
@@ -329,7 +329,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
 
       .loading-new-session {
-        padding: var(--boxel-sp);
+        margin: auto;
       }
 
       @keyframes spin {

@@ -586,10 +586,28 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     });
   }
 
-  validate(instance: BaseDef, value: any) {
-    if (value && !Array.isArray(value)) {
-      throw new Error(`Expected array for field value ${this.name}`);
+  validate(instance: BaseDef, values: any[] | null) {
+    if (values && !Array.isArray(values)) {
+      throw new Error(
+        `field validation error: Expected array for field value of field '${this.name}'`,
+      );
     }
+    if (values == null) {
+      return values;
+    }
+
+    if (primitive in this.card) {
+      // todo: primitives could implement a validation symbol
+    } else {
+      for (let [index, item] of values.entries()) {
+        if (item != null && !(item instanceof this.card)) {
+          throw new Error(
+            `field validation error: tried set instance of ${values.constructor.name} at index ${index} of field '${this.name}' but it is not an instance of ${this.card.name}`,
+          );
+        }
+      }
+    }
+
     return new WatchedArray((oldValue, value) => {
       applySubscribersToInstanceValue(
         instance,
@@ -599,7 +617,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
       );
       notifySubscribers(instance, this.name, value);
       logger.log(recompute(instance));
-    }, value);
+    }, values);
   }
 
   async handleNotLoadedError<T extends BaseDef>(instance: T, _e: NotLoaded) {
@@ -752,7 +770,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     } else {
       if (value != null && !(value instanceof this.card)) {
         throw new Error(
-          `tried set ${value} as field ${this.name} but it is not an instance of ${this.card.name}`,
+          `field validation error: tried set instance of ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
         );
       }
     }
@@ -950,7 +968,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     // so the next opportunity we have to test this scenario is during field assignment
     if (primitive in this.card) {
       throw new Error(
-        `the linksTo field '${this.name}' contains a primitive card '${this.card.name}'`,
+        `field validation error: the linksTo field '${this.name}' contains a primitive card '${this.card.name}'`,
       );
     }
     if (value) {
@@ -959,7 +977,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       }
       if (!(value instanceof this.card)) {
         throw new Error(
-          `tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
+          `field validation error: tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
         );
       }
     }
@@ -1324,7 +1342,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
   validate(instance: BaseDef, values: any[] | null) {
     if (primitive in this.card) {
       throw new Error(
-        `the linksToMany field '${this.name}' contains a primitive card '${this.card.name}'`,
+        `field validation error: the linksToMany field '${this.name}' contains a primitive card '${this.card.name}'`,
       );
     }
 
@@ -1333,13 +1351,19 @@ class LinksToMany<FieldT extends CardDefConstructor>
     }
 
     if (!Array.isArray(values)) {
-      throw new Error(`Expected array for field value ${this.name}`);
+      throw new Error(
+        `field validation error: Expected array for field value of field '${this.name}'`,
+      );
     }
 
     for (let value of values) {
-      if (!isNotLoadedValue(value) && !(value instanceof this.card)) {
+      if (
+        !isNotLoadedValue(value) &&
+        value != null &&
+        !(value instanceof this.card)
+      ) {
         throw new Error(
-          `tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
+          `field validation error: tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
         );
       }
     }
@@ -2866,6 +2890,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
         );
       }
       let deserialized = getDataBucket(instance);
+      field.validate(instance, value);
 
       // Before updating field's value, we also have to make sure
       // the subscribers also subscribes to a new value.

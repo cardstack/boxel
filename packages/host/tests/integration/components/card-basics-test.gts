@@ -1861,14 +1861,16 @@ module('Integration | card-basics', function (hooks) {
       loader.shimModule(`${testRealmURL}test-cards`, { Person });
       assert.throws(
         () => new Person({ languagesSpoken: 'english' }),
-        /Expected array for field value languagesSpoken/,
+        /Expected array for field value of field 'languagesSpoken'/,
       );
       try {
         new Person({ languagesSpoken: 'english' });
         throw new Error(`expected exception to be thrown`);
       } catch (err: any) {
         assert.ok(
-          err.message.match(/Expected array for field value languagesSpoken/),
+          err.message.match(
+            /Expected array for field value of field 'languagesSpoken'/,
+          ),
           'expected error received',
         );
       }

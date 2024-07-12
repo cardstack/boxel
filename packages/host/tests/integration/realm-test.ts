@@ -29,6 +29,14 @@ import {
   setupIntegrationTestRealm,
   lookupLoaderService,
 } from '../helpers';
+import {
+  setupBaseRealm,
+  FieldDef,
+  contains,
+  CardDef,
+  StringField,
+  field,
+} from '../helpers/base-realm';
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -36,6 +44,7 @@ let loader: Loader;
 
 module('Integration | realm', function (hooks) {
   setupRenderingTest(hooks);
+  setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = lookupLoaderService().loader;
@@ -620,6 +629,69 @@ module('Integration | realm', function (hooks) {
       },
       'file contents are correct',
     );
+  });
+
+  test('realm returns 400 error for POST requests that set the value of a polymorphic field to an incompatible type', async function (assert) {
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+    }
+    class Car extends FieldDef {
+      @field make = contains(StringField);
+      @field model = contains(StringField);
+      @field year = contains(StringField);
+    }
+    class Driver extends CardDef {
+      @field card = contains(Person);
+    }
+    let { realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'driver.gts': { Driver },
+        'person.gts': { Person },
+        'car.gts': { Car },
+      },
+    });
+    let response = await handle(
+      realm,
+      new Request(testRealmURL, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+        body: JSON.stringify(
+          {
+            data: {
+              type: 'card',
+              attributes: {
+                card: {
+                  firstName: null,
+                  make: 'Mercedes Benz',
+                  model: 'C300',
+                  year: '2024',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}driver`,
+                  name: 'Driver',
+                },
+                fields: {
+                  card: {
+                    adoptsFrom: {
+                      module: `${testRealmURL}car`,
+                      name: 'Car',
+                    },
+                  },
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      }),
+    );
+    assert.strictEqual(response.status, 400, '400 server error');
   });
 
   test<TestContextWithSSE>('realm can serve patch card requests', async function (assert) {
@@ -1821,8 +1893,8 @@ module('Integration | realm', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: 'http://localhost:4202/test/person',
-                  name: 'Person',
+                  module: 'http://localhost:4202/test/pet',
+                  name: 'Pet',
                 },
               },
             },
@@ -1925,6 +1997,371 @@ module('Integration | realm', function (hooks) {
             adoptsFrom: {
               module: 'http://localhost:4202/test/pet',
               name: 'Pet',
+            },
+          },
+        },
+      },
+      'file contents are correct',
+    );
+  });
+
+  test('realm can serve PATCH requests that include polymorphic updates', async function (assert) {
+    class Driver extends CardDef {
+      @field card = contains(FieldDef);
+    }
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+    }
+    class Car extends FieldDef {
+      @field make = contains(StringField);
+      @field model = contains(StringField);
+      @field year = contains(StringField);
+    }
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'driver.gts': { Driver },
+        'person.gts': { Person },
+        'car.gts': { Car },
+        'dir/driver.json': {
+          data: {
+            id: `${testRealmURL}dir/driver`,
+            attributes: {
+              card: {
+                firstName: 'Mango',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}driver`,
+                name: 'Driver',
+              },
+              fields: {
+                card: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}person`,
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    let response = await handle(
+      realm,
+      new Request(`${testRealmURL}dir/driver`, {
+        method: 'PATCH',
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+        body: JSON.stringify(
+          {
+            data: {
+              type: 'card',
+              attributes: {
+                card: {
+                  firstName: null,
+                  make: 'Mercedes Benz',
+                  model: 'C300',
+                  year: '2024',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}driver`,
+                  name: 'Driver',
+                },
+                fields: {
+                  card: {
+                    adoptsFrom: {
+                      module: `${testRealmURL}car`,
+                      name: 'Car',
+                    },
+                  },
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      }),
+    );
+
+    assert.strictEqual(response.status, 200, 'successful http status');
+    let json = await response.json();
+    assert.deepEqual(json, {
+      data: {
+        type: 'card',
+        id: `${testRealmURL}dir/driver`,
+        attributes: {
+          card: {
+            make: 'Mercedes Benz',
+            model: 'C300',
+            year: '2024',
+          },
+          description: null,
+          thumbnailURL: null,
+          title: null,
+        },
+        meta: {
+          adoptsFrom: {
+            module: `../driver`,
+            name: 'Driver',
+          },
+          fields: {
+            card: {
+              adoptsFrom: {
+                module: `${testRealmURL}car`,
+                name: 'Car',
+              },
+            },
+          },
+          lastModified: adapter.lastModified.get(
+            `${testRealmURL}dir/driver.json`,
+          ),
+          realmInfo: testRealmInfo,
+          realmURL: testRealmURL,
+        },
+        links: {
+          self: `${testRealmURL}dir/driver`,
+        },
+      },
+    });
+    let fileRef = await adapter.openFile('dir/driver.json');
+    if (!fileRef) {
+      throw new Error('file not found');
+    }
+    assert.deepEqual(
+      JSON.parse(fileRef.content as string),
+      {
+        data: {
+          type: 'card',
+          attributes: {
+            card: {
+              make: 'Mercedes Benz',
+              model: 'C300',
+              year: '2024',
+            },
+            description: null,
+            thumbnailURL: null,
+            title: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: `../driver`,
+              name: 'Driver',
+            },
+            fields: {
+              card: {
+                adoptsFrom: {
+                  module: `${testRealmURL}car`,
+                  name: 'Car',
+                },
+              },
+            },
+          },
+        },
+      },
+      'file contents are correct',
+    );
+  });
+
+  test('realm returns 400 error for PATCH requests that change the type of the underlying instance', async function (assert) {
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+    }
+    class Car extends CardDef {
+      @field make = contains(StringField);
+      @field model = contains(StringField);
+      @field year = contains(StringField);
+    }
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'person.gts': { Person },
+        'car.gts': { Car },
+        'dir/person.json': {
+          data: {
+            attributes: {
+              firstName: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `../person`,
+                name: 'Person',
+              },
+            },
+          },
+        },
+      },
+    });
+    let response = await handle(
+      realm,
+      new Request(`${testRealmURL}dir/person`, {
+        method: 'PATCH',
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+        body: JSON.stringify(
+          {
+            data: {
+              type: 'card',
+              attributes: {
+                make: 'Mercedes Benz',
+                model: 'C300',
+                year: '2024',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}car`,
+                  name: 'Car',
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      }),
+    );
+
+    assert.strictEqual(response.status, 400, '400 server error');
+    let fileRef = await adapter.openFile('dir/person.json');
+    if (!fileRef) {
+      throw new Error('file not found');
+    }
+    assert.deepEqual(
+      JSON.parse(fileRef.content as string),
+      {
+        data: {
+          attributes: {
+            firstName: 'Mango',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `../person`,
+              name: 'Person',
+            },
+          },
+        },
+      },
+      'file contents are correct',
+    );
+  });
+
+  test('realm returns 400 error for PATCH requests that set the value of a polymorphic field to an incompatible type', async function (assert) {
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+    }
+    class Car extends FieldDef {
+      @field make = contains(StringField);
+      @field model = contains(StringField);
+      @field year = contains(StringField);
+    }
+    class Driver extends CardDef {
+      @field card = contains(Person);
+    }
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'driver.gts': { Driver },
+        'person.gts': { Person },
+        'car.gts': { Car },
+        'dir/driver.json': {
+          data: {
+            attributes: {
+              card: {
+                firstName: 'Mango',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}driver`,
+                name: 'Driver',
+              },
+              fields: {
+                card: {
+                  adoptsFrom: {
+                    module: `../person`,
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    let response = await handle(
+      realm,
+      new Request(`${testRealmURL}dir/driver`, {
+        method: 'PATCH',
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+        body: JSON.stringify(
+          {
+            data: {
+              type: 'card',
+              attributes: {
+                card: {
+                  firstName: null,
+                  make: 'Mercedes Benz',
+                  model: 'C300',
+                  year: '2024',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}driver`,
+                  name: 'Driver',
+                },
+                fields: {
+                  card: {
+                    adoptsFrom: {
+                      module: `${testRealmURL}car`,
+                      name: 'Car',
+                    },
+                  },
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      }),
+    );
+
+    assert.strictEqual(response.status, 400, '400 server error');
+    let fileRef = await adapter.openFile('dir/driver.json');
+    if (!fileRef) {
+      throw new Error('file not found');
+    }
+    assert.deepEqual(
+      JSON.parse(fileRef.content as string),
+      {
+        data: {
+          attributes: {
+            card: {
+              firstName: 'Mango',
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}driver`,
+              name: 'Driver',
+            },
+            fields: {
+              card: {
+                adoptsFrom: {
+                  module: `../person`,
+                  name: 'Person',
+                },
+              },
             },
           },
         },

@@ -255,6 +255,7 @@ export function getBoxComponent(
         height: 100%;
         container-name: embedded-card;
         container-type: size;
+        overflow: hidden;
       }
 
       /* 
