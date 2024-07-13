@@ -20,6 +20,8 @@ export class RoomModel {
     if (event) {
       return new Date(event.origin_server_ts);
     }
+    // there is a race condition in the matrix SDK where newly created
+    // rooms don't immediately have a created date
     return new Date();
   }
 
