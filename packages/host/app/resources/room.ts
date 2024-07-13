@@ -100,7 +100,7 @@ export class RoomResource extends Resource<Args> {
     return this.members.filter((m) => m.membership === 'join');
   }
 
-  get events() {
+  private get events() {
     return this.room ? this.room.events : [];
   }
 
