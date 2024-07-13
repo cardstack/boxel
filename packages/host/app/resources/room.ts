@@ -40,9 +40,11 @@ const ErrorMessage: Record<string, string> = {
 };
 
 export class RoomResource extends Resource<Args> {
-  _messageCache: TrackedMap<string, RoomMessageModel> = new TrackedMap();
-  _memberCache: TrackedMap<string, RoomMember> = new TrackedMap();
-  _fragmentCache: TrackedMap<string, CardFragmentContent> = new TrackedMap();
+  private _messageCache: TrackedMap<string, RoomMessageModel> =
+    new TrackedMap();
+  private _memberCache: TrackedMap<string, RoomMember> = new TrackedMap();
+  private _fragmentCache: TrackedMap<string, CardFragmentContent> =
+    new TrackedMap();
   @tracked room: RoomModel | undefined;
   @tracked loading: Promise<void> | undefined;
   @service private declare matrixService: MatrixService;
@@ -59,11 +61,11 @@ export class RoomResource extends Resource<Args> {
     }
   }
 
-  isNewRoom(roomId: string) {
+  private isNewRoom(roomId: string) {
     return this.roomId && roomId !== this.roomId;
   }
 
-  resetCache() {
+  private resetCache() {
     this._messageCache = new TrackedMap();
     this._memberCache = new TrackedMap();
     this._fragmentCache = new TrackedMap();
@@ -102,7 +104,7 @@ export class RoomResource extends Resource<Args> {
     return this.room ? this.room.events : [];
   }
 
-  async loadRoomMembers(roomId: string) {
+  private async loadRoomMembers(roomId: string) {
     for (let event of this.events) {
       if (event.type !== 'm.room.member') {
         continue;
@@ -122,7 +124,7 @@ export class RoomResource extends Resource<Args> {
     }
   }
 
-  async loadRoomMessages(roomId: string) {
+  private async loadRoomMessages(roomId: string) {
     let index = this._messageCache.size;
     let newMessages = new Map<string, RoomMessageModel>();
     for (let event of this.events) {
@@ -255,7 +257,7 @@ export class RoomResource extends Resource<Args> {
     }
   }
 
-  upsertRoomMember({
+  private upsertRoomMember({
     roomId,
     userId,
     displayName,
