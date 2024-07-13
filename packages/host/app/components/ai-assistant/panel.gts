@@ -94,6 +94,8 @@ export default class AiAssistantPanel extends Component<Signature> {
       <div
         class='ai-assistant-panel'
         data-test-ai-assistant-panel
+        data-test-room-has-messages={{if this.roomResource.messages true false}}
+        data-test-room-is-empty={{if this.roomResource.messages false true}}
         ...attributes
       >
         <@resizeHandle />
@@ -339,7 +341,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
 
       .loading-new-session {
-        padding: var(--boxel-sp);
+        margin: auto;
       }
 
       @keyframes spin {

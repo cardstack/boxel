@@ -97,7 +97,12 @@ export type IndexedModuleOrError = IndexedModule | IndexedError;
 export type IndexedCSSOrError = IndexedCSS | IndexedError;
 
 type GetEntryOptions = WIPOptions;
-export type QueryOptions = WIPOptions;
+export type QueryOptions = WIPOptions & PrerenderedCardOptions;
+
+interface PrerenderedCardOptions {
+  htmlFormat?: 'embedded' | 'atom';
+}
+
 interface WIPOptions {
   useWorkInProgressIndex?: boolean;
 }
@@ -109,7 +114,7 @@ export interface PrerenderedCardCssItem {
 
 export interface PrerenderedCard {
   url: string;
-  embeddedHtml: Record<string, string>;
+  html: string;
   cssModuleIds: string[];
 }
 
@@ -432,15 +437,31 @@ export class IndexQueryEngine {
     prerenderedCardCssItems: PrerenderedCardCssItem[];
     meta: QueryResultsMeta;
   }> {
-    let { results, meta } = await this._search(
+    if (
+      !opts.htmlFormat ||
+      (opts.htmlFormat !== 'embedded' && opts.htmlFormat !== 'atom')
+    ) {
+      throw new Error(`htmlFormat must be either 'embedded' or 'atom'`);
+    }
+    let htmlColumnExpression =
+      opts.htmlFormat == 'embedded'
+        ? ['embedded_html ->> ', param('default')] // TODO: this param should be the value of card type specified in the ON filter - if that is not present, or the query has different card type values in ON filters, we should default to CardDef embedded template in the embedded_html JSON
+        : ['atom_html'];
+
+    let { results, meta } = (await this._search(
       realmURL,
       { filter, sort, page },
       loader,
       opts,
       [
-        'SELECT url, ANY_VALUE(file_alias) as file_alias, ANY_VALUE(embedded_html) as embedded_html',
+        'SELECT url, ANY_VALUE(file_alias) as file_alias, ANY_VALUE(',
+        ...htmlColumnExpression,
+        ') as html',
       ],
-    );
+    )) as {
+      meta: QueryResultsMeta;
+      results: (Partial<BoxelIndexTable> & { html: string })[];
+    };
 
     let cardFileAliases = results.map((c) => c.file_alias);
     let realmVersion = meta.page.realmVersion;
@@ -520,7 +541,7 @@ export class IndexQueryEngine {
     let prerenderedCards = results.map((card) => {
       return {
         url: card.url!,
-        embeddedHtml: card.embedded_html!,
+        html: card.html,
         cssModuleIds:
           cardInstanceCss[card.file_alias!]?.map((item) => item.cssModuleId) ??
           [],

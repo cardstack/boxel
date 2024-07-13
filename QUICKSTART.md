@@ -42,7 +42,7 @@ To build the entire repository and run the application, follow these steps:
 
    ```zsh
    cd ./packages/realm-server
-   pnpm start:all
+   DISABLE_MODULE_CACHING=true pnpm start:all
    ```
 
    Note: Ensure that the realm-server is completely started by looking out for tor the test-realm indexing output.
