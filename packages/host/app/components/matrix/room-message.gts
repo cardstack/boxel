@@ -410,12 +410,10 @@ export default class RoomMessage extends Component<Signature> {
 
   @cached
   private get failedCommandState() {
-    if (!this.args.message.command?.eventId) {
+    if (!this.command?.eventId) {
       return undefined;
     }
-    return this.matrixService.failedCommandState.get(
-      this.args.message.command.eventId,
-    );
+    return this.matrixService.failedCommandState.get(this.command.eventId);
   }
 
   @cached
