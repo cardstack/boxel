@@ -361,11 +361,20 @@ export default class RoomMessage extends Component<Signature> {
       .join(', ');
   }
 
+  get command() {
+    return this.args.message.command;
+  }
+
   private patchCard = task(async () => {
     if (this.operatorModeStateService.patchCard.isRunning) {
       return;
     }
-    let { payload, eventId } = this.args.message.command!;
+    if (!this.command) {
+      throw new Error(
+        'patchCard requires a command on the message to be defined',
+      );
+    }
+    let { payload, eventId } = this.command!;
     this.matrixService.failedCommandState.delete(eventId);
     try {
       await this.operatorModeStateService.patchCard.perform(
@@ -390,7 +399,12 @@ export default class RoomMessage extends Component<Signature> {
   });
 
   private get previewPatchCode() {
-    let { commandType, payload } = this.args.message.command!;
+    if (!this.command) {
+      throw new Error(
+        'patchCard requires a command on the message to be defined',
+      );
+    }
+    let { commandType, payload } = this.command!;
     return JSON.stringify({ commandType, payload }, null, 2);
   }
 
@@ -412,7 +426,7 @@ export default class RoomMessage extends Component<Signature> {
     if (this.failedCommandState) {
       return 'failed';
     }
-    return this.args.message.command!.status;
+    return this.command?.status ?? 'ready';
   }
 
   @action private viewCodeToggle() {
