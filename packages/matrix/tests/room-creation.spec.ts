@@ -27,8 +27,7 @@ import {
 test.describe('Room creation', () => {
   let synapse: SynapseInstance;
 
-  test.beforeEach(async ({ page }, testInfo) => {
-    testInfo.setTimeout(testInfo.timeout + 30000);
+  test.beforeEach(async ({ page }) => {
     synapse = await synapseStart();
     await registerRealmUsers(synapse);
     await registerUser(synapse, 'user1', 'pass');
