@@ -1,23 +1,42 @@
+import { guidFor } from '@ember/object/internals';
+import Component from '@glimmer/component';
+import { modifier } from 'ember-modifier';
+
 interface Signature {
   Args: {
-    html?: string;
     css?: string;
+    html?: string;
   };
   Blocks: {
     default: [];
   };
 }
 
-import type { TemplateOnlyComponent } from '@ember/component/template-only';
+let insertStyleElement = modifier((element, [css]: [string | undefined]) => {
+  if (css) {
+    let styleElement = document.querySelector(
+      `style[data-boxel-prerendered-style='${guidFor(element)}']`,
+    );
 
-const Prerendered: TemplateOnlyComponent<Signature> = <template>
-  <style unscoped>
-    {{@css}}
-  </style>
+    if (!styleElement) {
+      styleElement = document.createElement('style');
+      styleElement.setAttribute(
+        'data-boxel-prerendered-style',
+        guidFor(element),
+      );
+      document.head.appendChild(styleElement);
+    }
 
-  {{{@html}}}
+    styleElement.textContent = css;
+  }
+});
 
-  {{yield}}
-</template>;
+export default class Prerendered extends Component<Signature> {
+  <template>
+    <invalid {{insertStyleElement @css}}></invalid>
 
-export default Prerendered;
+    {{{@html}}}
+
+    {{yield}}
+  </template>
+}
