@@ -226,9 +226,7 @@ test.describe('Room creation', () => {
       document.querySelector('[data-test-close-ai-assistant]'),
     );
 
-    await expect(page.locator(`[data-test-chat-title]`)).not.toHaveText(
-      newRoomName,
-    );
+    await expect(page.locator(`[data-test-chat-title]`)).toHaveCount(0);
   });
 
   test('it can delete a room', async ({ page }) => {
