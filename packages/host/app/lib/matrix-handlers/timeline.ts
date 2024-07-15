@@ -106,12 +106,12 @@ async function processDecryptedEvent(
     return;
   }
 
-  let roomField = await context.getRoom(roomId);
+  let roomState = await context.getRoom(roomId);
   // patch in any missing room events--this will support dealing with local
   // echoes, migrating older histories as well as handle any matrix syncing gaps
   // that might occur
   if (
-    roomField &&
+    roomState &&
     event.type === 'm.room.message' &&
     event.content?.msgtype === 'org.boxel.message' &&
     event.content.data
@@ -128,7 +128,7 @@ async function processDecryptedEvent(
       for (let attachedCardEventId of data.attachedCardsEventIds) {
         let currentFragmentId: string | undefined = attachedCardEventId;
         do {
-          let fragmentEvent = roomField.events.find(
+          let fragmentEvent = roomState.events.find(
             (e: DiscreteMatrixEvent) => e.event_id === currentFragmentId,
           );
           let fragmentData: CardFragmentContent['data'];
