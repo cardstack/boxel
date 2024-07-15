@@ -375,7 +375,7 @@ export class RoomResource extends Resource<Args> {
 export function getRoom(
   parent: object,
   roomId: () => string | undefined,
-  events: () => any | undefined, //we need this to react to new roomAddEvent
+  events: () => any | undefined, //TODO: This line of code is needed to get the room to react to new messages. This should be removed in CS-6987
 ) {
   return RoomResource.from(parent, () => ({
     named: {
