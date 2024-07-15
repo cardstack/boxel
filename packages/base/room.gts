@@ -18,6 +18,7 @@ import { EventStatus } from 'matrix-js-sdk';
 import { RoomMemberField } from './room-membership';
 import { MessageField } from './message';
 import { PatchField } from './command';
+import { SkillField, SkillCard } from './skill-card';
 import {
   CardFragmentContent,
   CardMessageContent,
@@ -460,6 +461,12 @@ export class RoomField extends FieldDef {
       return this.roomMembers.filter((m) => m.membership === 'invite');
     },
   });
+
+  @field skills = containsMany(SkillField);
+
+  addSkill(card: SkillCard) {
+    this.skills.push(new SkillField({ card, isActive: true }));
+  }
 
   private serializedCardFromFragments(
     eventId: string,

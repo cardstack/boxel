@@ -4,10 +4,11 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask } from 'ember-concurrency';
 
 import { AddButton, Header } from '@cardstack/boxel-ui/components';
-import { cn, not } from '@cardstack/boxel-ui/helpers';
+import { cn, gt, not, or } from '@cardstack/boxel-ui/helpers';
 
 import { chooseCard, baseCardRef, type Query } from '@cardstack/runtime-common';
 
@@ -44,9 +45,10 @@ export default class PillMenu extends Component<Signature> {
   <template>
     <div
       class={{cn 'pill-menu' pill-menu--minimized=(not this.isExpanded)}}
+      {{onClickOutside this.closeMenu exceptSelector='.card-catalog-modal'}}
       ...attributes
     >
-      <Header class='menu-header' @title={{@title}}>
+      <Header class='menu-header' @title={{@title}} data-test-pill-menu-header>
         <:icon>
           {{yield to='headerIcon'}}
         </:icon>
@@ -60,6 +62,7 @@ export default class PillMenu extends Component<Signature> {
               'header-button'
               expandable-header-button=@isExpandableHeader
             }}
+            data-test-pill-menu-header-button
           >
             {{#if @isExpandableHeader}}
               {{if this.isExpanded 'Hide' 'Show'}}
@@ -70,23 +73,26 @@ export default class PillMenu extends Component<Signature> {
         </:actions>
       </Header>
       {{#if this.isExpanded}}
-        <div class='menu-content'>
-          {{yield to='content'}}
+        {{#if (or (has-block 'content') (gt @items.length 0))}}
+          <div class='menu-content'>
+            {{yield to='content'}}
 
-          {{#if @items.length}}
-            <ul class='pill-list'>
-              {{#each @items as |item|}}
-                <li>
-                  <CardPill
-                    @card={{item.card}}
-                    @onToggle={{fn this.toggleActive item}}
-                    @isEnabled={{item.isActive}}
-                  />
-                </li>
-              {{/each}}
-            </ul>
-          {{/if}}
-        </div>
+            {{#if @items.length}}
+              <ul class='pill-list'>
+                {{#each @items as |item|}}
+                  <li>
+                    <CardPill
+                      @card={{item.card}}
+                      @onToggle={{fn this.toggleActive item}}
+                      @isEnabled={{item.isActive}}
+                      data-test-pill-menu-item={{item.card.id}}
+                    />
+                  </li>
+                {{/each}}
+              </ul>
+            {{/if}}
+          </div>
+        {{/if}}
 
         {{#if @canAttachCard}}
           <footer class='menu-footer'>
@@ -97,6 +103,7 @@ export default class PillMenu extends Component<Signature> {
               @iconHeight='15px'
               {{on 'click' this.attachCard}}
               @disabled={{this.doAttachCard.isRunning}}
+              data-test-pill-menu-add-button
             >
               Add
               {{if @itemDisplayName @itemDisplayName 'Item'}}
@@ -213,6 +220,13 @@ export default class PillMenu extends Component<Signature> {
 
   @action toggleMenu() {
     this.isExpanded = !this.isExpanded;
+  }
+
+  @action closeMenu() {
+    if (!this.args.isExpandableHeader) {
+      return;
+    }
+    this.isExpanded = false;
   }
 
   @action private toggleActive(item: PillMenuItem) {

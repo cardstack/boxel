@@ -1172,6 +1172,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       roomId: string,
       body: string,
       attachedCards: CardDef[],
+      _skillCards: [],
       _clientGeneratedId: string,
       _context?: any,
     ) {
@@ -1279,6 +1280,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       roomId: string,
       body: string,
       _attachedCards: [],
+      _skillCards: [],
       _clientGeneratedId: string,
       _context?: any,
     ) {
@@ -1342,6 +1344,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       _roomId: string,
       _body: string,
       _attachedCards: [],
+      _skillCards: [],
       _clientGeneratedId: string,
       _context?: any,
     ) {

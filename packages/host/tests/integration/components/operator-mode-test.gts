@@ -614,7 +614,9 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
     );
-    assert.dom('[data-test-card-catalog-item]').exists({ count: 4 });
+    assert
+      .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
+      .exists({ count: 3 });
 
     await click(
       `[data-test-select="${testRealmURL}CatalogEntry/publishing-packet"]`,
@@ -689,7 +691,9 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
       .containsText('Choose a Catalog Entry card');
-    assert.dom('[data-test-card-catalog-item]').exists({ count: 4 });
+    assert
+      .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
+      .exists({ count: 3 });
 
     await click(
       `[data-test-select="${testRealmURL}CatalogEntry/publishing-packet"]`,
@@ -1551,7 +1555,9 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-create-new-card-button]`);
     await waitFor('[data-test-card-catalog-item]');
-    assert.dom(`[data-test-card-catalog-item]`).exists({ count: 4 });
+    assert
+      .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
+      .exists({ count: 3 });
 
     await fillIn(`[data-test-search-field]`, `general`);
     await waitFor(
@@ -1599,15 +1605,15 @@ module('Integration | operator-mode', function (hooks) {
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/pet-card"]`,
     );
     assert
-      .dom(`[data-test-card-catalog-item]`)
-      .exists({ count: 4 }, 'can clear search input');
+      .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
+      .exists({ count: 3 }, 'can clear search input');
 
     await fillIn(`[data-test-search-field]`, 'pet');
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/pet-card"]`,
     );
     await click('[data-test-realm-filter-button]');
-    await click('[data-test-boxel-menu-item-text="Operator Mode Workspace"]');
+    await click(`[data-test-boxel-menu-item-text="${realmName}"]`);
     await waitFor('[data-test-card-catalog-item]', { count: 0 });
     assert.dom('[data-test-card-catalog]').hasText('No cards available');
   });
@@ -2255,7 +2261,9 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
     );
-    assert.dom('[data-test-card-catalog-item]').exists({ count: 4 });
+    assert
+      .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
+      .exists({ count: 3 });
 
     await click(
       `[data-test-select="${testRealmURL}CatalogEntry/publishing-packet"]`,
