@@ -36,7 +36,7 @@ export type Event = Partial<IEvent> & {
 
 export interface EventSendingContext {
   setRoom: (roomId: string, room: RoomState) => void;
-  getRoom: (roomId: string) => RoomState | undefined;
+  getRoom: (roomId: string) => Promise<RoomState> | undefined;
   cardAPI: typeof CardAPI;
 }
 
@@ -78,13 +78,15 @@ export async function addRoomEvent(context: EventSendingContext, event: Event) {
   }
   let room = context.getRoom(roomId);
   if (!room) {
-    room = new RoomState();
-    context.setRoom(roomId, room);
+    context.setRoom(roomId, new RoomState());
   }
   // duplicate events may be emitted from matrix, as well as the resolved room card might already contain this event
   let resolvedRoom = await room;
 
-  if (!resolvedRoom.events.find((e) => e.event_id === eventId)) {
+  if (
+    resolvedRoom &&
+    !resolvedRoom?.events.find((e) => e.event_id === eventId)
+  ) {
     resolvedRoom.events = [
       ...(resolvedRoom.events ?? []),
       event as unknown as DiscreteMatrixEvent,
