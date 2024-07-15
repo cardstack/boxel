@@ -30,7 +30,6 @@ import DeleteModal from '@cardstack/host/components/operator-mode/delete-modal';
 
 import ENV from '@cardstack/host/config/environment';
 import { RoomMessageModel } from '@cardstack/host/lib/matrix-model/message';
-import { RoomModel } from '@cardstack/host/lib/matrix-model/room';
 import {
   isMatrixError,
   eventDebounceMs,
@@ -55,10 +54,10 @@ interface Signature {
 
 export interface SessionRoomData {
   roomId: string;
-  room: RoomModel;
   name: string;
   lastMessage: RoomMessageModel | undefined;
   created: Date;
+  lastActiveTimestamp: number;
 }
 
 // Local storage keys
@@ -70,12 +69,14 @@ export default class AiAssistantPanel extends Component<Signature> {
     let oneMinuteAgo = new Date(Date.now() - 60 * 1000).getTime();
 
     return this.aiSessionRooms
-      .filter((session) => session.room?.roomId !== this.roomModel?.roomId)
+      .filter((session) => session.roomId !== this.roomResource?.roomId)
       .some((session) => {
         let isSessionActive = false;
         isSessionActive =
-          this.matrixService.getLastActiveTimestamp(session.room) >
-          oneMinuteAgo;
+          this.matrixService.getLastActiveTimestamp(
+            session.roomId,
+            session.lastActiveTimestamp,
+          ) > oneMinuteAgo;
 
         let lastMessageEventId = session.lastMessage?.eventId;
 
@@ -109,7 +110,7 @@ export default class AiAssistantPanel extends Component<Signature> {
                 height='20'
               />
               <h3 class='panel-title-text' data-test-chat-title>
-                {{if this.roomModel.name this.roomModel.name 'Assistant'}}
+                {{if this.roomResource.name this.roomResource.name 'Assistant'}}
               </h3>
             </div>
           {{/if}}
@@ -400,10 +401,6 @@ export default class AiAssistantPanel extends Component<Signature> {
       : undefined;
   }
 
-  private get roomModel() {
-    return this.roomResource ? this.roomResource.room : undefined;
-  }
-
   private loadRoomsTask = restartableTask(async () => {
     await this.matrixService.flushMembership;
     await this.matrixService.flushTimeline;
@@ -464,30 +461,35 @@ export default class AiAssistantPanel extends Component<Signature> {
       if (!resource.room) {
         continue;
       }
-      let room = resource.room;
       if (
         (resource.invitedMembers.find((m) => aiBotUserId === m.userId) ||
           resource.joinedMembers.find((m) => aiBotUserId === m.userId)) &&
         resource.joinedMembers.find(
           (m) => this.matrixService.userId === m.userId,
         ) &&
-        room.name &&
-        room.roomId
+        resource.name &&
+        resource.roomId
       ) {
         sessions.push({
-          roomId: room.roomId,
-          room: room,
-          name: room.name,
+          roomId: resource.roomId,
+          name: resource.name,
           lastMessage: resource.messages[resource.messages.length - 1],
-          created: room.created,
+          created: resource.created,
+          lastActiveTimestamp: resource.lastActiveTimestamp,
         });
       }
     }
     // sort in reverse chronological order of last activity
     let sorted = sessions.sort(
       (a, b) =>
-        this.matrixService.getLastActiveTimestamp(b.room) -
-        this.matrixService.getLastActiveTimestamp(a.room),
+        this.matrixService.getLastActiveTimestamp(
+          b.roomId,
+          b.lastActiveTimestamp,
+        ) -
+        this.matrixService.getLastActiveTimestamp(
+          a.roomId,
+          b.lastActiveTimestamp,
+        ),
     );
     return sorted;
   }

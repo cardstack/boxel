@@ -17,6 +17,11 @@ import type {
 
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
+import type {
+  RoomCreateEvent,
+  RoomNameEvent,
+} from 'https://cardstack.com/base/matrix-event';
+
 import {
   RoomMember,
   type RoomMemberInterface,
@@ -49,20 +54,20 @@ export class RoomResource extends Resource<Args> {
   @tracked loading: Promise<void> | undefined;
   @service private declare matrixService: MatrixService;
   @service private declare cardService: CardService;
-  roomId: string | undefined;
+  _roomId: string | undefined;
 
   modify(_positional: never[], named: Args['named']) {
     if (named.roomId) {
       if (this.isNewRoom(named.roomId)) {
         this.resetCache();
       }
-      this.roomId = named.roomId;
+      this._roomId = named.roomId;
       this.loading = this.load.perform(named.roomId);
     }
   }
 
   private isNewRoom(roomId: string) {
-    return this.roomId && roomId !== this.roomId;
+    return this._roomId && roomId !== this._roomId;
   }
 
   private resetCache() {
@@ -71,11 +76,11 @@ export class RoomResource extends Resource<Args> {
     this._fragmentCache = new TrackedMap();
   }
 
-  private load = restartableTask(async (roomId: string | undefined) => {
+  private load = restartableTask(async (roomId: string) => {
     this.room = roomId ? await this.matrixService.getRoom(roomId) : undefined;
-    if (this.room && this.room.roomId) {
-      await this.loadRoomMembers(this.room.roomId);
-      await this.loadRoomMessages(this.room.roomId);
+    if (this.room) {
+      await this.loadRoomMembers(roomId);
+      await this.loadRoomMessages(roomId);
     }
   });
 
@@ -102,6 +107,41 @@ export class RoomResource extends Resource<Args> {
 
   private get events() {
     return this.room ? this.room.events : [];
+  }
+
+  get roomId() {
+    return this._roomId;
+  }
+
+  get created() {
+    let event = this.events.find((e) => e.type === 'm.room.create') as
+      | RoomCreateEvent
+      | undefined;
+    if (event) {
+      return new Date(event.origin_server_ts);
+    }
+    // there is a race condition in the matrix SDK where newly created
+    // rooms don't immediately have a created date
+    return new Date();
+  }
+
+  get name() {
+    // Read from this.events instead of this.newEvents to avoid a race condition bug where
+    // newEvents never returns the m.room.name while the event is present in events
+    let events = this.events
+      .filter((e) => e.type === 'm.room.name')
+      .sort(
+        (a, b) => a.origin_server_ts - b.origin_server_ts,
+      ) as RoomNameEvent[];
+    if (events.length > 0) {
+      return events.pop()!.content.name;
+    }
+    return;
+  }
+
+  get lastActiveTimestamp() {
+    let maybeLastActive = this.events[this.events.length - 1]?.origin_server_ts;
+    return maybeLastActive ?? this.created.getTime();
   }
 
   private async loadRoomMembers(roomId: string) {

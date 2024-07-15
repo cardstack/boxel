@@ -310,11 +310,9 @@ function generateMockMatrixService(
       return roomId;
     }
 
-    getLastActiveTimestamp(room: RoomModel) {
-      return (
-        room.events[room.events.length - 1]?.origin_server_ts ??
-        room.created?.getTime()
-      );
+    getLastActiveTimestamp(roomId: string) {
+      let resource = this.roomResources.get(roomId);
+      return resource?.lastActiveTimestamp;
     }
 
     getRoom(roomId: string) {

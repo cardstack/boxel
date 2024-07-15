@@ -655,10 +655,10 @@ export default class MatrixService
     }
   }
 
-  getLastActiveTimestamp(room: RoomModel) {
-    let matrixRoom = this.client.getRoom(room.roomId);
+  getLastActiveTimestamp(roomId: string, defaultTimestamp: number) {
+    let matrixRoom = this.client.getRoom(roomId);
     let lastMatrixEvent = matrixRoom?.getLastActiveTimestamp();
-    return lastMatrixEvent ?? room.lastActiveTimestamp;
+    return lastMatrixEvent ?? defaultTimestamp;
   }
 
   async requestRegisterEmailToken(

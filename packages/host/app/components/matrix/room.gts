@@ -40,7 +40,7 @@ export default class Room extends Component<Signature> {
       class='room'
       data-room-settled={{this.doWhenRoomChanges.isIdle}}
       data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
-      data-test-room-name={{this.room.name}}
+      data-test-room-name={{this.roomResource.name}}
       data-test-room={{@roomId}}
     >
       {{#if this.messages}}
