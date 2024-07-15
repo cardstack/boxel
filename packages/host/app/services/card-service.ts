@@ -371,6 +371,39 @@ export default class CardService extends Service {
     await this.fetchJSON(card.id, { method: 'DELETE' });
   }
 
+  async searchPrerendered(
+    query: Query,
+    realmURL: URL,
+  ): Promise<{
+    prerenderedCards: PrerenderedCard[];
+    prerenderedCardCssItems: PrerenderedCardCssItem[];
+    meta: QueryResultsMeta;
+  }> {
+    query.prerenderedHtmlFormat = 'embedded';
+    let json = await this.fetchJSON(
+      `${realmURL}_search-prerendered?${stringify(query)}`,
+    );
+    debugger;
+    let prerenderedCards = json.data.map((doc) => {
+      return {
+        url: doc.id,
+        html: doc.attributes.html,
+        cssModuleIds: doc.relationships['prerendered-card-css'].data.map(
+          (css) => css.id,
+        ),
+      };
+    });
+
+    let prerenderedCardCssItems = json.included.map((doc) => {
+      return {
+        cssModuleId: doc.id,
+        source: doc.attributes.source,
+      };
+    });
+
+    return { prerenderedCards, prerenderedCardCssItems, meta: json.meta };
+  }
+
   async search(query: Query, realmURL: URL): Promise<CardDef[]> {
     let json = await this.fetchJSON(`${realmURL}_search?${stringify(query)}`);
     if (!isCardCollectionDocument(json)) {
