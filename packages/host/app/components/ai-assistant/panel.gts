@@ -109,7 +109,7 @@ export default class AiAssistantPanel extends Component<Signature> {
               height='20'
             />
             <h3 class='panel-title-text' data-test-chat-title>
-              {{if this.roomModel.name this.roomModel.name 'Assistant'}}
+              {{if this.roomResource.name this.roomResource.name 'Assistant'}}
             </h3>
           </div>
           <IconButton
