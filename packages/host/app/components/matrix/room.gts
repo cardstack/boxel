@@ -43,26 +43,28 @@ export default class Room extends Component<Signature> {
       data-test-room-name={{this.roomResource.name}}
       data-test-room={{@roomId}}
     >
-      {{#if this.messages}}
-        <AiAssistantConversation>
-          {{#each this.messages as |message i|}}
-            <RoomMessage
-              @roomId={{@roomId}}
-              @messages={{this.messages}}
-              @message={{message}}
-              @index={{i}}
-              @isPending={{this.isPendingMessage message}}
-              @monacoSDK={{@monacoSDK}}
-              @isStreaming={{this.isMessageStreaming message i}}
-              @currentEditor={{this.currentMonacoContainer}}
-              @setCurrentEditor={{this.setCurrentMonacoContainer}}
-              @retryAction={{this.maybeRetryAction i message}}
-              data-test-message-idx={{i}}
-            />
-          {{/each}}
-        </AiAssistantConversation>
-      {{else}}
-        <NewSession @sendPrompt={{this.sendPrompt}} />
+      {{#if this.doMatrixEventFlush.isIdle}}
+        {{#if this.messages}}
+          <AiAssistantConversation>
+            {{#each this.messages as |message i|}}
+              <RoomMessage
+                @roomId={{@roomId}}
+                @messages={{this.messages}}
+                @message={{message}}
+                @index={{i}}
+                @isPending={{this.isPendingMessage message}}
+                @monacoSDK={{@monacoSDK}}
+                @isStreaming={{this.isMessageStreaming message i}}
+                @currentEditor={{this.currentMonacoContainer}}
+                @setCurrentEditor={{this.setCurrentMonacoContainer}}
+                @retryAction={{this.maybeRetryAction i message}}
+                data-test-message-idx={{i}}
+              />
+            {{/each}}
+          </AiAssistantConversation>
+        {{else}}
+          <NewSession @sendPrompt={{this.sendPrompt}} />
+        {{/if}}
       {{/if}}
 
       <footer class='room-actions'>
@@ -83,7 +85,6 @@ export default class Room extends Component<Signature> {
         </div>
       </footer>
     </section>
-
     <style>
       .room {
         display: grid;
