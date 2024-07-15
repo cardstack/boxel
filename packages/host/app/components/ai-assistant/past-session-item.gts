@@ -223,8 +223,10 @@ export default class PastSessionItem extends Component<Signature> {
 
   private get lastActive() {
     return (
-      this.matrixService.getLastActiveTimestamp(this.args.session.room) ??
-      this.createDate.getTime()
+      this.matrixService.getLastActiveTimestamp(
+        this.args.session.roomId,
+        this.args.session.lastActiveTimestamp,
+      ) ?? this.createDate.getTime()
     );
   }
 

@@ -5,7 +5,7 @@ import {
   type IEvent,
 } from 'matrix-js-sdk';
 
-import { RoomModel } from '@cardstack/host/lib/matrix-model/room';
+import { RoomState } from '@cardstack/host/lib/matrix-model/room';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
@@ -35,8 +35,8 @@ export type Event = Partial<IEvent> & {
 };
 
 export interface EventSendingContext {
-  setRoom: (roomId: string, room: RoomModel) => void;
-  getRoom: (roomId: string) => RoomModel | undefined;
+  setRoom: (roomId: string, room: RoomState) => void;
+  getRoom: (roomId: string) => RoomState | undefined;
   cardAPI: typeof CardAPI;
 }
 
@@ -78,7 +78,7 @@ export async function addRoomEvent(context: EventSendingContext, event: Event) {
   }
   let room = context.getRoom(roomId);
   if (!room) {
-    room = new RoomModel();
+    room = new RoomState();
     context.setRoom(roomId, room);
   }
   // duplicate events may be emitted from matrix, as well as the resolved room card might already contain this event

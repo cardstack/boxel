@@ -10,7 +10,7 @@ import { Deferred } from '@cardstack/runtime-common';
 import { baseRealm, LooseCardResource } from '@cardstack/runtime-common';
 
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
-import { RoomModel } from '@cardstack/host/lib/matrix-model/room';
+import { RoomState } from '@cardstack/host/lib/matrix-model/room';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 import { RoomResource, getRoom } from '@cardstack/host/resources/room';
 import CardService from '@cardstack/host/services/card-service';
@@ -100,7 +100,7 @@ function generateMockMatrixService(
 
     profile = getMatrixProfile(this, () => this.userId);
 
-    rooms: TrackedMap<string, RoomModel> = new TrackedMap();
+    rooms: TrackedMap<string, RoomState> = new TrackedMap();
     roomResourcesCache: TrackedMap<string, RoomResource> = new TrackedMap();
 
     messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
@@ -310,18 +310,16 @@ function generateMockMatrixService(
       return roomId;
     }
 
-    getLastActiveTimestamp(room: RoomModel) {
-      return (
-        room.events[room.events.length - 1]?.origin_server_ts ??
-        room.created?.getTime()
-      );
+    getLastActiveTimestamp(roomId: string) {
+      let resource = this.roomResources.get(roomId);
+      return resource?.lastActiveTimestamp;
     }
 
     getRoom(roomId: string) {
       return this.rooms.get(roomId);
     }
 
-    setRoom(roomId: string, room: RoomModel) {
+    setRoom(roomId: string, room: RoomState) {
       this.rooms.set(roomId, room);
       if (!this.roomResourcesCache.has(roomId)) {
         this.roomResourcesCache.set(
