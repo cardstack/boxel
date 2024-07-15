@@ -144,7 +144,9 @@ export class RoomResource extends Resource<Args> {
   }
 
   get lastActiveTimestamp() {
-    let maybeLastActive = this.events[this.events.length - 1]?.origin_server_ts;
+    let eventsWithTime = this.events.filter((t) => t.origin_server_ts);
+    let maybeLastActive =
+      eventsWithTime[eventsWithTime.length - 1].origin_server_ts;
     return maybeLastActive ?? this.created.getTime();
   }
 
