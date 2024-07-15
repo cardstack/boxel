@@ -8,18 +8,9 @@
       "ref": {
         "module": "../plant-info",
         "name": "PlantInfo"
-      },
-      "demo": {}
+      }
     },
     "meta": {
-      "fields": {
-        "demo": {
-          "adoptsFrom": {
-            "module": "../plant-info",
-            "name": "PlantInfo"
-          }
-        }
-      },
       "adoptsFrom": {
         "module": "https://cardstack.com/base/catalog-entry",
         "name": "CatalogEntry"
