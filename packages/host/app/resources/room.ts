@@ -77,10 +77,14 @@ export class RoomResource extends Resource<Args> {
   }
 
   private load = restartableTask(async (roomId: string) => {
-    this.room = roomId ? await this.matrixService.getRoom(roomId) : undefined;
-    if (this.room) {
-      await this.loadRoomMembers(roomId);
-      await this.loadRoomMessages(roomId);
+    try {
+      this.room = roomId ? await this.matrixService.getRoom(roomId) : undefined;
+      if (this.room) {
+        await this.loadRoomMembers(roomId);
+        await this.loadRoomMessages(roomId);
+      }
+    } catch (e) {
+      throw new Error(`Error loading room ${e}`);
     }
   });
 
