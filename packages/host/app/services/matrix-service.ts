@@ -38,7 +38,7 @@ import { currentRoomIdPersistenceKey } from '@cardstack/host/components/ai-assis
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
-import { RoomModel } from '@cardstack/host/lib/matrix-model/room';
+import { RoomState } from '@cardstack/host/lib/matrix-model/room';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
@@ -99,7 +99,7 @@ export default class MatrixService
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
-  rooms: TrackedMap<string, RoomModel> = new TrackedMap();
+  rooms: TrackedMap<string, RoomState> = new TrackedMap();
   roomResourcesCache: TrackedMap<string, RoomResource> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
@@ -750,7 +750,7 @@ export default class MatrixService
     return this.rooms.get(roomId);
   }
 
-  setRoom(roomId: string, room: RoomModel) {
+  setRoom(roomId: string, room: RoomState) {
     this.rooms.set(roomId, room);
     if (!this.roomResourcesCache.has(roomId)) {
       this.roomResourcesCache.set(

@@ -28,7 +28,7 @@ import {
 } from '../lib/matrix-model/member';
 import { RoomMessageModel } from '../lib/matrix-model/message';
 
-import { RoomModel } from '../lib/matrix-model/room';
+import { RoomState } from '../lib/matrix-model/room';
 
 import type CardService from '../services/card-service';
 import type MatrixService from '../services/matrix-service';
@@ -50,7 +50,7 @@ export class RoomResource extends Resource<Args> {
   private _memberCache: TrackedMap<string, RoomMember> = new TrackedMap();
   private _fragmentCache: TrackedMap<string, CardFragmentContent> =
     new TrackedMap();
-  @tracked room: RoomModel | undefined;
+  @tracked room: RoomState | undefined;
   @tracked loading: Promise<void> | undefined;
   @service private declare matrixService: MatrixService;
   @service private declare cardService: CardService;
