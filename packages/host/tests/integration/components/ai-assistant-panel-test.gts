@@ -1,7 +1,13 @@
-import { waitFor, waitUntil, click, fillIn } from '@ember/test-helpers';
+import {
+  waitFor,
+  waitUntil,
+  click,
+  fillIn,
+  triggerEvent,
+} from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
-import { format } from 'date-fns';
+import { format, subMinutes } from 'date-fns';
 import { setupRenderingTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
@@ -1907,7 +1913,31 @@ module('Integration | ai-assistant-panel', function (hooks) {
     // Create a new room with some activity
     let anotherRoomId = await matrixService.createAndJoinRoom('Another Room');
 
-    let date = Date.now() - 98;
+    // A message that hasn't been seen and was sent more than fifteen minutes ago must not be shown in the toast.
+    let sixteenMinutesAgo = subMinutes(new Date(), 16);
+    await addRoomEvent(matrixService, {
+      event_id: 'event1',
+      room_id: anotherRoomId,
+      state_key: 'state',
+      type: 'm.room.message',
+      sender: '@aibot:localhost',
+      content: {
+        body: 'I sent a message sixteen minutes ago',
+        msgtype: 'm.text',
+        formatted_body: 'A message that was sent sixteen minutes ago.',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      origin_server_ts: sixteenMinutesAgo.getTime(),
+      unsigned: {
+        age: 105,
+        transaction_id: '1',
+      },
+      status: null,
+    });
+    assert.dom('[data-test-ai-assistant-toast]').exists({ count: 0 });
+
+    let fourteenMinutesAgo = subMinutes(new Date(), 14);
     await addRoomEvent(matrixService, {
       event_id: 'event2',
       room_id: anotherRoomId,
@@ -1921,7 +1951,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
-      origin_server_ts: date,
+      origin_server_ts: fourteenMinutesAgo.getTime(),
       unsigned: {
         age: 105,
         transaction_id: '1',
@@ -1930,16 +1960,16 @@ module('Integration | ai-assistant-panel', function (hooks) {
     });
 
     await waitFor('[data-test-ai-assistant-toast]');
+    // Hovering over the toast prevents it from disappearing
+    await triggerEvent('[data-test-ai-assistant-toast]', 'mouseenter');
     assert
       .dom('[data-test-ai-assistant-toast-header]')
-      .exists(`${format(date, 'dd.MM.yyyy, h:mm aa')}`);
-    assert
-      .dom('[data-test-ai-assistant-toast-content]')
-      .exists(`${format(date, 'dd.MM.yyyy, h:mm aa')}`);
+      .containsText(`${format(fourteenMinutesAgo, 'dd.MM.yyyy, h:mm aa')}`);
+    await triggerEvent('[data-test-ai-assistant-toast]', 'mouseleave');
     await click('[data-test-ai-assistant-toast-button]');
     assert.dom('[data-test-chat-title]').containsText('Another Room');
     assert
-      .dom('[data-test-ai-message-content]')
+      .dom('[data-test-message-idx="1"] [data-test-ai-message-content]')
       .containsText('A message from the background.');
   });
 });
