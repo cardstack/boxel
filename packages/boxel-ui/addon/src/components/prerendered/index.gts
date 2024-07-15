@@ -36,16 +36,21 @@ class Prerendered extends Component<Signature> {
     this.updateStyleTag(element);
   };
   updateStyleTag(element: HTMLElement) {
-    // check if the style tag exists, otherwise create it, and update the content
+    if (!this.args.css) {
+      return;
+    }
     let styleTag = element.querySelector('style');
     if (!styleTag) {
       styleTag = document.createElement('style');
       element.appendChild(styleTag);
     }
-    styleTag.textContent = this.args.css || '';
+    styleTag.textContent = this.args.css;
   }
   <template>
-    <div {{RegisterElement registerElement=(fn this.registerElement)}}>
+    <div
+      class='prerendered-content'
+      {{RegisterElement registerElement=(fn this.registerElement)}}
+    >
       {{{@html}}}
     </div>
 

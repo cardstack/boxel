@@ -34,9 +34,9 @@ import StringField from './string';
 class Isolated extends Component<typeof CardsGrid> {
   <template>
     <div class='cards-grid'>
-      <ul class='cards' data-test-cards-grid-cards>
+      {{!-- <ul class='cards' data-test-cards-grid-cards>
         {{! use "key" to keep the list stable between refreshes }}
-        {{!-- {{#each this.instances key='id' as |card|}}
+         {{#each this.instances key='id' as |card|}}
           <li
             {{@context.cardComponentModifier
               card=card
@@ -77,17 +77,11 @@ class Isolated extends Component<typeof CardsGrid> {
           {{else}}
             <p>No cards available</p>
           {{/if}}
-        {{/each}} --}}
+        {{/each}}
 
-        <Prerendered @css={{this.prerenderedData.prerenderedCardsCss}}>
-          *** test ***
-          {{#each this.prerenderedData.prerenderedCards as |prerenderedCard|}}
-            <Prerendered @html={{prerenderedCard.html}} />
-          {{/each}}
-        </Prerendered>
-      </ul>
+      </ul> --}}
 
-      {{#if @context.actions.createCard}}
+      {{!-- {{#if @context.actions.createCard}}
         <div class='add-button'>
           <Tooltip @placement='left' @offset={{6}}>
             <:trigger>
@@ -98,8 +92,14 @@ class Isolated extends Component<typeof CardsGrid> {
             </:content>
           </Tooltip>
         </div>
-      {{/if}}
+      {{/if}} --}}
     </div>
+
+    <Prerendered @css={{this.prerenderedData.prerenderedCardsCss}}>
+      {{#each this.prerenderedData.prerenderedCards as |prerenderedCard|}}
+        <Prerendered @html={{prerenderedCard.html}} />
+      {{/each}}
+    </Prerendered>
 
     <style>
       .cards-grid {
@@ -183,6 +183,23 @@ class Isolated extends Component<typeof CardsGrid> {
       }
     </style>
   </template>
+
+  get prerenderedData() {
+    let payload = JSON.parse(prerenderedPayload);
+    debugger;
+    return {
+      prerenderedCards: payload.data.map((item) => {
+        return {
+          html: item.attributes.html,
+        };
+      }),
+      prerenderedCardsCss: payload.included
+        .map((item) => {
+          return item.attributes.content;
+        })
+        .join('\n'),
+    };
+  }
 
   @tracked
   private declare liveQuery: {
