@@ -100,19 +100,17 @@ export default class AiAssistantPanel extends Component<Signature> {
       >
         <@resizeHandle />
         <header class='panel-header'>
-          {{#if this.roomResource.messages}}
-            <div class='panel-title-group'>
-              <img
-                alt='AI Assistant'
-                src={{assistantIcon}}
-                width='20'
-                height='20'
-              />
-              <h3 class='panel-title-text' data-test-chat-title>
-                {{if this.roomModel.name this.roomModel.name 'Assistant'}}
-              </h3>
-            </div>
-          {{/if}}
+          <div class='panel-title-group'>
+            <img
+              alt='AI Assistant'
+              src={{assistantIcon}}
+              width='20'
+              height='20'
+            />
+            <h3 class='panel-title-text' data-test-chat-title>
+              {{if this.roomModel.name this.roomModel.name 'Assistant'}}
+            </h3>
+          </div>
           <IconButton
             class='close-ai-panel'
             @variant='primary'
