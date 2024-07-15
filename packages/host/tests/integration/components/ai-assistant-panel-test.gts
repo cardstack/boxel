@@ -17,6 +17,7 @@ import { module, test } from 'qunit';
 import { Deferred, baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
+import { currentRoomIdPersistenceKey } from '@cardstack/host/components/ai-assistant/panel';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
@@ -1090,7 +1091,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await click('[data-test-close-ai-assistant]');
     window.localStorage.setItem(
-      'aiPanelCurrentRoomId',
+      currentRoomIdPersistenceKey,
       "room-id-that-doesn't-exist-and-should-not-break-the-implementation",
     );
     await click('[data-test-open-ai-assistant]');
@@ -1101,7 +1102,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         "test room 3 is the most recently created room and it's opened initially",
       );
 
-    window.localStorage.removeItem('aiPanelCurrentRoomId'); // Cleanup
+    window.localStorage.removeItem(currentRoomIdPersistenceKey); // Cleanup
   });
 
   test('can close past-sessions list on outside click', async function (assert) {

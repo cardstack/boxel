@@ -11,7 +11,6 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import type { RoomField } from 'https://cardstack.com/base/room';
 
-import type LoaderService from '../../services/loader-service';
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 export * as Membership from './membership';
@@ -40,7 +39,6 @@ export interface EventSendingContext {
   setRoom: (roomId: string, roomPromise: Promise<RoomField>) => void;
   getRoom: (roomId: string) => Promise<RoomField> | undefined;
   cardAPI: typeof CardAPI;
-  loaderService: LoaderService;
 }
 
 export interface Context extends EventSendingContext {
@@ -93,7 +91,6 @@ export async function addRoomEvent(context: EventSendingContext, event: Event) {
       data,
       { data },
       undefined,
-      context.loaderService.loader,
     );
     context.setRoom(roomId, room!);
   }

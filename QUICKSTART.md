@@ -42,7 +42,7 @@ To build the entire repository and run the application, follow these steps:
 
    ```zsh
    cd ./packages/realm-server
-   pnpm start:all
+   DISABLE_MODULE_CACHING=true pnpm start:all
    ```
 
    Note: Ensure that the realm-server is completely started by looking out for tor the test-realm indexing output.
@@ -84,7 +84,10 @@ To build the entire repository and run the application, follow these steps:
 11. Validate email for login
 	- Visit SMTP UI at http://localhost:5001/
 	- Validate email
-	- Go back to Host and login
+	- Go back to Host http://localhost:4201/ and login 
+
+12. Trigger interact mode
+   - After you see a list of cards, Ctrl+ . OR Ctrl +, to "interact" with them 
 
 13. Run ai bot (Optional):
 

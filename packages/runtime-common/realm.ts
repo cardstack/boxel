@@ -1,6 +1,9 @@
 import { Deferred } from './deferred';
 import { SearchIndex } from './search-index';
-import { type SingleCardDocument } from './card-document';
+import {
+  transformResultsToPrerenderedCardsDoc,
+  type SingleCardDocument,
+} from './card-document';
 import { Loader } from './loader';
 import { RealmPaths, LocalPath, join } from './paths';
 import {
@@ -18,7 +21,6 @@ import {
   hasExecutableExtension,
   isNode,
   isSingleCardDocument,
-  assetsDir,
   logger,
   type CodeRef,
   type LooseSingleCardDocument,
@@ -26,10 +28,11 @@ import {
   type DirectoryEntryRelationship,
   type DBAdapter,
   type Queue,
-  type Indexer,
+  type IndexUpdater,
   fetchUserPermissions,
   maybeHandleScopedCSSRequest,
   authorizationMiddleware,
+  internalKeyFor,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -53,13 +56,12 @@ import {
   SupportedMimeType,
   lookupRouteTable,
 } from './router';
-import { parseQueryString } from './query';
+import { assertQuery } from './query';
 import type { Readable } from 'stream';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
-import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import { MatrixClient, waitForMatrixMessage } from './matrix-client';
 import { Sha256 } from '@aws-crypto/sha256-js';
 
@@ -69,6 +71,8 @@ import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
 
 import { RealmAuthDataSource } from './realm-auth-data-source';
 import { fetcher } from './fetcher';
+
+import qs from 'qs';
 
 export interface RealmSession {
   canRead: boolean;
@@ -142,6 +146,7 @@ export interface RealmAdapter {
 interface Options {
   deferStartUp?: true;
   useTestingDomain?: true;
+  disableModuleCaching?: true;
 }
 
 interface IndexHTMLOptions {
@@ -225,8 +230,11 @@ export class Realm {
   #flushUpdateEvents: Promise<void> | undefined;
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
+  #disableModuleCaching = false;
 
-  #onIndexer: ((indexer: Indexer) => Promise<void>) | undefined;
+  #onIndexUpdaterReady:
+    | ((indexUpdater: IndexUpdater) => Promise<void>)
+    | undefined;
   #publicEndpoints: RouteTable<true> = new Map([
     [
       SupportedMimeType.Session,
@@ -267,7 +275,7 @@ export class Realm {
       dbAdapter,
       queue,
       virtualNetwork,
-      onIndexer,
+      onIndexUpdaterReady,
       assetsURL,
     }: {
       url: string;
@@ -278,7 +286,7 @@ export class Realm {
       dbAdapter: DBAdapter;
       queue: Queue;
       virtualNetwork: VirtualNetwork;
-      onIndexer?: (indexer: Indexer) => Promise<void>;
+      onIndexUpdaterReady?: (indexUpdater: IndexUpdater) => Promise<void>;
       assetsURL: URL;
     },
     opts?: Options,
@@ -290,15 +298,17 @@ export class Realm {
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
     this.#assetsURL = assetsURL;
+    this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
 
-    let maybeHandle = this.maybeHandle.bind(this);
     let fetch = fetcher(virtualNetwork.fetch, [
       async (req, next) => {
         return (await maybeHandleScopedCSSRequest(req)) || next(req);
       },
       async (request, next) => {
-        let response = await maybeHandle(request);
-        return response || next(request);
+        if (!this.paths.inRealm(new URL(request.url))) {
+          return next(request);
+        }
+        return await this.internalHandle(request, true);
       },
       authorizationMiddleware(
         new RealmAuthDataSource(
@@ -315,7 +325,7 @@ export class Realm {
     this.loaderTemplate = loader;
 
     this.#adapter = adapter;
-    this.#onIndexer = onIndexer;
+    this.#onIndexUpdaterReady = onIndexUpdaterReady;
     this.#searchIndex = new SearchIndex({
       realm: this,
       dbAdapter,
@@ -333,6 +343,11 @@ export class Realm {
       )
       .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
       .get('/_search', SupportedMimeType.CardJson, this.search.bind(this))
+      .get(
+        '/_search-prerendered',
+        SupportedMimeType.CardJson,
+        this.searchPrerendered.bind(this),
+      )
       .post(
         '/_session',
         SupportedMimeType.Session,
@@ -543,7 +558,7 @@ export class Realm {
 
   async #startup() {
     await Promise.resolve();
-    await this.#searchIndex.run(this.#onIndexer);
+    await this.#searchIndex.run(this.#onIndexUpdaterReady);
     this.sendServerEvent({ type: 'index', data: { type: 'full' } });
     this.#perfLog.debug(
       `realm server startup in ${Date.now() - this.#startTime}ms`,
@@ -554,6 +569,7 @@ export class Realm {
     return this.#startedUp.promise;
   }
 
+  // TODO get rid of this
   maybeHandle = async (
     request: Request,
   ): Promise<ResponseWithNodeStream | null> => {
@@ -563,20 +579,12 @@ export class Realm {
     return await this.internalHandle(request, true);
   };
 
-  // This is scaffolding that should be deleted once we can finish the isolated
-  // loader refactor
-  maybeExternalHandle = async (
-    request: Request,
-  ): Promise<ResponseWithNodeStream | null> => {
+  handle = async (request: Request): Promise<ResponseWithNodeStream | null> => {
     if (!this.paths.inRealm(new URL(request.url))) {
       return null;
     }
     return await this.internalHandle(request, false);
   };
-
-  async handle(request: Request): Promise<ResponseWithNodeStream> {
-    return this.internalHandle(request, false);
-  }
 
   private async createSession(
     request: Request,
@@ -862,12 +870,15 @@ export class Realm {
     return undefined;
   }
 
-  async fallbackHandle(request: Request, requestContext: RequestContext) {
+  private async fallbackHandle(
+    request: Request,
+    requestContext: RequestContext,
+  ) {
     let start = Date.now();
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
 
-    if (!localPath.startsWith(assetsDir)) {
+    if (!this.#disableModuleCaching) {
       let useWorkInProgressIndex = Boolean(
         request.headers.get('X-Boxel-Use-WIP-Index'),
       );
@@ -916,10 +927,7 @@ export class Realm {
       }
 
       let fileRef = maybeFileRef;
-      if (
-        hasExecutableExtension(fileRef.path) &&
-        !localPath.startsWith(assetsDir)
-      ) {
+      if (hasExecutableExtension(fileRef.path)) {
         if (fileRef[Symbol.for('shimmed-module')]) {
           // this response is ultimately thrown away and only the symbol value
           // is preserved. so what is inside this response is not important
@@ -1360,16 +1368,22 @@ export class Realm {
       `/${join(new URL(this.url).pathname, name, uuidV4() + '.json')}`,
     );
     let localPath = this.paths.local(fileURL);
+    let fileSerialization: LooseSingleCardDocument | undefined;
+    try {
+      fileSerialization = await this.fileSerialization(
+        merge(json, { data: { meta: { realmURL: this.url } } }),
+        fileURL,
+      );
+    } catch (err: any) {
+      if (err.message.startsWith('field validation error')) {
+        return badRequest(err.message, requestContext);
+      } else {
+        return systemError(requestContext, err.message, err);
+      }
+    }
     let { lastModified } = await this.write(
       localPath,
-      JSON.stringify(
-        await this.fileSerialization(
-          merge(json, { data: { meta: { realmURL: this.url } } }),
-          fileURL,
-        ),
-        null,
-        2,
-      ),
+      JSON.stringify(fileSerialization, null, 2),
     );
     let newURL = fileURL.href.replace(/\.json$/, '');
     let entry = await this.#searchIndex.cardDocument(new URL(newURL), {
@@ -1436,9 +1450,21 @@ export class Realm {
         requestContext,
       );
     }
-    // prevent the client from changing the card type or ID in the patch
-    delete (patch as any).data.meta;
+    if (
+      internalKeyFor(patch.data.meta.adoptsFrom, url) !==
+      internalKeyFor(originalClone.data.meta.adoptsFrom, url)
+    ) {
+      return badRequest(
+        `Cannot change card instance type to ${JSON.stringify(
+          patch.data.meta.adoptsFrom,
+        )}`,
+        requestContext,
+      );
+    }
+
     delete (patch as any).data.type;
+    delete (patch as any).data.meta.realmInfo;
+    delete (patch as any).data.meta.realmURL;
 
     let card = mergeWith(
       originalClone,
@@ -1464,16 +1490,22 @@ export class Realm {
 
     delete (card as any).data.id; // don't write the ID to the file
     let path: LocalPath = `${localPath}.json`;
+    let fileSerialization: LooseSingleCardDocument | undefined;
+    try {
+      fileSerialization = await this.fileSerialization(
+        merge(card, { data: { meta: { realmURL: this.url } } }),
+        url,
+      );
+    } catch (err: any) {
+      if (err.message.startsWith('field validation error')) {
+        return badRequest(err.message, requestContext);
+      } else {
+        return systemError(requestContext, err.message, err);
+      }
+    }
     let { lastModified } = await this.write(
       path,
-      JSON.stringify(
-        await this.fileSerialization(
-          merge(card, { data: { meta: { realmURL: this.url } } }),
-          url,
-        ),
-        null,
-        2,
-      ),
+      JSON.stringify(fileSerialization, null, 2),
       request.headers.get('X-Boxel-Client-Request-Id'),
     );
     let instanceURL = url.href.replace(/\.json$/, '');
@@ -1685,10 +1717,56 @@ export class Realm {
     let useWorkInProgressIndex = Boolean(
       request.headers.get('X-Boxel-Use-WIP-Index'),
     );
-    let doc = await this.#searchIndex.search(
-      parseQueryString(new URL(request.url).search.slice(1)),
-      { loadLinks: true, useWorkInProgressIndex },
+
+    let cardsQuery = qs.parse(new URL(request.url).search.slice(1));
+    assertQuery(cardsQuery);
+
+    let doc = await this.#searchIndex.search(cardsQuery, {
+      loadLinks: true,
+      useWorkInProgressIndex,
+    });
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: { 'content-type': SupportedMimeType.CardJson },
+      },
+      requestContext,
+    });
+  }
+
+  private async searchPrerendered(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let useWorkInProgressIndex = Boolean(
+      request.headers.get('X-Boxel-Use-WIP-Index'),
     );
+
+    let parsedQueryString = qs.parse(new URL(request.url).search.slice(1));
+    let htmlFormat = parsedQueryString.prerenderedHtmlFormat as string;
+    if (!htmlFormat || (htmlFormat !== 'embedded' && htmlFormat !== 'atom')) {
+      return badRequest(
+        JSON.stringify({
+          errors: [
+            `Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint.`,
+          ],
+        }),
+        requestContext,
+      );
+    }
+    // prerenederedHtmlFormat is a special parameter only for this endpoint so don't include it in our Query for card search
+    delete parsedQueryString.prerenderedHtmlFormat;
+
+    let cardsQuery = parsedQueryString;
+    assertQuery(parsedQueryString);
+
+    let results = await this.#searchIndex.searchPrerendered(cardsQuery, {
+      useWorkInProgressIndex,
+      htmlFormat,
+    });
+
+    let doc = transformResultsToPrerenderedCardsDoc(results);
+
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {
@@ -1749,7 +1827,6 @@ export class Realm {
       doc.data,
       doc,
       relativeTo,
-      this.loader as unknown as LoaderType,
     )) as CardDef;
     await api.flushLogs();
     let data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds

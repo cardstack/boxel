@@ -64,7 +64,6 @@ module('Integration | text-input-validator', function (hooks) {
       result.doc.data,
       result.doc,
       new URL(result.doc.data.id),
-      loader,
     );
     await recompute(card, { loadFields: true });
     return card;
@@ -184,14 +183,6 @@ module('Integration | text-input-validator', function (hooks) {
 
   test('if json contains undeserializable values, the input box should show empty input box', async function (assert) {
     let card = await loadCard(`${testRealmURL}Sample/1`);
-    let response = await realm.handle(
-      new Request(`${testRealmURL}Sample/1`, {
-        headers: {
-          Accept: 'application/vnd.card+json',
-        },
-      }),
-    );
-    await response.json();
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>

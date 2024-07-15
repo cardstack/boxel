@@ -8,20 +8,9 @@
       "ref": {
         "module": "../chain",
         "name": "Chain"
-      },
-      "demo": {
-        "name": "Ethereum Mainnet"
       }
     },
     "meta": {
-      "fields": {
-        "demo": {
-          "adoptsFrom": {
-            "module": "../chain",
-            "name": "Chain"
-          }
-        }
-      },
       "adoptsFrom": {
         "module": "https://cardstack.com/base/catalog-entry",
         "name": "CatalogEntry"
