@@ -8,15 +8,17 @@ import { skillCardRef, type Query } from '@cardstack/runtime-common';
 import PillMenu from '@cardstack/host/components/pill-menu';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type {
-  SkillCard,
-  SkillField,
-} from 'https://cardstack.com/base/skill-card';
+import type { SkillCard } from 'https://cardstack.com/base/skill-card';
+
+export type Skill = {
+  card: SkillCard;
+  isActive: boolean;
+};
 
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    skills: SkillField[];
+    skills: Skill[];
     onChooseCard?: (card: SkillCard) => void;
   };
 }
@@ -89,7 +91,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
 
   private get query(): Query {
     let selectedCardIds =
-      this.args.skills?.map((skill: SkillField) => ({
+      this.args.skills?.map((skill: Skill) => ({
         not: { eq: { id: skill.card.id } },
       })) ?? [];
     // query for only displaying skill cards that are not already selected

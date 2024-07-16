@@ -331,8 +331,8 @@ test.describe('Skills', () => {
         ev.type === 'm.room.message' &&
         ev.content?.msgtype === 'org.boxel.cardFragment',
     );
-    expect(cardFragments.length).toStrictEqual(3);
-    expect(cardFragments[2].content.data).toContain(skillCard2);
+    expect(cardFragments.length).toStrictEqual(2);
+    expect(cardFragments[1].content.data).toContain(skillCard2);
   });
 
   test(`can disable all skills`, async ({ page }) => {
