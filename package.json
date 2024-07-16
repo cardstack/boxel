@@ -28,7 +28,8 @@
     },
     "peerDependencyRules": {
       "allowedVersions": {
-        "mustache": "3"
+        "mustache": "3",
+        "prettier@github:cardstack/prettier#glimmer-style-tag-in-template-support": "3.1.0-dev"
       }
     },
     "patchedDependencies": {
