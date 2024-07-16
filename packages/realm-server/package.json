@@ -21,7 +21,6 @@
     "@types/lodash": "^4.14.182",
     "@types/mime-types": "^2.1.1",
     "@types/node": "^18.18.5",
-    "@types/node-pg-migrate": "^2.3.1",
     "@types/pg": "^8.11.5",
     "@types/qs": "^6.9.14",
     "@types/qunit": "^2.11.3",

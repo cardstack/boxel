@@ -1535,9 +1535,6 @@ importers:
       '@types/node':
         specifier: ^18.18.5
         version: 18.18.5
-      '@types/node-pg-migrate':
-        specifier: ^2.3.1
-        version: 2.3.1
       '@types/pg':
         specifier: ^8.11.5
         version: 8.11.5
@@ -5684,11 +5681,6 @@ packages:
       '@types/node': 18.18.5
       form-data: 4.0.0
     dev: false
-
-  /@types/node-pg-migrate@2.3.1:
-    resolution: {integrity: sha512-ccKzTzDu8b6IRttXh1Ch6JlEQvVM4jrRUU9xyEp+Pq5yd3vBCg84pJeAUzycyts5Tg+eyiLqmlIW3g/SrRlqEQ==}
-    deprecated: This is a stub types definition for node-pg-migrate (https://github.com/theoephraim/node-pg-migrate#readme). node-pg-migrate provides its own type definitions, so you don\'t need @types/node-pg-migrate installed!
-    dev: true
 
   /@types/node@18.15.13:
     resolution: {integrity: sha512-N+0kuo9KgrUQ1Sn/ifDXsvg0TTleP7rIy4zOBGECxAljqvqfqpTfzx0Q1NUedOixRMBfe2Whhb056a42cWs26Q==}
