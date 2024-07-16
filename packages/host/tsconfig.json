@@ -49,5 +49,6 @@
     "app/**/*",
     "tests/**/*",
     "types/**/*"
-  ]
+  ],
+  "exclude": ["../base/**/__boxel/**"]
 }
