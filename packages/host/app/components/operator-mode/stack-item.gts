@@ -33,7 +33,7 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
-import { cn, eq, optional } from '@cardstack/boxel-ui/helpers';
+import { cn, cssVar, eq, optional } from '@cardstack/boxel-ui/helpers';
 
 import {
   IconPencil,
@@ -163,14 +163,21 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get styleForStackedCard(): SafeString {
+    const stackItemMaxWidth = '50rem';
     let itemsOnStackCount = this.args.stackItems.length;
     let invertedIndex = itemsOnStackCount - this.args.index - 1;
     let widthReductionPercent = 5; // Every new card on the stack is 5% wider than the previous one
     let offsetPx = 30; // Every new card on the stack is 30px lower than the previous one
+    let width = this.args.item.isWideFormat
+      ? '100%'
+      : `calc(${stackItemMaxWidth} * ${
+          100 - invertedIndex * widthReductionPercent
+        } / 100)`;
 
     return htmlSafe(`
       height: calc(100% - ${offsetPx}px * ${this.args.index});
-      width: ${100 - invertedIndex * widthReductionPercent}%;
+      width: ${width};
+      max-width: ${100 - invertedIndex * widthReductionPercent}%;
       z-index: ${itemsOnStackCount - invertedIndex};
       margin-top: calc(${offsetPx}px * ${this.args.index});
     `); // using margin-top instead of padding-top to hide scrolled content from view
@@ -395,7 +402,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
           <Header
             @size='large'
             @title={{this.headerTitle}}
+            @hasBackground={{true}}
             class={{cn 'header' header--icon-hovered=this.isHoverOnRealmIcon}}
+            style={{cssVar boxel-header-background-color=@item.headerColor}}
             {{on
               'click'
               (optional
@@ -541,8 +550,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
         --boxel-header-padding: var(--boxel-sp-sm);
         --boxel-header-text-font: var(--boxel-font-med);
         --boxel-header-border-radius: var(--boxel-border-radius-xl);
+        --boxel-header-background-color: var(--boxel-light);
         z-index: 1;
-        background-color: var(--boxel-light);
         max-width: max-content;
         height: fit-content;
         min-width: 100%;
