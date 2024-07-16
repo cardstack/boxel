@@ -52,7 +52,6 @@ export class RoomResource extends Resource<Args> {
   private _memberCache: TrackedMap<string, RoomMember> = new TrackedMap();
   private _fragmentCache: TrackedMap<string, CardFragmentContent> =
     new TrackedMap();
-  @tracked _skills: Skill[] = [];
   @tracked room: RoomState | undefined;
   @tracked loading: Promise<void> | undefined;
   @service private declare matrixService: MatrixService;
@@ -117,7 +116,7 @@ export class RoomResource extends Resource<Args> {
   }
 
   get skills(): Skill[] {
-    return this._skills;
+    return this.room?.skills ?? [];
   }
 
   get roomId() {
@@ -380,8 +379,11 @@ export class RoomResource extends Resource<Args> {
   }
 
   addSkill(card: SkillCard) {
-    this._skills = [
-      ...this._skills,
+    if (!this.room) {
+      return;
+    }
+    this.room.skills = [
+      ...this.room.skills,
       new TrackedObject({ card, isActive: true }),
     ];
   }
