@@ -83,6 +83,14 @@ export class StackItem {
     throw new Error(`This StackItem has no card set`);
   }
 
+  get isWideFormat() {
+    return (
+      this.card?.constructor &&
+      'prefersWideFormat' in this.card.constructor &&
+      this.card.constructor.prefersWideFormat
+    );
+  }
+
   get api() {
     let api = this.cardResource?.api ?? this.newCardApi;
     if (!api) {

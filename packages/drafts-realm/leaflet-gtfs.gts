@@ -25,6 +25,7 @@ type Route = {
 
 export class LeafletGtfs extends CardDef {
   static displayName = 'Leaflet GTFS';
+  static prefersWideFormat = true;
 
   @field lat = contains(NumberField);
   @field lon = contains(NumberField);

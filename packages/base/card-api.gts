@@ -2223,6 +2223,8 @@ export class CardDef extends BaseDef {
   static isolated: BaseDefComponent = DefaultCardDefTemplate;
   static edit: BaseDefComponent = DefaultCardDefTemplate;
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
+
+  static prefersWideFormat = false; // whether the card is full-width in the stack
 }
 
 export type BaseDefConstructor = typeof BaseDef;
