@@ -15,7 +15,7 @@ class CommandType extends FieldDef {
   static [primitive]: 'patchCard';
 }
 
-type CommandStatus = 'applied' | 'ready';
+export type CommandStatus = 'applied' | 'ready';
 
 class CommandStatusField extends FieldDef {
   static [primitive]: CommandStatus;

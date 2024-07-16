@@ -7,15 +7,14 @@ import { TrackedObject } from 'tracked-built-ins';
 
 import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 
-import type {
-  SkillCard,
-  SkillField,
-} from 'https://cardstack.com/base/skill-card';
+import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import AiAssistantSkillMenu from './index';
 
+import type { Skill } from './index';
+
 export default class AiAssistantSkillMenuUsage extends Component {
-  @tracked skills: SkillField[] = [];
+  @tracked skills: Skill[] = [];
 
   @action attachSkill(card: SkillCard) {
     this.skills = [
@@ -23,7 +22,7 @@ export default class AiAssistantSkillMenuUsage extends Component {
       new TrackedObject({
         card,
         isActive: true,
-      }) as SkillField,
+      }),
     ];
   }
 
