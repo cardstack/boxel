@@ -36,6 +36,12 @@ export type Event = Partial<IEvent> & {
 
 export interface EventSendingContext {
   setRoom: (roomId: string, room: RoomState) => void;
+  // Note: Notice our implementation looks completely synchronous but bcos of the way we process our matrix event as a subscriber. getRoom is inherently asynchronous
+  // getRoom is async because subscribe handlers should be synchronous and we should handle asynchrony outside of the handler code, otherwise, handler/queues will become confused
+  // If you look around the codebase, you will see instances of await getRoom which is the correct pattern to use although the types do not reflect so
+  // The reason why the types are locked in as synchronous is because we don't have a good way to react or access .events which hides behind this promise
+  // If we await getRoom before accessing .events, we lose trackedness
+  // TODO: Resolve matrix async types with this https://linear.app/cardstack/issue/CS-6987/get-room-resource-to-register-with-matrix-event-handler
   getRoom: (roomId: string) => RoomState | undefined;
   cardAPI: typeof CardAPI;
 }
@@ -81,9 +87,9 @@ export async function addRoomEvent(context: EventSendingContext, event: Event) {
     room = new RoomState();
     context.setRoom(roomId, room);
   }
-  // duplicate events may be emitted from matrix, as well as the resolved room card might already contain this event
-  let resolvedRoom = await room;
+  let resolvedRoom = await room; //look at the note in the EventSendingContext interface for why this is awaited
 
+  // duplicate events may be emitted from matrix, as well as the resolved room card might already contain this event
   if (!resolvedRoom.events.find((e) => e.event_id === eventId)) {
     resolvedRoom.events = [
       ...(resolvedRoom.events ?? []),
@@ -118,7 +124,7 @@ export async function updateRoomEvent(
       `bug: unknown room for event ${JSON.stringify(event, null, 2)}`,
     );
   }
-  let resolvedRoom = await room;
+  let resolvedRoom = await room; //look at the note in the EventSendingContext interface for why this is awaited
   let oldEventIndex = resolvedRoom.events.findIndex(
     (e) => e.event_id === oldEventId,
   );

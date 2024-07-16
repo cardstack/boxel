@@ -78,7 +78,7 @@ export class RoomResource extends Resource<Args> {
 
   private load = restartableTask(async (roomId: string) => {
     try {
-      this.room = roomId ? await this.matrixService.getRoom(roomId) : undefined;
+      this.room = roomId ? await this.matrixService.getRoom(roomId) : undefined; //look at the note in the EventSendingContext interface for why this is awaited
       if (this.room) {
         await this.loadRoomMembers(roomId);
         await this.loadRoomMessages(roomId);
