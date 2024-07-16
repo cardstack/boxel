@@ -53,7 +53,7 @@
     "pg": "^8.11.5",
     "prettier": "^2.8.4",
     "prettier-plugin-ember-template-tag": "^1.1.0",
-    "qs": "^6.10.5",
+    "qs": "^6.12.3",
     "qunit": "^2.20.0",
     "sane": "^5.0.1",
     "sql-parser-cst": "^0.28.0",

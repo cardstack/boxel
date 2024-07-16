@@ -155,7 +155,7 @@
     "path-browserify": "^1.0.1",
     "prettier": "^3.0.3",
     "prettier-plugin-ember-template-tag": "^1.1.0",
-    "qs": "^6.10.5",
+    "qs": "^6.12.3",
     "qunit": "^2.20.0",
     "qunit-dom": "^2.0.0",
     "safe-stable-stringify": "^2.4.3",
