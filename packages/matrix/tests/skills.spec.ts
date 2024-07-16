@@ -22,8 +22,7 @@ import {
 
 test.describe('Skills', () => {
   let synapse: SynapseInstance;
-  test.beforeEach(async ({ page }, testInfo) => {
-    testInfo.setTimeout(testInfo.timeout + 30000);
+  test.beforeEach(async () => {
     synapse = await synapseStart();
     await registerRealmUsers(synapse);
     await registerUser(synapse, 'user1', 'pass');
