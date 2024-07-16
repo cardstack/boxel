@@ -8,7 +8,7 @@ import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import { RoomMessageModel } from '@cardstack/host/lib/matrix-model/message';
+import { Message } from '@cardstack/host/lib/matrix-model/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
 import { getRoom } from '@cardstack/host/resources/room';
@@ -145,14 +145,14 @@ export default class Room extends Component<Signature> {
     this.doMatrixEventFlush.perform();
   }
 
-  maybeRetryAction = (messageIndex: number, message: RoomMessageModel) => {
+  maybeRetryAction = (messageIndex: number, message: Message) => {
     if (this.isLastMessage(messageIndex) && message.isRetryable) {
       return this.resendLastMessage;
     }
     return undefined;
   };
 
-  @action isMessageStreaming(message: RoomMessageModel, messageIndex: number) {
+  @action isMessageStreaming(message: Message, messageIndex: number) {
     return (
       !message.isStreamingFinished &&
       this.isLastMessage(messageIndex) &&
@@ -360,7 +360,7 @@ export default class Room extends Component<Signature> {
     this.currentMonacoContainer = index;
   }
 
-  private isPendingMessage(message: RoomMessageModel) {
+  private isPendingMessage(message: Message) {
     return message.status === 'sending' || message.status === 'queued';
   }
 

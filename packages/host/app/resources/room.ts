@@ -27,7 +27,7 @@ import {
   RoomMember,
   type RoomMemberInterface,
 } from '../lib/matrix-model/member';
-import { RoomMessageModel } from '../lib/matrix-model/message';
+import { Message } from '../lib/matrix-model/message';
 
 import { RoomState } from '../lib/matrix-model/room';
 
@@ -48,8 +48,7 @@ const ErrorMessage: Record<string, string> = {
 };
 
 export class RoomResource extends Resource<Args> {
-  private _messageCache: TrackedMap<string, RoomMessageModel> =
-    new TrackedMap();
+  private _messageCache: TrackedMap<string, Message> = new TrackedMap();
   private _memberCache: TrackedMap<string, RoomMember> = new TrackedMap();
   private _fragmentCache: TrackedMap<string, CardFragmentContent> =
     new TrackedMap();
@@ -179,7 +178,7 @@ export class RoomResource extends Resource<Args> {
 
   private async loadRoomMessages(roomId: string) {
     let index = this._messageCache.size;
-    let newMessages = new Map<string, RoomMessageModel>();
+    let newMessages = new Map<string, Message>();
     for (let event of this.events) {
       if (event.type !== 'm.room.message') {
         continue;
@@ -197,7 +196,7 @@ export class RoomResource extends Resource<Args> {
         roomId,
         userId: event.sender,
       });
-      let messageArgs = new RoomMessageModel({
+      let messageArgs = new Message({
         author,
         created: new Date(event.origin_server_ts),
         updated: new Date(), // Changes every time an update from AI bot streaming is received, used for detecting timeouts
@@ -245,7 +244,7 @@ export class RoomResource extends Resource<Args> {
           throw new Error(`cannot handle cards in room without an ID`);
         }
         messageArgs.clientGeneratedId = event.content.clientGeneratedId;
-        messageField = new RoomMessageModel({
+        messageField = new Message({
           ...messageArgs,
           attachedCardIds,
         });
@@ -273,7 +272,7 @@ export class RoomResource extends Resource<Args> {
           status: status,
         });
 
-        messageField = new RoomMessageModel({
+        messageField = new Message({
           ...messageArgs,
           formattedMessage: `<p class="patch-message">${event.content.formatted_body}</p>`,
           command: commandField,
@@ -284,7 +283,7 @@ export class RoomResource extends Resource<Args> {
         if (event.content.msgtype === 'm.text') {
           messageArgs.isStreamingFinished = !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
         }
-        messageField = new RoomMessageModel({ ...messageArgs });
+        messageField = new Message({ ...messageArgs });
       }
 
       if (messageField) {

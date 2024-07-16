@@ -20,7 +20,7 @@ import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
 
-import { RoomMessageModel } from '@cardstack/host/lib/matrix-model/message';
+import { Message } from '@cardstack/host/lib/matrix-model/message';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -40,8 +40,8 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     roomId: string;
-    message: RoomMessageModel;
-    messages: RoomMessageModel[];
+    message: Message;
+    messages: Message[];
     index?: number;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
@@ -59,8 +59,8 @@ interface SendReadReceiptModifierSignature {
     Named: {
       matrixService: MatrixService;
       roomId: string;
-      message: RoomMessageModel;
-      messages: RoomMessageModel[];
+      message: Message;
+      messages: Message[];
     };
     Positional: [];
   };

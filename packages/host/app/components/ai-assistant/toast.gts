@@ -17,7 +17,7 @@ import { BoxelButton } from '@cardstack/boxel-ui/components';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
 
-import { RoomMessageModel } from '@cardstack/host/lib/matrix-model/message';
+import { Message } from '@cardstack/host/lib/matrix-model/message';
 import MatrixService from '@cardstack/host/services/matrix-service';
 
 import assistantIcon from './ai-assist-icon.webp';
@@ -133,7 +133,7 @@ export default class AiAssistantToast extends Component<Signature> {
     const state: {
       value: {
         roomId: string;
-        message: RoomMessageModel;
+        message: Message;
       } | null;
       isResetStateValueBlocked: boolean;
     } = new TrackedObject({
@@ -155,7 +155,7 @@ export default class AiAssistantToast extends Component<Signature> {
       );
     };
 
-    let lastMessages: Map<string, RoomMessageModel> = new Map();
+    let lastMessages: Map<string, Message> = new Map();
     for (let resource of this.matrixService.roomResources.values()) {
       if (!resource.room) {
         continue;
@@ -202,7 +202,7 @@ export default class AiAssistantToast extends Component<Signature> {
       ({
         formattedMessage: '',
         created: new Date(),
-      } as RoomMessageModel)
+      } as Message)
     );
   }
 

@@ -29,7 +29,7 @@ import Room from '@cardstack/host/components/matrix/room';
 import DeleteModal from '@cardstack/host/components/operator-mode/delete-modal';
 
 import ENV from '@cardstack/host/config/environment';
-import { RoomMessageModel } from '@cardstack/host/lib/matrix-model/message';
+import { Message } from '@cardstack/host/lib/matrix-model/message';
 import {
   isMatrixError,
   eventDebounceMs,
@@ -55,7 +55,7 @@ interface Signature {
 export interface SessionRoomData {
   roomId: string;
   name: string;
-  lastMessage: RoomMessageModel | undefined;
+  lastMessage: Message | undefined;
   created: Date;
   lastActiveTimestamp: number;
 }

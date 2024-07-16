@@ -41,7 +41,7 @@ interface RoomMessageOptional {
   command?: PatchField | null;
 }
 
-export class RoomMessageModel implements RoomMessageInterface {
+export class Message implements RoomMessageInterface {
   attachedCardIds?: string[] | null;
   attachedSkillCardIds?: string[] | null;
   index?: number;
