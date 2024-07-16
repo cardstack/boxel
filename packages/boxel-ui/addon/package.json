@@ -50,7 +50,7 @@
     "ember-load-initializers": "^2.1.2",
     "ember-modifier": "^4.1.0",
     "ember-power-select": "^8.0.0",
-    "ember-resize-modifier": "^0.6.0",
+    "ember-resize-modifier": "^0.7.1",
     "ember-set-body-class": "^1.0.2",
     "ember-sortable": "^5.0.2",
     "ember-velcro": "^2.1.3",
