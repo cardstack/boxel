@@ -177,6 +177,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return htmlSafe(`
       height: calc(100% - ${offsetPx}px * ${this.args.index});
       width: ${width};
+      max-width: ${100 - invertedIndex * widthReductionPercent}%;
       z-index: ${itemsOnStackCount - invertedIndex};
       margin-top: calc(${offsetPx}px * ${this.args.index});
     `); // using margin-top instead of padding-top to hide scrolled content from view

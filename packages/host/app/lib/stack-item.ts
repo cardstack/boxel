@@ -84,22 +84,29 @@ export class StackItem {
   }
 
   get isWideFormat() {
-    return (
-      this.card?.constructor &&
-      'prefersWideFormat' in this.card.constructor &&
-      this.card.constructor.prefersWideFormat
+    if (!this.cardResource || !this.cardResource.card) {
+      return false;
+    }
+    let { constructor } = this.cardResource.card;
+    return Boolean(
+      constructor &&
+        'prefersWideFormat' in constructor &&
+        constructor.prefersWideFormat,
     );
   }
 
   get headerColor() {
-    if (
-      this.card?.constructor &&
-      'headerColor' in this.card.constructor &&
-      this.card.constructor.headerColor != null
-    ) {
-      return this.card.constructor.headerColor;
+    if (!this.cardResource || !this.cardResource.card) {
+      return;
     }
-    return;
+    let cardDef = this.cardResource.card.constructor;
+    if (!cardDef || !('headerColor' in cardDef)) {
+      return;
+    }
+    if (cardDef.headerColor == null) {
+      return;
+    }
+    return cardDef.headerColor as string;
   }
 
   get api() {
