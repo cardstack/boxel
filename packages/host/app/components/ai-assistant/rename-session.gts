@@ -16,14 +16,13 @@ import {
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import type { RoomField } from 'https://cardstack.com/base/room';
-
+import { SessionRoomData } from './panel';
 import AiAssistantPanelPopover from './panel-popover';
 
 interface Signature {
   Element: HTMLElement;
   Args: {
-    room: RoomField;
+    room: SessionRoomData;
     onClose: () => void;
   };
 }
@@ -119,7 +118,7 @@ export default class RenameSession extends Component<Signature> {
   }
 
   private doRenameRoom = restartableTask(async () => {
-    if (!this.newRoomName.length || !this.args.room.roomId) {
+    if (!this.newRoomName?.length || !this.args.room.roomId) {
       throw new Error(`bug: should never get here`);
     }
     try {
