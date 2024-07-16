@@ -26,10 +26,10 @@ import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 import {
   RoomMember,
   type RoomMemberInterface,
-} from '../lib/matrix-model/member';
-import { Message } from '../lib/matrix-model/message';
+} from '../lib/matrix-classes/member';
+import { Message } from '../lib/matrix-classes/message';
 
-import { RoomState } from '../lib/matrix-model/room';
+import { RoomState } from '../lib/matrix-classes/room';
 
 import type { Skill } from '../components/ai-assistant/skill-menu';
 

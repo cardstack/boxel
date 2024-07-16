@@ -7,7 +7,7 @@ import { module, test } from 'qunit';
 
 import RoomMessage from '@cardstack/host/components/matrix/room-message';
 
-import { RoomState } from '@cardstack/host/lib/matrix-model/room';
+import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
 
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 

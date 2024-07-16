@@ -38,7 +38,7 @@ import { currentRoomIdPersistenceKey } from '@cardstack/host/components/ai-assis
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
-import { RoomState } from '@cardstack/host/lib/matrix-model/room';
+import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';

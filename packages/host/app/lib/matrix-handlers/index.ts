@@ -5,7 +5,7 @@ import {
   type IEvent,
 } from 'matrix-js-sdk';
 
-import { RoomState } from '@cardstack/host/lib/matrix-model/room';
+import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';

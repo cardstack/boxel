@@ -9,8 +9,8 @@ import { Deferred } from '@cardstack/runtime-common';
 
 import { baseRealm, LooseCardResource } from '@cardstack/runtime-common';
 
+import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
-import { RoomState } from '@cardstack/host/lib/matrix-model/room';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 import { RoomResource, getRoom } from '@cardstack/host/resources/room';
 import CardService from '@cardstack/host/services/card-service';

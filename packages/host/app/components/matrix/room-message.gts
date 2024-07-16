@@ -20,7 +20,7 @@ import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
 
-import { Message } from '@cardstack/host/lib/matrix-model/message';
+import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 import type MatrixService from '@cardstack/host/services/matrix-service';

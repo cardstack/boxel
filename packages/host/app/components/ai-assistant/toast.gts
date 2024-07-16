@@ -17,7 +17,7 @@ import { BoxelButton } from '@cardstack/boxel-ui/components';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
 
-import { Message } from '@cardstack/host/lib/matrix-model/message';
+import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import MatrixService from '@cardstack/host/services/matrix-service';
 
 import assistantIcon from './ai-assist-icon.webp';
