@@ -69,7 +69,8 @@ export class RoomMessageModel implements RoomMessageInterface {
   }
   get isRetryable() {
     return (
-      this.errorMessage && this.errorMessage !== ErrorMessage['M_TOO_LARGE']
+      this.errorMessage === undefined ||
+      (this.errorMessage && this.errorMessage !== ErrorMessage['M_TOO_LARGE'])
     );
   }
   get attachedResources(): AttachedCardResource[] | undefined {
