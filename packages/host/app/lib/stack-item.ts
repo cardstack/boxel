@@ -91,6 +91,17 @@ export class StackItem {
     );
   }
 
+  get headerColor() {
+    if (
+      this.card?.constructor &&
+      'headerColor' in this.card.constructor &&
+      this.card.constructor.headerColor != null
+    ) {
+      return this.card.constructor.headerColor;
+    }
+    return;
+  }
+
   get api() {
     let api = this.cardResource?.api ?? this.newCardApi;
     if (!api) {

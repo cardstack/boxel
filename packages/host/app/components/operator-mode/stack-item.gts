@@ -33,7 +33,7 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
-import { cn, eq, optional } from '@cardstack/boxel-ui/helpers';
+import { cn, cssVar, eq, optional } from '@cardstack/boxel-ui/helpers';
 
 import {
   IconPencil,
@@ -401,7 +401,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
           <Header
             @size='large'
             @title={{this.headerTitle}}
+            @hasBackground={{true}}
             class={{cn 'header' header--icon-hovered=this.isHoverOnRealmIcon}}
+            style={{cssVar boxel-header-background-color=@item.headerColor}}
             {{on
               'click'
               (optional
@@ -547,8 +549,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
         --boxel-header-padding: var(--boxel-sp-sm);
         --boxel-header-text-font: var(--boxel-font-med);
         --boxel-header-border-radius: var(--boxel-border-radius-xl);
+        --boxel-header-background-color: var(--boxel-light);
         z-index: 1;
-        background-color: var(--boxel-light);
         max-width: max-content;
         height: fit-content;
         min-width: 100%;
