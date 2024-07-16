@@ -114,6 +114,7 @@ export default class MatrixService
   currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
     new TrackedMap();
   cardHashes: Map<string, string> = new Map(); // hashes <> event id
+  skillCardHashes: Map<string, string> = new Map(); // hashes <> event id
 
   constructor(owner: Owner) {
     super(owner);
@@ -440,16 +441,52 @@ export default class MatrixService
     }
   }
 
+  async getCardEventIds(
+    cards: CardDef[],
+    roomId: string,
+    cardHashes: Map<string, string>,
+    opts?: CardAPI.SerializeOpts,
+  ) {
+    if (!cards.length) {
+      return [];
+    }
+    let serializedCards = await Promise.all(
+      cards.map(async (card) => {
+        let { Base64ImageField } = await loaderFor(card).import<{
+          Base64ImageField: typeof Base64ImageFieldType;
+        }>(`${baseRealm.url}base64-image`);
+        return await this.cardService.serializeCard(card, {
+          omitFields: [Base64ImageField],
+          ...opts,
+        });
+      }),
+    );
+
+    let eventIds: string[] = [];
+    if (serializedCards.length) {
+      for (let card of serializedCards) {
+        let eventId = cardHashes.get(this.generateCardHashKey(roomId, card));
+        if (eventId === undefined) {
+          let responses = await this.sendCardFragments(roomId, card);
+          eventId = responses[0].event_id; // we only care about the first fragment
+          cardHashes.set(this.generateCardHashKey(roomId, card), eventId);
+        }
+        eventIds.push(eventId);
+      }
+    }
+    return eventIds;
+  }
+
   async sendMessage(
     roomId: string,
     body: string | undefined,
     attachedCards: CardDef[] = [],
+    skillCards: CardDef[] = [],
     clientGeneratedId: string,
     context?: OperatorModeContext,
   ): Promise<void> {
     let html = markdownToHtml(body);
     let tools = [];
-    let serializedAttachedCards: LooseSingleCardDocument[] = [];
     let attachedOpenCards: CardDef[] = [];
     let submode = context?.submode;
     if (submode === 'interact') {
@@ -493,37 +530,17 @@ export default class MatrixService
       }
     }
 
-    if (attachedCards?.length) {
-      serializedAttachedCards = await Promise.all(
-        attachedCards.map(async (card) => {
-          let { Base64ImageField } = await loaderFor(card).import<{
-            Base64ImageField: typeof Base64ImageFieldType;
-          }>(`${baseRealm.url}base64-image`);
-          return await this.cardService.serializeCard(card, {
-            omitFields: [Base64ImageField],
-          });
-        }),
-      );
-    }
-
-    let attachedCardsEventIds: string[] = [];
-    if (serializedAttachedCards.length > 0) {
-      for (let attachedCard of serializedAttachedCards) {
-        let eventId = this.cardHashes.get(
-          this.generateCardHashKey(roomId, attachedCard),
-        );
-        if (eventId === undefined) {
-          let responses = await this.sendCardFragments(roomId, attachedCard);
-          eventId = responses[0].event_id; // we only care about the first fragment
-          this.cardHashes.set(
-            this.generateCardHashKey(roomId, attachedCard),
-            eventId,
-          );
-        }
-
-        attachedCardsEventIds.push(eventId);
-      }
-    }
+    let attachedCardsEventIds = await this.getCardEventIds(
+      attachedCards,
+      roomId,
+      this.cardHashes,
+    );
+    let attachedSkillEventIds = await this.getCardEventIds(
+      skillCards,
+      roomId,
+      this.skillCardHashes,
+      { includeComputeds: true },
+    );
 
     await this.sendEvent(roomId, 'm.room.message', {
       msgtype: 'org.boxel.message',
@@ -533,6 +550,7 @@ export default class MatrixService
       clientGeneratedId,
       data: {
         attachedCardsEventIds,
+        attachedSkillEventIds,
         context: {
           openCardIds: attachedOpenCards.map((c) => c.id),
           tools,

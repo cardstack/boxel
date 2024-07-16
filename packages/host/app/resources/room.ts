@@ -4,7 +4,7 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 
-import { TrackedMap } from 'tracked-built-ins';
+import { TrackedMap, TrackedObject } from 'tracked-built-ins';
 
 import { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
@@ -21,6 +21,7 @@ import type {
   RoomCreateEvent,
   RoomNameEvent,
 } from 'https://cardstack.com/base/matrix-event';
+import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import {
   RoomMember,
@@ -29,6 +30,8 @@ import {
 import { RoomMessageModel } from '../lib/matrix-model/message';
 
 import { RoomState } from '../lib/matrix-model/room';
+
+import type { Skill } from '../components/ai-assistant/skill-menu';
 
 import type CardService from '../services/card-service';
 import type MatrixService from '../services/matrix-service';
@@ -111,6 +114,10 @@ export class RoomResource extends Resource<Args> {
 
   private get events() {
     return this.room ? this.room.events : [];
+  }
+
+  get skills(): Skill[] {
+    return this.room?.skills ?? [];
   }
 
   get roomId() {
@@ -199,6 +206,7 @@ export class RoomResource extends Resource<Args> {
         // These are not guaranteed to exist in the event
         transactionId: event.unsigned?.transaction_id || null,
         attachedCardIds: null,
+        attachedSkillCardIds: null,
         command: null,
         status: event.status,
         eventId: event.event_id,
@@ -369,6 +377,16 @@ export class RoomResource extends Resource<Args> {
       fragments.map((f) => f.data.cardFragment).join(''),
     ) as LooseSingleCardDocument;
     return cardDoc;
+  }
+
+  addSkill(card: SkillCard) {
+    if (!this.room) {
+      return;
+    }
+    this.room.skills = [
+      ...this.room.skills,
+      new TrackedObject({ card, isActive: true }),
+    ];
   }
 }
 

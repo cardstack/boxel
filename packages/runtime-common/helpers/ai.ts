@@ -17,6 +17,7 @@ export type ObjectSchema = {
   properties: {
     [fieldName: string]: Schema;
   };
+  required?: string[];
 };
 
 export type LinksToSchema = {
@@ -73,6 +74,7 @@ type StringSchema = {
   minLength?: number;
   maxLength?: number;
   pattern?: string;
+  const?: string;
 };
 
 type BooleanSchema = {

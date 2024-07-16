@@ -33,6 +33,7 @@ interface RoomMessageRequired {
 interface RoomMessageOptional {
   transactionId?: string | null;
   attachedCardIds?: string[] | null;
+  attachedSkillCardIds?: string[] | null;
   isStreamingFinished?: boolean;
   index?: number;
   errorMessage?: string;
@@ -42,6 +43,7 @@ interface RoomMessageOptional {
 
 export class RoomMessageModel implements RoomMessageInterface {
   attachedCardIds?: string[] | null;
+  attachedSkillCardIds?: string[] | null;
   index?: number;
   transactionId?: string | null;
   isStreamingFinished?: boolean;
@@ -73,11 +75,14 @@ export class RoomMessageModel implements RoomMessageInterface {
       (this.errorMessage && this.errorMessage !== ErrorMessage['M_TOO_LARGE'])
     );
   }
-  get attachedResources(): AttachedCardResource[] | undefined {
-    if (!this.attachedCardIds?.length) {
+
+  getCardResources(
+    cardIds: string[] | null | undefined,
+  ): AttachedCardResource[] | undefined {
+    if (!cardIds?.length) {
       return undefined;
     }
-    let cards = this.attachedCardIds.map((id) => {
+    let cards = cardIds.map((id) => {
       let card = getCard(new URL(id));
       if (!card) {
         return {
@@ -91,5 +96,13 @@ export class RoomMessageModel implements RoomMessageInterface {
       return card;
     });
     return cards;
+  }
+
+  get attachedResources(): AttachedCardResource[] | undefined {
+    return this.getCardResources(this.attachedCardIds);
+  }
+
+  get attachedSkills(): AttachedCardResource[] | undefined {
+    return this.getCardResources(this.attachedSkillCardIds);
   }
 }
