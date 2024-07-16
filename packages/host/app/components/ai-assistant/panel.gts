@@ -84,23 +84,23 @@ export default class AiAssistantPanel extends Component<Signature> {
       <div
         class='ai-assistant-panel'
         data-test-ai-assistant-panel
+        data-test-room-has-messages={{if this.currentRoom.messages true false}}
+        data-test-room-is-empty={{if this.currentRoom.messages false true}}
         ...attributes
       >
         <@resizeHandle />
         <header class='panel-header'>
-          {{#if this.currentRoom.messages}}
-            <div class='panel-title-group'>
-              <img
-                alt='AI Assistant'
-                src={{assistantIcon}}
-                width='20'
-                height='20'
-              />
-              <h3 class='panel-title-text' data-test-chat-title>
-                {{if this.currentRoom.name this.currentRoom.name 'Assistant'}}
-              </h3>
-            </div>
-          {{/if}}
+          <div class='panel-title-group'>
+            <img
+              alt='AI Assistant'
+              src={{assistantIcon}}
+              width='20'
+              height='20'
+            />
+            <h3 class='panel-title-text' data-test-chat-title>
+              {{if this.currentRoom.name this.currentRoom.name 'Assistant'}}
+            </h3>
+          </div>
           <IconButton
             class='close-ai-panel'
             @variant='primary'
@@ -164,7 +164,9 @@ export default class AiAssistantPanel extends Component<Signature> {
         {{/if}}
 
         {{#if this.displayRoomError}}
-          <NewSession @errorAction={{this.createNewSession}} />
+          <div class='session-error'>
+            <NewSession @errorAction={{this.createNewSession}} />
+          </div>
         {{else if this.isReady}}
           {{! below if statement is covered in 'isReady' check above but added due to glint not realizing it }}
           {{#if this.currentRoomId}}
@@ -219,9 +221,6 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
       :deep(.separator-horizontal:not(:hover) > button) {
         display: none;
-      }
-      :deep(.ai-assistant-conversation) {
-        padding: var(--boxel-sp) var(--boxel-sp-lg);
       }
       :deep(.room-actions) {
         z-index: 1;
@@ -330,13 +329,17 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
 
       .loading-new-session {
-        padding: var(--boxel-sp);
+        margin: auto;
       }
 
       @keyframes spin {
         to {
           transform: rotate(360deg);
         }
+      }
+
+      .session-error {
+        padding: 0 var(--boxel-sp);
       }
     </style>
   </template>

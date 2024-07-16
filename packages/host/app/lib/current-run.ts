@@ -19,7 +19,7 @@ import {
   identifyCard,
   moduleFrom,
   isCardDef,
-  type Indexer,
+  IndexUpdater,
   type Batch,
   type LooseCardResource,
   type InstanceEntry,
@@ -46,7 +46,6 @@ import { type Reader, type Stats } from '@cardstack/runtime-common/worker';
 import {
   CardDef,
   type IdentityContext as IdentityContextType,
-  LoaderType,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
@@ -75,7 +74,7 @@ export class CurrentRun {
   #typesCache = new WeakMap<typeof CardDef, Promise<TypesWithErrors>>();
   #indexingInstances = new Map<string, Promise<void>>();
   #reader: Reader;
-  #indexer: Indexer;
+  #indexUpdater: IndexUpdater;
   #batch: Batch | undefined;
   #realmPaths: RealmPaths;
   #ignoreData: Record<string, string>;
@@ -92,17 +91,17 @@ export class CurrentRun {
   constructor({
     realmURL,
     reader,
-    indexer,
+    indexUpdater,
     ignoreData = {},
     renderCard,
   }: {
     realmURL: URL;
     reader: Reader;
-    indexer: Indexer;
+    indexUpdater: IndexUpdater;
     ignoreData?: Record<string, string>;
     renderCard: RenderCard;
   }) {
-    this.#indexer = indexer;
+    this.#indexUpdater = indexUpdater;
     this.#realmPaths = new RealmPaths(realmURL);
     this.#reader = reader;
     this.#realmURL = realmURL;
@@ -114,7 +113,9 @@ export class CurrentRun {
     await current.whileIndexing(async () => {
       let start = Date.now();
       log.debug(`starting from scratch indexing`);
-      current.#batch = await current.#indexer.createBatch(current.realmURL);
+      current.#batch = await current.#indexUpdater.createBatch(
+        current.realmURL,
+      );
       await current.batch.makeNewGeneration();
       await current.visitDirectory(current.realmURL);
       await current.batch.done();
@@ -137,7 +138,7 @@ export class CurrentRun {
     let start = Date.now();
     log.debug(`starting from incremental indexing for ${url.href}`);
 
-    current.#batch = await current.#indexer.createBatch(current.realmURL);
+    current.#batch = await current.#indexUpdater.createBatch(current.realmURL);
     let invalidations = (await current.batch.invalidate(url)).map(
       (href) => new URL(href),
     );
@@ -407,25 +408,28 @@ export class CurrentRun {
         adjustedResource,
         { data: adjustedResource },
         new URL(fileURL),
-        this.loaderService.loader as unknown as LoaderType,
         {
           identityContext,
         },
       );
-      isolatedHtml = await this.#renderCard({
-        card,
-        format: 'isolated',
-        visit: this.visitFile.bind(this),
-        identityContext,
-        realmPath: this.#realmPaths,
-      });
-      atomHtml = await this.#renderCard({
-        card,
-        format: 'atom',
-        visit: this.visitFile.bind(this),
-        identityContext,
-        realmPath: this.#realmPaths,
-      });
+      isolatedHtml = sanitizeHTML(
+        await this.#renderCard({
+          card,
+          format: 'isolated',
+          visit: this.visitFile.bind(this),
+          identityContext,
+          realmPath: this.#realmPaths,
+        }),
+      );
+      atomHtml = sanitizeHTML(
+        await this.#renderCard({
+          card,
+          format: 'atom',
+          visit: this.visitFile.bind(this),
+          identityContext,
+          realmPath: this.#realmPaths,
+        }),
+      );
       cardType = Reflect.getPrototypeOf(card)?.constructor as typeof CardDef;
       let data = api.serializeCard(card, { includeComputeds: true });
       // prepare the document for index serialization
@@ -543,18 +547,19 @@ export class CurrentRun {
         resourceForType,
         { data: resourceForType },
         new URL(resource.id),
-        this.loaderService.loader as unknown as LoaderType,
         {
           identityContext: modifiedContext,
         },
       );
-      let embeddedHtml = await this.#renderCard({
-        card,
-        format: 'embedded',
-        visit: this.visitFile.bind(this),
-        identityContext: modifiedContext,
-        realmPath: this.#realmPaths,
-      });
+      let embeddedHtml = sanitizeHTML(
+        await this.#renderCard({
+          card,
+          format: 'embedded',
+          visit: this.visitFile.bind(this),
+          identityContext: modifiedContext,
+          realmPath: this.#realmPaths,
+        }),
+      );
       let ref = refURL === types[0].refURL ? 'default' : refURL;
       result[ref] = embeddedHtml;
     }
@@ -594,7 +599,9 @@ export class CurrentRun {
           loader: this.loaderService.loader,
         });
         if (!isCardDef(maybeCard)) {
-          throw new Error(`The definition at ${fullRef} is not a CardDef`);
+          throw new Error(
+            `The definition at ${JSON.stringify(fullRef)} is not a CardDef`,
+          );
         }
         loadedCard = maybeCard;
         loadedCardRef = identifyCard(loadedCard);
@@ -622,6 +629,11 @@ export class CurrentRun {
     deferred.fulfill(result);
     return result;
   }
+}
+
+function sanitizeHTML(html: string): string {
+  // currently this only involves removing auto-generated ember ID's
+  return html.replace(/\s+id="ember[0-9]+"/g, '');
 }
 
 function assertURLEndsWithJSON(url: URL): URL {

@@ -162,6 +162,15 @@ interface CardMessageEvent extends BaseMatrixEvent {
   };
 }
 
+export interface Tool {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: Schema;
+  };
+}
+
 export interface CardMessageContent {
   'm.relates_to'?: {
     rel_type: string;
@@ -180,19 +189,14 @@ export interface CardMessageContent {
     // we use this field over the wire since the matrix message protocol
     // limits us to 65KB per message
     attachedCardsEventIds?: string[];
+    attachedSkillEventIds?: string[];
     // we materialize this field on the server from the card
     // fragments that we receive
     attachedCards?: LooseSingleCardDocument[];
+    skillCards?: LooseSingleCardDocument[];
     context: {
       openCardIds?: string[];
-      tools: {
-        type: 'function';
-        function: {
-          name: string;
-          description: string;
-          parameters: Schema;
-        };
-      }[];
+      tools: Tool[];
       submode: string | undefined;
     };
   };

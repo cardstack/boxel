@@ -51,10 +51,18 @@ export default class CardPill extends Component<CardPillSignature> {
           <this.component @format='atom' @displayContainer={{false}} />
         </div>
         {{#if @onToggle}}
-          <label class={{cn 'toggle' checked=@isEnabled}}>
+          <label
+            class={{cn 'toggle' checked=@isEnabled}}
+            data-test-card-pill-toggle='{{@card.id}}-{{if
+              @isEnabled
+              "on"
+              "off"
+            }}'
+          >
             <span class='boxel-sr-only'>{{@card.title}}</span>
             <input
               {{on 'click' @onToggle}}
+              {{on 'keypress' @onToggle}}
               class='toggle-switch'
               type='checkbox'
               switch

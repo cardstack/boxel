@@ -203,6 +203,14 @@ export default class AiAssistantMessage extends Component<Signature> {
         -moz-osx-font-smoothing: grayscale;
       }
 
+      .is-from-assistant .content :deep(pre) {
+        white-space: pre-wrap;
+      }
+
+      .is-from-assistant .content :deep(pre code) {
+        overflow-wrap: break-word;
+      }
+
       .is-pending .content,
       .is-pending .content .cards > :deep(.card-pill),
       .is-pending .content .cards > :deep(.card-pill .boxel-card-container) {
@@ -291,7 +299,7 @@ const AiAssistantConversation: TemplateOnlyComponent<AiAssistantConversationSign
       .ai-assistant-conversation {
         display: flex;
         flex-direction: column;
-        padding: var(--boxel-sp);
+        padding: 0 var(--boxel-sp);
         overflow-y: auto;
       }
     </style>

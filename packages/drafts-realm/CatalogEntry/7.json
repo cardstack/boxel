@@ -8,25 +8,9 @@
       "ref": {
         "module": "../booking",
         "name": "Booking"
-      },
-      "demo": {
-        "title": null,
-        "venue": null,
-        "startTime": null,
-        "endTime": null,
-        "hosts": [],
-        "sponsors": []
       }
     },
     "meta": {
-      "fields": {
-        "demo": {
-          "adoptsFrom": {
-            "module": "../booking",
-            "name": "Booking"
-          }
-        }
-      },
       "adoptsFrom": {
         "module": "https://cardstack.com/base/catalog-entry",
         "name": "CatalogEntry"

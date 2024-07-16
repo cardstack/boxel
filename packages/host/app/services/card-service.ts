@@ -123,12 +123,7 @@ export default class CardService extends Service {
     relativeTo?: URL | undefined,
   ): Promise<CardDef> {
     let api = await this.getAPI();
-    let card = await api.createFromSerialized(
-      resource,
-      doc,
-      relativeTo,
-      this.loaderService.loader,
-    );
+    let card = await api.createFromSerialized(resource, doc, relativeTo);
     // it's important that we absorb the field async here so that glimmer won't
     // encounter NotLoaded errors, since we don't have the luxury of the indexer
     // being able to inform us of which fields are used or not at this point.
@@ -351,7 +346,6 @@ export default class CardService extends Service {
   }
 
   async copyCard(source: CardDef, destinationRealm: URL): Promise<CardDef> {
-    let loader = this.loaderService.loader;
     let api = await this.getAPI();
     let serialized = await this.serializeCard(source, {
       maybeRelativeURL: null, // forces URL's to be absolute.
@@ -362,7 +356,6 @@ export default class CardService extends Service {
       json.data,
       json,
       new URL(json.data.id),
-      loader,
     )) as CardDef;
     if (this.subscriber) {
       this.subscriber(new URL(json.data.id), json);

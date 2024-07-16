@@ -1,7 +1,6 @@
 import isEqual from 'lodash/isEqual';
 
 import {
-  Indexer,
   asExpressions,
   addExplicitParens,
   separatedByCommas,
@@ -19,9 +18,11 @@ import {
   type RealmVersionsTable,
   LooseCardResource,
   trimExecutableExtension,
+  DBAdapter,
+  query,
 } from '../index';
 
-import { coerceTypes } from '../indexer';
+import { coerceTypes } from '../index-structure';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -103,18 +104,18 @@ export type TestIndexRow =
 //
 // the realm version table will default to version 1 of the testRealmURL if no
 // value is supplied
-export async function setupIndex(client: Indexer): Promise<void>;
+export async function setupIndex(client: DBAdapter): Promise<void>;
 export async function setupIndex(
-  client: Indexer,
+  client: DBAdapter,
   indexRows: TestIndexRow[],
 ): Promise<void>;
 export async function setupIndex(
-  client: Indexer,
+  client: DBAdapter,
   versionRows: RealmVersionsTable[],
   indexRows: TestIndexRow[],
 ): Promise<void>;
 export async function setupIndex(
-  client: Indexer,
+  client: DBAdapter,
   maybeVersionRows: RealmVersionsTable[] | TestIndexRow[] = [],
   indexRows?: TestIndexRow[],
 ): Promise<void> {
@@ -160,45 +161,64 @@ export async function setupIndex(
       );
       row.type = row.type ?? 'instance';
       row.last_modified = String(row.last_modified ?? now);
-      return asExpressions(
-        { ...defaultIndexEntry, ...row },
-        {
-          jsonFields: [...Object.entries(coerceTypes)]
-            .filter(([_, type]) => type === 'JSON')
-            .map(([column]) => column),
-        },
+
+      let valuesToInsert: { [key: string]: unknown } = {
+        ...defaultIndexEntry,
+        ...row,
+      };
+      let columnNames = await client.getColumnNames('boxel_index');
+
+      // Make sure all table columns are present in the data object, even if their value is undefined. This is to assure
+      // that the order of the columns in the insert statement is consistent for all types of resources
+      // that get passed into setupIndex.
+      let dataObject = Object.fromEntries(
+        columnNames.map((column) => [column, valuesToInsert[column]]),
       );
+
+      return asExpressions(dataObject, {
+        jsonFields: [...Object.entries(coerceTypes)]
+          .filter(([_, type]) => type === 'JSON')
+          .map(([column]) => column),
+      });
     }),
   );
   let versionExpressions = versionRows.map((r) => asExpressions(r));
 
   if (indexedCardsExpressions.length > 0) {
-    await client.query([
-      `INSERT INTO boxel_index`,
-      ...addExplicitParens(
-        separatedByCommas(indexedCardsExpressions[0].nameExpressions),
-      ),
-      'VALUES',
-      ...separatedByCommas(
-        indexedCardsExpressions.map((row) =>
-          addExplicitParens(separatedByCommas(row.valueExpressions)),
+    await query(
+      client,
+      [
+        `INSERT INTO boxel_index`,
+        ...addExplicitParens(
+          separatedByCommas(indexedCardsExpressions[0].nameExpressions),
         ),
-      ),
-    ] as Expression);
+        'VALUES',
+        ...separatedByCommas(
+          indexedCardsExpressions.map((row) =>
+            addExplicitParens(separatedByCommas(row.valueExpressions)),
+          ),
+        ),
+      ] as Expression,
+      coerceTypes,
+    );
   }
 
   if (versionExpressions.length > 0) {
-    await client.query([
-      `INSERT INTO realm_versions`,
-      ...addExplicitParens(
-        separatedByCommas(versionExpressions[0].nameExpressions),
-      ),
-      'VALUES',
-      ...separatedByCommas(
-        versionExpressions.map((row) =>
-          addExplicitParens(separatedByCommas(row.valueExpressions)),
+    await query(
+      client,
+      [
+        `INSERT INTO realm_versions`,
+        ...addExplicitParens(
+          separatedByCommas(versionExpressions[0].nameExpressions),
         ),
-      ),
-    ] as Expression);
+        'VALUES',
+        ...separatedByCommas(
+          versionExpressions.map((row) =>
+            addExplicitParens(separatedByCommas(row.valueExpressions)),
+          ),
+        ),
+      ] as Expression,
+      coerceTypes,
+    );
   }
 }

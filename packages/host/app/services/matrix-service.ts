@@ -33,6 +33,7 @@ import {
 
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
+import { currentRoomIdPersistenceKey } from '@cardstack/host/components/ai-assistant/panel';
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
@@ -427,16 +428,51 @@ export default class MatrixService extends Service {
     }
   }
 
+  async getCardEventIds(
+    cards: CardDef[],
+    roomModule: typeof RoomModule,
+    roomId: string,
+    opts?: CardAPI.SerializeOpts,
+  ) {
+    if (!cards.length) {
+      return [];
+    }
+    let serializedCards = await Promise.all(
+      cards.map(async (card) => {
+        let { Base64ImageField } = await loaderFor(card).import<{
+          Base64ImageField: typeof Base64ImageFieldType;
+        }>(`${baseRealm.url}base64-image`);
+        return await this.cardService.serializeCard(card, {
+          omitFields: [Base64ImageField],
+          ...opts,
+        });
+      }),
+    );
+
+    let eventIds: string[] = [];
+    if (serializedCards.length) {
+      for (let card of serializedCards) {
+        let eventId = roomModule.getEventIdForCard(roomId, card);
+        if (!eventId) {
+          let responses = await this.sendCardFragments(roomId, card);
+          eventId = responses[0].event_id; // we only care about the first fragment
+        }
+        eventIds.push(eventId);
+      }
+    }
+    return eventIds;
+  }
+
   async sendMessage(
     roomId: string,
     body: string | undefined,
     attachedCards: CardDef[] = [],
+    skillCards: CardDef[] = [],
     clientGeneratedId: string,
     context?: OperatorModeContext,
   ): Promise<void> {
     let html = markdownToHtml(body);
     let tools = [];
-    let serializedAttachedCards: LooseSingleCardDocument[] = [];
     let attachedOpenCards: CardDef[] = [];
     let submode = context?.submode;
     if (submode === 'interact') {
@@ -480,32 +516,18 @@ export default class MatrixService extends Service {
       }
     }
 
-    if (attachedCards?.length) {
-      serializedAttachedCards = await Promise.all(
-        attachedCards.map(async (card) => {
-          let { Base64ImageField } = await loaderFor(card).import<{
-            Base64ImageField: typeof Base64ImageFieldType;
-          }>(`${baseRealm.url}base64-image`);
-          return await this.cardService.serializeCard(card, {
-            omitFields: [Base64ImageField],
-          });
-        }),
-      );
-    }
-
     let roomModule = await this.getRoomModule();
-    let attachedCardsEventIds: string[] = [];
-    if (serializedAttachedCards.length > 0) {
-      for (let attachedCard of serializedAttachedCards) {
-        let eventId = roomModule.getEventIdForCard(roomId, attachedCard);
-        if (!eventId) {
-          let responses = await this.sendCardFragments(roomId, attachedCard);
-          eventId = responses[0].event_id; // we only care about the first fragment
-        }
-
-        attachedCardsEventIds.push(eventId);
-      }
-    }
+    let attachedCardsEventIds = await this.getCardEventIds(
+      attachedCards,
+      roomModule,
+      roomId,
+    );
+    let attachedSkillEventIds = await this.getCardEventIds(
+      skillCards,
+      roomModule,
+      roomId,
+      { includeComputeds: true },
+    );
 
     await this.sendEvent(roomId, 'm.room.message', {
       msgtype: 'org.boxel.message',
@@ -515,6 +537,7 @@ export default class MatrixService extends Service {
       clientGeneratedId,
       data: {
         attachedCardsEventIds,
+        attachedSkillEventIds,
         context: {
           openCardIds: attachedOpenCards.map((c) => c.id),
           tools,
@@ -758,6 +781,7 @@ export default class MatrixService extends Service {
   private resetState() {
     this.rooms = new TrackedMap();
     this.roomMembershipQueue = [];
+    this.roomResourcesCache.clear();
     this.timelineQueue = [];
     this.flushMembership = undefined;
     this.flushTimeline = undefined;
@@ -793,6 +817,7 @@ function saveAuth(auth: LoginResponse) {
 
 function clearAuth() {
   localStorage.removeItem('auth');
+  localStorage.removeItem(currentRoomIdPersistenceKey);
 }
 
 function getAuth(): LoginResponse | undefined {

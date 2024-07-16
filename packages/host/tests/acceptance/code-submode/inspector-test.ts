@@ -25,7 +25,6 @@ import { Submodes } from '@cardstack/host/components/submode-switcher';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
-import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import {
   elementIsVisible,
@@ -535,13 +534,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       },
     }));
 
-    let realmInfoService = this.owner.lookup(
-      'service:realm-info-service',
-    ) as RealmInfoService;
-
-    await realmInfoService.fetchRealmInfo({
-      realmURL: new URL(testRealmURL2),
-    });
     monacoService = this.owner.lookup(
       'service:monaco-service',
     ) as MonacoService;
