@@ -502,16 +502,7 @@ module('Integration | card-basics', function (hooks) {
       let driver = new EmbeddedViewDriver();
       await renderCard(loader, driver, 'isolated');
 
-      assert.dom('[data-test-viewport="row"] [data-test-empty-field]').exists();
-      assert
-        .dom('[data-test-viewport="small"] [data-test-empty-field]')
-        .exists();
-      assert
-        .dom('[data-test-viewport="medium"] [data-test-empty-field]')
-        .exists();
-      assert
-        .dom('[data-test-viewport="large"] [data-test-empty-field]')
-        .exists();
+      assert.dom('[data-test-driver] [data-test-empty-field]').exists();
 
       await percySnapshot(assert);
     });
@@ -542,6 +533,7 @@ module('Integration | card-basics', function (hooks) {
 
       let mang = new Person({
         firstName: 'Mango',
+        description: 'test card',
         image: new Base64ImageField({
           altText: 'Picture of Mango',
           size: 'contain',
@@ -554,41 +546,20 @@ module('Integration | card-basics', function (hooks) {
       await renderCard(loader, driver, 'isolated');
 
       assert
-        .dom('[data-test-viewport="row"] [data-test-card-title]')
+        .dom('[data-test-driver] [data-test-card-title]')
         .containsText('Mango');
       assert
-        .dom('[data-test-viewport="row"] [data-test-card-display-name]')
+        .dom('[data-test-driver] [data-test-card-display-name]')
         .containsText('Person');
       assert
-        .dom('[data-test-viewport="row"] [data-test-card-thumbnail-text]')
+        .dom('[data-test-driver] [data-test-card-thumbnail-text]')
         .doesNotExist();
       assert
-        .dom('[data-test-viewport="small"] [data-test-card-title]')
+        .dom('[data-test-driver] [data-test-card-title]')
         .containsText('Mango');
       assert
-        .dom('[data-test-viewport="small"] [data-test-card-display-name]')
-        .containsText('Person');
-      assert
-        .dom('[data-test-viewport="small"] [data-test-card-thumbnail-text]')
-        .doesNotExist();
-      assert
-        .dom('[data-test-viewport="medium"] [data-test-card-title]')
-        .containsText('Mango');
-      assert
-        .dom('[data-test-viewport="medium"] [data-test-card-display-name]')
-        .containsText('Person');
-      assert
-        .dom('[data-test-viewport="medium"] [data-test-card-thumbnail-text]')
-        .doesNotExist();
-      assert
-        .dom('[data-test-viewport="large"] [data-test-card-title]')
-        .containsText('Mango');
-      assert
-        .dom('[data-test-viewport="large"] [data-test-card-display-name]')
-        .containsText('Person');
-      assert
-        .dom('[data-test-viewport="large"] [data-test-card-thumbnail-text]')
-        .doesNotExist();
+        .dom('[data-test-driver] [data-test-card-description]')
+        .containsText('test card');
 
       await percySnapshot(assert);
     });
@@ -622,40 +593,13 @@ module('Integration | card-basics', function (hooks) {
       await renderCard(loader, driver, 'isolated');
 
       assert
-        .dom('[data-test-viewport="row"] [data-test-card-title]')
+        .dom('[data-test-driver] [data-test-card-title]')
         .containsText('Van Gogh');
       assert
-        .dom('[data-test-viewport="row"] [data-test-card-display-name]')
+        .dom('[data-test-driver] [data-test-card-display-name]')
         .containsText('Person');
       assert
-        .dom('[data-test-viewport="row"] [data-test-card-thumbnail-text]')
-        .containsText('Person');
-      assert
-        .dom('[data-test-viewport="small"] [data-test-card-title]')
-        .containsText('Van Gogh');
-      assert
-        .dom('[data-test-viewport="small"] [data-test-card-display-name]')
-        .containsText('Person');
-      assert
-        .dom('[data-test-viewport="small"] [data-test-card-thumbnail-text]')
-        .containsText('Person');
-      assert
-        .dom('[data-test-viewport="medium"] [data-test-card-title]')
-        .containsText('Van Gogh');
-      assert
-        .dom('[data-test-viewport="medium"] [data-test-card-display-name]')
-        .containsText('Person');
-      assert
-        .dom('[data-test-viewport="medium"] [data-test-card-thumbnail-text]')
-        .containsText('Person');
-      assert
-        .dom('[data-test-viewport="large"] [data-test-card-title]')
-        .containsText('Van Gogh');
-      assert
-        .dom('[data-test-viewport="large"] [data-test-card-display-name]')
-        .containsText('Person');
-      assert
-        .dom('[data-test-viewport="large"] [data-test-card-thumbnail-text]')
+        .dom('[data-test-driver] [data-test-card-thumbnail-text]')
         .containsText('Person');
 
       await percySnapshot(assert);
@@ -2604,7 +2548,11 @@ function embeddedViewDriver() {
           <div class='header'>Aspect ratio &lt;= 1.0</div>
           <div class='item'>
             <div class='desc'>AR 1.0: 226px x 226px</div>
-            <div class='card' style='width: 226px; height: 226px'>
+            <div
+              data-test-driver
+              class='card'
+              style='width: 226px; height: 226px'
+            >
               <@fields.card />
             </div>
           </div>
