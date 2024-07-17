@@ -248,7 +248,10 @@ export class RoomResource extends Resource<Args> {
           ...messageArgs,
           attachedCardIds,
         });
-      } else if (event.content.msgtype === 'org.boxel.command') {
+      } else if (
+        event.content.msgtype === 'org.boxel.command' &&
+        event.content.data?.command
+      ) {
         // We only handle patches for now
         let command = event.content.data.command;
         let annotation = this.events.find(
