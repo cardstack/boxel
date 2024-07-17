@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { registerUser } from '../docker/synapse';
+import { Credentials, putEvent, registerUser } from '../docker/synapse';
 import {
   login,
   logout,
@@ -25,10 +25,11 @@ import {
 
 test.describe('Room messages', () => {
   let synapse: SynapseInstance;
+  let userCred: Credentials;
   test.beforeEach(async () => {
     synapse = await synapseStart();
     await registerRealmUsers(synapse);
-    await registerUser(synapse, 'user1', 'pass');
+    userCred = await registerUser(synapse, 'user1', 'pass');
   });
   test.afterEach(async () => {
     await synapseStop(synapse.synapseId);
@@ -1064,5 +1065,88 @@ test.describe('Room messages', () => {
     await expect(page.locator('[data-test-ai-bot-retry-button]')).toHaveCount(
       0,
     );
+  });
+
+  test(`applying a command dispatches a reaction event if command is succesful`, async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass');
+    let room1 = await getRoomId(page);
+    let card_id = `${testHost}/hassan`;
+    let content = {
+      msgtype: 'org.boxel.command',
+      format: 'org.matrix.custom.html',
+      body: 'some command',
+      formatted_body: 'some command',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'patchCard',
+          arguments: {
+            card_id,
+            attributes: {
+              firstName: 'Dave',
+            },
+          },
+        },
+      }),
+    };
+
+    await page
+      .locator(
+        `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${card_id}"]`,
+      )
+      .click();
+    await putEvent(userCred.accessToken, room1, 'm.room.message', '1', content);
+    await page.locator('[data-test-command-apply]').click();
+    await page.locator('[data-test-command-idle]');
+
+    await expect(async () => {
+      let events = await getRoomEvents('user1', 'pass', room1);
+      let reactionEvent = (events as any).find(
+        (e: any) => e.type === 'm.reaction',
+      );
+      await expect(reactionEvent).toBeDefined();
+    }).toPass();
+  });
+
+  test(`applying a command dispatches a result event if command is succesful and result is returned`, async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass');
+    let room1 = await getRoomId(page);
+    let card_id = `${testHost}/hassan`;
+    let content = {
+      msgtype: 'org.boxel.command',
+      format: 'org.matrix.custom.html',
+      body: 'some command',
+      formatted_body: 'some command',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'patchCard',
+          arguments: {
+            card_id,
+            attributes: {
+              firstName: 'Dave',
+            },
+          },
+        },
+      }),
+    };
+
+    await page
+      .locator(
+        `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${card_id}"]`,
+      )
+      .click();
+    await putEvent(userCred.accessToken, room1, 'm.room.message', '1', content);
+    await page.locator('[data-test-command-apply]').click();
+    await page.locator('[data-test-command-idle]');
+    await expect(async () => {
+      let events = await getRoomEvents('user1', 'pass', room1);
+      let commandResultEvent = (events as any).find(
+        (e: any) => e.content.msgtype === 'org.boxel.commandResult',
+      );
+      await expect(commandResultEvent).toBeDefined();
+    }).toPass();
   });
 });
