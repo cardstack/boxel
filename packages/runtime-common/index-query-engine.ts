@@ -443,9 +443,18 @@ export class IndexQueryEngine {
     ) {
       throw new Error(`htmlFormat must be either 'embedded' or 'atom'`);
     }
+
+    let ref: CodeRef;
+    let filterOnValue = filter && 'type' in filter ? filter.type : filter?.on;
+    if (filterOnValue) {
+      ref = filterOnValue;
+    } else {
+      ref = baseCardRef;
+    }
+
     let htmlColumnExpression =
       opts.htmlFormat == 'embedded'
-        ? ['embedded_html ->> ', param('default')] // TODO: this param should be the value of card type specified in the ON filter - if that is not present, or the query has different card type values in ON filters, we should default to CardDef embedded template in the embedded_html JSON
+        ? ['embedded_html ->> ', param(internalKeyFor(ref, undefined))]
         : ['atom_html'];
 
     let { results, meta } = (await this._search(
