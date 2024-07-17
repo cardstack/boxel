@@ -1076,6 +1076,7 @@ module(`Integration | search-index`, function (hooks) {
             attributes: {
               firstName: 'Germaine',
               favoriteColor: 'hot pink',
+              description: 'Fancy Germaine',
             },
             meta: {
               adoptsFrom: {
@@ -1141,15 +1142,12 @@ module(`Integration | search-index`, function (hooks) {
             <div class="card-thumbnail">
               <div class="card-thumbnail-text" data-test-card-thumbnail-text>Card</div>
             </div> 
-            <div class="thumbnail-subsection">
-              <div class="thumbnail-subsection">
-                <h3 class="card-title" data-test-card-title></h3>
-              </div>
-              <div class="thumbnail-subsection">
-                <h4 class="card-display-name" data-test-card-display-name>Card</h4>
-              </div>
-            </div>
           </div>
+          <div class="info-section">
+            <h3 class="card-title" data-test-card-title></h3>
+            <h4 class="card-display-name" data-test-card-display-name>Card</h4>
+          </div>
+          <div class="card-description" data-test-card-description>Fancy Germaine</div>
         </div>
       `),
       `${cardDefRefURL} embedded HTML is correct`,

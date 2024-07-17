@@ -1825,7 +1825,10 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
             data-test-card-display-name
           >{{cardTypeDisplayName @model}}</h4>
         </div>
-        <div class='card-description'>{{@model.description}}</div>
+        <div
+          class='card-description'
+          data-test-card-description
+        >{{@model.description}}</div>
       {{else}}
         {{! empty links-to field }}
         <div data-test-empty-field class='empty-field'></div>
