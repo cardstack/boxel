@@ -8,12 +8,6 @@
       "ref": {
         "module": "../person",
         "name": "Person"
-      },
-      "demo": {
-        "firstName": "Mango",
-        "lastName": "Abdel-Rahman",
-        "isCool": false,
-        "isHuman": false
       }
     },
     "relationships": {
@@ -24,14 +18,6 @@
       }
     },
     "meta": {
-      "fields": {
-        "demo": {
-          "adoptsFrom": {
-            "module": "../person",
-            "name": "Person"
-          }
-        }
-      },
       "adoptsFrom": {
         "module": "https://cardstack.com/base/catalog-entry",
         "name": "CatalogEntry"

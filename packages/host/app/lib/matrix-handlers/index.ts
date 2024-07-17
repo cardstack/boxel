@@ -5,18 +5,11 @@ import {
   type IEvent,
 } from 'matrix-js-sdk';
 
-import { type LooseCardResource, baseRealm } from '@cardstack/runtime-common';
+import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type {
-  RoomField,
-  MatrixEvent as DiscreteMatrixEvent,
-  CommandResultEvent,
-  ReactionEvent,
-  CommandEvent,
-} from 'https://cardstack.com/base/room';
+import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
-import type LoaderService from '../../services/loader-service';
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 export * as Membership from './membership';
@@ -42,9 +35,15 @@ export type Event = Partial<IEvent> & {
 };
 
 export interface EventSendingContext {
-  rooms: Map<string, Promise<RoomField>>;
+  setRoom: (roomId: string, room: RoomState) => void;
+  // Note: Notice our implementation looks completely synchronous but bcos of the way we process our matrix event as a subscriber. getRoom is inherently asynchronous
+  // getRoom is async because subscribe handlers should be synchronous and we should handle asynchrony outside of the handler code, otherwise, handler/queues will become confused
+  // If you look around the codebase, you will see instances of await getRoom which is the correct pattern to use although the types do not reflect so
+  // The reason why the types are locked in as synchronous is because we don't have a good way to react or access .events which hides behind this promise
+  // If we await getRoom before accessing .events, we lose trackedness
+  // TODO: Resolve matrix async types with this https://linear.app/cardstack/issue/CS-6987/get-room-resource-to-register-with-matrix-event-handler
+  getRoom: (roomId: string) => RoomState | undefined;
   cardAPI: typeof CardAPI;
-  loaderService: LoaderService;
 }
 
 export interface Context extends EventSendingContext {
@@ -52,13 +51,14 @@ export interface Context extends EventSendingContext {
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[];
   timelineQueue: { event: MatrixEvent; oldEventId?: string }[];
-  client: MatrixClient;
-  matrixSDK: typeof MatrixSDK;
+  client: MatrixClient | undefined;
+  matrixSDK: typeof MatrixSDK | undefined;
   handleMessage?: (
     context: Context,
     event: Event,
     roomId: string,
   ) => Promise<void>;
+  addEventReadReceipt(eventId: string, receipt: { readAt: Date }): void;
 }
 
 export async function addRoomEvent(context: EventSendingContext, event: Event) {
@@ -82,25 +82,12 @@ export async function addRoomEvent(context: EventSendingContext, event: Event) {
       `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
     );
   }
-  let room = context.rooms.get(roomId);
+  let room = context.getRoom(roomId);
   if (!room) {
-    let data: LooseCardResource = {
-      meta: {
-        adoptsFrom: {
-          name: 'RoomField',
-          module: `${baseRealm.url}room`,
-        },
-      },
-    };
-    room = context.cardAPI.createFromSerialized<typeof RoomField>(
-      data,
-      { data },
-      undefined,
-      context.loaderService.loader,
-    );
-    context.rooms.set(roomId, room);
+    room = new RoomState();
+    context.setRoom(roomId, room);
   }
-  let resolvedRoom = await room;
+  let resolvedRoom = await room; //look at the note in the EventSendingContext interface for why this is awaited
 
   // duplicate events may be emitted from matrix, as well as the resolved room card might already contain this event
   if (!resolvedRoom.events.find((e) => e.event_id === eventId)) {
@@ -131,13 +118,13 @@ export async function updateRoomEvent(
       `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
     );
   }
-  let room = context.rooms.get(roomId);
+  let room = context.getRoom(roomId);
   if (!room) {
     throw new Error(
       `bug: unknown room for event ${JSON.stringify(event, null, 2)}`,
     );
   }
-  let resolvedRoom = await room;
+  let resolvedRoom = await room; //look at the note in the EventSendingContext interface for why this is awaited
   let oldEventIndex = resolvedRoom.events.findIndex(
     (e) => e.event_id === oldEventId,
   );

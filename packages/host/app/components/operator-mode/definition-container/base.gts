@@ -1,6 +1,9 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 
+import { service } from '@ember/service';
+import Component from '@glimmer/component';
+
 import {
   Button,
   CardContainer,
@@ -11,7 +14,7 @@ import {
 import type { Icon } from '@cardstack/boxel-ui/icons';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
-import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import type RealmService from '@cardstack/host/services/realm';
 
 interface Action {
   label: string;
@@ -34,97 +37,95 @@ interface BaseSignature {
   };
 }
 
-const BaseDefinitionContainer: TemplateOnlyComponent<BaseSignature> = <template>
-  <CardContainer class='card-container' ...attributes>
-    <Header
-      @title={{@title}}
-      @hasBackground={{true}}
-      class='header {{if @isActive "active"}}'
-      data-test-definition-header
-    >
-      <:detail>
-        <div data-test-definition-file-extension>
-          {{@fileExtension}}
-        </div>
-      </:detail>
-    </Header>
-    <div class='content'>
-      <div class='definition-info'>
-        {{#if @fileURL}}
-          <RealmInfoProvider @fileURL={{@fileURL}}>
-            <:ready as |realmInfo|>
+class BaseDefinitionContainer extends Component<BaseSignature> {
+  @service private declare realm: RealmService;
+
+  <template>
+    <CardContainer class='card-container' ...attributes>
+      <Header
+        @title={{@title}}
+        @hasBackground={{true}}
+        class='header {{if @isActive "active"}}'
+        data-test-definition-header
+      >
+        <:detail>
+          <div data-test-definition-file-extension>
+            {{@fileExtension}}
+          </div>
+        </:detail>
+      </Header>
+      <div class='content'>
+        <div class='definition-info'>
+          {{#if @fileURL}}
+            {{#let (this.realm.info @fileURL) as |realmInfo|}}
               <div class='realm-info'>
-                <RealmIcon
-                  @realmIconURL={{realmInfo.iconURL}}
-                  @realmName={{realmInfo.name}}
-                />
+                <RealmIcon @realmInfo={{realmInfo}} />
                 <Label class='realm-name' data-test-definition-realm-name>in
                   {{realmInfo.name}}</Label>
               </div>
-            </:ready>
-          </RealmInfoProvider>
+            {{/let}}
+          {{/if}}
+          <div data-test-definition-name class='definition-name'>{{@name}}</div>
+
+        </div>
+        {{#if @isActive}}
+          {{yield to='activeContent'}}
         {{/if}}
-        <div data-test-definition-name class='definition-name'>{{@name}}</div>
-
       </div>
-      {{#if @isActive}}
-        {{yield to='activeContent'}}
-      {{/if}}
-    </div>
-  </CardContainer>
+    </CardContainer>
 
-  <style>
-    .card-container {
-      overflow: hidden;
-      overflow-wrap: anywhere;
-    }
-    .header {
-      --boxel-header-text-size: var(--boxel-font-size-sm);
-      --boxel-header-padding: var(--boxel-sp-xs);
-      --boxel-header-text-size: var(--boxel-font-size-sm);
-      --boxel-header-text-transform: uppercase;
-      --boxel-header-letter-spacing: var(--boxel-lsp-xxl);
-      --boxel-header-detail-margin-left: auto;
-      --boxel-header-detail-max-width: none;
-      --boxel-header-background-color: var(--boxel-100);
-      --boxel-header-text-color: var(--boxel-450);
-    }
+    <style>
+      .card-container {
+        overflow: hidden;
+        overflow-wrap: anywhere;
+      }
+      .header {
+        --boxel-header-text-font: var(--boxel-font-size-sm);
+        --boxel-header-padding: var(--boxel-sp-xs);
+        --boxel-header-text-transform: uppercase;
+        --boxel-header-letter-spacing: var(--boxel-lsp-xxl);
+        --boxel-header-detail-max-width: none;
+        --boxel-header-background-color: var(--boxel-100);
+        --boxel-header-text-color: var(--boxel-450);
+        --boxel-header-max-width: calc(100% - 10rem);
+      }
 
-    .header.active {
-      --boxel-header-background-color: var(--boxel-highlight);
-      --boxel-header-text-color: var(--boxel-light);
-    }
-    .content {
-      display: flex;
-      flex-direction: column;
-      padding: var(--boxel-sp-xs);
-      gap: var(--boxel-sp-sm);
-    }
-    .realm-info {
-      display: flex;
-      justify-content: flex-start;
-      align-items: center;
-      gap: var(--boxel-sp-xxxs);
-    }
-    .realm-info img {
-      width: var(--boxel-icon-sm);
-    }
-    .realm-info .realm-name {
-      letter-spacing: var(--boxel-lsp-xs);
-      font-weight: 500;
-      font-size: var(--boxel-font-size-sm);
-    }
-    .definition-info {
-      display: flex;
-      flex-direction: column;
-      gap: var(--boxel-sp-xxxs);
-    }
-    .definition-name {
-      font-size: var(--boxel-font-size);
-      font-weight: bold;
-    }
-  </style>
-</template>;
+      .header.active {
+        --boxel-header-background-color: var(--boxel-highlight);
+        --boxel-header-text-color: var(--boxel-light);
+      }
+      .content {
+        display: flex;
+        flex-direction: column;
+        padding: var(--boxel-sp-xs);
+        gap: var(--boxel-sp-sm);
+      }
+      .realm-info {
+        display: flex;
+        justify-content: flex-start;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+      }
+      .realm-info img {
+        width: var(--boxel-icon-sm);
+      }
+      .realm-info .realm-name {
+        letter-spacing: var(--boxel-lsp-xs);
+        font-weight: 500;
+        font-size: var(--boxel-font-size-sm);
+      }
+      .definition-info {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xxxs);
+      }
+      .definition-name {
+        font-size: var(--boxel-font-size);
+        font-weight: bold;
+      }
+    </style>
+  </template>
+}
 
 export interface ActiveArgs {
   actions: Action[];

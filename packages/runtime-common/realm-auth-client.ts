@@ -1,5 +1,4 @@
 import { TokenClaims } from './realm';
-import { type Loader } from './loader';
 
 // iat - issued at (seconds since epoch)
 // exp - expires at (seconds since epoch)
@@ -16,31 +15,35 @@ export interface RealmAuthMatrixClientInterface {
 }
 
 export class RealmAuthClient {
-  private jwt: string | undefined;
+  private _jwt: string | undefined;
 
   constructor(
     private realmURL: URL,
     private matrixClient: RealmAuthMatrixClientInterface,
-    private loader: Loader,
+    private fetch: typeof globalThis.fetch,
   ) {}
+
+  get jwt(): string | undefined {
+    return this._jwt;
+  }
 
   async getJWT() {
     let tokenRefreshLeadTimeSeconds = 60;
     let jwt: string;
 
-    if (!this.jwt) {
+    if (!this._jwt) {
       jwt = await this.createRealmSession();
-      this.jwt = jwt;
+      this._jwt = jwt;
       return jwt;
     } else {
-      let jwtData = JSON.parse(atob(this.jwt.split('.')[1])) as JWTPayload;
+      let jwtData = JSON.parse(atob(this._jwt.split('.')[1])) as JWTPayload;
       // If the token is about to expire (in tokenRefreshLeadTimeSeconds), create a new one just to make sure we reduce the risk of the token getting outdated during things happening in createRealmSession
       if (jwtData.exp - tokenRefreshLeadTimeSeconds < Date.now() / 1000) {
         jwt = await this.createRealmSession();
-        this.jwt = jwt;
+        this._jwt = jwt;
         return jwt;
       } else {
-        return this.jwt;
+        return this._jwt;
       }
     }
   }
@@ -98,7 +101,7 @@ export class RealmAuthClient {
     if (!userId) {
       throw new Error('userId is undefined');
     }
-    return this.loader.fetch(`${this.realmURL.href}_session`, {
+    return this.fetch(`${this.realmURL.href}_session`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
@@ -110,7 +113,7 @@ export class RealmAuthClient {
   }
 
   private async challengeRequest(challenge: string) {
-    return this.loader.fetch(`${this.realmURL.href}_session`, {
+    return this.fetch(`${this.realmURL.href}_session`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',

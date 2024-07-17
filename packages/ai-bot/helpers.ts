@@ -1,14 +1,18 @@
 import {
   LooseCardResource,
   type LooseSingleCardDocument,
+  type CardResource,
 } from '@cardstack/runtime-common';
 import { MODIFY_SYSTEM_MESSAGE } from '@cardstack/runtime-common/helpers/ai';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardFragmentContent,
   CommandEvent,
-} from 'https://cardstack.com/base/room';
+} from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
+
+export const SKILL_INSTRUCTIONS_MESSAGE =
+  '\nThe user has given you the following instructions. You must obey these instructions when responding to the user:\n';
 
 type CommandMessage = {
   type: 'command';
@@ -49,14 +53,16 @@ export function constructHistory(history: IRoomEvent[]) {
       fragments.set(eventId, event.content);
       continue;
     } else if (event.content.msgtype === 'org.boxel.message') {
-      if (
-        event.content.data.attachedCardsEventIds &&
-        event.content.data.attachedCardsEventIds.length > 0
-      ) {
-        event.content.data.attachedCards =
-          event.content.data.attachedCardsEventIds!.map((id) =>
-            serializedCardFromFragments(id, fragments),
-          );
+      let { attachedCardsEventIds, attachedSkillEventIds } = event.content.data;
+      if (attachedCardsEventIds && attachedCardsEventIds.length > 0) {
+        event.content.data.attachedCards = attachedCardsEventIds.map((id) =>
+          serializedCardFromFragments(id, fragments),
+        );
+      }
+      if (attachedSkillEventIds && attachedSkillEventIds.length > 0) {
+        event.content.data.skillCards = attachedSkillEventIds.map((id) =>
+          serializedCardFromFragments(id, fragments),
+        );
       }
     }
 
@@ -129,12 +135,37 @@ export interface OpenAIPromptMessage {
   role: 'system' | 'user' | 'assistant';
 }
 
+function setRelevantCards(
+  cardMap: Map<string, CardResource> = new Map(),
+  cards: LooseSingleCardDocument[] = [],
+) {
+  for (let card of cards) {
+    if (card.data.id) {
+      cardMap.set(card.data.id, card.data as CardResource);
+    } else {
+      throw new Error(`bug: don't know how to handle card without ID`);
+    }
+  }
+  return cardMap;
+}
+
+interface RelevantCards {
+  mostRecentlyAttachedCard: LooseCardResource | undefined;
+  attachedCards: LooseCardResource[];
+  skillCards: CardResource[];
+}
+
 export function getRelevantCards(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
-): [LooseCardResource | undefined, LooseCardResource[]] {
+): RelevantCards {
   let relevantCards: Map<string, any> = new Map();
   let mostRecentlySharedCard;
+  let attachedCardMap = new Map<string, CardResource>();
+  let skillCardMap = new Map<string, CardResource>();
+  let latestMessageEventId = history
+    .filter((ev) => ev.sender !== aiBotUserId && ev.type === 'm.room.message')
+    .slice(-1)[0]?.event_id;
   for (let event of history) {
     if (event.type !== 'm.room.message') {
       continue;
@@ -150,16 +181,29 @@ export function getRelevantCards(
           } else {
             throw new Error(`bug: don't know how to handle card without ID`);
           }
+          setRelevantCards(attachedCardMap, content.data?.attachedCards);
+
+          // setting skill card instructions only based on the latest boxel message event (not cumulative)
+          if (event.event_id === latestMessageEventId) {
+            setRelevantCards(skillCardMap, content.data?.skillCards);
+          }
         }
       }
     }
   }
-
   // Return the cards in a consistent manner
   let sortedCards = Array.from(relevantCards.values()).sort((a, b) => {
     return a.id.localeCompare(b.id);
   });
-  return [mostRecentlySharedCard, sortedCards];
+
+  let skillCards = Array.from(skillCardMap.values()).sort((a, b) =>
+    a.id.localeCompare(b.id),
+  );
+  return {
+    mostRecentlyAttachedCard: mostRecentlySharedCard,
+    attachedCards: sortedCards,
+    skillCards,
+  };
 }
 
 export function getTools(history: DiscreteMatrixEvent[], aiBotUserId: string) {
@@ -216,11 +260,24 @@ export function getModifyPrompt(
     }
   }
 
+  let { mostRecentlyAttachedCard, attachedCards, skillCards } =
+    getRelevantCards(history, aiBotUserId);
   let systemMessage =
     MODIFY_SYSTEM_MESSAGE +
     `
-  The user currently has given you the following data to work with. \n`;
-  systemMessage += attachedCardsToMessage(history, aiBotUserId);
+  The user currently has given you the following data to work with:
+  Cards:\n`;
+  systemMessage += attachedCardsToMessage(
+    mostRecentlyAttachedCard,
+    attachedCards,
+  );
+
+  if (skillCards.length) {
+    systemMessage += SKILL_INSTRUCTIONS_MESSAGE;
+    systemMessage += skillCardsToMessage(skillCards);
+    systemMessage += '\n';
+  }
+
   if (tools.length == 0) {
     systemMessage +=
       'You are unable to edit any cards, the user has not given you access, they need to open the card on the stack and let it be auto-attached';
@@ -238,24 +295,26 @@ export function getModifyPrompt(
 }
 
 export const attachedCardsToMessage = (
-  history: DiscreteMatrixEvent[],
-  aiBotUserId: string,
+  mostRecentlyAttachedCard: LooseCardResource | undefined,
+  attachedCards: LooseCardResource[],
 ) => {
-  let [mostRecentlySharedCard, allSharedCards] = getRelevantCards(
-    history,
-    aiBotUserId,
-  );
   let a =
-    mostRecentlySharedCard !== undefined
+    mostRecentlyAttachedCard !== undefined
       ? `Most recently shared card: ${JSON.stringify(
-          mostRecentlySharedCard,
+          mostRecentlyAttachedCard,
         )}.\n`
       : ``;
   let b =
-    allSharedCards.length > 0
-      ? `All previously shared cards: ${JSON.stringify(allSharedCards)}.\n`
+    attachedCards.length > 0
+      ? `All previously shared cards: ${JSON.stringify(attachedCards)}.\n`
       : ``;
   return a + b;
+};
+
+export const skillCardsToMessage = (cards: CardResource[]) => {
+  return `${JSON.stringify(
+    cards.map((card) => card.attributes?.instructions),
+  )}`;
 };
 
 export function cleanContent(content: string) {

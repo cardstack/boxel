@@ -10,7 +10,6 @@ import { tracked, cached } from '@glimmer/tracking';
 import { restartableTask, timeout } from 'ember-concurrency';
 import { Velcro } from 'ember-velcro';
 import window from 'ember-window-mock';
-import { TrackedMap } from 'tracked-built-ins';
 
 import {
   Button,
@@ -30,6 +29,7 @@ import Room from '@cardstack/host/components/matrix/room';
 import DeleteModal from '@cardstack/host/components/operator-mode/delete-modal';
 
 import ENV from '@cardstack/host/config/environment';
+import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import {
   isMatrixError,
   eventDebounceMs,
@@ -38,10 +38,6 @@ import {
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
-
-import type { RoomField } from 'https://cardstack.com/base/room';
-
-import { getRoom, RoomResource } from '../../resources/room';
 
 import assistantIcon from './ai-assist-icon.webp';
 
@@ -56,33 +52,66 @@ interface Signature {
   };
 }
 
+export interface SessionRoomData {
+  roomId: string;
+  name: string;
+  lastMessage: Message | undefined;
+  created: Date;
+  lastActiveTimestamp: number;
+}
+
 // Local storage keys
-let currentRoomIdPersistenceKey = 'aiPanelCurrentRoomId';
+export const currentRoomIdPersistenceKey = 'aiPanelCurrentRoomId';
 let newSessionIdPersistenceKey = 'aiPanelNewSessionId';
 
 export default class AiAssistantPanel extends Component<Signature> {
+  get hasOtherActiveSessions() {
+    let oneMinuteAgo = new Date(Date.now() - 60 * 1000).getTime();
+
+    return this.aiSessionRooms
+      .filter((session) => session.roomId !== this.roomResource?.roomId)
+      .some((session) => {
+        let isSessionActive = false;
+        isSessionActive =
+          this.matrixService.getLastActiveTimestamp(
+            session.roomId,
+            session.lastActiveTimestamp,
+          ) > oneMinuteAgo;
+
+        let lastMessageEventId = session.lastMessage?.eventId;
+
+        let hasSeenLastMessage = lastMessageEventId
+          ? this.matrixService.currentUserEventReadReceipts.has(
+              lastMessageEventId,
+            )
+          : false;
+
+        return isSessionActive && !hasSeenLastMessage;
+      });
+  }
+
   <template>
     <Velcro @placement='bottom' @offsetOptions={{-50}} as |popoverVelcro|>
       <div
         class='ai-assistant-panel'
         data-test-ai-assistant-panel
+        data-test-room-has-messages={{if this.roomResource.messages true false}}
+        data-test-room-is-empty={{if this.roomResource.messages false true}}
         ...attributes
       >
         <@resizeHandle />
         <header class='panel-header'>
-          {{#if this.currentRoom.messages}}
-            <div class='panel-title-group'>
-              <img
-                alt='AI Assistant'
-                src={{assistantIcon}}
-                width='20'
-                height='20'
-              />
-              <h3 class='panel-title-text' data-test-chat-title>
-                {{if this.currentRoom.name this.currentRoom.name 'Assistant'}}
-              </h3>
-            </div>
-          {{/if}}
+          <div class='panel-title-group'>
+            <img
+              alt='AI Assistant'
+              src={{assistantIcon}}
+              width='20'
+              height='20'
+            />
+            <h3 class='panel-title-text' data-test-chat-title>
+              {{if this.roomResource.name this.roomResource.name 'Assistant'}}
+            </h3>
+          </div>
           <IconButton
             class='close-ai-panel'
             @variant='primary'
@@ -98,7 +127,7 @@ export default class AiAssistantPanel extends Component<Signature> {
               class='new-session-button'
               @kind='secondary-dark'
               @size='small'
-              @disabled={{not this.currentRoom.messages.length}}
+              @disabled={{not this.roomResource.messages.length}}
               {{on 'click' this.createNewSession}}
               data-test-create-room-btn
             >
@@ -109,15 +138,21 @@ export default class AiAssistantPanel extends Component<Signature> {
               <LoadingIndicator @color='var(--boxel-light)' />
             {{else}}
               <Button
-                class='past-sessions-button'
+                class='past-sessions-button
+                  {{if
+                    this.hasOtherActiveSessions
+                    "past-sessions-button-active"
+                  }}'
                 @kind='secondary-dark'
                 @size='small'
                 @disabled={{this.displayRoomError}}
                 {{on 'click' this.displayPastSessions}}
                 data-test-past-sessions-button
+                data-test-has-active-sessions={{this.hasOtherActiveSessions}}
               >
-                Past Sessions
+                All Sessions
                 <DropdownArrowFilled width='10' height='10' />
+
               </Button>
             {{/if}}
           </div>
@@ -139,7 +174,9 @@ export default class AiAssistantPanel extends Component<Signature> {
         {{/if}}
 
         {{#if this.displayRoomError}}
-          <NewSession @errorAction={{this.createNewSession}} />
+          <div class='session-error'>
+            <NewSession @errorAction={{this.createNewSession}} />
+          </div>
         {{else if this.isReady}}
           {{! below if statement is covered in 'isReady' check above but added due to glint not realizing it }}
           {{#if this.currentRoomId}}
@@ -185,7 +222,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
       :deep(.separator-horizontal) {
         min-width: calc(
-          var(--boxel-panel-resize-handler-width) +
+          var(--boxel-panel-resize-handle-width) +
             calc(var(--boxel-sp-xxxs) * 2)
         );
         position: absolute;
@@ -194,9 +231,6 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
       :deep(.separator-horizontal:not(:hover) > button) {
         display: none;
-      }
-      :deep(.ai-assistant-conversation) {
-        padding: var(--boxel-sp) var(--boxel-sp-lg);
       }
       :deep(.room-actions) {
         z-index: 1;
@@ -257,8 +291,65 @@ export default class AiAssistantPanel extends Component<Signature> {
         --icon-color: var(--boxel-light);
         margin-left: var(--boxel-sp-xs);
       }
+
+      .past-sessions-button-active::before {
+        content: '';
+        position: absolute;
+        top: -105px;
+        left: -55px;
+        width: 250px;
+        height: 250px;
+        background: conic-gradient(
+          #ffcc8f 0deg,
+          #ff3966 45deg,
+          #ff309e 90deg,
+          #aa1dc9 135deg,
+          #d7fad6 180deg,
+          #5fdfea 225deg,
+          #3d83f2 270deg,
+          #5145e8 315deg,
+          #ffcc8f 360deg
+        );
+        z-index: -1;
+        animation: spin 4s infinite linear;
+      }
+
+      .past-sessions-button-active::after {
+        content: '';
+        position: absolute;
+        top: 1px;
+        left: 1px;
+        right: 1px;
+        bottom: 1px;
+        background: var(--boxel-700);
+        border-radius: inherit;
+        z-index: -1;
+      }
+
+      .past-sessions-button-active {
+        position: relative;
+        display: inline-block;
+        border-radius: 3rem;
+        color: white;
+        background: var(--boxel-700);
+        border: none;
+        cursor: pointer;
+        z-index: 1;
+        overflow: hidden;
+      }
+
       .loading-new-session {
-        padding: var(--boxel-sp);
+        margin: auto;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .session-error {
+        padding: 0 var(--boxel-sp);
       }
     </style>
   </template>
@@ -269,8 +360,8 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @tracked private currentRoomId: string | undefined;
   @tracked private isShowingPastSessions = false;
-  @tracked private roomToRename: RoomField | undefined = undefined;
-  @tracked private roomToDelete: RoomField | undefined = undefined;
+  @tracked private roomToRename: SessionRoomData | undefined = undefined;
+  @tracked private roomToDelete: SessionRoomData | undefined = undefined;
   @tracked private roomDeleteError: string | undefined = undefined;
   @tracked private displayRoomError = false;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
@@ -282,17 +373,16 @@ export default class AiAssistantPanel extends Component<Signature> {
   }
 
   private enterRoomInitially() {
-    if (this.currentRoomId) {
-      return;
-    }
-
     let persistedRoomId = window.localStorage.getItem(
       currentRoomIdPersistenceKey,
     );
-    if (persistedRoomId && this.roomResources.has(persistedRoomId)) {
+    if (
+      persistedRoomId &&
+      this.aiSessionRooms.find((r) => r.roomId === persistedRoomId)
+    ) {
       this.currentRoomId = persistedRoomId;
     } else {
-      let latestRoom = this.aiSessionRooms[0];
+      let latestRoom = this.latestRoom;
       if (latestRoom) {
         this.currentRoomId = latestRoom.roomId;
       } else {
@@ -301,22 +391,15 @@ export default class AiAssistantPanel extends Component<Signature> {
     }
   }
 
-  private get currentRoom() {
-    return this.currentRoomId
-      ? this.roomResources.get(this.currentRoomId)?.room
-      : undefined;
-  }
-
   @cached
   private get roomResources() {
-    let resources = new TrackedMap<string, RoomResource>();
-    for (let roomId of this.matrixService.rooms.keys()) {
-      resources.set(
-        roomId,
-        getRoom(this, () => roomId),
-      );
-    }
-    return resources;
+    return this.matrixService.roomResources;
+  }
+
+  private get roomResource() {
+    return this.currentRoomId
+      ? this.roomResources.get(this.currentRoomId)
+      : undefined;
   }
 
   private loadRoomsTask = restartableTask(async () => {
@@ -355,7 +438,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     if (
       id &&
       this.roomResources.has(id) &&
-      this.roomResources.get(id)?.room?.messages.length === 0
+      this.roomResources.get(id)?.messages.length === 0
     ) {
       return id;
     }
@@ -374,30 +457,40 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @cached
   private get aiSessionRooms() {
-    let rooms: RoomField[] = [];
+    let sessions: SessionRoomData[] = [];
     for (let resource of this.roomResources.values()) {
       if (!resource.room) {
         continue;
       }
-      let { room } = resource;
-      if (!room.created) {
-        // there is a race condition in the matrix SDK where newly created
-        // rooms don't immediately have a created date
-        room.created = new Date();
-      }
       if (
-        (room.invitedMembers.find((m) => aiBotUserId === m.userId) ||
-          room.joinedMembers.find((m) => aiBotUserId === m.userId)) &&
-        room.joinedMembers.find((m) => this.matrixService.userId === m.userId)
+        (resource.invitedMembers.find((m) => aiBotUserId === m.userId) ||
+          resource.joinedMembers.find((m) => aiBotUserId === m.userId)) &&
+        resource.joinedMembers.find(
+          (m) => this.matrixService.userId === m.userId,
+        ) &&
+        resource.name &&
+        resource.roomId
       ) {
-        rooms.push(room);
+        sessions.push({
+          roomId: resource.roomId,
+          name: resource.name,
+          lastMessage: resource.messages[resource.messages.length - 1],
+          created: resource.created,
+          lastActiveTimestamp: resource.lastActiveTimestamp,
+        });
       }
     }
     // sort in reverse chronological order of last activity
-    let sorted = rooms.sort(
+    let sorted = sessions.sort(
       (a, b) =>
-        this.matrixService.getLastActiveTimestamp(b) -
-        this.matrixService.getLastActiveTimestamp(a),
+        this.matrixService.getLastActiveTimestamp(
+          b.roomId,
+          b.lastActiveTimestamp,
+        ) -
+        this.matrixService.getLastActiveTimestamp(
+          a.roomId,
+          b.lastActiveTimestamp,
+        ),
     );
     return sorted;
   }
@@ -411,7 +504,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     window.localStorage.setItem(currentRoomIdPersistenceKey, roomId);
   }
 
-  @action private setRoomToRename(room: RoomField | undefined) {
+  @action private setRoomToRename(room: SessionRoomData) {
     this.roomToRename = room;
     this.hidePastSessions();
   }
@@ -421,7 +514,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     this.displayPastSessions();
   }
 
-  @action private setRoomToDelete(room: RoomField | undefined) {
+  @action private setRoomToDelete(room: SessionRoomData | undefined) {
     this.roomDeleteError = undefined;
     this.roomToDelete = room;
   }
@@ -439,12 +532,19 @@ export default class AiAssistantPanel extends Component<Signature> {
     this.doLeaveRoom.perform(roomId);
   }
 
+  get latestRoom() {
+    if (this.aiSessionRooms.length !== 0) {
+      return this.aiSessionRooms[0];
+    }
+    return undefined;
+  }
+
   private doLeaveRoom = restartableTask(async (roomId: string) => {
     try {
       await this.matrixService.client.leave(roomId);
       await this.matrixService.client.forget(roomId);
       await timeout(eventDebounceMs); // this makes it feel a bit more responsive
-      this.roomResources.delete(roomId);
+      this.matrixService.roomResourcesCache.delete(roomId);
 
       if (this.newSessionId === roomId) {
         window.localStorage.removeItem(newSessionIdPersistenceKey);
@@ -452,9 +552,8 @@ export default class AiAssistantPanel extends Component<Signature> {
 
       if (this.currentRoomId === roomId) {
         window.localStorage.removeItem(currentRoomIdPersistenceKey);
-        let latestRoom = this.aiSessionRooms[0];
-        if (latestRoom) {
-          this.enterRoom(latestRoom.roomId, false);
+        if (this.latestRoom) {
+          this.enterRoom(this.latestRoom.roomId, false);
         } else {
           this.createNewSession();
         }

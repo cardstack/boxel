@@ -4,14 +4,13 @@ import { on } from '@ember/modifier';
 import { IconButton } from '@cardstack/boxel-ui/components';
 import { DropdownArrowFilled } from '@cardstack/boxel-ui/icons';
 
-import type { RoomField } from 'https://cardstack.com/base/room';
-
+import { SessionRoomData } from './panel';
 import AiAssistantPanelPopover from './panel-popover';
 import PastSessionItem, { type RoomActions } from './past-session-item';
 
 interface Signature {
   Args: {
-    sessions: RoomField[];
+    sessions: SessionRoomData[];
     roomActions: RoomActions;
     onClose: () => void;
   };
@@ -25,7 +24,7 @@ const AiAssistantPastSessionsList: TemplateOnlyComponent<Signature> = <template>
     ...attributes
   >
     <:header>
-      Past Sessions
+      All Sessions
       <IconButton
         @icon={{DropdownArrowFilled}}
         @width='12px'
@@ -39,7 +38,7 @@ const AiAssistantPastSessionsList: TemplateOnlyComponent<Signature> = <template>
       {{#if @sessions}}
         <ul class='past-sessions'>
           {{#each @sessions as |session|}}
-            <PastSessionItem @room={{session}} @actions={{@roomActions}} />
+            <PastSessionItem @session={{session}} @actions={{@roomActions}} />
           {{/each}}
         </ul>
       {{else}}

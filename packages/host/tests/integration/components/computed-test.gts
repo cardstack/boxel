@@ -3,10 +3,12 @@ import { RenderingTestContext } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
-import { RealmSessionContextName, baseRealm } from '@cardstack/runtime-common';
+import {
+  PermissionsContextName,
+  type Permissions,
+  baseRealm,
+} from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
-
-import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
   cleanWhiteSpace,
@@ -15,6 +17,7 @@ import {
   provideConsumeContext,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  lookupLoaderService,
 } from '../../helpers';
 import {
   setupBaseRealm,
@@ -39,12 +42,13 @@ module('Integration | computeds', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
-    provideConsumeContext(RealmSessionContextName, {
+    let permissions: Permissions = {
       canWrite: true,
-    });
+      canRead: true,
+    };
+    provideConsumeContext(PermissionsContextName, permissions);
 
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    loader = lookupLoaderService().loader;
   });
   setupLocalIndexing(hooks);
 

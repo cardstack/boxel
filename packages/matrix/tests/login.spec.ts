@@ -22,7 +22,10 @@ const REALM_SECRET_SEED = "shhh! it's a secret";
 
 test.describe('Login', () => {
   let synapse: SynapseInstance;
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page }, testInfo) => {
+    // These tests specifically are pretty slow as there's lots of reloading
+    // Add 30s to the overall test timeout
+    testInfo.setTimeout(testInfo.timeout + 30000);
     synapse = await synapseStart();
     await registerRealmUsers(synapse);
     await registerUser(synapse, 'user1', 'pass');
@@ -84,7 +87,7 @@ test.describe('Login', () => {
       await new Promise((res) => setTimeout(res, 1000));
       return window.localStorage.getItem('boxel-session');
     });
-    expect(boxelSession).toBeFalsy();
+    expect(JSON.parse(boxelSession ?? '{}')).toEqual({});
 
     // reload to page to show that the logout state persists
     await page.reload();

@@ -2,7 +2,10 @@ import { module, test } from 'qunit';
 import { dirSync, setGracefulCleanup } from 'tmp';
 import {
   baseRealm,
+  fetcher,
+  Loader,
   LooseSingleCardDocument,
+  maybeHandleScopedCSSRequest,
   Realm,
   RealmPermissions,
   VirtualNetwork,
@@ -40,10 +43,15 @@ setGracefulCleanup();
 // as to test through loader caching)
 module('indexing', function (hooks) {
   let virtualNetwork = new VirtualNetwork();
-  let loader = virtualNetwork.createLoader();
-
   virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
   shimExternals(virtualNetwork);
+
+  let fetch = fetcher(virtualNetwork.fetch, [
+    async (req, next) => {
+      return (await maybeHandleScopedCSSRequest(req)) || next(req);
+    },
+  ]);
+  let loader = new Loader(fetch, virtualNetwork.resolveImport);
 
   setupCardLogs(
     hooks,
@@ -73,6 +81,11 @@ module('indexing', function (hooks) {
               static isolated = class Isolated extends Component<typeof this> {
                 <template>
                   <h1><@fields.firstName/></h1>
+                </template>
+              }
+              static embedded = class Isolated extends Component<typeof this> {
+                <template>
+                  <h1> Embedded Card Person: <@fields.firstName/></h1>
                 </template>
               }
             }
@@ -236,19 +249,28 @@ module('indexing', function (hooks) {
   });
 
   test('can store card pre-rendered html in the index', async function (assert) {
-    let entry = await realm.searchIndex.searchEntry(
-      new URL(`${testRealm}mango`),
-    );
-    assert.strictEqual(
-      trimCardContainer(stripScopedCSSAttributes(entry!.isolatedHtml!)),
-      cleanWhiteSpace(`<h1> Mango </h1>`),
-      'pre-rendered html is correct',
-    );
+    let entry = await realm.searchIndex.instance(new URL(`${testRealm}mango`));
+    if (entry?.type === 'instance') {
+      assert.strictEqual(
+        trimCardContainer(stripScopedCSSAttributes(entry!.isolatedHtml!)),
+        cleanWhiteSpace(`<h1> Mango </h1>`),
+        'pre-rendered isolated format html is correct',
+      );
+      assert.strictEqual(
+        trimCardContainer(stripScopedCSSAttributes(entry!.embeddedHtml!)),
+        cleanWhiteSpace(`<h1> Embedded Card Person: Mango </h1>`),
+        'pre-rendered embedded format html is correct',
+      );
+    } else {
+      assert.ok(false, 'expected index entry not to be an error');
+    }
   });
 
   test('can recover from rendering a card that has a template error', async function (assert) {
     {
-      let entry = await realm.searchIndex.card(new URL(`${testRealm}boom`));
+      let entry = await realm.searchIndex.cardDocument(
+        new URL(`${testRealm}boom`),
+      );
       if (entry?.type === 'error') {
         assert.strictEqual(
           entry.error.detail,
@@ -260,17 +282,26 @@ module('indexing', function (hooks) {
       }
     }
     {
-      let entry = await realm.searchIndex.card(new URL(`${testRealm}vangogh`));
+      let entry = await realm.searchIndex.cardDocument(
+        new URL(`${testRealm}vangogh`),
+      );
       if (entry?.type === 'doc') {
         assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
-        let { isolatedHtml } =
-          (await realm.searchIndex.searchEntry(
-            new URL(`${testRealm}vangogh`),
-          )) ?? {};
-        assert.strictEqual(
-          trimCardContainer(stripScopedCSSAttributes(isolatedHtml!)),
-          cleanWhiteSpace(`<h1> Van Gogh </h1>`),
+        let item = await realm.searchIndex.instance(
+          new URL(`${testRealm}vangogh`),
         );
+        if (item?.type === 'instance') {
+          assert.strictEqual(
+            trimCardContainer(stripScopedCSSAttributes(item.isolatedHtml!)),
+            cleanWhiteSpace(`<h1> Van Gogh </h1>`),
+          );
+          assert.strictEqual(
+            trimCardContainer(stripScopedCSSAttributes(item.embeddedHtml!)),
+            cleanWhiteSpace(`<h1> Embedded Card Person: Van Gogh </h1>`),
+          );
+        } else {
+          assert.ok(false, 'expected index entry not to be an error');
+        }
       } else {
         assert.ok(
           false,
@@ -281,7 +312,9 @@ module('indexing', function (hooks) {
   });
 
   test('can make an error doc for a card that has a link to a URL that is not a card', async function (assert) {
-    let entry = await realm.searchIndex.card(new URL(`${testRealm}bad-link`));
+    let entry = await realm.searchIndex.cardDocument(
+      new URL(`${testRealm}bad-link`),
+    );
     if (entry?.type === 'error') {
       assert.strictEqual(
         entry.error.detail,
@@ -527,7 +560,9 @@ module('indexing', function (hooks) {
         'the deleted type results in no card instance results',
       );
     }
-    let actual = await realm.searchIndex.card(new URL(`${testRealm}post-1`));
+    let actual = await realm.searchIndex.cardDocument(
+      new URL(`${testRealm}post-1`),
+    );
     if (actual?.type === 'error') {
       assert.ok(actual.error.stack, 'stack trace is included');
       delete actual.error.stack;

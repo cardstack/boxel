@@ -21,7 +21,7 @@ import {
 import { Responder } from './lib/send-response';
 import { handleDebugCommands } from './lib/debug';
 import { MatrixClient } from './lib/matrix';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
+import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
 if (process.env.SENTRY_DSN) {

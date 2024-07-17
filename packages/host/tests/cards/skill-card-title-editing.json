@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "instructions": "You are now allowed to edit and change the title and description of any open card. You must inform the user of the changes you made. If asked to revert changes, you must do so.",
+      "title": "Card Title & Description Editing",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/skill-card",
+        "name": "SkillCard"
+      }
+    }
+  }
+}

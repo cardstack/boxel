@@ -6,7 +6,6 @@ import {
   settled,
 } from '@ember/test-helpers';
 import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
-import { buildWaiter } from '@ember/test-waiters';
 import GlimmerComponent from '@glimmer/component';
 
 import ms from 'ms';
@@ -21,11 +20,10 @@ import {
   RunnerOptionsManager,
   type RealmInfo,
   type TokenClaims,
-  type Indexer,
+  type IndexUpdater,
   type RunnerRegistration,
   type IndexRunner,
   type IndexResults,
-  assetsDir,
   insertPermissions,
 } from '@cardstack/runtime-common';
 
@@ -64,7 +62,6 @@ export * from '@cardstack/runtime-common/helpers';
 export * from '@cardstack/runtime-common/helpers/indexer';
 
 const { sqlSchema } = ENV;
-const waiter = buildWaiter('@cardstack/host/test/helpers/index:onFetch-waiter');
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 const testMatrix = {
@@ -111,7 +108,6 @@ export async function getDbAdapter() {
     | undefined;
   if (!dbAdapter) {
     dbAdapter = new SQLiteAdapter(sqlSchema);
-    await dbAdapter.startClient();
     (globalThis as any).__sqliteAdapter = dbAdapter;
   }
   return dbAdapter;
@@ -140,8 +136,9 @@ export async function waitForSyntaxHighlighting(
 
   await waitUntil(
     () =>
-      finalHighlightedToken?.computedStyleMap()?.get('color')?.toString() ===
-      color,
+      window
+        .getComputedStyle(finalHighlightedToken!)
+        .getPropertyValue('color') === color,
     {
       timeout: 2000,
       timeoutMessage: 'timed out waiting for syntax highlighting',
@@ -201,7 +198,7 @@ async function makeRenderer() {
 class MockLocalIndexer extends Service {
   url = new URL(testRealmURL);
   #adapter: RealmAdapter | undefined;
-  #indexer: Indexer | undefined;
+  #indexUpdater: IndexUpdater | undefined;
   #fromScratch: ((realmURL: URL) => Promise<IndexResults>) | undefined;
   #incremental:
     | ((
@@ -226,7 +223,7 @@ class MockLocalIndexer extends Service {
   async configureRunner(
     registerRunner: RunnerRegistration,
     adapter: RealmAdapter,
-    indexer: Indexer,
+    indexUpdater: IndexUpdater,
   ) {
     if (!this.#fromScratch || !this.#incremental) {
       throw new Error(
@@ -234,7 +231,7 @@ class MockLocalIndexer extends Service {
       );
     }
     this.#adapter = adapter;
-    this.#indexer = indexer;
+    this.#indexUpdater = indexUpdater;
     await registerRunner(
       this.#fromScratch.bind(this),
       this.#incremental.bind(this),
@@ -246,11 +243,11 @@ class MockLocalIndexer extends Service {
     }
     return this.#adapter;
   }
-  get indexer() {
-    if (!this.#indexer) {
-      throw new Error(`indexer not registered with MockLocalIndexer`);
+  get indexUpdater() {
+    if (!this.#indexUpdater) {
+      throw new Error(`indexUpdater not registered with MockLocalIndexer`);
     }
-    return this.#indexer;
+    return this.#indexUpdater;
   }
 }
 
@@ -348,8 +345,8 @@ export function setupServerSentEvents(hooks: NestedHooks) {
           },
         }),
       );
-      if (!response.ok) {
-        throw new Error(`failed to connect to realm: ${response.status}`);
+      if (!response?.ok) {
+        throw new Error(`failed to connect to realm: ${response?.status}`);
       }
       let reader = response.body!.getReader();
       let timeout = setTimeout(
@@ -436,21 +433,15 @@ interface RealmContents {
 export async function setupAcceptanceTestRealm({
   contents,
   realmURL,
-  onFetch,
   permissions,
 }: {
   contents: RealmContents;
   realmURL?: string;
-  onFetch?: (req: Request) => Promise<{
-    req: Request;
-    res: Response | null;
-  }>;
   permissions?: RealmPermissions;
 }) {
   return await setupTestRealm({
     contents,
     realmURL,
-    onFetch,
     isAcceptanceTest: true,
     permissions,
   });
@@ -459,48 +450,45 @@ export async function setupAcceptanceTestRealm({
 export async function setupIntegrationTestRealm({
   contents,
   realmURL,
-  onFetch,
 }: {
   loader: Loader;
   contents: RealmContents;
   realmURL?: string;
-  onFetch?: (req: Request) => Promise<{
-    req: Request;
-    res: Response | null;
-  }>;
 }) {
   return await setupTestRealm({
     contents,
     realmURL,
-    onFetch,
     isAcceptanceTest: false,
   });
+}
+
+export function lookupLoaderService(): LoaderService {
+  let owner = (getContext() as TestContext).owner;
+  return owner.lookup('service:loader-service') as LoaderService;
 }
 
 export const testRealmSecretSeed = "shhh! it's a secret";
 async function setupTestRealm({
   contents,
   realmURL,
-  onFetch,
   isAcceptanceTest,
   permissions = { '*': ['read', 'write'] },
 }: {
   contents: RealmContents;
   realmURL?: string;
-  onFetch?: (req: Request) => Promise<{
-    req: Request;
-    res: Response | null;
-  }>;
   isAcceptanceTest?: boolean;
   permissions?: RealmPermissions;
 }) {
   let owner = (getContext() as TestContext).owner;
-  let { loader, virtualNetwork } = owner.lookup(
-    'service:loader-service',
-  ) as LoaderService;
+  let { virtualNetwork } = lookupLoaderService();
   let { queue } = owner.lookup('service:queue') as QueueService;
 
   realmURL = realmURL ?? testRealmURL;
+
+  let cardService = owner.lookup('service:card-service') as CardService;
+  if (!cardService.realmURLs.includes(realmURL)) {
+    cardService.realmURLs.push(realmURL);
+  }
 
   if (isAcceptanceTest) {
     await visit('/acceptance-test-setup');
@@ -515,29 +503,11 @@ async function setupTestRealm({
     'service:local-indexer',
   ) as unknown as MockLocalIndexer;
   let realm: Realm;
-  if (onFetch) {
-    // we need to register this before the realm is created so
-    // that it is in prime position in the url handlers list
-    loader.registerURLHandler(async (req: Request) => {
-      let token = waiter.beginAsync();
-      try {
-        let { req: newReq, res } = await onFetch(req);
-        if (res) {
-          return res;
-        }
-        req = newReq;
-      } finally {
-        waiter.endAsync(token);
-      }
-
-      return realm.maybeHandle(req);
-    });
-  }
 
   let adapter = new TestRealmAdapter(contents, new URL(realmURL));
   let indexRunner: IndexRunner = async (optsId) => {
-    let { registerRunner, indexer } = runnerOptsMgr.getOptions(optsId);
-    await localIndexer.configureRunner(registerRunner, adapter, indexer);
+    let { registerRunner, indexUpdater } = runnerOptsMgr.getOptions(optsId);
+    await localIndexer.configureRunner(registerRunner, adapter, indexUpdater);
   };
 
   let dbAdapter = await getDbAdapter();
@@ -552,10 +522,10 @@ async function setupTestRealm({
     virtualNetwork,
     dbAdapter,
     queue,
-    onIndexer: async (indexer) => {
+    onIndexUpdaterReady: async (indexUpdater) => {
       let worker = new Worker({
         realmURL: new URL(realmURL!),
-        indexer,
+        indexUpdater,
         queue,
         realmAdapter: adapter,
         runnerOptsManager: runnerOptsMgr,
@@ -564,7 +534,7 @@ async function setupTestRealm({
       });
       await worker.run();
     },
-    assetsURL: new URL(`${realmURL}${assetsDir}`),
+    assetsURL: new URL(`http://example.com/notional-assets-host/`),
   });
   virtualNetwork.mount(realm.maybeHandle);
 

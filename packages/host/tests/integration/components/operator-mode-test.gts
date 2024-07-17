@@ -13,10 +13,8 @@ import {
 import GlimmerComponent from '@glimmer/component';
 
 import { setupRenderingTest } from 'ember-qunit';
-import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
-import { EventStatus } from 'matrix-js-sdk';
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 
@@ -33,11 +31,8 @@ import {
   getCommandReactionEvents,
 } from '@cardstack/host/lib/matrix-handlers';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
-
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import { CardDef } from '../../../../drafts-realm/re-export';
 import {
   percySnapshot,
   testRealmURL,
@@ -48,33 +43,25 @@ import {
   setupOnSave,
   showSearchResult,
   type TestContextWithSave,
-  getMonacoContent,
-  waitForCodeEditor,
+  lookupLoaderService,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
-import {
-  setupMatrixServiceMock,
-  MockMatrixService,
-} from '../../helpers/mock-matrix-service';
+import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
 
-let cardApi: typeof import('https://cardstack.com/base/card-api');
-const realmName = 'Operator Mode Workspace';
-let setCardInOperatorModeState: (
-  cardURL?: string,
-  format?: 'isolated' | 'edit',
-) => Promise<void>;
-let loader: Loader;
-
 module('Integration | operator-mode', function (hooks) {
-  let matrixService: MockMatrixService;
-  let testRealmAdapter: TestRealmAdapter;
-
   setupRenderingTest(hooks);
 
+  const realmName = 'Operator Mode Workspace';
+  let loader: Loader;
+  let testRealmAdapter: TestRealmAdapter;
+  let operatorModeStateService: OperatorModeStateService;
+
   hooks.beforeEach(function () {
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    loader = lookupLoaderService().loader;
+    operatorModeStateService = this.owner.lookup(
+      'service:operator-mode-state-service',
+    ) as OperatorModeStateService;
   });
 
   setupLocalIndexing(hooks);
@@ -84,56 +71,22 @@ module('Integration | operator-mode', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMatrixServiceMock(hooks, { autostart: true });
   setupWindowMock(hooks);
   let noop = () => {};
 
   hooks.beforeEach(async function () {
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    matrixService = this.owner.lookup(
-      'service:matrixService',
-    ) as MockMatrixService;
-    matrixService.cardAPI = cardApi;
-    matrixService.getRoomModule = async function () {
-      return await loader.import(`${baseRealm.url}room`);
-    };
-
-    //Generate 11 person card to test recent card menu in card sheet
-    let personCards: Map<String, any> = new Map<String, any>();
-    for (let i = 1; i <= 11; i++) {
-      personCards.set(`Person/${i}.json`, {
-        data: {
-          type: 'card',
-          id: `${testRealmURL}Person/${i}`,
-          attributes: {
-            firstName: `${i}`,
-            address: {
-              city: 'Bandung',
-              country: 'Indonesia',
-            },
-          },
-          relationships: {
-            pet: {
-              links: {
-                self: `${testRealmURL}Pet/mango`,
-              },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}person`,
-              name: 'Person',
-            },
-          },
-        },
-      });
-    }
-
+    let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
     let textArea: typeof import('https://cardstack.com/base/text-area');
+    let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
+    let catalogEntry: typeof import('https://cardstack.com/base/catalog-entry');
 
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     textArea = await loader.import(`${baseRealm.url}text-area`);
+    cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
+    catalogEntry = await loader.import(`${baseRealm.url}catalog-entry`);
 
     let {
       field,
@@ -147,6 +100,8 @@ module('Integration | operator-mode', function (hooks) {
     } = cardApi;
     let { default: StringField } = string;
     let { default: TextAreaField } = textArea;
+    let { CardsGrid } = cardsGrid;
+    let { CatalogEntry } = catalogEntry;
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -219,42 +174,6 @@ module('Integration | operator-mode', function (hooks) {
       };
     }
 
-    class Country extends CardDef {
-      static displayName = 'Country';
-      @field name = contains(StringField);
-      @field title = contains(StringField, {
-        computeVia(this: Country) {
-          return this.name;
-        },
-      });
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <@fields.name />
-        </template>
-      };
-    }
-    class Trips extends FieldDef {
-      static displayName = 'Trips';
-      @field tripTitle = contains(StringField);
-      @field homeCountry = linksTo(Country);
-      @field countriesVisited = linksToMany(Country);
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          {{#if @model.tripTitle}}
-            <h3 data-test-tripTitle><@fields.tripTitle /></h3>
-          {{/if}}
-          <div>
-            Home Country:
-            <@fields.homeCountry />
-          </div>
-          <div>
-            Countries Visited:
-            <@fields.countriesVisited />
-          </div>
-        </template>
-      };
-    }
-
     // Friend card that can link to another friend
     class Friend extends CardDef {
       static displayName = 'Friend';
@@ -272,7 +191,6 @@ module('Integration | operator-mode', function (hooks) {
       @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
       @field friends = linksToMany(Pet);
-      @field trips = contains(Trips);
       @field firstLetterOfTheName = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName[0];
@@ -297,7 +215,6 @@ module('Integration | operator-mode', function (hooks) {
           Friends:
           <@fields.friends />
           <div data-test-addresses>Address: <@fields.address /></div>
-          <div>Trips: <span data-test-trips><@fields.trips /></span></div>
         </template>
       };
     }
@@ -393,6 +310,32 @@ module('Integration | operator-mode', function (hooks) {
       });
     }
 
+    let petMango = new Pet({ name: 'Mango' });
+    let petJackie = new Pet({ name: 'Jackie' });
+    let petWoody = new Pet({ name: 'Woody' });
+    let petBuzz = new Pet({ name: 'Buzz' });
+    let friendB = new Friend({ name: 'Friend B' });
+    let author1 = new Author({
+      firstName: 'Alien',
+      lastName: 'Bob',
+    });
+
+    //Generate 11 person card to test recent card menu in card sheet
+    let personCards: Map<String, any> = new Map<String, any>();
+    for (let i = 1; i <= 11; i++) {
+      personCards.set(
+        `Person/${i}.json`,
+        new Person({
+          firstName: String(i),
+          address: new Address({
+            city: 'Bandung',
+            country: 'Indonesia',
+          }),
+          pet: petMango,
+        }),
+      );
+    }
+
     ({ adapter: testRealmAdapter } = await setupIntegrationTestRealm({
       loader,
       contents: {
@@ -407,453 +350,76 @@ module('Integration | operator-mode', function (hooks) {
         'friend.gts': { Friend },
         'publishing-packet.gts': { PublishingPacket },
         'pet-room.gts': { PetRoom },
-        'country.gts': { Country },
-        'Pet/mango.json': {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}Pet/mango`,
-            attributes: {
-              name: 'Mango',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
-              },
-            },
+        'Pet/mango.json': petMango,
+        'BoomPet/paper.json': new BoomPet({ name: 'Paper' }),
+        'Pet/jackie.json': petJackie,
+        'Pet/woody.json': petWoody,
+        'Pet/buzz.json': petBuzz,
+        'Person/fadhlan.json': new Person({
+          firstName: 'Fadhlan',
+          address: new Address({
+            city: 'Bandung',
+            country: 'Indonesia',
+            shippingInfo: new ShippingInfo({
+              preferredCarrier: 'DHL',
+              remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+            }),
+          }),
+          pet: petMango,
+        }),
+        'Person/burcu.json': new Person({
+          firstName: 'Burcu',
+          friends: [petJackie, petWoody, petBuzz],
+        }),
+        'Friend/friend-b.json': friendB,
+        'Friend/friend-a.json': new Friend({
+          name: 'Friend A',
+          friend: friendB,
+        }),
+        'grid.json': new CardsGrid(),
+        'CatalogEntry/publishing-packet.json': new CatalogEntry({
+          title: 'Publishing Packet',
+          description: 'Catalog entry for PublishingPacket',
+          isField: false,
+          ref: {
+            module: `${testRealmURL}publishing-packet`,
+            name: 'PublishingPacket',
           },
-        },
-        'BoomPet/paper.json': {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}BoomPet/paper`,
-            attributes: {
-              name: 'Paper',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}boom-pet`,
-                name: 'BoomPet',
-              },
-            },
+        }),
+        'CatalogEntry/pet-room.json': new CatalogEntry({
+          title: 'General Pet Room',
+          description: 'Catalog entry for Pet Room Card',
+          isField: false,
+          ref: {
+            module: `${testRealmURL}pet-room`,
+            name: 'PetRoom',
           },
-        },
-        'Pet/jackie.json': {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}Pet/jackie`,
-            attributes: {
-              name: 'Jackie',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
-              },
-            },
+        }),
+        'CatalogEntry/pet-card.json': new CatalogEntry({
+          title: 'Pet',
+          description: 'Catalog entry for Pet',
+          ref: {
+            module: `${testRealmURL}pet`,
+            name: 'Pet',
           },
-        },
-        'Pet/woody.json': {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}Pet/woody`,
-            attributes: {
-              name: 'Woody',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Pet/buzz.json': {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}Pet/buzz`,
-            attributes: {
-              name: 'Buzz',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Person/fadhlan.json': {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}Person/fadhlan`,
-            attributes: {
-              firstName: 'Fadhlan',
-              address: {
-                city: 'Bandung',
-                country: 'Indonesia',
-                shippingInfo: {
-                  preferredCarrier: 'DHL',
-                  remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
-                },
-              },
-            },
-            relationships: {
-              pet: {
-                links: {
-                  self: `${testRealmURL}Pet/mango`,
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}person`,
-                name: 'Person',
-              },
-            },
-          },
-        },
-        'Person/burcu.json': {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}Person/burcu`,
-            attributes: {
-              firstName: 'Burcu',
-            },
-            relationships: {
-              'friends.0': {
-                links: {
-                  self: `${testRealmURL}Pet/jackie`,
-                },
-              },
-              'friends.1': {
-                links: {
-                  self: `${testRealmURL}Pet/woody`,
-                },
-              },
-              'friends.2': {
-                links: {
-                  self: `${testRealmURL}Pet/buzz`,
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}person`,
-                name: 'Person',
-              },
-            },
-          },
-        },
-        'Country/usa.json': {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}Country/usa`,
-            attributes: {
-              name: 'USA',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}country`,
-                name: 'Country',
-              },
-            },
-          },
-        },
-        'Country/japan.json': {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}Country/japan`,
-            attributes: {
-              name: 'Japan',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}country`,
-                name: 'Country',
-              },
-            },
-          },
-        },
-        'Person/mickey.json': {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}Person/mickey`,
-            attributes: {
-              firstName: 'Mickey',
-              trips: {
-                tripTitle: 'Summer Vacation',
-              },
-            },
-            relationships: {
-              'trips.homeCountry': {
-                links: {
-                  self: `${testRealmURL}Country/usa`,
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}person`,
-                name: 'Person',
-              },
-            },
-          },
-        },
-        'Friend/friend-a.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Friend A',
-            },
-            relationships: {
-              friend: {
-                links: {
-                  self: `${testRealmURL}Friend/friend-b`,
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}friend`,
-                name: 'Friend',
-              },
-            },
-          },
-        },
-        'Friend/friend-b.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Friend B',
-            },
-            relationships: {
-              friend: {
-                links: {
-                  self: null,
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}friend`,
-                name: 'Friend',
-              },
-            },
-          },
-        },
-        'grid.json': {
-          data: {
-            type: 'card',
-            attributes: {},
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
-                name: 'CardsGrid',
-              },
-            },
-          },
-        },
-        'CatalogEntry/publishing-packet.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Publishing Packet',
-              description: 'Catalog entry for PublishingPacket',
-              isField: false,
-              ref: {
-                module: `${testRealmURL}publishing-packet`,
-                name: 'PublishingPacket',
-              },
-              demo: {
-                socialBlurb: null,
-              },
-            },
-            relationships: {
-              'demo.blogPost': {
-                links: {
-                  self: '../BlogPost/1',
-                },
-              },
-            },
-            meta: {
-              fields: {
-                demo: {
-                  adoptsFrom: {
-                    module: `../publishing-packet`,
-                    name: 'PublishingPacket',
-                  },
-                },
-              },
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/catalog-entry',
-                name: 'CatalogEntry',
-              },
-            },
-          },
-        },
-        'CatalogEntry/pet-room.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'General Pet Room',
-              description: 'Catalog entry for Pet Room Card',
-              isField: false,
-              ref: {
-                module: `${testRealmURL}pet-room`,
-                name: 'PetRoom',
-              },
-            },
-            meta: {
-              fields: {
-                demo: {
-                  adoptsFrom: {
-                    module: `../pet-room`,
-                    name: 'PetRoom',
-                  },
-                },
-              },
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/catalog-entry',
-                name: 'CatalogEntry',
-              },
-            },
-          },
-        },
-        'CatalogEntry/pet-card.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Pet',
-              description: 'Catalog entry for Pet',
-              ref: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
-              },
-              isField: false,
-              demo: {
-                name: 'Snoopy',
-              },
-            },
-            meta: {
-              fields: {
-                demo: {
-                  adoptsFrom: {
-                    module: `../pet`,
-                    name: 'Pet',
-                  },
-                },
-              },
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/catalog-entry',
-                name: 'CatalogEntry',
-              },
-            },
-          },
-        },
-        'BlogPost/1.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Outer Space Journey',
-              body: 'Hello world',
-            },
-            relationships: {
-              authorBio: {
-                links: {
-                  self: '../Author/1',
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../blog-post',
-                name: 'BlogPost',
-              },
-            },
-          },
-        },
-        'BlogPost/2.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Beginnings',
-            },
-            relationships: {
-              authorBio: {
-                links: {
-                  self: null,
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../blog-post',
-                name: 'BlogPost',
-              },
-            },
-          },
-        },
-        'Author/1.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Alien',
-              lastName: 'Bob',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../author',
-                name: 'Author',
-              },
-            },
-          },
-        },
-        'Author/2.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'R2-D2',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../author',
-                name: 'Author',
-              },
-            },
-          },
-        },
-        'Author/mark.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Mark',
-              lastName: 'Jackson',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../author',
-                name: 'Author',
-              },
-            },
-          },
-        },
+          isField: false,
+        }),
+        'Author/1.json': author1,
+        'Author/2.json': new Author({ firstName: 'R2-D2' }),
+        'Author/mark.json': new Author({
+          firstName: 'Mark',
+          lastName: 'Jackson',
+        }),
+        'BlogPost/1.json': new BlogPost({
+          title: 'Outer Space Journey',
+          body: 'Hello world',
+          authorBio: author1,
+        }),
+        'BlogPost/2.json': new BlogPost({ title: 'Beginnings' }),
         '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
         ...Object.fromEntries(personCards),
       },
     }));
-
-    setCardInOperatorModeState = async (
-      cardURL?: string,
-      format: 'isolated' | 'edit' = 'isolated',
-    ) => {
-      let operatorModeStateService = this.owner.lookup(
-        'service:operator-mode-state-service',
-      ) as OperatorModeStateService;
-      await operatorModeStateService.restore({
-        stacks: cardURL ? [[{ id: cardURL, format }]] : [[]],
-      });
-    };
   });
 
   module('matrix', function () {
@@ -2626,8 +2192,6 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       },
     );
-
-    await waitFor('[data-test-person]');
     assert.dom('[data-test-boxel-header-title]').hasText('Person');
     assert
       .dom(`[data-test-boxel-header-icon="https://example-icon.test"]`)
@@ -2692,6 +2256,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
     await waitFor('[data-test-pet]');
+    await waitFor('[data-test-edit-button]');
     await click('[data-test-edit-button]');
     await fillIn('[data-test-field="boom"] input', 'Bad cat!');
     await setCardInOperatorModeState(`${testRealmURL}BoomPet/paper`);
@@ -2807,7 +2372,9 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
     );
-    assert.dom('[data-test-card-catalog-item]').exists({ count: 4 });
+    assert
+      .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
+      .exists({ count: 3 });
 
     await click(
       `[data-test-select="${testRealmURL}CatalogEntry/publishing-packet"]`,
@@ -2882,7 +2449,9 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
       .containsText('Choose a Catalog Entry card');
-    assert.dom('[data-test-card-catalog-item]').exists({ count: 4 });
+    assert
+      .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
+      .exists({ count: 3 });
 
     await click(
       `[data-test-select="${testRealmURL}CatalogEntry/publishing-packet"]`,
@@ -3430,8 +2999,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-create-new-card-button]`).isNotVisible();
   });
 
-  // Flaky test: CS-6842
-  skip(`displays recently accessed card`, async function (assert) {
+  test(`displays recently accessed card`, async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -3466,7 +3034,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
-    assert.dom(`[data-test-stack-card-index="1"]`).exists();
+    await waitFor(`[data-test-stack-card-index="1"]`);
 
     await focus(`[data-test-search-field]`);
     assert.dom(`[data-test-search-sheet-recent-card]`).exists({ count: 2 });
@@ -3531,12 +3099,12 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
 
     await focus(`[data-test-search-field]`);
-    await typeIn(`[data-test-search-field]`, 'Ma');
-    assert.dom(`[data-test-search-label]`).containsText('Searching for “Ma”');
+    await typeIn(`[data-test-search-field]`, 'ma');
+    assert.dom(`[data-test-search-label]`).containsText('Searching for “ma”');
 
     await waitFor(`[data-test-search-sheet-search-result]`);
-    assert.dom(`[data-test-search-label]`).containsText('3 Results for “Ma”');
-    assert.dom(`[data-test-search-sheet-search-result]`).exists({ count: 3 });
+    assert.dom(`[data-test-search-label]`).containsText('4 Results for “ma”');
+    assert.dom(`[data-test-search-sheet-search-result]`).exists({ count: 4 });
     assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
     assert
       .dom(`[data-test-search-result="${testRealmURL}Author/mark"]`)
@@ -3745,7 +3313,9 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-create-new-card-button]`);
     await waitFor('[data-test-card-catalog-item]');
-    assert.dom(`[data-test-card-catalog-item]`).exists({ count: 4 });
+    assert
+      .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
+      .exists({ count: 3 });
 
     await fillIn(`[data-test-search-field]`, `general`);
     await waitFor(
@@ -3793,15 +3363,15 @@ module('Integration | operator-mode', function (hooks) {
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/pet-card"]`,
     );
     assert
-      .dom(`[data-test-card-catalog-item]`)
-      .exists({ count: 4 }, 'can clear search input');
+      .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
+      .exists({ count: 3 }, 'can clear search input');
 
     await fillIn(`[data-test-search-field]`, 'pet');
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/pet-card"]`,
     );
     await click('[data-test-realm-filter-button]');
-    await click('[data-test-boxel-menu-item-text="Operator Mode Workspace"]');
+    await click(`[data-test-boxel-menu-item-text="${realmName}"]`);
     await waitFor('[data-test-card-catalog-item]', { count: 0 });
     assert.dom('[data-test-card-catalog]').hasText('No cards available');
   });
@@ -4042,7 +3612,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
-    await waitFor('[data-test-person]');
+    await waitFor('[data-test-boxel-header-icon]');
     assert.dom('[data-test-boxel-header-title]').hasText('Person');
     assert
       .dom(`[data-test-boxel-header-icon="https://example-icon.test"]`)
@@ -4327,9 +3897,6 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}BlogPost/1.json`);
 
-    let operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
     operatorModeStateService.updateCodePath(
       new URL(`${testRealmURL}person.gts`),
     );
@@ -4378,9 +3945,6 @@ module('Integration | operator-mode', function (hooks) {
     let someRandomText = 'I am still typing a url';
     await typeIn('[data-test-card-url-bar-input]', someRandomText);
 
-    let operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
     operatorModeStateService.updateCodePath(
       new URL(`${testRealmURL}person.gts`),
     );
@@ -4455,7 +4019,9 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
     );
-    assert.dom('[data-test-card-catalog-item]').exists({ count: 4 });
+    assert
+      .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
+      .exists({ count: 3 });
 
     await click(
       `[data-test-select="${testRealmURL}CatalogEntry/publishing-packet"]`,
@@ -4729,8 +4295,14 @@ module('Integration | operator-mode', function (hooks) {
         overlayButtonElements.length - 1
       ].getBoundingClientRect();
 
-    assert.strictEqual(itemRect.top, overlayButtonRect.top);
-    assert.strictEqual(itemRect.left, overlayButtonRect.left);
+    assert.strictEqual(
+      Math.round(itemRect.top),
+      Math.round(overlayButtonRect.top),
+    );
+    assert.strictEqual(
+      Math.round(itemRect.left),
+      Math.round(overlayButtonRect.left),
+    );
 
     await click(
       `[data-test-stack-card="${testRealmURL}Person/burcu"] [data-test-edit-button]`,

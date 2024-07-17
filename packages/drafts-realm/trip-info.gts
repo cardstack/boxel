@@ -8,14 +8,46 @@ import {
   linksToMany,
 } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
-import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { CardContainer, FieldContainer } from '@cardstack/boxel-ui/components';
 import { Country } from './country';
+
+class TravelGoal extends FieldDef {
+  static displayName = 'Travel Goal';
+  @field goalTitle = contains(StringField);
+  @field country = linksTo(Country);
+  @field alternateTrips = linksToMany(Country);
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <CardContainer class='container'>
+        <FieldContainer @label='Goal Title'>
+          <@fields.goalTitle />
+        </FieldContainer>
+        <FieldContainer @label='Country'>
+          <@fields.country />
+        </FieldContainer>
+        <FieldContainer @label='Alternate Trips'>
+          <@fields.alternateTrips />
+        </FieldContainer>
+      </CardContainer>
+      <style>
+        .container {
+          padding: 20px;
+          background-color: whitesmoke;
+        }
+        .container > * + * {
+          margin-top: 20px;
+        }
+      </style>
+    </template>
+  };
+}
 
 class Traveler extends FieldDef {
   static displayName = 'Traveler';
   @field name = contains(StringField);
   @field countryOfOrigin = linksTo(Country);
   @field countriesVisited = linksToMany(Country);
+  @field nextTravelGoal = contains(TravelGoal);
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
@@ -36,6 +68,9 @@ class Traveler extends FieldDef {
           {{else}}
             Unknown
           {{/if}}
+        </FieldContainer>
+        <FieldContainer @label='Next Travel Goal' @vertical={{true}}>
+          <@fields.nextTravelGoal />
         </FieldContainer>
       </div>
       <style>
@@ -61,7 +96,6 @@ export class TripInfo extends CardDef {
   });
   @field startLocation = linksTo(Country);
   @field endLocation = linksTo(Country);
-
   /*
   static isolated = class Isolated extends Component<typeof this> {
     <template></template>

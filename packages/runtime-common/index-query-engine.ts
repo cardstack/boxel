@@ -1,0 +1,1156 @@
+import * as JSONTypes from 'json-typescript';
+import flatten from 'lodash/flatten';
+import {
+  type CardResource,
+  type CodeRef,
+  Loader,
+  baseCardRef,
+  loadCard,
+  internalKeyFor,
+  identifyCard,
+} from './index';
+import {
+  type Expression,
+  type CardExpression,
+  type FieldQuery,
+  type FieldValue,
+  type FieldArity,
+  param,
+  isParam,
+  tableValuedEach,
+  tableValuedTree,
+  separatedByCommas,
+  addExplicitParens,
+  any,
+  every,
+  fieldQuery,
+  fieldValue,
+  fieldArity,
+  tableValuedFunctionsPlaceholder,
+  query,
+} from './expression';
+import {
+  type Query,
+  type Filter,
+  type EqFilter,
+  type NotFilter,
+  type ContainsFilter,
+  type Sort,
+  type RangeFilter,
+  RANGE_OPERATORS,
+  RangeOperator,
+  RangeFilterValue,
+} from './query';
+import { type SerializedError } from './error';
+import { type DBAdapter } from './db';
+
+import type { BaseDef, Field } from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import {
+  coerceTypes,
+  type BoxelIndexTable,
+  type RealmVersionsTable,
+} from './index-structure';
+
+interface IndexedModule {
+  type: 'module';
+  executableCode: string;
+  source: string;
+  canonicalURL: string;
+  lastModified: number;
+}
+
+interface IndexedCSS {
+  type: 'css';
+  source: string;
+  canonicalURL: string;
+  lastModified: number;
+}
+
+export interface IndexedInstance {
+  type: 'instance';
+  instance: CardResource;
+  source: string;
+  canonicalURL: string;
+  lastModified: number;
+  isolatedHtml: string | null;
+  embeddedHtml: string | null;
+  atomHtml: string | null;
+  searchDoc: Record<string, any> | null;
+  types: string[] | null;
+  deps: string[] | null;
+  realmVersion: number;
+  realmURL: string;
+  indexedAt: number | null;
+  // TODO this is used for testing, lets remove this after we have a way to ask
+  // for which card class to use for embedded HTML. This will mean we'll need to
+  // alter the way we test this so that it's a bit more indirect.
+  _embeddedHtmlByClassHierarchy: { [refURL: string]: string } | null;
+}
+interface IndexedError {
+  type: 'error';
+  error: SerializedError;
+}
+
+export type IndexedInstanceOrError = IndexedInstance | IndexedError;
+export type IndexedModuleOrError = IndexedModule | IndexedError;
+export type IndexedCSSOrError = IndexedCSS | IndexedError;
+
+type GetEntryOptions = WIPOptions;
+export type QueryOptions = WIPOptions & PrerenderedCardOptions;
+
+interface PrerenderedCardOptions {
+  htmlFormat?: 'embedded' | 'atom';
+}
+
+interface WIPOptions {
+  useWorkInProgressIndex?: boolean;
+}
+
+export interface PrerenderedCardCssItem {
+  cssModuleId: string;
+  source: string;
+}
+
+export interface PrerenderedCard {
+  url: string;
+  html: string;
+  cssModuleIds: string[];
+}
+
+export interface QueryResultsMeta {
+  // TODO SQLite doesn't let us use cursors in the classic sense so we need to
+  // keep track of page size and index number--note it is possible for the index
+  // to mutate between pages. Perhaps consider querying a specific realm version
+  // (and only cleanup realm versions when making generations) so we can see
+  // consistent paginated results...
+  page: {
+    total: number;
+    realmVersion: number;
+  };
+}
+
+export class IndexQueryEngine {
+  constructor(private dbAdapter: DBAdapter) {}
+
+  private async query(expression: Expression) {
+    return await query(this.dbAdapter, expression, coerceTypes);
+  }
+
+  private async queryCards(query: CardExpression, loader: Loader) {
+    return this.query(await this.makeExpression(query, loader));
+  }
+
+  async getModule(
+    url: URL,
+    opts?: GetEntryOptions,
+  ): Promise<IndexedModuleOrError | undefined> {
+    let result = await this.getModuleOrCSS(url, 'module', opts);
+    if (!result) {
+      return undefined;
+    }
+    if (result.type === 'error') {
+      return { type: 'error', error: result.error_doc! };
+    }
+    let moduleEntry = assertIndexEntrySource(result);
+    let {
+      transpiled_code: executableCode,
+      source,
+      url: canonicalURL,
+      last_modified: lastModified,
+    } = moduleEntry;
+    if (!executableCode) {
+      throw new Error(
+        `bug: index entry for ${url.href} with opts: ${JSON.stringify(
+          opts,
+        )} has neither an error_doc nor transpiled_code`,
+      );
+    }
+    return {
+      type: 'module',
+      canonicalURL,
+      executableCode,
+      source,
+      lastModified: parseInt(lastModified),
+    };
+  }
+
+  async getCSS(
+    url: URL,
+    opts?: GetEntryOptions,
+  ): Promise<IndexedCSSOrError | undefined> {
+    let result = await this.getModuleOrCSS(url, 'css', opts);
+    if (!result) {
+      return undefined;
+    }
+    if (result.type === 'error') {
+      return { type: 'error', error: result.error_doc! };
+    }
+    let moduleEntry = assertIndexEntrySource(result);
+    let {
+      source,
+      url: canonicalURL,
+      last_modified: lastModified,
+    } = moduleEntry;
+    return {
+      type: 'css',
+      canonicalURL,
+      source,
+      lastModified: parseInt(lastModified),
+    };
+  }
+
+  private async getModuleOrCSS(
+    url: URL,
+    type: 'module' | 'css',
+    opts?: GetEntryOptions,
+  ): Promise<BoxelIndexTable | undefined> {
+    let result = (await this.query([
+      `SELECT i.*
+       FROM boxel_index as i
+       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
+       WHERE`,
+      ...every([
+        any([
+          [`i.url =`, param(url.href)],
+          [`i.file_alias =`, param(url.href)],
+        ]),
+        realmVersionExpression(opts),
+        any([
+          ['i.type =', param(type)],
+          ['i.type =', param('error')],
+        ]),
+      ]),
+    ] as Expression)) as unknown as BoxelIndexTable[];
+    let maybeResult: BoxelIndexTable | undefined = result[0];
+    if (!maybeResult) {
+      return undefined;
+    }
+    if (maybeResult.is_deleted) {
+      return undefined;
+    }
+    return maybeResult;
+  }
+
+  async getInstance(
+    url: URL,
+    opts?: GetEntryOptions,
+  ): Promise<IndexedInstanceOrError | undefined> {
+    let result = (await this.query([
+      `SELECT i.*, embedded_html ->> `,
+      param('default'),
+      ` as default_embedded_html
+       FROM boxel_index as i
+       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
+       WHERE`,
+      ...every([
+        any([
+          [`i.url =`, param(url.href)],
+          [`i.file_alias =`, param(url.href)],
+        ]),
+        realmVersionExpression(opts),
+        any([
+          ['i.type =', param('instance')],
+          ['i.type =', param('error')],
+        ]),
+      ]),
+    ] as Expression)) as unknown as (BoxelIndexTable & {
+      default_embedded_html: string | null;
+    })[];
+    let maybeResult:
+      | (BoxelIndexTable & { default_embedded_html: string | null })
+      | undefined = result[0];
+    if (!maybeResult) {
+      return undefined;
+    }
+    if (maybeResult.is_deleted) {
+      return undefined;
+    }
+
+    if (maybeResult.error_doc) {
+      return { type: 'error', error: maybeResult.error_doc };
+    }
+    let instanceEntry = assertIndexEntrySource(maybeResult);
+    let {
+      url: canonicalURL,
+      pristine_doc: instance,
+      isolated_html: isolatedHtml,
+      atom_html: atomHtml,
+      default_embedded_html: embeddedHtml,
+      embedded_html: _embeddedHtmlByClassHierarchy,
+      search_doc: searchDoc,
+      realm_version: realmVersion,
+      realm_url: realmURL,
+      indexed_at: indexedAt,
+      last_modified: lastModified,
+      source,
+      types,
+      deps,
+    } = instanceEntry;
+    if (!instance) {
+      throw new Error(
+        `bug: index entry for ${url.href} with opts: ${JSON.stringify(
+          opts,
+        )} has neither an error_doc nor a pristine_doc`,
+      );
+    }
+    return {
+      type: 'instance',
+      canonicalURL,
+      realmURL,
+      instance,
+      isolatedHtml,
+      embeddedHtml,
+      atomHtml,
+      searchDoc,
+      types,
+      indexedAt: indexedAt != null ? parseInt(indexedAt) : null,
+      source,
+      deps,
+      lastModified: parseInt(lastModified),
+      realmVersion,
+      // TODO this is used for testing, lets remove this after we have a way to ask
+      // for which card class to use for embedded HTML
+      _embeddedHtmlByClassHierarchy,
+    };
+  }
+
+  // we pass the loader in so there is no ambiguity which loader to use as this
+  // client may be serving a live index or a WIP index that is being built up
+  // which could have conflicting loaders. It is up to the caller to provide the
+  // loader that we should be using.
+  private async _search(
+    realmURL: URL,
+    { filter, sort, page }: Query,
+    loader: Loader,
+    opts: QueryOptions,
+    selectClauseExpression: CardExpression,
+  ): Promise<{
+    meta: QueryResultsMeta;
+    results: Partial<BoxelIndexTable>[];
+  }> {
+    let version: number;
+    if (page?.realmVersion) {
+      version = page.realmVersion;
+    } else {
+      let currentRealmVersion = await this.fetchCurrentRealmVersion(realmURL);
+      version = opts?.useWorkInProgressIndex
+        ? currentRealmVersion + 1
+        : currentRealmVersion;
+    }
+    let conditions: CardExpression[] = [
+      ['i.realm_url = ', param(realmURL.href)],
+      ['i.type =', param('instance')],
+      ['is_deleted = FALSE OR is_deleted IS NULL'],
+      realmVersionExpression({ withMaxVersion: version }),
+    ];
+    if (filter) {
+      conditions.push(this.filterCondition(filter, baseCardRef));
+    }
+
+    let everyCondition = every(conditions);
+    let query = [
+      ...selectClauseExpression,
+      `FROM boxel_index AS i ${tableValuedFunctionsPlaceholder}`,
+      `INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
+      'WHERE',
+      ...everyCondition,
+      'GROUP BY url',
+      ...this.orderExpression(sort),
+      ...(page ? [`LIMIT ${page.size} OFFSET ${page.number * page.size}`] : []),
+    ];
+    let queryCount = [
+      'SELECT COUNT(DISTINCT url) AS total',
+      `FROM boxel_index AS i ${tableValuedFunctionsPlaceholder}`,
+      `INNER JOIN realm_versions r ON i.realm_url = r.realm_url`,
+      'WHERE',
+      ...everyCondition,
+    ];
+
+    let [results, totalResults] = await Promise.all([
+      this.queryCards(query, loader),
+      this.queryCards(queryCount, loader),
+    ]);
+
+    return {
+      results,
+      meta: {
+        page: { total: Number(totalResults[0].total), realmVersion: version },
+      },
+    };
+  }
+
+  async search(
+    realmURL: URL,
+    { filter, sort, page }: Query,
+    loader: Loader,
+    opts: QueryOptions = {},
+    // TODO this should be returning a CardCollectionDocument--handle that in
+    // subsequent PR where we start storing card documents in "pristine_doc"
+  ): Promise<{ cards: CardResource[]; meta: QueryResultsMeta }> {
+    let { results, meta } = await this._search(
+      realmURL,
+      { filter, sort, page },
+      loader,
+      opts,
+      [
+        'SELECT url, ANY_VALUE(pristine_doc) AS pristine_doc, ANY_VALUE(error_doc) AS error_doc',
+      ],
+    );
+
+    let cards = results
+      .map((r) => r.pristine_doc)
+      .filter(Boolean) as CardResource[];
+
+    return { cards, meta };
+  }
+
+  private orderExpression(sort: Sort | undefined): CardExpression {
+    if (!sort) {
+      return ['ORDER BY url COLLATE "POSIX"'];
+    }
+    return [
+      'ORDER BY',
+      ...separatedByCommas([
+        ...sort.map((s) => [
+          // intentionally not using field arity here--not sure what it means to
+          // sort via a plural field
+          'ANY_VALUE(',
+          fieldQuery(s.by, s.on, false, 'sort'),
+          ')',
+          s.direction ?? 'asc',
+          'NULLS LAST',
+        ]),
+        // we include 'url' as the final sort key for deterministic results
+        ['url COLLATE "POSIX"'],
+      ]),
+    ];
+  }
+
+  async searchPrerendered(
+    realmURL: URL,
+    { filter, sort, page }: Query,
+    loader: Loader,
+    opts: QueryOptions = {},
+  ): Promise<{
+    prerenderedCards: PrerenderedCard[];
+    prerenderedCardCssItems: PrerenderedCardCssItem[];
+    meta: QueryResultsMeta;
+  }> {
+    if (
+      !opts.htmlFormat ||
+      (opts.htmlFormat !== 'embedded' && opts.htmlFormat !== 'atom')
+    ) {
+      throw new Error(`htmlFormat must be either 'embedded' or 'atom'`);
+    }
+    let htmlColumnExpression =
+      opts.htmlFormat == 'embedded'
+        ? ['embedded_html ->> ', param('default')] // TODO: this param should be the value of card type specified in the ON filter - if that is not present, or the query has different card type values in ON filters, we should default to CardDef embedded template in the embedded_html JSON
+        : ['atom_html'];
+
+    let { results, meta } = (await this._search(
+      realmURL,
+      { filter, sort, page },
+      loader,
+      opts,
+      [
+        'SELECT url, ANY_VALUE(file_alias) as file_alias, ANY_VALUE(',
+        ...htmlColumnExpression,
+        ') as html',
+      ],
+    )) as {
+      meta: QueryResultsMeta;
+      results: (Partial<BoxelIndexTable> & { html: string })[];
+    };
+
+    let cardFileAliases = results.map((c) => c.file_alias);
+    let realmVersion = meta.page.realmVersion;
+
+    let conditions: CardExpression[] = [
+      ['i.realm_version = ', param(realmVersion)],
+      ['i.type =', param('instance')],
+      [
+        'i.file_alias IN',
+        ...addExplicitParens(
+          separatedByCommas(
+            cardFileAliases.map((cardFileAlias) => [param(cardFileAlias!)]),
+          ),
+        ),
+      ],
+    ];
+
+    // This query will give us a list of indexed css entries and their corresponding instances that have that particular css module as a dependency
+    let cssSourceQuery = [
+      `WITH instance_deps AS (
+        SELECT file_alias as instance_file_alias, deps_each.value AS instance_dep_file_alias
+        FROM boxel_index i, jsonb_array_elements_text(i.deps) AS deps_each
+        WHERE`,
+      ...every(conditions),
+      `),
+      css_deps AS (
+        SELECT
+          bi.source AS css_source,
+          bi.file_alias AS css_module_id,
+          array_agg(id.instance_file_alias) AS instances
+        FROM boxel_index bi
+        JOIN instance_deps id ON bi.file_alias = id.instance_dep_file_alias
+        WHERE bi.type = 'css'
+        GROUP BY bi.source, bi.file_alias
+      )
+      SELECT
+        css_module_id,
+        array_to_json(instances) AS instances,
+        css_source
+      FROM css_deps;
+      `,
+    ];
+
+    let groupedCssInstanceData = (await this.queryCards(
+      cssSourceQuery,
+      loader,
+    )) as {
+      css_module_id: string;
+      instances: string[];
+      css_source: string;
+    }[];
+
+    // Prepare a structure where we can easily access css entries for deps of a particular card
+    let cardInstanceCss = groupedCssInstanceData.reduce(
+      (
+        acc: Record<string, { cssModuleId: string; cssSource: string }[]>,
+        row,
+      ) => {
+        let instances =
+          typeof row.instances === 'string'
+            ? JSON.parse(row.instances)
+            : row.instances; // SQLite client returns array as string
+        instances.forEach((instance: string) => {
+          if (!acc[instance]) {
+            acc[instance] = [];
+          }
+          acc[instance].push({
+            cssModuleId: row.css_module_id,
+            cssSource: row.css_source,
+          });
+        });
+        return acc;
+      },
+      {},
+    );
+
+    let prerenderedCards = results.map((card) => {
+      return {
+        url: card.url!,
+        html: card.html,
+        cssModuleIds:
+          cardInstanceCss[card.file_alias!]?.map((item) => item.cssModuleId) ??
+          [],
+      };
+    });
+
+    let prerenderedCardCssItems = groupedCssInstanceData.map((cssRecord) => {
+      return {
+        cssModuleId: cssRecord.css_module_id,
+        source: cssRecord.css_source,
+      };
+    });
+
+    return { prerenderedCards, prerenderedCardCssItems, meta };
+  }
+
+  private async fetchCurrentRealmVersion(realmURL: URL) {
+    let [{ current_version }] = (await this.query([
+      'SELECT current_version FROM realm_versions WHERE realm_url =',
+      param(realmURL.href),
+    ])) as Pick<RealmVersionsTable, 'current_version'>[];
+    if (current_version == null) {
+      throw new Error(`No current version found for realm ${realmURL.href}`);
+    }
+    return current_version;
+  }
+
+  private filterCondition(filter: Filter, onRef: CodeRef): CardExpression {
+    if ('type' in filter) {
+      return this.typeCondition(filter.type);
+    }
+
+    let on = filter.on ?? onRef;
+
+    if ('eq' in filter) {
+      return this.eqCondition(filter, on);
+    } else if ('contains' in filter) {
+      return this.containsCondition(filter, on);
+    } else if ('not' in filter) {
+      return this.notCondition(filter, on);
+    } else if ('range' in filter) {
+      return this.rangeCondition(filter, on);
+    } else if ('every' in filter) {
+      return every([
+        ...(filter.on ? [this.typeCondition(filter.on)] : []),
+        ...filter.every.map((i) => this.filterCondition(i, filter.on ?? on)),
+      ]);
+    } else if ('any' in filter) {
+      return every([
+        ...(filter.on ? [this.typeCondition(filter.on)] : []),
+        any([
+          ...filter.any.map((i) => this.filterCondition(i, filter.on ?? on)),
+        ]),
+      ]);
+    } else {
+      assertNever(filter);
+    }
+    throw new Error(`Unknown filter: ${JSON.stringify(filter)}`);
+  }
+
+  // the type condition only consumes absolute URL card refs.
+  private typeCondition(ref: CodeRef): CardExpression {
+    return [
+      tableValuedEach('types'),
+      '=',
+      param(internalKeyFor(ref, undefined)),
+    ];
+  }
+
+  private eqCondition(filter: EqFilter, on: CodeRef): CardExpression {
+    on = filter.on ?? on;
+    return every([
+      ...(filter.on ? [this.typeCondition(filter.on)] : []),
+      ...Object.entries(filter.eq).map(([key, value]) => {
+        return this.fieldEqFilter(key, value, on);
+      }),
+    ]);
+  }
+
+  private containsCondition(
+    filter: ContainsFilter,
+    on: CodeRef,
+  ): CardExpression {
+    on = filter.on ?? on;
+    return every([
+      ...(filter.on ? [this.typeCondition(filter.on)] : []),
+      ...Object.entries(filter.contains).map(([key, value]) => {
+        return this.fieldLikeFilter(key, value, on);
+      }),
+    ]);
+  }
+
+  private notCondition(filter: NotFilter, on: CodeRef): CardExpression {
+    on = filter.on ?? on;
+    return every([
+      ...(filter.on ? [this.typeCondition(filter.on)] : []),
+      ['NOT', ...addExplicitParens(this.filterCondition(filter.not, on))],
+    ]);
+  }
+
+  private rangeCondition(filter: RangeFilter, on: CodeRef): CardExpression {
+    on = filter.on ?? on;
+    return every([
+      ...(filter.on ? [this.typeCondition(filter.on)] : []),
+      ...Object.entries(filter.range).map(([key, filterValue]) => {
+        return this.fieldRangeFilter(key, filterValue as RangeFilterValue, on);
+      }),
+    ]);
+  }
+
+  private fieldEqFilter(
+    key: string,
+    value: JSONTypes.Value,
+    onRef: CodeRef,
+  ): CardExpression {
+    if (value === null) {
+      let query = fieldQuery(key, onRef, true, 'filter');
+      return [
+        fieldArity({
+          type: onRef,
+          path: key,
+          value: [query, 'IS NULL'],
+          pluralValue: [query, "= 'null'::jsonb"],
+          usePluralContainer: true,
+          errorHint: 'filter',
+        }),
+      ];
+    }
+    let query = fieldQuery(key, onRef, false, 'filter');
+    let v = fieldValue(key, [param(value)], onRef, 'filter');
+    return [
+      fieldArity({
+        type: onRef,
+        path: key,
+        value: [query, '=', v],
+        errorHint: 'filter',
+      }),
+    ];
+  }
+
+  private fieldLikeFilter(
+    key: string,
+    value: JSONTypes.Value,
+    onRef: CodeRef,
+  ): CardExpression {
+    if (value === null) {
+      let query = fieldQuery(key, onRef, true, 'filter');
+      return [
+        fieldArity({
+          type: onRef,
+          path: key,
+          value: [query, 'IS NULL'],
+          pluralValue: [query, "= 'null'::jsonb"],
+          usePluralContainer: true,
+          errorHint: 'filter',
+        }),
+      ];
+    }
+    let query = fieldQuery(key, onRef, false, 'filter');
+    let v = fieldValue(key, [param(`%${value}%`)], onRef, 'filter');
+    return [
+      fieldArity({
+        type: onRef,
+        path: key,
+        value: [query, 'ILIKE', v],
+        errorHint: 'filter',
+      }),
+    ];
+  }
+
+  private fieldRangeFilter(
+    key: string,
+    filterValue: RangeFilterValue,
+    onRef: CodeRef,
+  ): CardExpression {
+    let query = fieldQuery(key, onRef, false, 'filter');
+    let cardExpressions: CardExpression[] = [];
+    Object.entries(filterValue).forEach(([operator, value]) => {
+      if (value == null) {
+        throw new Error(`'null' is not a permitted value in a 'range' filter`);
+      }
+      let v = fieldValue(key, [param(value)], onRef, 'filter');
+      cardExpressions.push([
+        fieldArity({
+          type: onRef,
+          path: key,
+          value: [query, RANGE_OPERATORS[operator as RangeOperator], v],
+          errorHint: 'filter',
+        }),
+      ]);
+    });
+
+    return every(cardExpressions);
+  }
+
+  private async makeExpression(
+    query: CardExpression,
+    loader: Loader,
+  ): Promise<Expression> {
+    return flatten(
+      await Promise.all(
+        query.map((element) => {
+          if (
+            isParam(element) ||
+            typeof element === 'string' ||
+            element.kind === 'table-valued-each' ||
+            element.kind === 'table-valued-tree'
+          ) {
+            return Promise.resolve([element]);
+          } else if (element.kind === 'field-query') {
+            return this.handleFieldQuery(element, loader);
+          } else if (element.kind === 'field-value') {
+            return this.handleFieldValue(element, loader);
+          } else if (element.kind === 'field-arity') {
+            return this.handleFieldArity(element, loader);
+          } else {
+            throw assertNever(element);
+          }
+        }),
+      ),
+    );
+  }
+
+  // The goal of this handler is to ensure that the use of table valued
+  // json_tree() function that we use for querying thru fields that are plural
+  // is confined to the specific JSON path that our query should run. This means
+  // that we need to determine the root path for the json_tree() function, as
+  // well as the "query path" for the json_tree() function. The query path
+  // predicate is AND'ed to the expression contained in the FieldArity
+  // expression. Queries that do not go thru a plural field can use the normal
+  // '->' and '->>' JSON operators.
+  // The result is a query that looks like this:
+  //
+  //   SELECT url, pristine_doc
+  //   FROM
+  //     boxel_index,
+  //   CROSS JOIN LATERAL jsonb_array_elements_text(types) as types0_array_element
+  //     -- This json_tree was derived by this handler:
+  //   CROSS JOIN LATERAL jsonb_tree(search_doc, '$.friends') as friends1_tree
+  //   WHERE
+  //     ( ( is_deleted = FALSE OR is_deleted IS NULL ) )
+  //     AND (
+  //       ( types0_array_element = $1 )
+  //       AND (
+  //         ( friends1_tree.text_value = $2 )
+  //         AND
+  //         -- This predicate was derived by this handler:
+  //         ( friends1_tree.fullkey LIKE '$.friends[%].bestFriend.name' )
+  //       )
+  //     )
+  //   GROUP BY url
+  //   ORDER BY url
+
+  private async handleFieldArity(
+    fieldArity: FieldArity,
+    loader: Loader,
+  ): Promise<Expression> {
+    let { path, value, type, pluralValue, usePluralContainer } = fieldArity;
+
+    let exp: CardExpression = await this.walkFilterFieldPath(
+      loader,
+      await loadFieldOrCard(type, loader),
+      path,
+      value,
+      // Leaf field handler
+      async (_api, _field, expression, _fieldName, pathTraveled) => {
+        if (traveledThruPlural(pathTraveled)) {
+          return [
+            ...every([
+              pluralValue ?? expression,
+              [
+                tableValuedTree(
+                  'search_doc',
+                  trimPathAtFirstPluralField(pathTraveled),
+                  path,
+                  'fullkey',
+                ),
+                `LIKE '$.${
+                  usePluralContainer
+                    ? convertBracketsToWildCards(
+                        trimTrailingBrackets(pathTraveled),
+                      )
+                    : convertBracketsToWildCards(pathTraveled)
+                }'`,
+              ],
+            ]),
+          ];
+        }
+        return expression;
+      },
+    );
+    return await this.makeExpression(exp, loader);
+  }
+
+  private async handleFieldQuery(
+    fieldQuery: FieldQuery,
+    loader: Loader,
+  ): Promise<Expression> {
+    let { path, type, useJsonBValue } = fieldQuery;
+    // The rootPluralPath should line up with the tableValuedTree that was
+    // used in the handleFieldArity (the multiple tableValuedTree expressions will
+    // collapse into a single function)
+    let rootPluralPath: string | undefined;
+
+    let exp = await this.walkFilterFieldPath(
+      loader,
+      await loadFieldOrCard(type, loader),
+      path,
+      [],
+      // Leaf field handler
+      async (_api, field, expression, fieldName, pathTraveled) => {
+        // TODO we should probably add a new hook in our cards to support custom
+        // query expressions, like casting to a bigint for integers:
+        //     return ['(', ...source, '->>', { param: fieldName }, ')::bigint'];
+        if (isFieldPlural(field)) {
+          rootPluralPath = trimPathAtFirstPluralField(pathTraveled);
+          return [
+            tableValuedTree(
+              'search_doc',
+              rootPluralPath,
+              path,
+              useJsonBValue ? 'jsonb_value' : 'text_value',
+            ),
+          ];
+        } else if (!rootPluralPath) {
+          return [...expression, '->>', param(fieldName)];
+        }
+        return expression;
+      },
+      // interior field handler
+      {
+        enter: async (_api, field, expression, _fieldName, pathTraveled) => {
+          // we work forwards determining if any interior fields are plural
+          // since that requires a different style predicate
+          if (isFieldPlural(field)) {
+            rootPluralPath = trimPathAtFirstPluralField(pathTraveled);
+            return [
+              tableValuedTree('search_doc', rootPluralPath, path, 'text_value'),
+            ];
+          }
+          return expression;
+        },
+        exit: async (_api, field, expression, fieldName, _pathTraveled) => {
+          // we populate the singular fields backwards as we can only do that
+          // after we are assured that we are not leveraging the plural style
+          // predicate
+          if (!isFieldPlural(field) && !rootPluralPath) {
+            return ['->', param(fieldName), ...expression];
+          }
+          return expression;
+        },
+      },
+    );
+    if (!rootPluralPath) {
+      exp = ['search_doc', ...exp];
+    }
+    return exp;
+  }
+
+  private async handleFieldValue(
+    fieldValue: FieldValue,
+    loader: Loader,
+  ): Promise<Expression> {
+    let { path, value, type } = fieldValue;
+    let exp = await this.makeExpression(value, loader);
+
+    return await this.walkFilterFieldPath(
+      loader,
+      await loadFieldOrCard(type, loader),
+      path,
+      exp,
+      // Leaf field handler
+      async (api, field, expression) => {
+        let queryValue: any;
+        let [value] = expression;
+        if (isParam(value)) {
+          queryValue = api.formatQueryValue(field, value.param);
+        } else if (typeof value === 'string') {
+          queryValue = api.formatQueryValue(field, value);
+        } else {
+          throw new Error(
+            `Do not know how to handle field value: ${JSON.stringify(value)}`,
+          );
+        }
+        return [param(queryValue)];
+      },
+    );
+  }
+
+  private async walkFilterFieldPath(
+    loader: Loader,
+    cardOrField: typeof BaseDef,
+    path: string,
+    expression: Expression,
+    handleLeafField: FilterFieldHandler<Expression>,
+    handleInteriorField?: FilterFieldHandlerWithEntryAndExit<Expression>,
+    pathTraveled?: string[],
+  ): Promise<Expression>;
+  private async walkFilterFieldPath(
+    loader: Loader,
+    cardOrField: typeof BaseDef,
+    path: string,
+    expression: CardExpression,
+    handleLeafField: FilterFieldHandler<CardExpression>,
+    handleInteriorField?: FilterFieldHandlerWithEntryAndExit<CardExpression>,
+    pathTraveled?: string[],
+  ): Promise<CardExpression>;
+  private async walkFilterFieldPath(
+    loader: Loader,
+    cardOrField: typeof BaseDef,
+    path: string,
+    expression: Expression,
+    handleLeafField: FilterFieldHandler<any[]>,
+    handleInteriorField?: FilterFieldHandlerWithEntryAndExit<any[]>,
+    pathTraveled?: string[],
+  ): Promise<any> {
+    let pathSegments = path.split('.');
+    let isLeaf = pathSegments.length === 1;
+    let currentSegment = pathSegments.shift()!;
+    let api = await loader.import<typeof CardAPI>(
+      'https://cardstack.com/base/card-api',
+    );
+    if (!api) {
+      throw new Error(`could not load card API`);
+    }
+    let field: Field;
+    if (currentSegment === '_cardType') {
+      // this is a little awkward--we have the need to treat '_cardType' as a
+      // type of string field that we can query against from the index (e.g. the
+      // cards grid sorts by the card's display name). current-run is injecting
+      // this into the searchDoc during index time.
+      field = {
+        card: (
+          await loader.import<{ default: typeof CardAPI.FieldDef }>(
+            'https://cardstack.com/base/string',
+          )
+        ).default,
+        fieldType: 'contains',
+      } as unknown as Field; // just pretend this is an actual field
+    } else {
+      let fields = api.getFields(cardOrField, { includeComputeds: true });
+      field = fields[currentSegment];
+      if (!field) {
+        throw new Error(
+          `Your filter refers to nonexistent field "${currentSegment}" on type ${JSON.stringify(
+            identifyCard(cardOrField),
+          )}`,
+        );
+      }
+    }
+    // we use '[]' to denote plural fields as that has important ramifications
+    // to how we compose our queries in the various handlers and ultimately in
+    // SQL construction
+    let traveled = [
+      ...(pathTraveled ?? []),
+      `${currentSegment}${isFieldPlural(field) ? '[]' : ''}`,
+    ].join('.');
+    if (isLeaf) {
+      expression = await handleLeafField(
+        api,
+        field,
+        expression,
+        currentSegment,
+        traveled,
+      );
+    } else {
+      let passThru: FilterFieldHandler<any[]> = async (
+        _api,
+        _fc,
+        e: Expression,
+      ) => e;
+      // when dealing with an interior field that is not a leaf path segment,
+      // the entrance and exit hooks allow you to decorate the expression for
+      // the interior field before the interior's antecedant segment's
+      // expression is processed and after the interior field's antecedant
+      // segment's expression has been processed (i.e. recursing into the
+      // antecedant field and recursing out of the antecedant field).
+      let entranceHandler = handleInteriorField
+        ? handleInteriorField.enter || passThru
+        : passThru;
+      let exitHandler = handleInteriorField
+        ? handleInteriorField.exit || passThru
+        : passThru;
+
+      let interiorExpression = await this.walkFilterFieldPath(
+        loader,
+        field.card,
+        pathSegments.join('.'),
+        await entranceHandler(api, field, expression, currentSegment, traveled),
+        handleLeafField,
+        handleInteriorField,
+        traveled.split('.'),
+      );
+      expression = await exitHandler(
+        api,
+        field,
+        interiorExpression,
+        currentSegment,
+        traveled,
+      );
+    }
+    return expression;
+  }
+}
+
+async function loadFieldOrCard(
+  ref: CodeRef,
+  loader: Loader,
+): Promise<typeof BaseDef> {
+  try {
+    return await loadCard(ref, { loader });
+  } catch (e: any) {
+    if (!('type' in ref)) {
+      throw new Error(
+        `Your filter refers to nonexistent type: import ${
+          ref.name === 'default' ? 'default' : `{ ${ref.name} }`
+        } from "${ref.module}"`,
+      );
+    } else {
+      throw new Error(
+        `Your filter refers to nonexistent type: ${JSON.stringify(
+          ref,
+          null,
+          2,
+        )}`,
+      );
+    }
+  }
+}
+
+function realmVersionExpression(opts?: {
+  useWorkInProgressIndex?: boolean;
+  withMaxVersion?: number;
+}) {
+  return [
+    'realm_version =',
+    ...addExplicitParens([
+      'SELECT MAX(i2.realm_version)',
+      'FROM boxel_index i2',
+      'WHERE i2.url = i.url',
+      ...(opts?.withMaxVersion
+        ? ['AND i2.realm_version <=', param(opts?.withMaxVersion)]
+        : !opts?.useWorkInProgressIndex
+        ? // if we are not using the work in progress index then we limit the max
+          // version permitted to the current version for the realm
+          ['AND i2.realm_version <= r.current_version']
+        : // otherwise we choose the highest version in the system
+          []),
+    ]),
+  ] as Expression;
+}
+
+function traveledThruPlural(pathTraveled: string) {
+  return pathTraveled.includes('[');
+}
+
+function trimTrailingBrackets(pathTraveled: string) {
+  return pathTraveled.replace(/\[\]$/g, '');
+}
+
+function trimPathAtFirstPluralField(pathTraveled: string) {
+  return pathTraveled.substring(0, pathTraveled.indexOf('['));
+}
+
+function convertBracketsToWildCards(pathTraveled: string) {
+  return pathTraveled.replace(/\[\]/g, '[%]');
+}
+
+function isFieldPlural(field: Field): boolean {
+  return (
+    field.fieldType === 'containsMany' || field.fieldType === 'linksToMany'
+  );
+}
+
+function assertIndexEntrySource<T>(obj: T): Omit<
+  T,
+  'source' | 'last_modified'
+> & {
+  source: string;
+  last_modified: string;
+} {
+  if (!obj || typeof obj !== 'object') {
+    throw new Error(`expected index entry is null or not an object`);
+  }
+  if (!('source' in obj) || typeof obj.source !== 'string') {
+    throw new Error(`expected index entry to have "source" string property`);
+  }
+  if (!('last_modified' in obj) || typeof obj.last_modified !== 'string') {
+    throw new Error(`expected index entry to have "last_modified" property`);
+  }
+  return obj as Omit<T, 'source' | 'last_modified'> & {
+    source: string;
+    last_modified: string;
+  };
+}
+
+function assertNever(value: never) {
+  return new Error(`should never happen ${value}`);
+}
+
+type FilterFieldHandler<T> = (
+  api: typeof CardAPI,
+  field: Field,
+  expression: T,
+  fieldName: string,
+  pathTraveled: string,
+) => Promise<T>;
+
+interface FilterFieldHandlerWithEntryAndExit<T> {
+  enter?: FilterFieldHandler<T>;
+  exit?: FilterFieldHandler<T>;
+}

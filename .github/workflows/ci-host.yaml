@@ -29,10 +29,13 @@ jobs:
       - name: Build boxel-ui
         run: pnpm build
         working-directory: packages/boxel-ui/addon
-      - name: Build host dist/ for fastboot
-        run: pnpm build
+      - name: Start host to serve assets for fastboot
+        run: pnpm start &
         env:
           NODE_OPTIONS: --max_old_space_size=4096
+        working-directory: packages/host
+      - name: Wait for ember-cli to be ready
+        run: pnpm npx wait-for-localhost 4200
         working-directory: packages/host
       - name: Start realm servers
         run: pnpm start:all &
