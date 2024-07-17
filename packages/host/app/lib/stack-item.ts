@@ -99,14 +99,15 @@ export class StackItem {
     if (!this.cardResource || !this.cardResource.card) {
       return;
     }
-    let cardDef = this.cardResource.card.constructor;
+    let cardDef = this.cardResource.card;
     if (!cardDef || !('headerColor' in cardDef)) {
       return;
     }
-    if (cardDef.headerColor == null) {
+    let color = cardDef.headerColor as { value: string } | null;
+    if (color == null || !color.value) {
       return;
     }
-    return cardDef.headerColor as string;
+    return color.value;
   }
 
   get api() {

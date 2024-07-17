@@ -2385,7 +2385,6 @@ export class CardDef extends BaseDef {
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
 
   static prefersWideFormat = false; // whether the card is full-width in the stack
-  static headerColor: string | null = null; // set string color value if the stack-item header has a background color
 }
 
 export type BaseDefConstructor = typeof BaseDef;

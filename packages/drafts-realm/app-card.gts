@@ -6,7 +6,7 @@ import {
   FieldDef,
 } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { cssVar, eq } from '@cardstack/boxel-ui/helpers';
 
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -21,6 +21,7 @@ import { getLiveCards, cardTypeDisplayName } from '@cardstack/runtime-common';
 // @ts-ignore no types
 import cssUrl from 'ember-css-url';
 import BooleanField from 'https://cardstack.com/base/boolean';
+import { ColorPicker } from './color-picker';
 
 class Tab extends FieldDef {
   @field ref = contains(CodeRefField);
@@ -208,12 +209,6 @@ class Isolated extends Component<typeof AppCard> {
     this.moduleName = (event.target as HTMLInputElement).value;
   }
 
-  get headerColor() {
-    let hc = Object.getPrototypeOf(this.args.model).constructor.headerColor;
-    console.log('hello', hc);
-    return hc;
-  }
-
   <template>
     {{#if this.noTabs}}
       <div
@@ -242,7 +237,7 @@ class Isolated extends Component<typeof AppCard> {
       <section class='dashboard'>
         <header
           class='dashboard-header'
-          style='background-color: {{this.headerColor}}'
+          style={{cssVar db-header-bg-color=this.args.model.headerColor.value}}
         >
           <h1 class='dashboard-title'><@fields.title /></h1>
           <nav class='dashboard-nav'>
@@ -558,11 +553,8 @@ class Isolated extends Component<typeof AppCard> {
 
 export class AppCard extends CardDef {
   static displayName = 'AppCard';
-
   static prefersWideFormat = true;
-  static headerColor = '#009879';
-
+  @field headerColor = contains(ColorPicker);
   @field tabs = containsMany(Tab);
-
   static isolated = Isolated;
 }
