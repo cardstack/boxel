@@ -2544,6 +2544,7 @@ function embeddedViewDriver() {
     @field card = linksTo(CardDef);
     static isolated = class Isolated extends Component<typeof this> {
       <template>
+        {{! template-lint-disable no-inline-styles }}
         <div class='group'>
           <div class='header'>Aspect ratio &lt;= 1.0</div>
           <div class='item'>
