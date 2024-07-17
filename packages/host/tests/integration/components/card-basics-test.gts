@@ -590,22 +590,75 @@ module('Integration | card-basics', function (hooks) {
         .dom('[data-test-viewport="large"] [data-test-card-thumbnail-text]')
         .doesNotExist();
 
-      let lastScrollPos = 0;
-      let snapshotCount = 0;
-      let preview = document.querySelector(
-        '[data-test-code-mode-card-preview-body]',
-      );
-      if (!preview) {
-        throw new Error(`Can't find preview panel`);
+      await percySnapshot(assert);
+    });
+
+    test('renders a default (CardDef) embedded view for card without thumbnail', async function (assert) {
+      class Person extends CardDef {
+        static displayName = 'Person';
+        @field firstName = contains(StringField);
+        @field image = contains(Base64ImageField);
+        @field title = contains(StringField, {
+          computeVia: function (this: Person) {
+            return this.firstName;
+          },
+        });
+        @field thumbnailURL = contains(MaybeBase64Field, {
+          computeVia: function (this: Person) {
+            return this.image.base64;
+          },
+        });
       }
-      do {
-        await percySnapshot(
-          `Integration | card-basics | cards allowed to be edited | renders a default (CardDef) embedded view for card with thumbnail - scroll position ${lastScrollPos}px`,
-        );
-        snapshotCount++;
-        lastScrollPos = preview.scrollTop;
-        preview.scrollTop = lastScrollPos + 900;
-      } while (lastScrollPos !== preview.scrollTop && snapshotCount < 10);
+
+      let EmbeddedViewDriver = embeddedViewDriver();
+
+      loader.shimModule(`${testRealmURL}test-cards`, {
+        Person,
+        EmbeddedViewDriver,
+      });
+
+      let vang = new Person({ firstName: 'Van Gogh' });
+      let driver = new EmbeddedViewDriver({ card: vang });
+      await renderCard(loader, driver, 'isolated');
+
+      assert
+        .dom('[data-test-viewport="row"] [data-test-card-title]')
+        .containsText('Van Gogh');
+      assert
+        .dom('[data-test-viewport="row"] [data-test-card-display-name]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="row"] [data-test-card-thumbnail-text]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="small"] [data-test-card-title]')
+        .containsText('Van Gogh');
+      assert
+        .dom('[data-test-viewport="small"] [data-test-card-display-name]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="small"] [data-test-card-thumbnail-text]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="medium"] [data-test-card-title]')
+        .containsText('Van Gogh');
+      assert
+        .dom('[data-test-viewport="medium"] [data-test-card-display-name]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="medium"] [data-test-card-thumbnail-text]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="large"] [data-test-card-title]')
+        .containsText('Van Gogh');
+      assert
+        .dom('[data-test-viewport="large"] [data-test-card-display-name]')
+        .containsText('Person');
+      assert
+        .dom('[data-test-viewport="large"] [data-test-card-thumbnail-text]')
+        .containsText('Person');
+
+      await percySnapshot(assert);
     });
 
     test('can set the ID for an unsaved card', async function (assert) {
