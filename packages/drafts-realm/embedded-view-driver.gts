@@ -107,15 +107,12 @@ export class EmbeddedViewDriver extends CardDef {
 
       <style>
         .card {
-          /* this is a whacky background color so that we can see from visual inspection 
-             if the embedded card doesn't use all the space that has been yielded to it
-          */
-          background-color: fuchsia;
           /* this is how a border would appear around a card.
              note that a card is not supposed to draw its own border 
           */
           box-shadow: 0 0 0 1px var(--boxel-light-500);
           overflow: hidden;
+          border-radius: var(--boxel-border-radius);
         }
         .group {
           margin: 2rem;

@@ -1819,15 +1819,11 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
           </div>
         </div>
         <div class='info-section'>
-          <div class='info-subsection'>
-            <h3 class='card-title' data-test-card-title>{{@model.title}}</h3>
-          </div>
-          <div class='info-subsection'>
-            <h4
-              class='card-display-name'
-              data-test-card-display-name
-            >{{cardTypeDisplayName @model}}</h4>
-          </div>
+          <h3 class='card-title' data-test-card-title>{{@model.title}}</h3>
+          <h4
+            class='card-display-name'
+            data-test-card-display-name
+          >{{cardTypeDisplayName @model}}</h4>
         </div>
         <div class='card-description'>{{@model.description}}</div>
       {{else}}
@@ -1861,9 +1857,7 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
         }
         .card-display-name {
           text-align: center;
-        }
-        .card-thumbnail {
-          border-radius: var(--boxel-border-radius);
+          margin: var(--boxel-sp-xxs) 0 0 0;
         }
         .card-description {
           display: none;
@@ -1948,7 +1942,6 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
 
       @container embedded-card (1.0 < aspect-ratio <= 2.0) {
         .embedded-template {
-          background-color: pink;
           align-content: flex-start;
           justify-content: center;
           padding: 10px;
@@ -1961,8 +1954,8 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
           line-height: 1.25;
           letter-spacing: 0.16px;
         }
-        .card-thumbnail {
-          border-radius: var(--boxel-border-radius);
+        .card-display-name {
+          margin: var(--boxel-sp-xxs) 0 0 0;
         }
       }
       @container embedded-card (1.0 < aspect-ratio <= 2.0) and (width < 200px) {
@@ -1995,6 +1988,9 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
           display: none;
         }
         .card-thumbnail {
+          /* at this breakpoint, the dominant axis is the height for 
+             thumbnail 1:1 aspect ratio calculations 
+          */
           height: 100%;
         }
       }
@@ -2017,6 +2013,9 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
           flex: 1 100%;
         }
         .card-thumbnail {
+          /* at this breakpoint, the dominant axis is the width for 
+             thumbnail 1:1 aspect ratio calculations 
+          */
           width: 100%;
         }
       }
@@ -2027,24 +2026,44 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
         .embedded-template {
           justify-content: center;
           padding: 10px;
+          column-gap: 10px;
+          flex-wrap: nowrap;
         }
         .card-title {
-          height: 35px;
-          text-align: center;
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 1;
+          overflow: hidden;
+          line-height: 1.25;
+          letter-spacing: 0.16px;
+          font: 500 var(--boxel-font-size-med);
+          margin: 0;
         }
         .card-display-name {
-          text-align: center;
-        }
-        .card-thumbnail {
-          border-radius: var(--boxel-border-radius);
-          margin-bottom: 11px;
-          padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
+          margin: var(--boxel-sp-4xs) 0 0 0;
         }
         .thumbnail-section {
-          width: 100%;
+          flex: 1;
         }
         .info-section {
-          width: 100%;
+          flex: 4;
+        }
+        .card-description {
+          display: none;
+        }
+      }
+      @container embedded-card (2.0 < aspect-ratio) and (height <= 57px) {
+        .embedded-template {
+          padding: 6px;
+        }
+        .thumbnail-section {
+          display: none;
+        }
+        .card-title {
+          margin: 0;
+        }
+        .card-display-name {
+          display: none;
         }
       }
 
@@ -2067,12 +2086,12 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
         color: var(--boxel-light);
         font: 700 var(--boxel-font);
         letter-spacing: var(--boxel-lsp);
+        border-radius: 6px;
       }
       .card-title {
         text-overflow: ellipsis;
       }
       .card-display-name {
-        margin: var(--boxel-sp-xxs) 0 0 0;
         font: 500 var(--boxel-font-xs);
         color: var(--boxel-450);
         line-height: 1.27;
