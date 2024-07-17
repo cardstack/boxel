@@ -7,6 +7,7 @@ import {
   useIndexBasedKey,
   FieldDef,
   type CardDef,
+  linksTo,
 } from './card-api';
 import StringField from './string';
 import DateTimeField from './datetime';
@@ -25,6 +26,7 @@ import BooleanField from './boolean';
 import { md5 } from 'super-fast-md5';
 import { EventStatus, MatrixError } from 'matrix-js-sdk';
 import { CommandField } from './command';
+import { CommandResult, SearchCommandResult } from './command-result';
 
 const ErrorMessage: Record<string, string> = {
   ['M_TOO_LARGE']: 'Message is too large',
@@ -191,16 +193,16 @@ function getCardComponent(card: CardDef) {
 }
 
 class EmbeddedMessageField extends Component<typeof MessageField> {
+  get hasCommandResult() {
+    //only display when there is a result
+    return this.args.fields.command && this.args.model.command?.result;
+  }
   <template>
     <div
       {{ScrollIntoView}}
       data-test-message-idx={{@model.index}}
       data-test-message-cards
     >
-      <div>
-        {{@fields.message}}
-      </div>
-
       {{#each @model.attachedResources as |cardResource|}}
         {{#if cardResource.cardError}}
           <div data-test-card-error={{cardResource.cardError.id}} class='error'>
@@ -258,7 +260,7 @@ export class MessageField extends FieldDef {
   @field attachedCardIds = containsMany(StringField);
   @field index = contains(NumberField);
   @field transactionId = contains(StringField);
-  @field command = contains(CommandField);
+  @field command = linksTo(CommandField);
   @field isStreamingFinished = contains(BooleanField);
   @field errorMessage = contains(StringField);
   // ID from the client and can be used by client
@@ -568,15 +570,43 @@ export class RoomField extends FieldDef {
                 (commandEvent.content.data.eventId ?? event_id),
           ) as ReactionEvent | undefined;
 
+          let commandResultEvent = this.events.find(
+            (e) =>
+              e.type === 'm.room.message' &&
+              e.content.msgtype === 'org.boxel.commandResult' &&
+              e.content['m.relates_to']?.rel_type === 'm.annotation' &&
+              e.content['m.relates_to'].event_id ===
+                commandEvent.content.data.eventId,
+          ) as CommandResultEvent;
+          let serializedResults: LooseSingleCardDocument[] =
+            commandResultEvent?.content?.result;
+          let r: CommandResult | SearchCommandResult | undefined;
+          if (serializedResults) {
+            // TODO: We should move this code into component when room has been changed
+            if (command.name === 'searchCard') {
+              r = new SearchCommandResult({
+                intent: command.arguments.description,
+                cardIds: serializedResults.map((r) => r.data.id),
+              });
+            } else {
+              r = new CommandResult({
+                intent: command.arguments.description,
+                cardIds: serializedResults.map((r) => r.data.id),
+              });
+            }
+          }
+          let commandFieldArgs = {
+            eventId: event_id,
+            name: command.name,
+            payload: command.arguments,
+            status: annotation?.content['m.relates_to'].key ?? 'ready',
+            ...(r && { result: r }),
+          };
+          let commandField = new CommandField(commandFieldArgs);
           messageField = new MessageField({
             ...cardArgs,
             formattedMessage: `<p class="command-message">${event.content.formatted_body}</p>`,
-            command: new CommandField({
-              eventId: event_id,
-              name: command.name,
-              payload: command.arguments,
-              status: annotation?.content['m.relates_to'].key ?? 'ready',
-            }),
+            command: commandField,
             isStreamingFinished: true,
           });
         } else {

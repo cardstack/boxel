@@ -18,13 +18,37 @@ import {
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+import { BaseDef } from 'https://cardstack.com/base/card-api';
 import { CommandField } from 'https://cardstack.com/base/command';
+
+import { SearchCommandResult } from 'https://cardstack.com/base/command-result';
+import { MessageField } from 'https://cardstack.com/base/room';
 
 import { getSearchResults } from '../resources/search';
 
+import CardService from './card-service';
+
+const deserializeToQuery = (payload: SearchPayload) => {
+  let maybeCodeRef = codeRefWithAbsoluteURL(
+    payload.filter.type,
+    new URL(payload.card_id),
+  );
+  if (!isResolvedCodeRef(maybeCodeRef)) {
+    throw new Error('Query returned by ai bot is not fully resolved');
+  }
+  payload.filter.type = maybeCodeRef;
+
+  return { filter: payload.filter };
+};
+
+function getComponent(cardOrField: BaseDef) {
+  return cardOrField.constructor.getComponent(cardOrField);
+}
+
 export default class CommandService extends Service {
-  @service declare operatorModeStateService: OperatorModeStateService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
+  @service private declare cardService: CardService;
   @tracked query: Query = {};
 
   searchCardResource = getSearchResults(this, () => this.query);
@@ -53,20 +77,12 @@ export default class CommandService extends Service {
             "Search command can't run because it doesn't have all the arguments returned by open ai",
           );
         }
-        //If ai returns a relative module path, we make it absolute based upon the card_id that exists
-        let maybeCodeRef = codeRefWithAbsoluteURL(
-          payload.filter.type,
-          new URL(payload.card_id),
-        );
-        if (!isResolvedCodeRef(maybeCodeRef)) {
-          throw new Error('Query returned by ai bot is not fully resolved');
-        }
-        payload.filter.type = maybeCodeRef;
-
-        this.query = { filter: payload.filter };
-
+        this.query = deserializeToQuery(payload);
         await this.searchCardResource.loaded;
-        res = this.searchCardResource.instances.map((c) => c.id);
+        let promises = this.searchCardResource.instances.map((c) =>
+          this.cardService.serializeCard(c),
+        );
+        res = await Promise.all(promises);
         console.log(res);
       }
       await this.matrixService.sendReactionEvent(roomId, eventId, 'applied');
@@ -83,6 +99,15 @@ export default class CommandService extends Service {
       this.matrixService.failedCommandState.set(eventId, error);
     }
   });
+
+  getCommandResultComponent(message: MessageField) {
+    if (message.command && message.command.result) {
+      if (message.command.name === 'searchCard') {
+        return getComponent(message.command.result as SearchCommandResult);
+      }
+    }
+    return;
+  }
 }
 
 type PatchPayload = { card_id: string } & PatchData;

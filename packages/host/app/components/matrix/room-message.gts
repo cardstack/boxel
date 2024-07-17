@@ -82,6 +82,10 @@ export default class RoomMessage extends Component<Signature> {
     return this.args.message.author.userId === aiBotUserId;
   }
 
+  get getComponent() {
+    return this.commandService.getCommandResultComponent(this.args.message);
+  }
+
   <template>
     {{! We Intentionally wait until message resources are loaded (i.e. have a value) before rendering the message.
       This is because if the message resources render asynchronously after the message is already rendered (e.g. card pills),
@@ -136,6 +140,14 @@ export default class RoomMessage extends Component<Signature> {
               data-test-command-apply={{this.applyButtonState}}
             />
           </div>
+
+          {{#let this.getComponent as |Component|}}
+            <Component
+              class='embedded-message-field'
+              @format='embedded'
+              @displayContainer={{false}}
+            />
+          {{/let}}
           {{#if this.isDisplayingCode}}
             <div class='preview-code'>
               <Button
@@ -229,6 +241,9 @@ export default class RoomMessage extends Component<Signature> {
         height: var(--monaco-container-height);
         min-height: 7rem;
         max-height: 30vh;
+      }
+      .embedded-message-field {
+        --boxel-field-embedded-padding: 0;
       }
     </style>
   </template>
