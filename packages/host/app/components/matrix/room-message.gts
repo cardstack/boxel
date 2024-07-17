@@ -20,6 +20,7 @@ import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
 
+import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -28,8 +29,6 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-import { type MessageField } from 'https://cardstack.com/base/message';
-import { RoomField } from 'https://cardstack.com/base/room';
 
 import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
@@ -40,9 +39,9 @@ import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    room: RoomField;
     roomId: string;
-    message: MessageField;
+    message: Message;
+    messages: Message[];
     index?: number;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
@@ -59,8 +58,9 @@ interface SendReadReceiptModifierSignature {
   Args: {
     Named: {
       matrixService: MatrixService;
-      message: MessageField;
-      room: RoomField;
+      roomId: string;
+      message: Message;
+      messages: Message[];
     };
     Positional: [];
   };
@@ -71,13 +71,10 @@ class SendReadReceipt extends Modifier<SendReadReceiptModifierSignature> {
   async modify(
     _element: Element,
     _positional: [],
-    {
-      matrixService,
-      message,
-      room,
-    }: NamedArgs<SendReadReceiptModifierSignature>,
+    args: NamedArgs<SendReadReceiptModifierSignature>,
   ) {
-    let isLastMessage = room.messages[room.messages.length - 1] === message;
+    let { matrixService, message, messages, roomId } = args;
+    let isLastMessage = messages[messages.length - 1] === message;
     if (!isLastMessage) {
       return;
     }
@@ -89,7 +86,7 @@ class SendReadReceipt extends Modifier<SendReadReceiptModifierSignature> {
     // sendReadReceipt expects an actual MatrixEvent (as defined in the matrix SDK), but it' not available to us here - however, we can fake it by adding the necessary methods
     let matrixEvent = {
       getId: () => message.eventId,
-      getRoomId: () => room.roomId,
+      getRoomId: () => roomId,
       getTs: () => message.created.getTime(),
     };
 
@@ -141,8 +138,9 @@ export default class RoomMessage extends Component<Signature> {
       <AiAssistantMessage
         {{SendReadReceipt
           matrixService=this.matrixService
+          roomId=@roomId
           message=@message
-          room=@room
+          messages=@messages
         }}
         id='message-container-{{@index}}'
         class='room-message'
@@ -363,11 +361,20 @@ export default class RoomMessage extends Component<Signature> {
       .join(', ');
   }
 
+  get command() {
+    return this.args.message.command;
+  }
+
   private patchCard = task(async () => {
     if (this.operatorModeStateService.patchCard.isRunning) {
       return;
     }
-    let { payload, eventId } = this.args.message.command;
+    if (!this.command) {
+      throw new Error(
+        'patchCard requires a command on the message to be defined',
+      );
+    }
+    let { payload, eventId } = this.command!;
     this.matrixService.failedCommandState.delete(eventId);
     try {
       await this.operatorModeStateService.patchCard.perform(
@@ -392,18 +399,21 @@ export default class RoomMessage extends Component<Signature> {
   });
 
   private get previewPatchCode() {
-    let { commandType, payload } = this.args.message.command;
+    if (!this.command) {
+      throw new Error(
+        'patchCard requires a command on the message to be defined',
+      );
+    }
+    let { commandType, payload } = this.command!;
     return JSON.stringify({ commandType, payload }, null, 2);
   }
 
   @cached
   private get failedCommandState() {
-    if (!this.args.message.command?.eventId) {
+    if (!this.command?.eventId) {
       return undefined;
     }
-    return this.matrixService.failedCommandState.get(
-      this.args.message.command.eventId,
-    );
+    return this.matrixService.failedCommandState.get(this.command.eventId);
   }
 
   @cached
@@ -414,7 +424,7 @@ export default class RoomMessage extends Component<Signature> {
     if (this.failedCommandState) {
       return 'failed';
     }
-    return this.args.message.command.status;
+    return this.command?.status ?? 'ready';
   }
 
   @action private viewCodeToggle() {

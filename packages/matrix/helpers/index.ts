@@ -339,6 +339,9 @@ export async function selectCardFromCatalog(
   await page
     .locator(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`)
     .click();
+  await page
+    .locator(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`)
+    .click();
   await page.locator(`[data-test-select="${cardId}"]`).click();
   await page.locator('[data-test-card-catalog-go-button]').click();
 }

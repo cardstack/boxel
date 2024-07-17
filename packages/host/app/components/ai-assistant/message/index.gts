@@ -299,7 +299,7 @@ const AiAssistantConversation: TemplateOnlyComponent<AiAssistantConversationSign
       .ai-assistant-conversation {
         display: flex;
         flex-direction: column;
-        padding: var(--boxel-sp);
+        padding: 0 var(--boxel-sp);
         overflow-y: auto;
       }
     </style>

@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Product Requirement Document",
+      "description": "Catalog entry for product requirement documents",
+      "isField": false,
+      "ref": {
+        "module": "../product-requirement-document",
+        "name": "ProductRequirementDocument"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}
