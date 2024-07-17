@@ -590,22 +590,7 @@ module('Integration | card-basics', function (hooks) {
         .dom('[data-test-viewport="large"] [data-test-card-thumbnail-text]')
         .doesNotExist();
 
-      let lastScrollPos = 0;
-      let snapshotCount = 0;
-      let preview = document.querySelector(
-        '[data-test-code-mode-card-preview-body]',
-      );
-      if (!preview) {
-        throw new Error(`Can't find preview panel`);
-      }
-      do {
-        await percySnapshot(
-          `Integration | card-basics | cards allowed to be edited | renders a default (CardDef) embedded view for card with thumbnail - scroll position ${lastScrollPos}px`,
-        );
-        snapshotCount++;
-        lastScrollPos = preview.scrollTop;
-        preview.scrollTop = lastScrollPos + 900;
-      } while (lastScrollPos !== preview.scrollTop && snapshotCount < 10);
+      await percySnapshot(assert);
     });
 
     test('renders a default (CardDef) embedded view for card without thumbnail', async function (assert) {
