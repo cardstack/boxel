@@ -590,7 +590,22 @@ module('Integration | card-basics', function (hooks) {
         .dom('[data-test-viewport="large"] [data-test-card-thumbnail-text]')
         .doesNotExist();
 
-      await percySnapshot(assert);
+      let lastScrollPos = 0;
+      let snapshotCount = 0;
+      let preview = document.querySelector(
+        '[data-test-code-mode-card-preview-body]',
+      );
+      if (!preview) {
+        throw new Error(`Can't find preview panel`);
+      }
+      do {
+        await percySnapshot(
+          `Integration | card-basics | cards allowed to be edited | renders a default (CardDef) embedded view for card with thumbnail - scroll position ${lastScrollPos}px`,
+        );
+        snapshotCount++;
+        lastScrollPos = preview.scrollTop;
+        preview.scrollTop = lastScrollPos + 900;
+      } while (lastScrollPos !== preview.scrollTop && snapshotCount < 10);
     });
 
     test('renders a default (CardDef) embedded view for card without thumbnail', async function (assert) {
@@ -2600,53 +2615,119 @@ function embeddedViewDriver() {
     @field card = linksTo(CardDef);
     static isolated = class Isolated extends Component<typeof this> {
       <template>
-        <div class='item'>
-          <div class='desc'>Row thumbnail (226px x 62px)</div>
-          <div class='row thumbnail' data-test-viewport='row'>
-            <@fields.card />
+        <div class='group'>
+          <div class='header'>Aspect ratio &lt;= 1.0</div>
+          <div class='item'>
+            <div class='desc'>AR 1.0: 226px x 226px</div>
+            <div class='card' style='width: 226px; height: 226px'>
+              <@fields.card />
+            </div>
+          </div>
+          <div class='item'>
+            <div class='desc'>AR 0.73: 164px x 224px</div>
+            <div class='card' style='width: 164px; height: 224px'>
+              <@fields.card />
+            </div>
+          </div>
+          <div class='item'>
+            <div class='desc'>AR 0.91: 164px x 180px</div>
+            <div class='card' style='width: 164px; height: 180px'>
+              <@fields.card />
+            </div>
+          </div>
+          <div class='item'>
+            <div class='desc'>AR 0.95: 140px x 148px</div>
+            <div class='card' style='width: 140px; height: 148px'>
+              <@fields.card />
+            </div>
+          </div>
+          <div class='item'>
+            <div class='desc'>AR 0.94: 120px x 128px</div>
+            <div class='card' style='width: 120px; height: 128px'>
+              <@fields.card />
+            </div>
+          </div>
+          <div class='item'>
+            <div class='desc'>AR 0.85: 100px x 118px</div>
+            <div class='card' style='width: 100px; height: 118px'>
+              <@fields.card />
+            </div>
+          </div>
+          <div class='item'>
+            <div class='desc'>AR 0.2: 100px x 500px</div>
+            <div class='card' style='width: 100px; height: 500px'>
+              <@fields.card />
+            </div>
           </div>
         </div>
-        <div class='item'>
-          <div class='desc'>Small thumbnail (164px x 224px)</div>
-          <div class='small thumbnail' data-test-viewport='small'>
-            <@fields.card />
+
+        <div class='group'>
+          <div class='header'>1.0 &lt; Aspect ratio &lt; 2.0</div>
+          <div class='item'>
+            <div class='desc'>AR 1.9: 151px x 78px</div>
+            <div class='card' style='width: 151px; height: 78px'>
+              <@fields.card />
+            </div>
+          </div>
+          <div class='item'>
+            <div class='desc'>AR 1.99: 300px x 151px</div>
+            <div class='card' style='width: 300px; height: 151px'>
+              <@fields.card />
+            </div>
+          </div>
+          <div class='item'>
+            <div class='desc'>AR 1.66: 300px x 180px</div>
+            <div class='card' style='width: 300px; height: 180px'>
+              <@fields.card />
+            </div>
           </div>
         </div>
-        <div class='item'>
-          <div class='desc'>Medium thumbnail (195px x 224px)</div>
-          <div class='medium thumbnail' data-test-viewport='medium'>
-            <@fields.card />
+
+        <div class='group'>
+          <div class='header'>Aspect ratio &gt; 2.0</div>
+          <div class='item'>
+            <div class='desc'>AR 3.4: 100px x 29px</div>
+            <div class='card' style='width: 100px; height: 29px'>
+              <@fields.card />
+            </div>
+          </div>
+          <div class='item'>
+            <div class='desc'>AR 2.6: 150px x 58px</div>
+            <div class='card' style='width: 150px; height: 58px'>
+              <@fields.card />
+            </div>
+          </div>
+          <div class='item'>
+            <div class='desc'>AR 3.9: 226px x 58px</div>
+            <div class='card' style='width: 226px; height: 58px'>
+              <@fields.card />
+            </div>
+          </div>
+          <div class='item'>
+            <div class='desc'>AR 2.6: 300px x 115px</div>
+            <div class='card' style='width: 300px; height: 115px'>
+              <@fields.card />
+            </div>
           </div>
         </div>
-        <div class='item'>
-          <div class='desc'>Large thumbnail (350px x 250px)</div>
-          <div class='large thumbnail' data-test-viewport='large'>
-            <@fields.card />
-          </div>
-        </div>
+
         <style>
-          .small {
-            width: 164px;
-            height: 224px;
-          }
-          .medium {
-            width: 195px;
-            height: 224px;
-          }
-          .large {
-            width: 350px;
-            height: 250px;
-          }
-          .row {
-            width: 226px;
-            height: 62px;
-          }
-          .thumbnail {
-            background-color: fuchsia;
+          .card {
+            /* this is how a border would appear around a card.
+             note that a card is not supposed to draw its own border 
+          */
+            box-shadow: 0 0 0 1px var(--boxel-light-500);
             overflow: hidden;
+            border-radius: var(--boxel-border-radius);
+          }
+          .group {
+            margin: 2rem;
+          }
+          .header {
+            font: 700 var(--boxel-font-lg);
           }
           .item {
-            margin: 1rem;
+            padding-bottom: 1rem;
           }
           .desc {
             padding-top: 1rem;
