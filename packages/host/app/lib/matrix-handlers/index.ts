@@ -69,6 +69,14 @@ export async function addRoomEvent(context: EventSendingContext, event: Event) {
   // Corresponding encoding is done in
   // sendEvent in the matrix-service
   if (event.content?.data) {
+    if (typeof event.content.data !== 'string') {
+      console.warn(
+        `skipping matrix event ${
+          eventId ?? stateKey
+        }, event.content.data is not serialized properly`,
+      );
+      return;
+    }
     event.content.data = JSON.parse(event.content.data);
   }
   eventId = eventId ?? stateKey; // room state may not necessary have an event ID
