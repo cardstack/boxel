@@ -74,7 +74,7 @@ export interface IndexedInstance {
   canonicalURL: string;
   lastModified: number;
   isolatedHtml: string | null;
-  embeddedHtml: string | null;
+  embeddedHtml: { [refURL: string]: string } | null;
   atomHtml: string | null;
   searchDoc: Record<string, any> | null;
   types: string[] | null;
@@ -82,10 +82,6 @@ export interface IndexedInstance {
   realmVersion: number;
   realmURL: string;
   indexedAt: number | null;
-  // TODO this is used for testing, lets remove this after we have a way to ask
-  // for which card class to use for embedded HTML. This will mean we'll need to
-  // alter the way we test this so that it's a bit more indirect.
-  _embeddedHtmlByClassHierarchy: { [refURL: string]: string } | null;
 }
 interface IndexedError {
   type: 'error';
@@ -237,10 +233,8 @@ export class IndexQueryEngine {
     opts?: GetEntryOptions,
   ): Promise<IndexedInstanceOrError | undefined> {
     let result = (await this.query([
-      `SELECT i.*, embedded_html ->> `,
-      param('default'),
-      ` as default_embedded_html
-       FROM boxel_index as i
+      `SELECT i.*, embedded_html`,
+      `FROM boxel_index as i
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
        WHERE`,
       ...every([
@@ -257,9 +251,7 @@ export class IndexQueryEngine {
     ] as Expression)) as unknown as (BoxelIndexTable & {
       default_embedded_html: string | null;
     })[];
-    let maybeResult:
-      | (BoxelIndexTable & { default_embedded_html: string | null })
-      | undefined = result[0];
+    let maybeResult: BoxelIndexTable | undefined = result[0];
     if (!maybeResult) {
       return undefined;
     }
@@ -276,8 +268,7 @@ export class IndexQueryEngine {
       pristine_doc: instance,
       isolated_html: isolatedHtml,
       atom_html: atomHtml,
-      default_embedded_html: embeddedHtml,
-      embedded_html: _embeddedHtmlByClassHierarchy,
+      embedded_html: embeddedHtml,
       search_doc: searchDoc,
       realm_version: realmVersion,
       realm_url: realmURL,
@@ -309,9 +300,6 @@ export class IndexQueryEngine {
       deps,
       lastModified: parseInt(lastModified),
       realmVersion,
-      // TODO this is used for testing, lets remove this after we have a way to ask
-      // for which card class to use for embedded HTML
-      _embeddedHtmlByClassHierarchy,
     };
   }
 
@@ -443,9 +431,18 @@ export class IndexQueryEngine {
     ) {
       throw new Error(`htmlFormat must be either 'embedded' or 'atom'`);
     }
+
+    let ref: CodeRef;
+    let filterOnValue = filter && 'type' in filter ? filter.type : filter?.on;
+    if (filterOnValue) {
+      ref = filterOnValue;
+    } else {
+      ref = baseCardRef;
+    }
+
     let htmlColumnExpression =
       opts.htmlFormat == 'embedded'
-        ? ['embedded_html ->> ', param('default')] // TODO: this param should be the value of card type specified in the ON filter - if that is not present, or the query has different card type values in ON filters, we should default to CardDef embedded template in the embedded_html JSON
+        ? ['embedded_html ->> ', param(internalKeyFor(ref, undefined))]
         : ['atom_html'];
 
     let { results, meta } = (await this._search(

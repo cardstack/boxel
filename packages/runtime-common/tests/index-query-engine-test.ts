@@ -2479,14 +2479,17 @@ const tests = Object.freeze({
     await setupIndex(dbAdapter, [
       {
         url: `${testRealmURL}vangogh.json`,
-        file_alias: `${testRealmURL}vangogh.json`,
+        file_alias: `${testRealmURL}vangogh`,
         type: 'instance',
         realm_version: 1,
         realm_url: testRealmURL,
         deps: [`${testRealmURL}person`],
         types: [],
         embedded_html: {
-          default: '<div>Van Gogh</div>',
+          [`${testRealmURL}person/Person`]:
+            '<div>Van Gogh (Person embedded template)</div>',
+          'https://cardstack.com/base/card-api/CardDef':
+            '<div>Van Gogh (CardDef embedded template)</div>',
         },
         atom_html: 'Van Gogh',
       },
@@ -2516,7 +2519,7 @@ const tests = Object.freeze({
     let { prerenderedCards, prerenderedCardCssItems, meta } =
       await indexQueryEngine.searchPrerendered(
         new URL(testRealmURL),
-        {},
+        {}, // When there is no ON filter, embedded template for CardDef is used
         loader,
         {
           htmlFormat: 'embedded',
@@ -2538,7 +2541,10 @@ const tests = Object.freeze({
       prerenderedCards[0].url,
       'http://test-realm/test/vangogh.json',
     );
-    assert.strictEqual(prerenderedCards[0].html, '<div>Van Gogh</div>');
+    assert.strictEqual(
+      prerenderedCards[0].html,
+      '<div>Van Gogh (CardDef embedded template)</div>',
+    );
 
     assert.strictEqual(prerenderedCardCssItems.length, 1);
     assert.strictEqual(

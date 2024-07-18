@@ -560,8 +560,8 @@ export class CurrentRun {
           realmPath: this.#realmPaths,
         }),
       );
-      let ref = refURL === types[0].refURL ? 'default' : refURL;
-      result[ref] = embeddedHtml;
+
+      result[refURL] = embeddedHtml;
     }
     return result;
   }
