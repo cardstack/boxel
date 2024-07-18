@@ -448,7 +448,11 @@ export default class MatrixService
     }
   }
 
-  async sendCommandResultMessage(roomId: string, eventId: string, result: any) {
+  async sendCommandResultMessage(
+    roomId: string,
+    eventId: string,
+    result: Record<string, any>,
+  ) {
     let body = `Command Results from command event ${eventId}`;
     let html = markdownToHtml(body);
     let content: CommandResultContent = {

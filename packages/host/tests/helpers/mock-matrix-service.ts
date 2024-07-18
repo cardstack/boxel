@@ -208,7 +208,7 @@ function generateMockMatrixService(
     async sendCommandResultMessage(
       roomId: string,
       eventId: string,
-      result: any,
+      result: Record<string, any>,
     ) {
       let body = `Command Results from command event ${eventId}`;
       let html = body;
