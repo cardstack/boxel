@@ -4,7 +4,6 @@ import {
   StringField,
   contains,
   field,
-  linksTo,
   primitive,
 } from './card-api';
 import { CommandResult } from './command-result';
@@ -25,11 +24,10 @@ class CommandStatusField extends FieldDef {
   static [primitive]: CommandStatus;
 }
 
-// Subclass, add a validator that checks the fields required?
 export class CommandField extends CardDef {
   @field name = contains(StringField);
   @field payload = contains(CommandObjectField);
   @field eventId = contains(StringField);
   @field status = contains(CommandStatusField);
-  @field result = linksTo(CommandResult);
+  @field result = contains(CommandResult);
 }

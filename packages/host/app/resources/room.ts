@@ -9,10 +9,6 @@ import { TrackedMap, TrackedObject } from 'tracked-built-ins';
 import { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import { CommandStatus } from 'https://cardstack.com/base/command';
-import {
-  CommandResult,
-  SearchCommandResult,
-} from 'https://cardstack.com/base/command-result';
 import type {
   CardFragmentContent,
   CardMessageContent,
@@ -40,6 +36,7 @@ import { RoomState } from '../lib/matrix-classes/room';
 import type { Skill } from '../components/ai-assistant/skill-menu';
 
 import type CardService from '../services/card-service';
+import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
 
 interface Args {
@@ -61,6 +58,7 @@ export class RoomResource extends Resource<Args> {
   @tracked room: RoomState | undefined;
   @tracked loading: Promise<void> | undefined;
   @service private declare matrixService: MatrixService;
+  @service private declare commandService: CommandService;
   @service private declare cardService: CardService;
   _roomId: string | undefined;
 
@@ -283,20 +281,14 @@ export class RoomResource extends Resource<Args> {
         ) as CommandResultEvent;
         let serializedResults: LooseSingleCardDocument[] =
           commandResultEvent?.content?.result;
-        let r: CommandResult | SearchCommandResult | undefined;
+        let r: any;
         if (serializedResults) {
-          // TODO: We should move this code into component when room has been changed
-          if (command.name === 'searchCard') {
-            r = new SearchCommandResult({
-              intent: command.arguments.description,
-              cardIds: serializedResults.map((r) => r.data.id),
-            });
-          } else {
-            r = new CommandResult({
-              intent: command.arguments.description,
-              cardIds: serializedResults.map((r) => r.data.id),
-            });
-          }
+          r = await this.commandService.createCommandResult(
+            commandEvent,
+            commandResultEvent,
+          );
+          console.log('command result');
+          console.log(r);
         }
 
         let status: CommandStatus =
@@ -309,16 +301,22 @@ export class RoomResource extends Resource<Args> {
           name: command.name,
           payload: command.arguments,
           status,
-          ...(r && { result: r }),
+          ...(r && {
+            result: r,
+          }),
         };
 
-        let commandField = await this.matrixService.createCommandField(
+        let commandField = await this.commandService.createCommand(
           commandFieldArgs,
         );
+        if (commandField.result) {
+          console.log('command field with new commnad result');
+          console.log(commandField);
+        }
 
         messageField = new Message({
           ...messageArgs,
-          formattedMessage: `<p class="patch-message">${event.content.formatted_body}</p>`,
+          formattedMessage: `<p class="command-message">${event.content.formatted_body}</p>`,
           command: commandField,
           isStreamingFinished: true,
         });
@@ -331,9 +329,14 @@ export class RoomResource extends Resource<Args> {
       }
 
       if (messageField) {
+        console.log('lets see if we are updating the message');
+        console.log(event_id);
+        console.log(messageField);
+        console.log(this._messageCache);
         // if the message is a replacement for other messages,
         // use `created` from the oldest one.
         if (this._messageCache.has(event_id)) {
+          console.log('inside the cache if event already exists');
           let d1 = this._messageCache.get(event_id)!.created!;
           let d2 = messageField.created!;
           messageField.created = d1 < d2 ? d1 : d2;
@@ -342,6 +345,8 @@ export class RoomResource extends Resource<Args> {
           (event.content as CardMessageContent).clientGeneratedId ?? event_id,
           messageField as any,
         );
+        console.log('new messages after');
+        console.log(newMessages);
       }
     }
 

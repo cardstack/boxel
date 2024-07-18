@@ -3,6 +3,7 @@ import {
   BaseDef,
   CardDef,
   Component,
+  FieldDef,
   StringField,
   contains,
   containsMany,
@@ -213,9 +214,11 @@ class SearchCommandResultEmbeddedView extends Component<typeof CommandResult> {
   </template>
 }
 
-export class CommandResult extends CardDef {
+export class CommandResult extends FieldDef {
   @field intent = contains(StringField);
   @field cardIds = containsMany(StringField);
+
+  static embedded = SearchCommandResultEmbeddedView;
 }
 
 export class SearchCommandResult extends CommandResult {

@@ -8,6 +8,8 @@ import {
   type PatchData,
   codeRefWithAbsoluteURL,
   isResolvedCodeRef,
+  baseRealm,
+  LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import {
   CardTypeFilter,
@@ -22,6 +24,11 @@ import { BaseDef } from 'https://cardstack.com/base/card-api';
 import { CommandField } from 'https://cardstack.com/base/command';
 
 import { SearchCommandResult } from 'https://cardstack.com/base/command-result';
+
+import {
+  CommandEvent,
+  CommandResultEvent,
+} from 'https://cardstack.com/base/matrix-event';
 
 import { Message } from '../lib/matrix-classes/message';
 import { getSearchResults } from '../resources/search';
@@ -99,6 +106,33 @@ export default class CommandService extends Service {
       this.matrixService.failedCommandState.set(eventId, error);
     }
   });
+
+  async createCommand(args: any) {
+    return this.matrixService.createCard<typeof CommandField>(
+      {
+        name: 'CommandField',
+        module: `${baseRealm.url}command`,
+      },
+      args,
+    );
+  }
+
+  async createCommandResult(
+    commandEvent: CommandEvent,
+    event: CommandResultEvent,
+  ) {
+    let toolCall = commandEvent.content.data.toolCall;
+    let serializedResults: LooseSingleCardDocument[] = event?.content?.result;
+    if (toolCall.name === 'searchCard') {
+      return {
+        intent: toolCall.arguments.description,
+        cardIds: serializedResults.map((r) => r.data.id),
+      };
+    } else if (toolCall.name === 'patchCard') {
+      return {};
+    }
+    return;
+  }
 
   getCommandResultComponent(message: Message) {
     if (message.command && message.command.result) {

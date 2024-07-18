@@ -26,6 +26,7 @@ import {
   baseRealm,
   loaderFor,
   LooseCardResource,
+  ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import {
   basicMappings,
@@ -44,9 +45,8 @@ import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import { BaseDef, type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import { CommandField } from 'https://cardstack.com/base/command';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardMessageContent,
@@ -839,19 +839,19 @@ export default class MatrixService
     }
   }
 
-  async createCommandField(attr: Record<string, any>): Promise<CommandField> {
+  async createCard<T extends typeof BaseDef>(
+    codeRef: ResolvedCodeRef,
+    attr: Record<string, any>,
+  ) {
     let data: LooseCardResource = {
       meta: {
-        adoptsFrom: {
-          name: 'CommandField',
-          module: `${baseRealm.url}command`,
-        },
+        adoptsFrom: codeRef,
       },
       attributes: {
         ...attr,
       },
     };
-    let card = this.cardAPI.createFromSerialized<typeof CommandField>(
+    let card = await this.cardAPI.createFromSerialized<T>(
       data,
       { data },
       undefined,
