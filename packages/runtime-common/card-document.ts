@@ -278,23 +278,13 @@ export function transformResultsToPrerenderedCardsDoc(results: {
     attributes: {
       html: card.html,
     },
-    relationships: {
-      'prerendered-card-css': {
-        data: card.cssModuleIds.map((cssModuleId) => {
-          return {
-            type: 'prerendered-card-css',
-            id: cssModuleId,
-          };
-        }),
-      },
-    },
   }));
 
   let included = prerenderedCardCssItems.map((css) => ({
     type: 'prerendered-card-css',
     id: css.cssModuleId,
     attributes: {
-      content: css.source,
+      source: css.source,
     },
   }));
 

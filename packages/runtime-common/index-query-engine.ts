@@ -8,6 +8,7 @@ import {
   loadCard,
   internalKeyFor,
   identifyCard,
+  ResolvedCodeRef,
 } from './index';
 import {
   type Expression,
@@ -111,7 +112,6 @@ export interface PrerenderedCardCssItem {
 export interface PrerenderedCard {
   url: string;
   html: string;
-  cssModuleIds: string[];
 }
 
 export interface QueryResultsMeta {
@@ -432,10 +432,10 @@ export class IndexQueryEngine {
       throw new Error(`htmlFormat must be either 'embedded' or 'atom'`);
     }
 
-    let ref: CodeRef;
+    let ref: ResolvedCodeRef;
     let filterOnValue = filter && 'type' in filter ? filter.type : filter?.on;
     if (filterOnValue) {
-      ref = filterOnValue;
+      ref = filterOnValue as ResolvedCodeRef;
     } else {
       ref = baseCardRef;
     }
@@ -460,45 +460,39 @@ export class IndexQueryEngine {
       results: (Partial<BoxelIndexTable> & { html: string })[];
     };
 
-    let cardFileAliases = results.map((c) => c.file_alias);
     let realmVersion = meta.page.realmVersion;
 
     let conditions: CardExpression[] = [
       ['i.realm_version = ', param(realmVersion)],
-      ['i.type =', param('instance')],
-      [
-        'i.file_alias IN',
-        ...addExplicitParens(
-          separatedByCommas(
-            cardFileAliases.map((cardFileAlias) => [param(cardFileAlias!)]),
-          ),
-        ),
-      ],
+      ['i.type =', param('module')],
+      ['i.file_alias =', param(ref.module)],
     ];
 
-    // This query will give us a list of indexed css entries and their corresponding instances that have that particular css module as a dependency
+    // This query will give us all the CSS that relates to the card ref's module and its dependencies
     let cssSourceQuery = [
-      `WITH instance_deps AS (
-        SELECT file_alias as instance_file_alias, deps_each.value AS instance_dep_file_alias
+      `WITH module_deps AS (
+        SELECT file_alias as module_file_alias, deps_each.value AS module_dep_file_alias
         FROM boxel_index i, jsonb_array_elements_text(i.deps) AS deps_each
         WHERE`,
       ...every(conditions),
+      `UNION ALL SELECT `, // UNION ALL to include the css from module itself as well, not just its its dependencies
+      param(ref.module),
+      `, `,
+      param(ref.module),
       `),
       css_deps AS (
         SELECT
-          bi.source AS css_source,
           bi.file_alias AS css_module_id,
-          array_agg(id.instance_file_alias) AS instances
+          bi.source AS css_source
         FROM boxel_index bi
-        JOIN instance_deps id ON bi.file_alias = id.instance_dep_file_alias
-        WHERE bi.type = 'css'
-        GROUP BY bi.source, bi.file_alias
-      )
-      SELECT
-        css_module_id,
-        array_to_json(instances) AS instances,
-        css_source
-      FROM css_deps;
+        JOIN module_deps md ON bi.file_alias = md.module_dep_file_alias WHERE`,
+      ...every([
+        [`bi.realm_version = `, param(realmVersion)],
+        ['bi.type =', param('css')],
+      ]),
+      `)
+        SELECT css_module_id, css_source
+        FROM css_deps
       `,
     ];
 
@@ -507,50 +501,24 @@ export class IndexQueryEngine {
       loader,
     )) as {
       css_module_id: string;
-      instances: string[];
       css_source: string;
     }[];
-
-    // Prepare a structure where we can easily access css entries for deps of a particular card
-    let cardInstanceCss = groupedCssInstanceData.reduce(
-      (
-        acc: Record<string, { cssModuleId: string; cssSource: string }[]>,
-        row,
-      ) => {
-        let instances =
-          typeof row.instances === 'string'
-            ? JSON.parse(row.instances)
-            : row.instances; // SQLite client returns array as string
-        instances.forEach((instance: string) => {
-          if (!acc[instance]) {
-            acc[instance] = [];
-          }
-          acc[instance].push({
-            cssModuleId: row.css_module_id,
-            cssSource: row.css_source,
-          });
-        });
-        return acc;
-      },
-      {},
-    );
 
     let prerenderedCards = results.map((card) => {
       return {
         url: card.url!,
         html: card.html,
-        cssModuleIds:
-          cardInstanceCss[card.file_alias!]?.map((item) => item.cssModuleId) ??
-          [],
       };
     });
 
-    let prerenderedCardCssItems = groupedCssInstanceData.map((cssRecord) => {
-      return {
-        cssModuleId: cssRecord.css_module_id,
-        source: cssRecord.css_source,
-      };
-    });
+    let prerenderedCardCssItems = groupedCssInstanceData
+      .map((cssRecord) => {
+        return {
+          cssModuleId: cssRecord.css_module_id,
+          source: cssRecord.css_source,
+        };
+      })
+      .sort((a, b) => a.cssModuleId.localeCompare(b.cssModuleId)); // Sort by css module id for determinism (especially in tests). We do it in JS because SQLite and Postgres have different sorting behavior for urls
 
     return { prerenderedCards, prerenderedCardCssItems, meta };
   }
