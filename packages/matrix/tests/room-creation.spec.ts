@@ -226,7 +226,7 @@ test.describe('Room creation', () => {
     );
 
     await expect(page.locator(`[data-test-chat-title]`)).not.toHaveText(
-      newRoomName,
+      'New AI Assistant Chat',
     );
   });
 

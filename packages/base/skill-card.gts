@@ -1,12 +1,4 @@
-import BooleanField from './boolean';
-import {
-  CardDef,
-  Component,
-  field,
-  FieldDef,
-  contains,
-  linksTo,
-} from './card-api';
+import { CardDef, Component, field, contains } from './card-api';
 import TextAreaField from './text-area';
 
 export class SkillCard extends CardDef {
@@ -17,9 +9,4 @@ export class SkillCard extends CardDef {
       <@fields.title />
     </template>
   };
-}
-
-export class SkillField extends FieldDef {
-  @field isActive = contains(BooleanField);
-  @field card = linksTo(SkillCard);
 }
