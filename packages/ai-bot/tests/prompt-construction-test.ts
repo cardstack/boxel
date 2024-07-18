@@ -287,7 +287,10 @@ module('getModifyPrompt', () => {
       },
     ];
 
-    const { attachedCards } = getRelevantCards(history, '@aibot:localhost');
+    const { attachedCards, mostRecentlyAttachedCard } = getRelevantCards(
+      history,
+      '@aibot:localhost',
+    );
     assert.equal(attachedCards.length, 1);
     if (
       history[1].type === 'm.room.message' &&
@@ -298,7 +301,7 @@ module('getModifyPrompt', () => {
         history[1].content.data.attachedCards?.[0]['data'],
       );
       assert.equal(
-        latestCard,
+        mostRecentlyAttachedCard,
         history[1].content.data.attachedCards![0]['data'],
       );
     } else {

@@ -155,12 +155,18 @@ interface RelevantCards {
   skillCards: CardResource[];
 }
 
+function getMostRecentlyAttachedCard(attachedCards: LooseSingleCardDocument[]) {
+  let cardResources = attachedCards.filter((c) => c.data.id).map((c) => c.data);
+  return cardResources.length
+    ? cardResources[cardResources.length - 1]
+    : undefined;
+}
+
 export function getRelevantCards(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): RelevantCards {
-  let relevantCards: Map<string, any> = new Map();
-  let mostRecentlySharedCard;
+  let mostRecentlyAttachedCard: LooseCardResource | undefined;
   let attachedCardMap = new Map<string, CardResource>();
   let skillCardMap = new Map<string, CardResource>();
   let latestMessageEventId = history
@@ -173,26 +179,22 @@ export function getRelevantCards(
     if (event.sender !== aiBotUserId) {
       let { content } = event;
       if (content.msgtype === 'org.boxel.message') {
-        const attachedCards = content.data?.attachedCards || [];
-        for (let card of attachedCards) {
-          if (card.data.id) {
-            mostRecentlySharedCard = card.data;
-            relevantCards.set(card.data.id, card.data);
-          } else {
-            throw new Error(`bug: don't know how to handle card without ID`);
-          }
-          setRelevantCards(attachedCardMap, content.data?.attachedCards);
+        setRelevantCards(attachedCardMap, content.data?.attachedCards);
+        if (content.data?.attachedCards) {
+          mostRecentlyAttachedCard = getMostRecentlyAttachedCard(
+            content.data?.attachedCards,
+          );
+        }
 
-          // setting skill card instructions only based on the latest boxel message event (not cumulative)
-          if (event.event_id === latestMessageEventId) {
-            setRelevantCards(skillCardMap, content.data?.skillCards);
-          }
+        // setting skill card instructions only based on the latest boxel message event (not cumulative)
+        if (event.event_id === latestMessageEventId) {
+          setRelevantCards(skillCardMap, content.data?.skillCards);
         }
       }
     }
   }
   // Return the cards in a consistent manner
-  let sortedCards = Array.from(relevantCards.values()).sort((a, b) => {
+  let sortedCards = Array.from(attachedCardMap.values()).sort((a, b) => {
     return a.id.localeCompare(b.id);
   });
 
@@ -200,7 +202,7 @@ export function getRelevantCards(
     a.id.localeCompare(b.id),
   );
   return {
-    mostRecentlyAttachedCard: mostRecentlySharedCard,
+    mostRecentlyAttachedCard: mostRecentlyAttachedCard,
     attachedCards: sortedCards,
     skillCards,
   };
