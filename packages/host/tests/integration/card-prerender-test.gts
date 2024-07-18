@@ -62,6 +62,7 @@ module('Integration | card-prerender', function (hooks) {
             type: 'card',
             id: `${testRealmURL}Pet/mango`,
             attributes: {
+              title: 'test card: pet mango',
               firstName: 'Mango',
             },
             meta: {
@@ -77,6 +78,7 @@ module('Integration | card-prerender', function (hooks) {
             type: 'card',
             id: `${testRealmURL}Pet/vangogh`,
             attributes: {
+              title: 'test card: pet vangogh',
               firstName: 'Van Gogh',
             },
             meta: {
@@ -134,7 +136,9 @@ module('Integration | card-prerender', function (hooks) {
         `,
         'jane.json': {
           data: {
+            type: 'card',
             attributes: {
+              title: 'test card: person jane',
               firstName: 'Jane',
               favoriteColor: 'blue',
             },
@@ -148,7 +152,9 @@ module('Integration | card-prerender', function (hooks) {
         },
         'jimmy.json': {
           data: {
+            type: 'card',
             attributes: {
+              title: 'test card: person jimmy',
               firstName: 'Jimmy',
               favoriteColor: 'black',
             },
@@ -195,7 +201,7 @@ module('Integration | card-prerender', function (hooks) {
     }
   });
 
-  test('can get prerendered cards with their html + css', async function (assert) {
+  test('indexer returns correct prerendered cards with their html + css when there is "on" filter specified', async function (assert) {
     let results = await realm.searchIndex.searchPrerendered(
       {
         filter: {
@@ -261,5 +267,52 @@ module('Integration | card-prerender', function (hooks) {
       results.prerenderedCards[0].html.includes('Embedded Card FancyPerson'),
       'the embedded card html looks correct',
     );
+  });
+
+  test('indexer returns correct prerendered cards with their html + css when there is no "on" filter specified', async function (assert) {
+    let results = await realm.searchIndex.searchPrerendered(
+      {},
+      {
+        htmlFormat: 'embedded',
+      },
+    );
+
+    assert.strictEqual(
+      results.meta.page.total,
+      4,
+      'the search results contain the correct number of items',
+    );
+
+    // Since there is no "on" filter, the prerendered html must be from a CardDef template
+
+    [
+      'test card: pet mango',
+      'test card: pet vangogh',
+      'test card: person jane',
+      'test card: person jimmy',
+    ].forEach((title, index) => {
+      assert.strictEqual(
+        trimCardContainer(
+          stripScopedCSSAttributes(results.prerenderedCards[index].html),
+        ),
+        cleanWhiteSpace(`
+        <div class="embedded-template">
+          <div class="thumbnail-section">
+            <div class="card-thumbnail">
+              <div class="card-thumbnail-text" data-test-card-thumbnail-text>Card</div>
+            </div>
+            <div class="thumbnail-subsection">
+              <div class="thumbnail-subsection">
+                <h3 class="card-title" data-test-card-title>${title}</h3>
+              </div>
+              <div class="thumbnail-subsection">
+                <h4 class="card-display-name" data-test-card-display-name>Card</h4>
+              </div>
+            </div>
+          </div>
+        </div>
+      `),
+      );
+    });
   });
 });

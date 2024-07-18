@@ -270,6 +270,15 @@ export default class ResizablePanelGroup extends Component<Signature> {
       return;
     }
 
+    if (!this.isCursorInTheRightPlace(event)) {
+      let resizeHandleRect =
+        this.currentResizeHandle.handle.element.getBoundingClientRect();
+      this.currentResizeHandle.initialPosition = Math.round(
+        (resizeHandleRect.left + resizeHandleRect.right) / 2,
+      );
+      return;
+    }
+
     let delta =
       event[this.clientPositionProperty] -
       this.currentResizeHandle.initialPosition;
@@ -568,5 +577,44 @@ export default class ResizablePanelGroup extends Component<Signature> {
       prevPanel,
       nextPanel,
     };
+  }
+
+  private isCursorInTheRightPlace(event: MouseEvent): boolean {
+    let { currentResizeHandle } = this;
+    if (!currentResizeHandle) {
+      return true;
+    }
+
+    let { handle, prevPanel, nextPanel } = currentResizeHandle;
+    if (!handle || !prevPanel || !nextPanel) {
+      return true;
+    }
+
+    let resizeHandleRect = handle.element.getBoundingClientRect();
+    let rightCursorPosition = this.isHorizontal
+      ? (resizeHandleRect.left + resizeHandleRect.right) / 2
+      : (resizeHandleRect.top + resizeHandleRect.bottom) / 2;
+
+    let isCursorLeftOfHandle =
+      event[this.clientPositionProperty] <= Math.ceil(rightCursorPosition);
+    let isCursorRightOfHandle =
+      event[this.clientPositionProperty] >= Math.round(rightCursorPosition);
+
+    let isPrevPanelAtMinLength =
+      !prevPanel.collapsible &&
+      prevPanel.initialMinLengthPx === prevPanel.lengthPx;
+    let isNextPanelAtMinLength =
+      !nextPanel.collapsible &&
+      nextPanel.initialMinLengthPx === nextPanel.lengthPx;
+
+    if (isPrevPanelAtMinLength && isCursorLeftOfHandle) {
+      return false;
+    }
+
+    if (isNextPanelAtMinLength && isCursorRightOfHandle) {
+      return false;
+    }
+
+    return true;
   }
 }

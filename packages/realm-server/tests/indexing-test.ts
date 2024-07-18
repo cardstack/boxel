@@ -257,7 +257,11 @@ module('indexing', function (hooks) {
         'pre-rendered isolated format html is correct',
       );
       assert.strictEqual(
-        trimCardContainer(stripScopedCSSAttributes(entry!.embeddedHtml!)),
+        trimCardContainer(
+          stripScopedCSSAttributes(
+            entry!.embeddedHtml![`${testRealm}person/Person`],
+          ),
+        ),
         cleanWhiteSpace(`<h1> Embedded Card Person: Mango </h1>`),
         'pre-rendered embedded format html is correct',
       );
@@ -296,7 +300,11 @@ module('indexing', function (hooks) {
             cleanWhiteSpace(`<h1> Van Gogh </h1>`),
           );
           assert.strictEqual(
-            trimCardContainer(stripScopedCSSAttributes(item.embeddedHtml!)),
+            trimCardContainer(
+              stripScopedCSSAttributes(
+                item.embeddedHtml![`${testRealm}person/Person`]!,
+              ),
+            ),
             cleanWhiteSpace(`<h1> Embedded Card Person: Van Gogh </h1>`),
           );
         } else {
