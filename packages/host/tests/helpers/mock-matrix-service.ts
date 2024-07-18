@@ -5,9 +5,9 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import { v4 as uuid } from 'uuid';
 
-import { Deferred } from '@cardstack/runtime-common';
+import { Deferred, ResolvedCodeRef } from '@cardstack/runtime-common';
 
-import { baseRealm, LooseCardResource } from '@cardstack/runtime-common';
+import { LooseCardResource } from '@cardstack/runtime-common';
 
 import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
@@ -21,8 +21,7 @@ import { OperatorModeContext } from '@cardstack/host/services/matrix-service';
 
 import RealmService from '@cardstack/host/services/realm';
 
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import { CommandField } from 'https://cardstack.com/base/command';
+import { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
 import type {
   CommandResultContent,
   ReactionEventContent,
@@ -377,19 +376,19 @@ function generateMockMatrixService(
       return resources;
     }
 
-    async createCommandField(attr: Record<string, any>): Promise<CommandField> {
+    async createCard<T extends typeof BaseDef>(
+      codeRef: ResolvedCodeRef,
+      attr: Record<string, any>,
+    ) {
       let data: LooseCardResource = {
         meta: {
-          adoptsFrom: {
-            name: 'CommandField',
-            module: `${baseRealm.url}command`,
-          },
+          adoptsFrom: codeRef,
         },
         attributes: {
           ...attr,
         },
       };
-      let card = this.cardAPI.createFromSerialized<typeof CommandField>(
+      let card = await this.cardAPI.createFromSerialized<T>(
         data,
         { data },
         undefined,
