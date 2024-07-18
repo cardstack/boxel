@@ -23,6 +23,8 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import {
   addRoomEvent,
+  getCommandReactionEvents,
+  getCommandResultEvents,
   updateRoomEvent,
 } from '@cardstack/host/lib/matrix-handlers';
 
@@ -1974,5 +1976,148 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert
       .dom('[data-test-message-idx="1"] [data-test-ai-message-content]')
       .containsText('A message from the background.');
+  });
+
+  test('after command is issued, a reaction event will be dispatched', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    await matrixService.createAndJoinRoom('room1', 'test room 1');
+    await addRoomEvent(matrixService, {
+      event_id: 'room1-event1',
+      room_id: 'room1',
+      state_key: 'state',
+      type: 'm.room.message',
+      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      sender: '@aibot:localhost',
+      content: {
+        msgtype: 'org.boxel.command',
+        formatted_body: 'Changing first name to Evie',
+        format: 'org.matrix.custom.html',
+        data: JSON.stringify({
+          toolCall: {
+            name: 'patchCard',
+            arguments: {
+              card_id: `${testRealmURL}Person/fadhlan`,
+              attributes: { firstName: 'Evie' },
+            },
+          },
+          eventId: 'room1-event1',
+        }),
+        'm.relates_to': {
+          rel_type: 'm.replace',
+          event_id: 'room1-event1',
+        },
+      },
+      status: null,
+    });
+    let commandReactionEvents = await getCommandReactionEvents(
+      matrixService,
+      'room1',
+    );
+    assert.equal(
+      commandReactionEvents.length,
+      0,
+      'reaction event is not dispatched',
+    );
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-room-name="test room 1"]');
+    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+    await waitFor('[data-test-command-card-idle]');
+
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .exists();
+
+    commandReactionEvents = await getCommandReactionEvents(
+      matrixService,
+      'room1',
+    );
+    assert.equal(
+      commandReactionEvents.length,
+      1,
+      'reaction event is dispatched',
+    );
+  });
+
+  test('after command is issued, a command result event is dispatched if a result is returned', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    await matrixService.createAndJoinRoom('room1', 'test room 1');
+    await addRoomEvent(matrixService, {
+      event_id: 'room1-event1',
+      room_id: 'room1',
+      state_key: 'state',
+      type: 'm.room.message',
+      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      sender: '@aibot:localhost',
+      content: {
+        msgtype: 'org.boxel.command',
+        formatted_body: 'Changing first name to Evie',
+        format: 'org.matrix.custom.html',
+        data: JSON.stringify({
+          toolCall: {
+            name: 'patchCard',
+            arguments: {
+              card_id: `${testRealmURL}Person/fadhlan`,
+              attributes: { firstName: 'Evie' },
+            },
+          },
+          eventId: 'room1-event1',
+        }),
+        'm.relates_to': {
+          rel_type: 'm.replace',
+          event_id: 'room1-event1',
+        },
+      },
+      status: null,
+    });
+    let commandResultEvents = await getCommandResultEvents(
+      matrixService,
+      'room1',
+    );
+    assert.equal(
+      commandResultEvents.length,
+      0,
+      'command result event is not dispatched',
+    );
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-room-name="test room 1"]');
+    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+    await waitFor('[data-test-command-card-idle]');
+
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .exists();
+
+    commandResultEvents = await getCommandResultEvents(matrixService, 'room1');
+    assert.equal(
+      commandResultEvents.length,
+      1,
+      'command result event is dispatched',
+    );
+    assert.equal(
+      commandResultEvents[0].content.result[0].firstName,
+      'Evie',
+      'field has been changed',
+    );
   });
 });

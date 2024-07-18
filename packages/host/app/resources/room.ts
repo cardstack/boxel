@@ -9,9 +9,15 @@ import { TrackedMap, TrackedObject } from 'tracked-built-ins';
 import { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import { CommandStatus } from 'https://cardstack.com/base/command';
+import {
+  CommandResult,
+  SearchCommandResult,
+} from 'https://cardstack.com/base/command-result';
 import type {
   CardFragmentContent,
   CardMessageContent,
+  CommandEvent,
+  CommandResultEvent,
   ReactionEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
@@ -302,7 +308,7 @@ export class RoomResource extends Resource<Args> {
           eventId: event_id,
           name: command.name,
           payload: command.arguments,
-          status: annotation?.content['m.relates_to'].key ?? 'ready',
+          status,
           ...(r && { result: r }),
         };
 

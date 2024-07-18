@@ -46,12 +46,13 @@ import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import { PatchField } from 'https://cardstack.com/base/command';
+import { CommandField } from 'https://cardstack.com/base/command';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardMessageContent,
   CardFragmentContent,
   ReactionEventContent,
+  CommandResultContent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import {
@@ -534,11 +535,7 @@ export default class MatrixService
           this.cardAPI,
           mappings,
         );
-        let realmSession = getRealmSession(this, {
-          card: () => attachedOpenCard,
-        });
-        await realmSession.loaded;
-        if (realmSession.canWrite) {
+        if (this.realm.canWrite(attachedOpenCard.id)) {
           tools.push(getPatchTool(attachedOpenCard, patchSpec));
           tools.push(getSearchTool(attachedOpenCard));
         }
@@ -842,11 +839,11 @@ export default class MatrixService
     }
   }
 
-  async createCommandField(attr: Record<string, any>): Promise<PatchField> {
+  async createCommandField(attr: Record<string, any>): Promise<CommandField> {
     let data: LooseCardResource = {
       meta: {
         adoptsFrom: {
-          name: 'PatchField',
+          name: 'CommandField',
           module: `${baseRealm.url}command`,
         },
       },
@@ -854,7 +851,7 @@ export default class MatrixService
         ...attr,
       },
     };
-    let card = this.cardAPI.createFromSerialized<typeof PatchField>(
+    let card = this.cardAPI.createFromSerialized<typeof CommandField>(
       data,
       { data },
       undefined,

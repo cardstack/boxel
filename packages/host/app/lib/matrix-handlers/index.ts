@@ -8,7 +8,12 @@ import {
 import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type {
+  CommandEvent,
+  CommandResultEvent,
+  MatrixEvent as DiscreteMatrixEvent,
+  ReactionEvent,
+} from 'https://cardstack.com/base/matrix-event';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
@@ -144,7 +149,7 @@ export async function getRoomEvents(
       `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
     );
   }
-  let room = context.rooms.get(roomId);
+  let room = context.getRoom(roomId);
   let resolvedRoom = await room;
   return resolvedRoom?.events ?? [];
 }

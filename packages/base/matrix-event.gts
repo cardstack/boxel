@@ -1,7 +1,6 @@
 import { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { EventStatus, MatrixError } from 'matrix-js-sdk';
 import { type Schema } from '@cardstack/runtime-common/helpers/ai';
-import { PatchObject } from './command';
 
 interface BaseMatrixEvent {
   sender: string;
@@ -120,6 +119,11 @@ export interface CommandEvent extends BaseMatrixEvent {
   };
 }
 
+export interface FunctionToolCall {
+  name: string;
+  arguments: any;
+}
+
 interface CommandMessageContent {
   'm.relates_to'?: {
     rel_type: string;
@@ -130,11 +134,8 @@ interface CommandMessageContent {
   body: string;
   formatted_body: string;
   data: {
-    command: {
-      type: 'patchCard';
-      payload: PatchObject;
-      eventId: string;
-    };
+    toolCall: FunctionToolCall;
+    eventId: string;
   };
 }
 

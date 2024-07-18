@@ -377,11 +377,11 @@ function generateMockMatrixService(
       return resources;
     }
 
-    async createCommandField(attr: Record<string, any>): Promise<PatchField> {
+    async createCommandField(attr: Record<string, any>): Promise<CommandField> {
       let data: LooseCardResource = {
         meta: {
           adoptsFrom: {
-            name: 'PatchField',
+            name: 'CommandField',
             module: `${baseRealm.url}command`,
           },
         },
@@ -389,7 +389,7 @@ function generateMockMatrixService(
           ...attr,
         },
       };
-      let card = this.cardAPI.createFromSerialized<typeof PatchField>(
+      let card = this.cardAPI.createFromSerialized<typeof CommandField>(
         data,
         { data },
         undefined,

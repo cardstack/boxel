@@ -19,7 +19,7 @@ class CommandObjectField extends FieldDef {
   static [primitive]: CommandObject;
 }
 
-type CommandStatus = 'applied' | 'ready';
+export type CommandStatus = 'applied' | 'ready';
 
 class CommandStatusField extends FieldDef {
   static [primitive]: CommandStatus;

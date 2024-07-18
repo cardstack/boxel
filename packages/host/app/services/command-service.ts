@@ -22,8 +22,8 @@ import { BaseDef } from 'https://cardstack.com/base/card-api';
 import { CommandField } from 'https://cardstack.com/base/command';
 
 import { SearchCommandResult } from 'https://cardstack.com/base/command-result';
-import { MessageField } from 'https://cardstack.com/base/room';
 
+import { Message } from '../lib/matrix-classes/message';
 import { getSearchResults } from '../resources/search';
 
 import CardService from './card-service';
@@ -100,7 +100,7 @@ export default class CommandService extends Service {
     }
   });
 
-  getCommandResultComponent(message: MessageField) {
+  getCommandResultComponent(message: Message) {
     if (message.command && message.command.result) {
       if (message.command.name === 'searchCard') {
         return getComponent(message.command.result as SearchCommandResult);
