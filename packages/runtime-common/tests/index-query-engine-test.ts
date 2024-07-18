@@ -2703,7 +2703,7 @@ const tests = Object.freeze({
     assert.strictEqual(
       prerenderedCardCssItems.length,
       3,
-      'css for fancy person + for person and card api since these is in the deps of fancy person',
+      'css for fancy person + for person and card api since these are in the deps of fancy person',
     );
 
     assert.strictEqual(
@@ -2765,7 +2765,7 @@ const tests = Object.freeze({
 
     assert.strictEqual(prerenderedCards[0].url, `${testRealmURL}donald.json`);
     assert.strictEqual(prerenderedCards[0].html, 'Donald'); // Atom template
-    assert.strictEqual(prerenderedCardCssItems.length, 3); // css for fancy person + for person and card api since these is in the deps of fancy person
+    assert.strictEqual(prerenderedCardCssItems.length, 3); // css for fancy person + for person and card api since these are in the deps of fancy person
   },
 } as SharedTests<{
   indexQueryEngine: IndexQueryEngine;

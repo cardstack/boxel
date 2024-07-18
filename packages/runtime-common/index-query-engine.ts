@@ -475,7 +475,7 @@ export class IndexQueryEngine {
         FROM boxel_index i, jsonb_array_elements_text(i.deps) AS deps_each
         WHERE`,
       ...every(conditions),
-      `UNION ALL SELECT `, // UNION ALL to include the css from module itself as well, not just its its dependencies
+      `UNION ALL SELECT `, // UNION ALL to include the css from module itself as well, not just its dependencies
       param(ref.module),
       `, `,
       param(ref.module),
