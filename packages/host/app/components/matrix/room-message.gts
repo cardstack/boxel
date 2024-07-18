@@ -195,11 +195,7 @@ export default class RoomMessage extends Component<Signature> {
           </div>
 
           {{#let this.getComponent as |Component|}}
-            <Component
-              class='embedded-message-field'
-              @format='embedded'
-              @displayContainer={{false}}
-            />
+            <Component @format='embedded' />
           {{/let}}
           {{#if this.isDisplayingCode}}
             <div class='preview-code'>
@@ -294,9 +290,6 @@ export default class RoomMessage extends Component<Signature> {
         height: var(--monaco-container-height);
         min-height: 7rem;
         max-height: 30vh;
-      }
-      .embedded-message-field {
-        --boxel-field-embedded-padding: 0;
       }
     </style>
   </template>

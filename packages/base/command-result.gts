@@ -162,7 +162,8 @@ class SearchCommandResultEmbeddedView extends Component<typeof CommandResult> {
     <style>
       .result {
         color: black;
-        width: 100%;
+        background-color: var(--boxel-light);
+        border-radius: var(--boxel-border-radius);
         --left-padding: var(--boxel-sp-xs);
       }
       .card {
