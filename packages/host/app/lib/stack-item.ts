@@ -103,11 +103,13 @@ export class StackItem {
     if (!cardDef || !('headerColor' in cardDef)) {
       return;
     }
-    let color = cardDef.headerColor as { value: string } | null;
-    if (color == null || !color.value) {
+    if (
+      cardDef.headerColor == null ||
+      typeof cardDef.headerColor !== 'string'
+    ) {
       return;
     }
-    return color.value;
+    return cardDef.headerColor;
   }
 
   get api() {

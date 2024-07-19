@@ -237,7 +237,7 @@ class Isolated extends Component<typeof AppCard> {
       <section class='dashboard'>
         <header
           class='dashboard-header'
-          style={{cssVar db-header-bg-color=this.args.model.headerColor.value}}
+          style={{cssVar db-header-bg-color=this.args.model.headerColor}}
         >
           <h1 class='dashboard-title'><@fields.title /></h1>
           <nav class='dashboard-nav'>
