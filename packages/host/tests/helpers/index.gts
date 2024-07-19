@@ -84,7 +84,7 @@ export function cleanWhiteSpace(text: string) {
 
 export function trimCardContainer(text: string) {
   return cleanWhiteSpace(text).replace(
-    /<div .*? data-test-field-component-card>\s?[<!---->]*? (.*?) <\/div>/g,
+    /<div .*? data-test-field-component-card>\s?[<!---->]*? (.*?) <\/div>$/g,
     '$1',
   );
 }

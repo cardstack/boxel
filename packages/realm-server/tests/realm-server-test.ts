@@ -1654,8 +1654,20 @@ module('Realm Server', function (hooks) {
         });
 
         test('returns prerendered instances', async function (assert) {
+          let query: Query & { prerenderedHtmlFormat: string } = {
+            filter: {
+              on: {
+                module: `${testRealmHref}person`,
+                name: 'Person',
+              },
+              eq: {
+                firstName: 'John',
+              },
+            },
+            prerenderedHtmlFormat: 'embedded',
+          };
           let response = await request
-            .get(`/_search-prerendered?prerenderedHtmlFormat=embedded`)
+            .get(`/_search-prerendered?${stringify(query)}`)
             .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -1753,6 +1765,7 @@ module('Realm Server', function (hooks) {
             data: {
               attributes: {
                 firstName: 'Aaron',
+                title: 'Person Aaron',
               },
               meta: {
                 adoptsFrom: {
@@ -1766,6 +1779,7 @@ module('Realm Server', function (hooks) {
             data: {
               attributes: {
                 firstName: 'Craig',
+                title: 'Person Craig',
               },
               meta: {
                 adoptsFrom: {
@@ -1780,6 +1794,7 @@ module('Realm Server', function (hooks) {
               attributes: {
                 firstName: 'Jane',
                 favoriteColor: 'blue',
+                title: 'FancyPerson Jane',
               },
               meta: {
                 adoptsFrom: {
@@ -1794,6 +1809,7 @@ module('Realm Server', function (hooks) {
               attributes: {
                 firstName: 'Jimmy',
                 favoriteColor: 'black',
+                title: 'FancyPerson Jimmy',
               },
               meta: {
                 adoptsFrom: {
@@ -1806,7 +1822,7 @@ module('Realm Server', function (hooks) {
         },
       );
 
-      test('returns instances with prerendered embedded html + css', async function (assert) {
+      test('returns instances with CardDef prerendered embedded html + css when there is no "on" filter', async function (assert) {
         let response = await request
           .get(`/_search-prerendered?prerenderedHtmlFormat=embedded`)
           .set('Accept', 'application/vnd.card+json');
@@ -1835,7 +1851,7 @@ module('Realm Server', function (hooks) {
         assert.true(
           json.data[0].attributes.html
             .replace(/\s+/g, ' ')
-            .includes('Embedded Card Person: Aaron'),
+            .includes('Person Aaron'),
           'embedded html looks correct',
         );
         assert.strictEqual(
@@ -1854,7 +1870,7 @@ module('Realm Server', function (hooks) {
         assert.true(
           json.data[1].attributes.html
             .replace(/\s+/g, ' ')
-            .includes('Embedded Card Person: Craig'),
+            .includes('Person Craig'),
           'embedded html for Craig looks correct',
         );
         assert.strictEqual(
@@ -1873,7 +1889,7 @@ module('Realm Server', function (hooks) {
         assert.true(
           json.data[2].attributes.html
             .replace(/\s+/g, ' ')
-            .includes('Embedded Card FancyPerson: Jane'),
+            .includes('FancyPerson Jane'),
           'embedded html for Jane looks correct',
         );
         assert.strictEqual(
@@ -1901,7 +1917,7 @@ module('Realm Server', function (hooks) {
         assert.true(
           json.data[3].attributes.html
             .replace(/\s+/g, ' ')
-            .includes('Embedded Card FancyPerson: Jimmy'),
+            .includes('FancyPerson Jimmy'),
           'embedded html for Jimmy looks correct',
         );
         assert.strictEqual(

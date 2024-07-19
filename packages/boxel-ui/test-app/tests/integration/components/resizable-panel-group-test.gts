@@ -4,6 +4,7 @@ import { doubleClick, render, RenderingTestContext } from '@ember/test-helpers';
 import { htmlSafe } from '@ember/template';
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
+import { triggerEvent } from '@ember/test-helpers';
 
 const RESIZE_HANDLE_WIDTH = 18;
 const PANEL_INDEX_1_MIN_LENGTH = 50;
@@ -13,6 +14,7 @@ class PanelProperties {
   @tracked isHidden?: boolean;
   @tracked defaultLengthFraction?: number;
   @tracked minLengthPx?: number;
+  collapsible: boolean;
 
   outerContainerStyle?: string;
   showResizeHandle?: boolean;
@@ -24,6 +26,7 @@ class PanelProperties {
       minLengthPx?: number;
       outerContainerStyle?: string;
       showResizeHandle?: boolean;
+      collapsible?: boolean;
     } = {},
     testArgs: {
       outerContainerStyle?: string;
@@ -35,12 +38,14 @@ class PanelProperties {
       isHidden = false,
       defaultLengthFraction,
       minLengthPx,
+      collapsible,
     } = panelArgs;
     let { outerContainerStyle, showResizeHandle } = testArgs;
     this.lengthPx = lengthPx;
     this.isHidden = isHidden;
     this.defaultLengthFraction = defaultLengthFraction;
     this.minLengthPx = minLengthPx;
+    this.collapsible = collapsible ?? true;
 
     this.showResizeHandle = showResizeHandle;
 
@@ -116,6 +121,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
               max-${orientationProperties.dimension}: 100%;
             }
         `;
+        console.log(renderController.panels[1]);
 
         await render(<template>
           {{! template-lint-disable no-inline-styles }}
@@ -132,6 +138,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
                   @lengthPx={{panel.lengthPx}}
                   @minLengthPx={{panel.minLengthPx}}
                   @isHidden={{panel.isHidden}}
+                  @collapsible={{panel.collapsible}}
                 >
                   <div
                     class='panel'
@@ -553,6 +560,79 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
           0,
           0,
         );
+      });
+
+      test<MyTestContext>(`it stops expanding/shrinking if cursor is not in the right position`, async function (assert) {
+        this.renderController.containerStyle = `
+          ${orientationProperties.dimension}: ${300 + RESIZE_HANDLE_WIDTH}px;
+        `;
+        this.renderController.panels[1].minLengthPx = 60;
+        this.renderController.panels[1].collapsible = false;
+
+        await renderResizablePanelGroup(this.renderController);
+
+        assert.hasNumericStyle(
+          '[data-test-panel-index="0"]',
+          orientationProperties.dimension,
+          300 * 0.6,
+          1,
+        );
+        assert.hasNumericStyle(
+          '[data-test-panel-index="1"]',
+          orientationProperties.dimension,
+          300 * 0.4,
+          1,
+        );
+
+        let resizeHandleRect = document
+          .querySelector('[data-test-resize-handle]')!
+          .getBoundingClientRect();
+        await triggerEvent('[data-test-resize-handle]', 'mousedown');
+        await triggerEvent(
+          '[data-test-resize-handle]',
+          'mousemove',
+          orientationProperties.orientation === 'horizontal'
+            ? {
+                clientX: resizeHandleRect.x + 60,
+                clientY: 25,
+              }
+            : {
+                clientX: 25,
+                clientY: resizeHandleRect.y + 60,
+              },
+        );
+        assert.hasNumericStyle(
+          '[data-test-panel-index="1"]',
+          orientationProperties.dimension,
+          this.renderController.panels[1].minLengthPx,
+          1,
+        );
+
+        // Mouse move event doesn't give any effects
+        // since the cursor drags past minimum length
+        resizeHandleRect = document
+          .querySelector('[data-test-resize-handle]')!
+          .getBoundingClientRect();
+        await triggerEvent(
+          '[data-test-resize-handle]',
+          'mousemove',
+          orientationProperties.orientation === 'horizontal'
+            ? {
+                clientX: resizeHandleRect.x + 40,
+                clientY: 25,
+              }
+            : {
+                clientX: 25,
+                clientY: resizeHandleRect.y + 40,
+              },
+        );
+        assert.hasNumericStyle(
+          '[data-test-panel-index="1"]',
+          orientationProperties.dimension,
+          this.renderController.panels[1].minLengthPx,
+          1,
+        );
+        await triggerEvent('[data-test-resize-handle]', 'mouseup');
       });
     },
   );
