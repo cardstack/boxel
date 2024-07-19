@@ -196,6 +196,7 @@ export class RoomResource extends Resource<Args> {
         roomId,
         userId: event.sender,
       });
+      console.log('new message', event.content.body, event.event_id);
       let messageArgs = new Message({
         author,
         created: new Date(event.origin_server_ts),
