@@ -286,11 +286,11 @@ module('Integration | card-prerender', function (hooks) {
     // Since there is no "on" filter, the prerendered html must be from a CardDef template
 
     [
-      'test card: pet mango',
-      'test card: pet vangogh',
-      'test card: person jane',
-      'test card: person jimmy',
-    ].forEach((title, index) => {
+      ['test card: pet mango', 'Pet'],
+      ['test card: pet vangogh', 'Pet'],
+      ['test card: person jane', 'FancyPerson'],
+      ['test card: person jimmy', 'FancyPerson'],
+    ].forEach(([title, type], index) => {
       assert.strictEqual(
         trimCardContainer(
           stripScopedCSSAttributes(results.prerenderedCards[index].html),
@@ -304,7 +304,7 @@ module('Integration | card-prerender', function (hooks) {
           </div>
           <div class="info-section">
             <h3 class="card-title" data-test-card-title>${title}</h3>
-            <h4 class="card-display-name" data-test-card-display-name>Card</h4>
+            <h4 class="card-display-name" data-test-card-display-name> ${type} </h4>
           </div>
           <div class="card-description" data-test-card-description></div>
         </div>

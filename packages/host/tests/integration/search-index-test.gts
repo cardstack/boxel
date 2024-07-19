@@ -1061,6 +1061,7 @@ module(`Integration | search-index`, function (hooks) {
 
   test(`can generate embedded HTML for instance's card class hierarchy`, async function (assert) {
     class Person extends CardDef {
+      static displayName = 'Person';
       @field firstName = contains(StringField);
       static embedded = class Isolated extends Component<typeof this> {
         <template>
@@ -1070,6 +1071,7 @@ module(`Integration | search-index`, function (hooks) {
     }
 
     class FancyPerson extends Person {
+      static displayName = 'Fancy Person';
       @field favoriteColor = contains(StringField);
       static embedded = class Isolated extends Component<typeof this> {
         <template>
@@ -1163,7 +1165,9 @@ module(`Integration | search-index`, function (hooks) {
             </div>
             <div class="info-section">
               <h3 class="card-title" data-test-card-title></h3>
-              <h4 class="card-display-name" data-test-card-display-name>Card</h4>
+              <h4 class="card-display-name" data-test-card-display-name>
+                Fancy Person
+              </h4>
             </div>
             <div class="card-description" data-test-card-description>Fancy Germaine</div>
           </div>

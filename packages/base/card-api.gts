@@ -1820,10 +1820,11 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
         </div>
         <div class='info-section'>
           <h3 class='card-title' data-test-card-title>{{@model.title}}</h3>
-          <h4
-            class='card-display-name'
-            data-test-card-display-name
-          >{{cardTypeDisplayName @model}}</h4>
+          <h4 class='card-display-name' data-test-card-display-name>
+            <!-- __org.boxel.cardType START -->
+            {{cardTypeDisplayName @model}}
+            <!-- __org.boxel.cardType END -->
+          </h4>
         </div>
         <div
           class='card-description'
