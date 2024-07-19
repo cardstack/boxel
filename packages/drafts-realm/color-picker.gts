@@ -9,25 +9,18 @@ import { action } from '@ember/object';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 
 class ColorPickerTemplate extends Component<typeof ColorPicker> {
-  @action
-  setColor(color: string) {
-    this.args.model.value = color;
-  }
   <template>
     <div class='color-picker'>
       <label>
         <span class='boxel-sr-only'>Hex Code</span>
-        <BoxelInput
-          @value={{this.args.model.value}}
-          @onInput={{this.setColor}}
-        />
+        <BoxelInput @value={{this.currentColor}} @onInput={{this.setColor}} />
       </label>
       <label>
         <span class='boxel-sr-only'>Color</span>
         <BoxelInput
           class='color-input'
           @type='color'
-          @value={{this.args.model.value}}
+          @value={{this.currentColor}}
           @onInput={{this.setColor}}
         />
       </label>
@@ -46,6 +39,13 @@ class ColorPickerTemplate extends Component<typeof ColorPicker> {
       }
     </style>
   </template>
+
+  get currentColor() {
+    return this.args.model.value ?? '#ffffff';
+  }
+  @action setColor(color: string) {
+    this.args.model.value = color;
+  }
 }
 
 export class ColorPicker extends FieldDef {
