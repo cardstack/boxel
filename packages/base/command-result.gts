@@ -29,7 +29,7 @@ function getComponent(cardOrField: BaseDef) {
   return cardOrField.constructor.getComponent(cardOrField);
 }
 
-class SearchCommandResultEmbeddedView extends Component<typeof CommandResult> {
+class CommandResultEmbeddedView extends Component<typeof CommandResult> {
   @tracked showAllResults = false;
 
   @cached
@@ -216,12 +216,9 @@ class SearchCommandResultEmbeddedView extends Component<typeof CommandResult> {
 }
 
 export class CommandResult extends FieldDef {
-  @field intent = contains(StringField);
+  @field toolCallId = contains(StringField);
+  @field toolCallResults = contains(FieldDef);
   @field cardIds = containsMany(StringField);
 
-  static embedded = SearchCommandResultEmbeddedView;
-}
-
-export class SearchCommandResult extends CommandResult {
-  static embedded = SearchCommandResultEmbeddedView;
+  static embedded = CommandResultEmbeddedView;
 }

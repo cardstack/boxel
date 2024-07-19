@@ -1,6 +1,9 @@
 import { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { EventStatus, MatrixError } from 'matrix-js-sdk';
-import { type Schema } from '@cardstack/runtime-common/helpers/ai';
+import {
+  FunctionToolCall,
+  type Schema,
+} from '@cardstack/runtime-common/helpers/ai';
 
 interface BaseMatrixEvent {
   sender: string;
@@ -117,11 +120,6 @@ export interface CommandEvent extends BaseMatrixEvent {
     prev_content?: any;
     prev_sender?: string;
   };
-}
-
-export interface FunctionToolCall {
-  name: string;
-  arguments: any;
 }
 
 interface CommandMessageContent {

@@ -279,17 +279,12 @@ export class RoomResource extends Resource<Args> {
             e.content['m.relates_to'].event_id ===
               commandEvent.content.data.eventId,
         ) as CommandResultEvent;
-        let serializedResults: LooseSingleCardDocument[] =
-          commandResultEvent?.content?.result;
-        let r: any;
-        if (serializedResults) {
-          r = await this.commandService.createCommandResult(
-            commandEvent,
-            commandResultEvent,
-          );
-          console.log('command result');
-          console.log(r);
-        }
+        let r = commandResultEvent?.content?.result
+          ? await this.commandService.createCommandResultArgs(
+              commandEvent,
+              commandResultEvent,
+            )
+          : undefined;
 
         let status: CommandStatus =
           annotation?.content['m.relates_to'].key === 'applied'
@@ -297,22 +292,17 @@ export class RoomResource extends Resource<Args> {
             : 'ready';
 
         let commandFieldArgs = {
+          toolCallId: command.id,
           eventId: event_id,
           name: command.name,
           payload: command.arguments,
           status,
-          ...(r && {
-            result: r,
-          }),
+          result: r,
         };
 
         let commandField = await this.commandService.createCommand(
           commandFieldArgs,
         );
-        if (commandField.result) {
-          console.log('command field with new commnad result');
-          console.log(commandField);
-        }
 
         messageField = new Message({
           ...messageArgs,
@@ -329,14 +319,9 @@ export class RoomResource extends Resource<Args> {
       }
 
       if (messageField) {
-        console.log('lets see if we are updating the message');
-        console.log(event_id);
-        console.log(messageField);
-        console.log(this._messageCache);
         // if the message is a replacement for other messages,
         // use `created` from the oldest one.
         if (this._messageCache.has(event_id)) {
-          console.log('inside the cache if event already exists');
           let d1 = this._messageCache.get(event_id)!.created!;
           let d2 = messageField.created!;
           messageField.created = d1 < d2 ? d1 : d2;
@@ -345,8 +330,6 @@ export class RoomResource extends Resource<Args> {
           (event.content as CardMessageContent).clientGeneratedId ?? event_id,
           messageField as any,
         );
-        console.log('new messages after');
-        console.log(newMessages);
       }
     }
 
@@ -436,11 +419,6 @@ export class RoomResource extends Resource<Args> {
       new TrackedObject({ card, isActive: true }),
     ];
   }
-}
-
-export interface FunctionToolCall {
-  name: string;
-  arguments: any;
 }
 
 export function getRoom(

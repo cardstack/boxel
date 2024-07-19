@@ -25,8 +25,9 @@ class CommandStatusField extends FieldDef {
 }
 
 export class CommandField extends CardDef {
+  @field toolCallId = contains(StringField);
   @field name = contains(StringField);
-  @field payload = contains(CommandObjectField);
+  @field payload = contains(CommandObjectField); //arguments of toolCall. Its not called arguments due to lint
   @field eventId = contains(StringField);
   @field status = contains(CommandStatusField);
   @field result = contains(CommandResult);

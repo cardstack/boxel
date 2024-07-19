@@ -2,6 +2,7 @@ import { IContent } from 'matrix-js-sdk';
 import { logger } from '@cardstack/runtime-common';
 import { OpenAIError } from 'openai/error';
 import * as Sentry from '@sentry/node';
+import { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
 
 let log = logger('ai-bot');
 
@@ -65,11 +66,6 @@ export async function sendMessage(
     messageObject,
     eventToUpdate,
   );
-}
-
-export interface FunctionToolCall {
-  name: string;
-  arguments: { [key: string]: any };
 }
 
 // TODO we might want to think about how to handle patches that are larger than

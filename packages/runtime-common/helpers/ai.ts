@@ -453,3 +453,9 @@ If a user asks you about things in the world, use your existing knowledge to hel
 \
 If you need access to the cards the user can see, you can ask them to attach the cards. \
 If you encounter JSON structures, please enclose them within backticks to ensure they are displayed stylishly in Markdown.';
+
+export interface FunctionToolCall {
+  id: string;
+  name: string;
+  arguments: { [key: string]: any };
+}

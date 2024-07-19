@@ -23,8 +23,6 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import { BaseDef } from 'https://cardstack.com/base/card-api';
 import { CommandField } from 'https://cardstack.com/base/command';
 
-import { SearchCommandResult } from 'https://cardstack.com/base/command-result';
-
 import {
   CommandEvent,
   CommandResultEvent,
@@ -117,7 +115,7 @@ export default class CommandService extends Service {
     );
   }
 
-  async createCommandResult(
+  async createCommandResultArgs(
     commandEvent: CommandEvent,
     event: CommandResultEvent,
   ) {
@@ -125,20 +123,25 @@ export default class CommandService extends Service {
     let serializedResults: LooseSingleCardDocument[] = event?.content?.result;
     if (toolCall.name === 'searchCard') {
       return {
-        intent: toolCall.arguments.description,
+        toolCallId: toolCall.id,
+        toolCallResults: event?.content?.result,
         cardIds: serializedResults.map((r) => r.data.id),
       };
     } else if (toolCall.name === 'patchCard') {
-      return {};
+      return {
+        toolCallId: toolCall.id,
+        toolCallResults: event?.content?.result,
+      };
     }
     return;
   }
 
   getCommandResultComponent(message: Message) {
-    if (message.command && message.command.result) {
-      if (message.command.name === 'searchCard') {
-        return getComponent(message.command.result as SearchCommandResult);
-      }
+    if (
+      message?.command?.result?.cardIds.length &&
+      message?.command?.name === 'searchCard'
+    ) {
+      return getComponent(message.command.result as SearchCommandResult);
     }
     return;
   }

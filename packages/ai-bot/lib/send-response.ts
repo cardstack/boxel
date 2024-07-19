@@ -1,18 +1,13 @@
 import { cleanContent } from '../helpers';
 import { logger } from '@cardstack/runtime-common';
-import {
-  MatrixClient,
-  sendError,
-  sendMessage,
-  sendOption,
-  type FunctionToolCall,
-} from './matrix';
+import { MatrixClient, sendError, sendMessage, sendOption } from './matrix';
 
 import * as Sentry from '@sentry/node';
 import { OpenAIError } from 'openai/error';
 import debounce from 'lodash/debounce';
 import { ISendEventResponse } from 'matrix-js-sdk/lib/matrix';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
+import { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
 
 let log = logger('ai-bot');
 
@@ -88,7 +83,7 @@ export class Responder {
 
   async onMessage(msg: {
     role: string;
-    tool_calls?: { function: ChatCompletionMessageToolCall.Function }[];
+    tool_calls?: ChatCompletionMessageToolCall[];
   }) {
     if (msg.role === 'assistant') {
       await this.handleFunctionToolCalls(msg);
@@ -96,23 +91,23 @@ export class Responder {
   }
 
   deserializeToolCall(
-    f: ChatCompletionMessageToolCall.Function,
+    toolCall: ChatCompletionMessageToolCall,
   ): FunctionToolCall {
-    return { name: f.name, arguments: JSON.parse(f.arguments) };
+    let { id, function: f } = toolCall;
+    return { id, name: f.name, arguments: JSON.parse(f.arguments) };
   }
 
   async handleFunctionToolCalls(msg: {
     role: string;
-    tool_calls?: { function: ChatCompletionMessageToolCall.Function }[];
+    tool_calls?: ChatCompletionMessageToolCall[];
   }) {
     for (const toolCall of msg.tool_calls || []) {
-      const functionCall = toolCall.function;
       log.debug('[Room Timeline] Function call', toolCall);
       try {
         let optionPromise = sendOption(
           this.client,
           this.roomId,
-          this.deserializeToolCall(functionCall),
+          this.deserializeToolCall(toolCall),
           this.initialMessageReplaced ? undefined : this.initialMessageId,
         );
         this.messagePromises.push(optionPromise);
