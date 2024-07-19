@@ -168,11 +168,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
     let invertedIndex = itemsOnStackCount - this.args.index - 1;
     let widthReductionPercent = 5; // Every new card on the stack is 5% wider than the previous one
     let offsetPx = 30; // Every new card on the stack is 30px lower than the previous one
-    let width = this.args.item.isWideFormat
-      ? '100%'
-      : `calc(${stackItemMaxWidth} * ${
-          100 - invertedIndex * widthReductionPercent
-        } / 100)`;
+    let width =
+      !this.isBuried && this.args.item.isWideFormat
+        ? '100%'
+        : `calc(${stackItemMaxWidth} * ${
+            100 - invertedIndex * widthReductionPercent
+          } / 100)`;
 
     return htmlSafe(`
       height: calc(100% - ${offsetPx}px * ${this.args.index});
