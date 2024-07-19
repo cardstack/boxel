@@ -31,6 +31,8 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 
 import RealmService from '@cardstack/host/services/realm';
 
+import EmbeddedFormatGallery from './embedded-format-gallery';
+
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
@@ -147,7 +149,11 @@ export default class CardPreviewPanel extends Component<Signature> {
         onScroll=this.onScroll
       }}
     >
-      <Preview @card={{@card}} @format={{this.format}} />
+      {{#if (eq this.format 'embedded')}}
+        <EmbeddedFormatGallery @card={{@card}} />
+      {{else}}
+        <Preview @card={{@card}} @format={{this.format}} />
+      {{/if}}
     </div>
 
     <div
