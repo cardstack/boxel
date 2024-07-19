@@ -5,6 +5,7 @@ import {
   isCommandReactionEvent,
   attachedCardsToMessage,
   isCommandEvent,
+  getRelevantCards,
 } from '../helpers';
 import { MatrixClient } from './matrix';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
@@ -98,11 +99,15 @@ export const getLatestCommandApplyMessage = (
     if (commandEvent === undefined) {
       return [];
     }
+    let { mostRecentlyAttachedCard, attachedCards } = getRelevantCards(
+      history,
+      aiBotUserId,
+    );
     if (isCommandEvent(commandEvent)) {
       let args = JSON.stringify(commandEvent.content.data.toolCall);
       let content = `Applying command with args ${args}. Cards shared are: ${attachedCardsToMessage(
-        history,
-        aiBotUserId,
+        mostRecentlyAttachedCard,
+        attachedCards,
       )}`;
       return [
         {
