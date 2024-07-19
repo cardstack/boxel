@@ -96,12 +96,12 @@ class SendReadReceipt extends Modifier<SendReadReceiptModifierSignature> {
       }, room ${roomId}, ts ${message.created.getTime()}`,
     );
 
-    if (message.eventId.startsWith('~')) {
-      debugger;
-    }
-
     // Without scheduling this after render, this produces the "attempted to update value, but it had already been used previously in the same computation" error
     schedule('afterRender', () => {
+      if (message.eventId.startsWith('~')) {
+        debugger;
+      }
+
       matrixService.client.sendReadReceipt(matrixEvent as MatrixEvent);
     });
   }
