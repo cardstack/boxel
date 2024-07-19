@@ -32,6 +32,7 @@ import { Message } from '../lib/matrix-classes/message';
 import { getSearchResults } from '../resources/search';
 
 import CardService from './card-service';
+import { CommandResult } from 'https://cardstack.com/base/command-result';
 
 const deserializeToQuery = (payload: SearchPayload) => {
   let maybeCodeRef = codeRefWithAbsoluteURL(
@@ -141,7 +142,7 @@ export default class CommandService extends Service {
       message?.command?.result?.cardIds.length &&
       message?.command?.name === 'searchCard'
     ) {
-      return getComponent(message.command.result as SearchCommandResult);
+      return getComponent(message.command.result as CommandResult);
     }
     return;
   }
