@@ -90,6 +90,12 @@ class SendReadReceipt extends Modifier<SendReadReceiptModifierSignature> {
       getTs: () => message.created.getTime(),
     };
 
+    console.log(
+      `artificial matrix event: id ${
+        message.eventId
+      }, room ${roomId}, ts ${message.created.getTime()}`,
+    );
+
     if (message.eventId.startsWith('~')) {
       debugger;
     }
