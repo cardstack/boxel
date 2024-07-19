@@ -491,7 +491,7 @@ export class IndexQueryEngine {
         ['bi.type =', param('css')],
       ]),
       `)
-        SELECT css_module_id, css_source
+        SELECT DISTINCT css_module_id, css_source
         FROM css_deps
       `,
     ];
