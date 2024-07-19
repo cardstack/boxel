@@ -124,10 +124,6 @@ export default class EmbeddedFormatGallery extends Component<Signature> {
         position: relative;
         padding: var(--boxel-sp);
         border-top: var(--boxel-border-card);
-        border-bottom: var(--boxel-border-card);
-      }
-      .item + .item {
-        border-top: none;
       }
       .desc {
         position: absolute;
