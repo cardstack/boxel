@@ -306,7 +306,7 @@ export class RoomResource extends Resource<Args> {
 
         messageField = new Message({
           ...messageArgs,
-          formattedMessage: `<p class="command-message">${event.content.formatted_body}</p>`,
+          formattedMessage: `<p data-test-command-message class="command-message">${event.content.formatted_body}</p>`,
           command: commandField,
           isStreamingFinished: true,
         });

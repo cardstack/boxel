@@ -1,4 +1,4 @@
-import { getCard } from '@cardstack/runtime-common';
+import { getCard, primitive } from '@cardstack/runtime-common';
 import {
   BaseDef,
   CardDef,
@@ -34,10 +34,10 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
 
   @cached
   get attachedResources(): AttachedCardResource[] | undefined {
-    if (!this.args.model.cardIds?.length) {
+    if (!this.cardIdsToDisplay.length) {
       return undefined;
     }
-    let cards = this.args.model.cardIds.map((id) => {
+    let cards = this.cardIdsToDisplay.map((id) => {
       let card = getCard(new URL(id));
       if (!card) {
         return {
@@ -53,11 +53,14 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
     return cards;
   }
 
-  get cardsToDisplay() {
-    if (this.showAllResults) {
-      return this.attachedResources;
+  get cardIdsToDisplay() {
+    if (!this.args.model.cardIds?.length) {
+      return [];
     }
-    return this.attachedResources?.slice(0, this.paginateSize);
+    if (this.showAllResults) {
+      return this.args.model.cardIds;
+    }
+    return this.args.model.cardIds?.slice(0, this.paginateSize);
   }
 
   get numberOfCards() {
@@ -90,7 +93,7 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
   }
 
   <template>
-    <div class='result'>
+    <div data-test-command-result class='command-result'>
       <Header
         @title='Search Results'
         @subtitle='{{this.numberOfCards}} results'
@@ -115,7 +118,7 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
         </:actions>
       </Header>
       <div class='body'>
-        {{#each this.cardsToDisplay as |cardResource i|}}
+        {{#each this.attachedResources as |cardResource i|}}
           {{#if cardResource.cardError}}
             <div
               data-test-card-error={{cardResource.cardError.id}}
@@ -126,7 +129,11 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
               {{cardResource.cardError.error.message}}
             </div>
           {{else if cardResource.card}}
-            <div class='card' data-test-result-card={{cardResource.card.id}}>
+            <div
+              class='card-item'
+              data-test-result-card={{cardResource.card.id}}
+              data-test-result-card-idx={{i}}
+            >
               {{#let (getComponent cardResource.card) as |Component|}}
                 {{i}}.
                 <Component @format='atom' @displayContainer={{false}} />
@@ -160,13 +167,13 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
       </div>
     </div>
     <style>
-      .result {
+      .command-result {
         color: black;
         background-color: var(--boxel-light);
         border-radius: var(--boxel-border-radius);
         --left-padding: var(--boxel-sp-xs);
       }
-      .card {
+      .card-item {
         display: flex;
         gap: var(--boxel-sp-xxs);
       }
@@ -215,9 +222,21 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
   </template>
 }
 
+type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
+
+type JSONObject = { [x: string]: JSONValue };
+
+type JSONArray = JSONValue[];
+
+type ToolCallResultObj = JSONObject | JSONArray;
+
+class ToolCallResult extends FieldDef {
+  static [primitive]: ToolCallResultObj;
+}
+
 export class CommandResult extends FieldDef {
   @field toolCallId = contains(StringField);
-  @field toolCallResults = contains(FieldDef);
+  @field toolCallResults = contains(ToolCallResult);
   @field cardIds = containsMany(StringField);
 
   static embedded = CommandResultEmbeddedView;

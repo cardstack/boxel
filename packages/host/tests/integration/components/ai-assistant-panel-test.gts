@@ -262,6 +262,11 @@ module('Integration | ai-assistant-panel', function (hooks) {
             homeCountry: usa,
           }),
         }),
+        'Person/justin.json': new Person({ firstName: 'Justin' }),
+        'Person/ian.json': new Person({ firstName: 'Ian' }),
+        'Person/matic.json': new Person({ firstName: 'Matic' }),
+        'Person/buck.json': new Person({ firstName: 'Buck' }),
+        'Person/hassan.json': new Person({ firstName: 'Hassan' }),
         '.realm.json': `{ "name": "${realmName}" }`,
       },
     });
@@ -2147,5 +2152,134 @@ module('Integration | ai-assistant-panel', function (hooks) {
       'Evie',
       'field has been changed',
     );
+  });
+
+  test('it can search for card instances of other card type on stack', async function (assert) {
+    let id = `${testRealmURL}Person/fadhlan`;
+    let roomId = await renderAiAssistantPanel(id);
+
+    await addRoomEvent(matrixService, {
+      event_id: 'event1',
+      room_id: roomId,
+      state_key: 'state',
+      type: 'm.room.message',
+      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      sender: '@aibot:localhost',
+      content: {
+        msgtype: 'org.boxel.command',
+        formatted_body: 'Search for the following card',
+        format: 'org.matrix.custom.html',
+        data: JSON.stringify({
+          toolCall: {
+            name: 'searchCard',
+            arguments: {
+              card_id: id,
+              description: 'Searching for card',
+              filter: {
+                type: {
+                  module: '../person',
+                  name: 'Person',
+                },
+              },
+            },
+          },
+          eventId: 'search1',
+        }),
+        'm.relates_to': {
+          rel_type: 'm.replace',
+          event_id: 'search1',
+        },
+      },
+      status: null,
+    });
+    await waitFor('[data-test-command-apply]');
+    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+    await waitFor('[data-test-command-result]');
+    await waitFor('[data-test-result-card-idx="2"]');
+    let commandResultEvents = await getCommandResultEvents(
+      matrixService,
+      roomId,
+    );
+    assert.equal(
+      commandResultEvents[0].content.result.length,
+      3,
+      'number of search results',
+    );
+    assert
+      .dom('[data-test-command-message]')
+      .containsText('Search for the following card');
+    assert
+      .dom('[data-test-comand-result-header]')
+      .containsText('Search Results 3 result');
+
+    assert.dom('[data-test-result-card-idx="0"]').containsText('0. Burcu');
+    assert.dom('[data-test-result-card-idx="1"]').containsText('1. Fadhlan');
+    assert.dom('[data-test-result-card-idx="2"]').containsText('2. Mickey');
+    assert.dom('[data-test-toggle-show-button]').doesNotExist();
+  });
+
+  test('toggle more search results', async function (assert) {
+    let id = `${testRealmURL}Person/fadhlan.json`;
+    let roomId = await renderAiAssistantPanel(id);
+    await addRoomEvent(matrixService, {
+      event_id: 'event1',
+      room_id: roomId,
+      state_key: 'state',
+      type: 'm.room.message',
+      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      sender: '@aibot:localhost',
+      content: {
+        msgtype: 'org.boxel.command',
+        formatted_body: 'Search for the following card',
+        format: 'org.matrix.custom.html',
+        data: JSON.stringify({
+          toolCall: {
+            name: 'searchCard',
+            arguments: {
+              card_id: id,
+              description: 'Searching for card',
+              filter: {
+                type: {
+                  module: '../person',
+                  name: 'Person',
+                },
+              },
+            },
+          },
+          eventId: 'search1',
+        }),
+        'm.relates_to': {
+          rel_type: 'm.replace',
+          event_id: 'search1',
+        },
+      },
+      status: null,
+    });
+    await waitFor('[data-test-command-apply]');
+    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+    await waitFor('[data-test-command-result]');
+    await waitFor('[data-test-result-card-idx="4"]');
+    assert.dom('[data-test-result-card-idx="5"]').doesNotExist();
+    assert
+      .dom('[data-test-toggle-show-button]')
+      .containsText('Show 3 more results');
+    await click('[data-test-toggle-show-button]');
+    await waitFor('[data-test-result-card-idx="7"]');
+    assert.dom('[data-test-toggle-show-button]').containsText('See Less');
+    assert.dom('[data-test-result-card-idx="0"]').containsText('0. Buck');
+    assert.dom('[data-test-result-card-idx="1"]').containsText('1. Burcu');
+    assert.dom('[data-test-result-card-idx="2"]').containsText('2. Fadhlan');
+    assert.dom('[data-test-result-card-idx="3"]').containsText('3. Hassan');
+    assert.dom('[data-test-result-card-idx="4"]').containsText('4. Ian');
+    assert.dom('[data-test-result-card-idx="5"]').containsText('5. Justin');
+    assert.dom('[data-test-result-card-idx="6"]').containsText('6. Matic');
+    assert.dom('[data-test-result-card-idx="7"]').containsText('7. Mickey');
+    await click('[data-test-toggle-show-button]');
+    assert.dom('[data-test-result-card-idx="0"]').containsText('0. Buck');
+    assert.dom('[data-test-result-card-idx="1"]').containsText('1. Burcu');
+    assert.dom('[data-test-result-card-idx="2"]').containsText('2. Fadhlan');
+    assert.dom('[data-test-result-card-idx="3"]').containsText('3. Hassan');
+    assert.dom('[data-test-result-card-idx="4"]').containsText('4. Ian');
+    assert.dom('[data-test-result-card-idx="5"]').doesNotExist();
   });
 });
