@@ -90,18 +90,8 @@ class SendReadReceipt extends Modifier<SendReadReceiptModifierSignature> {
       getTs: () => message.created.getTime(),
     };
 
-    console.log(
-      `artificial matrix event: id ${
-        message.eventId
-      }, room ${roomId}, ts ${message.created.getTime()}`,
-    );
-
     // Without scheduling this after render, this produces the "attempted to update value, but it had already been used previously in the same computation" error
     schedule('afterRender', () => {
-      if (message.eventId.startsWith('~')) {
-        debugger;
-      }
-
       matrixService.client.sendReadReceipt(matrixEvent as MatrixEvent);
     });
   }
