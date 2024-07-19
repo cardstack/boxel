@@ -23,6 +23,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import { BaseDef } from 'https://cardstack.com/base/card-api';
 import { CommandField } from 'https://cardstack.com/base/command';
 
+import { CommandResult } from 'https://cardstack.com/base/command-result';
 import {
   CommandEvent,
   CommandResultEvent,
@@ -32,7 +33,6 @@ import { Message } from '../lib/matrix-classes/message';
 import { getSearchResults } from '../resources/search';
 
 import CardService from './card-service';
-import { CommandResult } from 'https://cardstack.com/base/command-result';
 
 const deserializeToQuery = (payload: SearchPayload) => {
   let maybeCodeRef = codeRefWithAbsoluteURL(
