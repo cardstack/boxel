@@ -2154,8 +2154,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
     );
   });
 
-  test('it can search for card instances of other card type on stack', async function (assert) {
-    let id = `${testRealmURL}Person/fadhlan`;
+  test('it can search for card instances that is of the same card type as the card shared', async function (assert) {
+    let id = `${testRealmURL}Pet/mango.json`;
     let roomId = await renderAiAssistantPanel(id);
 
     await addRoomEvent(matrixService, {
@@ -2177,8 +2177,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
               description: 'Searching for card',
               filter: {
                 type: {
-                  module: '../person',
-                  name: 'Person',
+                  module: '../pet',
+                  name: 'Pet',
                 },
               },
             },
@@ -2195,14 +2195,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
     await waitFor('[data-test-command-result]');
-    await waitFor('[data-test-result-card-idx="2"]');
+    await waitFor('[data-test-result-card-idx="1"]');
     let commandResultEvents = await getCommandResultEvents(
       matrixService,
       roomId,
     );
     assert.equal(
       commandResultEvents[0].content.result.length,
-      3,
+      2,
       'number of search results',
     );
     assert
@@ -2210,11 +2210,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .containsText('Search for the following card');
     assert
       .dom('[data-test-comand-result-header]')
-      .containsText('Search Results 3 result');
+      .containsText('Search Results 2 results');
 
-    assert.dom('[data-test-result-card-idx="0"]').containsText('0. Burcu');
-    assert.dom('[data-test-result-card-idx="1"]').containsText('1. Fadhlan');
-    assert.dom('[data-test-result-card-idx="2"]').containsText('2. Mickey');
+    assert.dom('[data-test-result-card-idx="0"]').containsText('0. Jackie');
+    assert.dom('[data-test-result-card-idx="1"]').containsText('1. Mango');
     assert.dom('[data-test-toggle-show-button]').doesNotExist();
   });
 
