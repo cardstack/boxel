@@ -1,5 +1,6 @@
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
+
 import { provide } from 'ember-provide-consume-context';
 
 import { DefaultFormatContextName } from '@cardstack/runtime-common';
@@ -23,6 +24,7 @@ export default class EmbeddedFormatGallery extends Component<Signature> {
   }
 
   <template>
+    {{! template-lint-disable no-inline-styles }}
     <div class='item'>
       <div class='desc'>Aspect Ratio 1.0, 226px 𐊴 226px</div>
       <div class='card' style='width: 226px; height: 226px'>

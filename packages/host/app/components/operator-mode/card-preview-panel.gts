@@ -31,9 +31,9 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 
 import RealmService from '@cardstack/host/services/realm';
 
-import EmbeddedFormatGallery from './embedded-format-gallery';
-
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+
+import EmbeddedFormatGallery from './embedded-format-gallery';
 
 interface Signature {
   Element: HTMLElement;
