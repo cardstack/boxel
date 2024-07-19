@@ -1533,6 +1533,94 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .doesNotContainText('Updated');
   });
 
+  test('sends read receipts only for bot messages', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    await addRoomEvent(matrixService, {
+      event_id: 'userevent0',
+      room_id: roomId,
+      state_key: 'state',
+      type: 'm.room.message',
+      sender: '@matic:boxel',
+      content: {
+        body: 'Say one word.',
+        msgtype: 'org.boxel.message',
+        formatted_body: 'Say one word.',
+        format: 'org.matrix.custom.html',
+      },
+      origin_server_ts: Date.now() - 100,
+      unsigned: {
+        age: 105,
+        transaction_id: '1',
+      },
+      status: null,
+    });
+
+    await waitFor(`[data-room-settled]`);
+
+    await addRoomEvent(matrixService, {
+      event_id: 'botevent1',
+      room_id: roomId,
+      state_key: 'state',
+      type: 'm.room.message',
+      sender: '@aibot:localhost',
+      content: {
+        body: 'Word.',
+        msgtype: 'm.text',
+        formatted_body: 'Word.',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      origin_server_ts: Date.now() - 99,
+      unsigned: {
+        age: 105,
+        transaction_id: '1',
+      },
+      status: null,
+    });
+
+    assert
+      .dom('[data-test-past-sessions-button] [data-test-has-active-sessions]')
+      .doesNotExist();
+    assert
+      .dom(
+        "[data-test-enter-room='New AI Assistant Chat'] [data-test-is-streaming]",
+      )
+      .doesNotExist();
+
+    let anotherRoomId = await matrixService.createAndJoinRoom('Another Room');
+
+    await addRoomEvent(matrixService, {
+      event_id: 'botevent2',
+      room_id: anotherRoomId,
+      state_key: 'state',
+      type: 'm.room.message',
+      sender: '@aibot:localhost',
+      content: {
+        body: 'I sent a message from the background.',
+        msgtype: 'm.text',
+        formatted_body: 'Word.',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      origin_server_ts: Date.now() - 98,
+      unsigned: {
+        age: 105,
+        transaction_id: '1',
+      },
+      status: null,
+    });
+
+    await waitFor('[data-test-has-active-sessions]');
+    await click('[data-test-past-sessions-button]');
+    await click(`[data-test-enter-room="${anotherRoomId}"]`);
+
+    assert.deepEqual(
+      Array.from(matrixService.currentUserEventReadReceipts.keys()),
+      ['botevent1', 'botevent2'],
+    );
+  });
+
   test('it can retry a message when receiving an error from the AI bot', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
