@@ -163,7 +163,7 @@ export default class MatrixService
   );
 
   private loadState = task(async () => {
-    await this.loadDefaultSkillCards();
+    await this.loadDefaultSkills();
     await this.loadSDK();
   });
 
@@ -797,7 +797,7 @@ export default class MatrixService
     }
   }
 
-  private async loadDefaultSkillCards() {
+  private async loadDefaultSkills() {
     for (let skillCardURL of DefaultSkillCards) {
       let cardResource = getCard(this, () => skillCardURL);
       await cardResource.loaded;
