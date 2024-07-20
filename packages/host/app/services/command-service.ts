@@ -59,6 +59,7 @@ export default class CommandService extends Service {
 
   searchCardResource = getSearchResults(this, () => this.query);
 
+  //TODO: Remove ember concurrent task after fixing CS-6987
   run = task(async (command: CommandField, roomId: string) => {
     let { payload, eventId } = command;
     let res: any;
