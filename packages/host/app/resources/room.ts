@@ -233,6 +233,7 @@ export class RoomResource extends Resource<Args> {
         }
       } else if (event.content.msgtype === 'org.boxel.commandResult') {
         //don't display command result in the room as a message
+        // TOOD: Refactor having many if conditions to some variant of a strategy pattern
       } else if (event.content.msgtype === 'org.boxel.message') {
         // Safely skip over cases that don't have attached cards or a data type
         let cardDocs = event.content.data?.attachedCardsEventIds
