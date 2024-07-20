@@ -2,6 +2,8 @@ import Service, { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 
+import { task } from 'ember-concurrency';
+
 import {
   type PatchData,
   codeRefWithAbsoluteURL,
@@ -57,7 +59,7 @@ export default class CommandService extends Service {
 
   searchCardResource = getSearchResults(this, () => this.query);
 
-  run = async (command: CommandField, roomId: string) => {
+  run = task(async (command: CommandField, roomId: string) => {
     let { payload, eventId } = command;
     let res: any;
     try {
@@ -102,7 +104,7 @@ export default class CommandService extends Service {
           : new Error('Command failed.');
       this.matrixService.failedCommandState.set(eventId, error);
     }
-  };
+  });
 
   async createCommand(args: any) {
     return this.matrixService.createCard<typeof CommandField>(
