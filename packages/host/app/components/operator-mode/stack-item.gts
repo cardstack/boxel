@@ -121,6 +121,23 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private contentEl: HTMLElement | undefined;
   private containerEl: HTMLElement | undefined;
 
+  @tracked private aiActions: MenuItem[] | null = null;
+
+  loadAiActions = task(async () => {
+    // Simulate or implement the actual search for AI actions here
+    await timeout(1000); // Remove this line when implementing actual search
+    this.aiActions =
+      this.card.experimentalAiActions?.map(
+        (action: any) =>
+          new MenuItem(action.name, 'action', {
+            action: () => this.runAction(action),
+            icon: Sparkle,
+            dangerous: true,
+            disabled: !this.card.id,
+          }),
+      ) ?? [];
+  });
+
   @provide(PermissionsContextName)
   get permissions(): Permissions {
     return this.realm.permissions(this.card.id);
@@ -142,6 +159,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       this.doWithStableScroll.perform,
       this.scrollIntoView.perform,
     );
+    this.loadAiActions.perform();
   }
 
   private get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
@@ -271,20 +289,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
       );
     }
     return menuItems;
-  }
-
-  private get aiActionsMenuItems() {
-    return (
-      this.card.experimentalAiActions?.map(
-        (action: any) =>
-          new MenuItem(action.name, 'action', {
-            action: () => this.runAction(action),
-            icon: Sparkle,
-            dangerous: true,
-            disabled: !this.card.id,
-          }),
-      ) ?? []
-    );
   }
 
   @action private async runAction(action: any) {
@@ -459,6 +463,37 @@ export default class OperatorModeStackItem extends Component<Signature> {
               {{/let}}
             </:icon>
             <:actions>
+
+              {{#if this.aiActions}}
+                <div>
+                  <BoxelDropdown>
+                    <:trigger as |bindings|>
+                      <Tooltip @placement='top'>
+                        <:trigger>
+                          <IconButton
+                            @icon={{Sparkle}}
+                            @width='20px'
+                            @height='20px'
+                            class='icon-button'
+                            aria-label='AI Actions'
+                            data-test-actions-button
+                            {{bindings}}
+                          />
+                        </:trigger>
+                        <:content>
+                          AI Actions
+                        </:content>
+                      </Tooltip>
+                    </:trigger>
+                    <:content as |dd|>
+                      <BoxelMenu
+                        @closeMenu={{dd.close}}
+                        @items={{this.aiActions}}
+                      />
+                    </:content>
+                  </BoxelDropdown>
+                </div>
+              {{/if}}
               {{#if (this.realm.canWrite this.card.id)}}
                 {{#if (eq @item.format 'isolated')}}
                   <Tooltip @placement='top'>
@@ -496,34 +531,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
                   </Tooltip>
                 {{/if}}
               {{/if}}
-              <div>
-                <BoxelDropdown>
-                  <:trigger as |bindings|>
-                    <Tooltip @placement='top'>
-                      <:trigger>
-                        <IconButton
-                          @icon={{Sparkle}}
-                          @width='20px'
-                          @height='20px'
-                          class='icon-button'
-                          aria-label='AI Actions'
-                          data-test-actions-button
-                          {{bindings}}
-                        />
-                      </:trigger>
-                      <:content>
-                        AI Actions
-                      </:content>
-                    </Tooltip>
-                  </:trigger>
-                  <:content as |dd|>
-                    <BoxelMenu
-                      @closeMenu={{dd.close}}
-                      @items={{this.aiActionsMenuItems}}
-                    />
-                  </:content>
-                </BoxelDropdown>
-              </div>
               <div>
                 <BoxelDropdown>
                   <:trigger as |bindings|>
