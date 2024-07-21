@@ -270,21 +270,21 @@ export default class OperatorModeStackItem extends Component<Signature> {
         }),
       );
     }
-    if ('experimentalAiActions' in this.card) {
-      console.log('Has actions', this.card);
-      for (let action of this.card.experimentalAiActions as any[]) {
-        console.log('Action', action);
-        menuItems.push(
+    return menuItems;
+  }
+
+  private get aiActionsMenuItems() {
+    return (
+      this.card.experimentalAiActions?.map(
+        (action: any) =>
           new MenuItem(action.name, 'action', {
             action: () => this.runAction(action),
             icon: Sparkle,
             dangerous: true,
             disabled: !this.card.id,
           }),
-        );
-      }
-    }
-    return menuItems;
+      ) ?? []
+    );
   }
 
   @action private async runAction(action: any) {
@@ -496,6 +496,34 @@ export default class OperatorModeStackItem extends Component<Signature> {
                   </Tooltip>
                 {{/if}}
               {{/if}}
+              <div>
+                <BoxelDropdown>
+                  <:trigger as |bindings|>
+                    <Tooltip @placement='top'>
+                      <:trigger>
+                        <IconButton
+                          @icon={{Sparkle}}
+                          @width='20px'
+                          @height='20px'
+                          class='icon-button'
+                          aria-label='AI Actions'
+                          data-test-actions-button
+                          {{bindings}}
+                        />
+                      </:trigger>
+                      <:content>
+                        AI Actions
+                      </:content>
+                    </Tooltip>
+                  </:trigger>
+                  <:content as |dd|>
+                    <BoxelMenu
+                      @closeMenu={{dd.close}}
+                      @items={{this.aiActionsMenuItems}}
+                    />
+                  </:content>
+                </BoxelDropdown>
+              </div>
               <div>
                 <BoxelDropdown>
                   <:trigger as |bindings|>
