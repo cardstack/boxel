@@ -233,22 +233,21 @@ module('Integration | card-prerender', function (hooks) {
 
     assert.strictEqual(
       results.prerenderedCardCssItems[0].cssModuleId,
-      'http://test-realm/test/person',
-    );
-
-    assert.true(
-      results.prerenderedCardCssItems[0].source.includes('.border'),
-      'css for person card looks correct',
-    );
-
-    assert.strictEqual(
-      results.prerenderedCardCssItems[1].cssModuleId,
       'http://test-realm/test/fancy-person',
     );
 
     assert.true(
-      results.prerenderedCardCssItems[1].source.includes('.fancy-border'),
+      results.prerenderedCardCssItems[0].source.includes('.fancy-border'),
       'css for fancy person card looks correct',
+    );
+    assert.strictEqual(
+      results.prerenderedCardCssItems[1].cssModuleId,
+      'http://test-realm/test/person',
+    );
+
+    assert.true(
+      results.prerenderedCardCssItems[1].source.includes('.border'),
+      'css for person card looks correct',
     );
 
     assert.strictEqual(
