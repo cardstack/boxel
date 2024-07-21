@@ -40,10 +40,12 @@ import {
   IconX,
   IconTrash,
   IconLink,
+  Sparkle,
   ThreeDotsHorizontal,
 } from '@cardstack/boxel-ui/icons';
 
 import {
+  aiBotUsername,
   type Actions,
   cardTypeDisplayName,
   CardContextName,
@@ -59,6 +61,7 @@ import config from '@cardstack/host/config/environment';
 import { type StackItem } from '@cardstack/host/lib/stack-item';
 
 import type EnvironmentService from '@cardstack/host/services/environment-service';
+import MatrixService from '@cardstack/host/services/matrix-service';
 
 import RealmService from '@cardstack/host/services/realm';
 
@@ -104,6 +107,7 @@ export interface RenderedCardForOverlayActions {
 
 export default class OperatorModeStackItem extends Component<Signature> {
   @service private declare cardService: CardService;
+  @service private declare matrixService: MatrixService;
   @service private declare environmentService: EnvironmentService;
   @service private declare realm: RealmService;
 
@@ -266,7 +270,35 @@ export default class OperatorModeStackItem extends Component<Signature> {
         }),
       );
     }
+    if ('experimentalAiActions' in this.card) {
+      console.log('Has actions', this.card);
+      for (let action of this.card.experimentalAiActions as any[]) {
+        console.log('Action', action);
+        menuItems.push(
+          new MenuItem(action.name, 'action', {
+            action: () => this.runAction(action),
+            icon: Sparkle,
+            dangerous: true,
+            disabled: !this.card.id,
+          }),
+        );
+      }
+    }
     return menuItems;
+  }
+
+  @action private async runAction(action: any) {
+    console.log('Running action', action);
+    let newRoomId = await this.matrixService.createRoom(
+      `${action.initialRoomName}`,
+      [aiBotUsername],
+    );
+    await this.matrixService.sendMessage(
+      newRoomId,
+      action.prompt,
+      action.attachedCards || [],
+      action.skillCards || [],
+    );
   }
 
   @cached

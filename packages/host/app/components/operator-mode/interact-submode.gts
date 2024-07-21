@@ -191,6 +191,7 @@ export default class InteractSubmode extends Component<Signature> {
         card: CardDef,
         format: Format = 'isolated',
       ): Promise<void> => {
+        // TODO: Add into here the action for sending messages?
         let newItem = new StackItem({
           owner: here,
           card,
