@@ -454,9 +454,11 @@ class ViewSecForOpportunityForm extends Component<typeof OpportunityForm> {
         <@fields.accountName />
       </FieldContainer>
 
-      <FieldContainer @tag='label' @label='Company' @vertical={{true}}>
-        <@fields.company />
-      </FieldContainer>
+      {{#if @model.company}}
+        <FieldContainer @tag='label' @label='Company' @vertical={{true}}>
+          <@fields.company />
+        </FieldContainer>
+      {{/if}}
 
       <FieldContainer @tag='label' @label='Close Date' @vertical={{true}}>
         <@fields.closeDate />
@@ -485,13 +487,15 @@ class ViewSecForOpportunityForm extends Component<typeof OpportunityForm> {
       >
         <@fields.forecastCategory />
       </FieldContainer>
-      <FieldContainer
-        @tag='label'
-        @label='Opportunity Owner'
-        @vertical={{true}}
-      >
-        <@fields.owner />
-      </FieldContainer>
+      {{#if @model.owner}}
+        <FieldContainer
+          @tag='label'
+          @label='Opportunity Owner'
+          @vertical={{true}}
+        >
+          <@fields.owner />
+        </FieldContainer>
+      {{/if}}
     </div>
 
     <style>

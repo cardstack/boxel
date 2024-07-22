@@ -171,10 +171,19 @@ class View extends Component<typeof ContactForm> {
         <FieldContainer @tag='label' @label='Address Info' @vertical={{true}}>
           <@fields.addressInfo />
         </FieldContainer>
+        {{! TODO: If this @model.owner check doesn't exist, we get Encountered error rendering HTML for card: Cannot read properties of null (reading 'title') }}
+        {{! This applies to the embedded template }}
+        {{! This also occurs during indexing }}
+        {{#if @model.owner}}
+          <FieldContainer
+            @tag='label'
+            @label='Contact Owner'
+            @vertical={{true}}
+          >
+            <@fields.owner />
+          </FieldContainer>
+        {{/if}}
 
-        <FieldContainer @tag='label' @label='Contact Owner' @vertical={{true}}>
-          <@fields.owner />
-        </FieldContainer>
       </div>
     </div>
 
