@@ -30,6 +30,7 @@ import ResizablePanelGroup, {
 } from './components/resizable-panel-group/index.gts';
 import BoxelSelect from './components/select/index.gts';
 import Tooltip from './components/tooltip/index.gts';
+import Prerendered from './components/prerendered/index.gts';
 
 export {
   Accordion,
@@ -62,4 +63,5 @@ export {
   ResizablePanelGroup,
   ResizeHandle,
   Tooltip,
+  Prerendered,
 };
