@@ -562,10 +562,19 @@ export class CurrentRun {
           realmPath: this.#realmPaths,
         }),
       );
-      embeddedHtml = embeddedHtml.replace(
-        /<!-- __org\.boxel\.cardType START -->\s*.*?\s*<!-- __org\.boxel\.cardType END -->/gm,
-        typeName,
-      );
+      embeddedHtml = embeddedHtml
+        .trim()
+        // we unwrap the outer div (and cleanup empty html comments) as the
+        // outer div is actually the container that the embedded HTML is
+        // rendering into
+        .replace(/^<div ([^<]*\n)/, '')
+        .replace(/^<!---->/, '')
+        .replace(/<\/div>$/, '')
+        .replace(
+          /<!-- __org\.boxel\.cardType START -->\s*.*?\s*<!-- __org\.boxel\.cardType END -->/gm,
+          typeName,
+        )
+        .trim();
 
       result[refURL] = embeddedHtml;
     }

@@ -291,7 +291,7 @@ module('Integration | card-prerender', function (hooks) {
       ['test card: person jimmy', 'FancyPerson'],
     ].forEach(([title, type], index) => {
       assert.strictEqual(
-        trimCardContainer(
+        cleanWhiteSpace(
           stripScopedCSSAttributes(results.prerenderedCards[index].html),
         ),
         cleanWhiteSpace(`
