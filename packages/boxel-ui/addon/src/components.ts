@@ -61,5 +61,6 @@ export {
   ResizablePanel,
   ResizablePanelGroup,
   ResizeHandle,
+  Sparkle,
   Tooltip,
 };

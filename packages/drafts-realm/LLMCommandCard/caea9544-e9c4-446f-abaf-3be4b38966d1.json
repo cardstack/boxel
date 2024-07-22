@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "appliesTo": {
+        "module": "../product-requirement-document",
+        "name":"ProductRequirementDocument"
+      },
+      "commandTitle": "Generate Code",
+      "message": "Generate code for the attached product requirement document.",
+      "includeOpenCard": true,
+      "title": "Code generator trigger",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "attachedSkills.0": {
+        "links": {
+          "self": "../SkillCard/d82e819a-506a-4538-bc6e-3f26413f93eb"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/llmcommand",
+        "name": "LLMCommandCard"
+      }
+    }
+  }
+}

@@ -69,6 +69,7 @@ import type {
   CardDef,
   Format,
   FieldType,
+  relativeTo,
 } from 'https://cardstack.com/base/card-api';
 
 import ElementTracker from '../../resources/element-tracker';
@@ -124,16 +125,38 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @tracked private aiActions: MenuItem[] | null = null;
 
   loadAiActions = task(async () => {
-    // Simulate or implement the actual search for AI actions here
-    await timeout(1000); // Remove this line when implementing actual search
+    console.log(this.card.relativeTo);
+    let matching = await this.cardService.search(
+      {
+        filter: {
+          every: [
+            {
+              on: {
+                module: `https://cardstack.com/base/llmcommand`,
+                name: 'LLMCommandCard',
+              },
+              eq: {
+                appliesTo: {
+                  module: `http://localhost:4201/drafts/product-requirement-document`,
+                  name: `ProductRequirementDocument`,
+                },
+              },
+            },
+          ],
+        },
+      },
+      'http://localhost:4201/drafts/',
+    );
+    console.log(matching);
+
     this.aiActions =
-      this.card.experimentalAiActions?.map(
-        (action: any) =>
-          new MenuItem(action.name, 'action', {
-            action: () => this.runAction(action),
+      matching?.map(
+        (card) =>
+          new MenuItem(card.commandTitle, 'action', {
+            action: () => this.runAction(card),
             icon: Sparkle,
             dangerous: true,
-            disabled: !this.card.id,
+            disabled: !card.id,
           }),
       ) ?? [];
   });
@@ -291,17 +314,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return menuItems;
   }
 
-  @action private async runAction(action: any) {
+  @action private async runAction(llmCommand: any) {
     console.log('Running action', action);
-    let newRoomId = await this.matrixService.createRoom(
-      `${action.initialRoomName}`,
-      [aiBotUsername],
-    );
+    let newRoomId = await this.matrixService.createRoom(`New AI chat`, [
+      aiBotUsername,
+    ]);
     await this.matrixService.sendMessage(
       newRoomId,
-      action.prompt,
-      action.attachedCards || [],
-      action.skillCards || [],
+      llmCommand.message,
+      llmCommand.includeOpenCard ? [this.card] : [],
+      llmCommand.attachedSkills,
     );
   }
 
@@ -463,7 +485,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
               {{/let}}
             </:icon>
             <:actions>
-
               {{#if this.aiActions}}
                 <div>
                   <BoxelDropdown>
