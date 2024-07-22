@@ -107,6 +107,7 @@ export class Responder {
             this.client,
             this.roomId,
             args,
+            toolCall,
             this.initialMessageReplaced ? undefined : this.initialMessageId,
           );
           this.messagePromises.push(optionPromise);

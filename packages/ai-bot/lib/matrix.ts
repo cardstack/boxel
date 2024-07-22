@@ -74,6 +74,7 @@ export async function sendOption(
   client: MatrixClient,
   roomId: string,
   patch: any,
+  toolCall: any,
   eventToUpdate: string | undefined,
 ) {
   log.debug('sending option', patch);
@@ -88,6 +89,7 @@ export async function sendOption(
       command: {
         type: 'patchCard',
         id: id,
+        toolCall: toolCall,
         patch: {
           attributes: patch['attributes'],
           relationships: patch['relationships'],

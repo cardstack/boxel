@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import type {
   CardResource,
   LooseSingleCardDocument,
@@ -24,7 +25,7 @@ You may make multiple function calls, all calls are gated by the user so multipl
 If a user asks you about things in the world, use your existing knowledge to help them. Only if necessary, add a *small* caveat at the end of your message to explain that you do not have live external data. \
 \
 If you need access to the cards the user can see, you can ask them to attach the cards. \
-If you encounter JSON structures, please enclose them within backticks to ensure they are displayed stylishly in Markdown.';
+If you encounter JSON structures, please enclose them within backticks to ensure they are displayed stylishly in Markdown';
 
 export const SKILL_INSTRUCTIONS_MESSAGE =
   '\nThe user has given you the following instructions. You must obey these instructions when responding to the user:\n';
@@ -242,11 +243,39 @@ export function getModifyPrompt(
     let body = event.content.body;
     if (body) {
       if (event.sender === aiBotUserId) {
+        // if command
+        if (
+          event.content.msgtype === 'org.boxel.command' &&
+          event.content.data?.command?.toolCall
+        ) {
+          historicalMessages.push({
+            role: 'assistant',
+            content: body,
+            tool_calls: [event.content.data.command.toolCall],
+          });
+          historicalMessages.push({
+            role: 'tool',
+            content: 'status: proposed',
+            tool_call_id: event.content.data.command.toolCall.id,
+          });
+        }
         historicalMessages.push({
           role: 'assistant',
           content: body,
         });
       } else {
+        if (
+          event.content.msgtype === 'org.boxel.message' &&
+          event.content.data?.context?.openCardIds
+        ) {
+          body = `User message: ${body}
+          Context: the user has the following cards open: ${JSON.stringify(
+            event.content.data.context.openCardIds,
+          )}`;
+        } else {
+          body = `User message: ${body}
+          Context: the user has no open cards.`;
+        }
         historicalMessages.push({
           role: 'user',
           content: body,
@@ -282,6 +311,8 @@ export function getModifyPrompt(
   ];
 
   messages = messages.concat(historicalMessages);
+  // debug write this to a file
+  fs.writeFileSync('messages.json', JSON.stringify(messages, null, 2));
   return messages;
 }
 
