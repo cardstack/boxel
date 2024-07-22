@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "packages/host/**"
+      - "packages/boxel-ui/**"
       - ".github/workflows/pr-boxel-host.yml"
       - "package.json"
       - "pnpm-lock.yaml"
