@@ -84,7 +84,7 @@ export function cleanWhiteSpace(text: string) {
 
 export function trimCardContainer(text: string) {
   return cleanWhiteSpace(text).replace(
-    /<div .*? data-test-field-component-card>\s?[<!---->]*? (.*?) <\/div>/g,
+    /<div .*? data-test-field-component-card>\s?[<!---->]*? (.*?) <\/div>$/g,
     '$1',
   );
 }
@@ -136,8 +136,9 @@ export async function waitForSyntaxHighlighting(
 
   await waitUntil(
     () =>
-      finalHighlightedToken?.computedStyleMap()?.get('color')?.toString() ===
-      color,
+      window
+        .getComputedStyle(finalHighlightedToken!)
+        .getPropertyValue('color') === color,
     {
       timeout: 2000,
       timeoutMessage: 'timed out waiting for syntax highlighting',

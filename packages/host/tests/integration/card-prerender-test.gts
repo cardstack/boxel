@@ -62,6 +62,7 @@ module('Integration | card-prerender', function (hooks) {
             type: 'card',
             id: `${testRealmURL}Pet/mango`,
             attributes: {
+              title: 'test card: pet mango',
               firstName: 'Mango',
             },
             meta: {
@@ -77,6 +78,7 @@ module('Integration | card-prerender', function (hooks) {
             type: 'card',
             id: `${testRealmURL}Pet/vangogh`,
             attributes: {
+              title: 'test card: pet vangogh',
               firstName: 'Van Gogh',
             },
             meta: {
@@ -134,7 +136,9 @@ module('Integration | card-prerender', function (hooks) {
         `,
         'jane.json': {
           data: {
+            type: 'card',
             attributes: {
+              title: 'test card: person jane',
               firstName: 'Jane',
               favoriteColor: 'blue',
             },
@@ -148,7 +152,9 @@ module('Integration | card-prerender', function (hooks) {
         },
         'jimmy.json': {
           data: {
+            type: 'card',
             attributes: {
+              title: 'test card: person jimmy',
               firstName: 'Jimmy',
               favoriteColor: 'black',
             },
@@ -195,18 +201,23 @@ module('Integration | card-prerender', function (hooks) {
     }
   });
 
-  test('can get prerendered cards with their html + css', async function (assert) {
-    let results = await realm.realmIndexQueryEngine.searchPrerendered({
-      filter: {
-        on: {
-          module: `${testRealmURL}fancy-person`,
-          name: 'FancyPerson',
-        },
-        eq: {
-          firstName: 'Jimmy',
+  test('indexer returns correct prerendered cards with their html + css when there is "on" filter specified', async function (assert) {
+    let results = await realm.realmIndexQueryEngine.searchPrerendered(
+      {
+        filter: {
+          on: {
+            module: `${testRealmURL}fancy-person`,
+            name: 'FancyPerson',
+          },
+          eq: {
+            firstName: 'Jimmy',
+          },
         },
       },
-    });
+      {
+        htmlFormat: 'embedded',
+      },
+    );
 
     assert.strictEqual(
       results.meta.page.total,
@@ -222,22 +233,21 @@ module('Integration | card-prerender', function (hooks) {
 
     assert.strictEqual(
       results.prerenderedCardCssItems[0].cssModuleId,
-      'http://test-realm/test/person',
-    );
-
-    assert.true(
-      results.prerenderedCardCssItems[0].source.includes('.border'),
-      'css for person card looks correct',
-    );
-
-    assert.strictEqual(
-      results.prerenderedCardCssItems[1].cssModuleId,
       'http://test-realm/test/fancy-person',
     );
 
     assert.true(
-      results.prerenderedCardCssItems[1].source.includes('.fancy-border'),
+      results.prerenderedCardCssItems[0].source.includes('.fancy-border'),
       'css for fancy person card looks correct',
+    );
+    assert.strictEqual(
+      results.prerenderedCardCssItems[1].cssModuleId,
+      'http://test-realm/test/person',
+    );
+
+    assert.true(
+      results.prerenderedCardCssItems[1].source.includes('.border'),
+      'css for person card looks correct',
     );
 
     assert.strictEqual(
@@ -253,10 +263,52 @@ module('Integration | card-prerender', function (hooks) {
     );
 
     assert.ok(
-      results.prerenderedCards[0].embeddedHtml.default.includes(
-        'Embedded Card FancyPerson',
-      ),
+      results.prerenderedCards[0].html.includes('Embedded Card FancyPerson'),
       'the embedded card html looks correct',
     );
+  });
+
+  test('indexer returns correct prerendered cards with their html + css when there is no "on" filter specified', async function (assert) {
+    let results = await realm.realmIndexQueryEngine.searchPrerendered(
+      {},
+      {
+        htmlFormat: 'embedded',
+      },
+    );
+
+    assert.strictEqual(
+      results.meta.page.total,
+      4,
+      'the search results contain the correct number of items',
+    );
+
+    // Since there is no "on" filter, the prerendered html must be from a CardDef template
+
+    [
+      ['test card: pet mango', 'Pet'],
+      ['test card: pet vangogh', 'Pet'],
+      ['test card: person jane', 'FancyPerson'],
+      ['test card: person jimmy', 'FancyPerson'],
+    ].forEach(([title, type], index) => {
+      assert.strictEqual(
+        trimCardContainer(
+          stripScopedCSSAttributes(results.prerenderedCards[index].html),
+        ),
+        cleanWhiteSpace(`
+        <div class="embedded-template">
+          <div class="thumbnail-section">
+            <div class="card-thumbnail">
+              <div class="card-thumbnail-text" data-test-card-thumbnail-text>Card</div>
+            </div>
+          </div>
+          <div class="info-section">
+            <h3 class="card-title" data-test-card-title>${title}</h3>
+            <h4 class="card-display-name" data-test-card-display-name> ${type} </h4>
+          </div>
+          <div class="card-description" data-test-card-description></div>
+        </div>
+      `),
+      );
+    });
   });
 });

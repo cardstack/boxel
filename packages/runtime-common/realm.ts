@@ -31,6 +31,7 @@ import {
   fetchUserPermissions,
   maybeHandleScopedCSSRequest,
   authorizationMiddleware,
+  internalKeyFor,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -54,7 +55,7 @@ import {
   SupportedMimeType,
   lookupRouteTable,
 } from './router';
-import { parseQueryString } from './query';
+import { assertQuery } from './query';
 import type { Readable } from 'stream';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -71,6 +72,8 @@ import { RealmAuthDataSource } from './realm-auth-data-source';
 import { fetcher } from './fetcher';
 import { RealmIndexQueryEngine } from './realm-index-query-engine';
 import { RealmIndexUpdater } from './realm-index-updater';
+
+import qs from 'qs';
 
 export interface RealmSession {
   canRead: boolean;
@@ -144,6 +147,7 @@ export interface RealmAdapter {
 interface Options {
   deferStartUp?: true;
   useTestingDomain?: true;
+  disableModuleCaching?: true;
 }
 
 interface IndexHTMLOptions {
@@ -228,6 +232,7 @@ export class Realm {
   #flushUpdateEvents: Promise<void> | undefined;
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
+  #disableModuleCaching = false;
 
   #onIndexWriterReady:
     | ((indexWriter: IndexWriter) => Promise<void>)
@@ -295,6 +300,7 @@ export class Realm {
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
     this.#assetsURL = assetsURL;
+    this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
 
     let fetch = fetcher(virtualNetwork.fetch, [
       async (req, next) => {
@@ -882,40 +888,42 @@ export class Realm {
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
 
-    let useWorkInProgressIndex = Boolean(
-      request.headers.get('X-Boxel-Use-WIP-Index'),
-    );
-    let module = await this.#realmIndexQueryEngine.module(url, {
-      useWorkInProgressIndex,
-    });
-    if (module?.type === 'module') {
-      try {
-        return createResponse({
-          body: module.executableCode,
-          init: {
-            status: 200,
-            headers: { 'content-type': 'text/javascript' },
-          },
-          requestContext,
-        });
-      } finally {
-        this.#logRequestPerformance(request, start, 'cache hit');
+    if (!this.#disableModuleCaching) {
+      let useWorkInProgressIndex = Boolean(
+        request.headers.get('X-Boxel-Use-WIP-Index'),
+      );
+      let module = await this.#realmIndexQueryEngine.module(url, {
+        useWorkInProgressIndex,
+      });
+      if (module?.type === 'module') {
+        try {
+          return createResponse({
+            body: module.executableCode,
+            init: {
+              status: 200,
+              headers: { 'content-type': 'text/javascript' },
+            },
+            requestContext,
+          });
+        } finally {
+          this.#logRequestPerformance(request, start, 'cache hit');
+        }
       }
-    }
-    if (module?.type === 'error') {
-      try {
-        // using "Not Acceptable" here because no text/javascript representation
-        // can be made and we're sending text/html error page instead
-        return createResponse({
-          body: JSON.stringify(module.error, null, 2),
-          init: {
-            status: 406,
-            headers: { 'content-type': 'text/html' },
-          },
-          requestContext,
-        });
-      } finally {
-        this.#logRequestPerformance(request, start, 'cache hit');
+      if (module?.type === 'error') {
+        try {
+          // using "Not Acceptable" here because no text/javascript representation
+          // can be made and we're sending text/html error page instead
+          return createResponse({
+            body: JSON.stringify(module.error, null, 2),
+            init: {
+              status: 406,
+              headers: { 'content-type': 'text/html' },
+            },
+            requestContext,
+          });
+        } finally {
+          this.#logRequestPerformance(request, start, 'cache hit');
+        }
       }
     }
 
@@ -1370,16 +1378,22 @@ export class Realm {
       `/${join(new URL(this.url).pathname, name, uuidV4() + '.json')}`,
     );
     let localPath = this.paths.local(fileURL);
+    let fileSerialization: LooseSingleCardDocument | undefined;
+    try {
+      fileSerialization = await this.fileSerialization(
+        merge(json, { data: { meta: { realmURL: this.url } } }),
+        fileURL,
+      );
+    } catch (err: any) {
+      if (err.message.startsWith('field validation error')) {
+        return badRequest(err.message, requestContext);
+      } else {
+        return systemError(requestContext, err.message, err);
+      }
+    }
     let { lastModified } = await this.write(
       localPath,
-      JSON.stringify(
-        await this.fileSerialization(
-          merge(json, { data: { meta: { realmURL: this.url } } }),
-          fileURL,
-        ),
-        null,
-        2,
-      ),
+      JSON.stringify(fileSerialization, null, 2),
     );
     let newURL = fileURL.href.replace(/\.json$/, '');
     let entry = await this.#realmIndexQueryEngine.cardDocument(
@@ -1451,9 +1465,21 @@ export class Realm {
         requestContext,
       );
     }
-    // prevent the client from changing the card type or ID in the patch
-    delete (patch as any).data.meta;
+    if (
+      internalKeyFor(patch.data.meta.adoptsFrom, url) !==
+      internalKeyFor(originalClone.data.meta.adoptsFrom, url)
+    ) {
+      return badRequest(
+        `Cannot change card instance type to ${JSON.stringify(
+          patch.data.meta.adoptsFrom,
+        )}`,
+        requestContext,
+      );
+    }
+
     delete (patch as any).data.type;
+    delete (patch as any).data.meta.realmInfo;
+    delete (patch as any).data.meta.realmURL;
 
     let card = mergeWith(
       originalClone,
@@ -1479,16 +1505,22 @@ export class Realm {
 
     delete (card as any).data.id; // don't write the ID to the file
     let path: LocalPath = `${localPath}.json`;
+    let fileSerialization: LooseSingleCardDocument | undefined;
+    try {
+      fileSerialization = await this.fileSerialization(
+        merge(card, { data: { meta: { realmURL: this.url } } }),
+        url,
+      );
+    } catch (err: any) {
+      if (err.message.startsWith('field validation error')) {
+        return badRequest(err.message, requestContext);
+      } else {
+        return systemError(requestContext, err.message, err);
+      }
+    }
     let { lastModified } = await this.write(
       path,
-      JSON.stringify(
-        await this.fileSerialization(
-          merge(card, { data: { meta: { realmURL: this.url } } }),
-          url,
-        ),
-        null,
-        2,
-      ),
+      JSON.stringify(fileSerialization, null, 2),
       request.headers.get('X-Boxel-Client-Request-Id'),
     );
     let instanceURL = url.href.replace(/\.json$/, '');
@@ -1703,10 +1735,14 @@ export class Realm {
     let useWorkInProgressIndex = Boolean(
       request.headers.get('X-Boxel-Use-WIP-Index'),
     );
-    let doc = await this.#realmIndexQueryEngine.search(
-      parseQueryString(new URL(request.url).search.slice(1)),
-      { loadLinks: true, useWorkInProgressIndex },
-    );
+
+    let cardsQuery = qs.parse(new URL(request.url).search.slice(1));
+    assertQuery(cardsQuery);
+
+    let doc = await this.#realmIndexQueryEngine.search(cardsQuery, {
+      loadLinks: true,
+      useWorkInProgressIndex,
+    });
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {
@@ -1723,11 +1759,32 @@ export class Realm {
     let useWorkInProgressIndex = Boolean(
       request.headers.get('X-Boxel-Use-WIP-Index'),
     );
-    let query = parseQueryString(new URL(request.url).search.slice(1));
 
-    let results = await this.#realmIndexQueryEngine.searchPrerendered(query, {
-      useWorkInProgressIndex,
-    });
+    let parsedQueryString = qs.parse(new URL(request.url).search.slice(1));
+    let htmlFormat = parsedQueryString.prerenderedHtmlFormat as string;
+    if (!htmlFormat || (htmlFormat !== 'embedded' && htmlFormat !== 'atom')) {
+      return badRequest(
+        JSON.stringify({
+          errors: [
+            `Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint.`,
+          ],
+        }),
+        requestContext,
+      );
+    }
+    // prerenederedHtmlFormat is a special parameter only for this endpoint so don't include it in our Query for card search
+    delete parsedQueryString.prerenderedHtmlFormat;
+
+    let cardsQuery = parsedQueryString;
+    assertQuery(parsedQueryString);
+
+    let results = await this.#realmIndexQueryEngine.searchPrerendered(
+      cardsQuery,
+      {
+        useWorkInProgressIndex,
+        htmlFormat,
+      },
+    );
 
     let doc = transformResultsToPrerenderedCardsDoc(results);
 

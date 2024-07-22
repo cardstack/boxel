@@ -1639,9 +1639,35 @@ module('Realm Server', function (hooks) {
           },
         );
 
-        test('returns prerendered instances', async function (assert) {
+        test('endpoint will respond with a bad request if html format is not provided', async function (assert) {
           let response = await request
             .get(`/_search-prerendered`)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 400, 'HTTP 200 status');
+
+          assert.ok(
+            response.body.errors[0].detail.includes(
+              "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint",
+            ),
+          );
+        });
+
+        test('returns prerendered instances', async function (assert) {
+          let query: Query & { prerenderedHtmlFormat: string } = {
+            filter: {
+              on: {
+                module: `${testRealmHref}person`,
+                name: 'Person',
+              },
+              eq: {
+                firstName: 'John',
+              },
+            },
+            prerenderedHtmlFormat: 'embedded',
+          };
+          let response = await request
+            .get(`/_search-prerendered?${stringify(query)}`)
             .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -1666,16 +1692,16 @@ module('Realm Server', function (hooks) {
           assert.strictEqual(json.data[0].type, 'prerendered-card');
 
           assert.true(
-            json.data[0].attributes.embeddedHtml
+            json.data[0].attributes.html
               .replace(/\s+/g, ' ')
               .includes('Embedded Card Person: John'),
             'embedded html looks correct',
           );
 
-          assert.strictEqual(
-            json.data[0].relationships['prerendered-card-css'].data.length,
-            0,
-            'no css is included',
+          assert.deepEqual(
+            json.included,
+            [],
+            'no css is present in the response',
           );
 
           assert.strictEqual(json.meta.page.total, 1, 'total count is correct');
@@ -1739,6 +1765,7 @@ module('Realm Server', function (hooks) {
             data: {
               attributes: {
                 firstName: 'Aaron',
+                title: 'Person Aaron',
               },
               meta: {
                 adoptsFrom: {
@@ -1752,6 +1779,7 @@ module('Realm Server', function (hooks) {
             data: {
               attributes: {
                 firstName: 'Craig',
+                title: 'Person Craig',
               },
               meta: {
                 adoptsFrom: {
@@ -1766,6 +1794,7 @@ module('Realm Server', function (hooks) {
               attributes: {
                 firstName: 'Jane',
                 favoriteColor: 'blue',
+                title: 'FancyPerson Jane',
               },
               meta: {
                 adoptsFrom: {
@@ -1780,6 +1809,7 @@ module('Realm Server', function (hooks) {
               attributes: {
                 firstName: 'Jimmy',
                 favoriteColor: 'black',
+                title: 'FancyPerson Jimmy',
               },
               meta: {
                 adoptsFrom: {
@@ -1792,9 +1822,9 @@ module('Realm Server', function (hooks) {
         },
       );
 
-      test('returns instances with prerendered embedded html + css', async function (assert) {
+      test('returns instances with CardDef prerendered embedded html + css when there is no "on" filter', async function (assert) {
         let response = await request
-          .get(`/_search-prerendered`)
+          .get(`/_search-prerendered?prerenderedHtmlFormat=embedded`)
           .set('Accept', 'application/vnd.card+json');
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -1819,129 +1849,44 @@ module('Realm Server', function (hooks) {
         // 1st card: Person Aaron
         assert.strictEqual(json.data[0].type, 'prerendered-card');
         assert.true(
-          json.data[0].attributes.embeddedHtml
+          json.data[0].attributes.html
             .replace(/\s+/g, ' ')
-            .includes('Embedded Card Person: Aaron'),
-          'embedded html looks correct',
-        );
-        assert.strictEqual(
-          json.data[0].relationships['prerendered-card-css'].data.length,
-          1,
-          'there is one css for card of type Person',
-        );
-        assert.deepEqual(
-          json.data[0].relationships['prerendered-card-css'].data[0],
-          { type: 'prerendered-card-css', id: 'http://127.0.0.1:4444/person' },
-          'css relationship is correct',
+            .includes('Person Aaron'),
+          'embedded html looks correct (CardDef template)',
         );
 
         // 2nd card: Person Craig
         assert.strictEqual(json.data[1].type, 'prerendered-card');
         assert.true(
-          json.data[1].attributes.embeddedHtml
+          json.data[1].attributes.html
             .replace(/\s+/g, ' ')
-            .includes('Embedded Card Person: Craig'),
-          'embedded html for Craig looks correct',
-        );
-        assert.strictEqual(
-          json.data[1].relationships['prerendered-card-css'].data.length,
-          1,
-          'there is one css for card of type Person',
-        );
-        assert.deepEqual(
-          json.data[1].relationships['prerendered-card-css'].data[0],
-          { type: 'prerendered-card-css', id: 'http://127.0.0.1:4444/person' },
-          'css relationship is correct',
+            .includes('Person Craig'),
+          'embedded html for Craig looks correct (CardDef template)',
         );
 
         // 3rd card: FancyPerson Jane
         assert.strictEqual(json.data[2].type, 'prerendered-card');
         assert.true(
-          json.data[2].attributes.embeddedHtml
+          json.data[2].attributes.html
             .replace(/\s+/g, ' ')
-            .includes('Embedded Card FancyPerson: Jane'),
-          'embedded html for Jane looks correct',
-        );
-        assert.strictEqual(
-          json.data[2].relationships['prerendered-card-css'].data.length,
-          2,
-          'there are two css for card of type FancyPerson',
-        );
-        assert.deepEqual(
-          json.data[2].relationships['prerendered-card-css'].data,
-          [
-            {
-              type: 'prerendered-card-css',
-              id: 'http://127.0.0.1:4444/person',
-            },
-            {
-              type: 'prerendered-card-css',
-              id: 'http://127.0.0.1:4444/fancy-person',
-            },
-          ],
-          'instance of type FancyPerson has css from both Person and FancyPerson',
+            .includes('FancyPerson Jane'),
+          'embedded html for Jane looks correct (CardDef template)',
         );
 
         // 4th card: FancyPerson Jimmy
         assert.strictEqual(json.data[3].type, 'prerendered-card');
         assert.true(
-          json.data[3].attributes.embeddedHtml
+          json.data[3].attributes.html
             .replace(/\s+/g, ' ')
-            .includes('Embedded Card FancyPerson: Jimmy'),
-          'embedded html for Jimmy looks correct',
-        );
-        assert.strictEqual(
-          json.data[3].relationships['prerendered-card-css'].data.length,
-          2,
-          'there are two css for card of type FancyPerson',
-        );
-        assert.deepEqual(
-          json.data[3].relationships['prerendered-card-css'].data,
-          [
-            {
-              type: 'prerendered-card-css',
-              id: 'http://127.0.0.1:4444/person',
-            },
-            {
-              type: 'prerendered-card-css',
-              id: 'http://127.0.0.1:4444/fancy-person',
-            },
-          ],
-          'instance of type FancyPerson has css from both Person and FancyPerson',
-        );
-
-        assert.strictEqual(
-          json.included.length,
-          2,
-          'css sources are not duplicated - only 2 css sources are included for 4 instances (one for Person and one for FancyPerson',
-        );
-
-        assert.strictEqual(json.included[0].type, 'prerendered-card-css');
-        assert.strictEqual(json.included[0].id, 'http://127.0.0.1:4444/person');
-        assert.ok(
-          /^\.border\[data-scopedcss-[a-f0-9]+-[a-f0-9]+\] \{ border: 1px solid red; \}$/.test(
-            json.included[0].attributes.content.replace(/\s+/g, ' '),
-          ),
-          'css content for Person is correct',
-        );
-
-        assert.strictEqual(json.included[1].type, 'prerendered-card-css');
-        assert.strictEqual(
-          json.included[1].id,
-          'http://127.0.0.1:4444/fancy-person',
-        );
-        assert.ok(
-          /^\.fancy-border\[data-scopedcss-[a-f0-9]+-[a-f0-9]+\] \{ border: 1px solid pink; \}$/.test(
-            json.included[1].attributes.content.replace(/\s+/g, ' '),
-          ),
-          'css content for FancyPerson is correct',
+            .includes('FancyPerson Jimmy'),
+          'embedded html for Jimmy looks correct (CardDef template)',
         );
 
         assert.strictEqual(json.meta.page.total, 4, 'total count is correct');
       });
 
       test('can filter prerendered instances', async function (assert) {
-        let query: Query = {
+        let query: Query & { prerenderedHtmlFormat: string } = {
           filter: {
             on: {
               module: `${testRealmHref}person`,
@@ -1951,6 +1896,7 @@ module('Realm Server', function (hooks) {
               firstName: 'Jimmy',
             },
           },
+          prerenderedHtmlFormat: 'embedded',
         };
         let response = await request
           .get(`/_search-prerendered?${stringify(query)}`)
@@ -1967,7 +1913,7 @@ module('Realm Server', function (hooks) {
       });
 
       test('can sort prerendered instances', async function (assert) {
-        let query: Query = {
+        let query: Query & { prerenderedHtmlFormat: string } = {
           sort: [
             {
               by: 'firstName',
@@ -1975,6 +1921,7 @@ module('Realm Server', function (hooks) {
               direction: 'desc',
             },
           ],
+          prerenderedHtmlFormat: 'embedded',
         };
         let response = await request
           .get(`/_search-prerendered?${stringify(query)}`)

@@ -8,36 +8,9 @@
       "ref": {
         "module": "../invoice-packet",
         "name": "InvoicePacket"
-      },
-      "demo": {
-        "details": {
-          "invoiceNo": null,
-          "invoiceDate": null,
-          "dueDate": null,
-          "terms": null,
-          "invoiceDocument": null,
-          "memo": null
-        },
-        "lineItems": [],
-        "notes": []
-      }
-    },
-    "relationships": {
-      "demo.vendor": {
-        "links": {
-          "self": null
-        }
       }
     },
     "meta": {
-      "fields": {
-        "demo": {
-          "adoptsFrom": {
-            "module": "../invoice-packet",
-            "name": "InvoicePacket"
-          }
-        }
-      },
       "adoptsFrom": {
         "module": "https://cardstack.com/base/catalog-entry",
         "name": "CatalogEntry"

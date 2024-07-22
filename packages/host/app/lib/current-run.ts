@@ -473,6 +473,7 @@ export class CurrentRun {
     if (adjustedResource && typesMaybeError?.type === 'types') {
       embeddedHtml = await this.buildEmbeddedHtml(
         adjustedResource,
+        searchData?._cardType ?? 'Card',
         typesMaybeError.types,
         identityContext,
       );
@@ -526,6 +527,7 @@ export class CurrentRun {
 
   private async buildEmbeddedHtml(
     resource: CardResource,
+    typeName: string,
     types: CardType[],
     identityContext: IdentityContextType,
   ): Promise<{ [refURL: string]: string }> {
@@ -558,8 +560,12 @@ export class CurrentRun {
           realmPath: this.#realmPaths,
         }),
       );
-      let ref = refURL === types[0].refURL ? 'default' : refURL;
-      result[ref] = embeddedHtml;
+      embeddedHtml = embeddedHtml.replace(
+        /<!-- __org\.boxel\.cardType START -->\s*.*?\s*<!-- __org\.boxel\.cardType END -->/gm,
+        typeName,
+      );
+
+      result[refURL] = embeddedHtml;
     }
     return result;
   }
@@ -597,7 +603,9 @@ export class CurrentRun {
           loader: this.loaderService.loader,
         });
         if (!isCardDef(maybeCard)) {
-          throw new Error(`The definition at ${fullRef} is not a CardDef`);
+          throw new Error(
+            `The definition at ${JSON.stringify(fullRef)} is not a CardDef`,
+          );
         }
         loadedCard = maybeCard;
         loadedCardRef = identifyCard(loadedCard);

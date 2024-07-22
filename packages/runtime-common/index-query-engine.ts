@@ -8,6 +8,7 @@ import {
   loadCard,
   internalKeyFor,
   identifyCard,
+  ResolvedCodeRef,
 } from './index';
 import {
   type Expression,
@@ -74,7 +75,7 @@ export interface IndexedInstance {
   canonicalURL: string;
   lastModified: number;
   isolatedHtml: string | null;
-  embeddedHtml: string | null;
+  embeddedHtml: { [refURL: string]: string } | null;
   atomHtml: string | null;
   searchDoc: Record<string, any> | null;
   types: string[] | null;
@@ -82,10 +83,6 @@ export interface IndexedInstance {
   realmVersion: number;
   realmURL: string;
   indexedAt: number | null;
-  // TODO this is used for testing, lets remove this after we have a way to ask
-  // for which card class to use for embedded HTML. This will mean we'll need to
-  // alter the way we test this so that it's a bit more indirect.
-  _embeddedHtmlByClassHierarchy: { [refURL: string]: string } | null;
 }
 interface IndexedError {
   type: 'error';
@@ -97,7 +94,12 @@ export type IndexedModuleOrError = IndexedModule | IndexedError;
 export type IndexedCSSOrError = IndexedCSS | IndexedError;
 
 type GetEntryOptions = WIPOptions;
-export type QueryOptions = WIPOptions;
+export type QueryOptions = WIPOptions & PrerenderedCardOptions;
+
+interface PrerenderedCardOptions {
+  htmlFormat?: 'embedded' | 'atom';
+}
+
 interface WIPOptions {
   useWorkInProgressIndex?: boolean;
 }
@@ -109,8 +111,7 @@ export interface PrerenderedCardCssItem {
 
 export interface PrerenderedCard {
   url: string;
-  embeddedHtml: Record<string, string>;
-  cssModuleIds: string[];
+  html: string;
 }
 
 export interface QueryResultsMeta {
@@ -232,10 +233,8 @@ export class IndexQueryEngine {
     opts?: GetEntryOptions,
   ): Promise<IndexedInstanceOrError | undefined> {
     let result = (await this.query([
-      `SELECT i.*, embedded_html ->> `,
-      param('default'),
-      ` as default_embedded_html
-       FROM boxel_index as i
+      `SELECT i.*, embedded_html`,
+      `FROM boxel_index as i
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
        WHERE`,
       ...every([
@@ -252,9 +251,7 @@ export class IndexQueryEngine {
     ] as Expression)) as unknown as (BoxelIndexTable & {
       default_embedded_html: string | null;
     })[];
-    let maybeResult:
-      | (BoxelIndexTable & { default_embedded_html: string | null })
-      | undefined = result[0];
+    let maybeResult: BoxelIndexTable | undefined = result[0];
     if (!maybeResult) {
       return undefined;
     }
@@ -271,8 +268,7 @@ export class IndexQueryEngine {
       pristine_doc: instance,
       isolated_html: isolatedHtml,
       atom_html: atomHtml,
-      default_embedded_html: embeddedHtml,
-      embedded_html: _embeddedHtmlByClassHierarchy,
+      embedded_html: embeddedHtml,
       search_doc: searchDoc,
       realm_version: realmVersion,
       realm_url: realmURL,
@@ -304,9 +300,6 @@ export class IndexQueryEngine {
       deps,
       lastModified: parseInt(lastModified),
       realmVersion,
-      // TODO this is used for testing, lets remove this after we have a way to ask
-      // for which card class to use for embedded HTML
-      _embeddedHtmlByClassHierarchy,
     };
   }
 
@@ -432,55 +425,74 @@ export class IndexQueryEngine {
     prerenderedCardCssItems: PrerenderedCardCssItem[];
     meta: QueryResultsMeta;
   }> {
-    let { results, meta } = await this._search(
+    if (
+      !opts.htmlFormat ||
+      (opts.htmlFormat !== 'embedded' && opts.htmlFormat !== 'atom')
+    ) {
+      throw new Error(`htmlFormat must be either 'embedded' or 'atom'`);
+    }
+
+    let ref: ResolvedCodeRef;
+    let filterOnValue = filter && 'type' in filter ? filter.type : filter?.on;
+    if (filterOnValue) {
+      ref = filterOnValue as ResolvedCodeRef;
+    } else {
+      ref = baseCardRef;
+    }
+
+    let htmlColumnExpression =
+      opts.htmlFormat == 'embedded'
+        ? ['embedded_html ->> ', param(internalKeyFor(ref, undefined))]
+        : ['atom_html'];
+
+    let { results, meta } = (await this._search(
       realmURL,
       { filter, sort, page },
       loader,
       opts,
       [
-        'SELECT url, ANY_VALUE(file_alias) as file_alias, ANY_VALUE(embedded_html) as embedded_html',
+        'SELECT url, ANY_VALUE(file_alias) as file_alias, ANY_VALUE(',
+        ...htmlColumnExpression,
+        ') as html',
       ],
-    );
+    )) as {
+      meta: QueryResultsMeta;
+      results: (Partial<BoxelIndexTable> & { html: string })[];
+    };
 
-    let cardFileAliases = results.map((c) => c.file_alias);
     let realmVersion = meta.page.realmVersion;
 
     let conditions: CardExpression[] = [
       ['i.realm_version = ', param(realmVersion)],
-      ['i.type =', param('instance')],
-      [
-        'i.file_alias IN',
-        ...addExplicitParens(
-          separatedByCommas(
-            cardFileAliases.map((cardFileAlias) => [param(cardFileAlias!)]),
-          ),
-        ),
-      ],
+      ['i.type =', param('module')],
+      ['i.file_alias =', param(ref.module)],
     ];
 
-    // This query will give us a list of indexed css entries and their corresponding instances that have that particular css module as a dependency
+    // This query will give us all the CSS that relates to the card ref's module and its dependencies
     let cssSourceQuery = [
-      `WITH instance_deps AS (
-        SELECT file_alias as instance_file_alias, deps_each.value AS instance_dep_file_alias
+      `WITH module_deps AS (
+        SELECT file_alias as module_file_alias, deps_each.value AS module_dep_file_alias
         FROM boxel_index i, jsonb_array_elements_text(i.deps) AS deps_each
         WHERE`,
       ...every(conditions),
+      `UNION ALL SELECT `, // UNION ALL to include the css from module itself as well, not just its dependencies
+      param(ref.module),
+      `, `,
+      param(ref.module),
       `),
       css_deps AS (
         SELECT
-          bi.source AS css_source,
           bi.file_alias AS css_module_id,
-          array_agg(id.instance_file_alias) AS instances
+          bi.source AS css_source
         FROM boxel_index bi
-        JOIN instance_deps id ON bi.file_alias = id.instance_dep_file_alias
-        WHERE bi.type = 'css'
-        GROUP BY bi.source, bi.file_alias
-      )
-      SELECT
-        css_module_id,
-        array_to_json(instances) AS instances,
-        css_source
-      FROM css_deps;
+        JOIN module_deps md ON bi.file_alias = md.module_dep_file_alias WHERE`,
+      ...every([
+        [`bi.realm_version = `, param(realmVersion)],
+        ['bi.type =', param('css')],
+      ]),
+      `)
+        SELECT DISTINCT css_module_id, css_source
+        FROM css_deps
       `,
     ];
 
@@ -489,50 +501,24 @@ export class IndexQueryEngine {
       loader,
     )) as {
       css_module_id: string;
-      instances: string[];
       css_source: string;
     }[];
-
-    // Prepare a structure where we can easily access css entries for deps of a particular card
-    let cardInstanceCss = groupedCssInstanceData.reduce(
-      (
-        acc: Record<string, { cssModuleId: string; cssSource: string }[]>,
-        row,
-      ) => {
-        let instances =
-          typeof row.instances === 'string'
-            ? JSON.parse(row.instances)
-            : row.instances; // SQLite client returns array as string
-        instances.forEach((instance: string) => {
-          if (!acc[instance]) {
-            acc[instance] = [];
-          }
-          acc[instance].push({
-            cssModuleId: row.css_module_id,
-            cssSource: row.css_source,
-          });
-        });
-        return acc;
-      },
-      {},
-    );
 
     let prerenderedCards = results.map((card) => {
       return {
         url: card.url!,
-        embeddedHtml: card.embedded_html!,
-        cssModuleIds:
-          cardInstanceCss[card.file_alias!]?.map((item) => item.cssModuleId) ??
-          [],
+        html: card.html,
       };
     });
 
-    let prerenderedCardCssItems = groupedCssInstanceData.map((cssRecord) => {
-      return {
-        cssModuleId: cssRecord.css_module_id,
-        source: cssRecord.css_source,
-      };
-    });
+    let prerenderedCardCssItems = groupedCssInstanceData
+      .map((cssRecord) => {
+        return {
+          cssModuleId: cssRecord.css_module_id,
+          source: cssRecord.css_source,
+        };
+      })
+      .sort((a, b) => a.cssModuleId.localeCompare(b.cssModuleId)); // Sort by css module id for determinism (especially in tests). We do it in JS because SQLite and Postgres have different sorting behavior for urls
 
     return { prerenderedCards, prerenderedCardCssItems, meta };
   }

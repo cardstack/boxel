@@ -586,10 +586,28 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     });
   }
 
-  validate(instance: BaseDef, value: any) {
-    if (value && !Array.isArray(value)) {
-      throw new Error(`Expected array for field value ${this.name}`);
+  validate(instance: BaseDef, values: any[] | null) {
+    if (values && !Array.isArray(values)) {
+      throw new Error(
+        `field validation error: Expected array for field value of field '${this.name}'`,
+      );
     }
+    if (values == null) {
+      return values;
+    }
+
+    if (primitive in this.card) {
+      // todo: primitives could implement a validation symbol
+    } else {
+      for (let [index, item] of values.entries()) {
+        if (item != null && !(item instanceof this.card)) {
+          throw new Error(
+            `field validation error: tried set instance of ${values.constructor.name} at index ${index} of field '${this.name}' but it is not an instance of ${this.card.name}`,
+          );
+        }
+      }
+    }
+
     return new WatchedArray((oldValue, value) => {
       applySubscribersToInstanceValue(
         instance,
@@ -599,7 +617,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
       );
       notifySubscribers(instance, this.name, value);
       logger.log(recompute(instance));
-    }, value);
+    }, values);
   }
 
   async handleNotLoadedError<T extends BaseDef>(instance: T, _e: NotLoaded) {
@@ -752,7 +770,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     } else {
       if (value != null && !(value instanceof this.card)) {
         throw new Error(
-          `tried set ${value} as field ${this.name} but it is not an instance of ${this.card.name}`,
+          `field validation error: tried set instance of ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
         );
       }
     }
@@ -950,7 +968,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     // so the next opportunity we have to test this scenario is during field assignment
     if (primitive in this.card) {
       throw new Error(
-        `the linksTo field '${this.name}' contains a primitive card '${this.card.name}'`,
+        `field validation error: the linksTo field '${this.name}' contains a primitive card '${this.card.name}'`,
       );
     }
     if (value) {
@@ -959,7 +977,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       }
       if (!(value instanceof this.card)) {
         throw new Error(
-          `tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
+          `field validation error: tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
         );
       }
     }
@@ -1324,7 +1342,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
   validate(instance: BaseDef, values: any[] | null) {
     if (primitive in this.card) {
       throw new Error(
-        `the linksToMany field '${this.name}' contains a primitive card '${this.card.name}'`,
+        `field validation error: the linksToMany field '${this.name}' contains a primitive card '${this.card.name}'`,
       );
     }
 
@@ -1333,13 +1351,19 @@ class LinksToMany<FieldT extends CardDefConstructor>
     }
 
     if (!Array.isArray(values)) {
-      throw new Error(`Expected array for field value ${this.name}`);
+      throw new Error(
+        `field validation error: Expected array for field value of field '${this.name}'`,
+      );
     }
 
     for (let value of values) {
-      if (!isNotLoadedValue(value) && !(value instanceof this.card)) {
+      if (
+        !isNotLoadedValue(value) &&
+        value != null &&
+        !(value instanceof this.card)
+      ) {
         throw new Error(
-          `tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
+          `field validation error: tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
         );
       }
     }
@@ -1794,17 +1818,18 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
             {{/unless}}
           </div>
         </div>
-        <div class='thumbnail-subsection'>
-          <div class='thumbnail-subsection'>
-            <h3 class='card-title' data-test-card-title>{{@model.title}}</h3>
-          </div>
-          <div class='thumbnail-subsection'>
-            <h4
-              class='card-display-name'
-              data-test-card-display-name
-            >{{cardTypeDisplayName @model}}</h4>
-          </div>
+        <div class='info-section'>
+          <h3 class='card-title' data-test-card-title>{{@model.title}}</h3>
+          <h4 class='card-display-name' data-test-card-display-name>
+            <!-- __org.boxel.cardType START -->
+            {{cardTypeDisplayName @model}}
+            <!-- __org.boxel.cardType END -->
+          </h4>
         </div>
+        <div
+          class='card-description'
+          data-test-card-description
+        >{{@model.description}}</div>
       {{else}}
         {{! empty links-to field }}
         <div data-test-empty-field class='empty-field'></div>
@@ -1815,82 +1840,234 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
         width: 100%;
         height: 100%;
         display: flex;
-        flex-wrap: wrap;
       }
-      /*
-         sadly you can't use css vars in container queries. also be careful of fractional pixel
-         dimensions in the breakpoints. due to this we use the "breakpoint - 1 pixel" in the
-         container query conditions
-      */
 
-      /* strip style embedded card */
-      @container embedded-card (height <= 223px) {
+      /* Aspect Ratio <= 1.0 */
+
+      @container embedded-card (aspect-ratio <= 1.0) {
         .embedded-template {
+          align-content: flex-start;
+          justify-content: center;
+          padding: 10px;
+          flex-wrap: wrap;
+        }
+        .card-title {
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+          text-align: center;
+          margin: 10px 0 0 0;
+        }
+        .card-display-name {
+          text-align: center;
+          margin: var(--boxel-sp-xxs) 0 0 0;
+        }
+        .card-description {
+          display: none;
+        }
+        .thumbnail-section {
+          width: 100%;
+        }
+        .info-section {
+          width: 100%;
+        }
+      }
+      @container embedded-card (0.75 < aspect-ratio <= 1.0) {
+        .thumbnail-section {
+          /* 
+             64.35px is the computed height for the info section--at this particular
+             aspect ratio break-point the height is the dominant axis for which to
+             base the dimensions of the thumbnail
+          */
+          height: calc(100% - 64.35px);
+        }
+        .card-thumbnail {
+          height: 100%;
+        }
+      }
+      @container embedded-card (aspect-ratio <= 0.75) {
+        .card-thumbnail {
+          width: 100%;
+        }
+      }
+      @container embedded-card (aspect-ratio <= 1.0) and ((width < 150px) or (height < 150px)) {
+        .card-title {
+          font: 500 var(--boxel-font-xs);
+          line-height: 1.27;
+          letter-spacing: 0.11px;
+        }
+      }
+      @container embedded-card (aspect-ratio <= 1.0) and (150px <= width) and (150px <= height) {
+        .card-title {
+          font: 500 var(--boxel-font-sm);
+          line-height: 1.23;
+          letter-spacing: 0.13px;
+        }
+      }
+      @container embedded-card (aspect-ratio <= 1.0) and (118px < height) {
+        .thumbnail-section {
+          display: flex;
+        }
+      }
+      @container embedded-card (aspect-ratio <= 1.0) and (height <= 118px) {
+        .thumbnail-section {
+          display: none;
+        }
+      }
+
+      /* 1.0 < Aspect Ratio */
+
+      @container embedded-card (1.0 < aspect-ratio) and (77px < height) {
+        .card-title {
+          -webkit-line-clamp: 2;
+        }
+      }
+      @container embedded-card (1.0 < aspect-ratio) and (height <= 77px) {
+        .card-title {
+          -webkit-line-clamp: 1;
+        }
+      }
+      @container embedded-card (1.0 < aspect-ratio) and (width < 200px) {
+        .thumbnail-section {
+          display: none;
+        }
+        .card-title {
+          margin: 0;
+        }
+      }
+      @container embedded-card (1.0 < aspect-ratio) and (200px <= width) {
+        .card-title {
+          margin: 10px 0 0 0;
+        }
+      }
+
+      /* 1.0 < Aspect Ratio <= 2.0 */
+
+      @container embedded-card (1.0 < aspect-ratio <= 2.0) {
+        .embedded-template {
+          align-content: flex-start;
+          justify-content: center;
+          padding: 10px;
           column-gap: 10px;
-          padding: 5px;
-        }
-        .card-thumbnail {
-          width: var(--strip-embedded-thumbnail-width);
-          height: var(--strip-embedded-thumbnail-height);
-          border-radius: 6px;
-        }
-        .card-thumbnail-text {
-          visibility: hidden;
-        }
-      }
-      /* small and medium thumbnail styles embedded card */
-      @container embedded-card (223px < height <= 249px) {
-        .embedded-template {
-          justify-content: center;
-          padding: 10px;
         }
         .card-title {
-          height: 35px;
-          text-align: center;
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+          line-height: 1.25;
+          letter-spacing: 0.16px;
         }
         .card-display-name {
-          text-align: center;
+          margin: var(--boxel-sp-xxs) 0 0 0;
         }
-        .card-thumbnail {
-          width: var(--small-embedded-thumbnail-width);
-          height: var(--small-embedded-thumbnail-height);
-          border-radius: var(--boxel-border-radius);
-          margin-bottom: 11px;
-          padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
+      }
+      @container embedded-card (1.0 < aspect-ratio <= 2.0) and (width < 200px) {
+        .thumbnail-section {
+          display: none;
+        }
+        .card-title {
+          margin: 0;
+          font: 500 var(--boxel-font-size-sm);
+        }
+      }
+      @container embedded-card (1.0 < aspect-ratio <= 2.0) and (200px <= width) {
+        .card-title {
+          margin: 10px 0 0 0;
+          font: 500 var(--boxel-font-size-med);
+        }
+      }
+      @container embedded-card (1.67 < aspect-ratio <= 2.0) {
+        .embedded-template {
+          flex-wrap: nowrap;
         }
         .thumbnail-section {
           width: 100%;
+          height: 100%;
         }
-        .thumbnail-subsection {
+        .info-section {
+          width: 100%;
+        }
+        .card-description {
+          display: none;
+        }
+        .card-thumbnail {
+          /* at this breakpoint, the dominant axis is the height for 
+             thumbnail 1:1 aspect ratio calculations 
+          */
+          height: 100%;
+        }
+      }
+      @container embedded-card (1.0 < aspect-ratio <= 1.67) {
+        .embedded-template {
+          flex-wrap: wrap;
+        }
+        .thumbnail-section {
+          flex: 1 auto;
+          max-width: 50%;
+          /* 24px is the computed height for the card description */
+          height: calc(100% - 24px);
+        }
+        .info-section {
+          flex: 1 auto;
+          max-width: 50%;
+        }
+        .card-description {
+          display: -webkit-box;
+          flex: 1 100%;
+        }
+        .card-thumbnail {
+          /* at this breakpoint, the dominant axis is the width for 
+             thumbnail 1:1 aspect ratio calculations 
+          */
           width: 100%;
         }
       }
 
-      /* large thumbnail style embedded card */
-      @container embedded-card (249px < height) and (339px < width) {
+      /* Aspect Ratio < 2.0 */
+
+      @container embedded-card (2.0 < aspect-ratio) {
         .embedded-template {
           justify-content: center;
           padding: 10px;
+          column-gap: 10px;
+          flex-wrap: nowrap;
         }
         .card-title {
-          height: 35px;
-          text-align: center;
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 1;
+          overflow: hidden;
+          line-height: 1.25;
+          letter-spacing: 0.16px;
+          font: 500 var(--boxel-font-size-med);
+          margin: 0;
         }
         .card-display-name {
-          text-align: center;
-        }
-        .card-thumbnail {
-          width: var(--large-embedded-thumbnail-width);
-          height: var(--large-embedded-thumbnail-height);
-          border-radius: var(--boxel-border-radius);
-          margin-bottom: 11px;
-          padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
+          margin: var(--boxel-sp-4xs) 0 0 0;
         }
         .thumbnail-section {
-          width: 100%;
+          flex: 1;
         }
-        .thumbnail-subsection {
-          width: 100%;
+        .info-section {
+          flex: 4;
+        }
+        .card-description {
+          display: none;
+        }
+      }
+      @container embedded-card (2.0 < aspect-ratio) and (height <= 57px) {
+        .embedded-template {
+          padding: 6px;
+        }
+        .thumbnail-section {
+          display: none;
+        }
+        .card-title {
+          margin: 0;
+        }
+        .card-display-name {
+          display: none;
         }
       }
 
@@ -1903,6 +2080,7 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
       }
       .card-thumbnail {
         display: flex;
+        aspect-ratio: 1 / 1;
         align-items: center;
         justify-content: center;
         background-color: var(--boxel-teal);
@@ -1912,22 +2090,29 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
         color: var(--boxel-light);
         font: 700 var(--boxel-font);
         letter-spacing: var(--boxel-lsp);
+        border-radius: 6px;
       }
       .card-title {
-        margin: 0;
-        font: 500 var(--boxel-font-sm);
-        line-height: 1.23;
         text-overflow: ellipsis;
       }
       .card-display-name {
-        margin: 0;
         font: 500 var(--boxel-font-xs);
         color: var(--boxel-450);
         line-height: 1.27;
+        letter-spacing: 0.11px;
         text-overflow: ellipsis;
       }
+      .card-description {
+        margin: var(--boxel-sp-xxs) 0 0 0;
+        font: 500 var(--boxel-font-xs);
+        line-height: 1.27;
+        letter-spacing: 0.11px;
+        text-overflow: ellipsis;
+        -webkit-line-clamp: 1;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
       .thumbnail-section {
-        display: flex;
         justify-content: center;
       }
     </style>
@@ -2199,6 +2384,9 @@ export class CardDef extends BaseDef {
   static isolated: BaseDefComponent = DefaultCardDefTemplate;
   static edit: BaseDefComponent = DefaultCardDefTemplate;
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
+
+  static prefersWideFormat = false; // whether the card is full-width in the stack
+  static headerColor: string | null = null; // set string color value if the stack-item header has a background color
 }
 
 export type BaseDefConstructor = typeof BaseDef;
@@ -2866,6 +3054,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
         );
       }
       let deserialized = getDataBucket(instance);
+      field.validate(instance, value);
 
       // Before updating field's value, we also have to make sure
       // the subscribers also subscribes to a new value.

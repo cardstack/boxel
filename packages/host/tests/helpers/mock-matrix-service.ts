@@ -7,6 +7,9 @@ import { v4 as uuid } from 'uuid';
 
 import { Deferred } from '@cardstack/runtime-common';
 
+import { baseRealm, LooseCardResource } from '@cardstack/runtime-common';
+
+import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 import { RoomResource, getRoom } from '@cardstack/host/resources/room';
@@ -19,8 +22,8 @@ import { OperatorModeContext } from '@cardstack/host/services/matrix-service';
 import RealmService from '@cardstack/host/services/realm';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
+import { PatchField } from 'https://cardstack.com/base/command';
 import type { ReactionEventContent } from 'https://cardstack.com/base/matrix-event';
-import type { RoomField } from 'https://cardstack.com/base/room';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let nonce = 0;
@@ -97,8 +100,8 @@ function generateMockMatrixService(
 
     profile = getMatrixProfile(this, () => this.userId);
 
-    private rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
-    private roomResourcesCache: Map<string, RoomResource> = new Map();
+    rooms: TrackedMap<string, RoomState> = new TrackedMap();
+    roomResourcesCache: TrackedMap<string, RoomResource> = new TrackedMap();
 
     messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
     cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
@@ -307,23 +310,25 @@ function generateMockMatrixService(
       return roomId;
     }
 
-    getLastActiveTimestamp(room: RoomField) {
-      return (
-        room.events[room.events.length - 1]?.origin_server_ts ??
-        room.created?.getTime()
-      );
+    getLastActiveTimestamp(roomId: string) {
+      let resource = this.roomResources.get(roomId);
+      return resource?.lastActiveTimestamp;
     }
 
     getRoom(roomId: string) {
       return this.rooms.get(roomId);
     }
 
-    setRoom(roomId: string, roomPromise: Promise<RoomField>) {
-      this.rooms.set(roomId, roomPromise);
+    setRoom(roomId: string, room: RoomState) {
+      this.rooms.set(roomId, room);
       if (!this.roomResourcesCache.has(roomId)) {
         this.roomResourcesCache.set(
           roomId,
-          getRoom(this, () => roomId),
+          getRoom(
+            this,
+            () => roomId,
+            () => this.getRoom(roomId)?.events,
+          ),
         );
       }
     }
@@ -338,6 +343,26 @@ function generateMockMatrixService(
         resources.set(roomId, this.roomResourcesCache.get(roomId)!);
       }
       return resources;
+    }
+
+    async createCommandField(attr: Record<string, any>): Promise<PatchField> {
+      let data: LooseCardResource = {
+        meta: {
+          adoptsFrom: {
+            name: 'PatchField',
+            module: `${baseRealm.url}command`,
+          },
+        },
+        attributes: {
+          ...attr,
+        },
+      };
+      let card = this.cardAPI.createFromSerialized<typeof PatchField>(
+        data,
+        { data },
+        undefined,
+      );
+      return card;
     }
   }
   return MockMatrixService;

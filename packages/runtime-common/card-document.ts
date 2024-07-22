@@ -276,17 +276,7 @@ export function transformResultsToPrerenderedCardsDoc(results: {
     type: 'prerendered-card',
     id: card.url,
     attributes: {
-      embeddedHtml: card.embeddedHtml.default,
-    },
-    relationships: {
-      'prerendered-card-css': {
-        data: card.cssModuleIds.map((cssModuleId) => {
-          return {
-            type: 'prerendered-card-css',
-            id: cssModuleId,
-          };
-        }),
-      },
+      html: card.html,
     },
   }));
 
@@ -294,7 +284,7 @@ export function transformResultsToPrerenderedCardsDoc(results: {
     type: 'prerendered-card-css',
     id: css.cssModuleId,
     attributes: {
-      content: css.source,
+      source: css.source,
     },
   }));
 

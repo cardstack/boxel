@@ -2479,15 +2479,85 @@ const tests = Object.freeze({
     await setupIndex(dbAdapter, [
       {
         url: `${testRealmURL}vangogh.json`,
-        file_alias: `${testRealmURL}vangogh.json`,
+        file_alias: `${testRealmURL}vangogh`,
         type: 'instance',
         realm_version: 1,
         realm_url: testRealmURL,
-        deps: [`${testRealmURL}person`],
-        types: [],
+        deps: [],
+        types: [
+          `${testRealmURL}person/Person`,
+          'https://cardstack.com/base/card-api/CardDef',
+        ],
         embedded_html: {
-          default: '<div>Van Gogh</div',
+          [`${testRealmURL}person/Person`]:
+            '<div>Van Gogh (Person embedded template)</div>',
+          'https://cardstack.com/base/card-api/CardDef':
+            '<div>Van Gogh (CardDef embedded template)</div>',
         },
+        atom_html: 'Van Gogh',
+        search_doc: { name: 'Van Gogh' },
+      },
+      {
+        url: `${testRealmURL}jimmy.json`,
+        file_alias: `${testRealmURL}jimmy`,
+        type: 'instance',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        deps: [],
+        types: [
+          `${testRealmURL}person/Person`,
+          'https://cardstack.com/base/card-api/CardDef',
+        ],
+
+        embedded_html: {
+          [`${testRealmURL}person/1`]:
+            '<div>Jimmy (Person embedded template)</div>',
+          'https://cardstack.com/base/card-api/CardDef':
+            '<div>Jimmy (CardDef embedded template)</div>',
+        },
+        atom_html: 'Jimmy',
+        search_doc: { name: 'Jimmy' },
+      },
+      {
+        url: `${testRealmURL}donald.json`,
+        file_alias: `${testRealmURL}donald`,
+        type: 'instance',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        deps: [],
+        types: [
+          `${testRealmURL}fancy-person/FancyPerson`,
+          `${testRealmURL}person/Person`,
+          'https://cardstack.com/base/card-api/CardDef',
+        ],
+        embedded_html: {
+          [`${testRealmURL}fancy-person/FancyPerson`]:
+            '<div>Donald (FancyPerson embedded template)</div>',
+          [`${testRealmURL}person/Person`]:
+            '<div>Donald (Person embedded template)</div>',
+          'https://cardstack.com/base/card-api/CardDef':
+            '<div>Donald (CardDef embedded template)</div>',
+        },
+        atom_html: 'Donald',
+        search_doc: { name: 'Donald' },
+      },
+      {
+        url: `${testRealmURL}fancy-person.gts`,
+        type: 'module',
+        file_alias: `${testRealmURL}fancy-person`,
+        realm_version: 1,
+        realm_url: testRealmURL,
+        source: cardSrc,
+        deps: [`${testRealmURL}person`, 'https://cardstack.com/base/card-api'],
+      },
+      {
+        url: `${testRealmURL}fancy-person.gts`,
+        file_alias: `${testRealmURL}fancy-person`,
+        type: 'css',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        source: '.fancy-person { color: pink; }',
+        deps: [],
       },
       {
         url: `${testRealmURL}person.gts`,
@@ -2496,8 +2566,7 @@ const tests = Object.freeze({
         realm_version: 1,
         realm_url: testRealmURL,
         source: cardSrc,
-        deps: [],
-        types: [],
+        deps: ['https://cardstack.com/base/card-api'],
       },
       {
         url: `${testRealmURL}person.gts`,
@@ -2505,18 +2574,187 @@ const tests = Object.freeze({
         type: 'css',
         realm_version: 1,
         realm_url: testRealmURL,
-        source: '.foo { color: red; }',
+        source: '.person { color: red; }',
         deps: [],
-        types: [],
+      },
+      {
+        url: `https://cardstack.com/base/card-api`,
+        type: 'module',
+        file_alias: `${testRealmURL}card-api`,
+        realm_version: 1,
+        realm_url: testRealmURL,
+        source: '',
+        deps: [],
+      },
+      {
+        url: `https://cardstack.com/base/card-api`,
+        type: 'css',
+        file_alias: `${testRealmURL}card-api`,
+        realm_version: 1,
+        realm_url: testRealmURL,
+        source: '.default-card-template { color: blue; }',
+        deps: [],
       },
     ]);
 
+    // Requesting embedded template without ON filter
     let { prerenderedCards, prerenderedCardCssItems, meta } =
       await indexQueryEngine.searchPrerendered(
         new URL(testRealmURL),
-        {},
+        {}, // When there is no ON filter, embedded template for CardDef is used
         loader,
+        {
+          htmlFormat: 'embedded',
+        },
       );
+
+    assert.strictEqual(
+      meta.page.total,
+      3,
+      'meta total results meta is correct',
+    );
+    assert.strictEqual(meta.page.realmVersion, 1, 'realm version is correct');
+    assert.strictEqual(
+      prerenderedCards.length,
+      3,
+      'the actual returned total results are correct',
+    );
+
+    assert.strictEqual(
+      prerenderedCards[0].url,
+      'http://test-realm/test/donald.json',
+    );
+    assert.strictEqual(
+      prerenderedCards[0].html,
+      '<div>Donald (CardDef embedded template)</div>',
+    );
+
+    assert.strictEqual(
+      prerenderedCards[1].url,
+      'http://test-realm/test/jimmy.json',
+    );
+    assert.strictEqual(
+      prerenderedCards[1].html,
+      '<div>Jimmy (CardDef embedded template)</div>',
+    );
+
+    assert.strictEqual(
+      prerenderedCards[2].url,
+      'http://test-realm/test/vangogh.json',
+    );
+    assert.strictEqual(
+      prerenderedCards[2].html,
+      '<div>Van Gogh (CardDef embedded template)</div>',
+    );
+
+    assert.strictEqual(
+      prerenderedCardCssItems.length,
+      1,
+      'css for card def only since no ON filter is provided',
+    );
+    assert.strictEqual(
+      prerenderedCardCssItems[0].cssModuleId,
+      'https://cardstack.com/base/card-api',
+    );
+    assert.strictEqual(
+      prerenderedCardCssItems[0].source,
+      '.default-card-template { color: blue; }',
+      'css for card def is correct',
+    );
+
+    // Requesting embedded template with ON filter
+    ({ prerenderedCards, prerenderedCardCssItems, meta } =
+      await indexQueryEngine.searchPrerendered(
+        new URL(testRealmURL),
+        {
+          filter: {
+            on: {
+              module: `${testRealmURL}fancy-person`,
+              name: 'FancyPerson',
+            },
+            not: {
+              eq: {
+                name: 'Richard',
+              },
+            },
+          },
+        },
+        loader,
+        {
+          htmlFormat: 'embedded',
+        },
+      ));
+
+    assert.strictEqual(
+      prerenderedCards.length,
+      1,
+      'the actual returned total results are correct (there is only one FancyPerson)',
+    );
+
+    assert.strictEqual(
+      prerenderedCards[0].url,
+      'http://test-realm/test/donald.json',
+    );
+    assert.strictEqual(
+      prerenderedCards[0].html,
+      '<div>Donald (FancyPerson embedded template)</div>',
+    );
+
+    assert.strictEqual(
+      prerenderedCardCssItems.length,
+      3,
+      'css for fancy person + for person and card api since these are in the deps of fancy person',
+    );
+
+    assert.strictEqual(
+      prerenderedCardCssItems[0].cssModuleId,
+      `${testRealmURL}fancy-person`,
+    );
+    assert.strictEqual(
+      prerenderedCardCssItems[0].source,
+      '.fancy-person { color: pink; }',
+      'css for fancy person is correct',
+    );
+    assert.strictEqual(
+      prerenderedCardCssItems[1].cssModuleId,
+      `${testRealmURL}person`,
+    );
+    assert.strictEqual(
+      prerenderedCardCssItems[1].source,
+      '.person { color: red; }',
+      'css for person is correct',
+    );
+    assert.strictEqual(
+      prerenderedCardCssItems[2].cssModuleId,
+      'https://cardstack.com/base/card-api',
+    );
+    assert.strictEqual(
+      prerenderedCardCssItems[2].source,
+      '.default-card-template { color: blue; }',
+      'css for card def is correct',
+    );
+
+    //  Requesting atom template
+    ({ prerenderedCards, prerenderedCardCssItems, meta } =
+      await indexQueryEngine.searchPrerendered(
+        new URL(testRealmURL),
+        {
+          filter: {
+            on: {
+              module: `${testRealmURL}fancy-person`,
+              name: 'FancyPerson',
+            },
+
+            eq: {
+              name: 'Donald',
+            },
+          },
+        },
+        loader,
+        {
+          htmlFormat: 'atom',
+        },
+      ));
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
     assert.strictEqual(
@@ -2524,28 +2762,10 @@ const tests = Object.freeze({
       1,
       'the realm version is correct',
     );
-    assert.strictEqual(
-      prerenderedCards.length,
-      1,
-      'the total results are correct',
-    );
-    assert.strictEqual(
-      prerenderedCards[0].url,
-      'http://test-realm/test/vangogh.json',
-    );
-    assert.deepEqual(prerenderedCards[0].embeddedHtml, {
-      default: '<div>Van Gogh</div',
-    });
 
-    assert.strictEqual(prerenderedCardCssItems.length, 1);
-    assert.strictEqual(
-      prerenderedCardCssItems[0].cssModuleId,
-      'http://test-realm/test/person',
-    );
-    assert.strictEqual(
-      prerenderedCardCssItems[0].source,
-      '.foo { color: red; }',
-    );
+    assert.strictEqual(prerenderedCards[0].url, `${testRealmURL}donald.json`);
+    assert.strictEqual(prerenderedCards[0].html, 'Donald'); // Atom template
+    assert.strictEqual(prerenderedCardCssItems.length, 3); // css for fancy person + for person and card api since these are in the deps of fancy person
   },
 } as SharedTests<{
   indexQueryEngine: IndexQueryEngine;

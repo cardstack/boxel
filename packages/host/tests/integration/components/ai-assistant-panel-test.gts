@@ -1,7 +1,13 @@
-import { waitFor, waitUntil, click, fillIn } from '@ember/test-helpers';
+import {
+  waitFor,
+  waitUntil,
+  click,
+  fillIn,
+  triggerEvent,
+} from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
-import { format } from 'date-fns';
+import { format, subMinutes } from 'date-fns';
 import { setupRenderingTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
@@ -73,9 +79,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
       'service:matrixService',
     ) as MockMatrixService;
     matrixService.cardAPI = cardApi;
-    matrixService.getRoomModule = async function () {
-      return await loader.import(`${baseRealm.url}room`);
-    };
     operatorModeStateService = this.owner.lookup(
       'service:operator-mode-state-service',
     ) as OperatorModeStateService;
@@ -1048,21 +1051,17 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
 
-    let tinyDelay = () => new Promise((resolve) => setTimeout(resolve, 1)); // Add a tiny artificial delay to ensure rooms are created in the correct order with increasing timestamps
     await matrixService.createAndJoinRoom('test1', 'test room 1');
-    await tinyDelay();
     const room2Id = await matrixService.createAndJoinRoom(
       'test2',
       'test room 2',
     );
-    await tinyDelay();
     const room3Id = await matrixService.createAndJoinRoom(
       'test3',
       'test room 3',
     );
 
-    await waitFor(`[data-test-open-ai-assistant]`);
-    await click('[data-test-open-ai-assistant]');
+    await openAiAssistant();
     await waitFor(`[data-room-settled]`);
 
     assert
@@ -1166,6 +1165,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       roomId: string,
       body: string,
       attachedCards: CardDef[],
+      _skillCards: [],
       _clientGeneratedId: string,
       _context?: any,
     ) {
@@ -1273,6 +1273,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       roomId: string,
       body: string,
       _attachedCards: [],
+      _skillCards: [],
       _clientGeneratedId: string,
       _context?: any,
     ) {
@@ -1336,6 +1337,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       _roomId: string,
       _body: string,
       _attachedCards: [],
+      _skillCards: [],
       _clientGeneratedId: string,
       _context?: any,
     ) {
@@ -1349,157 +1351,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
     assert.dom('[data-test-ai-assistant-message]').hasNoClass('is-error');
     matrixService.sendMessage = originalSendMessage;
-  });
-
-  test('it displays the streaming indicator when ai bot message is in progress (streaming words)', async function (assert) {
-    let roomId = await renderAiAssistantPanel();
-
-    await addRoomEvent(matrixService, {
-      event_id: 'event0',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@matic:boxel',
-      content: {
-        body: 'Say one word.',
-        msgtype: 'org.boxel.message',
-        formatted_body: 'Say one word.',
-        format: 'org.matrix.custom.html',
-      },
-      origin_server_ts: Date.now() - 100,
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
-      },
-      status: null,
-    });
-
-    await addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@aibot:localhost',
-      content: {
-        body: 'French.',
-        msgtype: 'm.text',
-        formatted_body: 'French.',
-        format: 'org.matrix.custom.html',
-        isStreamingFinished: true,
-      },
-      origin_server_ts: Date.now() - 99,
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
-      },
-      status: null,
-    });
-
-    await addRoomEvent(matrixService, {
-      event_id: 'event2',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@matic:boxel',
-      content: {
-        body: 'What is a french bulldog?',
-        msgtype: 'org.boxel.message',
-        formatted_body: 'What is a french bulldog?',
-        format: 'org.matrix.custom.html',
-      },
-      origin_server_ts: Date.now() - 98,
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
-      },
-      status: null,
-    });
-
-    await addRoomEvent(matrixService, {
-      event_id: 'event3',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@aibot:localhost',
-      content: {
-        body: 'French bulldog is a',
-        msgtype: 'm.text',
-        formatted_body: 'French bulldog is a',
-        format: 'org.matrix.custom.html',
-      },
-      origin_server_ts: Date.now() - 97,
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
-      },
-      status: null,
-    });
-
-    await waitFor('[data-test-message-idx="3"]');
-
-    assert
-      .dom('[data-test-message-idx="1"] [data-test-ai-avatar]')
-      .doesNotHaveClass(
-        'ai-avatar-animated',
-        'Answer to my previous question is not in progress',
-      );
-    assert
-      .dom('[data-test-message-idx="3"] [data-test-ai-avatar]')
-      .hasClass(
-        'ai-avatar-animated',
-        'Answer to my current question is in progress',
-      );
-
-    await click('[data-test-past-sessions-button]');
-    assert
-      .dom("[data-test-enter-room='New AI Assistant Chat']")
-      .includesText('Thinking');
-    assert.dom('[data-test-is-streaming]').exists();
-
-    await addRoomEvent(matrixService, {
-      event_id: 'event4',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      sender: '@aibot:localhost',
-      content: {
-        body: 'French bulldog is a French breed of companion dog or toy dog.',
-        msgtype: 'm.text',
-        formatted_body:
-          'French bulldog is a French breed of companion dog or toy dog',
-        format: 'org.matrix.custom.html',
-        isStreamingFinished: true, // This is an indicator from the ai bot that the message is finalized and the openai is done streaming
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'event3',
-        },
-      },
-      origin_server_ts: Date.now() - 96,
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
-      },
-      status: null,
-    });
-
-    await waitFor('[data-test-message-idx="3"]');
-    assert
-      .dom('[data-test-message-idx="1"] [data-test-ai-avatar]')
-      .doesNotHaveClass(
-        'ai-avatar-animated',
-        'Answer to my previous question is not in progress',
-      );
-    assert
-      .dom('[data-test-message-idx="3"] [data-test-ai-avatar]')
-      .doesNotHaveClass(
-        'ai-avatar-animated',
-        'Answer to my last question is not in progress',
-      );
-
-    assert
-      .dom("[data-test-enter-room='New AI Assistant Chat']")
-      .doesNotContainText('Thinking');
-    assert.dom('[data-test-is-streaming]').doesNotExist();
   });
 
   test('it does not display the streaming indicator when ai bot sends an option', async function (assert) {
@@ -1682,6 +1533,94 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .doesNotContainText('Updated');
   });
 
+  test('sends read receipts only for bot messages', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    await addRoomEvent(matrixService, {
+      event_id: 'userevent0',
+      room_id: roomId,
+      state_key: 'state',
+      type: 'm.room.message',
+      sender: '@matic:boxel',
+      content: {
+        body: 'Say one word.',
+        msgtype: 'org.boxel.message',
+        formatted_body: 'Say one word.',
+        format: 'org.matrix.custom.html',
+      },
+      origin_server_ts: Date.now() - 100,
+      unsigned: {
+        age: 105,
+        transaction_id: '1',
+      },
+      status: null,
+    });
+
+    await waitFor(`[data-room-settled]`);
+
+    await addRoomEvent(matrixService, {
+      event_id: 'botevent1',
+      room_id: roomId,
+      state_key: 'state',
+      type: 'm.room.message',
+      sender: '@aibot:localhost',
+      content: {
+        body: 'Word.',
+        msgtype: 'm.text',
+        formatted_body: 'Word.',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      origin_server_ts: Date.now() - 99,
+      unsigned: {
+        age: 105,
+        transaction_id: '1',
+      },
+      status: null,
+    });
+
+    assert
+      .dom('[data-test-past-sessions-button] [data-test-has-active-sessions]')
+      .doesNotExist();
+    assert
+      .dom(
+        "[data-test-enter-room='New AI Assistant Chat'] [data-test-is-streaming]",
+      )
+      .doesNotExist();
+
+    let anotherRoomId = await matrixService.createAndJoinRoom('Another Room');
+
+    await addRoomEvent(matrixService, {
+      event_id: 'botevent2',
+      room_id: anotherRoomId,
+      state_key: 'state',
+      type: 'm.room.message',
+      sender: '@aibot:localhost',
+      content: {
+        body: 'I sent a message from the background.',
+        msgtype: 'm.text',
+        formatted_body: 'Word.',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      origin_server_ts: Date.now() - 98,
+      unsigned: {
+        age: 105,
+        transaction_id: '1',
+      },
+      status: null,
+    });
+
+    await waitFor('[data-test-has-active-sessions]');
+    await click('[data-test-past-sessions-button]');
+    await click(`[data-test-enter-room="${anotherRoomId}"]`);
+
+    assert.deepEqual(
+      Array.from(matrixService.currentUserEventReadReceipts.keys()),
+      ['botevent1', 'botevent2'],
+    );
+  });
+
   test('it can retry a message when receiving an error from the AI bot', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
@@ -1818,10 +1757,9 @@ module('Integration | ai-assistant-panel', function (hooks) {
         formatted_body: 'This is the first message',
         format: 'org.matrix.custom.html',
         'm.new_content': {
-          body: 'This is the first message replacement comes after second message, but must be displayed before second message because it will be used creted from the oldest',
+          body: 'First message body',
           msgtype: 'org.text',
-          formatted_body:
-            'This is the first message replacement comes after second message, but must be displayed before second message because it will be used creted from the oldest',
+          formatted_body: 'First message body',
           format: 'org.matrix.custom.html',
         },
       },
@@ -1839,10 +1777,9 @@ module('Integration | ai-assistant-panel', function (hooks) {
       type: 'm.room.message',
       sender: '@aibot:localhost',
       content: {
-        body: 'This is the second message comes after the first message and before the replacement of the first message',
+        body: 'Second message body',
         msgtype: 'org.text',
-        formatted_body:
-          'This is the second message comes after the first message and before the replacement of the first message',
+        formatted_body: 'Second message body',
         format: 'org.matrix.custom.html',
       },
       origin_server_ts: new Date(2024, 0, 3, 12, 31).getTime(),
@@ -1859,16 +1796,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
       type: 'm.room.message',
       sender: '@aibot:localhost',
       content: {
-        body: 'This is the first message replacement comes after second message, but must be displayed before second message because it will be used creted from the oldest',
+        body: 'First replacement message body',
         msgtype: 'org.text',
-        formatted_body:
-          'This is the first message replacement comes after second message, but must be displayed before second message because it will be used creted from the oldest',
+        formatted_body: 'First replacement message body',
         format: 'org.matrix.custom.html',
         ['m.new_content']: {
-          body: 'This is the first message replacement comes after second message, but must be displayed before second message because it will be used creted from the oldest',
+          body: 'First replacement message body',
           msgtype: 'org.text',
-          formatted_body:
-            'This is the first message replacement comes after second message, but must be displayed before second message because it will be used creted from the oldest',
+          formatted_body: 'First replacement message body',
           format: 'org.matrix.custom.html',
         },
         ['m.relates_to']: {
@@ -1890,31 +1825,20 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await addRoomEvent(matrixService, firstMessageReplacement);
 
-    await waitFor('[data-test-message-idx="0"]');
+    await waitFor('[data-test-message-idx="1"]');
 
     assert
       .dom('[data-test-message-idx="0"]')
       .containsText(
-        'Wednesday Jan 3, 2024, 12:30 PM This is the first message replacement comes after second message, but must be displayed before second message because it will be used creted from the oldest',
+        'Wednesday Jan 3, 2024, 12:30 PM First replacement message body',
       );
     assert
       .dom('[data-test-message-idx="1"]')
-      .containsText(
-        'Wednesday Jan 3, 2024, 12:31 PM This is the second message comes after the first message and before the replacement of the first message',
-      );
+      .containsText('Wednesday Jan 3, 2024, 12:31 PM Second message body');
   });
 
   test('it displays the streaming indicator when ai bot message is in progress (streaming words)', async function (assert) {
-    await setCardInOperatorModeState();
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-    let roomId = await openAiAssistant();
+    let roomId = await renderAiAssistantPanel();
 
     await addRoomEvent(matrixService, {
       event_id: 'event0',
@@ -2080,7 +2004,31 @@ module('Integration | ai-assistant-panel', function (hooks) {
     // Create a new room with some activity
     let anotherRoomId = await matrixService.createAndJoinRoom('Another Room');
 
-    let date = Date.now() - 98;
+    // A message that hasn't been seen and was sent more than fifteen minutes ago must not be shown in the toast.
+    let sixteenMinutesAgo = subMinutes(new Date(), 16);
+    await addRoomEvent(matrixService, {
+      event_id: 'event1',
+      room_id: anotherRoomId,
+      state_key: 'state',
+      type: 'm.room.message',
+      sender: '@aibot:localhost',
+      content: {
+        body: 'I sent a message sixteen minutes ago',
+        msgtype: 'm.text',
+        formatted_body: 'A message that was sent sixteen minutes ago.',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      origin_server_ts: sixteenMinutesAgo.getTime(),
+      unsigned: {
+        age: 105,
+        transaction_id: '1',
+      },
+      status: null,
+    });
+    assert.dom('[data-test-ai-assistant-toast]').exists({ count: 0 });
+
+    let fourteenMinutesAgo = subMinutes(new Date(), 14);
     await addRoomEvent(matrixService, {
       event_id: 'event2',
       room_id: anotherRoomId,
@@ -2094,7 +2042,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
-      origin_server_ts: date,
+      origin_server_ts: fourteenMinutesAgo.getTime(),
       unsigned: {
         age: 105,
         transaction_id: '1',
@@ -2103,16 +2051,16 @@ module('Integration | ai-assistant-panel', function (hooks) {
     });
 
     await waitFor('[data-test-ai-assistant-toast]');
+    // Hovering over the toast prevents it from disappearing
+    await triggerEvent('[data-test-ai-assistant-toast]', 'mouseenter');
     assert
       .dom('[data-test-ai-assistant-toast-header]')
-      .exists(`${format(date, 'dd.MM.yyyy, h:mm aa')}`);
-    assert
-      .dom('[data-test-ai-assistant-toast-content]')
-      .exists(`${format(date, 'dd.MM.yyyy, h:mm aa')}`);
+      .containsText(`${format(fourteenMinutesAgo, 'dd.MM.yyyy, h:mm aa')}`);
+    await triggerEvent('[data-test-ai-assistant-toast]', 'mouseleave');
     await click('[data-test-ai-assistant-toast-button]');
     assert.dom('[data-test-chat-title]').containsText('Another Room');
     assert
-      .dom('[data-test-ai-message-content]')
+      .dom('[data-test-message-idx="1"] [data-test-ai-message-content]')
       .containsText('A message from the background.');
   });
 });
