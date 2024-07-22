@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import Component from '@glimmer/component';
 
 interface Signature {
@@ -14,13 +15,22 @@ export default class Prerendered extends Component<Signature> {
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
 
+    let randomId = Math.random().toString(36).substring(7);
     if (this.args.css) {
       let styleElement = document.createElement('style');
       document.head.appendChild(styleElement);
       styleElement.textContent = this.args.css;
-      let randomId = Math.random().toString(36).substring(7);
       styleElement.setAttribute('data-prerendered-card-css', randomId);
     }
+
+    registerDestructor(this, () => {
+      let styleElement = document.querySelector(
+        `[data-prerendered-card-css="${randomId}"]`,
+      );
+      if (styleElement) {
+        styleElement.remove();
+      }
+    });
   }
 
   <template>
