@@ -7,6 +7,7 @@ import {
   FieldContainer,
   CardContainer,
 } from '@cardstack/boxel-ui/components';
+// @ts-ignore
 import { task } from 'ember-concurrency';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
