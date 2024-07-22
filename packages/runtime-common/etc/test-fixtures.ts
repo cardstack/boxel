@@ -25,7 +25,7 @@ export class Person extends CardDef {
 
 export function compiledCard(id = 'null', moduleName = '/dir/person.gts') {
   return `
-var _class, _descriptor, _descriptor2, _class2;
+var _class, _descriptor, _descriptor2, _Person;
 import { setComponentTemplate } from \"@ember/component\";
 function _initializerDefineProperty(target, property, descriptor, context) { if (!descriptor) return; Object.defineProperty(target, property, { enumerable: descriptor.enumerable, configurable: descriptor.configurable, writable: descriptor.writable, value: descriptor.initializer ? descriptor.initializer.call(context) : void 0 }); }
 function _defineProperty(obj, key, value) { key = _toPropertyKey(key); if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
@@ -36,24 +36,26 @@ function _initializerWarningHelper(descriptor, context) { throw new Error('Decor
 import { contains, field, Component, CardDef } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import { createTemplateFactory } from \"@ember/template-factory\";
-export let Person = (_class = (_class2 = class Person extends CardDef {
+export let Person = (_class = (_Person = class Person extends CardDef {
   constructor(...args) {
     super(...args);
     _initializerDefineProperty(this, \"firstName\", _descriptor, this);
     _initializerDefineProperty(this, \"title\", _descriptor2, this);
   }
-}, _defineProperty(_class2, "displayName", 'Person'), _defineProperty(_class2, \"isolated\", setComponentTemplate(createTemplateFactory(
+}, _defineProperty(_Person, "displayName", 'Person'), _defineProperty(_Person, \"isolated\", setComponentTemplate(createTemplateFactory(
 /*
-\ \ 
+  \
+
       <h1 data-test-card><@fields.firstName /></h1>
-\ \ \ \ 
+    \
+
 */
 {
   \"id\": ${id},
   \"block\": \"[[[1,\\\"\\\\n      \\\"],[10,\\\"h1\\\"],[14,\\\"data-test-card\\\",\\\"\\\"],[12],[8,[30,1,[\\\"firstName\\\"]],null,null,null],[13],[1,\\\"\\\\n    \\\"]],[\\\"@fields\\\"],false,[]]\",
   \"moduleName\": \"${moduleName}\",
   \"isStrictMode\": true
-}), class Isolated extends Component {})), _class2), (_descriptor = _applyDecoratedDescriptor(_class.prototype, \"firstName\", [field], {
+}), class Isolated extends Component {})), _Person), (_descriptor = _applyDecoratedDescriptor(_class.prototype, \"firstName\", [field], {
   configurable: true,
   enumerable: true,
   writable: true,
