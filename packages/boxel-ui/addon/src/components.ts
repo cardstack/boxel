@@ -23,6 +23,7 @@ import Menu from './components/menu/index.gts';
 import BoxelMessage from './components/message/index.gts';
 import Message from './components/message/index.gts';
 import Modal from './components/modal/index.gts';
+import Prerendered from './components/prerendered/index.gts';
 import RadioInput from './components/radio-input/index.gts';
 import ResizablePanelGroup, {
   ResizablePanel,
@@ -30,7 +31,6 @@ import ResizablePanelGroup, {
 } from './components/resizable-panel-group/index.gts';
 import BoxelSelect from './components/select/index.gts';
 import Tooltip from './components/tooltip/index.gts';
-import Prerendered from './components/prerendered/index.gts';
 
 export {
   Accordion,
@@ -58,10 +58,10 @@ export {
   Menu,
   Message,
   Modal,
+  Prerendered,
   RadioInput,
   ResizablePanel,
   ResizablePanelGroup,
   ResizeHandle,
   Tooltip,
-  Prerendered,
 };

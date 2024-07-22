@@ -1,5 +1,6 @@
 import Component from '@glimmer/component';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
+
 import Prerendered from './index.gts';
 
 export default class PrerenderedUsage extends Component {
