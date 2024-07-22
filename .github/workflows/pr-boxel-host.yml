@@ -54,9 +54,9 @@ jobs:
       - name: Deploy boxel-host preview
         uses: ./.github/actions/deploy-ember-preview
         env:
-          OWN_REALM_URL: https://realms-staging.boxel.ai/drafts/
-          OTHER_REALM_URLS: https://realms-staging.boxel.ai/published/
-          RESOLVED_BASE_REALM_URL: https://realms-staging.boxel.ai/base/
+          OWN_REALM_URL: https://app.boxel.ai/drafts/
+          OTHER_REALM_URLS: https://app.boxel.ai/published/
+          RESOLVED_BASE_REALM_URL: https://app.boxel.ai/base/
           MATRIX_URL: https://matrix-staging.boxel.ai
           MATRIX_SERVER_NAME: boxel.ai
           EXPERIMENTAL_AI_ENABLED: true

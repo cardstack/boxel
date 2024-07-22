@@ -32,9 +32,9 @@ jobs:
             echo "MATRIX_SERVER_NAME=matrix.cardstack.com" >> $GITHUB_ENV
             echo "EXPERIMENTAL_AI_ENABLED=true" >> $GITHUB_ENV
           elif [ "$INPUT_ENVIRONMENT" = "staging" ]; then
-            echo "OWN_REALM_URL=https://realms-staging.boxel.ai/drafts/" >> $GITHUB_ENV
-            echo "OTHER_REALM_URLS=https://realms-staging.boxel.ai/published/" >> $GITHUB_ENV
-            echo "RESOLVED_BASE_REALM_URL=https://realms-staging.boxel.ai/base/" >> $GITHUB_ENV
+            echo "OWN_REALM_URL=https://app.boxel.ai/drafts/" >> $GITHUB_ENV
+            echo "OTHER_REALM_URLS=https://app.boxel.ai/published/" >> $GITHUB_ENV
+            echo "RESOLVED_BASE_REALM_URL=https://app.boxel.ai/base/" >> $GITHUB_ENV
             echo "MATRIX_URL=https://matrix-staging.boxel.ai" >> $GITHUB_ENV
             echo "MATRIX_SERVER_NAME=boxel.ai" >> $GITHUB_ENV
             echo "EXPERIMENTAL_AI_ENABLED=true" >> $GITHUB_ENV
