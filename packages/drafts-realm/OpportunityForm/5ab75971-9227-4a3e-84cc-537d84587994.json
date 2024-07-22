@@ -15,11 +15,6 @@
       "thumbnailURL": null
     },
     "relationships": {
-      "accountName": {
-        "links": {
-          "self": null
-        }
-      },
       "company": {
         "links": {
           "self": null
