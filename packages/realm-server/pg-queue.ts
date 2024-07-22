@@ -254,7 +254,6 @@ export default class PgQueue implements Queue {
   async start() {
     if (!this.jobRunner && !this.#isDestroyed) {
       this.#hasStarted = true;
-      await this.pgClient.startClient();
       this.jobRunner = new WorkLoop('jobRunner', this.pollInterval);
       this.jobRunner.run(async (loop) => {
         await this.pgClient.listen('jobs', loop.wake.bind(loop), async () => {

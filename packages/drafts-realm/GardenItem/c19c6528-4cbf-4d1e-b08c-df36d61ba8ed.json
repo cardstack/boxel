@@ -1,0 +1,18 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "gardenItemId": "black-eyed-susan",
+      "name": "Black-Eyed Susan",
+      "symbol": "D",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../garden-design",
+        "name": "GardenItem"
+      }
+    }
+  }
+}

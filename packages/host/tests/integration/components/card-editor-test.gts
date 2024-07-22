@@ -4,12 +4,17 @@ import {
   click,
   RenderingTestContext,
 } from '@ember/test-helpers';
+import { waitUntil } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test, skip } from 'qunit';
 
-import { RealmSessionContextName, baseRealm } from '@cardstack/runtime-common';
+import {
+  PermissionsContextName,
+  type Permissions,
+  baseRealm,
+} from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 
@@ -43,9 +48,11 @@ module('Integration | card-editor', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
-    provideConsumeContext(RealmSessionContextName, {
+    let permissions: Permissions = {
       canWrite: true,
-    });
+      canRead: true,
+    };
+    provideConsumeContext(PermissionsContextName, permissions);
 
     loader = lookupLoaderService().loader;
   });
@@ -55,7 +62,7 @@ module('Integration | card-editor', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-  setupMatrixServiceMock(hooks);
+  setupMatrixServiceMock(hooks, { autostart: true });
 
   async function loadCard(url: string): Promise<CardDef> {
     let { createFromSerialized, recompute } = cardApi;
@@ -71,7 +78,6 @@ module('Integration | card-editor', function (hooks) {
       result.doc.data,
       result.doc,
       new URL(result.doc.data.id),
-      loader,
     );
     await recompute(card, { loadFields: true });
     return card;
@@ -479,6 +485,9 @@ module('Integration | card-editor', function (hooks) {
 
     await click('[data-test-create-new-card="Pet"] [data-test-save-card]');
     await waitFor('[data-test-pet="Simba"]');
+    await waitUntil(
+      () => !document.querySelector('[data-test-create-new-card="Pet"]'),
+    );
     assert.dom('[data-test-create-new-card="Pet"]').doesNotExist();
     assert.dom('[data-test-remove-card]').exists();
 

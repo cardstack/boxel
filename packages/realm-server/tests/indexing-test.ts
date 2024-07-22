@@ -83,6 +83,11 @@ module('indexing', function (hooks) {
                   <h1><@fields.firstName/></h1>
                 </template>
               }
+              static embedded = class Isolated extends Component<typeof this> {
+                <template>
+                  <h1> Embedded Card Person: <@fields.firstName/></h1>
+                </template>
+              }
             }
           `,
           'pet.gts': `
@@ -249,7 +254,16 @@ module('indexing', function (hooks) {
       assert.strictEqual(
         trimCardContainer(stripScopedCSSAttributes(entry!.isolatedHtml!)),
         cleanWhiteSpace(`<h1> Mango </h1>`),
-        'pre-rendered html is correct',
+        'pre-rendered isolated format html is correct',
+      );
+      assert.strictEqual(
+        trimCardContainer(
+          stripScopedCSSAttributes(
+            entry!.embeddedHtml![`${testRealm}person/Person`],
+          ),
+        ),
+        cleanWhiteSpace(`<h1> Embedded Card Person: Mango </h1>`),
+        'pre-rendered embedded format html is correct',
       );
     } else {
       assert.ok(false, 'expected index entry not to be an error');
@@ -284,6 +298,14 @@ module('indexing', function (hooks) {
           assert.strictEqual(
             trimCardContainer(stripScopedCSSAttributes(item.isolatedHtml!)),
             cleanWhiteSpace(`<h1> Van Gogh </h1>`),
+          );
+          assert.strictEqual(
+            trimCardContainer(
+              stripScopedCSSAttributes(
+                item.embeddedHtml![`${testRealm}person/Person`]!,
+              ),
+            ),
+            cleanWhiteSpace(`<h1> Embedded Card Person: Van Gogh </h1>`),
           );
         } else {
           assert.ok(false, 'expected index entry not to be an error');

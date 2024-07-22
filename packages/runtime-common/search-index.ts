@@ -3,7 +3,8 @@ import {
   SupportedMimeType,
   maxLinkDepth,
   maybeURL,
-  Indexer,
+  IndexUpdater,
+  IndexQueryEngine,
   type Stats,
   type LooseCardResource,
   type DBAdapter,
@@ -15,6 +16,7 @@ import {
   type IncrementalResult,
   type IndexedModuleOrError,
   IndexedInstanceOrError,
+  IndexedCSSOrError,
 } from '.';
 import { Realm } from './realm';
 import { RealmPaths } from './paths';
@@ -53,7 +55,8 @@ export class SearchIndex {
     instanceErrors: 0,
     moduleErrors: 0,
   };
-  #indexer: Indexer;
+  #indexUpdater: IndexUpdater;
+  #indexQueryEngine: IndexQueryEngine;
   #queue: Queue;
 
   constructor({
@@ -70,7 +73,8 @@ export class SearchIndex {
         `DB Adapter was not provided to SearchIndex constructor--this is required when using a db based index`,
       );
     }
-    this.#indexer = new Indexer(dbAdapter);
+    this.#indexUpdater = new IndexUpdater(dbAdapter);
+    this.#indexQueryEngine = new IndexQueryEngine(dbAdapter);
     this.#queue = queue;
     this.#realm = realm;
     this.#loader = Loader.cloneLoader(this.#realm.loaderTemplate);
@@ -98,11 +102,12 @@ export class SearchIndex {
     return ignoreMap;
   }
 
-  async run(onIndexer?: (indexer: Indexer) => Promise<void>) {
+  async run(
+    onIndexUpdaterReady?: (indexUpdater: IndexUpdater) => Promise<void>,
+  ) {
     await this.#queue.start();
-    await this.#indexer.ready();
-    if (onIndexer) {
-      await onIndexer(this.#indexer);
+    if (onIndexUpdaterReady) {
+      await onIndexUpdaterReady(this.#indexUpdater);
     }
 
     await this.fullIndex();
@@ -149,7 +154,7 @@ export class SearchIndex {
 
   async search(query: Query, opts?: Options): Promise<CardCollectionDocument> {
     let doc: CardCollectionDocument;
-    let { cards: data, meta: _meta } = await this.#indexer.search(
+    let { cards: data, meta: _meta } = await this.#indexQueryEngine.search(
       new URL(this.#realm.url),
       query,
       this.loader,
@@ -184,6 +189,17 @@ export class SearchIndex {
       }
     }
     return doc;
+  }
+
+  async searchPrerendered(query: Query, opts?: Options) {
+    let results = await this.#indexQueryEngine.searchPrerendered(
+      new URL(this.#realm.url),
+      query,
+      this.loader,
+      opts,
+    );
+
+    return results;
   }
 
   public isIgnored(url: URL): boolean {
@@ -235,18 +251,24 @@ export class SearchIndex {
     return { type: 'doc', doc };
   }
 
+  // this is for tests--it's unlikely we'd actually want to access CSS directly
+  // this way
+  async css(url: URL, opts?: Options): Promise<IndexedCSSOrError | undefined> {
+    return await this.#indexQueryEngine.getCSS(url, opts);
+  }
+
   async module(
     url: URL,
     opts?: Options,
   ): Promise<IndexedModuleOrError | undefined> {
-    return await this.#indexer.getModule(url, opts);
+    return await this.#indexQueryEngine.getModule(url, opts);
   }
 
   async instance(
     url: URL,
     opts?: QueryOptions,
   ): Promise<IndexedInstanceOrError | undefined> {
-    return await this.#indexer.getInstance(url, opts);
+    return await this.#indexQueryEngine.getInstance(url, opts);
   }
 
   // TODO The caller should provide a list of fields to be included via JSONAPI
@@ -289,7 +311,10 @@ export class SearchIndex {
       );
       let linkResource: CardResource<Saved> | undefined;
       if (realmPath.inRealm(linkURL)) {
-        let maybeResult = await this.#indexer.getInstance(linkURL, opts);
+        let maybeResult = await this.#indexQueryEngine.getInstance(
+          linkURL,
+          opts,
+        );
         linkResource =
           maybeResult?.type === 'instance' ? maybeResult.instance : undefined;
       } else {

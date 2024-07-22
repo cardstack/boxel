@@ -1,15 +1,16 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import cn from '../../helpers/cn.ts';
-import { bool, eq, or } from '../../helpers/truth-helpers.ts';
+import { eq, or } from '../../helpers/truth-helpers.ts';
 import Label from '../label/index.gts';
 
 interface Signature {
   Args: {
     hasBackground?: boolean;
+    hasBottomBorder?: boolean;
     isHighlighted?: boolean;
-    label?: string;
     size?: 'large';
+    subtitle?: string;
     title?: string;
   };
   Blocks: {
@@ -26,7 +27,8 @@ const Header: TemplateOnlyComponent<Signature> = <template>
     class={{cn
       has-background=@hasBackground
       highlighted=@isHighlighted
-      large=(or (bool @title) (eq @size 'large'))
+      large=(eq @size 'large')
+      hasBottomBorder=@hasBottomBorder
     }}
     data-test-boxel-header
     ...attributes
@@ -35,17 +37,18 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       {{yield to='icon'}}
     {{/if}}
 
-    {{#if (or @label @title)}}
+    {{#if (or @subtitle @title)}}
       <div
         class='title {{if (has-block "detail") "with-detail"}}'
         data-test-boxel-header-title
       >
-        {{#if @label}}
+        {{#if @title}}{{@title}}{{/if}}
+        {{#if @subtitle}}
           <Label data-test-boxel-header-label>
-            {{@label}}
+            {{@subtitle}}
+
           </Label>
         {{/if}}
-        {{#if @title}}{{@title}}{{/if}}
       </div>
     {{/if}}
 
@@ -66,10 +69,10 @@ const Header: TemplateOnlyComponent<Signature> = <template>
   <style>
     @layer {
       header {
+        --default-header-padding: 0 var(--boxel-sp-xxxs) 0 var(--boxel-sp-sm);
         position: relative;
         display: flex;
         align-items: center;
-        padding: 0 var(--boxel-sp-xxxs) 0 var(--boxel-sp-sm);
         min-height: var(--boxel-header-min-height, 1.875rem); /* 30px */
         color: var(--boxel-header-text-color, var(--boxel-dark));
         border-top-right-radius: calc(
@@ -78,24 +81,26 @@ const Header: TemplateOnlyComponent<Signature> = <template>
         border-top-left-radius: calc(
           var(--boxel-header-border-radius, var(--boxel-border-radius)) - 1px
         );
-        font: 600 var(--boxel-header-text-size, var(--boxel-font-xs));
-        letter-spacing: var(--boxel-lsp-xl);
-        text-transform: uppercase;
+        font: var(--boxel-header-font-weight, 700)
+          var(--boxel-header-text-font, var(--boxel-font-sm));
+        letter-spacing: var(--boxel-header-letter-spacing, normal);
+        text-transform: var(--boxel-header-text-transform);
         transition:
           background-color var(--boxel-transition),
           color var(--boxel-transition);
-        gap: var(--boxel-sp-xs);
+        gap: var(--boxel-header-gap, var(--boxel-sp-xs));
+        padding: var(--boxel-header-padding, var(--default-header-padding));
       }
       header .title {
         max-width: var(
           --boxel-header-max-width,
-          calc(100% - 10rem)
+          100%
         ); /* this includes the space to show the header buttons */
-        text-overflow: ellipsis;
+        text-overflow: var(--boxel-header-text-overflow, ellipsis);
         overflow: hidden;
         text-wrap: nowrap;
       }
-      .header .title.with-detail {
+      header .title.with-detail {
         max-width: var(
           --boxel-header-detail-max-width,
           calc(100% - 23rem)
@@ -103,9 +108,12 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       }
       .large {
         padding: var(--boxel-header-padding, var(--boxel-sp-xl));
-        font: 700 var(--boxel-header-text-size, var(--boxel-font-lg));
-        letter-spacing: var(--boxel-header-letter-spacing, normal);
-        text-transform: var(--boxel-header-text-transform, none);
+        font: var(--boxel-header-font-weight, 700)
+          var(--boxel-header-text-font, var(--boxel-font-lg));
+      }
+      .hasBottomBorder {
+        border-bottom: 1px solid
+          var(--boxel--header-border-color, var(--boxel-200));
       }
       .has-background {
         background-color: var(
@@ -123,7 +131,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
         gap: var(--boxel-sp-xxs);
       }
       .detail {
-        margin-left: var(--boxel-header-detail-margin-left, 0);
+        margin-left: var(--boxel-header-detail-margin-left, auto);
       }
     }
   </style>

@@ -61,6 +61,7 @@
   --boxel-border-color: #d3d3d3;
   --boxel-border: 1px solid var(--boxel-border-color);
   --boxel-border-dark: 1px solid var(--boxel-dark);
+  --boxel-border-card: 1px solid rgba(0,0,0, 0.1 );
   --boxel-border-radius-xs: 2px;
   --boxel-border-radius-sm: 8px;
   --boxel-border-radius: 10px;
@@ -81,6 +82,7 @@
   --boxel-lg-container: 43.75rem; /* 700px */
   --boxel-xl-container: 65rem; /* 1040px */
   --boxel-xxl-container: 83.76rem; /* 1340px */
+
 
   /* COLOR PALETTE */
 

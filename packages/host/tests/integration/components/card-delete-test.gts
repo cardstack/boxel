@@ -57,7 +57,6 @@ module('Integration | card-delete', function (hooks) {
       result.doc.data,
       result.doc,
       new URL(url),
-      loader,
     );
     await recompute(card, { loadFields: true });
     return card;
@@ -74,7 +73,7 @@ module('Integration | card-delete', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMatrixServiceMock(hooks, { autostart: true });
   setupWindowMock(hooks);
 
   hooks.beforeEach(async function () {

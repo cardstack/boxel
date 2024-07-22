@@ -25,7 +25,6 @@ import { Submodes } from '@cardstack/host/components/submode-switcher';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
-import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import {
   elementIsVisible,
@@ -394,8 +393,6 @@ const localInheritSource = `
   }
 `;
 
-let realmPermissions: { [realmURL: string]: ('read' | 'write')[] };
-
 module('Acceptance | code submode | inspector tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
@@ -406,10 +403,10 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks, { realmPermissions: () => realmPermissions });
+  let { setRealmPermissions } = setupMatrixServiceMock(hooks);
 
   hooks.beforeEach(async function () {
-    realmPermissions = { [testRealmURL]: ['read', 'write'] };
+    setRealmPermissions({ [testRealmURL]: ['read', 'write'] });
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
@@ -537,13 +534,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       },
     }));
 
-    let realmService = this.owner.lookup(
-      'service:realm-info-service',
-    ) as RealmInfoService;
-
-    await realmService.fetchRealmInfo({
-      realmURL: new URL(testRealmURL2),
-    });
     monacoService = this.owner.lookup(
       'service:monaco-service',
     ) as MonacoService;
@@ -888,9 +878,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     // realm selection
     await click(`[data-test-realm-dropdown-trigger]`);
-    await waitFor(
-      '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Base Workspace"]',
-    );
+    await waitFor('[data-test-boxel-menu-item-text="Test Workspace A"]');
     await click('[data-test-boxel-menu-item-text="Test Workspace A"]');
     await waitFor(`[data-test-realm-name="Test Workspace A"]`);
     assert.dom('[data-test-realm-name]').hasText('Test Workspace A');
@@ -1787,7 +1775,7 @@ export class TestCard extends ExportedCard {
     );
 
     assert
-      .dom('[data-test-inherits-from-field] .pill.inert')
+      .dom('[data-test-inherits-from-field] .pill')
       .includesText('exported card', 'the inherits from is correct');
     assert.dom('[data-test-create-definition]').isDisabled();
 
@@ -1831,7 +1819,7 @@ export class TestCard extends ExportedCard {
       `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
     );
     assert
-      .dom('[data-test-inherits-from-field] .pill.inert')
+      .dom('[data-test-inherits-from-field] .pill')
       .includesText('Test Card', 'the inherits from is correct');
     assert
       .dom('[data-test-display-name-field]')
@@ -1861,7 +1849,7 @@ export class TestCard extends ExportedCard {
     );
 
     assert
-      .dom('[data-test-inherits-from-field] .pill.inert')
+      .dom('[data-test-inherits-from-field] .pill')
       .includesText('exported field', 'the inherits from is correct');
 
     await fillIn('[data-test-display-name-field]', 'Test Field');
@@ -1936,7 +1924,7 @@ export class TestField extends ExportedField {
       `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
     );
     assert
-      .dom('[data-test-inherits-from-field] .pill.inert')
+      .dom('[data-test-inherits-from-field] .pill')
       .includesText('exported card', 'the inherits from is correct');
     assert
       .dom('[data-test-display-name-field]')
@@ -2095,7 +2083,7 @@ export class ExportedCard extends ExportedCardParent {
     );
 
     assert
-      .dom('[data-test-inherits-from-field] .pill.inert')
+      .dom('[data-test-inherits-from-field] .pill')
       .includesText('exported card', 'the inherits from is correct');
     assert.dom('[data-test-create-card-instance]').isEnabled();
 
@@ -2182,9 +2170,74 @@ export class ExportedCard extends ExportedCardParent {
       .doesNotExist('field defs do not display a create instance button');
   });
 
+  test('can find instances of an exported card definition', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}pet`,
+    });
+
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="Pet"]');
+
+    await click('[data-boxel-selector-item-text="Pet"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Find instances"]');
+    await waitFor('[data-test-search-sheet-search-result]');
+    assert
+      .dom('[data-test-search-field]')
+      .hasValue(`carddef:${testRealmURL}pet/Pet`);
+    assert
+      .dom('[data-test-search-label]')
+      .hasText(`2 Results for “carddef:${testRealmURL}pet/Pet”`);
+    assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
+    assert
+      .dom(`[data-test-search-result="${testRealmURL}Pet/vangogh"]`)
+      .exists();
+  });
+
+  test('find instances action is not displayed for non-exported Card definition', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    });
+
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="LocalCard"]');
+
+    await click('[data-boxel-selector-item-text="LocalCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    assert
+      .dom('[data-test-action-button="Find instances"]')
+      .doesNotExist(
+        'non-exported card defs do not display a Find instances button',
+      );
+  });
+
+  test('find instances action is not displayed for field definition', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    });
+
+    await waitForCodeEditor();
+    await waitFor('[data-boxel-selector-item-text="ExportedField"]');
+
+    await click('[data-boxel-selector-item-text="ExportedField"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    assert
+      .dom('[data-test-action-button="Find instances"]')
+      .doesNotExist('field defs do not display a Find instances button');
+  });
+
   module('when the user lacks write permissions', function (hooks) {
     hooks.beforeEach(async function () {
-      realmPermissions = { [testRealmURL]: ['read'] };
+      setRealmPermissions({ [testRealmURL]: ['read'] });
     });
 
     test('delete button is not displayed for module when user does not have permission to write to realm', async function (assert) {

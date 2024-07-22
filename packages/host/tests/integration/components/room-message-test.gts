@@ -7,11 +7,13 @@ import { module, test } from 'qunit';
 
 import RoomMessage from '@cardstack/host/components/matrix/room-message';
 
+import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
+
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
 module('Integration | Component | RoomMessage', function (hooks) {
   setupRenderingTest(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMatrixServiceMock(hooks, { autostart: true });
 
   function setupTestScenario(
     isStreaming: boolean,
@@ -28,7 +30,9 @@ module('Integration | Component | RoomMessage', function (hooks) {
 
     let testScenario = {
       message,
+      messages: [message],
       isStreaming,
+      room: new RoomState(),
       monacoSDK: {},
       currentEditor: {},
       setCurrentMonacoContainer: null,
@@ -43,6 +47,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
       {{! @glint-ignore }}
       <RoomMessage
         @message={{testScenario.message}}
+        @messages={{testScenario.messages}}
         @monacoSDK={{testScenario.monacoSDK}}
         @isStreaming={{testScenario.isStreaming}}
         @currentEditor={{testScenario.currentEditor}}

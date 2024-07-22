@@ -12,7 +12,11 @@ import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
-import { RealmSessionContextName, baseRealm } from '@cardstack/runtime-common';
+import {
+  PermissionsContextName,
+  type Permissions,
+  baseRealm,
+} from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 
@@ -44,7 +48,7 @@ module('Integration | text-input-validator', function (hooks) {
   let realm: Realm;
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMatrixServiceMock(hooks, { autostart: true });
 
   async function loadCard(url: string): Promise<CardDef> {
     let { createFromSerialized, recompute } = cardApi;
@@ -60,16 +64,17 @@ module('Integration | text-input-validator', function (hooks) {
       result.doc.data,
       result.doc,
       new URL(result.doc.data.id),
-      loader,
     );
     await recompute(card, { loadFields: true });
     return card;
   }
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
-    provideConsumeContext(RealmSessionContextName, {
+    let permissions: Permissions = {
       canWrite: true,
-    });
+      canRead: true,
+    };
+    provideConsumeContext(PermissionsContextName, permissions);
 
     loader = lookupLoaderService().loader;
 
@@ -178,14 +183,6 @@ module('Integration | text-input-validator', function (hooks) {
 
   test('if json contains undeserializable values, the input box should show empty input box', async function (assert) {
     let card = await loadCard(`${testRealmURL}Sample/1`);
-    let response = await realm.handle(
-      new Request(`${testRealmURL}Sample/1`, {
-        headers: {
-          Accept: 'application/vnd.card+json',
-        },
-      }),
-    );
-    await response.json();
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>

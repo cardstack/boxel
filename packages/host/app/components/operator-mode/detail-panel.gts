@@ -20,6 +20,7 @@ import {
   IconInherit,
   IconTrash,
   IconPlus,
+  IconSearch,
   Copy,
 } from '@cardstack/boxel-ui/icons';
 
@@ -30,6 +31,7 @@ import {
   isCardDef,
   isFieldDef,
   isBaseDef,
+  internalKeyFor,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
@@ -41,6 +43,8 @@ import {
   isCardOrFieldDeclaration,
   isReexportCardOrField,
 } from '@cardstack/host/resources/module-contents';
+
+import RealmService from '@cardstack/host/services/realm';
 
 import {
   type CardDef,
@@ -72,6 +76,7 @@ interface Signature {
     cardInstance: CardDef | undefined;
     selectedDeclaration?: ModuleDeclaration;
     selectDeclaration: (dec: ModuleDeclaration) => void;
+    openSearch: (term: string) => void;
     goToDefinition: (
       codeRef: ResolvedCodeRef | undefined,
       localName: string | undefined,
@@ -90,6 +95,8 @@ interface Signature {
 
 export default class DetailPanel extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare realm: RealmService;
+
   private lastModified = lastModifiedDate(this, () => this.args.readyFile);
 
   @use private cardInstanceType = resource(() => {
@@ -184,6 +191,16 @@ export default class DetailPanel extends Component<Signature> {
             },
           ]
         : []),
+      ...(this.args.selectedDeclaration?.exportName &&
+      (this.args.selectedDeclaration?.cardOrField as typeof CardDef).isCardDef
+        ? [
+            {
+              label: 'Find instances',
+              icon: IconSearch,
+              handler: this.searchForInstances,
+            },
+          ]
+        : []),
     ];
   }
 
@@ -197,7 +214,7 @@ export default class DetailPanel extends Component<Signature> {
         icon: Copy,
         handler: this.duplicateInstance,
       },
-      ...(this.args.readyFile.realmSession.canWrite
+      ...(this.realm.canWrite(this.args.readyFile.url)
         ? [
             {
               label: 'Delete',
@@ -210,7 +227,7 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   private get miscFileActions() {
-    if (this.args.readyFile.realmSession.canWrite) {
+    if (this.realm.canWrite(this.args.readyFile.url)) {
       return [
         {
           label: 'Delete',
@@ -239,7 +256,7 @@ export default class DetailPanel extends Component<Signature> {
 
   @action private createInstance() {
     if (!this.args.selectedDeclaration) {
-      throw new Error('must have a selected delcaration');
+      throw new Error('must have a selected declaration');
     }
     if (
       this.args.selectedDeclaration &&
@@ -262,7 +279,7 @@ export default class DetailPanel extends Component<Signature> {
 
   @action private inherit() {
     if (!this.args.selectedDeclaration) {
-      throw new Error('must have a selected delcaration');
+      throw new Error('must have a selected declaration');
     }
     if (
       this.args.selectedDeclaration &&
@@ -289,6 +306,25 @@ export default class DetailPanel extends Component<Signature> {
         displayName,
       },
     );
+  }
+
+  @action private searchForInstances() {
+    if (!this.args.selectedDeclaration) {
+      throw new Error('must have a selected declaration');
+    }
+    if (
+      this.args.selectedDeclaration &&
+      (!isCardOrFieldDeclaration(this.args.selectedDeclaration) ||
+        !isCardDef(this.args.selectedDeclaration.cardOrField))
+    ) {
+      throw new Error(`bug: the selected declaration is not a card definition`);
+    }
+    let ref = this.getSelectedDeclarationAsCodeRef();
+    let refURL = internalKeyFor(
+      ref,
+      this.operatorModeStateService.state.codePath!,
+    );
+    this.args.openSearch(`carddef:${refURL}`);
   }
 
   private getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
@@ -371,7 +407,7 @@ export default class DetailPanel extends Component<Signature> {
                 data-test-current-module-name={{@readyFile.name}}
               >
                 <:actions>
-                  {{#if @readyFile.realmSession.canWrite}}
+                  {{#if (this.realm.canWrite @readyFile.url)}}
                     <IconButton
                       @icon={{IconTrash}}
                       @width='18'
@@ -508,7 +544,7 @@ export default class DetailPanel extends Component<Signature> {
     <style>
       .header {
         --boxel-header-padding: var(--boxel-sp-xs);
-        --boxel-header-text-size: var(--boxel-font-size-xs);
+        --boxel-header-text-font: var(--boxel-font-size-xs);
         --boxel-header-text-transform: uppercase;
         --boxel-header-letter-spacing: var(--boxel-lsp-xxl);
         --boxel-header-background-color: var(--boxel-100);

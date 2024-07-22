@@ -7,6 +7,7 @@ import { module, test } from 'qunit';
 import {
   baseRealm,
   baseCardRef,
+  internalKeyFor,
   type CodeRef,
   type LooseSingleCardDocument,
   type IndexedInstance,
@@ -26,9 +27,21 @@ import {
   setupLocalIndexing,
   type CardDocFiles,
   setupIntegrationTestRealm,
-  getDbAdapter,
   lookupLoaderService,
 } from '../helpers';
+import {
+  CardDef,
+  Component,
+  contains,
+  linksTo,
+  containsMany,
+  DatetimeField,
+  field,
+  FieldDef,
+  NumberField,
+  setupBaseRealm,
+  StringField,
+} from '../helpers/base-realm';
 
 const paths = new RealmPaths(new URL(testRealmURL));
 const testModuleRealm = 'http://localhost:4202/test/';
@@ -37,6 +50,7 @@ let loader: Loader;
 
 module(`Integration | search-index`, function (hooks) {
   setupRenderingTest(hooks);
+  setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = lookupLoaderService().loader;
@@ -484,14 +498,6 @@ module(`Integration | search-index`, function (hooks) {
   });
 
   test('can index a card with relative code-ref fields', async function (assert) {
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-
-    let { field, contains, CardDef } = cardApi;
-    let { default: StringField } = string;
-
     class Person extends CardDef {
       @field firstName = contains(StringField);
     }
@@ -510,19 +516,8 @@ module(`Integration | search-index`, function (hooks) {
                 module: './person',
                 name: 'Person',
               },
-              demo: {
-                firstName: 'Mango',
-              },
             },
             meta: {
-              fields: {
-                demo: {
-                  adoptsFrom: {
-                    module: './person',
-                    name: 'Person',
-                  },
-                },
-              },
               adoptsFrom: {
                 module: 'https://cardstack.com/base/catalog-entry',
                 name: 'CatalogEntry',
@@ -553,22 +548,9 @@ module(`Integration | search-index`, function (hooks) {
             module: `./person`,
             name: 'Person',
           },
-          demo: {
-            firstName: 'Mango',
-            title: null,
-            description: null,
-            thumbnailURL: null,
-          },
+          demo: {},
         },
         meta: {
-          fields: {
-            demo: {
-              adoptsFrom: {
-                module: `${testRealmURL}person`,
-                name: 'Person',
-              },
-            },
-          },
           adoptsFrom: {
             module: 'https://cardstack.com/base/catalog-entry',
             name: 'CatalogEntry',
@@ -587,19 +569,16 @@ module(`Integration | search-index`, function (hooks) {
 
   test('can recover from rendering a card that has a template error', async function (assert) {
     {
-      let cardApi: typeof import('https://cardstack.com/base/card-api');
-      let string: typeof import('https://cardstack.com/base/string');
-      cardApi = await loader.import(`${baseRealm.url}card-api`);
-      string = await loader.import(`${baseRealm.url}string`);
-
-      let { field, contains, CardDef, Component } = cardApi;
-      let { default: StringField } = string;
-
       class Person extends CardDef {
         @field firstName = contains(StringField);
         static isolated = class Isolated extends Component<typeof this> {
           <template>
             <h1><@fields.firstName /></h1>
+          </template>
+        };
+        static embedded = class Isolated extends Component<typeof this> {
+          <template>
+            <h1> Person Embedded Card: <@fields.firstName /></h1>
           </template>
         };
       }
@@ -668,11 +647,19 @@ module(`Integration | search-index`, function (hooks) {
         );
         if (entry?.type === 'doc') {
           assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
-          let { isolatedHtml } =
+          let { isolatedHtml, embeddedHtml } =
             (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
           assert.strictEqual(
             trimCardContainer(stripScopedCSSAttributes(isolatedHtml!)),
             cleanWhiteSpace(`<h1> Van Gogh </h1>`),
+          );
+          assert.strictEqual(
+            trimCardContainer(
+              stripScopedCSSAttributes(
+                embeddedHtml![`${testRealmURL}person/Person`],
+              ),
+            ),
+            cleanWhiteSpace(`<h1> Person Embedded Card: Van Gogh </h1>`),
           );
         } else {
           assert.ok(
@@ -681,58 +668,27 @@ module(`Integration | search-index`, function (hooks) {
           );
         }
       }
-    }
-
-    {
       // perform a new index to assert that render stack is still consistent
-      (await getDbAdapter()).reset();
-      let cardApi: typeof import('https://cardstack.com/base/card-api');
-      let string: typeof import('https://cardstack.com/base/string');
-      cardApi = await loader.import(`${baseRealm.url}card-api`);
-      string = await loader.import(`${baseRealm.url}string`);
-
-      let { field, contains, CardDef, Component } = cardApi;
-      let { default: StringField } = string;
-
-      class Person extends CardDef {
-        @field firstName = contains(StringField);
-        static isolated = class Isolated extends Component<typeof this> {
-          <template>
-            <h1><@fields.firstName /></h1>
-          </template>
-        };
-      }
-      let { realm } = await setupIntegrationTestRealm({
-        loader,
-        contents: {
-          'person.gts': { Person },
-          'vangogh.json': {
-            data: {
-              attributes: {
-                firstName: 'Van Gogh',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: './person',
-                  name: 'Person',
-                },
-              },
-            },
-          },
-        },
-      });
-      let indexer = realm.searchIndex;
+      await indexer.fullIndex();
       {
         let entry = await indexer.cardDocument(
           new URL(`${testRealmURL}vangogh`),
         );
         if (entry?.type === 'doc') {
           assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
-          let { isolatedHtml } =
+          let { isolatedHtml, embeddedHtml } =
             (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
           assert.strictEqual(
             trimCardContainer(stripScopedCSSAttributes(isolatedHtml!)),
             cleanWhiteSpace(`<h1> Van Gogh </h1>`),
+          );
+          assert.strictEqual(
+            trimCardContainer(
+              stripScopedCSSAttributes(
+                embeddedHtml![`${testRealmURL}person/Person`],
+              ),
+            ),
+            cleanWhiteSpace(`<h1> Person Embedded Card: Van Gogh </h1>`),
           );
         } else {
           assert.ok(
@@ -745,14 +701,6 @@ module(`Integration | search-index`, function (hooks) {
   });
 
   test('can recover from rendering a card that has a nested card with a template error', async function (assert) {
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-
-    let { field, contains, CardDef, Component, FieldDef } = cardApi;
-    let { default: StringField } = string;
-
     class Boom extends FieldDef {
       @field firstName = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
@@ -781,6 +729,11 @@ module(`Integration | search-index`, function (hooks) {
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <h1><@fields.firstName /></h1>
+        </template>
+      };
+      static embedded = class Isolated extends Component<typeof this> {
+        <template>
+          <h1> Person Embedded Card: <@fields.firstName /></h1>
         </template>
       };
     }
@@ -841,7 +794,7 @@ module(`Integration | search-index`, function (hooks) {
     );
     if (entry?.type === 'doc') {
       assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
-      let { isolatedHtml } =
+      let { isolatedHtml, embeddedHtml } =
         (await getInstance(
           realm,
           new URL(`${testRealmURL}working-van-gogh`),
@@ -849,6 +802,14 @@ module(`Integration | search-index`, function (hooks) {
       assert.strictEqual(
         trimCardContainer(stripScopedCSSAttributes(isolatedHtml!)),
         cleanWhiteSpace(`<h1> Van Gogh </h1>`),
+      );
+      assert.strictEqual(
+        trimCardContainer(
+          stripScopedCSSAttributes(
+            embeddedHtml![`${testRealmURL}person/Person`],
+          ),
+        ),
+        cleanWhiteSpace(`<h1> Person Embedded Card: Van Gogh </h1>`),
       );
     } else {
       assert.ok(
@@ -859,14 +820,6 @@ module(`Integration | search-index`, function (hooks) {
   });
 
   test('can recover from rendering a card that encounters a template error in its own custom component', async function (assert) {
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-
-    let { field, contains, CardDef, FieldDef, Component } = cardApi;
-    let { default: StringField } = string;
-
     class CustomBoom extends FieldDef {
       @field firstName = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
@@ -899,6 +852,11 @@ module(`Integration | search-index`, function (hooks) {
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <h1><@fields.firstName /></h1>
+        </template>
+      };
+      static embedded = class Isolated extends Component<typeof this> {
+        <template>
+          <h1> Person Embedded Card: <@fields.firstName /></h1>
         </template>
       };
     }
@@ -961,12 +919,30 @@ module(`Integration | search-index`, function (hooks) {
     );
     if (entry?.type === 'doc') {
       assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
-      let { isolatedHtml } =
+      let { isolatedHtml, embeddedHtml } =
         (await getInstance(realm, new URL(`${testRealmURL}working-vangogh`))) ??
         {};
       assert.strictEqual(
         trimCardContainer(stripScopedCSSAttributes(isolatedHtml!)),
         cleanWhiteSpace(`<h1> Van Gogh </h1>`),
+      );
+      assert.strictEqual(
+        false,
+        isolatedHtml!.includes('id="ember'),
+        `isolated HTML does not include ember ID's`,
+      );
+      assert.strictEqual(
+        trimCardContainer(
+          stripScopedCSSAttributes(
+            embeddedHtml![`${testRealmURL}person/Person`],
+          ),
+        ),
+        cleanWhiteSpace(`<h1> Person Embedded Card: Van Gogh </h1>`),
+      );
+      assert.strictEqual(
+        false,
+        Object.values(embeddedHtml!).join('').includes('id="ember'),
+        `embeddedHtml HTML does not include ember ID's`,
       );
     } else {
       assert.ok(
@@ -976,15 +952,234 @@ module(`Integration | search-index`, function (hooks) {
     }
   });
 
+  test('can capture atom html when indexing a card', async function (assert) {
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h1><@fields.firstName /></h1>
+        </template>
+      };
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <div class='atom'>{{@model.firstName}}</div>
+        </template>
+      };
+    }
+    let { realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'person.gts': { Person },
+        'vangogh.json': {
+          data: {
+            attributes: {
+              firstName: 'Van Gogh',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person',
+                name: 'Person',
+              },
+            },
+          },
+        },
+      },
+    });
+    let { atomHtml } =
+      (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
+
+    assert.strictEqual(
+      trimCardContainer(stripScopedCSSAttributes(atomHtml!)),
+      cleanWhiteSpace(`<div class="atom">Van Gogh</div>`),
+      'atom html is correct',
+    );
+    assert.strictEqual(
+      false,
+      atomHtml!.includes('id="ember'),
+      `atom HTML does not include ember ID's`,
+    );
+  });
+
+  test('can capture css when indexing a card', async function (assert) {
+    let { realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        // we use a string src here because shimmed modules are skipped by the indexer
+        'person.gts': `
+          import { contains, field, Component, CardDef } from 'https://cardstack.com/base/card-api';
+          import StringField from 'https://cardstack.com/base/string';
+
+          export class Person extends CardDef {
+            @field firstName = contains(StringField);
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                <h2><@fields.firstName /></h2>
+                <style>
+                  h2 {
+                    color: red;
+                  }
+                </style>
+              </template>
+            };
+          }
+        `,
+        'mango.json': {
+          data: {
+            attributes: { firstName: 'Mango' },
+            meta: {
+              adoptsFrom: { module: `./person`, name: 'Person' },
+            },
+          },
+        },
+      },
+    });
+
+    let indexer = realm.searchIndex;
+    let scope = `data-scopedcss-a61576b4d4-6ad446b263`;
+    let entry = await indexer.css(new URL(`${testRealmURL}person`));
+    if (entry?.type === 'css') {
+      assert.strictEqual(
+        cleanWhiteSpace(entry.source),
+        cleanWhiteSpace(`h2[${scope}] { color: red; }`),
+        'the CSS is correct',
+      );
+    } else {
+      assert.ok(
+        false,
+        `expected search entry to be a document but was: ${entry?.error.detail}`,
+      );
+    }
+    let { isolatedHtml } =
+      (await getInstance(realm, new URL(`${testRealmURL}mango`))) ?? {};
+    let fragment = isolatedHtml!.match(/<h2[^<]+<\/h2>/)![0];
+    assert.strictEqual(
+      cleanWhiteSpace(fragment),
+      cleanWhiteSpace(`<h2 ${scope}> Mango </h2>`),
+      'the HTML is correct',
+    );
+  });
+
+  test(`can generate embedded HTML for instance's card class hierarchy`, async function (assert) {
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+      static embedded = class Isolated extends Component<typeof this> {
+        <template>
+          <h1> Person Embedded Card: <@fields.firstName /></h1>
+        </template>
+      };
+    }
+
+    class FancyPerson extends Person {
+      @field favoriteColor = contains(StringField);
+      static embedded = class Isolated extends Component<typeof this> {
+        <template>
+          <h1>
+            Fancy Person Embedded Card:
+            <@fields.firstName />
+            -
+            <@fields.favoriteColor /></h1>
+        </template>
+      };
+    }
+
+    let { realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'person.gts': { Person },
+        'fancy-person.gts': { FancyPerson },
+        'germaine.json': {
+          data: {
+            attributes: {
+              firstName: 'Germaine',
+              favoriteColor: 'hot pink',
+              description: 'Fancy Germaine',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './fancy-person',
+                name: 'FancyPerson',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let { embeddedHtml } =
+      (await getInstance(realm, new URL(`${testRealmURL}germaine`))) ?? {};
+    assert.strictEqual(
+      false,
+      Object.values(embeddedHtml!).join('').includes('id="ember'),
+      `HTML does not include ember ID's`,
+    );
+    assert.strictEqual(
+      trimCardContainer(
+        stripScopedCSSAttributes(
+          embeddedHtml![`${testRealmURL}fancy-person/FancyPerson`],
+        ),
+      ),
+      cleanWhiteSpace(
+        `<h1> Fancy Person Embedded Card: Germaine - hot pink </h1>`,
+      ),
+      'default embedded HTML is correct',
+    );
+
+    let cardDefRefURL = internalKeyFor(baseCardRef, undefined);
+    assert.deepEqual(
+      Object.keys(embeddedHtml!),
+      [
+        `${testRealmURL}fancy-person/FancyPerson`,
+        `${testRealmURL}person/Person`,
+        cardDefRefURL,
+      ],
+      'embedded class hierarchy is correct',
+    );
+
+    assert.strictEqual(
+      trimCardContainer(
+        stripScopedCSSAttributes(embeddedHtml![`${testRealmURL}person/Person`]),
+      ),
+      cleanWhiteSpace(`<h1> Person Embedded Card: Germaine </h1>`),
+      `${testRealmURL}person/Person embedded HTML is correct`,
+    );
+    assert.strictEqual(
+      false,
+      embeddedHtml![`${testRealmURL}person/Person`].includes('id="ember'),
+      `${testRealmURL}person/Person embedded HTML does not include ember ID's`,
+    );
+    assert.strictEqual(
+      cleanWhiteSpace(stripScopedCSSAttributes(embeddedHtml![cardDefRefURL])),
+      cleanWhiteSpace(`
+        <div class="ember-view boxel-card-container boundaries field-component-card embedded-format display-container-true"
+              data-test-boxel-card-container 
+              data-test-card-format="embedded"
+              data-test-field-component-card>
+          <!---->
+          <div class="embedded-template">
+            <div class="thumbnail-section">
+              <div class="card-thumbnail">
+                <div class="card-thumbnail-text" data-test-card-thumbnail-text>Card</div>
+              </div>
+            </div>
+            <div class="info-section">
+              <h3 class="card-title" data-test-card-title></h3>
+              <h4 class="card-display-name" data-test-card-display-name>Card</h4>
+            </div>
+            <div class="card-description" data-test-card-description>Fancy Germaine</div>
+          </div>
+        </div>
+      `),
+      `${cardDefRefURL} embedded HTML is correct`,
+    );
+
+    assert.strictEqual(
+      false,
+      embeddedHtml![cardDefRefURL].includes('id="ember'),
+      `${cardDefRefURL} embedded HTML does not include ember ID's`,
+    );
+  });
+
   test('can index a card that has a cyclic relationship with the field of a card in its fields', async function (assert) {
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-
-    let { field, contains, linksTo, CardDef, FieldDef } = cardApi;
-    let { default: StringField } = string;
-
     class Person extends FieldDef {
       @field firstName = contains(StringField);
       @field pet = linksTo(() => PetCard);
@@ -1390,9 +1585,53 @@ module(`Integration | search-index`, function (hooks) {
   });
 
   test('search doc normalizes containsMany composite fields', async function (assert) {
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field lastName = contains(StringField);
+      @field email = contains(StringField);
+      @field posts = contains(NumberField);
+      @field fullName = contains(StringField, {
+        computeVia: function (this: Person) {
+          return `${this.firstName ?? ''} ${this.lastName ?? ''}`;
+        },
+      });
+      @field title = contains(StringField, {
+        computeVia: function (this: Person) {
+          return `${this.firstName ?? ''} ${this.lastName ?? ''}`;
+        },
+      });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+    }
+    class Post extends FieldDef {
+      @field title = contains(StringField);
+      @field description = contains(StringField);
+      @field author = contains(Person);
+      @field views = contains(NumberField);
+      @field createdAt = contains(DatetimeField);
+    }
+    class Booking extends FieldDef {
+      @field title = contains(StringField);
+      @field venue = contains(StringField);
+      @field startTime = contains(DatetimeField);
+      @field endTime = contains(DatetimeField);
+      @field hosts = containsMany(Person);
+      @field sponsors = containsMany(StringField);
+      @field posts = containsMany(Post);
+      @field description = contains(StringField, {
+        computeVia: function (this: Booking) {
+          return this.venue;
+        },
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
+    }
     let { realm } = await setupIntegrationTestRealm({
       loader,
       contents: {
+        'booking.gts': { Booking },
+        'person.gts': { Person },
+        'post.gts': { Post },
         'CatalogEntry/booking.json': {
           data: {
             attributes: {
@@ -1416,7 +1655,7 @@ module(`Integration | search-index`, function (hooks) {
               fields: {
                 demo: {
                   adoptsFrom: {
-                    module: 'http://localhost:4202/test/booking',
+                    module: '../booking',
                     name: 'Booking',
                   },
                 },
@@ -1716,7 +1955,7 @@ module(`Integration | search-index`, function (hooks) {
     }
   });
 
-  test('can index a card that contains a card with a linksToMany field', async function (assert) {
+  test('can index a card that contains a field with a linksToMany field', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
       contents: {
@@ -1756,7 +1995,7 @@ module(`Integration | search-index`, function (hooks) {
                 demo: {
                   adoptsFrom: {
                     module: `${testModuleRealm}pet-person`,
-                    name: 'PetPerson',
+                    name: 'PetPersonField',
                   },
                 },
               },
@@ -1824,7 +2063,7 @@ module(`Integration | search-index`, function (hooks) {
             demo: {
               adoptsFrom: {
                 module: `${testModuleRealm}pet-person`,
-                name: 'PetPerson',
+                name: 'PetPersonField',
               },
             },
           },
@@ -2331,6 +2570,7 @@ module(`Integration | search-index`, function (hooks) {
         description: 'Dog friend',
         friend: {
           id: `${testRealmURL}Friend/hassan`,
+          title: 'Hassan',
           firstName: 'Hassan',
           friend: {
             id: `${testRealmURL}Friend/mango`,
@@ -2506,6 +2746,7 @@ module(`Integration | search-index`, function (hooks) {
               id: vanGoghID,
               firstName: 'Van Gogh',
               friends: [{ id: hassanID }],
+              title: 'Van Gogh',
             },
           ],
         },
@@ -2619,6 +2860,7 @@ module(`Integration | search-index`, function (hooks) {
             {
               id: hassanID,
               firstName: 'Hassan',
+              title: 'Hassan',
               friends: [
                 { id: mangoID },
                 {
@@ -2813,6 +3055,7 @@ module(`Integration | search-index`, function (hooks) {
         'https://packages/@glimmer/tracking',
         'https://packages/ember-concurrency',
         'https://packages/ember-concurrency/-private/async-arrow-runtime',
+        'https://packages/ember-css-url',
         'https://packages/ember-modifier',
         'https://packages/ember-provide-consume-context',
         'https://packages/lodash',

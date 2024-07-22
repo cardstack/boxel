@@ -39,6 +39,5 @@
         "../boxel-ui/addon/**"
       ]
     }
-  },
-  "exclude": ["../base/__boxel/**/*"]
+  }
 }

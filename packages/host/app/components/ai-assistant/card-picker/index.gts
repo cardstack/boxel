@@ -65,7 +65,11 @@ export default class AiAssistantCardPicker extends Component<Signature> {
           (not this.isViewAllAttachedCards)
         )
       }}
-        <Pill {{on 'click' this.toggleViewAllAttachedCards}} data-test-view-all>
+        <Pill
+          @kind='button'
+          {{on 'click' this.toggleViewAllAttachedCards}}
+          data-test-view-all
+        >
           View All ({{this.cardsToDisplay.length}})
         </Pill>
       {{/if}}
@@ -85,8 +89,6 @@ export default class AiAssistantCardPicker extends Component<Signature> {
     </div>
     <style>
       .card-picker {
-        --pill-height: 1.875rem;
-        --pill-content-max-width: 10rem;
         background-color: var(--boxel-light);
         color: var(--boxel-dark);
         display: flex;

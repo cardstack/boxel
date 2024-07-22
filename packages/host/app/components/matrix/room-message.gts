@@ -1,5 +1,6 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
@@ -7,9 +8,11 @@ import { tracked, cached } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-import { modifier } from 'ember-modifier';
+import Modifier, { modifier, type NamedArgs } from 'ember-modifier';
 
 import { trackedFunction } from 'ember-resources/util/function';
+
+import { MatrixEvent } from 'matrix-js-sdk';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -17,6 +20,7 @@ import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
 
+import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -25,7 +29,6 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-import { type MessageField } from 'https://cardstack.com/base/room';
 
 import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
@@ -37,7 +40,8 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     roomId: string;
-    message: MessageField;
+    message: Message;
+    messages: Message[];
     index?: number;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
@@ -49,6 +53,49 @@ interface Signature {
 }
 
 const STREAMING_TIMEOUT_MS = 60000;
+
+interface SendReadReceiptModifierSignature {
+  Args: {
+    Named: {
+      matrixService: MatrixService;
+      roomId: string;
+      message: Message;
+      messages: Message[];
+    };
+    Positional: [];
+  };
+  Element: Element;
+}
+
+class SendReadReceipt extends Modifier<SendReadReceiptModifierSignature> {
+  async modify(
+    _element: Element,
+    _positional: [],
+    args: NamedArgs<SendReadReceiptModifierSignature>,
+  ) {
+    let { matrixService, message, messages, roomId } = args;
+    let isLastMessage = messages[messages.length - 1] === message;
+    if (!isLastMessage) {
+      return;
+    }
+
+    if (matrixService.currentUserEventReadReceipts.has(message.eventId)) {
+      return;
+    }
+
+    // sendReadReceipt expects an actual MatrixEvent (as defined in the matrix SDK), but it' not available to us here - however, we can fake it by adding the necessary methods
+    let matrixEvent = {
+      getId: () => message.eventId,
+      getRoomId: () => roomId,
+      getTs: () => message.created.getTime(),
+    };
+
+    // Without scheduling this after render, this produces the "attempted to update value, but it had already been used previously in the same computation" error
+    schedule('afterRender', () => {
+      matrixService.client.sendReadReceipt(matrixEvent as MatrixEvent);
+    });
+  }
+}
 
 export default class RoomMessage extends Component<Signature> {
   constructor(owner: unknown, args: Signature['Args']) {
@@ -89,6 +136,12 @@ export default class RoomMessage extends Component<Signature> {
     }}
     {{#if this.resources}}
       <AiAssistantMessage
+        {{SendReadReceipt
+          matrixService=this.matrixService
+          roomId=@roomId
+          message=@message
+          messages=@messages
+        }}
         id='message-container-{{@index}}'
         class='room-message'
         @formattedMessage={{htmlSafe
@@ -308,11 +361,20 @@ export default class RoomMessage extends Component<Signature> {
       .join(', ');
   }
 
+  get command() {
+    return this.args.message.command;
+  }
+
   private patchCard = task(async () => {
     if (this.operatorModeStateService.patchCard.isRunning) {
       return;
     }
-    let { payload, eventId } = this.args.message.command;
+    if (!this.command) {
+      throw new Error(
+        'patchCard requires a command on the message to be defined',
+      );
+    }
+    let { payload, eventId } = this.command!;
     this.matrixService.failedCommandState.delete(eventId);
     try {
       await this.operatorModeStateService.patchCard.perform(
@@ -337,18 +399,21 @@ export default class RoomMessage extends Component<Signature> {
   });
 
   private get previewPatchCode() {
-    let { commandType, payload } = this.args.message.command;
+    if (!this.command) {
+      throw new Error(
+        'patchCard requires a command on the message to be defined',
+      );
+    }
+    let { commandType, payload } = this.command!;
     return JSON.stringify({ commandType, payload }, null, 2);
   }
 
   @cached
   private get failedCommandState() {
-    if (!this.args.message.command?.eventId) {
+    if (!this.command?.eventId) {
       return undefined;
     }
-    return this.matrixService.failedCommandState.get(
-      this.args.message.command.eventId,
-    );
+    return this.matrixService.failedCommandState.get(this.command.eventId);
   }
 
   @cached
@@ -359,7 +424,7 @@ export default class RoomMessage extends Component<Signature> {
     if (this.failedCommandState) {
       return 'failed';
     }
-    return this.args.message.command.status;
+    return this.command?.status ?? 'ready';
   }
 
   @action private viewCodeToggle() {

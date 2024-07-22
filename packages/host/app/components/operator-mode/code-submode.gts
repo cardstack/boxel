@@ -20,7 +20,7 @@ import { provide } from 'ember-provide-consume-context';
 import { Accordion } from '@cardstack/boxel-ui/components';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
-import type { PanelContext } from '@cardstack/boxel-ui/components';
+import type { ResizablePanel } from '@cardstack/boxel-ui/components';
 import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
@@ -29,14 +29,13 @@ import {
   hasExecutableExtension,
   RealmPaths,
   type ResolvedCodeRef,
-  RealmSessionContextName,
+  PermissionsContextName,
 } from '@cardstack/runtime-common';
 import { SerializedError } from '@cardstack/runtime-common/error';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode/code-submode/editor-indicator';
-import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
@@ -52,7 +51,7 @@ import type CardService from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type RealmInfoService from '@cardstack/host/services/realm-info-service';
+import RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
@@ -119,7 +118,7 @@ export default class CodeSubmode extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare recentFilesService: RecentFilesService;
   @service private declare environmentService: EnvironmentService;
-  @service private declare realmInfoService: RealmInfoService;
+  @service private declare realm: RealmService;
 
   @tracked private loadFileError: string | null = null;
   @tracked private userHasDismissedURLError = false;
@@ -500,18 +499,18 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action
-  private onListPanelContextChange(listPanelContext: PanelContext[]) {
-    this.panelWidths.leftPanel = listPanelContext[0]?.lengthPx;
-    this.panelWidths.codeEditorPanel = listPanelContext[1]?.lengthPx;
-    this.panelWidths.rightPanel = listPanelContext[2]?.lengthPx;
+  private onHorizontalPanelChange(panels: ResizablePanel[]) {
+    this.panelWidths.leftPanel = panels[0]?.lengthPx;
+    this.panelWidths.codeEditorPanel = panels[1]?.lengthPx;
+    this.panelWidths.rightPanel = panels[2]?.lengthPx;
 
     localStorage.setItem(CodeModePanelWidths, JSON.stringify(this.panelWidths));
   }
 
   @action
-  private onFilePanelContextChange(filePanelContext: PanelContext[]) {
-    this.panelHeights.filePanel = filePanelContext[0]?.lengthPx;
-    this.panelHeights.recentPanel = filePanelContext[1]?.lengthPx;
+  private onVerticalPanelChange(panels: ResizablePanel[]) {
+    this.panelHeights.filePanel = panels[0]?.lengthPx;
+    this.panelHeights.recentPanel = panels[1]?.lengthPx;
 
     localStorage.setItem(
       CodeModePanelHeights,
@@ -604,10 +603,9 @@ export default class CodeSubmode extends Component<Signature> {
         throw new Error(`bug: CreateFileModal not instantiated`);
       }
       this.isCreateModalOpen = true;
-      await this.realmInfoService.fetchAllKnownRealmInfos.perform();
       let url = await this.createFileModal.createNewFile(
         fileType,
-        new URL(this.realmInfoService.userDefaultRealm.path),
+        new URL(this.realm.userDefaultRealm.path),
         definitionClass,
         sourceInstance,
       );
@@ -664,26 +662,25 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   get isReadOnly() {
-    return !this.readyFile.realmSession.canWrite;
+    return !this.realm.canWrite(this.readyFile.url);
   }
 
-  @provide(RealmSessionContextName)
-  get realmSession() {
-    return this.readyFile.realmSession;
+  @provide(PermissionsContextName)
+  get permissions() {
+    return this.realm.permissions(this.readyFile.url);
   }
 
   <template>
-    <RealmInfoProvider @realmURL={{this.realmURL}}>
-      <:ready as |realmInfo|>
-        <div
-          class='code-mode-background'
-          style={{this.backgroundURLStyle realmInfo.backgroundURL}}
-        ></div>
-      </:ready>
-    </RealmInfoProvider>
+    {{#let (this.realm.info this.realmURL.href) as |realmInfo|}}
+      <div
+        class='code-mode-background'
+        style={{this.backgroundURLStyle realmInfo.backgroundURL}}
+      ></div>
+    {{/let}}
     <SubmodeLayout
       @onCardSelectFromSearch={{this.openSearchResultInEditor}}
       @hideAiAssistant={{true}}
+      as |search|
     >
       <div
         class='code-mode'
@@ -708,7 +705,7 @@ export default class CodeSubmode extends Component<Signature> {
         </div>
         <ResizablePanelGroup
           @orientation='horizontal'
-          @onListPanelContextChange={{this.onListPanelContextChange}}
+          @onPanelChange={{this.onHorizontalPanelChange}}
           class='columns'
           as |ResizablePanel ResizeHandle|
         >
@@ -719,7 +716,7 @@ export default class CodeSubmode extends Component<Signature> {
             <div class='column'>
               <ResizablePanelGroup
                 @orientation='vertical'
-                @onListPanelContextChange={{this.onFilePanelContextChange}}
+                @onPanelChange={{this.onVerticalPanelChange}}
                 @reverseCollapse={{true}}
                 as |VerticallyResizablePanel VerticallyResizeHandle|
               >
@@ -744,6 +741,7 @@ export default class CodeSubmode extends Component<Signature> {
                           @delete={{this.setItemToDelete}}
                           @goToDefinition={{this.goToDefinition}}
                           @createFile={{perform this.createFile}}
+                          @openSearch={{search.openSearchToResults}}
                           data-test-card-inspector-panel
                         />
                       {{/if}}

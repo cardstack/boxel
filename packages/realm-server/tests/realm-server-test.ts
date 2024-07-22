@@ -142,11 +142,15 @@ module('Realm Server', function (hooks) {
   function setupPermissionedRealm(
     hooks: NestedHooks,
     permissions: RealmPermissions,
+    fileSystem?: Record<string, string | LooseSingleCardDocument>,
   ) {
     setupDB(hooks, {
       beforeEach: async (dbAdapter, queue) => {
         dir = dirSync();
-        copySync(join(__dirname, 'cards'), dir.name);
+        // If a fileSystem is provided, use it to populate the test realm, otherwise copy the default cards
+        if (!fileSystem) {
+          copySync(join(__dirname, 'cards'), dir.name);
+        }
         let virtualNetwork = createVirtualNetwork();
 
         ({ testRealm, testRealmServer } = await runTestRealmServer({
@@ -156,6 +160,7 @@ module('Realm Server', function (hooks) {
           permissions,
           dbAdapter,
           queue,
+          fileSystem,
         }));
 
         request = supertest(testRealmServer);
@@ -211,6 +216,7 @@ module('Realm Server', function (hooks) {
             id: `${testRealmHref}person-1`,
             type: 'card',
             attributes: {
+              title: 'Mango',
               firstName: 'Mango',
               description: null,
               thumbnailURL: null,
@@ -1589,6 +1595,351 @@ module('Realm Server', function (hooks) {
     });
   });
 
+  module('/_search-prerendered GET request', function (_hooks) {
+    module(
+      'instances with no embedded template css of its own',
+      function (hooks) {
+        setupPermissionedRealm(
+          hooks,
+          {
+            '*': ['read'],
+          },
+          {
+            'person.gts': `
+              import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+              import StringCard from "https://cardstack.com/base/string";
+
+              export class Person extends CardDef {
+                @field firstName = contains(StringCard);
+                static isolated = class Isolated extends Component<typeof this> {
+                  <template>
+                    <h1><@fields.firstName/></h1>
+                  </template>
+                }
+                static embedded = class Embedded extends Component<typeof this> {
+                  <template>
+                    Embedded Card Person: <@fields.firstName/>
+                  </template>
+                }
+              }
+            `,
+            'john.json': {
+              data: {
+                attributes: {
+                  firstName: 'John',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person',
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+          },
+        );
+
+        test('endpoint will respond with a bad request if html format is not provided', async function (assert) {
+          let response = await request
+            .get(`/_search-prerendered`)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 400, 'HTTP 200 status');
+
+          assert.ok(
+            response.body.errors[0].detail.includes(
+              "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint",
+            ),
+          );
+        });
+
+        test('returns prerendered instances', async function (assert) {
+          let query: Query & { prerenderedHtmlFormat: string } = {
+            filter: {
+              on: {
+                module: `${testRealmHref}person`,
+                name: 'Person',
+              },
+              eq: {
+                firstName: 'John',
+              },
+            },
+            prerenderedHtmlFormat: 'embedded',
+          };
+          let response = await request
+            .get(`/_search-prerendered?${stringify(query)}`)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('X-boxel-realm-url'),
+            testRealmURL.href,
+            'realm url header is correct',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-public-readable'),
+            'true',
+            'realm is public readable',
+          );
+          let json = response.body;
+
+          assert.strictEqual(
+            json.data.length,
+            1,
+            'one card instance is returned in the search results',
+          );
+
+          assert.strictEqual(json.data[0].type, 'prerendered-card');
+
+          assert.true(
+            json.data[0].attributes.html
+              .replace(/\s+/g, ' ')
+              .includes('Embedded Card Person: John'),
+            'embedded html looks correct',
+          );
+
+          assert.deepEqual(
+            json.included,
+            [],
+            'no css is present in the response',
+          );
+
+          assert.strictEqual(json.meta.page.total, 1, 'total count is correct');
+        });
+      },
+    );
+
+    module('instances whose embedded template has css', function (hooks) {
+      setupPermissionedRealm(
+        hooks,
+        {
+          '*': ['read'],
+        },
+        {
+          'person.gts': `
+          import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+          import StringCard from "https://cardstack.com/base/string";
+
+          export class Person extends CardDef {
+            @field firstName = contains(StringCard);
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                <h1><@fields.firstName/></h1>
+              </template>
+            }
+            static embedded = class Embedded extends Component<typeof this> {
+              <template>
+                Embedded Card Person: <@fields.firstName/>
+
+                <style>
+                  .border {
+                    border: 1px solid red;
+                  }
+                </style>
+              </template>
+            }
+          }
+        `,
+          'fancy-person.gts': `
+          import { Person } from './person';
+          import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+          import StringCard from "https://cardstack.com/base/string";
+
+          export class FancyPerson extends Person {
+            @field favoriteColor = contains(StringCard);
+
+            static embedded = class Embedded extends Component<typeof this> {
+              <template>
+                Embedded Card FancyPerson: <@fields.firstName/>
+
+                <style>
+                  .fancy-border {
+                    border: 1px solid pink;
+                  }
+                </style>
+              </template>
+            }
+          }
+        `,
+          'aaron.json': {
+            data: {
+              attributes: {
+                firstName: 'Aaron',
+                title: 'Person Aaron',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './person',
+                  name: 'Person',
+                },
+              },
+            },
+          },
+          'craig.json': {
+            data: {
+              attributes: {
+                firstName: 'Craig',
+                title: 'Person Craig',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './person',
+                  name: 'Person',
+                },
+              },
+            },
+          },
+          'jane.json': {
+            data: {
+              attributes: {
+                firstName: 'Jane',
+                favoriteColor: 'blue',
+                title: 'FancyPerson Jane',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './fancy-person',
+                  name: 'FancyPerson',
+                },
+              },
+            },
+          },
+          'jimmy.json': {
+            data: {
+              attributes: {
+                firstName: 'Jimmy',
+                favoriteColor: 'black',
+                title: 'FancyPerson Jimmy',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './fancy-person',
+                  name: 'FancyPerson',
+                },
+              },
+            },
+          },
+        },
+      );
+
+      test('returns instances with CardDef prerendered embedded html + css when there is no "on" filter', async function (assert) {
+        let response = await request
+          .get(`/_search-prerendered?prerenderedHtmlFormat=embedded`)
+          .set('Accept', 'application/vnd.card+json');
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          response.get('X-boxel-realm-url'),
+          testRealmURL.href,
+          'realm url header is correct',
+        );
+        assert.strictEqual(
+          response.get('X-boxel-realm-public-readable'),
+          'true',
+          'realm is public readable',
+        );
+        let json = response.body;
+
+        assert.strictEqual(
+          json.data.length,
+          4,
+          'returned results count is correct',
+        );
+
+        // 1st card: Person Aaron
+        assert.strictEqual(json.data[0].type, 'prerendered-card');
+        assert.true(
+          json.data[0].attributes.html
+            .replace(/\s+/g, ' ')
+            .includes('Person Aaron'),
+          'embedded html looks correct (CardDef template)',
+        );
+
+        // 2nd card: Person Craig
+        assert.strictEqual(json.data[1].type, 'prerendered-card');
+        assert.true(
+          json.data[1].attributes.html
+            .replace(/\s+/g, ' ')
+            .includes('Person Craig'),
+          'embedded html for Craig looks correct (CardDef template)',
+        );
+
+        // 3rd card: FancyPerson Jane
+        assert.strictEqual(json.data[2].type, 'prerendered-card');
+        assert.true(
+          json.data[2].attributes.html
+            .replace(/\s+/g, ' ')
+            .includes('FancyPerson Jane'),
+          'embedded html for Jane looks correct (CardDef template)',
+        );
+
+        // 4th card: FancyPerson Jimmy
+        assert.strictEqual(json.data[3].type, 'prerendered-card');
+        assert.true(
+          json.data[3].attributes.html
+            .replace(/\s+/g, ' ')
+            .includes('FancyPerson Jimmy'),
+          'embedded html for Jimmy looks correct (CardDef template)',
+        );
+
+        assert.strictEqual(json.meta.page.total, 4, 'total count is correct');
+      });
+
+      test('can filter prerendered instances', async function (assert) {
+        let query: Query & { prerenderedHtmlFormat: string } = {
+          filter: {
+            on: {
+              module: `${testRealmHref}person`,
+              name: 'Person',
+            },
+            eq: {
+              firstName: 'Jimmy',
+            },
+          },
+          prerenderedHtmlFormat: 'embedded',
+        };
+        let response = await request
+          .get(`/_search-prerendered?${stringify(query)}`)
+          .set('Accept', 'application/vnd.card+json');
+
+        let json = response.body;
+
+        assert.strictEqual(
+          json.data.length,
+          1,
+          'one prerendered card instance is returned in the filtered search results',
+        );
+        assert.strictEqual(json.data[0].id, 'http://127.0.0.1:4444/jimmy.json');
+      });
+
+      test('can sort prerendered instances', async function (assert) {
+        let query: Query & { prerenderedHtmlFormat: string } = {
+          sort: [
+            {
+              by: 'firstName',
+              on: { module: `${testRealmHref}person`, name: 'Person' },
+              direction: 'desc',
+            },
+          ],
+          prerenderedHtmlFormat: 'embedded',
+        };
+        let response = await request
+          .get(`/_search-prerendered?${stringify(query)}`)
+          .set('Accept', 'application/vnd.card+json');
+
+        let json = response.body;
+
+        assert.strictEqual(json.data.length, 4, 'results count is correct');
+
+        // firstName descending
+        assert.strictEqual(json.data[0].id, 'http://127.0.0.1:4444/jimmy.json');
+        assert.strictEqual(json.data[1].id, 'http://127.0.0.1:4444/jane.json');
+        assert.strictEqual(json.data[2].id, 'http://127.0.0.1:4444/craig.json');
+        assert.strictEqual(json.data[3].id, 'http://127.0.0.1:4444/aaron.json');
+      });
+    });
+  });
+
   module('_info GET request', function (_hooks) {
     module('public readable realm', function (hooks) {
       setupPermissionedRealm(hooks, {
@@ -1691,7 +2042,7 @@ module('Realm Server', function (hooks) {
     setupDB(hooks, {
       beforeEach: async (dbAdapter, queue) => {
         if (testRealm2) {
-          virtualNetwork.unmount(testRealm2.maybeExternalHandle);
+          virtualNetwork.unmount(testRealm2.handle);
         }
         ({ testRealm: testRealm2, testRealmServer: testRealmServer2 } =
           await runTestRealmServer({
@@ -1726,7 +2077,6 @@ module('Realm Server', function (hooks) {
         doc.data,
         doc,
         undefined,
-        loader,
       );
       assert.strictEqual(person.firstName, 'Mango', 'card data is correct');
     });
@@ -1750,7 +2100,6 @@ module('Realm Server', function (hooks) {
         doc.data,
         doc,
         undefined,
-        loader,
       );
       assert.strictEqual(person.firstName, 'Mango', 'card data is correct');
     });
@@ -1775,7 +2124,6 @@ module('Realm Server', function (hooks) {
         doc.data,
         doc,
         undefined,
-        loader,
       );
       assert.deepEqual(testCard.ref, ref, 'card data is correct');
     });
@@ -1836,6 +2184,7 @@ module('Realm Server', function (hooks) {
             id: `${testRealmHref}new-card`,
             type: 'card',
             attributes: {
+              title: 'Mango',
               firstName: 'Mango',
               description: null,
               thumbnailURL: null,
@@ -1961,6 +2310,10 @@ module('Realm Server', function (hooks) {
   });
 
   module('BOXEL_HTTP_BASIC_PW env var', function (hooks) {
+    setupPermissionedRealm(hooks, {
+      '*': ['read', 'write'],
+    });
+
     hooks.afterEach(function () {
       delete process.env.BOXEL_HTTP_BASIC_PW;
     });
@@ -1999,7 +2352,9 @@ module('Realm Server', function (hooks) {
         .auth('cardstack', process.env.BOXEL_HTTP_BASIC_PW);
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
       assert.ok(
-        /https?:\/\/[^/]+\/__boxel\/assets\/vendor\.css/.test(response.text),
+        /http:\/\/example.com\/notional-assets-host\/assets\/vendor\.css/.test(
+          response.text,
+        ),
         'the HTML returned is correct',
       );
     });
@@ -2239,7 +2594,7 @@ module('Realm server serving multiple realms', function (hooks) {
         dbAdapter,
         deferStartUp: true,
       });
-      virtualNetwork.mount(base.maybeExternalHandle);
+      virtualNetwork.mount(base.handle);
 
       testRealm = await createRealm({
         dir: dir.name,
@@ -2249,7 +2604,7 @@ module('Realm server serving multiple realms', function (hooks) {
         dbAdapter,
         deferStartUp: true,
       });
-      virtualNetwork.mount(testRealm.maybeExternalHandle);
+      virtualNetwork.mount(testRealm.handle);
 
       testRealmServer = new RealmServer(
         [base, testRealm],

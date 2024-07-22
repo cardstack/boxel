@@ -5,7 +5,7 @@ import Component from '@glimmer/component';
 
 import { didCancel, enqueueTask, restartableTask } from 'ember-concurrency';
 
-import { type Indexer, type TextFileRef } from '@cardstack/runtime-common';
+import { type IndexUpdater, type TextFileRef } from '@cardstack/runtime-common';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
 import {
@@ -98,12 +98,12 @@ export default class CardPrerender extends Component {
   });
 
   private doFromScratch = enqueueTask(async (realmURL: URL) => {
-    let { reader, indexer } = this.getRunnerParams();
+    let { reader, indexUpdater } = this.getRunnerParams();
     await this.resetLoaderInFastboot.perform();
     let currentRun = new CurrentRun({
       realmURL,
       reader,
-      indexer,
+      indexUpdater,
       renderCard: this.renderService.renderCard.bind(this.renderService),
     });
     setOwner(currentRun, getOwner(this)!);
@@ -120,12 +120,12 @@ export default class CardPrerender extends Component {
       operation: 'delete' | 'update',
       ignoreData: Record<string, string>,
     ) => {
-      let { reader, indexer } = this.getRunnerParams();
+      let { reader, indexUpdater } = this.getRunnerParams();
       await this.resetLoaderInFastboot.perform();
       let currentRun = new CurrentRun({
         realmURL,
         reader,
-        indexer,
+        indexUpdater,
         ignoreData: { ...ignoreData },
         renderCard: this.renderService.renderCard.bind(this.renderService),
       });
@@ -149,7 +149,7 @@ export default class CardPrerender extends Component {
 
   private getRunnerParams(): {
     reader: Reader;
-    indexer: Indexer;
+    indexUpdater: IndexUpdater;
   } {
     let self = this;
     function readFileAsText(
@@ -170,7 +170,7 @@ export default class CardPrerender extends Component {
       }
       return {
         reader: getRunnerOpts(optsId).reader,
-        indexer: getRunnerOpts(optsId).indexer,
+        indexUpdater: getRunnerOpts(optsId).indexUpdater,
       };
     } else {
       return {
@@ -180,7 +180,7 @@ export default class CardPrerender extends Component {
           ),
           readFileAsText,
         },
-        indexer: this.localIndexer.indexer,
+        indexUpdater: this.localIndexer.indexUpdater,
       };
     }
   }
