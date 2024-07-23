@@ -78,9 +78,7 @@ const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_CARD_SIZE_KB = 60;
 
-const DefaultSkillCards = [
-  `${baseRealm.url}SkillCard/card-editing`,
-];
+const DefaultSkillCards = [`${baseRealm.url}SkillCard/card-editing`];
 
 export type Event = Partial<IEvent>;
 
