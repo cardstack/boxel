@@ -295,7 +295,7 @@ export default class Room extends Component<Signature> {
       };
       let activeSkillCards = this.skills
         .filter((skill) => skill.isActive)
-        .map((c) => c.card);
+        .map((c) => c.cardResource.card!);
       await this.matrixService.sendMessage(
         this.args.roomId,
         message,

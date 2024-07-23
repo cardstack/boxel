@@ -31,6 +31,8 @@ import { Message } from '../lib/matrix-classes/message';
 
 import { RoomState } from '../lib/matrix-classes/room';
 
+import { getCard } from './card-resource';
+
 import type { Skill } from '../components/ai-assistant/skill-menu';
 
 import type CardService from '../services/card-service';
@@ -384,7 +386,10 @@ export class RoomResource extends Resource<Args> {
     }
     this.room.skills = [
       ...this.room.skills,
-      new TrackedObject({ card, isActive: true }),
+      new TrackedObject({
+        cardResource: getCard(this, () => card.id),
+        isActive: true,
+      }),
     ];
   }
 }

@@ -7,11 +7,13 @@ import { skillCardRef, type Query } from '@cardstack/runtime-common';
 
 import PillMenu from '@cardstack/host/components/pill-menu';
 
+import { CardResource } from '@cardstack/host/resources/card-resource';
+
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 export type Skill = {
-  card: SkillCard;
+  cardResource: CardResource;
   isActive: boolean;
 };
 
@@ -28,7 +30,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
     <PillMenu
       class='skill-menu'
       @query={{this.query}}
-      @items={{@skills}}
+      @items={{this.pillItems}}
       @itemDisplayName='Skill'
       @isExpandableHeader={{true}}
       @canAttachCard={{true}}
@@ -91,9 +93,11 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
 
   private get query(): Query {
     let selectedCardIds =
-      this.args.skills?.map((skill: Skill) => ({
-        not: { eq: { id: skill.card.id } },
-      })) ?? [];
+      this.args.skills
+        ?.filter((skill: Skill) => skill.cardResource.card)
+        .map((skill: Skill) => ({
+          not: { eq: { id: skill.cardResource.card!.id } },
+        })) ?? [];
     // query for only displaying skill cards that are not already selected
     return {
       filter: {
@@ -104,6 +108,15 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
 
   private get activeSkills() {
     return this.args.skills?.filter((skill) => skill.isActive) ?? [];
+  }
+
+  private get pillItems() {
+    return this.args.skills
+      ?.filter((skill: Skill) => skill.cardResource.card)
+      .map((skill: Skill) => ({
+        card: skill.cardResource.card!,
+        isActive: skill.isActive,
+      }));
   }
 
   @action attachSkill(card: CardDef) {

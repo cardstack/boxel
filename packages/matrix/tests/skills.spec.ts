@@ -460,6 +460,73 @@ test.describe('Skills', () => {
     expect(attachedSkillEventIds).toHaveLength(2);
   });
 
+  test('must use the latest version of skill card', async ({ page }) => {
+    const testCard = `${testHost}/hassan`;
+
+    await login(page, 'user1', 'pass');
+    await page.locator(`[data-test-room-settled]`).waitFor();
+
+    let room1 = await getRoomId(page);
+    await attachSkill(page, skillCard1, true);
+    await sendMessage(page, room1, 'Message 1', [testCard]);
+    await assertMessages(page, [
+      {
+        from: 'user1',
+        message: 'Message 1',
+        cards: [{ id: testCard, title: 'Hassan' }],
+      },
+    ]);
+    let events = await getRoomEvents('user1', 'pass', room1);
+    let messages = events.filter(
+      (ev) =>
+        ev.type === 'm.room.message' &&
+        ev.content?.msgtype === 'org.boxel.message',
+    );
+    let { attachedSkillEventIds } = JSON.parse(messages[0]?.content?.data);
+    expect(attachedSkillEventIds).toHaveLength(1);
+
+    // Updating skill's instructions
+    await page.locator(`[data-test-cards-grid-item="${skillCard1}"]`).click();
+    await page.locator(`[data-test-stack-card="${skillCard1}"] [data-test-edit-button]`).click();
+    const oldInstruction = await page.locator(`[data-test-field="instructions"] [data-test-boxel-input]`).inputValue();
+    const newInstruction = oldInstruction + 'With some updates';
+    await page.locator(`[data-test-field="instructions"] [data-test-boxel-input]`).fill(newInstruction);
+    await page.locator(`[data-test-stack-card="${skillCard1}"] [data-test-edit-button]`).click();
+
+    room1 = await getRoomId(page);
+    await sendMessage(page, room1, 'Message 2', [testCard]);
+    await assertMessages(page, [
+      {
+        from: 'user1',
+        message: 'Message 1',
+        cards: [{ id: testCard, title: 'Hassan' }],
+      },
+      {
+        from: 'user1',
+        message: 'Message 2',
+        cards: [{ id: testCard, title: 'Hassan' }, { id: skillCard1, title: 'Talk Like a Pirate' }],
+      },
+    ]);
+    events = await getRoomEvents('user1', 'pass', room1);
+    messages = events.filter(
+      (ev) =>
+        ev.type === 'm.room.message' &&
+        ev.content?.msgtype === 'org.boxel.message',
+    );
+    let { attachedSkillEventIds: attachedSkillEventIds1 } = JSON.parse(messages[1]?.content?.data);
+    expect(attachedSkillEventIds).not.toEqual(attachedSkillEventIds1);
+    let attachedSkillCard = events.find(ev => ev.event_id === attachedSkillEventIds[0]);
+    let attachedSkillCard1 = events.find(ev => ev.event_id === attachedSkillEventIds1[0]);
+    let cardId = JSON.parse(JSON.parse(attachedSkillCard!.content!.data).cardFragment).data.id;
+    let cardId1 = JSON.parse(JSON.parse(attachedSkillCard1!.content!.data).cardFragment).data.id;
+    expect(cardId).toEqual(cardId1);
+
+    // Revert skill's instructions
+    await page.locator(`[data-test-stack-card="${skillCard1}"] [data-test-edit-button]`).click();
+    await page.locator(`[data-test-field="instructions"] [data-test-boxel-input]`).fill(oldInstruction);
+    await page.locator(`[data-test-stack-card="${skillCard1}"] [data-test-edit-button]`).click();
+  });
+
   // TODO: CS-6985
   test.skip(`skills are persisted per room and do not leak between different users`, async ({
     page,
