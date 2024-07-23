@@ -182,7 +182,7 @@ export default class RoomMessage extends Component<Signature> {
             class='command-button-bar'
             {{! In test, if we change this isIdle check to the task running locally on this component, it will fail because roomMessages get destroyed during re-indexing. 
             Since services are long-lived so it we will not have this issue. I think this will go away when we convert our room field into a room component }}
-            {{! //TODO: Remove ember concurrent task after fixing CS-6987 }}
+            {{! TODO: Convert to non-EC async method after fixing CS-6987 }}
             data-test-command-card-idle={{this.commandService.run.isIdle}}
           >
             <Button
