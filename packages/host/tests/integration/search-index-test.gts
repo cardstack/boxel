@@ -22,7 +22,6 @@ import {
   testRealmURL,
   testRealmInfo,
   cleanWhiteSpace,
-  trimCardContainer,
   setupCardLogs,
   setupLocalIndexing,
   type CardDocFiles,
@@ -650,11 +649,11 @@ module(`Integration | search-index`, function (hooks) {
           let { isolatedHtml, embeddedHtml } =
             (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
           assert.strictEqual(
-            trimCardContainer(stripScopedCSSAttributes(isolatedHtml!)),
+            cleanWhiteSpace(stripScopedCSSAttributes(isolatedHtml!)),
             cleanWhiteSpace(`<h1> Van Gogh </h1>`),
           );
           assert.strictEqual(
-            trimCardContainer(
+            cleanWhiteSpace(
               stripScopedCSSAttributes(
                 embeddedHtml![`${testRealmURL}person/Person`],
               ),
@@ -679,11 +678,11 @@ module(`Integration | search-index`, function (hooks) {
           let { isolatedHtml, embeddedHtml } =
             (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
           assert.strictEqual(
-            trimCardContainer(stripScopedCSSAttributes(isolatedHtml!)),
+            cleanWhiteSpace(stripScopedCSSAttributes(isolatedHtml!)),
             cleanWhiteSpace(`<h1> Van Gogh </h1>`),
           );
           assert.strictEqual(
-            trimCardContainer(
+            cleanWhiteSpace(
               stripScopedCSSAttributes(
                 embeddedHtml![`${testRealmURL}person/Person`],
               ),
@@ -800,11 +799,11 @@ module(`Integration | search-index`, function (hooks) {
           new URL(`${testRealmURL}working-van-gogh`),
         )) ?? {};
       assert.strictEqual(
-        trimCardContainer(stripScopedCSSAttributes(isolatedHtml!)),
+        cleanWhiteSpace(stripScopedCSSAttributes(isolatedHtml!)),
         cleanWhiteSpace(`<h1> Van Gogh </h1>`),
       );
       assert.strictEqual(
-        trimCardContainer(
+        cleanWhiteSpace(
           stripScopedCSSAttributes(
             embeddedHtml![`${testRealmURL}person/Person`],
           ),
@@ -923,7 +922,7 @@ module(`Integration | search-index`, function (hooks) {
         (await getInstance(realm, new URL(`${testRealmURL}working-vangogh`))) ??
         {};
       assert.strictEqual(
-        trimCardContainer(stripScopedCSSAttributes(isolatedHtml!)),
+        cleanWhiteSpace(stripScopedCSSAttributes(isolatedHtml!)),
         cleanWhiteSpace(`<h1> Van Gogh </h1>`),
       );
       assert.strictEqual(
@@ -932,7 +931,7 @@ module(`Integration | search-index`, function (hooks) {
         `isolated HTML does not include ember ID's`,
       );
       assert.strictEqual(
-        trimCardContainer(
+        cleanWhiteSpace(
           stripScopedCSSAttributes(
             embeddedHtml![`${testRealmURL}person/Person`],
           ),
@@ -989,7 +988,7 @@ module(`Integration | search-index`, function (hooks) {
       (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
 
     assert.strictEqual(
-      trimCardContainer(stripScopedCSSAttributes(atomHtml!)),
+      cleanWhiteSpace(stripScopedCSSAttributes(atomHtml!)),
       cleanWhiteSpace(`<div class="atom">Van Gogh</div>`),
       'atom html is correct',
     );
@@ -1115,7 +1114,7 @@ module(`Integration | search-index`, function (hooks) {
       `HTML does not include ember ID's`,
     );
     assert.strictEqual(
-      trimCardContainer(
+      cleanWhiteSpace(
         stripScopedCSSAttributes(
           embeddedHtml![`${testRealmURL}fancy-person/FancyPerson`],
         ),
@@ -1138,7 +1137,7 @@ module(`Integration | search-index`, function (hooks) {
     );
 
     assert.strictEqual(
-      trimCardContainer(
+      cleanWhiteSpace(
         stripScopedCSSAttributes(embeddedHtml![`${testRealmURL}person/Person`]),
       ),
       cleanWhiteSpace(`<h1> Person Embedded Card: Germaine </h1>`),

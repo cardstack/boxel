@@ -12,7 +12,6 @@ import {
   testRealmURL,
   setupCardLogs,
   cleanWhiteSpace,
-  trimCardContainer,
   setupLocalIndexing,
   setupIntegrationTestRealm,
   lookupLoaderService,
@@ -177,7 +176,7 @@ module('Integration | card-prerender', function (hooks) {
       );
       if (entry?.type === 'instance') {
         assert.strictEqual(
-          trimCardContainer(stripScopedCSSAttributes(entry!.isolatedHtml!)),
+          cleanWhiteSpace(stripScopedCSSAttributes(entry!.isolatedHtml!)),
           cleanWhiteSpace(`<h3> Mango </h3>`),
           'the pre-rendered HTML is correct',
         );
@@ -191,7 +190,7 @@ module('Integration | card-prerender', function (hooks) {
       );
       if (entry?.type === 'instance') {
         assert.strictEqual(
-          trimCardContainer(stripScopedCSSAttributes(entry!.isolatedHtml!)),
+          cleanWhiteSpace(stripScopedCSSAttributes(entry!.isolatedHtml!)),
           cleanWhiteSpace(`<h3> Van Gogh </h3>`),
           'the pre-rendered HTML is correct',
         );

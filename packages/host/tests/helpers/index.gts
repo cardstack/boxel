@@ -82,13 +82,6 @@ export function cleanWhiteSpace(text: string) {
   return text.replace(/[\s ]+/g, ' ').trim();
 }
 
-export function trimCardContainer(text: string) {
-  return cleanWhiteSpace(text).replace(
-    /<div .*? data-test-field-component-card>\s?[<!---->]*? (.*?) <\/div>$/g,
-    '$1',
-  );
-}
-
 export function getMonacoContent(): string {
   return (window as any).monaco.editor.getModels()[0].getValue();
 }
