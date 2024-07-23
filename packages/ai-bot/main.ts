@@ -11,7 +11,7 @@ import {
   constructHistory,
   getModifyPrompt,
   getTools,
-  isCommandReactionEvent,
+  isCommandReactionStatusApplied,
 } from './helpers';
 import {
   shouldSetRoomTitle,
@@ -146,16 +146,17 @@ Common issues are:
         if (toStartOfTimeline) {
           return; // don't print paginated results
         }
-        if (event.getType() !== 'm.room.message') {
+        if (
+          event.getType() !== 'm.room.message'
+          // &&
+          // event.getType() !== 'm.reaction'
+        ) {
           return; // only print messages
         }
         if (event.getContent().msgtype === 'org.boxel.cardFragment') {
           return; // don't respond to card fragments, we just gather these in our history
         }
 
-        if (event.getContent().msgtype === 'org.boxel.commandResult') {
-          return; //don't responsd to command results
-        }
         if (event.getSender() === aiBotUserId) {
           return;
         }
@@ -212,7 +213,7 @@ Common issues are:
     if (!room) {
       return;
     }
-    if (!isCommandReactionEvent(event)) {
+    if (!isCommandReactionStatusApplied(event)) {
       return;
     }
     log.info(

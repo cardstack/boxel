@@ -94,7 +94,12 @@ export class Responder {
     toolCall: ChatCompletionMessageToolCall,
   ): FunctionToolCall {
     let { id, function: f } = toolCall;
-    return { id, name: f.name, arguments: JSON.parse(f.arguments) };
+    return {
+      type: 'function',
+      id,
+      name: f.name,
+      arguments: JSON.parse(f.arguments),
+    };
   }
 
   async handleFunctionToolCalls(msg: {

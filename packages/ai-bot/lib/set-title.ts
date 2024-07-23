@@ -2,7 +2,7 @@ import { type MatrixEvent, type IEventRelation } from 'matrix-js-sdk';
 import OpenAI from 'openai';
 import {
   type OpenAIPromptMessage,
-  isCommandReactionEvent,
+  isCommandReactionStatusApplied,
   attachedCardsToMessage,
   isCommandEvent,
   getRelevantCards,
@@ -145,7 +145,7 @@ export function shouldSetRoomTitle(
   event?: MatrixEvent,
 ) {
   return (
-    (isCommandReactionEvent(event) ||
+    (isCommandReactionStatusApplied(event) ||
       userAlreadyHasSentNMessages(rawEventLog, aiBotUserId)) &&
     !roomTitleAlreadySet(rawEventLog)
   );

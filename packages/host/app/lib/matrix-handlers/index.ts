@@ -175,7 +175,9 @@ export async function getCommandReactionEvents(
   roomId: string,
 ): Promise<ReactionEvent[]> {
   let events = await getRoomEvents(context, roomId);
-  return events.filter((e) => isCommandReactionEvent(e)) as ReactionEvent[];
+  return events.filter((e) =>
+    isCommandReactionStatusApplied(e),
+  ) as ReactionEvent[];
 }
 
 export function isCommandEvent(
@@ -191,7 +193,7 @@ export function isCommandEvent(
   );
 }
 
-export const isCommandReactionEvent = (
+export const isCommandReactionStatusApplied = (
   event: DiscreteMatrixEvent,
 ): event is ReactionEvent => {
   return (

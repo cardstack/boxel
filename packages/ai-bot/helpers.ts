@@ -3,13 +3,20 @@ import {
   type LooseSingleCardDocument,
   type CardResource,
 } from '@cardstack/runtime-common';
-import { MODIFY_SYSTEM_MESSAGE } from '@cardstack/runtime-common/helpers/ai';
+import {
+  FunctionToolCall,
+  MODIFY_SYSTEM_MESSAGE,
+} from '@cardstack/runtime-common/helpers/ai';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardFragmentContent,
   CommandEvent,
+  CommandResultEvent,
+  ReactionEvent,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
+import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
+import * as fs from 'fs';
 
 export const SKILL_INSTRUCTIONS_MESSAGE =
   '\nThe user has given you the following instructions. You must obey these instructions when responding to the user:\n';
@@ -64,6 +71,8 @@ export function constructHistory(history: IRoomEvent[]) {
           serializedCardFromFragments(id, fragments),
         );
       }
+    } else if (event.content.msgtype === 'org.boxel.commandResult') {
+    } else if (event.content.msgtype === 'org.boxel.command') {
     }
 
     if (event.content['m.relates_to']?.rel_type === 'm.replace') {
@@ -132,7 +141,9 @@ export interface OpenAIPromptMessage {
    * The role of the messages author. One of `system`, `user`, `assistant`, or
    * `function`.
    */
-  role: 'system' | 'user' | 'assistant';
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  tool_calls?: ChatCompletionMessageToolCall[];
+  tool_call_id?: string;
 }
 
 function setRelevantCards(
@@ -229,6 +240,59 @@ export function getTools(history: DiscreteMatrixEvent[], aiBotUserId: string) {
   }
 }
 
+export function isCommandResultEvent(
+  event: DiscreteMatrixEvent,
+): event is CommandResultEvent {
+  return (
+    event.type === 'm.room.message' &&
+    typeof event.content === 'object' &&
+    event.content.msgtype === 'org.boxel.commandResult'
+  );
+}
+
+export function isReactionEvent(
+  event: DiscreteMatrixEvent,
+): event is ReactionEvent {
+  return (
+    event.type === 'm.reaction' &&
+    event.content['m.relates_to'].rel_type === 'm.annotation'
+  );
+}
+
+function getReactionStatus(
+  commandEvent: DiscreteMatrixEvent,
+  history: DiscreteMatrixEvent[],
+) {
+  let maybeReactionEvent = history.find((e) => {
+    if (
+      isReactionEvent(e) &&
+      e.content['m.relates_to']?.event_id === commandEvent.event_id
+    ) {
+      return true;
+    }
+    return false;
+  });
+  return maybeReactionEvent && isReactionEvent(maybeReactionEvent)
+    ? maybeReactionEvent.content['m.relates_to'].key
+    : undefined;
+}
+
+function getResult(commandEvent: CommandEvent, history: DiscreteMatrixEvent[]) {
+  let maybeCommandResultEvent = history.find((e) => {
+    if (
+      isCommandResultEvent(e) &&
+      e.content['m.relates_to']?.event_id === commandEvent.event_id
+    ) {
+      return true;
+    }
+    return false;
+  });
+  return maybeCommandResultEvent &&
+    isCommandResultEvent(maybeCommandResultEvent)
+    ? maybeCommandResultEvent.content.result
+    : undefined;
+}
+
 export function getModifyPrompt(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
@@ -249,6 +313,41 @@ export function getModifyPrompt(
     let body = event.content.body;
     if (body) {
       if (event.sender === aiBotUserId) {
+        if (isCommandEvent(event)) {
+          historicalMessages.push({
+            role: 'assistant',
+            content: body,
+            tool_calls: [
+              {
+                id: event.content.data.toolCall.id,
+                function: {
+                  name: event.content.data.toolCall.name,
+                  arguments: JSON.stringify(
+                    event.content.data.toolCall.arguments,
+                  ),
+                },
+                type: 'function',
+              },
+            ],
+          });
+
+          let result = getResult(event as CommandEvent, history);
+          if (result) {
+            historicalMessages.push({
+              role: 'tool',
+              content: result,
+              tool_call_id: event.content.data.toolCall.id,
+            });
+          } else {
+            let reactionStatus = getReactionStatus(event, history);
+            historicalMessages.push({
+              role: 'tool',
+              content: reactionStatus ?? 'pending',
+              tool_call_id: event.content.data.toolCall.id,
+            });
+          }
+        }
+
         historicalMessages.push({
           role: 'assistant',
           content: body,
@@ -293,6 +392,7 @@ export function getModifyPrompt(
   ];
 
   messages = messages.concat(historicalMessages);
+  fs.writeFileSync('messages.json', JSON.stringify(messages, null, 2));
   return messages;
 }
 
@@ -334,8 +434,17 @@ export const isCommandReactionEvent = (event?: MatrixEvent) => {
   let content = event.getContent();
   return (
     event.getType() === 'm.reaction' &&
-    content['m.relates_to']?.rel_type === 'm.annotation' &&
-    content['m.relates_to']?.key === 'applied'
+    content['m.relates_to']?.rel_type === 'm.annotation'
+  );
+};
+
+export const isCommandReactionStatusApplied = (event?: MatrixEvent) => {
+  if (event === undefined) {
+    return false;
+  }
+  let content = event.getContent();
+  return (
+    isCommandReactionEvent(event) && content['m.relates_to']?.key === 'applied'
   );
 };
 

@@ -122,7 +122,9 @@ export default class CommandService extends Service {
     event: CommandResultEvent,
   ) {
     let toolCall = commandEvent.content.data.toolCall;
-    let serializedResults: LooseSingleCardDocument[] = event?.content?.result;
+    let serializedResults: LooseSingleCardDocument[] = JSON.parse(
+      event?.content?.result,
+    );
     if (toolCall.name === 'searchCard') {
       return {
         toolCallId: toolCall.id,

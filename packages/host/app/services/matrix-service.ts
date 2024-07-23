@@ -455,6 +455,7 @@ export default class MatrixService
   ) {
     let body = `Command Results from command event ${eventId}`;
     let html = markdownToHtml(body);
+    let jsonStringResult = JSON.stringify(result);
     let content: CommandResultContent = {
       'm.relates_to': {
         event_id: eventId,
@@ -464,7 +465,7 @@ export default class MatrixService
       body,
       formatted_body: html,
       msgtype: 'org.boxel.commandResult',
-      result,
+      result: jsonStringResult,
     };
     try {
       return await this.sendEvent(roomId, 'm.room.message', content);

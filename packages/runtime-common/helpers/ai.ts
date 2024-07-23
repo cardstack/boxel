@@ -458,4 +458,5 @@ export interface FunctionToolCall {
   id: string;
   name: string;
   arguments: { [key: string]: any };
+  type: 'function';
 }
