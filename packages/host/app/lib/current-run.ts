@@ -568,12 +568,10 @@ export class CurrentRun {
           }),
         ),
       );
-      embeddedHtml = embeddedHtml
-        .replace(
-          /<!-- __org\.boxel\.cardType START -->\s*.*?\s*<!-- __org\.boxel\.cardType END -->/gm,
-          typeName,
-        )
-        .trim();
+      embeddedHtml = embeddedHtml.replace(
+        /<!-- __org\.boxel\.cardType START -->\s*.*?\s*<!-- __org\.boxel\.cardType END -->/gm,
+        typeName,
+      );
 
       result[refURL] = embeddedHtml;
     }
