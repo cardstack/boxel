@@ -33,8 +33,7 @@
       "allowedVersions": {
         "mustache": "3",
         "prettier@github:cardstack/prettier#glimmer-style-tag-in-template-support": "3.1.0-dev",
-        "ember-qunit@5.1.2>ember-source": "*",
-        "ember-window-mock@0.9.0>ember-source": "*"
+        "ember-qunit@5.1.2>ember-source": "*"
       }
     },
     "patchedDependencies": {
