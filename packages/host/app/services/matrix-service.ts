@@ -79,7 +79,7 @@ const DEFAULT_PAGE_SIZE = 50;
 const MAX_CARD_SIZE_KB = 60;
 
 const DefaultSkillCards = [
-  `${baseRealm.url}SkillCard/43f62768-cbdb-401a-8130-30e12a29cf0d`,
+  `${baseRealm.url}SkillCard/card-editing`,
 ];
 
 export type Event = Partial<IEvent>;
