@@ -475,6 +475,7 @@ export class CurrentRun {
     if (adjustedResource && typesMaybeError?.type === 'types') {
       embeddedHtml = await this.buildEmbeddedHtml(
         adjustedResource,
+        searchData?._cardType ?? 'Card',
         typesMaybeError.types,
         identityContext,
       );
@@ -528,6 +529,7 @@ export class CurrentRun {
 
   private async buildEmbeddedHtml(
     resource: CardResource,
+    typeName: string,
     types: CardType[],
     identityContext: IdentityContextType,
   ): Promise<{ [refURL: string]: string }> {
@@ -559,6 +561,10 @@ export class CurrentRun {
           identityContext: modifiedContext,
           realmPath: this.#realmPaths,
         }),
+      );
+      embeddedHtml = embeddedHtml.replace(
+        /<!-- __org\.boxel\.cardType START -->\s*.*?\s*<!-- __org\.boxel\.cardType END -->/gm,
+        typeName,
       );
 
       result[refURL] = embeddedHtml;
