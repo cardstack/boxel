@@ -44,7 +44,8 @@
       "ember-css-url@1.0.0": "patches/ember-css-url@1.0.0.patch",
       "matrix-js-sdk@31.0.0": "patches/matrix-js-sdk@31.0.0.patch",
       "ember-basic-dropdown@8.0.4": "patches/ember-basic-dropdown@8.0.4.patch",
-      "ember-source@5.4.1": "patches/ember-source@5.4.1.patch"
+      "ember-source@5.4.1": "patches/ember-source@5.4.1.patch",
+      "ember-window-mock@1.0.0": "patches/ember-window-mock@1.0.0.patch"
     }
   },
   "devDependencies": {

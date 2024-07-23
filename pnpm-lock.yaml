@@ -25,6 +25,9 @@ patchedDependencies:
   ember-source@5.4.1:
     hash: oko46qetwhgpor6xgs7vahyney
     path: patches/ember-source@5.4.1.patch
+  ember-window-mock@1.0.0:
+    hash: vxcb2xxweyc64j67v24dzpz2jq
+    path: patches/ember-window-mock@1.0.0.patch
   fastboot@4.1.0:
     hash: kizxbxhfcldguz4jcwonfduu2y
     path: patches/fastboot@4.1.0.patch
@@ -1315,7 +1318,7 @@ importers:
         version: 2.1.3(ember-modifier@4.1.0)(ember-source@5.4.1)
       ember-window-mock:
         specifier: ^1.0.0
-        version: 1.0.0(@glint/template@1.3.0)
+        version: 1.0.0(patch_hash=vxcb2xxweyc64j67v24dzpz2jq)(@glint/template@1.3.0)
       eslint:
         specifier: ^8.52.0
         version: 8.57.0
@@ -13198,7 +13201,7 @@ packages:
     transitivePeerDependencies:
       - supports-color
 
-  /ember-window-mock@1.0.0(@glint/template@1.3.0):
+  /ember-window-mock@1.0.0(patch_hash=vxcb2xxweyc64j67v24dzpz2jq)(@glint/template@1.3.0):
     resolution: {integrity: sha512-zaTxOj72fGUXcOC6ib/+JC9SfXQepRPATN1qlyxPEaMN8qnCb3A0MmnBVuXazR6TS2HSxe7pCwoee5dByEVx3A==}
     dependencies:
       '@embroider/addon-shim': 1.8.9
@@ -13207,6 +13210,7 @@ packages:
       - '@glint/template'
       - supports-color
     dev: true
+    patched: true
 
   /emit-function@0.0.2:
     resolution: {integrity: sha512-WRHUvrW3lcV45D+IQ9F3Wro5jFjnJcX82IQHo0r47gkajeMEKpJPUeQ4BgbyUb1T1dT17XFkgPwwrg4owU0fRw==}
