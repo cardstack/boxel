@@ -31,5 +31,5 @@ NODE_NO_WARNINGS=1 \
   --toUrl='https://app.boxel.ai/published/' \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl='https://app.boxel.ai/base/' \
-  --fromUrl='https://app.stack.card/base/' \
+  --fromUrl='https://app.boxel.ai/base/' \
   --toUrl='https://app.boxel.ai/base/'
