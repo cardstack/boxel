@@ -245,10 +245,11 @@ export class CurrentRun {
     log.debug(`begin visiting file ${url.href}`);
     let localPath = this.#realmPaths.local(url);
 
-    let fileRef = await this.#reader.readFileAsText(localPath);
+    let fileRef = await this.#reader.readFileAsText(encodeURI(localPath));
     if (!fileRef) {
-      log.error(`could not read file '${url.href}', skipping...`);
-      return;
+      let error = new CardError(`missing file ${url.href}`, { status: 404 });
+      error.deps = [url.href];
+      throw error;
     }
     let { content, lastModified } = fileRef;
     if (hasExecutableExtension(url.href)) {
