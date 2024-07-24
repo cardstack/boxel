@@ -1,4 +1,5 @@
 import {
+  CardDef,
   Component,
   FieldDef,
   contains,
@@ -6,110 +7,170 @@ import {
   linksTo,
   linksToMany,
 } from 'https://cardstack.com/base/card-api';
-import { eq } from '@cardstack/boxel-ui/helpers';
-import { getLiveCards } from '@cardstack/runtime-common';
+import { cssVar, eq } from '@cardstack/boxel-ui/helpers';
+import { getLiveCards, cardTypeDisplayName } from '@cardstack/runtime-common';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
+// @ts-ignore
+import cssUrl from 'ember-css-url';
 import {
   Prompt,
   ProductRequirementDocument,
 } from './product-requirement-document';
 import { AppCard } from './app-card';
 
+class DashboardEmbedded extends Component<typeof Dashboard> {
+  <template>
+    <div class='dashboard'>
+      <aside class='intro-sidebar'>
+        <h3>
+          How to create your own app with AI in seconds
+        </h3>
+        <p>
+          Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+          eiusmod tempor.
+        </p>
+      </aside>
+      <div>
+        <h2 class='prompt-title'>Generate an App</h2>
+        <div class='prompt-container'>
+          <@fields.prompt @format='edit' />
+        </div>
+      </div>
+      <aside class='sample-app-sidebar'>
+        <h4 class='sample-app-title'>Browse Sample Apps</h4>
+        <ul class='sample-apps-list'>
+          {{#each this.instances key='id' as |card|}}
+            <li
+              {{@context.cardComponentModifier
+                card=card
+                format='data'
+                fieldType=undefined
+                fieldName=undefined
+              }}
+            >
+              {{#let (this.getEmbeddedCard card) as |CardComponent|}}
+                <CardComponent />
+              {{/let}}
+            </li>
+          {{/each}}
+        </ul>
+      </aside>
+    </div>
+    <style>
+      .dashboard {
+        display: grid;
+        grid-template-columns: 1fr 3fr 1fr;
+        gap: var(--boxel-sp);
+      }
+      .intro-sidebar {
+        max-width: 256px;
+        height: max-content;
+        min-height: 70%;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xl);
+        padding: var(--boxel-sp-lg);
+        background-color: var(--boxel-dark);
+        color: var(--boxel-light);
+        letter-spacing: var(--boxel-lsp);
+        border-radius: var(--boxel-border-radius-lg);
+      }
+      .intro-sidebar > h3 {
+        margin: 0;
+        font-weight: 700;
+        font-size: 1.5rem;
+      }
+      .intro-sidebar p {
+        margin: 0;
+      }
+
+      .prompt-title {
+        margin: 0;
+        font-weight: 700;
+        font-size: 1.5rem;
+      }
+      .prompt-container {
+        margin-top: var(--boxel-sp);
+        border: var(--boxel-border);
+        border-radius: var(--boxel-border-radius-lg);
+        padding: var(--boxel-sp-xl);
+        background-color: var(--boxel-light);
+      }
+
+      .sample-app-sidebar {
+        max-width: 300px;
+      }
+      .sample-app-title {
+        margin-top: 0;
+        margin-bottom: var(--boxel-sp);
+        font: 700 var(--boxel-font);
+      }
+      .sample-apps-list {
+        list-style-type: none;
+        margin: 0;
+        padding: 0;
+      }
+      .sample-apps-list > * + * {
+        margin-top: var(--boxel-sp);
+      }
+    </style>
+  </template>
+
+  @tracked
+  private declare liveQuery: {
+    instances: AppCard[];
+    isLoading: boolean;
+  };
+
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+    this.liveQuery = getLiveCards(
+      {
+        filter: {
+          type: {
+            name: 'AppCard',
+            module: 'http://localhost:4201/drafts/app-card',
+          },
+        },
+      },
+      ['http://localhost:4201/drafts/'],
+    ) as { instances: AppCard[]; isLoading: boolean };
+  }
+
+  get instances() {
+    return this.liveQuery?.instances;
+  }
+
+  getEmbeddedCard(card: CardDef) {
+    if (!card) {
+      return;
+    }
+    return card.constructor.getComponent(card);
+  }
+}
+
 class Dashboard extends FieldDef {
   static displayName = 'Dashboard';
   @field prompt = contains(Prompt);
-
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      <div class='dashboard'>
-        <aside class='intro-sidebar'>
-          <h3>
-            How to create your own app with AI in seconds
-          </h3>
-          <p>
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
-            eiusmod tempor.
-          </p>
-        </aside>
-        <div>
-          <h2 class='prompt-title'>Generate an App</h2>
-          <div class='prompt-container'>
-            <@fields.prompt @format='edit' />
-          </div>
-        </div>
-        <aside class='sample-app-sidebar'>
-          <h4 class='sample-app-title'>Browse Sample Apps</h4>
-        </aside>
-      </div>
-      <style>
-        .dashboard {
-          display: grid;
-          grid-template-columns: 1fr 3fr 1fr;
-          gap: var(--boxel-sp);
-          padding: var(--boxel-sp);
-          background-color: #f7f7f7;
-        }
-        .intro-sidebar {
-          max-width: 256px;
-          height: max-content;
-          min-height: 70%;
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-xl);
-          padding: var(--boxel-sp-lg);
-          background-color: var(--boxel-dark);
-          color: var(--boxel-light);
-          letter-spacing: var(--boxel-lsp);
-          border-radius: var(--boxel-border-radius-lg);
-        }
-        .intro-sidebar > h3 {
-          margin: 0;
-          font-weight: 700;
-          font-size: 1.5rem;
-        }
-        .intro-sidebar p {
-          margin: 0;
-        }
-
-        .prompt-title {
-          margin: 0;
-          font-weight: 700;
-          font-size: 1.5rem;
-        }
-        .prompt-container {
-          margin-top: var(--boxel-sp);
-          border: var(--boxel-border);
-          border-radius: var(--boxel-border-radius-lg);
-          padding: var(--boxel-sp-xl);
-          background-color: var(--boxel-light);
-        }
-
-        .sample-app-sidebar {
-          max-width: 300px;
-        }
-        .sample-app-title {
-          margin: 0;
-          font: 700 var(--boxel-font);
-        }
-      </style>
-    </template>
-  };
+  static embedded = DashboardEmbedded;
 }
 
 class RequirementsEmbedded extends Component<typeof Requirements> {
   <template>
     <div class='requirements'>
-      <aside class='reecent-reqs-sidebar'>
-        <h3 class='reecent-reqs-title'>Recent Requirements</h3>
+      <aside class='recent-reqs-sidebar'>
+        <h3 class='recent-reqs-title'>Recent Requirements</h3>
         <ul>
           {{#each this.instances as |doc|}}
-            <li><button
-                {{on 'click' (fn this.openDoc doc)}}
-              >{{doc.title}}</button></li>
+            <li>
+              <button {{on 'click' (fn this.openDoc doc)}}>
+                {{doc.title}}
+              </button>
+            </li>
           {{/each}}
         </ul>
       </aside>
@@ -123,13 +184,11 @@ class RequirementsEmbedded extends Component<typeof Requirements> {
         display: grid;
         grid-template-columns: auto 1fr;
         gap: var(--boxel-sp);
-        padding: var(--boxel-sp);
-        background-color: #f7f7f7;
       }
-      .reecent-reqs-sidebar {
+      .recent-reqs-sidebar {
         max-width: 235px;
       }
-      .reecent-reqs-title {
+      .recent-reqs-title {
         margin: 0;
         font: 700 var(--boxel-font);
       }
@@ -169,15 +228,17 @@ class Requirements extends FieldDef {
   static displayName = 'Requirements';
   @field document = linksTo(ProductRequirementDocument);
   @field recentRequirements = linksToMany(ProductRequirementDocument);
-
   static embedded = RequirementsEmbedded;
 }
 
 class Isolated extends AppCard.isolated {
-  tabs = ['dashboard', 'requirements'];
+  tabs = ['Dashboard', 'Requirements'];
   <template>
     <section class='main'>
-      <header class='header'>
+      <header
+        class='header'
+        style={{cssVar db-header-bg-color=this.headerColor}}
+      >
         <h1 class='title'><@fields.title /></h1>
         <nav class='nav'>
           <ul class='tab-list'>
@@ -195,7 +256,7 @@ class Isolated extends AppCard.isolated {
         </nav>
       </header>
       <div class='content'>
-        {{#if (eq this.currentTabName 'requirements')}}
+        {{#if (eq this.currentTabName 'Requirements')}}
           <@fields.requirements />
         {{else}}
           <@fields.dashboard />
@@ -211,7 +272,6 @@ class Isolated extends AppCard.isolated {
       }
       .header {
         --db-header-color: var(--boxel-dark);
-        --db-header-bg-color: var(--boxel-yellow);
         padding-right: var(--boxel-sp-lg);
         padding-left: var(--boxel-sp-lg);
         background-color: var(--db-header-bg-color);
@@ -275,10 +335,6 @@ export class AiAppGenerator extends AppCard {
   static isolated = Isolated;
 
   /*
-  static embedded = class Embedded extends Component<typeof this> {
-    <template></template>
-  }
-
   static atom = class Atom extends Component<typeof this> {
     <template></template>
   }
@@ -286,92 +342,6 @@ export class AiAppGenerator extends AppCard {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
   */
 }

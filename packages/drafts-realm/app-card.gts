@@ -617,4 +617,9 @@ export class AppCard extends CardDef {
   static headerColor = '#ffffff';
   @field tabs = containsMany(Tab);
   static isolated = AppCardIsolated;
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <@fields.title />
+    </template>
+  };
 }
