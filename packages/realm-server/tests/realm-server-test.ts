@@ -1855,6 +1855,15 @@ module('Realm Server', function (hooks) {
           'embedded html looks correct (CardDef template)',
         );
 
+        // TODO: why is card-api module + css not present in the boxel index table?
+        assert.deepEqual(
+          json.data[0].relationships['prerendered-card-css'].data[0],
+          {
+            type: 'prerendered-card-css',
+            id: 'https://cardstack.com/base/card-api',
+          },
+        );
+
         // 2nd card: Person Craig
         assert.strictEqual(json.data[1].type, 'prerendered-card');
         assert.true(
