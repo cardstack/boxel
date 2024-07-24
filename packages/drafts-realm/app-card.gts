@@ -1,12 +1,14 @@
+import BooleanField from 'https://cardstack.com/base/boolean';
 import CodeRefField from 'https://cardstack.com/base/code-ref';
 import {
   CardDef,
   field,
+  contains,
   containsMany,
   FieldDef,
+  Component,
+  realmURL,
 } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
-import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -15,170 +17,94 @@ import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
 // @ts-ignore
 import { restartableTask } from 'ember-concurrency';
-import { contains, realmURL } from 'https://cardstack.com/base/card-api';
-import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
-import { getLiveCards, cardTypeDisplayName } from '@cardstack/runtime-common';
-// @ts-ignore no types
+// @ts-ignore
 import cssUrl from 'ember-css-url';
-import BooleanField from 'https://cardstack.com/base/boolean';
+
+import {
+  AddButton,
+  Tooltip,
+  FieldContainer,
+  BoxelButton,
+  BoxelInput,
+} from '@cardstack/boxel-ui/components';
+import { cssVar, eq } from '@cardstack/boxel-ui/helpers';
+
+import {
+  getLiveCards,
+  cardTypeDisplayName,
+  codeRefWithAbsoluteURL,
+  type Loader,
+} from '@cardstack/runtime-common';
+
+class CodeRefEdit extends Component<typeof EditableCodeRef> {
+  <template>
+    <FieldContainer @label='Module' @tag='label'>
+      <BoxelInput @value={{this.module}} @onInput={{this.onModuleInput}} />
+    </FieldContainer>
+    <FieldContainer @label='Name' @tag='label'>
+      <BoxelInput @value={{this.name}} @onInput={{this.onNameInput}} />
+    </FieldContainer>
+  </template>
+
+  @tracked name?: string = this.args.model?.name;
+  @tracked module?: string = this.args.model?.module;
+
+  get ref() {
+    if (!this.name?.trim().length || !this.module?.trim().length) {
+      return null;
+    }
+    return { name: this.name, module: this.module };
+  }
+
+  setFullRef() {
+    this.args.set(this.ref);
+  }
+
+  @action onModuleInput(val: string) {
+    this.module = val?.trim();
+    this.setFullRef();
+  }
+
+  @action onNameInput(val: string) {
+    this.name = val?.trim();
+    this.setFullRef();
+  }
+}
+
+class EditableCodeRef extends CodeRefField {
+  static edit = CodeRefEdit;
+}
 
 class Tab extends FieldDef {
-  @field ref = contains(CodeRefField);
+  @field ref = contains(EditableCodeRef);
   @field isTable = contains(BooleanField);
 }
 
-class Isolated extends Component<typeof AppCard> {
-  @tracked activeTabIndex = 0;
-
-  @action
-  setActiveTab(index: number) {
-    this.activeTabIndex = index;
-    this.setSearch();
-  }
-
-  get activeTab() {
-    if (this.args.model.tabs?.length == 0) {
-      return undefined;
-    }
-    return this.args.model.tabs?.[this.activeTabIndex];
-  }
-
-  get noTabs() {
-    return this.args.model.tabs?.length == 0;
-  }
-
-  @tracked
-  private declare liveQuery: {
-    instances: CardDef[];
-    isLoading: boolean;
-  };
-
-  private setSearch() {
-    console.log('Setting the search up');
-    if (!this.activeTab) {
-      return;
-    }
-    let tabRef = this.activeTab.ref;
-    let realm = this.args.model[realmURL];
-    if (!realm) {
-      console.warn('Could not get realm');
-      return;
-    }
-    this.liveQuery = getLiveCards(
-      {
-        filter: {
-          type: {
-            name: tabRef.name,
-            module: tabRef.module.replace('../', realm.href),
-          },
-        },
-      },
-      realm ? [realm.href] : undefined,
-      async (ready: Promise<void> | undefined) => {
-        if (this.args.context?.actions) {
-          this.args.context.actions.doWithStableScroll(
-            this.args.model as CardDef,
-            async () => {
-              await ready;
-            },
-          );
-        }
-      },
-    );
-  }
-
-  get instances() {
-    if (!this.liveQuery) {
-      return [];
-    }
-    return this.liveQuery.instances;
-  }
-
-  get tableData() {
-    if (this.instances.length == 0) {
-      return {
-        headers: [],
-        rows: [],
-      };
-    }
-    let exampleCard = this.instances[0];
-    let headers: string[] = [];
-    for (let fieldName in exampleCard) {
-      if (
-        fieldName !== 'title' &&
-        fieldName !== 'description' &&
-        fieldName !== 'thumbnailURL' &&
-        fieldName !== 'id'
-      ) {
-        headers.push(fieldName);
-      }
-    }
-    headers.sort();
-
-    let rows = this.instances.map((card) => {
-      let row: string[] = [];
-      for (let header of headers) {
-        row.push((card as any)[header]);
-      }
-      return row;
-    });
-    return {
-      headers,
-      rows,
-    };
-  }
-
-  constructor(owner: Owner, args: any) {
-    super(owner, args);
-    this.setActiveTab(0);
-  }
-
-  @action
-  createNew() {
-    this.createCard.perform();
-  }
-
-  private createCard = restartableTask(async () => {
-    console.log('Create card', this, this.activeTab);
-    let realm = this.args.model[realmURL];
-    if (!realm) {
-      console.warn('Realm is required');
-      return;
-    }
-    if (!this.activeTab) {
-      console.warn('Could not get active tab');
-      return;
-    }
-    let tabRef = {
-      name: this.activeTab.ref.name,
-      module: this.activeTab.ref.module.replace('../', realm.href),
-    };
-    if (!this.args.model.id) {
-      console.warn('Could not get model id');
-      return;
-    }
-    await this.args.context?.actions?.createCard?.(
-      tabRef,
-      new URL(this.args.model.id),
-      {
-        realmURL: realm,
-      },
-    );
-  });
-
+class AppCardIsolated extends Component<typeof AppCard> {
   @tracked moduleName = '';
-
-  @action
-  async setupInitialTabs() {
+  @action updateModuleName(val: string) {
+    this.errorMessage = '';
+    this.moduleName = val;
+  }
+  @action async setupInitialTabs() {
     if (!this.moduleName) {
-      console.warn('Module name is required');
+      this.errorMessage = 'Module name is required';
       return;
     }
-
-    let loader = (import.meta as any).loader;
-    let realm = this.args.model[realmURL];
-    console.log('realm - ', realm);
-    let module = await loader.import(realm + this.moduleName);
+    if (!this.currentRealm) {
+      this.errorMessage = 'Current realm is not available';
+      return;
+    }
+    let loader: Loader = (import.meta as any).loader;
+    let module;
+    try {
+      module = await loader.import(this.currentRealm.href + this.moduleName);
+    } catch (e) {
+      console.error(e);
+      this.errorMessage =
+        e instanceof Error ? `Error: ${e.message}` : 'An error occurred';
+      return;
+    }
     let exportedCards = Object.entries(module).filter(
       ([_, declaration]) =>
         declaration &&
@@ -191,7 +117,7 @@ class Isolated extends Component<typeof AppCard> {
         new Tab({
           ref: {
             name,
-            module: '../' + this.moduleName,
+            module: this.moduleName,
           },
           isTable: false,
         }),
@@ -203,65 +129,31 @@ class Isolated extends Component<typeof AppCard> {
     this.moduleName = '';
   }
 
-  @action
-  updateModuleName(event: Event) {
-    this.moduleName = (event.target as HTMLInputElement).value;
-  }
-
-  get headerColor() {
-    let hc = Object.getPrototypeOf(this.args.model).constructor.headerColor;
-    console.log('hello', hc);
-    return hc;
-  }
-
   <template>
-    {{#if this.noTabs}}
-      <div
-        class='dashboard-content'
-        style='padding: 20px; max-width: 600px; margin: 0 auto;'
+    <section class='dashboard'>
+      <header
+        class='dashboard-header'
+        style={{cssVar db-header-bg-color=this.headerColor}}
       >
-        <p style='margin-bottom: 20px; font-size: 16px;'>It looks like this app
-          hasn't been setup yet. For a quick setup, enter the module name and
-          click create.</p>
-        <div style='display: flex; gap: 10px;'>
-          <input
-            type='text'
-            value={{this.moduleName}}
-            {{on 'input' this.updateModuleName}}
-            style='flex-grow: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px;'
-          />
-          <button
-            {{on 'click' this.setupInitialTabs}}
-            style='padding: 10px 20px; background-color: #009879; color: white; border: none; border-radius: 4px; cursor: pointer;'
-          >
-            Create
-          </button>
-        </div>
-      </div>
-    {{else}}
-      <section class='dashboard'>
-        <header
-          class='dashboard-header'
-          style='background-color: {{this.headerColor}}'
-        >
-          <h1 class='dashboard-title'><@fields.title /></h1>
-          <nav class='dashboard-nav'>
-            <ul class='tab-list'>
-              {{#each this.args.model.tabs as |tab index|}}
-                <li>
-                  <a
-                    {{on 'click' (fn this.setActiveTab index)}}
-                    class={{if (eq this.activeTabIndex index) 'active'}}
-                  >
-                    {{tab.ref.name}}
-                  </a>
-                </li>
-              {{/each}}
-            </ul>
-          </nav>
-        </header>
+        <h1 class='dashboard-title'><@fields.title /></h1>
+        <nav class='dashboard-nav'>
+          <ul class='tab-list'>
+            {{#each @model.tabs as |tab index|}}
+              <li>
+                <a
+                  {{on 'click' (fn this.setActiveTab index)}}
+                  class={{if (eq this.activeTabIndex index) 'active'}}
+                >
+                  {{tab.ref.name}}
+                </a>
+              </li>
+            {{/each}}
+          </ul>
+        </nav>
+      </header>
 
-        <div class='tab-content'>
+      <div class='tab-content'>
+        {{#if this.activeTab}}
           {{#if this.activeTab.isTable}}
             <div class='table'>
               {{#if this.liveQuery.isLoading}}
@@ -290,56 +182,56 @@ class Isolated extends Component<typeof AppCard> {
               {{/if}}
             </div>
           {{else}}
-            <div class='cards-grid'>
-              <ul class='cards' data-test-cards-grid-cards>
-                {{! use "key" to keep the list stable between refreshes }}
-                {{#each this.instances key='id' as |card|}}
-                  <li
-                    {{@context.cardComponentModifier
-                      card=card
-                      format='data'
-                      fieldType=undefined
-                      fieldName=undefined
-                    }}
-                    data-test-cards-grid-item={{card.id}}
-                    {{! In order to support scrolling cards into view
+            <ul class='cards-grid' data-test-cards-grid-cards>
+              {{! use "key" to keep the list stable between refreshes }}
+              {{#each this.instances key='id' as |card|}}
+                <li
+                  {{@context.cardComponentModifier
+                    card=card
+                    format='data'
+                    fieldType=undefined
+                    fieldName=undefined
+                  }}
+                  data-test-cards-grid-item={{card.id}}
+                  {{! In order to support scrolling cards into view
             we use a selector that is not pruned out in production builds }}
-                    data-cards-grid-item={{card.id}}
-                  >
-                    <div class='grid-card'>
-                      <div
-                        class='grid-thumbnail'
-                        style={{cssUrl 'background-image' card.thumbnailURL}}
-                      >
-                        {{#unless card.thumbnailURL}}
-                          <div
-                            class='grid-thumbnail-text'
-                            data-test-cards-grid-item-thumbnail-text
-                          >{{cardTypeDisplayName card}}</div>
-                        {{/unless}}
-                      </div>
-                      <h3
-                        class='grid-title'
-                        data-test-cards-grid-item-title
-                      >{{card.title}}</h3>
-                      <h4
-                        class='grid-display-name'
-                        data-test-cards-grid-item-display-name
-                      >{{cardTypeDisplayName card}}</h4>
+                  data-cards-grid-item={{card.id}}
+                >
+                  <div class='grid-card'>
+                    <div
+                      class='grid-thumbnail'
+                      style={{cssUrl 'background-image' card.thumbnailURL}}
+                    >
+                      {{#unless card.thumbnailURL}}
+                        <div
+                          class='grid-thumbnail-text'
+                          data-test-cards-grid-item-thumbnail-text
+                        >{{cardTypeDisplayName card}}</div>
+                      {{/unless}}
                     </div>
-                  </li>
+                    <h3
+                      class='grid-title'
+                      data-test-cards-grid-item-title
+                    >{{card.title}}</h3>
+                    <h4
+                      class='grid-display-name'
+                      data-test-cards-grid-item-display-name
+                    >{{cardTypeDisplayName card}}</h4>
+                  </div>
+                </li>
+              {{else}}
+                {{#if this.liveQuery.isLoading}}
+                  Loading...
+                {{else if this.errorMessage}}
+                  <p class='error'>{{this.errorMessage}}</p>
                 {{else}}
-                  {{#if this.liveQuery.isLoading}}
-                    Loading...
-                  {{else}}
-                    <p>No cards available</p>
-                  {{/if}}
-                {{/each}}
-              </ul>
-            </div>
+                  <p>No cards available</p>
+                {{/if}}
+              {{/each}}
+            </ul>
           {{/if}}
           {{#if @context.actions.createCard}}
-            <div class='add-button'>
+            <div class='add-card-button'>
               <Tooltip @placement='left' @offset={{6}}>
                 <:trigger>
                   <AddButton {{on 'click' this.createNew}} />
@@ -350,17 +242,37 @@ class Isolated extends Component<typeof AppCard> {
               </Tooltip>
             </div>
           {{/if}}
-        </div>
-      </section>
-    {{/if}}
-
+        {{else}}
+          <p>
+            It looks like this app hasn't been setup yet. For a quick setup,
+            enter the module name and click create.
+          </p>
+          <div class='module-input-group'>
+            <FieldContainer
+              @label='Module Name'
+              @vertical={{true}}
+              @tag='label'
+            >
+              <BoxelInput
+                @value={{this.moduleName}}
+                @onInput={{this.updateModuleName}}
+                @state={{if this.errorMessage 'invalid' 'initial'}}
+                @errorMessage={{this.errorMessage}}
+              />
+            </FieldContainer>
+            <BoxelButton
+              @kind='primary'
+              @size='touch'
+              {{on 'click' this.setupInitialTabs}}
+            >
+              Create
+            </BoxelButton>
+          </div>
+        {{/if}}
+      </div>
+    </section>
     <style>
       .dashboard {
-        --db-header-bg-color: var(
-          --boxel-db-header-bg-color,
-          var(--boxel-light)
-        );
-        --db-header-color: var(--boxel-db-header-color, var(--boxel-dark));
         position: relative;
         min-height: 100%;
         display: grid;
@@ -371,10 +283,14 @@ class Isolated extends Component<typeof AppCard> {
         letter-spacing: var(--boxel-lsp);
       }
       .dashboard-header {
+        position: sticky;
+        top: 0;
+        z-index: 1;
         padding-right: var(--boxel-sp-lg);
         padding-left: var(--boxel-sp-lg);
-        background-color: var(--db-header-bg-color);
-        color: var(--db-header-color);
+        background-color: var(--db-header-bg-color, var(--boxel-light));
+        color: var(--db-header-color, var(--boxel-dark));
+        box-shadow: var(--boxel-box-shadow);
       }
       .dashboard-title {
         margin: 0;
@@ -399,11 +315,14 @@ class Isolated extends Component<typeof AppCard> {
         font-weight: 700;
       }
       .active {
-        border-bottom: 4px solid var(--db-header-color);
+        border-bottom: 4px solid var(--db-header-color, var(--boxel-dark));
       }
       .dashboard-nav a:hover {
-        color: var(--db-header-color);
-        border-bottom: 4px solid var(--db-header-color);
+        color: var(--db-header-color, var(--boxel-dark));
+        border-bottom: 4px solid var(--db-header-color, var(--boxel-dark));
+      }
+      .table {
+        margin-bottom: 40px;
       }
       .styled-table {
         width: 100%;
@@ -468,19 +387,33 @@ class Isolated extends Component<typeof AppCard> {
         color: var(--grid-card-label-color);
       }
 
+      .tab-content {
+        position: relative;
+        width: 100%;
+        max-width: 70rem;
+        height: 100%;
+        margin: 0 auto;
+        padding: var(--boxel-sp-xl) var(--boxel-sp-xl) var(--boxel-sp-xxl);
+        font: var(--boxel-font);
+        letter-spacing: var(--boxel-lsp);
+      }
+      .module-input-group {
+        max-width: 800px;
+        margin-top: var(--boxel-sp-xl);
+        display: flex;
+        gap: var(--boxel-sp);
+      }
+      .module-input-group > *:first-child {
+        flex-grow: 1;
+      }
+      .module-input-group > button {
+        margin-top: var(--boxel-sp);
+      }
       .cards-grid {
         --grid-card-text-thumbnail-height: 6.25rem;
         --grid-card-label-color: var(--boxel-450);
         --grid-card-width: 10.125rem;
         --grid-card-height: 15.125rem;
-
-        max-width: 70rem;
-        margin: 0 auto;
-        padding: var(--boxel-sp-xl);
-        position: relative; /* Do not change this */
-        height: 100%;
-      }
-      .cards {
         list-style-type: none;
         margin: 0;
         padding: 0;
@@ -489,25 +422,22 @@ class Isolated extends Component<typeof AppCard> {
           auto-fit,
           minmax(var(--grid-card-width), 1fr)
         );
+        grid-auto-rows: max-content;
         gap: var(--boxel-sp);
         justify-items: center;
         height: 100%;
-      }
-      .cards > li {
-        height: max-content;
       }
       .operator-mode .buried .cards,
       .operator-mode .buried .add-button {
         display: none;
       }
 
-      .add-button {
+      .add-card-button {
         display: inline-block;
         position: sticky;
         left: 100%;
-        bottom: 10px;
+        bottom: 20px;
         z-index: 1;
-        margin: 10px;
       }
       .grid-card {
         width: var(--grid-card-width);
@@ -552,17 +482,139 @@ class Isolated extends Component<typeof AppCard> {
       .grid-title + .grid-display-name {
         margin-top: 0.2em;
       }
+      .error {
+        color: var(--boxel-error-100);
+      }
     </style>
   </template>
+
+  @tracked activeTabIndex = 0;
+  @tracked private declare liveQuery: {
+    instances: CardDef[];
+    isLoading: boolean;
+  };
+  @tracked errorMessage = '';
+
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+    this.setSearch();
+  }
+
+  get currentRealm() {
+    return this.args.model[realmURL];
+  }
+
+  get activeTab() {
+    if (!this.args.model.tabs?.length) {
+      return;
+    }
+    let tab = this.args.model.tabs[this.activeTabIndex];
+    if (!tab) {
+      return;
+    }
+    let { name, module } = tab.ref;
+    if (!name || !module) {
+      return;
+    }
+    return tab;
+  }
+
+  get activeTabRef() {
+    if (!this.activeTab || !this.currentRealm) {
+      return;
+    }
+    return codeRefWithAbsoluteURL(this.activeTab.ref, this.currentRealm);
+  }
+
+  get headerColor() {
+    return Object.getPrototypeOf(this.args.model).constructor.headerColor;
+  }
+
+  get tableData() {
+    if (!this.instances) {
+      return;
+    }
+    let exampleCard = this.instances[0];
+    let headers: string[] = [];
+    for (let fieldName in exampleCard) {
+      if (
+        fieldName !== 'title' &&
+        fieldName !== 'description' &&
+        fieldName !== 'thumbnailURL' &&
+        fieldName !== 'id'
+      ) {
+        headers.push(fieldName);
+      }
+    }
+    headers.sort();
+
+    let rows = this.instances.map((card) => {
+      let row: string[] = [];
+      for (let header of headers) {
+        row.push((card as any)[header]);
+      }
+      return row;
+    });
+    return {
+      headers,
+      rows,
+    };
+  }
+
+  @action setActiveTab(index: number) {
+    this.activeTabIndex = index;
+    this.setSearch();
+  }
+
+  private setSearch() {
+    if (!this.activeTabRef || !this.currentRealm) {
+      return;
+    }
+    this.liveQuery = getLiveCards(
+      { filter: { type: this.activeTabRef } },
+      [this.currentRealm.href], // we're only searching in the current realm
+      async (ready: Promise<void> | undefined) => {
+        if (this.args.context?.actions) {
+          this.args.context.actions.doWithStableScroll(
+            this.args.model as CardDef,
+            async () => {
+              await ready;
+            },
+          );
+        }
+      },
+    );
+  }
+
+  get instances() {
+    return this.liveQuery?.instances;
+  }
+
+  @action createNew() {
+    this.createCard.perform();
+  }
+
+  private createCard = restartableTask(async () => {
+    if (!this.activeTabRef) {
+      return;
+    }
+    try {
+      await this.args.context?.actions?.createCard?.(
+        this.activeTabRef,
+        undefined,
+      );
+    } catch (e) {
+      console.error(e);
+      this.errorMessage =
+        e instanceof Error ? `Error: ${e.message}` : 'An error occurred';
+    }
+  });
 }
 
 export class AppCard extends CardDef {
   static displayName = 'AppCard';
-
   static prefersWideFormat = true;
-  static headerColor = '#009879';
-
+  static headerColor = '#ffffff';
   @field tabs = containsMany(Tab);
-
-  static isolated = Isolated;
+  static isolated = AppCardIsolated;
 }
