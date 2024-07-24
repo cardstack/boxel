@@ -6,8 +6,6 @@ import { task } from 'ember-concurrency';
 
 import {
   type PatchData,
-  codeRefWithAbsoluteURL,
-  isResolvedCodeRef,
   baseRealm,
   LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -33,19 +31,6 @@ import { Message } from '../lib/matrix-classes/message';
 import { getSearchResults } from '../resources/search';
 
 import CardService from './card-service';
-
-const deserializeToQuery = (payload: SearchPayload) => {
-  // let maybeCodeRef = codeRefWithAbsoluteURL(
-  //   payload.filter.type,
-  //   new URL(payload.card_id),
-  // );
-  // if (!isResolvedCodeRef(payload)) {
-  //   throw new Error('Query returned by ai bot is not fully resolved');
-  // }
-  // payload.filter.type = maybeCodeRef;
-
-  return { filter: payload.filter };
-};
 
 function getComponent(cardOrField: BaseDef) {
   return cardOrField.constructor.getComponent(cardOrField);
@@ -84,7 +69,7 @@ export default class CommandService extends Service {
             "Search command can't run because it doesn't have all the arguments returned by open ai",
           );
         }
-        this.query = deserializeToQuery(payload);
+        this.query = { filter: payload.filter };
         await this.searchCardResource.loaded;
         let promises = this.searchCardResource.instances.map((c) =>
           this.cardService.serializeCard(c),
