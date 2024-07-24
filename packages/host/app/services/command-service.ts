@@ -35,14 +35,14 @@ import { getSearchResults } from '../resources/search';
 import CardService from './card-service';
 
 const deserializeToQuery = (payload: SearchPayload) => {
-  let maybeCodeRef = codeRefWithAbsoluteURL(
-    payload.filter.type,
-    new URL(payload.card_id),
-  );
-  if (!isResolvedCodeRef(maybeCodeRef)) {
-    throw new Error('Query returned by ai bot is not fully resolved');
-  }
-  payload.filter.type = maybeCodeRef;
+  // let maybeCodeRef = codeRefWithAbsoluteURL(
+  //   payload.filter.type,
+  //   new URL(payload.card_id),
+  // );
+  // if (!isResolvedCodeRef(payload)) {
+  //   throw new Error('Query returned by ai bot is not fully resolved');
+  // }
+  // payload.filter.type = maybeCodeRef;
 
   return { filter: payload.filter };
 };

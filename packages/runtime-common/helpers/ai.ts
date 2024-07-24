@@ -394,19 +394,15 @@ export function getPatchTool(attachedOpenCard: CardDef, patchSpec: any) {
   };
 }
 
-export function getSearchTool(attachedOpenCard: CardDef) {
+export function getSearchTool() {
   return {
     type: 'function',
     function: {
       name: 'searchCard',
-      description: `Propose a query to search for a card instance related to module it was from. Always prioritise search based upon the card that was last shared. Ensure that you find the correct "module" and "name" from the OUTERMOST "adoptsFrom" field from the card data that is shared`,
+      description: `Propose a query to search for a card instance filtered by type. Always prioritise search based upon the card that was last shared. Ensure that you find the correct "module" and "name" from the OUTERMOST "adoptsFrom" field from the card data that is shared. The "module" MUST be an absolute url. "module" inside "adoptsFrom" is relative to the card "id", you must convert this if "module" is not an absolute url. The "id" of a card is its filepath. For example, if card.id=http://example.com/a/b/c/1 and adoptsFrom.module=../xyz, the resolved "module should be http://example.com/a/b/xyz.`,
       parameters: {
         type: 'object',
         properties: {
-          card_id: {
-            type: 'string',
-            const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
-          },
           description: {
             type: 'string',
           },
@@ -449,6 +445,7 @@ You can ONLY modify cards shared with you, if there is no patchCard function or 
 NEVER tell the user to use patchCard, you should always do it for them. \
 If the user request is unclear, you may ask clarifying questions. \
 You may make multiple function calls, all calls are gated by the user so multiple options can be explored.\
+If a tool call returns a result, do not respond with a message.\
 If a user asks you about things in the world, use your existing knowledge to help them. Only if necessary, add a *small* caveat at the end of your message to explain that you do not have live external data. \
 \
 If you need access to the cards the user can see, you can ask them to attach the cards. \

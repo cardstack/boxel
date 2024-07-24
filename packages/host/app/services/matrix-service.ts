@@ -542,7 +542,7 @@ export default class MatrixService
         );
         if (this.realm.canWrite(attachedOpenCard.id)) {
           tools.push(getPatchTool(attachedOpenCard, patchSpec));
-          tools.push(getSearchTool(attachedOpenCard));
+          tools.push(getSearchTool());
         }
       }
     }
