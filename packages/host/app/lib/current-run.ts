@@ -247,6 +247,9 @@ export class CurrentRun {
 
     let fileRef = await this.#reader.readFileAsText(localPath);
     if (!fileRef) {
+      fileRef = await this.#reader.readFileAsText(encodeURI(localPath));
+    }
+    if (!fileRef) {
       let error = new CardError(`missing file ${url.href}`, { status: 404 });
       error.deps = [url.href];
       throw error;
