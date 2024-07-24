@@ -54,7 +54,7 @@ test.describe('Skills', () => {
     ).toHaveClass('toggle checked');
   }
 
-  const defaultSkillCard = `https://cardstack.com/base/SkillCard/43f62768-cbdb-401a-8130-30e12a29cf0d`;
+  const defaultSkillCard = `https://cardstack.com/base/SkillCard/card-editing`;
   const skillCard1 = `${testHost}/skill-pirate-speak`;
   const skillCard2 = `${testHost}/skill-seo`;
   const skillCard3 = `${testHost}/skill-card-title-editing`;
