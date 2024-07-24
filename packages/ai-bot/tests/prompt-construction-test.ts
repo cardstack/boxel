@@ -1561,11 +1561,7 @@ module('getModifyPrompt', () => {
           data: {
             context: {
               openCardIds: ['http://localhost:4201/drafts/Friend/1'],
-              tools: [
-                getSearchTool({
-                  id: 'http://localhost:4201/drafts/Friend/1',
-                } as any),
-              ],
+              tools: [getSearchTool()],
               submode: 'interact',
             },
           },
@@ -1586,14 +1582,10 @@ module('getModifyPrompt', () => {
       function: {
         name: 'searchCard',
         description:
-          'Propose a query to search for a card instance related to module it was from. Always prioritise search based upon the card that was last shared. Ensure that you find the correct "module" and "name" from the OUTERMOST "adoptsFrom" field from the card data that is shared',
+          'Propose a query to search for a card instance filtered by type. Always prioritise search based upon the card that was last shared.',
         parameters: {
           type: 'object',
           properties: {
-            card_id: {
-              type: 'string',
-              const: 'http://localhost:4201/drafts/Friend/1',
-            },
             description: {
               type: 'string',
             },
@@ -1617,7 +1609,7 @@ module('getModifyPrompt', () => {
               },
             },
           },
-          required: ['card_id', 'filter', 'description'],
+          required: ['filter', 'description'],
         },
       },
     });
