@@ -274,7 +274,10 @@ function getReactionStatus(
     : undefined;
 }
 
-function getResult(commandEvent: CommandEvent, history: DiscreteMatrixEvent[]) {
+function getCommandResult(
+  commandEvent: CommandEvent,
+  history: DiscreteMatrixEvent[],
+) {
   let maybeCommandResultEvent = history.find((e) => {
     if (
       isCommandResultEvent(e) &&
@@ -305,11 +308,11 @@ function toPromptMessageWithToolResult(
   event: CommandEvent,
   history: DiscreteMatrixEvent[],
 ): OpenAIPromptMessage {
-  let result = getResult(event as CommandEvent, history);
-  if (result) {
+  let commandResult = getCommandResult(event as CommandEvent, history);
+  if (commandResult) {
     return {
       role: 'tool',
-      content: result,
+      content: commandResult,
       tool_call_id: event.content.data.toolCall.id,
     };
   } else {
