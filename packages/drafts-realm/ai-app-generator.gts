@@ -1,91 +1,206 @@
 import {
-  CardDef,
   Component,
+  FieldDef,
   contains,
   field,
+  linksTo,
+  linksToMany,
 } from 'https://cardstack.com/base/card-api';
 import { eq } from '@cardstack/boxel-ui/helpers';
+import { getLiveCards } from '@cardstack/runtime-common';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
-import { Prompt } from './product-requirement-document';
+import {
+  Prompt,
+  ProductRequirementDocument,
+} from './product-requirement-document';
+import { AppCard } from './app-card';
 
-class Isolated extends Component<typeof AiAppGenerator> {
-  tabs = [
-    {
-      name: 'Dashboard',
-      id: 'dashboard',
-    },
-    {
-      name: 'Requirements',
-      id: 'requirements',
-    },
-    {
-      name: 'Your Apps',
-      id: 'your-apps',
-    },
-    {
-      name: 'Sample Apps',
-      id: 'sample-apps',
-    },
-  ];
+class Dashboard extends FieldDef {
+  static displayName = 'Dashboard';
+  @field prompt = contains(Prompt);
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <div class='dashboard'>
+        <aside class='intro-sidebar'>
+          <h3>
+            How to create your own app with AI in seconds
+          </h3>
+          <p>
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+            eiusmod tempor.
+          </p>
+        </aside>
+        <div>
+          <h2 class='prompt-title'>Generate an App</h2>
+          <div class='prompt-container'>
+            <@fields.prompt @format='edit' />
+          </div>
+        </div>
+        <aside class='sample-app-sidebar'>
+          <h4 class='sample-app-title'>Browse Sample Apps</h4>
+        </aside>
+      </div>
+      <style>
+        .dashboard {
+          display: grid;
+          grid-template-columns: 1fr 3fr 1fr;
+          gap: var(--boxel-sp);
+          padding: var(--boxel-sp);
+          background-color: #f7f7f7;
+        }
+        .intro-sidebar {
+          max-width: 256px;
+          height: max-content;
+          min-height: 70%;
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xl);
+          padding: var(--boxel-sp-lg);
+          background-color: var(--boxel-dark);
+          color: var(--boxel-light);
+          letter-spacing: var(--boxel-lsp);
+          border-radius: var(--boxel-border-radius-lg);
+        }
+        .intro-sidebar > h3 {
+          margin: 0;
+          font-weight: 700;
+          font-size: 1.5rem;
+        }
+        .intro-sidebar p {
+          margin: 0;
+        }
+
+        .prompt-title {
+          margin: 0;
+          font-weight: 700;
+          font-size: 1.5rem;
+        }
+        .prompt-container {
+          margin-top: var(--boxel-sp);
+          border: var(--boxel-border);
+          border-radius: var(--boxel-border-radius-lg);
+          padding: var(--boxel-sp-xl);
+          background-color: var(--boxel-light);
+        }
+
+        .sample-app-sidebar {
+          max-width: 300px;
+        }
+        .sample-app-title {
+          margin: 0;
+          font: 700 var(--boxel-font);
+        }
+      </style>
+    </template>
+  };
+}
+
+class RequirementsEmbedded extends Component<typeof Requirements> {
+  <template>
+    <div class='requirements'>
+      <aside class='reecent-reqs-sidebar'>
+        <h3 class='reecent-reqs-title'>Recent Requirements</h3>
+        <ul>
+          {{#each this.instances as |doc|}}
+            <li><button
+                {{on 'click' (fn this.openDoc doc)}}
+              >{{doc.title}}</button></li>
+          {{/each}}
+        </ul>
+      </aside>
+      <div>
+        <@fields.document />
+      </div>
+    </div>
+    <style>
+      .requirements {
+        height: inherit;
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: var(--boxel-sp);
+        padding: var(--boxel-sp);
+        background-color: #f7f7f7;
+      }
+      .reecent-reqs-sidebar {
+        max-width: 235px;
+      }
+      .reecent-reqs-title {
+        margin: 0;
+        font: 700 var(--boxel-font);
+      }
+    </style>
+  </template>
+
+  @tracked
+  private declare liveQuery: {
+    instances: ProductRequirementDocument[];
+    isLoading: boolean;
+  };
+
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+    this.liveQuery = getLiveCards({
+      filter: {
+        type: {
+          name: 'ProductRequirementDocument',
+          module: 'http://localhost:4201/drafts/product-requirement-document',
+        },
+      },
+    }) as { instances: ProductRequirementDocument[]; isLoading: boolean };
+  }
+
+  get instances() {
+    let instances = this.liveQuery?.instances;
+    this.args.model.recentRequirements = instances;
+    return instances;
+  }
+
+  @action openDoc(doc: ProductRequirementDocument) {
+    this.args.model.document = doc;
+  }
+}
+
+class Requirements extends FieldDef {
+  static displayName = 'Requirements';
+  @field document = linksTo(ProductRequirementDocument);
+  @field recentRequirements = linksToMany(ProductRequirementDocument);
+
+  static embedded = RequirementsEmbedded;
+}
+
+class Isolated extends AppCard.isolated {
+  tabs = ['dashboard', 'requirements'];
   <template>
     <section class='main'>
       <header class='header'>
         <h1 class='title'><@fields.title /></h1>
         <nav class='nav'>
           <ul class='tab-list'>
-            {{#each this.tabs as |tab|}}
+            {{#each this.tabs as |tab index|}}
               <li>
                 <a
-                  {{on 'click' (fn this.setActiveTab tab.id)}}
-                  class={{if (eq this.activeTabId tab.id) 'active'}}
+                  {{on 'click' (fn this.setActiveTab index)}}
+                  class={{if (eq this.activeTabIndex index) 'active'}}
                 >
-                  {{tab.name}}
+                  {{tab}}
                 </a>
               </li>
             {{/each}}
           </ul>
         </nav>
       </header>
-      {{#if (eq this.activeTabId 'requirements')}}
-        <div class='content requirements'>
-          <aside class='reqs-sidebar'>
-            <h3>Recent Requirements</h3>
-          </aside>
-          <div>
-            {{! Requirements doc }}
-          </div>
-        </div>
-      {{else if (eq this.activeTabId 'your-apps')}}
-        <div class='content'>
-          <h2>Your Apps</h2>
-        </div>
-      {{else if (eq this.activeTabId 'sample-apps')}}
-        <div class='content'>
-          <h2>Sample Apps</h2>
-        </div>
-      {{else}}
-        <div class='content dashboard'>
-          <aside class='intro-sidebar'>
-            <h3>
-              How to create your own app with AI in seconds
-            </h3>
-            <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
-              eiusmod tempor.</p>
-          </aside>
-          <div class='prompt-generation'>
-            <h2>Generate an App</h2>
-            <div class='prompt-container'>
-              <@fields.prompt @format='edit' />
-            </div>
-          </div>
-          <aside class='sample-app-sidebar'>
-            <h4>Browse Sample Apps</h4>
-          </aside>
-        </div>
-      {{/if}}
+      <div class='content'>
+        {{#if (eq this.currentTabName 'requirements')}}
+          <@fields.requirements />
+        {{else}}
+          <@fields.dashboard />
+        {{/if}}
+      </div>
     </section>
 
     <style>
@@ -136,79 +251,27 @@ class Isolated extends Component<typeof AiAppGenerator> {
         border-bottom: 4px solid var(--db-header-color);
         font-weight: 700;
       }
-      .dashboard {
-        display: grid;
-        grid-template-columns: 1fr 3fr 1fr;
-        gap: var(--boxel-sp);
-      }
-
       .content {
         padding: var(--boxel-sp);
         background-color: #f7f7f7;
       }
-
-      .intro-sidebar {
-        max-width: 256px;
-        height: max-content;
-        min-height: 70%;
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xl);
-        padding: var(--boxel-sp-lg);
-        background-color: var(--boxel-dark);
-        color: var(--boxel-light);
-        letter-spacing: var(--boxel-lsp);
-        border-radius: var(--boxel-border-radius-lg);
-      }
-      .intro-sidebar > h3 {
-        margin: 0;
-        font-weight: 700;
-        font-size: 1.5rem;
-      }
-      .intro-sidebar p {
-        margin: 0;
-      }
-
-      .prompt-generation > h2 {
-        margin: 0;
-        font-weight: 700;
-        font-size: 1.5rem;
-      }
-      .prompt-container {
-        margin-top: var(--boxel-sp);
-        border: var(--boxel-border);
-        border-radius: var(--boxel-border-radius-lg);
-        padding: var(--boxel-sp-xl);
-        background-color: var(--boxel-light);
-      }
-
-      .sample-app-sidebar {
-        max-width: 300px;
-      }
-      .sample-app-sidebar > h4 {
-        margin: 0;
-        font: 700 var(--boxel-font);
-      }
-
-      .requirements {
-        display: grid;
-        grid-template-columns: auto 1fr;
+      .content > div {
+        height: 100%;
       }
     </style>
   </template>
 
-  @tracked activeTabId = this.tabs[0].id;
-
-  @action setActiveTab(tabId: string) {
-    this.activeTabId = tabId;
+  get currentTabName() {
+    return this.tabs[this.activeTabIndex];
   }
 }
 
-export class AiAppGenerator extends CardDef {
+export class AiAppGenerator extends AppCard {
   static displayName = 'AI App Generator';
   static prefersWideFormat = true;
-  @field prompt = contains(Prompt);
-
+  static headerColor = '#ffeb00';
+  @field dashboard = contains(Dashboard);
+  @field requirements = contains(Requirements);
   static isolated = Isolated;
 
   /*
@@ -223,6 +286,59 @@ export class AiAppGenerator extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
