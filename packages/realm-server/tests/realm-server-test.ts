@@ -2414,6 +2414,14 @@ module('Realm Server serving from root', function (hooks) {
           id: testRealmHref,
           type: 'directory',
           relationships: {
+            '%F0%9F%98%80.gts': {
+              links: {
+                related: 'http://127.0.0.1:4444/%F0%9F%98%80.gts',
+              },
+              meta: {
+                kind: 'file',
+              },
+            },
             'a.js': {
               links: {
                 related: `${testRealmHref}a.js`,
