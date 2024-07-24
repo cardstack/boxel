@@ -551,12 +551,13 @@ export default class MatrixService
       attachedCards,
       roomId,
       this.cardHashes,
+      { maybeRelativeURL: null },
     );
     let attachedSkillEventIds = await this.getCardEventIds(
       skillCards,
       roomId,
       this.skillCardHashes,
-      { includeComputeds: true },
+      { includeComputeds: true, maybeRelativeURL: null },
     );
 
     await this.sendEvent(roomId, 'm.room.message', {

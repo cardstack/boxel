@@ -399,7 +399,7 @@ export function getSearchTool() {
     type: 'function',
     function: {
       name: 'searchCard',
-      description: `Propose a query to search for a card instance filtered by type. Always prioritise search based upon the card that was last shared. Ensure that you find the correct "module" and "name" from the OUTERMOST "adoptsFrom" field from the card data that is shared. The "module" MUST be an absolute url. "module" inside "adoptsFrom" is relative to the card "id", you must convert this if "module" is not an absolute url. The "id" of a card is its filepath. For example, if card.id=http://example.com/a/b/c/1 and adoptsFrom.module=../xyz, the resolved "module should be http://example.com/a/b/xyz.`,
+      description: `Propose a query to search for a card instance filtered by type. Always prioritise search based upon the card that was last shared.`,
       parameters: {
         type: 'object',
         properties: {
