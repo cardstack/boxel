@@ -112,6 +112,7 @@ export interface PrerenderedCardCssItem {
 export interface PrerenderedCard {
   url: string;
   html: string;
+  cssModuleIds: string[];
 }
 
 export interface QueryResultsMeta {
@@ -508,6 +509,9 @@ export class IndexQueryEngine {
       return {
         url: card.url!,
         html: card.html,
+        cssModuleIds: groupedCssInstanceData.map(
+          (cssRecord) => cssRecord.css_module_id,
+        ),
       };
     });
 
