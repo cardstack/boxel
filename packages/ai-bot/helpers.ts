@@ -3,16 +3,14 @@ import {
   type LooseSingleCardDocument,
   type CardResource,
 } from '@cardstack/runtime-common';
-import {
-  FunctionToolCall,
-  MODIFY_SYSTEM_MESSAGE,
-} from '@cardstack/runtime-common/helpers/ai';
+import { MODIFY_SYSTEM_MESSAGE } from '@cardstack/runtime-common/helpers/ai';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardFragmentContent,
   CommandEvent,
   CommandResultEvent,
   ReactionEvent,
+  Tool,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
@@ -296,7 +294,7 @@ function getResult(commandEvent: CommandEvent, history: DiscreteMatrixEvent[]) {
 export function getModifyPrompt(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
-  tools: any[] = [],
+  tools: Tool[] = [],
 ) {
   // Need to make sure the passed in username is a full id
   if (
@@ -346,17 +344,20 @@ export function getModifyPrompt(
               tool_call_id: event.content.data.toolCall.id,
             });
           }
+        } else {
+          historicalMessages.push({
+            role: 'assistant',
+            content: body,
+          });
         }
-
-        historicalMessages.push({
-          role: 'assistant',
-          content: body,
-        });
       } else {
-        historicalMessages.push({
-          role: 'user',
-          content: body,
-        });
+        if (!isCommandResultEvent(event)) {
+          //must skip command result event here
+          historicalMessages.push({
+            role: 'user',
+            content: body,
+          });
+        }
       }
     }
   }
@@ -392,7 +393,6 @@ export function getModifyPrompt(
   ];
 
   messages = messages.concat(historicalMessages);
-  fs.writeFileSync('messages.json', JSON.stringify(messages, null, 2));
   return messages;
 }
 
