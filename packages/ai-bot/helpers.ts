@@ -14,7 +14,6 @@ import type {
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
-import * as fs from 'fs';
 
 export const SKILL_INSTRUCTIONS_MESSAGE =
   '\nThe user has given you the following instructions. You must obey these instructions when responding to the user:\n';
@@ -291,6 +290,38 @@ function getResult(commandEvent: CommandEvent, history: DiscreteMatrixEvent[]) {
     : undefined;
 }
 
+function toToolCall(event: CommandEvent): ChatCompletionMessageToolCall {
+  return {
+    id: event.content.data.toolCall.id,
+    function: {
+      name: event.content.data.toolCall.name,
+      arguments: JSON.stringify(event.content.data.toolCall.arguments),
+    },
+    type: 'function',
+  };
+}
+
+function toPromptMessageWithToolResult(
+  event: CommandEvent,
+  history: DiscreteMatrixEvent[],
+): OpenAIPromptMessage {
+  let result = getResult(event as CommandEvent, history);
+  if (result) {
+    return {
+      role: 'tool',
+      content: result,
+      tool_call_id: event.content.data.toolCall.id,
+    };
+  } else {
+    let reactionStatus = getReactionStatus(event, history);
+    return {
+      role: 'tool',
+      content: reactionStatus ?? 'pending',
+      tool_call_id: event.content.data.toolCall.id,
+    };
+  }
+}
+
 export function getModifyPrompt(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
@@ -308,6 +339,9 @@ export function getModifyPrompt(
     if (event.type !== 'm.room.message') {
       continue;
     }
+    if (isCommandResultEvent(event)) {
+      continue;
+    }
     let body = event.content.body;
     if (body) {
       if (event.sender === aiBotUserId) {
@@ -315,35 +349,11 @@ export function getModifyPrompt(
           historicalMessages.push({
             role: 'assistant',
             content: body,
-            tool_calls: [
-              {
-                id: event.content.data.toolCall.id,
-                function: {
-                  name: event.content.data.toolCall.name,
-                  arguments: JSON.stringify(
-                    event.content.data.toolCall.arguments,
-                  ),
-                },
-                type: 'function',
-              },
-            ],
+            tool_calls: [toToolCall(event)],
           });
-
-          let result = getResult(event as CommandEvent, history);
-          if (result) {
-            historicalMessages.push({
-              role: 'tool',
-              content: result,
-              tool_call_id: event.content.data.toolCall.id,
-            });
-          } else {
-            let reactionStatus = getReactionStatus(event, history);
-            historicalMessages.push({
-              role: 'tool',
-              content: reactionStatus ?? 'pending',
-              tool_call_id: event.content.data.toolCall.id,
-            });
-          }
+          historicalMessages.push(
+            toPromptMessageWithToolResult(event, history),
+          );
         } else {
           historicalMessages.push({
             role: 'assistant',
@@ -351,13 +361,10 @@ export function getModifyPrompt(
           });
         }
       } else {
-        if (!isCommandResultEvent(event)) {
-          //must skip command result event here
-          historicalMessages.push({
-            role: 'user',
-            content: body,
-          });
-        }
+        historicalMessages.push({
+          role: 'user',
+          content: body,
+        });
       }
     }
   }
