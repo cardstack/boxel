@@ -111,7 +111,6 @@ export default class OperatorModeStateService extends Service {
     ) {
       throw new Error(`Please open card '${id}' to make changes to it.`);
     }
-    let patchedCards: CardDef[] = [];
     for (let item of stackItems) {
       if ('card' in item && item.card.id == id) {
         let document = await this.cardService.serializeCard(item.card);
@@ -130,17 +129,9 @@ export default class OperatorModeStateService extends Service {
             document.data.relationships = mergedRel;
           }
         }
-        let newCard = await this.cardService.patchCard(
-          item.card,
-          document,
-          patch,
-        );
-        if (newCard) {
-          patchedCards.push(newCard);
-        }
+        await this.cardService.patchCard(item.card, document, patch);
       }
     }
-    return patchedCards;
   });
 
   async deleteCard(card: CardDef) {
