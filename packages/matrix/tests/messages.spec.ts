@@ -357,10 +357,6 @@ test.describe('Room messages', () => {
           name: 'searchCard',
           parameters: {
             properties: {
-              card_id: {
-                const: `${testHost}/mango`,
-                type: 'string',
-              },
               description: {
                 type: 'string',
               },
@@ -384,7 +380,7 @@ test.describe('Room messages', () => {
                 type: 'object',
               },
             },
-            required: ['card_id', 'filter', 'description'],
+            required: ['filter', 'description'],
             type: 'object',
           },
         },
