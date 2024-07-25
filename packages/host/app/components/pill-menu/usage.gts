@@ -14,9 +14,7 @@ import { getPlural } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 
-import { getCard } from '@cardstack/host/resources/card-resource';
-
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import { CardResource, getCard } from '@cardstack/host/resources/card-resource';
 
 import headerIcon from '../ai-assistant/ai-assist-icon@2x.webp';
 
@@ -46,22 +44,16 @@ export default class PillMenuUsage extends Component {
   }
 
   private attachSampleCards = restartableTask(async () => {
-    let cards: CardDef[] = [];
-    await Promise.all(
-      this.resources.map(async (resource) => {
-        await resource.loaded;
-        if (resource.card) {
-          cards.push(resource.card);
-        }
-      }),
-    );
-    let items = cards.map(
-      (card) =>
+    let items = [];
+    for (let cardResource of this.resources) {
+      await cardResource.loaded;
+      items.push(
         new TrackedObject({
-          card,
+          cardResource,
           isActive: true,
         }),
-    );
+      );
+    }
     this.items = items;
   });
 
@@ -73,8 +65,11 @@ export default class PillMenuUsage extends Component {
     console.log('Header button clicked');
   }
 
-  @action onChooseCard(card: CardDef) {
-    this.items = [...this.items, new TrackedObject({ card, isActive: true })];
+  @action onChooseCard(cardResource: CardResource) {
+    this.items = [
+      ...this.items,
+      new TrackedObject({ cardResource, isActive: true }),
+    ];
   }
 
   <template>
