@@ -247,6 +247,9 @@ export class CurrentRun {
 
     let fileRef = await this.#reader.readFileAsText(localPath);
     if (!fileRef) {
+      fileRef = await this.#reader.readFileAsText(encodeURI(localPath));
+    }
+    if (!fileRef) {
       let error = new CardError(`missing file ${url.href}`, { status: 404 });
       error.deps = [url.href];
       throw error;
@@ -412,23 +415,27 @@ export class CurrentRun {
           identityContext,
         },
       );
-      isolatedHtml = sanitizeHTML(
-        await this.#renderCard({
-          card,
-          format: 'isolated',
-          visit: this.visitFile.bind(this),
-          identityContext,
-          realmPath: this.#realmPaths,
-        }),
+      isolatedHtml = unwrap(
+        sanitizeHTML(
+          await this.#renderCard({
+            card,
+            format: 'isolated',
+            visit: this.visitFile.bind(this),
+            identityContext,
+            realmPath: this.#realmPaths,
+          }),
+        ),
       );
-      atomHtml = sanitizeHTML(
-        await this.#renderCard({
-          card,
-          format: 'atom',
-          visit: this.visitFile.bind(this),
-          identityContext,
-          realmPath: this.#realmPaths,
-        }),
+      atomHtml = unwrap(
+        sanitizeHTML(
+          await this.#renderCard({
+            card,
+            format: 'atom',
+            visit: this.visitFile.bind(this),
+            identityContext,
+            realmPath: this.#realmPaths,
+          }),
+        ),
       );
       cardType = Reflect.getPrototypeOf(card)?.constructor as typeof CardDef;
       let data = api.serializeCard(card, { includeComputeds: true });
@@ -553,14 +560,16 @@ export class CurrentRun {
           identityContext: modifiedContext,
         },
       );
-      let embeddedHtml = sanitizeHTML(
-        await this.#renderCard({
-          card,
-          format: 'embedded',
-          visit: this.visitFile.bind(this),
-          identityContext: modifiedContext,
-          realmPath: this.#realmPaths,
-        }),
+      let embeddedHtml = unwrap(
+        sanitizeHTML(
+          await this.#renderCard({
+            card,
+            format: 'embedded',
+            visit: this.visitFile.bind(this),
+            identityContext: modifiedContext,
+            realmPath: this.#realmPaths,
+          }),
+        ),
       );
       embeddedHtml = embeddedHtml.replace(
         /<!-- __org\.boxel\.cardType START -->\s*.*?\s*<!-- __org\.boxel\.cardType END -->/gm,
@@ -647,4 +656,16 @@ function assertURLEndsWithJSON(url: URL): URL {
     return new URL(`${url}.json`);
   }
   return url;
+}
+
+// we unwrap the outer div (and cleanup empty html comments) as the
+// outer div is actually the container that the card HTML is
+// rendering into
+function unwrap(html: string): string {
+  return html
+    .trim()
+    .replace(/^<div ([^<]*\n)/, '')
+    .replace(/^<!---->/, '')
+    .replace(/<\/div>$/, '')
+    .trim();
 }
