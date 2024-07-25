@@ -8,6 +8,8 @@ import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
 import { v4 as uuidv4 } from 'uuid';
 
+import { not } from '@cardstack/boxel-ui/helpers';
+
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
@@ -28,7 +30,6 @@ import NewSession from '../ai-assistant/new-session';
 import AiAssistantSkillMenu from '../ai-assistant/skill-menu';
 
 import RoomMessage from './room-message';
-import { not } from '@cardstack/boxel-ui/helpers';
 
 import type { Skill } from '../ai-assistant/skill-menu';
 
