@@ -52,8 +52,6 @@ import type {
   ReactionEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 
-import { SkillCard } from 'https://cardstack.com/base/skill-card';
-
 import { Skill } from '../components/ai-assistant/skill-menu';
 import {
   Timeline,
@@ -798,9 +796,9 @@ export default class MatrixService
   private async loadDefaultSkills() {
     for (let skillCardURL of DefaultSkillCards) {
       let cardResource = getCard(this, () => skillCardURL);
-      await cardResource.loaded;
-      let card = cardResource.card as SkillCard;
-      this.defaultSkills.push(new TrackedObject({ card, isActive: true }));
+      this.defaultSkills.push(
+        new TrackedObject({ cardResource, isActive: true }),
+      );
     }
   }
 
