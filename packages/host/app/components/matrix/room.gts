@@ -11,6 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
+import { CardResource } from '@cardstack/host/resources/card-resource';
 import { getRoom } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -19,7 +20,6 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import AiAssistantCardPicker from '../ai-assistant/card-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
@@ -364,8 +364,8 @@ export default class Room extends Component<Signature> {
     return message.status === 'sending' || message.status === 'queued';
   }
 
-  @action private attachSkill(card: SkillCard) {
-    this.roomResource?.addSkill(card);
+  @action private attachSkill(cardResource: CardResource) {
+    this.roomResource?.addSkill(cardResource);
   }
 }
 

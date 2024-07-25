@@ -14,10 +14,12 @@ import { chooseCard, baseCardRef, type Query } from '@cardstack/runtime-common';
 
 import CardPill from '@cardstack/host/components/card-pill';
 
+import { CardResource, getCard } from '@cardstack/host/resources/card-resource';
+
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 export type PillMenuItem = {
-  card: CardDef;
+  cardResource: CardResource;
   isActive: boolean;
 };
 
@@ -31,7 +33,7 @@ interface Signature {
     headerAction?: () => void;
     canAttachCard?: boolean;
     query?: Query;
-    onChooseCard?: (card: CardDef) => void;
+    onChooseCard?: (cardResource: CardResource) => void;
   };
   Blocks: {
     headerIcon: [];
@@ -82,10 +84,10 @@ export default class PillMenu extends Component<Signature> {
                 {{#each @items as |item|}}
                   <li>
                     <CardPill
-                      @card={{item.card}}
+                      @card={{(this.card item.cardResource)}}
                       @onToggle={{fn this.toggleActive item}}
                       @isEnabled={{item.isActive}}
-                      data-test-pill-menu-item={{item.card.id}}
+                      data-test-pill-menu-item={{item.cardResource.card.id}}
                     />
                   </li>
                 {{/each}}
@@ -244,7 +246,13 @@ export default class PillMenu extends Component<Signature> {
     let query = this.args.query ?? { filter: { type: baseCardRef } };
     let card: CardDef | undefined = await chooseCard(query);
     if (card) {
-      this.args.onChooseCard?.(card);
+      let cardResource = getCard(this, () => card!.id);
+      await cardResource.loaded;
+      this.args.onChooseCard?.(cardResource);
     }
   });
+
+  private card(cardResource: CardResource) {
+    return cardResource.card ?? ({} as CardDef);
+  }
 }

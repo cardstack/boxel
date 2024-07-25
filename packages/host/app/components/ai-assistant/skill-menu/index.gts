@@ -9,9 +9,6 @@ import PillMenu from '@cardstack/host/components/pill-menu';
 
 import { CardResource } from '@cardstack/host/resources/card-resource';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { SkillCard } from 'https://cardstack.com/base/skill-card';
-
 export type Skill = {
   cardResource: CardResource;
   isActive: boolean;
@@ -21,7 +18,7 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     skills: Skill[];
-    onChooseCard?: (card: SkillCard) => void;
+    onChooseCard?: (cardResource: CardResource) => void;
   };
 }
 
@@ -30,7 +27,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
     <PillMenu
       class='skill-menu'
       @query={{this.query}}
-      @items={{this.pillItems}}
+      @items={{@skills}}
       @itemDisplayName='Skill'
       @isExpandableHeader={{true}}
       @canAttachCard={{true}}
@@ -110,16 +107,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
     return this.args.skills?.filter((skill) => skill.isActive) ?? [];
   }
 
-  private get pillItems() {
-    return this.args.skills
-      ?.filter((skill: Skill) => skill.cardResource.card)
-      .map((skill: Skill) => ({
-        card: skill.cardResource.card!,
-        isActive: skill.isActive,
-      }));
-  }
-
-  @action attachSkill(card: CardDef) {
-    this.args.onChooseCard?.(card as SkillCard);
+  @action attachSkill(cardResource: CardResource) {
+    this.args.onChooseCard?.(cardResource);
   }
 }

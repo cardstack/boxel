@@ -796,6 +796,7 @@ export default class MatrixService
   private async loadDefaultSkills() {
     for (let skillCardURL of DefaultSkillCards) {
       let cardResource = getCard(this, () => skillCardURL);
+      await cardResource.loaded;
       this.defaultSkills.push(
         new TrackedObject({ cardResource, isActive: true }),
       );

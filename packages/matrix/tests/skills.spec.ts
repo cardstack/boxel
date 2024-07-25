@@ -491,7 +491,7 @@ test.describe('Skills', () => {
         ev.content?.msgtype === 'org.boxel.message',
     );
     let { attachedSkillEventIds } = JSON.parse(messages[0]?.content?.data);
-    expect(attachedSkillEventIds).toHaveLength(1);
+    expect(attachedSkillEventIds).toHaveLength(2);
 
     // Updating skill's instructions
     await page.locator(`[data-test-cards-grid-item="${skillCard1}"]`).click();
@@ -522,9 +522,11 @@ test.describe('Skills', () => {
         ev.content?.msgtype === 'org.boxel.message',
     );
     let { attachedSkillEventIds: attachedSkillEventIds1 } = JSON.parse(messages[1]?.content?.data);
-    expect(attachedSkillEventIds).not.toEqual(attachedSkillEventIds1);
-    let attachedSkillCard = events.find(ev => ev.event_id === attachedSkillEventIds[0]);
-    let attachedSkillCard1 = events.find(ev => ev.event_id === attachedSkillEventIds1[0]);
+    // The first element of attachedSkillEventIds is default skill card.
+    // So we use the second element to check.
+    expect(attachedSkillEventIds[1]).not.toEqual(attachedSkillEventIds1[1]);
+    let attachedSkillCard = events.find(ev => ev.event_id === attachedSkillEventIds[1]);
+    let attachedSkillCard1 = events.find(ev => ev.event_id === attachedSkillEventIds1[1]);
     let cardId = JSON.parse(JSON.parse(attachedSkillCard!.content!.data).cardFragment).data.id;
     let cardId1 = JSON.parse(JSON.parse(attachedSkillCard1!.content!.data).cardFragment).data.id;
     expect(cardId).toEqual(cardId1);
