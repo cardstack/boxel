@@ -1105,7 +1105,7 @@ test.describe('Room messages', () => {
     }).toPass();
   });
 
-  test(`applying a command dispatches a result event if command is succesful and result is returned`, async ({
+  test(`applying a search command dispatches a result event if command is succesful and result is returned`, async ({
     page,
   }) => {
     await login(page, 'user1', 'pass');
@@ -1118,14 +1118,18 @@ test.describe('Room messages', () => {
       formatted_body: 'some command',
       data: JSON.stringify({
         toolCall: {
-          name: 'patchCard',
+          name: 'searchCard',
           arguments: {
-            card_id,
-            attributes: {
-              firstName: 'Dave',
+            description: 'Searching for card',
+            filter: {
+              type: {
+                module: `${testHost}person`,
+                name: 'Person',
+              },
             },
           },
         },
+        eventId: 'search1',
       }),
     };
 
