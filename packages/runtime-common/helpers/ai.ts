@@ -427,7 +427,7 @@ export function getSearchTool() {
             },
           },
         },
-        required: ['card_id', 'filter', 'description'],
+        required: ['filter', 'description'],
       },
     },
   };
