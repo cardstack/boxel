@@ -95,7 +95,7 @@ jobs:
           S3_PREVIEW_BUCKET_NAME: boxel-host-preview.boxel.ai
           AWS_S3_BUCKET: boxel-host-preview.boxel.ai
           AWS_REGION: us-east-1
-          AWS_CLOUDFRONT_DISTRIBUTION: E1JS2AYUPFW775
+          AWS_CLOUDFRONT_DISTRIBUTION: E2PZR9CIAW093B
         with:
           package: boxel-host
           environment: production
