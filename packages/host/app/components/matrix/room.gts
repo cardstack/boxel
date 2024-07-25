@@ -28,6 +28,7 @@ import NewSession from '../ai-assistant/new-session';
 import AiAssistantSkillMenu from '../ai-assistant/skill-menu';
 
 import RoomMessage from './room-message';
+import { not } from '@cardstack/boxel-ui/helpers';
 
 import type { Skill } from '../ai-assistant/skill-menu';
 
@@ -40,61 +41,63 @@ interface Signature {
 
 export default class Room extends Component<Signature> {
   <template>
-    <section
-      class='room'
-      data-room-settled={{this.doWhenRoomChanges.isIdle}}
-      data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
-      data-test-room-name={{this.roomResource.name}}
-      data-test-room={{@roomId}}
-    >
-      <AiAssistantConversation>
-        {{#if this.messages}}
-          {{#each this.messages as |message i|}}
-            <RoomMessage
-              @roomId={{@roomId}}
-              @messages={{this.messages}}
-              @message={{message}}
-              @index={{i}}
-              @isPending={{this.isPendingMessage message}}
-              @monacoSDK={{@monacoSDK}}
-              @isStreaming={{this.isMessageStreaming message i}}
-              @currentEditor={{this.currentMonacoContainer}}
-              @setCurrentEditor={{this.setCurrentMonacoContainer}}
-              @retryAction={{this.maybeRetryAction i message}}
-              data-test-message-idx={{i}}
+    {{#if (not this.doMatrixEventFlush.isRunning)}}
+      <section
+        class='room'
+        data-room-settled={{this.doWhenRoomChanges.isIdle}}
+        data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
+        data-test-room-name={{this.roomResource.name}}
+        data-test-room={{@roomId}}
+      >
+        <AiAssistantConversation>
+          {{#if this.messages}}
+            {{#each this.messages as |message i|}}
+              <RoomMessage
+                @roomId={{@roomId}}
+                @messages={{this.messages}}
+                @message={{message}}
+                @index={{i}}
+                @isPending={{this.isPendingMessage message}}
+                @monacoSDK={{@monacoSDK}}
+                @isStreaming={{this.isMessageStreaming message i}}
+                @currentEditor={{this.currentMonacoContainer}}
+                @setCurrentEditor={{this.setCurrentMonacoContainer}}
+                @retryAction={{this.maybeRetryAction i message}}
+                data-test-message-idx={{i}}
+              />
+            {{/each}}
+          {{else}}
+            <NewSession @sendPrompt={{this.sendPrompt}} />
+          {{/if}}
+          {{#if this.room}}
+            <AiAssistantSkillMenu
+              class='skills'
+              @skills={{this.skills}}
+              @onChooseCard={{this.attachSkill}}
+              data-test-skill-menu
             />
-          {{/each}}
-        {{else}}
-          <NewSession @sendPrompt={{this.sendPrompt}} />
-        {{/if}}
-        {{#if this.room}}
-          <AiAssistantSkillMenu
-            class='skills'
-            @skills={{this.skills}}
-            @onChooseCard={{this.attachSkill}}
-            data-test-skill-menu
-          />
-        {{/if}}
-      </AiAssistantConversation>
+          {{/if}}
+        </AiAssistantConversation>
 
-      <footer class='room-actions'>
-        <div class='chat-input-area' data-test-chat-input-area>
-          <AiAssistantChatInput
-            @value={{this.messageToSend}}
-            @onInput={{this.setMessage}}
-            @onSend={{this.sendMessage}}
-            @canSend={{this.canSend}}
-            data-test-message-field={{@roomId}}
-          />
-          <AiAssistantCardPicker
-            @autoAttachedCards={{this.autoAttachedCards}}
-            @cardsToAttach={{this.cardsToAttach}}
-            @chooseCard={{this.chooseCard}}
-            @removeCard={{this.removeCard}}
-          />
-        </div>
-      </footer>
-    </section>
+        <footer class='room-actions'>
+          <div class='chat-input-area' data-test-chat-input-area>
+            <AiAssistantChatInput
+              @value={{this.messageToSend}}
+              @onInput={{this.setMessage}}
+              @onSend={{this.sendMessage}}
+              @canSend={{this.canSend}}
+              data-test-message-field={{@roomId}}
+            />
+            <AiAssistantCardPicker
+              @autoAttachedCards={{this.autoAttachedCards}}
+              @cardsToAttach={{this.cardsToAttach}}
+              @chooseCard={{this.chooseCard}}
+              @removeCard={{this.removeCard}}
+            />
+          </div>
+        </footer>
+      </section>
+    {{/if}}
 
     <style>
       .room {
