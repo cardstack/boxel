@@ -913,6 +913,49 @@ module('Acceptance | interact submode tests', function (hooks) {
         )
         .exists('linked card now rendered as a stack item in edit format');
     });
+
+    test('New card is auto-attached once it is saved', async function (assert) {
+      let indexCardId = `${testRealm2URL}index`;
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: indexCardId,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+      assert.dom(`[data-test-stack-card="${indexCardId}"]`).exists();
+      await click('[data-test-open-ai-assistant]');
+      assert.dom('[data-test-attached-card]').doesNotExist();
+      // Press the + button to create a new card instance
+      await click('[data-test-create-new-card-button]');
+      // Select a card from catalog entries
+      await click(
+        `[data-test-select="https://cardstack.com/base/fields/skill-card"]`,
+      );
+      await waitUntil(
+        () =>
+          (
+            document.querySelector(`[data-test-card-catalog-go-button]`) as
+              | HTMLButtonElement
+              | undefined
+          )?.disabled === false,
+      );
+      await click(`[data-test-card-catalog-go-button]`);
+
+      // When edit view of new card opens, fill in a field and press the Pencil icon to finish editing
+      await waitFor('[data-test-field="instructions"] textarea');
+      await fillIn(
+        '[data-test-field="instructions"] textarea',
+        'Do this and that and this and that',
+      );
+      await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
+      await waitFor(
+        '[data-test-card-format="isolated"] [data-test-field="instructions"] p',
+      );
+    });
   });
 
   module('1 stack, when the user lacks write permissions', function (hooks) {
