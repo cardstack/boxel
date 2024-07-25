@@ -50,6 +50,7 @@ import {
   PermissionsContextName,
   type Permissions,
   Deferred,
+  getContrastColor,
 } from '@cardstack/runtime-common';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
@@ -404,7 +405,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
             @title={{this.headerTitle}}
             @hasBackground={{true}}
             class={{cn 'header' header--icon-hovered=this.isHoverOnRealmIcon}}
-            style={{cssVar boxel-header-background-color=@item.headerColor}}
+            style={{cssVar
+              boxel-header-background-color=@item.headerColor
+              boxel-header-text-color=(getContrastColor @item.headerColor)
+            }}
             {{on
               'click'
               (optional
@@ -664,7 +668,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .icon-button {
-        --icon-color: var(--boxel-highlight);
+        --icon-color: var(--boxel-header-text-color, var(--boxel-highlight));
       }
 
       .icon-button:hover {

@@ -30,6 +30,7 @@ import {
 import { cssVar, eq } from '@cardstack/boxel-ui/helpers';
 
 import {
+  getContrastColor,
   getLiveCards,
   cardTypeDisplayName,
   codeRefWithAbsoluteURL,
@@ -134,7 +135,10 @@ class AppCardIsolated extends Component<typeof AppCard> {
     <section class='app-card'>
       <header
         class='app-card-header'
-        style={{cssVar db-header-bg-color=this.headerColor}}
+        style={{cssVar
+          db-header-bg-color=this.headerColor
+          db-header-color=(getContrastColor this.headerColor)
+        }}
       >
         <div class='app-card-title-group'>
           <h1 class='app-card-title'><@fields.title /></h1>
