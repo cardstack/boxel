@@ -2170,7 +2170,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     );
   });
 
-  test('after command is issued, a command result event is dispatched if a result is returned', async function (assert) {
+  test('after search command is issued, a command result event is dispatched', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -2195,10 +2195,15 @@ module('Integration | ai-assistant-panel', function (hooks) {
         format: 'org.matrix.custom.html',
         data: JSON.stringify({
           toolCall: {
-            name: 'patchCard',
+            name: 'searchCard',
             arguments: {
-              card_id: `${testRealmURL}Person/fadhlan`,
-              attributes: { firstName: 'Evie' },
+              description: 'Searching for card',
+              filter: {
+                type: {
+                  module: `${testRealmURL}pet`,
+                  name: 'Pet',
+                },
+              },
             },
           },
           eventId: 'room1-event1',
@@ -2235,11 +2240,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
       1,
       'command result event is dispatched',
     );
-    assert.equal(
-      commandResultEvents[0].content.result[0].firstName,
-      'Evie',
-      'field has been changed',
-    );
   });
 
   test('it can search for card instances that is of the same card type as the card shared', async function (assert) {
@@ -2261,11 +2261,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
           toolCall: {
             name: 'searchCard',
             arguments: {
-              card_id: id,
               description: 'Searching for card',
               filter: {
                 type: {
-                  module: '../pet',
+                  module: `${testRealmURL}pet`,
                   name: 'Pet',
                 },
               },
@@ -2323,11 +2322,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
           toolCall: {
             name: 'searchCard',
             arguments: {
-              card_id: id,
               description: 'Searching for card',
               filter: {
                 type: {
-                  module: '../person',
+                  module: `${testRealmURL}person`,
                   name: 'Person',
                 },
               },
