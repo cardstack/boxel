@@ -48,10 +48,11 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
 
 setGracefulCleanup();
-const testRealmURL = new URL('http://127.0.0.1:4444/');
+const testRealmURL = new URL('http://127.0.0.1:4444/test-realm/');
 const testRealm2URL = new URL('http://127.0.0.1:4445');
 const testRealmHref = testRealmURL.href;
 const testRealm2Href = testRealm2URL.href;
+
 const distDir = resolve(join(__dirname, '..', '..', 'host', 'dist'));
 console.log(`using host dist dir: ${distDir}`);
 
@@ -139,62 +140,79 @@ module('Realm Server', function (hooks) {
   let request: SuperTest<Test>;
   let dir: DirResult;
 
-  function setupPermissionedRealm(
+  let virtualNetwork: VirtualNetwork;
+  let loader: Loader;
+
+  function setupBaseAndPermissionedRealmOnSameServer(
     hooks: NestedHooks,
     permissions: RealmPermissions,
     fileSystem?: Record<string, string | LooseSingleCardDocument>,
   ) {
     setupDB(hooks, {
       beforeEach: async (dbAdapter, queue) => {
+        ({ virtualNetwork, loader } = createVirtualNetworkAndLoader());
+
+        let localBaseRealmURL = new URL(localBaseRealm);
+        virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
+
+        let testBaseRealm = await createRealm({
+          dir: resolve(join(__dirname, '..', '..', 'base')),
+          realmURL: baseRealm.url,
+          virtualNetwork,
+          queue,
+          dbAdapter,
+          permissions: undefined,
+        });
+        virtualNetwork.mount(testBaseRealm.handle);
+        await testBaseRealm.ready;
+
         dir = dirSync();
         // If a fileSystem is provided, use it to populate the test realm, otherwise copy the default cards
         if (!fileSystem) {
           copySync(join(__dirname, 'cards'), dir.name);
         }
-        let virtualNetwork = createVirtualNetwork();
 
-        ({ testRealm, testRealmServer } = await runTestRealmServer({
-          virtualNetwork,
+        testRealm = await createRealm({
           dir: dir.name,
-          realmURL: testRealmURL,
-          permissions,
-          dbAdapter,
-          queue,
           fileSystem,
-        }));
+          realmURL: testRealmHref,
+          permissions,
+          virtualNetwork,
+          matrixConfig: undefined,
+          queue,
+          dbAdapter,
+        });
+        virtualNetwork.mount(testRealm.handle);
+        await testRealm.ready;
+
+        testRealmServer = await new RealmServer(
+          [testBaseRealm, testRealm],
+          virtualNetwork,
+        ).listen(parseInt(testRealmURL.port));
 
         request = supertest(testRealmServer);
       },
+      afterEach: async () => {
+        testRealmServer.close();
+        removeSync(dir.name);
+      },
     });
   }
-
-  let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
-
-  setupCardLogs(
-    hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
-  );
-
-  setupBaseRealmServer(hooks, virtualNetwork);
 
   hooks.beforeEach(async function () {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
   });
 
-  hooks.afterEach(function () {
-    testRealmServer.close();
-  });
-
   module('card GET request', function (_hooks) {
     module('public readable realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupBaseAndPermissionedRealmOnSameServer(hooks, {
         '*': ['read'],
       });
 
       test('serves the request', async function (assert) {
         let response = await request
-          .get('/person-1')
+          .get('/test-realm/person-1')
           .set('Accept', 'application/vnd.card+json');
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -203,7 +221,7 @@ module('Realm Server', function (hooks) {
         delete json.data.meta.lastModified;
         assert.strictEqual(
           response.get('X-boxel-realm-url'),
-          testRealmURL.href,
+          testRealmHref,
           'realm url header is correct',
         );
         assert.strictEqual(
@@ -231,7 +249,7 @@ module('Realm Server', function (hooks) {
                 backgroundURL: null,
                 iconURL: null,
               },
-              realmURL: testRealmURL.href,
+              realmURL: testRealmHref,
             },
             links: {
               self: `${testRealmHref}person-1`,
@@ -242,13 +260,13 @@ module('Realm Server', function (hooks) {
     });
 
     module('permissioned realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupBaseAndPermissionedRealmOnSameServer(hooks, {
         john: ['read'],
       });
 
       test('401 with invalid JWT', async function (assert) {
         let response = await request
-          .get('/person-1')
+          .get('/test-realm/person-1')
           .set('Accept', 'application/vnd.card+json')
           .set('Authorization', `Bearer invalid-token`);
 
@@ -262,7 +280,7 @@ module('Realm Server', function (hooks) {
 
       test('401 without a JWT', async function (assert) {
         let response = await request
-          .get('/person-1')
+          .get('/test-realm/person-1')
           .set('Accept', 'application/vnd.card+json'); // no Authorization header
 
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
@@ -275,7 +293,7 @@ module('Realm Server', function (hooks) {
 
       test('403 without permission', async function (assert) {
         let response = await request
-          .get('/person-1')
+          .get('/test-realm/person-1')
           .set('Accept', 'application/vnd.card+json')
           .set(
             'Authorization',
@@ -292,7 +310,7 @@ module('Realm Server', function (hooks) {
 
       test('200 with permission', async function (assert) {
         let response = await request
-          .get('/person-1')
+          .get('/test-realm/person-1')
           .set('Accept', 'application/vnd.card+json')
           .set(
             'Authorization',
@@ -311,7 +329,7 @@ module('Realm Server', function (hooks) {
 
   module('card POST request', function (_hooks) {
     module('public writable realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupBaseAndPermissionedRealmOnSameServer(hooks, {
         '*': ['read', 'write'],
       });
 
@@ -340,7 +358,7 @@ module('Realm Server', function (hooks) {
           },
           callback: async () => {
             return await request
-              .post('/')
+              .post('/test-realm/')
               .send({
                 data: {
                   type: 'card',
@@ -409,13 +427,13 @@ module('Realm Server', function (hooks) {
     });
 
     module('permissioned realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupBaseAndPermissionedRealmOnSameServer(hooks, {
         john: ['read', 'write'],
       });
 
       test('401 with invalid JWT', async function (assert) {
         let response = await request
-          .post('/')
+          .post('/test-realm/')
           .send({})
           .set('Accept', 'application/vnd.card+json')
           .set('Authorization', `Bearer invalid-token`);
@@ -425,7 +443,7 @@ module('Realm Server', function (hooks) {
 
       test('401 without a JWT', async function (assert) {
         let response = await request
-          .post('/')
+          .post('/test-realm/')
           .send({})
           .set('Accept', 'application/vnd.card+json'); // no Authorization header
 
@@ -434,7 +452,7 @@ module('Realm Server', function (hooks) {
 
       test('401 permissions have been updated', async function (assert) {
         let response = await request
-          .post('/')
+          .post('/test-realm/')
           .send({})
           .set('Accept', 'application/vnd.card+json')
           .set(
@@ -447,7 +465,7 @@ module('Realm Server', function (hooks) {
 
       test('403 without permission', async function (assert) {
         let response = await request
-          .post('/')
+          .post('/test-realm/')
           .send({})
           .set('Accept', 'application/vnd.card+json')
           .set(
@@ -460,7 +478,7 @@ module('Realm Server', function (hooks) {
 
       test('201 with permission', async function (assert) {
         let response = await request
-          .post('/')
+          .post('/test-realm/')
           .send({
             data: {
               type: 'card',
@@ -489,7 +507,7 @@ module('Realm Server', function (hooks) {
 
   module('card PATCH request', function (_hooks) {
     module('public writable realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupBaseAndPermissionedRealmOnSameServer(hooks, {
         '*': ['read', 'write'],
       });
 
@@ -507,7 +525,7 @@ module('Realm Server', function (hooks) {
           expected,
           callback: async () => {
             return await request
-              .patch('/person-1')
+              .patch('/test-realm/person-1')
               .send({
                 data: {
                   type: 'card',
@@ -588,7 +606,7 @@ module('Realm Server', function (hooks) {
         };
 
         response = await request
-          .get(`/_search?${stringify(query)}`)
+          .get(`/test-realm/_search?${stringify(query)}`)
           .set('Accept', 'application/vnd.card+json');
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -597,13 +615,13 @@ module('Realm Server', function (hooks) {
     });
 
     module('permissioned realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupBaseAndPermissionedRealmOnSameServer(hooks, {
         john: ['read', 'write'],
       });
 
       test('401 with invalid JWT', async function (assert) {
         let response = await request
-          .patch('/person-1')
+          .patch('/test-realm/test-realm/person-1')
           .send({})
           .set('Accept', 'application/vnd.card+json')
           .set('Authorization', `Bearer invalid-token`);
@@ -613,7 +631,7 @@ module('Realm Server', function (hooks) {
 
       test('403 without permission', async function (assert) {
         let response = await request
-          .patch('/person-1')
+          .patch('/test-realm/person-1')
           .send({
             data: {
               type: 'card',
@@ -639,7 +657,7 @@ module('Realm Server', function (hooks) {
 
       test('200 with permission', async function (assert) {
         let response = await request
-          .patch('/person-1')
+          .patch('/test-realm/person-1')
           .send({
             data: {
               type: 'card',
@@ -670,7 +688,7 @@ module('Realm Server', function (hooks) {
 
   module('card DELETE request', function (_hooks) {
     module('public writable realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupBaseAndPermissionedRealmOnSameServer(hooks, {
         '*': ['read', 'write'],
       });
 
@@ -687,7 +705,7 @@ module('Realm Server', function (hooks) {
           expected,
           callback: async () => {
             return await request
-              .delete('/person-1')
+              .delete('/test-realm/person-1')
               .set('Accept', 'application/vnd.card+json');
           },
         });
@@ -721,7 +739,7 @@ module('Realm Server', function (hooks) {
           expected,
           callback: async () => {
             return await request
-              .delete('/person-1.json')
+              .delete('/test-realm/person-1.json')
               .set('Accept', 'application/vnd.card+json');
           },
         });
@@ -743,13 +761,13 @@ module('Realm Server', function (hooks) {
     });
 
     module('permissioned realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupBaseAndPermissionedRealmOnSameServer(hooks, {
         john: ['read', 'write'],
       });
 
       test('401 with invalid JWT', async function (assert) {
         let response = await request
-          .delete('/person-1')
+          .delete('/test-realm/person-1')
 
           .set('Accept', 'application/vnd.card+json')
           .set('Authorization', `Bearer invalid-token`);
@@ -759,7 +777,7 @@ module('Realm Server', function (hooks) {
 
       test('403 without permission', async function (assert) {
         let response = await request
-          .delete('/person-1')
+          .delete('/test-realm/person-1')
           .set('Accept', 'application/vnd.card+json')
           .set(
             'Authorization',
@@ -771,7 +789,7 @@ module('Realm Server', function (hooks) {
 
       test('204 with permission', async function (assert) {
         let response = await request
-          .delete('/person-1')
+          .delete('/test-realm/person-1')
           .set('Accept', 'application/vnd.card+json')
           .set(
             'Authorization',
@@ -788,13 +806,13 @@ module('Realm Server', function (hooks) {
 
   module('card source GET request', function (_hooks) {
     module('public readable realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupBaseAndPermissionedRealmOnSameServer(hooks, {
         '*': ['read'],
       });
 
       test('serves the request', async function (assert) {
         let response = await request
-          .get('/person.gts')
+          .get('/test-realm/person.gts')
           .set('Accept', 'application/vnd.card+source');
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -818,7 +836,7 @@ module('Realm Server', function (hooks) {
 
       test('serves a card-source GET request that results in redirect', async function (assert) {
         let response = await request
-          .get('/person')
+          .get('/test-realm/person')
           .set('Accept', 'application/vnd.card+source');
 
         assert.strictEqual(response.status, 302, 'HTTP 302 status');
@@ -832,12 +850,15 @@ module('Realm Server', function (hooks) {
           'true',
           'realm is public readable',
         );
-        assert.strictEqual(response.headers['location'], '/person.gts');
+        assert.strictEqual(
+          response.headers['location'],
+          '/test-realm/person.gts',
+        );
       });
 
       test('serves a card instance GET request with card-source accept header that results in redirect', async function (assert) {
         let response = await request
-          .get('/person-1')
+          .get('/test-realm/person-1')
           .set('Accept', 'application/vnd.card+source');
 
         assert.strictEqual(response.status, 302, 'HTTP 302 status');
@@ -851,12 +872,15 @@ module('Realm Server', function (hooks) {
           'true',
           'realm is public readable',
         );
-        assert.strictEqual(response.headers['location'], '/person-1.json');
+        assert.strictEqual(
+          response.headers['location'],
+          '/test-realm/person-1.json',
+        );
       });
 
       test('serves a card instance GET request with a .json extension and json accept header that results in redirect', async function (assert) {
         let response = await request
-          .get('/person.json')
+          .get('/test-realm/person.json')
           .set('Accept', 'application/vnd.card+json');
 
         assert.strictEqual(response.status, 302, 'HTTP 302 status');
@@ -870,11 +894,11 @@ module('Realm Server', function (hooks) {
           'true',
           'realm is public readable',
         );
-        assert.strictEqual(response.headers['location'], '/person');
+        assert.strictEqual(response.headers['location'], '/test-realm/person');
       });
 
       test('serves a module GET request', async function (assert) {
-        let response = await request.get('/person');
+        let response = await request.get('/test-realm/person');
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         assert.strictEqual(
@@ -904,13 +928,13 @@ module('Realm Server', function (hooks) {
     });
 
     module('permissioned realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupBaseAndPermissionedRealmOnSameServer(hooks, {
         john: ['read'],
       });
 
       test('401 with invalid JWT', async function (assert) {
         let response = await request
-          .get('/person.gts')
+          .get('/test-realm/person.gts')
           .set('Accept', 'application/vnd.card+source')
           .set('Authorization', `Bearer invalid-token`);
 
@@ -919,7 +943,7 @@ module('Realm Server', function (hooks) {
 
       test('401 without a JWT', async function (assert) {
         let response = await request
-          .get('/person.gts')
+          .get('/test-realm/person.gts')
           .set('Accept', 'application/vnd.card+source'); // no Authorization header
 
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
@@ -927,7 +951,7 @@ module('Realm Server', function (hooks) {
 
       test('403 without permission', async function (assert) {
         let response = await request
-          .get('/person.gts')
+          .get('/test-realm/person.gts')
           .set('Accept', 'application/vnd.card+source')
           .set(
             'Authorization',
@@ -939,7 +963,7 @@ module('Realm Server', function (hooks) {
 
       test('200 with permission', async function (assert) {
         let response = await request
-          .get('/person.gts')
+          .get('/test-realm/person.gts')
           .set('Accept', 'application/vnd.card+source')
           .set(
             'Authorization',
@@ -953,7 +977,7 @@ module('Realm Server', function (hooks) {
 
   module('card-source DELETE request', function (_hooks) {
     module('public writable realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupBaseAndPermissionedRealmOnSameServer(hooks, {
         '*': ['read', 'write'],
       });
 
@@ -970,7 +994,7 @@ module('Realm Server', function (hooks) {
           expected,
           callback: async () => {
             return await request
-              .delete('/unused-card.gts')
+              .delete('/test-realm/unused-card.gts')
               .set('Accept', 'application/vnd.card+source');
           },
         });
@@ -1003,7 +1027,7 @@ module('Realm Server', function (hooks) {
           expected,
           callback: async () => {
             return await request
-              .delete('/person-1')
+              .delete('/test-realm/person-1')
               .set('Accept', 'application/vnd.card+source');
           },
         });
@@ -1025,13 +1049,13 @@ module('Realm Server', function (hooks) {
     });
 
     module('permissioned realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupBaseAndPermissionedRealmOnSameServer(hooks, {
         john: ['read', 'write'],
       });
 
       test('401 with invalid JWT', async function (assert) {
         let response = await request
-          .delete('/unused-card.gts')
+          .delete('/test-realm/unused-card.gts')
           .set('Accept', 'application/vnd.card+source')
           .set('Authorization', `Bearer invalid-token`);
 
@@ -1040,7 +1064,7 @@ module('Realm Server', function (hooks) {
 
       test('403 without permission', async function (assert) {
         let response = await request
-          .delete('/unused-card.gts')
+          .delete('/test-realm/unused-card.gts')
           .set('Accept', 'application/vnd.card+source')
           .set(
             'Authorization',
@@ -1052,7 +1076,7 @@ module('Realm Server', function (hooks) {
 
       test('204 with permission', async function (assert) {
         let response = await request
-          .delete('/unused-card.gts')
+          .delete('/test-realm/unused-card.gts')
           .set('Accept', 'application/vnd.card+source')
           .set(
             'Authorization',
@@ -1069,7 +1093,7 @@ module('Realm Server', function (hooks) {
 
   module('card-source POST request', function (_hooks) {
     module('public writable realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupBaseAndPermissionedRealmOnSameServer(hooks, {
         '*': ['read', 'write'],
       });
 
@@ -1087,7 +1111,7 @@ module('Realm Server', function (hooks) {
           expected,
           callback: async () => {
             return await request
-              .post('/unused-card.gts')
+              .post('/test-realm/unused-card.gts')
               .set('Accept', 'application/vnd.card+source')
               .send(`//TEST UPDATE\n${cardSrc}`);
           },
@@ -1131,7 +1155,7 @@ module('Realm Server', function (hooks) {
             expected,
             callback: async () => {
               return await request
-                .post('/test-card.gts')
+                .post('/test-realm/test-card.gts')
                 .set('Accept', 'application/vnd.card+source').send(`
                 import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
                 import StringCard from 'https://cardstack.com/base/string';
@@ -1154,7 +1178,7 @@ module('Realm Server', function (hooks) {
             expectedNumberOfEvents: 1,
             callback: async () => {
               return await request
-                .post('/')
+                .post('/test-realm/')
                 .send({
                   data: {
                     type: 'card',
@@ -1198,7 +1222,7 @@ module('Realm Server', function (hooks) {
             expected,
             callback: async () => {
               return await request
-                .post('/test-card.gts')
+                .post('/test-realm/test-card.gts')
                 .set('Accept', 'application/vnd.card+source').send(`
                 import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
                 import StringCard from 'https://cardstack.com/base/string';
@@ -1214,11 +1238,12 @@ module('Realm Server', function (hooks) {
         }
 
         // verify serialization matches new card def
+
         {
           let response = await request
             .get(new URL(id).pathname)
             .set('Accept', 'application/vnd.card+json');
-
+          // '/test-realm/TestCard/fb1db9db-636b-46b0-b375-b529fad11484'
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           let json = response.body;
           assert.deepEqual(json.data.attributes, {
@@ -1306,7 +1331,7 @@ module('Realm Server', function (hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: '/test-card',
+                    module: '../test-card',
                     name: 'TestCard',
                   },
                 },
@@ -1336,13 +1361,13 @@ module('Realm Server', function (hooks) {
     });
 
     module('permissioned realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupBaseAndPermissionedRealmOnSameServer(hooks, {
         john: ['read', 'write'],
       });
 
       test('401 with invalid JWT', async function (assert) {
         let response = await request
-          .post('/unused-card.gts')
+          .post('/test-realm/unused-card.gts')
           .set('Accept', 'application/vnd.card+source')
           .send(`//TEST UPDATE\n${cardSrc}`)
           .set('Authorization', `Bearer invalid-token`);
@@ -1352,7 +1377,7 @@ module('Realm Server', function (hooks) {
 
       test('401 without a JWT', async function (assert) {
         let response = await request
-          .post('/unused-card.gts')
+          .post('/test-realm/unused-card.gts')
           .set('Accept', 'application/vnd.card+source')
           .send(`//TEST UPDATE\n${cardSrc}`); // no Authorization header
 
@@ -1361,7 +1386,7 @@ module('Realm Server', function (hooks) {
 
       test('403 without permission', async function (assert) {
         let response = await request
-          .post('/unused-card.gts')
+          .post('/test-realm/unused-card.gts')
           .set('Accept', 'application/vnd.card+source')
           .send(`//TEST UPDATE\n${cardSrc}`)
           .set(
@@ -1374,7 +1399,7 @@ module('Realm Server', function (hooks) {
 
       test('204 with permission', async function (assert) {
         let response = await request
-          .post('/unused-card.gts')
+          .post('/test-realm/unused-card.gts')
           .set('Accept', 'application/vnd.card+source')
           .send(`//TEST UPDATE\n${cardSrc}`)
           .set(
@@ -1392,13 +1417,13 @@ module('Realm Server', function (hooks) {
 
   module('directory GET request', function (_hooks) {
     module('public readable realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupBaseAndPermissionedRealmOnSameServer(hooks, {
         '*': ['read'],
       });
 
       test('serves the request', async function (assert) {
         let response = await request
-          .get('/dir/')
+          .get('/test-realm/dir/')
           .set('Accept', 'application/vnd.api+json');
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -1453,13 +1478,13 @@ module('Realm Server', function (hooks) {
     });
 
     module('permissioned realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupBaseAndPermissionedRealmOnSameServer(hooks, {
         john: ['read'],
       });
 
       test('401 with invalid JWT', async function (assert) {
         let response = await request
-          .get('/dir/')
+          .get('/test-realm/dir/')
           .set('Accept', 'application/vnd.api+json')
           .set('Authorization', `Bearer invalid-token`);
 
@@ -1468,7 +1493,7 @@ module('Realm Server', function (hooks) {
 
       test('401 without a JWT', async function (assert) {
         let response = await request
-          .get('/dir/')
+          .get('/test-realm/dir/')
           .set('Accept', 'application/vnd.api+json'); // no Authorization header
 
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
@@ -1476,7 +1501,7 @@ module('Realm Server', function (hooks) {
 
       test('403 without permission', async function (assert) {
         let response = await request
-          .get('/dir/')
+          .get('/test-realm/dir/')
           .set('Accept', 'application/vnd.api+json')
           .set(
             'Authorization',
@@ -1488,7 +1513,7 @@ module('Realm Server', function (hooks) {
 
       test('200 with permission', async function (assert) {
         let response = await request
-          .get('/dir/')
+          .get('/test-realm/dir/')
           .set('Accept', 'application/vnd.api+json')
           .set(
             'Authorization',
@@ -1514,13 +1539,13 @@ module('Realm Server', function (hooks) {
     };
 
     module('public readable realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupBaseAndPermissionedRealmOnSameServer(hooks, {
         '*': ['read'],
       });
 
       test('serves a /_search GET request', async function (assert) {
         let response = await request
-          .get(`/_search?${stringify(query)}`)
+          .get(`/test-realm/_search?${stringify(query)}`)
           .set('Accept', 'application/vnd.card+json');
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -1549,13 +1574,13 @@ module('Realm Server', function (hooks) {
     });
 
     module('permissioned realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupBaseAndPermissionedRealmOnSameServer(hooks, {
         john: ['read'],
       });
 
       test('401 with invalid JWT', async function (assert) {
         let response = await request
-          .get(`/_search?${stringify(query)}`)
+          .get(`/test-realm/_search?${stringify(query)}`)
           .set('Accept', 'application/vnd.card+json');
 
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
@@ -1563,7 +1588,7 @@ module('Realm Server', function (hooks) {
 
       test('401 without a JWT', async function (assert) {
         let response = await request
-          .get(`/_search?${stringify(query)}`)
+          .get(`/test-realm/_search?${stringify(query)}`)
           .set('Accept', 'application/vnd.card+json'); // no Authorization header
 
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
@@ -1571,7 +1596,7 @@ module('Realm Server', function (hooks) {
 
       test('403 without permission', async function (assert) {
         let response = await request
-          .get(`/_search?${stringify(query)}`)
+          .get(`/test-realm/_search?${stringify(query)}`)
           .set('Accept', 'application/vnd.card+json')
           .set(
             'Authorization',
@@ -1583,7 +1608,7 @@ module('Realm Server', function (hooks) {
 
       test('200 with permission', async function (assert) {
         let response = await request
-          .get(`/_search?${stringify(query)}`)
+          .get(`/test-realm/_search?${stringify(query)}`)
           .set('Accept', 'application/vnd.card+json')
           .set(
             'Authorization',
@@ -1599,7 +1624,7 @@ module('Realm Server', function (hooks) {
     module(
       'instances with no embedded template css of its own',
       function (hooks) {
-        setupPermissionedRealm(
+        setupBaseAndPermissionedRealmOnSameServer(
           hooks,
           {
             '*': ['read'],
@@ -1641,7 +1666,7 @@ module('Realm Server', function (hooks) {
 
         test('endpoint will respond with a bad request if html format is not provided', async function (assert) {
           let response = await request
-            .get(`/_search-prerendered`)
+            .get(`/test-realm/_search-prerendered`)
             .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(response.status, 400, 'HTTP 200 status');
@@ -1667,7 +1692,7 @@ module('Realm Server', function (hooks) {
             prerenderedHtmlFormat: 'embedded',
           };
           let response = await request
-            .get(`/_search-prerendered?${stringify(query)}`)
+            .get(`/test-realm/_search-prerendered?${stringify(query)}`)
             .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -1698,19 +1723,13 @@ module('Realm Server', function (hooks) {
             'embedded html looks correct',
           );
 
-          assert.deepEqual(
-            json.included,
-            [],
-            'no css is present in the response',
-          );
-
           assert.strictEqual(json.meta.page.total, 1, 'total count is correct');
         });
       },
     );
 
     module('instances whose embedded template has css', function (hooks) {
-      setupPermissionedRealm(
+      setupBaseAndPermissionedRealmOnSameServer(
         hooks,
         {
           '*': ['read'],
@@ -1824,7 +1843,7 @@ module('Realm Server', function (hooks) {
 
       test('returns instances with CardDef prerendered embedded html + css when there is no "on" filter', async function (assert) {
         let response = await request
-          .get(`/_search-prerendered?prerenderedHtmlFormat=embedded`)
+          .get(`/test-realm/_search-prerendered?prerenderedHtmlFormat=embedded`)
           .set('Accept', 'application/vnd.card+json');
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -1854,14 +1873,9 @@ module('Realm Server', function (hooks) {
             .includes('Person Aaron'),
           'embedded html looks correct (CardDef template)',
         );
-
-        // TODO: why is card-api module + css not present in the boxel index table?
-        assert.deepEqual(
-          json.data[0].relationships['prerendered-card-css'].data[0],
-          {
-            type: 'prerendered-card-css',
-            id: 'https://cardstack.com/base/card-api',
-          },
+        assertRelationshipsForCardDefCssModules(
+          json.data[0].relationships['prerendered-card-css'].data,
+          assert,
         );
 
         // 2nd card: Person Craig
@@ -1872,6 +1886,10 @@ module('Realm Server', function (hooks) {
             .includes('Person Craig'),
           'embedded html for Craig looks correct (CardDef template)',
         );
+        assertRelationshipsForCardDefCssModules(
+          json.data[1].relationships['prerendered-card-css'].data,
+          assert,
+        );
 
         // 3rd card: FancyPerson Jane
         assert.strictEqual(json.data[2].type, 'prerendered-card');
@@ -1880,6 +1898,10 @@ module('Realm Server', function (hooks) {
             .replace(/\s+/g, ' ')
             .includes('FancyPerson Jane'),
           'embedded html for Jane looks correct (CardDef template)',
+        );
+        assertRelationshipsForCardDefCssModules(
+          json.data[2].relationships['prerendered-card-css'].data,
+          assert,
         );
 
         // 4th card: FancyPerson Jimmy
@@ -1890,8 +1912,108 @@ module('Realm Server', function (hooks) {
             .includes('FancyPerson Jimmy'),
           'embedded html for Jimmy looks correct (CardDef template)',
         );
+        assertRelationshipsForCardDefCssModules(
+          json.data[3].relationships['prerendered-card-css'].data,
+          assert,
+        );
 
         assert.strictEqual(json.meta.page.total, 4, 'total count is correct');
+      });
+
+      test('returns instances with CardDef prerendered embedded html + css when there is "on" filter', async function (assert) {
+        let query: Query & { prerenderedHtmlFormat: string } = {
+          filter: {
+            on: {
+              module: `${testRealmHref}fancy-person`,
+              name: 'FancyPerson',
+            },
+            not: {
+              eq: {
+                firstName: 'Peter',
+              },
+            },
+          },
+          prerenderedHtmlFormat: 'embedded',
+        };
+
+        let response = await request
+          .get(`/test-realm/_search-prerendered?${stringify(query)}`)
+          .set('Accept', 'application/vnd.card+json');
+
+        let json = response.body;
+
+        assert.strictEqual(
+          json.data.length,
+          2,
+          'returned results count is correct',
+        );
+
+        // 1st card: FancyPerson Jane
+        assert.true(
+          json.data[0].attributes.html
+            .replace(/\s+/g, ' ')
+            .includes('Embedded Card FancyPerson: Jane'),
+          'embedded html for Jane looks correct (FancyPerson template)',
+        );
+        assert.deepEqual(
+          json.data[0].relationships['prerendered-card-css'].data,
+          [
+            {
+              type: 'prerendered-card-css',
+              id: `${testRealmHref}fancy-person`,
+            },
+            {
+              type: 'prerendered-card-css',
+              id: `${testRealmHref}person`,
+            },
+            {
+              type: 'prerendered-card-css',
+              id: 'https://cardstack.com/base/card-api',
+            },
+          ],
+        );
+
+        //  2nd card: FancyPerson Jimmy
+
+        assert.true(
+          json.data[1].attributes.html
+            .replace(/\s+/g, ' ')
+            .includes('Embedded Card FancyPerson: Jimmy'),
+          'embedded html for Jimmy looks correct (FancyPerson template)',
+        );
+
+        assert.deepEqual(
+          json.data[1].relationships['prerendered-card-css'].data,
+          [
+            {
+              type: 'prerendered-card-css',
+              id: `${testRealmHref}fancy-person`,
+            },
+            {
+              type: `prerendered-card-css`,
+              id: `${testRealmHref}person`,
+            },
+            {
+              type: `prerendered-card-css`,
+              id: `https://cardstack.com/base/card-api`,
+            },
+          ],
+        );
+
+        // Included css modules
+        assert.strictEqual(
+          json.included.length,
+          3,
+          '3 css modules are included',
+        );
+        assert.deepEqual(
+          json.included.map((i: any) => i.id),
+          [
+            `${testRealmHref}fancy-person`,
+            `${testRealmHref}person`,
+            'https://cardstack.com/base/card-api',
+          ],
+        );
       });
 
       test('can filter prerendered instances', async function (assert) {
@@ -1908,7 +2030,7 @@ module('Realm Server', function (hooks) {
           prerenderedHtmlFormat: 'embedded',
         };
         let response = await request
-          .get(`/_search-prerendered?${stringify(query)}`)
+          .get(`/test-realm/_search-prerendered?${stringify(query)}`)
           .set('Accept', 'application/vnd.card+json');
 
         let json = response.body;
@@ -1918,7 +2040,7 @@ module('Realm Server', function (hooks) {
           1,
           'one prerendered card instance is returned in the filtered search results',
         );
-        assert.strictEqual(json.data[0].id, 'http://127.0.0.1:4444/jimmy.json');
+        assert.strictEqual(json.data[0].id, `${testRealmHref}jimmy.json`);
       });
 
       test('can sort prerendered instances', async function (assert) {
@@ -1933,7 +2055,7 @@ module('Realm Server', function (hooks) {
           prerenderedHtmlFormat: 'embedded',
         };
         let response = await request
-          .get(`/_search-prerendered?${stringify(query)}`)
+          .get(`/test-realm/_search-prerendered?${stringify(query)}`)
           .set('Accept', 'application/vnd.card+json');
 
         let json = response.body;
@@ -1941,23 +2063,23 @@ module('Realm Server', function (hooks) {
         assert.strictEqual(json.data.length, 4, 'results count is correct');
 
         // firstName descending
-        assert.strictEqual(json.data[0].id, 'http://127.0.0.1:4444/jimmy.json');
-        assert.strictEqual(json.data[1].id, 'http://127.0.0.1:4444/jane.json');
-        assert.strictEqual(json.data[2].id, 'http://127.0.0.1:4444/craig.json');
-        assert.strictEqual(json.data[3].id, 'http://127.0.0.1:4444/aaron.json');
+        assert.strictEqual(json.data[0].id, `${testRealmHref}jimmy.json`);
+        assert.strictEqual(json.data[1].id, `${testRealmHref}jane.json`);
+        assert.strictEqual(json.data[2].id, `${testRealmHref}craig.json`);
+        assert.strictEqual(json.data[3].id, `${testRealmHref}aaron.json`);
       });
     });
   });
 
   module('_info GET request', function (_hooks) {
     module('public readable realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupBaseAndPermissionedRealmOnSameServer(hooks, {
         '*': ['read'],
       });
 
       test('serves the request', async function (assert) {
         let response = await request
-          .get(`/_info`)
+          .get(`/test-realm/_info`)
           .set('Accept', 'application/vnd.api+json');
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -1991,13 +2113,13 @@ module('Realm Server', function (hooks) {
     });
 
     module('permissioned realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupBaseAndPermissionedRealmOnSameServer(hooks, {
         john: ['read'],
       });
 
       test('401 with invalid JWT', async function (assert) {
         let response = await request
-          .get(`/_info`)
+          .get(`/test-realm/_info`)
           .set('Accept', 'application/vnd.api+json');
 
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
@@ -2005,7 +2127,7 @@ module('Realm Server', function (hooks) {
 
       test('401 without a JWT', async function (assert) {
         let response = await request
-          .get(`/_info`)
+          .get(`/test-realm/_info`)
           .set('Accept', 'application/vnd.api+json'); // no Authorization header
 
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
@@ -2013,7 +2135,7 @@ module('Realm Server', function (hooks) {
 
       test('403 without permission', async function (assert) {
         let response = await request
-          .get(`/_info`)
+          .get(`/test-realm/_info`)
           .set('Accept', 'application/vnd.api+json')
           .set(
             'Authorization',
@@ -2025,7 +2147,7 @@ module('Realm Server', function (hooks) {
 
       test('200 with permission', async function (assert) {
         let response = await request
-          .get(`/_info`)
+          .get(`/test-realm/_info`)
           .set('Accept', 'application/vnd.api+json')
           .set(
             'Authorization',
@@ -2036,15 +2158,12 @@ module('Realm Server', function (hooks) {
       });
     });
   });
+
   module('various other realm tests', function (hooks) {
     let testRealmServer2: Server;
     let testRealm2: Realm;
 
-    hooks.beforeEach(async function () {
-      shimExternals(virtualNetwork);
-    });
-
-    setupPermissionedRealm(hooks, {
+    setupBaseAndPermissionedRealmOnSameServer(hooks, {
       '*': ['read', 'write'],
     });
 
@@ -2172,7 +2291,7 @@ module('Realm Server', function (hooks) {
 
       {
         let response = await request
-          .get('/new-card')
+          .get('/test-realm/new-card')
           .set('Accept', 'application/vnd.card+json');
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         let json = response.body;
@@ -2221,7 +2340,7 @@ module('Realm Server', function (hooks) {
     test('can index a changed file in the filesystem', async function (assert) {
       {
         let response = await request
-          .get('/person-1')
+          .get('/test-realm/person-1')
           .set('Accept', 'application/vnd.card+json');
         let json = response.body as LooseSingleCardDocument;
         assert.strictEqual(
@@ -2260,7 +2379,7 @@ module('Realm Server', function (hooks) {
 
       {
         let response = await request
-          .get('/person-1')
+          .get('/test-realm/person-1')
           .set('Accept', 'application/vnd.card+json');
         let json = response.body as LooseSingleCardDocument;
         assert.strictEqual(
@@ -2274,7 +2393,7 @@ module('Realm Server', function (hooks) {
     test('can index a file deleted from the filesystem', async function (assert) {
       {
         let response = await request
-          .get('/person-1')
+          .get('/test-realm/person-1')
           .set('Accept', 'application/vnd.card+json');
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
       }
@@ -2303,7 +2422,7 @@ module('Realm Server', function (hooks) {
 
     test('can make HEAD request to get realmURL and isPublicReadable status', async function (assert) {
       let response = await request
-        .head('/person-1')
+        .head('/test-realm/person-1')
         .set('Accept', 'application/vnd.card+json');
 
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -2319,7 +2438,7 @@ module('Realm Server', function (hooks) {
   });
 
   module('BOXEL_HTTP_BASIC_PW env var', function (hooks) {
-    setupPermissionedRealm(hooks, {
+    setupBaseAndPermissionedRealmOnSameServer(hooks, {
       '*': ['read', 'write'],
     });
 
@@ -2411,7 +2530,7 @@ module('Realm Server serving from root', function (hooks) {
 
   test('serves a root directory GET request', async function (assert) {
     let response = await request
-      .get('/')
+      .get('/test-realm/')
       .set('Accept', 'application/vnd.api+json');
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -2725,3 +2844,21 @@ module('Realm Server serving from a subdirectory', function (hooks) {
     );
   });
 });
+
+function assertRelationshipsForCardDefCssModules(
+  prerenderedCardCssItems: any,
+  assert: Assert,
+) {
+  [
+    'https://cardstack.com/base/card-api',
+    'https://cardstack.com/base/contains-many-component',
+    'https://cardstack.com/base/field-component',
+    'https://cardstack.com/base/links-to-editor',
+    'https://cardstack.com/base/links-to-many-component',
+  ].forEach((module, index) => {
+    assert.deepEqual(prerenderedCardCssItems[index], {
+      type: 'prerendered-card-css',
+      id: module,
+    });
+  });
+}

@@ -2700,9 +2700,9 @@ const tests = Object.freeze({
       '<div>Donald (FancyPerson embedded template)</div>',
     );
     assert.deepEqual(prerenderedCards[0].cssModuleIds, [
+      'https://cardstack.com/base/card-api',
       `${testRealmURL}fancy-person`,
       `${testRealmURL}person`,
-      'https://cardstack.com/base/card-api',
     ]);
 
     assert.strictEqual(
