@@ -20,7 +20,7 @@ import {
   RunnerOptionsManager,
   type RealmInfo,
   type TokenClaims,
-  type IndexUpdater,
+  type IndexWriter,
   type RunnerRegistration,
   type IndexRunner,
   type IndexResults,
@@ -191,7 +191,7 @@ async function makeRenderer() {
 class MockLocalIndexer extends Service {
   url = new URL(testRealmURL);
   #adapter: RealmAdapter | undefined;
-  #indexUpdater: IndexUpdater | undefined;
+  #indexWriter: IndexWriter | undefined;
   #fromScratch: ((realmURL: URL) => Promise<IndexResults>) | undefined;
   #incremental:
     | ((
@@ -216,7 +216,7 @@ class MockLocalIndexer extends Service {
   async configureRunner(
     registerRunner: RunnerRegistration,
     adapter: RealmAdapter,
-    indexUpdater: IndexUpdater,
+    indexWriter: IndexWriter,
   ) {
     if (!this.#fromScratch || !this.#incremental) {
       throw new Error(
@@ -224,7 +224,7 @@ class MockLocalIndexer extends Service {
       );
     }
     this.#adapter = adapter;
-    this.#indexUpdater = indexUpdater;
+    this.#indexWriter = indexWriter;
     await registerRunner(
       this.#fromScratch.bind(this),
       this.#incremental.bind(this),
@@ -236,11 +236,11 @@ class MockLocalIndexer extends Service {
     }
     return this.#adapter;
   }
-  get indexUpdater() {
-    if (!this.#indexUpdater) {
-      throw new Error(`indexUpdater not registered with MockLocalIndexer`);
+  get indexWriter() {
+    if (!this.#indexWriter) {
+      throw new Error(`indexWriter not registered with MockLocalIndexer`);
     }
-    return this.#indexUpdater;
+    return this.#indexWriter;
   }
 }
 
@@ -499,8 +499,8 @@ async function setupTestRealm({
 
   let adapter = new TestRealmAdapter(contents, new URL(realmURL));
   let indexRunner: IndexRunner = async (optsId) => {
-    let { registerRunner, indexUpdater } = runnerOptsMgr.getOptions(optsId);
-    await localIndexer.configureRunner(registerRunner, adapter, indexUpdater);
+    let { registerRunner, indexWriter } = runnerOptsMgr.getOptions(optsId);
+    await localIndexer.configureRunner(registerRunner, adapter, indexWriter);
   };
 
   let dbAdapter = await getDbAdapter();
@@ -515,10 +515,10 @@ async function setupTestRealm({
     virtualNetwork,
     dbAdapter,
     queue,
-    onIndexUpdaterReady: async (indexUpdater) => {
+    onIndexWriterReady: async (indexWriter) => {
       let worker = new Worker({
         realmURL: new URL(realmURL!),
-        indexUpdater,
+        indexWriter,
         queue,
         realmAdapter: adapter,
         runnerOptsManager: runnerOptsMgr,

@@ -190,7 +190,7 @@ let dist: URL = new URL(distURL);
         virtualNetwork,
         dbAdapter,
         queue,
-        onIndexUpdaterReady: async (indexUpdater) => {
+        onIndexWriterReady: async (indexWriter) => {
           // Note for future: we are taking advantage of the fact that the realm
           // does not need to auth with itself and are passing in the realm's
           // loader which includes a url handler for internal requests that
@@ -199,7 +199,7 @@ let dist: URL = new URL(distURL);
           // indexing.
           let worker = new Worker({
             realmURL: new URL(url),
-            indexUpdater,
+            indexWriter,
             queue,
             realmAdapter,
             runnerOptsManager: manager,
@@ -247,7 +247,7 @@ let dist: URL = new URL(distURL);
     await realm.start();
     log.info(
       `Realm ${realm.url} has started (${JSON.stringify(
-        realm.searchIndex.stats,
+        realm.realmIndexUpdater.stats,
         null,
         2,
       )})`,

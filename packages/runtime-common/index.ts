@@ -45,7 +45,7 @@ export * from './constants';
 export * from './queue';
 export * from './expression';
 export * from './index-query-engine';
-export * from './index-updater';
+export * from './index-writer';
 export * from './index-structure';
 export * from './db';
 export * from './worker';

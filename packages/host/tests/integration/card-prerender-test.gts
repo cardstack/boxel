@@ -171,7 +171,7 @@ module('Integration | card-prerender', function (hooks) {
 
   test("can generate the card's pre-rendered HTML", async function (assert) {
     {
-      let entry = await realm.searchIndex.instance(
+      let entry = await realm.realmIndexQueryEngine.instance(
         new URL(`${testRealmURL}Pet/mango`),
       );
       if (entry?.type === 'instance') {
@@ -185,7 +185,7 @@ module('Integration | card-prerender', function (hooks) {
       }
     }
     {
-      let entry = await realm.searchIndex.instance(
+      let entry = await realm.realmIndexQueryEngine.instance(
         new URL(`${testRealmURL}Pet/vangogh`),
       );
       if (entry?.type === 'instance') {
@@ -201,7 +201,7 @@ module('Integration | card-prerender', function (hooks) {
   });
 
   test('indexer returns correct prerendered cards with their html + css when there is "on" filter specified', async function (assert) {
-    let results = await realm.searchIndex.searchPrerendered(
+    let results = await realm.realmIndexQueryEngine.searchPrerendered(
       {
         filter: {
           on: {
@@ -268,7 +268,7 @@ module('Integration | card-prerender', function (hooks) {
   });
 
   test('indexer returns correct prerendered cards with their html + css when there is no "on" filter specified', async function (assert) {
-    let results = await realm.searchIndex.searchPrerendered(
+    let results = await realm.realmIndexQueryEngine.searchPrerendered(
       {},
       {
         htmlFormat: 'embedded',
