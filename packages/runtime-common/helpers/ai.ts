@@ -410,7 +410,6 @@ export function getSearchTool() {
             type: 'object',
             properties: {
               type: {
-                //resolved code ref essentially
                 type: 'object',
                 properties: {
                   module: {

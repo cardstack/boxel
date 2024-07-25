@@ -102,19 +102,25 @@ export default class CommandService extends Service {
     );
   }
 
+  deserializeResults(event: CommandResultEvent) {
+    let serializedResults: LooseSingleCardDocument[] =
+      typeof event?.content?.result === 'string'
+        ? JSON.parse(event.content.result)
+        : event.content.result;
+    return Array.isArray(serializedResults) ? serializedResults : [];
+  }
+
   async createCommandResultArgs(
     commandEvent: CommandEvent,
     event: CommandResultEvent,
   ) {
     let toolCall = commandEvent.content.data.toolCall;
-    let serializedResults: LooseSingleCardDocument[] = JSON.parse(
-      event?.content?.result,
-    );
+    let results = this.deserializeResults(event);
     if (toolCall.name === 'searchCard') {
       return {
         toolCallId: toolCall.id,
         toolCallResults: event?.content?.result,
-        cardIds: serializedResults.map((r) => r.data.id),
+        cardIds: results.map((r) => r.data.id),
       };
     } else if (toolCall.name === 'patchCard') {
       return {
