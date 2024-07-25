@@ -34,6 +34,7 @@ import {
   cardTypeDisplayName,
   codeRefWithAbsoluteURL,
   type Loader,
+  type Query,
 } from '@cardstack/runtime-common';
 
 class CodeRefEdit extends Component<typeof EditableCodeRef> {
@@ -130,14 +131,16 @@ class AppCardIsolated extends Component<typeof AppCard> {
   }
 
   <template>
-    <section class='dashboard'>
+    <section class='app-card'>
       <header
-        class='dashboard-header'
+        class='app-card-header'
         style={{cssVar db-header-bg-color=this.headerColor}}
       >
-        <h1 class='dashboard-title'><@fields.title /></h1>
-        <nav class='dashboard-nav'>
-          <ul class='tab-list'>
+        <div class='app-card-title-group'>
+          <h1 class='app-card-title'><@fields.title /></h1>
+        </div>
+        <nav class='app-card-nav'>
+          <ul class='app-card-tab-list'>
             {{#each @model.tabs as |tab index|}}
               <li>
                 <a
@@ -152,7 +155,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
         </nav>
       </header>
 
-      <div class='tab-content'>
+      <div class='app-card-content'>
         {{#if this.activeTab}}
           {{#if this.activeTab.isTable}}
             <div class='table'>
@@ -272,7 +275,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
       </div>
     </section>
     <style>
-      .dashboard {
+      .app-card {
         position: relative;
         min-height: 100%;
         display: grid;
@@ -282,45 +285,44 @@ class AppCardIsolated extends Component<typeof AppCard> {
         font: var(--boxel-font);
         letter-spacing: var(--boxel-lsp);
       }
-      .dashboard-header {
-        position: sticky;
-        top: 0;
-        z-index: 1;
-        padding-right: var(--boxel-sp-lg);
-        padding-left: var(--boxel-sp-lg);
+      .app-card-header {
+        padding: 0 var(--boxel-sp-lg);
         background-color: var(--db-header-bg-color, var(--boxel-light));
         color: var(--db-header-color, var(--boxel-dark));
-        box-shadow: var(--boxel-box-shadow);
+        border-bottom: var(--boxel-border);
       }
-      .dashboard-title {
-        margin: 0;
-        padding-top: var(--boxel-sp-lg);
-        padding-bottom: var(--boxel-sp-xs);
+      .app-card-title {
         font: 900 var(--boxel-font);
         letter-spacing: var(--boxel-lsp-xl);
         text-transform: uppercase;
       }
-      .dashboard-nav {
+      .app-card-nav {
         font: var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-sm);
       }
-      .dashboard-nav ul {
+      .app-card-tab-list {
         list-style-type: none;
         margin: 0;
-        display: flex;
-        gap: var(--boxel-sp);
         padding: 0;
+        display: flex;
+        gap: var(--boxel-sp-lg);
       }
-      .dashboard-nav a {
-        padding: var(--boxel-sp-xs) 0;
+      .app-card-tab-list a {
+        padding: var(--boxel-sp-xs) var(--boxel-sp-xxs);
         font-weight: 700;
       }
-      .active {
-        border-bottom: 4px solid var(--db-header-color, var(--boxel-dark));
-      }
-      .dashboard-nav a:hover {
+      .app-card-tab-list a.active,
+      .app-card-tab-list a:hover:not(:disabled) {
         color: var(--db-header-color, var(--boxel-dark));
         border-bottom: 4px solid var(--db-header-color, var(--boxel-dark));
       }
+      .app-card-content {
+        width: 100%;
+        max-width: 70rem;
+        margin: 0 auto;
+        padding: var(--boxel-sp-xl) var(--boxel-sp-xl) var(--boxel-sp-xxl);
+      }
+
       .table {
         margin-bottom: 40px;
       }
@@ -387,16 +389,6 @@ class AppCardIsolated extends Component<typeof AppCard> {
         color: var(--grid-card-label-color);
       }
 
-      .tab-content {
-        position: relative;
-        width: 100%;
-        max-width: 70rem;
-        height: 100%;
-        margin: 0 auto;
-        padding: var(--boxel-sp-xl) var(--boxel-sp-xl) var(--boxel-sp-xxl);
-        font: var(--boxel-font);
-        letter-spacing: var(--boxel-lsp);
-      }
       .module-input-group {
         max-width: 800px;
         margin-top: var(--boxel-sp-xl);
@@ -566,12 +558,18 @@ class AppCardIsolated extends Component<typeof AppCard> {
     this.setSearch();
   }
 
-  private setSearch() {
-    if (!this.activeTabRef || !this.currentRealm) {
+  setSearch(query?: Query) {
+    if (!this.currentRealm) {
       return;
     }
+    if (!query) {
+      if (!this.activeTabRef) {
+        return;
+      }
+      query = { filter: { type: this.activeTabRef } };
+    }
     this.liveQuery = getLiveCards(
-      { filter: { type: this.activeTabRef } },
+      query,
       [this.currentRealm.href], // we're only searching in the current realm
       async (ready: Promise<void> | undefined) => {
         if (this.args.context?.actions) {
@@ -612,14 +610,54 @@ class AppCardIsolated extends Component<typeof AppCard> {
 }
 
 export class AppCard extends CardDef {
-  static displayName = 'AppCard';
+  static displayName = 'App Card';
   static prefersWideFormat = true;
   static headerColor = '#ffffff';
   @field tabs = containsMany(Tab);
   static isolated = AppCardIsolated;
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <@fields.title />
+      <article class='app-card-embedded'>
+        <header>
+          <div class='icon' />
+          <div class='title-group'>
+            <h3><@fields.title /></h3>
+            <h4>{{@model.constructor.displayName}}</h4>
+          </div>
+        </header>
+        <p><@fields.description /></p>
+      </article>
+      <style>
+        .app-card-embedded {
+          padding: var(--boxel-sp);
+        }
+        header {
+          display: flex;
+          gap: var(--boxel-sp);
+          align-items: center;
+        }
+        h3 {
+          margin: 0;
+          font-size: 1.125rem;
+          letter-spacing: var(--boxel-lsp-xs);
+        }
+        h4 {
+          margin: 0;
+          font: 500 var(--boxel-font-xs);
+          line-height: 1.7;
+          letter-spacing: var(--boxel-lsp-xs);
+          color: var(--boxel-450);
+        }
+        p {
+          letter-spacing: var(--boxel-lsp-xs);
+        }
+        .icon {
+          width: 100px;
+          height: 100px;
+          background-color: var(--boxel-450);
+          border-radius: var(--boxel-border-radius-sm);
+        }
+      </style>
     </template>
   };
 }
