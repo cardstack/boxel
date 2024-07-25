@@ -3,7 +3,6 @@ import {
   type LooseSingleCardDocument,
   type CardResource,
 } from '@cardstack/runtime-common';
-import { MODIFY_SYSTEM_MESSAGE } from '@cardstack/runtime-common/helpers/ai';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardFragmentContent,
@@ -14,6 +13,18 @@ import type {
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
+
+const MODIFY_SYSTEM_MESSAGE =
+  '\
+The user is using an application called Boxel, where they are working on editing "Cards" which are data models representable as JSON. \
+The user may be non-technical and should not need to understand the inner workings of Boxel. \
+The user may be asking questions about the contents of the cards rather than help editing them. Use your world knowledge to help them. \
+If the user request is unclear, you may ask clarifying questions. \
+You may make multiple function calls, all calls are gated by the user so multiple options can be explored.\
+If a user asks you about things in the world, use your existing knowledge to help them. Only if necessary, add a *small* caveat at the end of your message to explain that you do not have live external data. \
+\
+If you need access to the cards the user can see, you can ask them to attach the cards. \
+If you encounter JSON structures, please enclose them within backticks to ensure they are displayed stylishly in Markdown.';
 
 export const SKILL_INSTRUCTIONS_MESSAGE =
   '\nThe user has given you the following instructions. You must obey these instructions when responding to the user:\n';
