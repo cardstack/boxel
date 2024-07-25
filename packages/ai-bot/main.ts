@@ -146,11 +146,7 @@ Common issues are:
         if (toStartOfTimeline) {
           return; // don't print paginated results
         }
-        if (
-          event.getType() !== 'm.room.message'
-          // &&
-          // event.getType() !== 'm.reaction'
-        ) {
+        if (event.getType() !== 'm.room.message') {
           return; // only print messages
         }
         if (event.getContent().msgtype === 'org.boxel.cardFragment') {

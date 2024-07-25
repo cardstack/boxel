@@ -68,10 +68,7 @@ export function constructHistory(history: IRoomEvent[]) {
           serializedCardFromFragments(id, fragments),
         );
       }
-    } else if (event.content.msgtype === 'org.boxel.commandResult') {
-    } else if (event.content.msgtype === 'org.boxel.command') {
     }
-
     if (event.content['m.relates_to']?.rel_type === 'm.replace') {
       eventId = event.content['m.relates_to']!.event_id!;
       event.event_id = eventId;
