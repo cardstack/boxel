@@ -22,7 +22,6 @@ import {
   testRealmURL,
   testRealmInfo,
   cleanWhiteSpace,
-  trimCardContainer,
   setupCardLogs,
   setupLocalIndexing,
   type CardDocFiles,
@@ -650,11 +649,11 @@ module(`Integration | search-index`, function (hooks) {
           let { isolatedHtml, embeddedHtml } =
             (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
           assert.strictEqual(
-            trimCardContainer(stripScopedCSSAttributes(isolatedHtml!)),
+            cleanWhiteSpace(stripScopedCSSAttributes(isolatedHtml!)),
             cleanWhiteSpace(`<h1> Van Gogh </h1>`),
           );
           assert.strictEqual(
-            trimCardContainer(
+            cleanWhiteSpace(
               stripScopedCSSAttributes(
                 embeddedHtml![`${testRealmURL}person/Person`],
               ),
@@ -679,11 +678,11 @@ module(`Integration | search-index`, function (hooks) {
           let { isolatedHtml, embeddedHtml } =
             (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
           assert.strictEqual(
-            trimCardContainer(stripScopedCSSAttributes(isolatedHtml!)),
+            cleanWhiteSpace(stripScopedCSSAttributes(isolatedHtml!)),
             cleanWhiteSpace(`<h1> Van Gogh </h1>`),
           );
           assert.strictEqual(
-            trimCardContainer(
+            cleanWhiteSpace(
               stripScopedCSSAttributes(
                 embeddedHtml![`${testRealmURL}person/Person`],
               ),
@@ -800,11 +799,11 @@ module(`Integration | search-index`, function (hooks) {
           new URL(`${testRealmURL}working-van-gogh`),
         )) ?? {};
       assert.strictEqual(
-        trimCardContainer(stripScopedCSSAttributes(isolatedHtml!)),
+        cleanWhiteSpace(stripScopedCSSAttributes(isolatedHtml!)),
         cleanWhiteSpace(`<h1> Van Gogh </h1>`),
       );
       assert.strictEqual(
-        trimCardContainer(
+        cleanWhiteSpace(
           stripScopedCSSAttributes(
             embeddedHtml![`${testRealmURL}person/Person`],
           ),
@@ -923,7 +922,7 @@ module(`Integration | search-index`, function (hooks) {
         (await getInstance(realm, new URL(`${testRealmURL}working-vangogh`))) ??
         {};
       assert.strictEqual(
-        trimCardContainer(stripScopedCSSAttributes(isolatedHtml!)),
+        cleanWhiteSpace(stripScopedCSSAttributes(isolatedHtml!)),
         cleanWhiteSpace(`<h1> Van Gogh </h1>`),
       );
       assert.strictEqual(
@@ -932,7 +931,7 @@ module(`Integration | search-index`, function (hooks) {
         `isolated HTML does not include ember ID's`,
       );
       assert.strictEqual(
-        trimCardContainer(
+        cleanWhiteSpace(
           stripScopedCSSAttributes(
             embeddedHtml![`${testRealmURL}person/Person`],
           ),
@@ -989,7 +988,7 @@ module(`Integration | search-index`, function (hooks) {
       (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
 
     assert.strictEqual(
-      trimCardContainer(stripScopedCSSAttributes(atomHtml!)),
+      cleanWhiteSpace(stripScopedCSSAttributes(atomHtml!)),
       cleanWhiteSpace(`<div class="atom">Van Gogh</div>`),
       'atom html is correct',
     );
@@ -1061,6 +1060,7 @@ module(`Integration | search-index`, function (hooks) {
 
   test(`can generate embedded HTML for instance's card class hierarchy`, async function (assert) {
     class Person extends CardDef {
+      static displayName = 'Person';
       @field firstName = contains(StringField);
       static embedded = class Isolated extends Component<typeof this> {
         <template>
@@ -1070,6 +1070,7 @@ module(`Integration | search-index`, function (hooks) {
     }
 
     class FancyPerson extends Person {
+      static displayName = 'Fancy Person';
       @field favoriteColor = contains(StringField);
       static embedded = class Isolated extends Component<typeof this> {
         <template>
@@ -1113,7 +1114,7 @@ module(`Integration | search-index`, function (hooks) {
       `HTML does not include ember ID's`,
     );
     assert.strictEqual(
-      trimCardContainer(
+      cleanWhiteSpace(
         stripScopedCSSAttributes(
           embeddedHtml![`${testRealmURL}fancy-person/FancyPerson`],
         ),
@@ -1136,7 +1137,7 @@ module(`Integration | search-index`, function (hooks) {
     );
 
     assert.strictEqual(
-      trimCardContainer(
+      cleanWhiteSpace(
         stripScopedCSSAttributes(embeddedHtml![`${testRealmURL}person/Person`]),
       ),
       cleanWhiteSpace(`<h1> Person Embedded Card: Germaine </h1>`),
@@ -1150,23 +1151,19 @@ module(`Integration | search-index`, function (hooks) {
     assert.strictEqual(
       cleanWhiteSpace(stripScopedCSSAttributes(embeddedHtml![cardDefRefURL])),
       cleanWhiteSpace(`
-        <div class="ember-view boxel-card-container boundaries field-component-card embedded-format display-container-true"
-              data-test-boxel-card-container 
-              data-test-card-format="embedded"
-              data-test-field-component-card>
-          <!---->
-          <div class="embedded-template">
-            <div class="thumbnail-section">
-              <div class="card-thumbnail">
-                <div class="card-thumbnail-text" data-test-card-thumbnail-text>Card</div>
-              </div>
+        <div class="embedded-template">
+          <div class="thumbnail-section">
+            <div class="card-thumbnail">
+              <div class="card-thumbnail-text" data-test-card-thumbnail-text>Card</div>
             </div>
-            <div class="info-section">
-              <h3 class="card-title" data-test-card-title></h3>
-              <h4 class="card-display-name" data-test-card-display-name>Card</h4>
-            </div>
-            <div class="card-description" data-test-card-description>Fancy Germaine</div>
           </div>
+          <div class="info-section">
+            <h3 class="card-title" data-test-card-title></h3>
+            <h4 class="card-display-name" data-test-card-display-name>
+              Fancy Person
+            </h4>
+          </div>
+          <div class="card-description" data-test-card-description>Fancy Germaine</div>
         </div>
       `),
       `${cardDefRefURL} embedded HTML is correct`,

@@ -13,7 +13,7 @@ import glimmerTemplatePlugin from '@cardstack/ember-template-imports/src/babel-p
 //@ts-ignore no types are available
 import decoratorsProposalPlugin from '@babel/plugin-proposal-decorators';
 //@ts-ignore no types are available
-import classPropertiesProposalPlugin from '@babel/plugin-proposal-class-properties';
+import classPropertiesPlugin from '@babel/plugin-transform-class-properties';
 //@ts-ignore ironically no types are available
 import typescriptPlugin from '@babel/plugin-transform-typescript';
 //@ts-ignore no types are available
@@ -49,7 +49,7 @@ export function transpileJS(content: string, debugFilename: string): string {
       emberConcurrencyAsyncPlugin,
       [typescriptPlugin, { allowDeclareFields: true }],
       [decoratorsProposalPlugin, { legacy: true }],
-      classPropertiesProposalPlugin,
+      classPropertiesPlugin,
       [makeEmberTemplatePlugin, templateOptions],
       loaderPlugin,
     ],

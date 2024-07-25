@@ -79,6 +79,12 @@ class SendReadReceipt extends Modifier<SendReadReceiptModifierSignature> {
       return;
     }
 
+    let messageIsFromBot = message.author.userId === aiBotUserId;
+
+    if (!messageIsFromBot) {
+      return;
+    }
+
     if (matrixService.currentUserEventReadReceipts.has(message.eventId)) {
       return;
     }

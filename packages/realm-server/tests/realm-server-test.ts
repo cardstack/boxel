@@ -1698,10 +1698,10 @@ module('Realm Server', function (hooks) {
             'embedded html looks correct',
           );
 
-          assert.strictEqual(
-            json.data[0].relationships['prerendered-card-css'].data.length,
-            0,
-            'no css is included',
+          assert.deepEqual(
+            json.included,
+            [],
+            'no css is present in the response',
           );
 
           assert.strictEqual(json.meta.page.total, 1, 'total count is correct');
@@ -1852,17 +1852,7 @@ module('Realm Server', function (hooks) {
           json.data[0].attributes.html
             .replace(/\s+/g, ' ')
             .includes('Person Aaron'),
-          'embedded html looks correct',
-        );
-        assert.strictEqual(
-          json.data[0].relationships['prerendered-card-css'].data.length,
-          1,
-          'there is one css for card of type Person',
-        );
-        assert.deepEqual(
-          json.data[0].relationships['prerendered-card-css'].data[0],
-          { type: 'prerendered-card-css', id: 'http://127.0.0.1:4444/person' },
-          'css relationship is correct',
+          'embedded html looks correct (CardDef template)',
         );
 
         // 2nd card: Person Craig
@@ -1871,17 +1861,7 @@ module('Realm Server', function (hooks) {
           json.data[1].attributes.html
             .replace(/\s+/g, ' ')
             .includes('Person Craig'),
-          'embedded html for Craig looks correct',
-        );
-        assert.strictEqual(
-          json.data[1].relationships['prerendered-card-css'].data.length,
-          1,
-          'there is one css for card of type Person',
-        );
-        assert.deepEqual(
-          json.data[1].relationships['prerendered-card-css'].data[0],
-          { type: 'prerendered-card-css', id: 'http://127.0.0.1:4444/person' },
-          'css relationship is correct',
+          'embedded html for Craig looks correct (CardDef template)',
         );
 
         // 3rd card: FancyPerson Jane
@@ -1890,26 +1870,7 @@ module('Realm Server', function (hooks) {
           json.data[2].attributes.html
             .replace(/\s+/g, ' ')
             .includes('FancyPerson Jane'),
-          'embedded html for Jane looks correct',
-        );
-        assert.strictEqual(
-          json.data[2].relationships['prerendered-card-css'].data.length,
-          2,
-          'there are two css for card of type FancyPerson',
-        );
-        assert.deepEqual(
-          json.data[2].relationships['prerendered-card-css'].data,
-          [
-            {
-              type: 'prerendered-card-css',
-              id: 'http://127.0.0.1:4444/person',
-            },
-            {
-              type: 'prerendered-card-css',
-              id: 'http://127.0.0.1:4444/fancy-person',
-            },
-          ],
-          'instance of type FancyPerson has css from both Person and FancyPerson',
+          'embedded html for Jane looks correct (CardDef template)',
         );
 
         // 4th card: FancyPerson Jimmy
@@ -1918,53 +1879,7 @@ module('Realm Server', function (hooks) {
           json.data[3].attributes.html
             .replace(/\s+/g, ' ')
             .includes('FancyPerson Jimmy'),
-          'embedded html for Jimmy looks correct',
-        );
-        assert.strictEqual(
-          json.data[3].relationships['prerendered-card-css'].data.length,
-          2,
-          'there are two css for card of type FancyPerson',
-        );
-        assert.deepEqual(
-          json.data[3].relationships['prerendered-card-css'].data,
-          [
-            {
-              type: 'prerendered-card-css',
-              id: 'http://127.0.0.1:4444/person',
-            },
-            {
-              type: 'prerendered-card-css',
-              id: 'http://127.0.0.1:4444/fancy-person',
-            },
-          ],
-          'instance of type FancyPerson has css from both Person and FancyPerson',
-        );
-
-        assert.strictEqual(
-          json.included.length,
-          2,
-          'css sources are not duplicated - only 2 css sources are included for 4 instances (one for Person and one for FancyPerson',
-        );
-
-        assert.strictEqual(json.included[0].type, 'prerendered-card-css');
-        assert.strictEqual(json.included[0].id, 'http://127.0.0.1:4444/person');
-        assert.ok(
-          /^\.border\[data-scopedcss-[a-f0-9]+-[a-f0-9]+\] \{ border: 1px solid red; \}$/.test(
-            json.included[0].attributes.content.replace(/\s+/g, ' '),
-          ),
-          'css content for Person is correct',
-        );
-
-        assert.strictEqual(json.included[1].type, 'prerendered-card-css');
-        assert.strictEqual(
-          json.included[1].id,
-          'http://127.0.0.1:4444/fancy-person',
-        );
-        assert.ok(
-          /^\.fancy-border\[data-scopedcss-[a-f0-9]+-[a-f0-9]+\] \{ border: 1px solid pink; \}$/.test(
-            json.included[1].attributes.content.replace(/\s+/g, ' '),
-          ),
-          'css content for FancyPerson is correct',
+          'embedded html for Jimmy looks correct (CardDef template)',
         );
 
         assert.strictEqual(json.meta.page.total, 4, 'total count is correct');
@@ -2499,6 +2414,14 @@ module('Realm Server serving from root', function (hooks) {
           id: testRealmHref,
           type: 'directory',
           relationships: {
+            '%F0%9F%98%80.gts': {
+              links: {
+                related: 'http://127.0.0.1:4444/%F0%9F%98%80.gts',
+              },
+              meta: {
+                kind: 'file',
+              },
+            },
             'a.js': {
               links: {
                 related: `${testRealmHref}a.js`,
