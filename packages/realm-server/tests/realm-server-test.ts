@@ -1855,6 +1855,16 @@ module('Realm Server', function (hooks) {
           'embedded html looks correct (CardDef template)',
         );
 
+        // TODO: uncomment when we have a way to include cross realm css in the response
+        // This will be the same time when the test that follows this one should be unskipped
+        // assert.deepEqual(
+        //   json.data[0].relationships['prerendered-card-css'].data[0],
+        //   {
+        //     type: 'prerendered-card-css',
+        //     id: 'https://cardstack.com/base/card-api',
+        //   },
+        // );
+
         // 2nd card: Person Craig
         assert.strictEqual(json.data[1].type, 'prerendered-card');
         assert.true(
@@ -1883,6 +1893,104 @@ module('Realm Server', function (hooks) {
         );
 
         assert.strictEqual(json.meta.page.total, 4, 'total count is correct');
+      });
+
+      // Skipped until we have a way to include cross realm css in the response
+      // @ts-ignore
+      test.skip('returns correct css in relationships, even the one indexed in another realm (CardDef)', async function (assert) {
+        let query: Query & { prerenderedHtmlFormat: string } = {
+          filter: {
+            on: {
+              module: `${testRealmHref}fancy-person`,
+              name: 'FancyPerson',
+            },
+            not: {
+              eq: {
+                firstName: 'Peter',
+              },
+            },
+          },
+          prerenderedHtmlFormat: 'embedded',
+        };
+
+        let response = await request
+          .get(`/_search-prerendered?${stringify(query)}`)
+          .set('Accept', 'application/vnd.card+json');
+
+        let json = response.body;
+
+        assert.strictEqual(
+          json.data.length,
+          2,
+          'returned results count is correct',
+        );
+
+        // 1st card: FancyPerson Jane
+        assert.true(
+          json.data[0].attributes.html
+            .replace(/\s+/g, ' ')
+            .includes('Embedded Card FancyPerson: Jane'),
+          'embedded html for Jane looks correct (FancyPerson template)',
+        );
+        assert.deepEqual(
+          json.data[0].relationships['prerendered-card-css'].data,
+          [
+            {
+              type: 'prerendered-card-css',
+              id: `${testRealmHref}fancy-person`,
+            },
+            {
+              type: 'prerendered-card-css',
+              id: `${testRealmHref}person`,
+            },
+            {
+              type: 'prerendered-card-css',
+              id: 'https://cardstack.com/base/card-api',
+            },
+          ],
+        );
+
+        //  2nd card: FancyPerson Jimmy
+
+        assert.true(
+          json.data[1].attributes.html
+            .replace(/\s+/g, ' ')
+            .includes('Embedded Card FancyPerson: Jimmy'),
+          'embedded html for Jimmy looks correct (FancyPerson template)',
+        );
+
+        assert.deepEqual(
+          json.data[1].relationships['prerendered-card-css'].data,
+          [
+            {
+              type: 'prerendered-card-css',
+              id: `${testRealmHref}fancy-person`,
+            },
+            {
+              type: `prerendered-card-css`,
+              id: `${testRealmHref}person`,
+            },
+            {
+              type: `prerendered-card-css`,
+              id: `https://cardstack.com/base/card-api`,
+            },
+          ],
+        );
+
+        // Included css modules
+        assert.strictEqual(
+          json.included.length,
+          3,
+          '3 css modules are included',
+        );
+        assert.deepEqual(
+          json.included.map((i: any) => i.id),
+          [
+            `${testRealmHref}fancy-person`,
+            `${testRealmHref}person`,
+            'https://cardstack.com/base/card-api',
+          ],
+        );
       });
 
       test('can filter prerendered instances', async function (assert) {

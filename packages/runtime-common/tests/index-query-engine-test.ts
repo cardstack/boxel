@@ -2699,6 +2699,11 @@ const tests = Object.freeze({
       prerenderedCards[0].html,
       '<div>Donald (FancyPerson embedded template)</div>',
     );
+    assert.deepEqual(prerenderedCards[0].cssModuleIds, [
+      `${testRealmURL}fancy-person`,
+      `${testRealmURL}person`,
+      'https://cardstack.com/base/card-api',
+    ]);
 
     assert.strictEqual(
       prerenderedCardCssItems.length,
