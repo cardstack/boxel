@@ -1,7 +1,7 @@
 import '../setup-logger'; // This should be first
 import './auth-client-test';
 import './index-query-engine-test';
-import './index-updater-test';
+import './index-writer-test';
 import './indexing-test';
 import './loader-test';
 import './module-syntax-test';

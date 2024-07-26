@@ -112,6 +112,7 @@ export interface PrerenderedCardCssItem {
 export interface PrerenderedCard {
   url: string;
   html: string;
+  cssModuleIds: string[];
 }
 
 export interface QueryResultsMeta {
@@ -516,6 +517,9 @@ export class IndexQueryEngine {
       return {
         url: card.url!,
         html: card.html,
+        cssModuleIds: groupedCssInstanceData
+          .map((cssRecord) => cssRecord.css_module_id)
+          .sort((a, b) => a.localeCompare(b)), // Sort by css module id for determinism (especially in tests). We do it in JS because SQLite and Postgres have different sorting behavior for urls
       };
     });
 
@@ -526,7 +530,7 @@ export class IndexQueryEngine {
           source: cssRecord.css_source,
         };
       })
-      .sort((a, b) => a.cssModuleId.localeCompare(b.cssModuleId)); // Sort by css module id for determinism (especially in tests). We do it in JS because SQLite and Postgres have different sorting behavior for urls
+      .sort((a, b) => a.cssModuleId.localeCompare(b.cssModuleId)); // Same comment for sorting as above
 
     return { prerenderedCards, prerenderedCardCssItems, meta };
   }
