@@ -1010,6 +1010,7 @@ test.describe('Room messages', () => {
   });
 
   test('displays error message if message is too large', async ({ page }) => {
+    await new Promise((res) => setTimeout(res, 2000));
     await login(page, 'user1', 'pass');
 
     await page.locator('[data-test-message-field]').fill('a'.repeat(65000));
