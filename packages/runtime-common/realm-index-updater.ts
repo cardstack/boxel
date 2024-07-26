@@ -34,10 +34,12 @@ export class RealmIndexUpdater {
     realm,
     dbAdapter,
     queue,
+    withIndexWriter,
   }: {
     realm: Realm;
     dbAdapter: DBAdapter;
     queue: Queue;
+    withIndexWriter?: (indexWriter: IndexWriter, loader: Loader) => void;
   }) {
     if (!dbAdapter) {
       throw new Error(
@@ -48,6 +50,9 @@ export class RealmIndexUpdater {
     this.#queue = queue;
     this.#realm = realm;
     this.#loader = Loader.cloneLoader(this.#realm.loaderTemplate);
+    if (withIndexWriter) {
+      withIndexWriter(this.#indexWriter, this.#realm.loaderTemplate);
+    }
   }
 
   get stats() {
@@ -72,11 +77,8 @@ export class RealmIndexUpdater {
     return ignoreMap;
   }
 
-  async run(onIndexWriterReady?: (indexWriter: IndexWriter) => Promise<void>) {
+  async run() {
     await this.#queue.start();
-    if (onIndexWriterReady) {
-      await onIndexWriterReady(this.#indexWriter);
-    }
 
     let isNewIndex = await this.#indexWriter.isNewIndex(this.realmURL);
     if (isNewIndex) {

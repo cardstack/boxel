@@ -153,7 +153,7 @@ let dist: URL = new URL(distURL);
   let dbAdapter = new PgAdapter();
   let queue = new PgQueue(dbAdapter);
 
-  let start = Date.now();
+  let workers: Worker[] = [];
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
 
@@ -191,7 +191,7 @@ let dist: URL = new URL(distURL);
         virtualNetwork,
         dbAdapter,
         queue,
-        onIndexWriterReady: async (indexWriter) => {
+        withIndexWriter: (indexWriter, loader) => {
           // Note for future: we are taking advantage of the fact that the realm
           // does not need to auth with itself and are passing in the realm's
           // loader which includes a url handler for internal requests that
@@ -204,15 +204,14 @@ let dist: URL = new URL(distURL);
             queue,
             realmAdapter,
             runnerOptsManager: manager,
-            loader: realm.loaderTemplate,
+            loader,
             indexRunner: getRunner,
           });
-          await worker.run();
+          workers.push(worker);
         },
         assetsURL: dist,
       },
       {
-        deferStartUp: true,
         ...(process.env.DISABLE_MODULE_CACHING === 'true'
           ? { disableModuleCaching: true }
           : {}),
@@ -226,7 +225,6 @@ let dist: URL = new URL(distURL);
     realms.push(realm);
     virtualNetwork.mount(realm.handle);
   }
-  log.info(`workers for port ${port} started in ${Date.now() - start}ms`);
 
   let server = new RealmServer(realms, virtualNetwork);
 
@@ -243,6 +241,8 @@ let dist: URL = new URL(distURL);
     }
   }
   log.info(`Using host url: '${dist}' for card pre-rendering`);
+
+  await Promise.all(workers.map((worker) => worker.run()));
 
   for (let realm of realms) {
     log.info(`Starting realm ${realm.url}...`);
