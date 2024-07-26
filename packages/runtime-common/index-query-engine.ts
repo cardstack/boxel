@@ -138,14 +138,6 @@ export class IndexQueryEngine {
     return this.query(await this.makeExpression(query, loader));
   }
 
-  async isNewIndex(realm: URL): Promise<boolean> {
-    let [row] = (await this.query([
-      'SELECT current_version FROM realm_versions WHERE realm_url =',
-      param(realm.href),
-    ])) as Pick<RealmVersionsTable, 'current_version'>[];
-    return !row;
-  }
-
   async getModule(
     url: URL,
     opts?: GetEntryOptions,

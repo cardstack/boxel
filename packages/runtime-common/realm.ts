@@ -408,7 +408,7 @@ export class Realm {
     _request: Request,
     requestContext: RequestContext,
   ) {
-    await this.ready;
+    await this.#startedUp.promise;
 
     return createResponse({
       body: null,
@@ -422,7 +422,7 @@ export class Realm {
 
   async start() {
     this.#startedUp.fulfill((() => this.#startup())());
-    await this.ready;
+    await this.#startedUp.promise;
   }
 
   async fullIndex() {
@@ -560,10 +560,6 @@ export class Realm {
     this.#perfLog.debug(
       `realm server startup in ${Date.now() - this.#startTime}ms`,
     );
-  }
-
-  private get ready(): Promise<void> {
-    return this.#startedUp.promise;
   }
 
   // TODO get rid of this
@@ -796,7 +792,7 @@ export class Realm {
       // local requests are allowed to query the realm as the index is being built up
       if (!isLocal) {
         let timeout = await Promise.race<void | Error>([
-          this.ready,
+          this.#startedUp.promise,
           new Promise((resolve) =>
             setTimeout(() => {
               resolve(
