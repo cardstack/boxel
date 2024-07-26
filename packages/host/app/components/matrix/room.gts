@@ -6,7 +6,6 @@ import { cached, tracked } from '@glimmer/tracking';
 
 import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
-import { TrackedObject } from 'tracked-built-ins/.';
 import { v4 as uuidv4 } from 'uuid';
 
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
@@ -183,12 +182,24 @@ export default class Room extends Component<Signature> {
 
     for (let skill of this.roomResource.skills) {
       let skillCardResource = this.skillCardResources.get(skill.card.id);
-      skills.push(
-        new TrackedObject({
+      let newSkill = new Proxy(
+        {
           card: skillCardResource!.card ?? skill.card,
           isActive: skill.isActive,
-        } as Skill),
-      );
+        },
+        {
+          set(target, property, value) {
+            if (property === 'isActive' && target[property] !== value) {
+              Reflect.set(target, property, value);
+              skill.isActive = value;
+              return true;
+            }
+            Reflect.set(target, property, value);
+            return true;
+          },
+        },
+      ) as Skill;
+      skills.push(newSkill);
     }
     return skills;
   }
