@@ -9,7 +9,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import { cssVar, eq, getContrastColor } from '@cardstack/boxel-ui/helpers';
-import { getLiveCards } from '@cardstack/runtime-common';
+import { getLiveCards, type Query } from '@cardstack/runtime-common';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -370,12 +370,23 @@ class Isolated extends AppCard.isolated {
     super(owner, args);
     // this.args.model.tabs = this.tabs;
     if (this.currentRealm) {
-      let query = {
+      let query: Query = {
         filter: {
-          type: {
-            name: 'AppCard',
-            module: `${this.currentRealm?.href}app-card`,
-          },
+          every: [
+            {
+              type: {
+                name: 'AppCard',
+                module: `${this.currentRealm?.href}app-card`,
+              },
+            },
+            {
+              not: {
+                eq: {
+                  id: this.args.model.id!,
+                },
+              },
+            },
+          ],
         },
       };
       this.setSearch(query);
