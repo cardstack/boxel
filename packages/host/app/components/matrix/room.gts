@@ -175,6 +175,9 @@ export default class Room extends Component<Signature> {
 
   @cached
   private get skills(): Skill[] {
+    // To avoid `ember/no-side-effects` error:
+    // I separated the logic to instantiate and cache skill card resources
+    // from this getter into the `ensureSkillCardResources` method.
     this.ensureSkillCardResources();
     let skills = [];
 
