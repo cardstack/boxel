@@ -890,7 +890,24 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test('attaches a card in a coversation multiple times', async ({ page }) => {
+  test('displays error message if message is too large', async ({ page }) => {
+    await login(page, 'user1', 'pass');
+
+    await page.locator('[data-test-message-field]').fill('a'.repeat(65000));
+    await page.locator('[data-test-send-message-btn]').click();
+
+    await expect(page.locator('[data-test-ai-assistant-message]')).toHaveCount(
+      1,
+    );
+    await expect(page.locator('[data-test-card-error]')).toContainText(
+      'Message is too large',
+    );
+    await expect(page.locator('[data-test-ai-bot-retry-button]')).toHaveCount(
+      0,
+    );
+  });
+
+  test('attaches a card in a conversation multiple times', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
 
     await login(page, 'user1', 'pass');
@@ -1007,44 +1024,5 @@ test.describe('Room messages', () => {
     await page
       .locator(`[data-test-stack-card="${testCard}"] [data-test-edit-button]`)
       .click();
-  });
-
-  /*
-      TODO need to revisit this test. it fails with the following error.
-      It is very unclear what is so special about this particular test that
-      we consistently get this failure.
-
-      Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:4202/test
-      Call log:
-        - navigating to "http://localhost:4202/test", waiting until "load"
-
-
-        at ../helpers/index.ts:63
-
-        61 |
-        62 | export async function openRoot(page: Page, url = testHost) {
-      > 63 |   await page.goto(url);
-          |              ^
-        64 |   await expect(page.locator('.cards-grid')).toHaveCount(1);
-        65 |   let isOperatorMode = !!(await page.evaluate(() =>
-        66 |     document.querySelector('dialog.operator-mode'),
-  */
-  test.skip('displays error message if message is too large', async ({
-    page,
-  }) => {
-    await login(page, 'user1', 'pass');
-
-    await page.locator('[data-test-message-field]').fill('a'.repeat(65000));
-    await page.locator('[data-test-send-message-btn]').click();
-
-    await expect(page.locator('[data-test-ai-assistant-message]')).toHaveCount(
-      1,
-    );
-    await expect(page.locator('[data-test-card-error]')).toContainText(
-      'Message is too large',
-    );
-    await expect(page.locator('[data-test-ai-bot-retry-button]')).toHaveCount(
-      0,
-    );
   });
 });
