@@ -52,7 +52,12 @@ export function constructHistory(history: IRoomEvent[]) {
   const latestEventsMap = new Map<string, DiscreteMatrixEvent>();
   for (let rawEvent of history) {
     if (rawEvent.content.data) {
-      rawEvent.content.data = JSON.parse(rawEvent.content.data);
+      try {
+        rawEvent.content.data = JSON.parse(rawEvent.content.data);
+      } catch (e) {
+        console.log('Error parsing JSON data', rawEvent.content.data);
+        throw e;
+      }
     }
     let event = { ...rawEvent } as DiscreteMatrixEvent;
     if (event.type !== 'm.room.message') {
