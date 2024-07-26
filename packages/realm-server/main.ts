@@ -229,6 +229,13 @@ let dist: URL = new URL(distURL);
   let server = new RealmServer(realms, virtualNetwork);
 
   server.listen(port);
+
+  await Promise.all(workers.map((worker) => worker.run()));
+
+  for (let realm of realms) {
+    await realm.start();
+  }
+
   log.info(`Realm server listening on port ${port} is serving realms:`);
   let additionalMappings = hrefs.slice(paths.length);
   for (let [index, { url }] of realms.entries()) {
@@ -241,14 +248,6 @@ let dist: URL = new URL(distURL);
     }
   }
   log.info(`Using host url: '${dist}' for card pre-rendering`);
-
-  await Promise.all(workers.map((worker) => worker.run()));
-
-  for (let realm of realms) {
-    log.info(`Starting realm ${realm.url}...`);
-    await realm.start();
-    log.info(`Realm ${realm.url} has started`);
-  }
 })().catch((e: any) => {
   Sentry.captureException(e);
   console.error(
