@@ -153,6 +153,7 @@ let dist: URL = new URL(distURL);
   let dbAdapter = new PgAdapter();
   let queue = new PgQueue(dbAdapter);
 
+  let start = Date.now();
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
 
@@ -225,11 +226,12 @@ let dist: URL = new URL(distURL);
     realms.push(realm);
     virtualNetwork.mount(realm.handle);
   }
+  log.info(`workers for port ${port} started in ${Date.now() - start}ms`);
 
   let server = new RealmServer(realms, virtualNetwork);
 
   server.listen(port);
-  log.info(`Realm server listening on port ${port}:`);
+  log.info(`Realm server listening on port ${port} is serving realms:`);
   let additionalMappings = hrefs.slice(paths.length);
   for (let [index, { url }] of realms.entries()) {
     log.info(`    ${url} => ${hrefs[index][1]}, serving path ${paths[index]}`);
@@ -245,13 +247,7 @@ let dist: URL = new URL(distURL);
   for (let realm of realms) {
     log.info(`Starting realm ${realm.url}...`);
     await realm.start();
-    log.info(
-      `Realm ${realm.url} has started (${JSON.stringify(
-        realm.searchIndex.stats,
-        null,
-        2,
-      )})`,
-    );
+    log.info(`Realm ${realm.url} has started`);
   }
 })().catch((e: any) => {
   Sentry.captureException(e);

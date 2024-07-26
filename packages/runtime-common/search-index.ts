@@ -5,6 +5,10 @@ import {
   maybeURL,
   IndexUpdater,
   IndexQueryEngine,
+  IndexedInstanceOrError,
+  IndexedCSSOrError,
+  Deferred,
+  logger,
   type Stats,
   type LooseCardResource,
   type DBAdapter,
@@ -15,8 +19,6 @@ import {
   type IncrementalArgs,
   type IncrementalResult,
   type IndexedModuleOrError,
-  IndexedInstanceOrError,
-  IndexedCSSOrError,
 } from '.';
 import { Realm } from './realm';
 import { RealmPaths } from './paths';
@@ -49,6 +51,7 @@ interface SearchResultError {
 export class SearchIndex {
   #realm: Realm;
   #loader: Loader;
+  #log = logger('search-index');
   #ignoreData: Record<string, string> = {};
   #stats: Stats = {
     instancesIndexed: 0,
@@ -58,6 +61,7 @@ export class SearchIndex {
   #indexUpdater: IndexUpdater;
   #indexQueryEngine: IndexQueryEngine;
   #queue: Queue;
+  #indexingDeferred: Deferred<void> | undefined;
 
   constructor({
     realm,
@@ -110,45 +114,79 @@ export class SearchIndex {
       await onIndexUpdaterReady(this.#indexUpdater);
     }
 
-    await this.fullIndex();
+    let isNewIndex = await this.#indexQueryEngine.isNewIndex(this.realmURL);
+    if (isNewIndex) {
+      // we only await the full indexing at boot if this is a brand new index
+      await this.fullIndex();
+    } else {
+      // this promise is tracked in `this.indexing()` if consumers need it.
+      this.fullIndex();
+    }
+  }
+
+  indexing() {
+    return this.#indexingDeferred?.promise;
   }
 
   async fullIndex() {
-    let args: FromScratchArgs = {
-      realmURL: this.#realm.url,
-    };
-    let job = await this.#queue.publish<FromScratchResult>(
-      `from-scratch-index:${this.#realm.url}`,
-      args,
-    );
-    let { ignoreData, stats } = await job.done;
-    this.#stats = stats;
-    this.#ignoreData = ignoreData;
-    this.#loader = Loader.cloneLoader(this.#realm.loaderTemplate);
+    this.#indexingDeferred = new Deferred<void>();
+    try {
+      let args: FromScratchArgs = {
+        realmURL: this.#realm.url,
+      };
+      let job = await this.#queue.publish<FromScratchResult>(
+        `from-scratch-index:${this.#realm.url}`,
+        args,
+      );
+      let { ignoreData, stats } = await job.done;
+      this.#stats = stats;
+      this.#ignoreData = ignoreData;
+      this.#loader = Loader.cloneLoader(this.#realm.loaderTemplate);
+      this.#log.info(
+        `Realm ${this.realmURL.href} has completed indexing: ${JSON.stringify(
+          stats,
+          null,
+          2,
+        )}`,
+      );
+    } catch (e: any) {
+      this.#indexingDeferred.reject(e);
+      throw e;
+    } finally {
+      this.#indexingDeferred.fulfill();
+    }
   }
 
   async update(
     url: URL,
     opts?: { delete?: true; onInvalidation?: (invalidatedURLs: URL[]) => void },
   ): Promise<void> {
-    let args: IncrementalArgs = {
-      url: url.href,
-      realmURL: this.#realm.url,
-      operation: opts?.delete ? 'delete' : 'update',
-      ignoreData: { ...this.#ignoreData },
-    };
-    let job = await this.#queue.publish<IncrementalResult>(
-      `incremental-index:${this.#realm.url}`,
-      args,
-    );
-    let { invalidations, ignoreData, stats } = await job.done;
-    this.#stats = stats;
-    this.#ignoreData = ignoreData;
-    this.#loader = Loader.cloneLoader(this.#realm.loaderTemplate);
-    if (opts?.onInvalidation) {
-      opts.onInvalidation(
-        invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
+    this.#indexingDeferred = new Deferred<void>();
+    try {
+      let args: IncrementalArgs = {
+        url: url.href,
+        realmURL: this.#realm.url,
+        operation: opts?.delete ? 'delete' : 'update',
+        ignoreData: { ...this.#ignoreData },
+      };
+      let job = await this.#queue.publish<IncrementalResult>(
+        `incremental-index:${this.#realm.url}`,
+        args,
       );
+      let { invalidations, ignoreData, stats } = await job.done;
+      this.#stats = stats;
+      this.#ignoreData = ignoreData;
+      this.#loader = Loader.cloneLoader(this.#realm.loaderTemplate);
+      if (opts?.onInvalidation) {
+        opts.onInvalidation(
+          invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
+        );
+      }
+    } catch (e: any) {
+      this.#indexingDeferred.reject(e);
+      throw e;
+    } finally {
+      this.#indexingDeferred.fulfill();
     }
   }
 
