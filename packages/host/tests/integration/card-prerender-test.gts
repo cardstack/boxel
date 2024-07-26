@@ -12,7 +12,6 @@ import {
   testRealmURL,
   setupCardLogs,
   cleanWhiteSpace,
-  trimCardContainer,
   setupLocalIndexing,
   setupIntegrationTestRealm,
   lookupLoaderService,
@@ -172,12 +171,12 @@ module('Integration | card-prerender', function (hooks) {
 
   test("can generate the card's pre-rendered HTML", async function (assert) {
     {
-      let entry = await realm.searchIndex.instance(
+      let entry = await realm.realmIndexQueryEngine.instance(
         new URL(`${testRealmURL}Pet/mango`),
       );
       if (entry?.type === 'instance') {
         assert.strictEqual(
-          trimCardContainer(stripScopedCSSAttributes(entry!.isolatedHtml!)),
+          cleanWhiteSpace(stripScopedCSSAttributes(entry!.isolatedHtml!)),
           cleanWhiteSpace(`<h3> Mango </h3>`),
           'the pre-rendered HTML is correct',
         );
@@ -186,12 +185,12 @@ module('Integration | card-prerender', function (hooks) {
       }
     }
     {
-      let entry = await realm.searchIndex.instance(
+      let entry = await realm.realmIndexQueryEngine.instance(
         new URL(`${testRealmURL}Pet/vangogh`),
       );
       if (entry?.type === 'instance') {
         assert.strictEqual(
-          trimCardContainer(stripScopedCSSAttributes(entry!.isolatedHtml!)),
+          cleanWhiteSpace(stripScopedCSSAttributes(entry!.isolatedHtml!)),
           cleanWhiteSpace(`<h3> Van Gogh </h3>`),
           'the pre-rendered HTML is correct',
         );
@@ -202,7 +201,7 @@ module('Integration | card-prerender', function (hooks) {
   });
 
   test('indexer returns correct prerendered cards with their html + css when there is "on" filter specified', async function (assert) {
-    let results = await realm.searchIndex.searchPrerendered(
+    let results = await realm.realmIndexQueryEngine.searchPrerendered(
       {
         filter: {
           on: {
@@ -269,7 +268,7 @@ module('Integration | card-prerender', function (hooks) {
   });
 
   test('indexer returns correct prerendered cards with their html + css when there is no "on" filter specified', async function (assert) {
-    let results = await realm.searchIndex.searchPrerendered(
+    let results = await realm.realmIndexQueryEngine.searchPrerendered(
       {},
       {
         htmlFormat: 'embedded',
@@ -291,7 +290,7 @@ module('Integration | card-prerender', function (hooks) {
       ['test card: person jimmy', 'FancyPerson'],
     ].forEach(([title, type], index) => {
       assert.strictEqual(
-        trimCardContainer(
+        cleanWhiteSpace(
           stripScopedCSSAttributes(results.prerenderedCards[index].html),
         ),
         cleanWhiteSpace(`

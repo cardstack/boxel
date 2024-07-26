@@ -24,7 +24,7 @@ import {
   type RealmVersionsTable,
 } from './index-structure';
 
-export class IndexUpdater {
+export class IndexWriter {
   constructor(private dbAdapter: DBAdapter) {}
 
   async createBatch(realmURL: URL) {
