@@ -6,7 +6,8 @@ import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import { TrackedObject } from 'tracked-built-ins';
 
 import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
-import { CardResource } from '@cardstack/host/resources/card-resource';
+
+import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import AiAssistantSkillMenu from './index';
 
@@ -15,11 +16,11 @@ import type { Skill } from './index';
 export default class AiAssistantSkillMenuUsage extends Component {
   @tracked skills: Skill[] = [];
 
-  @action attachSkill(cardResource: CardResource) {
+  @action attachSkill(card: SkillCard) {
     this.skills = [
       ...this.skills,
       new TrackedObject({
-        cardResource,
+        card,
         isActive: true,
       }),
     ];

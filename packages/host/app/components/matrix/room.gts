@@ -2,16 +2,17 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
+import { TrackedObject } from 'tracked-built-ins/.';
 import { v4 as uuidv4 } from 'uuid';
 
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
-import { CardResource } from '@cardstack/host/resources/card-resource';
+import { CardResource, getCard } from '@cardstack/host/resources/card-resource';
 import { getRoom } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -19,7 +20,8 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import { CardDef } from 'https://cardstack.com/base/card-api';
+import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import AiAssistantCardPicker from '../ai-assistant/card-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
@@ -137,6 +139,7 @@ export default class Room extends Component<Signature> {
     () => this.topMostStackItems,
     () => this.cardsToAttach,
   );
+  private skillCardResources: Map<string, CardResource> = new Map();
 
   @tracked private currentMonacoContainer: number | undefined;
 
@@ -170,8 +173,31 @@ export default class Room extends Component<Signature> {
     return this.roomResource.messages;
   }
 
+  @cached
   private get skills(): Skill[] {
-    return this.roomResource.skills;
+    this.ensureSkillCardResources();
+    let skills = [];
+
+    for (let skill of this.roomResource.skills) {
+      let skillCardResource = this.skillCardResources.get(skill.card.id);
+      skills.push(
+        new TrackedObject({
+          card: skillCardResource!.card ?? skill.card,
+          isActive: skill.isActive,
+        } as Skill),
+      );
+    }
+    return skills;
+  }
+
+  private ensureSkillCardResources(): void {
+    for (let skill of this.roomResource.skills) {
+      let skillCardResource = this.skillCardResources.get(skill.card.id);
+      if (!skillCardResource) {
+        skillCardResource = getCard(this, () => skill.card.id);
+        this.skillCardResources.set(skill.card.id, skillCardResource);
+      }
+    }
   }
 
   private get room() {
@@ -295,7 +321,7 @@ export default class Room extends Component<Signature> {
       };
       let activeSkillCards = this.skills
         .filter((skill) => skill.isActive)
-        .map((c) => c.cardResource.card!);
+        .map((c) => c.card);
       await this.matrixService.sendMessage(
         this.args.roomId,
         message,
@@ -364,8 +390,8 @@ export default class Room extends Component<Signature> {
     return message.status === 'sending' || message.status === 'queued';
   }
 
-  @action private attachSkill(cardResource: CardResource) {
-    this.roomResource?.addSkill(cardResource);
+  @action private attachSkill(card: SkillCard) {
+    this.roomResource?.addSkill(card);
   }
 }
 

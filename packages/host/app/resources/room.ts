@@ -21,6 +21,7 @@ import type {
   RoomCreateEvent,
   RoomNameEvent,
 } from 'https://cardstack.com/base/matrix-event';
+import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import {
   RoomMember,
@@ -29,8 +30,6 @@ import {
 import { Message } from '../lib/matrix-classes/message';
 
 import { RoomState } from '../lib/matrix-classes/room';
-
-import { CardResource } from './card-resource';
 
 import type { Skill } from '../components/ai-assistant/skill-menu';
 
@@ -379,16 +378,13 @@ export class RoomResource extends Resource<Args> {
     return cardDoc;
   }
 
-  addSkill(cardResource: CardResource) {
+  addSkill(card: SkillCard) {
     if (!this.room) {
       return;
     }
     this.room.skills = [
       ...this.room.skills,
-      new TrackedObject({
-        cardResource,
-        isActive: true,
-      }),
+      new TrackedObject({ card, isActive: true }),
     ];
   }
 }
