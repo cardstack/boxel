@@ -615,7 +615,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
 export class AppCard extends CardDef {
   static displayName = 'App Card';
   static prefersWideFormat = true;
-  static headerColor = '#fff';
+  static headerColor = '#ffffff';
   @field tabs = containsMany(Tab);
   static isolated = AppCardIsolated;
   static embedded = class Embedded extends Component<typeof this> {
