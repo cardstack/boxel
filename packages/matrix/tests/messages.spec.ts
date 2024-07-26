@@ -907,6 +907,29 @@ test.describe('Room messages', () => {
     );
   });
 
+  /*
+    TODO: This matrix test appears to be leaking state. any tests that are 
+    run after it encounter this failure:
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:4202/test
+    Call log:
+      - navigating to "http://localhost:4202/test", waiting until "load"
+
+
+      at ../helpers/index.ts:63
+
+      61 |
+      62 | export async function openRoot(page: Page, url = testHost) {
+    > 63 |   await page.goto(url);
+        |              ^
+      64 |   await expect(page.locator('.cards-grid')).toHaveCount(1);
+      65 |   let isOperatorMode = !!(await page.evaluate(() =>
+      66 |     document.querySelector('dialog.operator-mode'),
+
+        at openRoot (/home/runner/work/boxel/boxel/packages/matrix/helpers/index.ts:63:14)
+        at login (/home/runner/work/boxel/boxel/packages/matrix/helpers/index.ts:232:11)
+        at /home/runner/work/boxel/boxel/packages/matrix/tests/messages.spec.ts:1013:16
+  */
   test('attaches a card in a conversation multiple times', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
 
