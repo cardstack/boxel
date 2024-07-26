@@ -1,6 +1,10 @@
+import { helper } from '@ember/component/helper';
+
 // Takes in a hex color and returns the color (black or white) that should be used for text on top of it.
 // https://stackoverflow.com/a/35970186
-export function getContrastColor(hex?: string) {
+export default helper(function getContrastColor([hex]: [string]):
+  | string
+  | undefined {
   if (!hex) {
     return;
   }
@@ -9,6 +13,9 @@ export function getContrastColor(hex?: string) {
   }
   // convert 3-digit hex to 6-digits.
   if (hex.length === 3) {
+    if (!hex[0]) {
+      return;
+    }
     hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
   }
   if (hex.length !== 6) {
@@ -22,4 +29,4 @@ export function getContrastColor(hex?: string) {
   return r * 0.299 + g * 0.587 + b * 0.114 > 186
     ? 'var(--boxel-dark, #000000)'
     : 'var(--boxel-light, #ffffff)';
-}
+});

@@ -27,10 +27,9 @@ import {
   BoxelButton,
   BoxelInput,
 } from '@cardstack/boxel-ui/components';
-import { cssVar, eq } from '@cardstack/boxel-ui/helpers';
+import { cssVar, eq, getContrastColor } from '@cardstack/boxel-ui/helpers';
 
 import {
-  getContrastColor,
   getLiveCards,
   cardTypeDisplayName,
   codeRefWithAbsoluteURL,
@@ -136,8 +135,8 @@ class AppCardIsolated extends Component<typeof AppCard> {
       <header
         class='app-card-header'
         style={{cssVar
-          db-header-bg-color=this.headerColor
-          db-header-color=(getContrastColor this.headerColor)
+          header-background-color=this.headerColor
+          header-text-color=(getContrastColor this.headerColor)
         }}
       >
         <div class='app-card-title-group'>
@@ -284,15 +283,15 @@ class AppCardIsolated extends Component<typeof AppCard> {
         min-height: 100%;
         display: grid;
         grid-template-rows: auto 1fr;
-        background-color: var(--db-bg-color, var(--boxel-light));
-        color: var(--db-color, var(--boxel-dark));
+        background-color: var(--boxel-light);
+        color: var(--boxel-dark);
         font: var(--boxel-font);
         letter-spacing: var(--boxel-lsp);
       }
       .app-card-header {
         padding: 0 var(--boxel-sp-lg);
-        background-color: var(--db-header-bg-color, var(--boxel-light));
-        color: var(--db-header-color, var(--boxel-dark));
+        background-color: var(--header-background-color, var(--boxel-light));
+        color: var(--header-text-color, var(--boxel-dark));
         border-bottom: var(--boxel-border);
       }
       .app-card-title {
@@ -317,8 +316,8 @@ class AppCardIsolated extends Component<typeof AppCard> {
       }
       .app-card-tab-list a.active,
       .app-card-tab-list a:hover:not(:disabled) {
-        color: var(--db-header-color, var(--boxel-dark));
-        border-bottom: 4px solid var(--db-header-color, var(--boxel-dark));
+        color: var(--header-text-color, var(--boxel-dark));
+        border-bottom: 4px solid var(--header-text-color, var(--boxel-dark));
       }
       .app-card-content {
         width: 100%;
@@ -616,7 +615,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
 export class AppCard extends CardDef {
   static displayName = 'App Card';
   static prefersWideFormat = true;
-  static headerColor = '#ffffff';
+  static headerColor = '#fff';
   @field tabs = containsMany(Tab);
   static isolated = AppCardIsolated;
   static embedded = class Embedded extends Component<typeof this> {

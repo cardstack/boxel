@@ -33,7 +33,13 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
-import { cn, cssVar, eq, optional } from '@cardstack/boxel-ui/helpers';
+import {
+  cn,
+  cssVar,
+  eq,
+  optional,
+  getContrastColor,
+} from '@cardstack/boxel-ui/helpers';
 
 import {
   IconPencil,
@@ -50,7 +56,6 @@ import {
   PermissionsContextName,
   type Permissions,
   Deferred,
-  getContrastColor,
 } from '@cardstack/runtime-common';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
@@ -407,7 +412,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
             class={{cn 'header' header--icon-hovered=this.isHoverOnRealmIcon}}
             style={{cssVar
               boxel-header-background-color=@item.headerColor
-              boxel-header-text-color=(getContrastColor @item.headerColor)
+              boxel-header-text-color=(if
+                @item.headerColor (getContrastColor @item.headerColor)
+              )
             }}
             {{on
               'click'

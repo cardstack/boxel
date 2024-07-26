@@ -8,7 +8,7 @@ import {
   linksToMany,
 } from 'https://cardstack.com/base/card-api';
 import { CardContainer } from '@cardstack/boxel-ui/components';
-import { cssVar, eq } from '@cardstack/boxel-ui/helpers';
+import { cssVar, eq, getContrastColor } from '@cardstack/boxel-ui/helpers';
 import { getLiveCards } from '@cardstack/runtime-common';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -101,7 +101,12 @@ class Isolated extends AppCard.isolated {
     <section class='app'>
       <header
         class='app-header'
-        style={{cssVar db-header-bg-color=this.headerColor}}
+        style={{cssVar
+          header-background-color=this.headerColor
+          header-text-color=(if
+            this.headerColor (getContrastColor this.headerColor)
+          )
+        }}
       >
         <div class='app-title-group'>
           <h1 class='app-title'><@fields.title /></h1>
@@ -216,15 +221,15 @@ class Isolated extends AppCard.isolated {
         min-height: 100%;
         display: grid;
         grid-template-rows: auto 1fr;
-        background-color: var(--db-bg-color, var(--boxel-light));
-        color: var(--db-color, var(--boxel-dark));
+        background-color: var(--boxel-light);
+        color: var(--boxel-dark);
         font: var(--boxel-font);
         letter-spacing: var(--boxel-lsp);
       }
       .app-header {
         padding: 0 var(--boxel-sp-lg);
-        background-color: var(--db-header-bg-color, var(--boxel-light));
-        color: var(--db-header-color, var(--boxel-dark));
+        background-color: var(--header-background-color, var(--boxel-light));
+        color: var(--header-text-color, var(--boxel-dark));
       }
       .app-title-group {
         padding: var(--boxel-sp-xs) 0;
@@ -257,8 +262,8 @@ class Isolated extends AppCard.isolated {
       }
       .app-tab-list a.active,
       .app-tab-list a:hover:not(:disabled) {
-        color: var(--db-header-color, var(--boxel-dark));
-        border-bottom: 4px solid var(--db-header-color, var(--boxel-dark));
+        color: var(--header-text-color, var(--boxel-dark));
+        border-bottom: 4px solid var(--header-text-color, var(--boxel-dark));
         font-weight: 700;
       }
       .app-content {
@@ -343,7 +348,7 @@ class Isolated extends AppCard.isolated {
       }
       .prompt-option.active,
       .prompt-option:hover:not(:disabled) {
-        border-bottom: 4px solid var(--db-header-color, var(--boxel-dark));
+        border-bottom: 4px solid var(--boxel-dark);
         font-weight: 700;
       }
 
