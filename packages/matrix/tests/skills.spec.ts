@@ -529,6 +529,7 @@ test.describe('Skills', () => {
     let attachedSkillCard1 = events.find(ev => ev.event_id === attachedSkillEventIds1[1]);
     let cardId = JSON.parse(JSON.parse(attachedSkillCard!.content!.data).cardFragment).data.id;
     let cardId1 = JSON.parse(JSON.parse(attachedSkillCard1!.content!.data).cardFragment).data.id;
+    expect(cardId).toEqual(skillCard1);
     expect(cardId).toEqual(cardId1);
 
     // Revert skill's instructions
