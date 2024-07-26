@@ -1,19 +1,22 @@
 import {
   CardDef,
-  Component,
-  FieldDef,
+  // Component,
   contains,
   field,
-  linksTo,
-  linksToMany,
 } from 'https://cardstack.com/base/card-api';
-import { CardContainer } from '@cardstack/boxel-ui/components';
+import {
+  CardContainer,
+  FieldContainer,
+  BoxelInput,
+  Button,
+} from '@cardstack/boxel-ui/components';
 import { cssVar, eq, getContrastColor } from '@cardstack/boxel-ui/helpers';
-import { getLiveCards, type Query } from '@cardstack/runtime-common';
+import { type Query } from '@cardstack/runtime-common';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
+import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 // @ts-ignore
 import cssUrl from 'ember-css-url';
@@ -23,12 +26,21 @@ import {
 } from './product-requirement-document';
 import { AppCard } from './app-card';
 
-class RequirementsEmbedded extends Component<typeof Requirements> {
+const getEmbeddedComponent = (card: CardDef) => {
+  if (!card) {
+    return;
+  }
+  return card.constructor.getComponent(card);
+};
+
+class Requirements extends GlimmerComponent<{
+  prd: ProductRequirementDocument | null;
+}> {
   <template>
     <div class='requirements'>
       <aside class='recent-reqs-sidebar'>
         <h3 class='recent-reqs-title'>Recent Requirements</h3>
-        <ul>
+        {{!-- <ul>
           {{#each this.instances as |doc|}}
             <li>
               <button {{on 'click' (fn this.openDoc doc)}}>
@@ -36,10 +48,14 @@ class RequirementsEmbedded extends Component<typeof Requirements> {
               </button>
             </li>
           {{/each}}
-        </ul>
+        </ul> --}}
       </aside>
       <div>
-        <@fields.document />
+        {{#if @prd}}
+          {{#let (getEmbeddedComponent @prd) as |EmbeddedCard|}}
+            <EmbeddedCard />
+          {{/let}}
+        {{/if}}
       </div>
     </div>
     <style>
@@ -59,44 +75,15 @@ class RequirementsEmbedded extends Component<typeof Requirements> {
     </style>
   </template>
 
-  @tracked
-  private declare liveQuery: {
-    instances: ProductRequirementDocument[];
-    isLoading: boolean;
-  };
-
-  constructor(owner: Owner, args: any) {
-    super(owner, args);
-    this.liveQuery = getLiveCards({
-      filter: {
-        type: {
-          name: 'ProductRequirementDocument',
-          module: 'http://localhost:4201/drafts/product-requirement-document',
-        },
-      },
-    }) as { instances: ProductRequirementDocument[]; isLoading: boolean };
-  }
-
-  get instances() {
-    let instances = this.liveQuery?.instances;
-    this.args.model.recentRequirements = instances;
-    return instances;
-  }
+  @tracked doc: ProductRequirementDocument | null = null;
 
   @action openDoc(doc: ProductRequirementDocument) {
-    this.args.model.document = doc;
+    this.doc = doc;
   }
-}
-
-class Requirements extends FieldDef {
-  static displayName = 'Requirements';
-  @field document = linksTo(ProductRequirementDocument);
-  @field recentRequirements = linksToMany(ProductRequirementDocument);
-  static embedded = RequirementsEmbedded;
 }
 
 class Isolated extends AppCard.isolated {
-  tabs = ['Dashboard' /*, 'Requirements', 'Your Apps', 'Sample Apps'*/];
+  tabs = ['Dashboard', 'Requirements' /*, 'Your Apps', 'Sample Apps'*/];
   <template>
     <section class='app'>
       <header
@@ -127,72 +114,102 @@ class Isolated extends AppCard.isolated {
         </nav>
       </header>
       <div class='app-content'>
-        <div class='dashboard'>
-          <aside class='intro'>
-            <header>
-              <div class='logo' />
-              <h3 class='intro-title'>
-                How to create your own app with AI in seconds
-              </h3>
-            </header>
-            <div class='intro-content'>
-              <p>
-                Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
-                eiusmod tempor.
-              </p>
-              <p>
-                <ul class='intro-list'>
-                  <li>Website</li>
-                  <li>CRM</li>
-                  <li>Scheduler</li>
-                  <li>Chess Game</li>
-                  <li>Music Instrument</li>
-                  <li>Generative Art</li>
-                </ul>
-              </p>
-              <p>
-                Duis aute irure dolor in reprehenderit in voluptate velit esse
-                cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat
-                cupidatat non proident, sunt in culpa qui officia deserunt
-                mollit anim id est laborum.
-              </p>
-            </div>
-          </aside>
-          <section>
-            <header class='db-content-header'>
-              <h2 class='prompt-title'>Generate an App</h2>
-            </header>
-            <CardContainer @displayBoundaries={{true}} class='prompt'>
-              <div class='prompt-options'>
-                <button class='prompt-option active'>Start From Scratch</button>
-                <button disabled class='prompt-option'>Remix an Existing App</button>
+        {{#if (eq this.currentTabName 'Requirements')}}
+          <Requirements @prd={{this.prd}} />
+        {{else}}
+          <div class='dashboard'>
+            <aside class='intro'>
+              <header>
+                <div class='logo' />
+                <h3 class='intro-title'>
+                  How to create your own app with AI in seconds
+                </h3>
+              </header>
+              <div class='intro-content'>
+                <p>
+                  Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed
+                  do eiusmod tempor.
+                </p>
+                <p>
+                  <ul class='intro-list'>
+                    <li>Website</li>
+                    <li>CRM</li>
+                    <li>Scheduler</li>
+                    <li>Chess Game</li>
+                    <li>Music Instrument</li>
+                    <li>Generative Art</li>
+                  </ul>
+                </p>
+                <p>
+                  Duis aute irure dolor in reprehenderit in voluptate velit esse
+                  cillum dolore eu fugiat nulla pariatur. Excepteur sint
+                  occaecat cupidatat non proident, sunt in culpa qui officia
+                  deserunt mollit anim id est laborum.
+                </p>
               </div>
-              <@fields.prompt @format='edit' />
-            </CardContainer>
-          </section>
-          <aside>
-            <header class='db-content-header'>
-              <h3 class='sample-apps-title'>Browse Sample Apps</h3>
-            </header>
-            <ul class='sample-apps-list'>
-              {{#each this.instances key='id' as |card|}}
-                <li
-                  class='sample-apps-list-item'
-                  {{@context.cardComponentModifier
-                    card=card
-                    format='data'
-                    fieldType=undefined
-                    fieldName=undefined
-                  }}
-                >
-                  {{#let (this.getEmbeddedComponent card) as |EmbeddedCard|}}
-                    <EmbeddedCard />
-                  {{/let}}
-                </li>
-              {{/each}}
-            </ul>
-          </aside>
-        </div>
+            </aside>
+            <section>
+              <header class='db-content-header'>
+                <h2 class='prompt-title'>Generate an App</h2>
+              </header>
+              <CardContainer @displayBoundaries={{true}} class='prompt'>
+                <div class='prompt-options'>
+                  <button class='prompt-option active'>Start From Scratch</button>
+                  <button disabled class='prompt-option'>Remix an Existing App</button>
+                </div>
+                <section class='prd-editor'>
+                  <FieldContainer @label='I want to make a'>
+                    <BoxelInput
+                      @value={{this.prompt.appType}}
+                      @onInput={{fn this.setPrompt 'appType'}}
+                    />
+                  </FieldContainer>
+                  <FieldContainer @label='Tailored for'>
+                    <BoxelInput
+                      @value={{this.prompt.domain}}
+                      @onInput={{fn this.setPrompt 'domain'}}
+                    />
+                  </FieldContainer>
+                  <FieldContainer
+                    class='features'
+                    @label='That has these features'
+                  >
+                    <BoxelInput
+                      @value={{this.prompt.customRequirements}}
+                      @onInput={{fn this.setPrompt 'customRequirements'}}
+                    />
+                  </FieldContainer>
+                  <Button @kind='primary-dark' {{on 'click' this.generatePrd}}>
+                    <span class='button-logo' />
+                    Let's Get Started
+                  </Button>
+                </section>
+              </CardContainer>
+            </section>
+            <aside>
+              <header class='db-content-header'>
+                <h3 class='sample-apps-title'>Browse Sample Apps</h3>
+              </header>
+              <ul class='sample-apps-list'>
+                {{#each this.instances key='id' as |card|}}
+                  <li
+                    class='sample-apps-list-item'
+                    {{@context.cardComponentModifier
+                      card=card
+                      format='data'
+                      fieldType=undefined
+                      fieldName=undefined
+                    }}
+                  >
+                    {{#let (getEmbeddedComponent card) as |EmbeddedCard|}}
+                      <EmbeddedCard />
+                    {{/let}}
+                  </li>
+                {{/each}}
+              </ul>
+            </aside>
+          </div>
+        {{/if}}
       </div>
     </section>
 
@@ -351,6 +368,20 @@ class Isolated extends AppCard.isolated {
         border-bottom: 4px solid var(--boxel-dark);
         font-weight: 700;
       }
+      .prd-editor > * + * {
+        margin-top: var(--boxel-sp);
+      }
+      .features {
+        --boxel-input-height: 4rem;
+      }
+      .button-logo {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        background: url('./ai-assist-icon@2x.webp') no-repeat center;
+        background-size: contain;
+        margin-right: var(--boxel-sp-sm);
+      }
 
       .sample-apps-title {
         font: 700 var(--boxel-font);
@@ -365,6 +396,13 @@ class Isolated extends AppCard.isolated {
       }
     </style>
   </template>
+
+  @tracked prompt: {
+    appType: string;
+    domain: string;
+    customRequirements: string;
+  } = { appType: '', domain: '', customRequirements: '' };
+  @tracked prd: ProductRequirementDocument | null = null;
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -397,11 +435,16 @@ class Isolated extends AppCard.isolated {
     return this.tabs[this.activeTabIndex];
   }
 
-  getEmbeddedComponent(card: CardDef) {
-    if (!card) {
-      return;
-    }
-    return card.constructor.getComponent(card);
+  @action setPrompt(key: string, value: string) {
+    this.prompt = { ...this.prompt, [key]: value };
+  }
+
+  @action generatePrd() {
+    this.prd = new ProductRequirementDocument({
+      prompt: new Prompt(this.prompt),
+    });
+    this.activeTabIndex = 1;
+    // this.args.context?.actions?.viewCard(this.prd, 'isolated');
   }
 }
 
