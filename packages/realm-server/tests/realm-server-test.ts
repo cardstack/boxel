@@ -1896,6 +1896,7 @@ module('Realm Server', function (hooks) {
       });
 
       // Skipped until we have a way to include cross realm css in the response
+      // @ts-ignore
       test.skip('returns correct css in relationships, even the one indexed in another realm (CardDef)', async function (assert) {
         let query: Query & { prerenderedHtmlFormat: string } = {
           filter: {
