@@ -189,6 +189,12 @@ export class RoomResource extends Resource<Args> {
       }
       let event_id = event.event_id;
       let update = false;
+      if (event.content['m.relates_to']?.rel_type == 'm.annotation') {
+        // we have to trigger a message field update if there is a reaction event so apply button state reliably updates
+        // otherwise, the message field (may) still but it occurs only accidentally because of a ..thinking event
+        // TOOD: Refactor having many if conditions to some variant of a strategy pattern
+        update = true;
+      }
       if (event.content['m.relates_to']?.rel_type === 'm.replace') {
         event_id = event.content['m.relates_to'].event_id;
         update = true;
