@@ -345,9 +345,6 @@ export class RoomResource extends Resource<Args> {
       // such as when resending a failed message or updating its status from sending to sent.
       this._messageCache.set(id, message);
     }
-    console.log('===');
-    console.log(this.events);
-    console.log(this._messageCache.vals);
   }
 
   private upsertRoomMember({
