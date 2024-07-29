@@ -55,7 +55,7 @@ export function constructHistory(history: IRoomEvent[]) {
       try {
         rawEvent.content.data = JSON.parse(rawEvent.content.data);
       } catch (e) {
-        console.log('Error parsing JSON data', rawEvent.content.data);
+        console.log(`Error parsing JSON data: ${rawEvent.content.data}`);
         throw e;
       }
     }
