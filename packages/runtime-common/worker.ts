@@ -165,14 +165,16 @@ export class Worker {
   async run() {
     await this.#queue.start();
 
-    this.#queue.register(
-      `from-scratch-index:${this.#realmURL}`,
-      this.fromScratch,
-    );
-    this.#queue.register(
-      `incremental-index:${this.#realmURL}`,
-      this.incremental,
-    );
+    await Promise.all([
+      this.#queue.register(
+        `from-scratch-index:${this.#realmURL}`,
+        this.fromScratch,
+      ),
+      this.#queue.register(
+        `incremental-index:${this.#realmURL}`,
+        this.incremental,
+      ),
+    ]);
   }
 
   private async prepareAndRunJob<T>(run: () => Promise<T>): Promise<T> {
