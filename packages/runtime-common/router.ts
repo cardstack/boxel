@@ -19,6 +19,7 @@ export type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'HEAD';
 export enum SupportedMimeType {
   CardJson = 'application/vnd.card+json',
   CardSource = 'application/vnd.card+source',
+  CardCss = 'application/vnd.card+css',
   DirectoryListing = 'application/vnd.api+json',
   RealmInfo = 'application/vnd.api+json',
   Session = 'application/json',

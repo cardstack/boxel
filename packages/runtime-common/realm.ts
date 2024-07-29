@@ -340,7 +340,17 @@ export class Realm {
 
     this.#dbAdapter = dbAdapter;
 
-    this.#router = new Router(new URL(url))
+    this.#router = new Router(new URL(url));
+
+    // Keep this HEAD catch-all route at the beginning to so that if a more specific HEAD route is added later it will take precedence
+    Object.values(SupportedMimeType).forEach((mimeType) => {
+      this.#router.head('/.*', mimeType as SupportedMimeType, async () => {
+        let requestContext = await this.createRequestContext();
+        return createResponse({ init: { status: 200 }, requestContext });
+      });
+    });
+
+    this.#router
       .post('/', SupportedMimeType.CardJson, this.createCard.bind(this))
       .patch(
         '/.+(?<!.json)',
@@ -379,6 +389,12 @@ export class Realm {
         SupportedMimeType.CardSource,
         this.getSourceOrRedirect.bind(this),
       )
+      .get('/.*', SupportedMimeType.CardCss, this.getCssModuleSource.bind(this))
+      .head(
+        '/.*',
+        SupportedMimeType.CardCss,
+        this.getCssModuleSource.bind(this),
+      )
       .delete(
         '/.+',
         SupportedMimeType.CardSource,
@@ -400,13 +416,6 @@ export class Realm {
         SupportedMimeType.RealmInfo,
         this.readinessCheck.bind(this),
       );
-
-    Object.values(SupportedMimeType).forEach((mimeType) => {
-      this.#router.head('/.*', mimeType as SupportedMimeType, async () => {
-        let requestContext = await this.createRequestContext();
-        return createResponse({ init: { status: 200 }, requestContext });
-      });
-    });
 
     this.#deferStartup = opts?.deferStartUp ?? false;
     if (!opts?.deferStartUp) {
@@ -1170,6 +1179,55 @@ export class Realm {
     });
   }
 
+  private async getCssModuleSource(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<ResponseWithNodeStream> {
+    let useWorkInProgressIndex = Boolean(
+      request.headers.get('X-Boxel-Use-WIP-Index'),
+    );
+    let cssRecord = await this.getCssFromIndex(new URL(request.url), {
+      useWorkInProgressIndex,
+    });
+
+    if (!cssRecord) {
+      return notFound(
+        request,
+        requestContext,
+        `css for ${request.url} cannot be found`,
+      );
+    }
+
+    let etag = String(cssRecord.lastModified);
+    let clientETag = request.headers.get('If-None-Match');
+
+    if (clientETag === etag) {
+      return createResponse({
+        body: null,
+        init: {
+          status: 304, // Tell the browser to use its cache - combined with etag this saves network transfer for large css files
+          headers: {
+            ETag: etag,
+            'Cache-Control': 'must-revalidate',
+            'Last-Modified': formatRFC7231(cssRecord.lastModified),
+          },
+        },
+        requestContext,
+      });
+    }
+
+    return createResponse({
+      body: cssRecord.source,
+      init: {
+        headers: {
+          ETag: etag,
+          'Cache-Control': 'must-revalidate',
+        },
+      },
+      requestContext,
+    });
+  }
+
   private async getSourceOrRedirect(
     request: Request,
     requestContext: RequestContext,
@@ -1274,6 +1332,28 @@ export class Realm {
         );
       }
       return { canonicalURL: new URL(canonicalURL), lastModified, source };
+    }
+    return undefined;
+  }
+
+  private async getCssFromIndex(
+    url: URL,
+    opts?: { useWorkInProgressIndex: boolean },
+  ): Promise<
+    | {
+        source: string;
+        lastModified: number;
+        canonicalURL: URL;
+      }
+    | undefined
+  > {
+    let cssEntry = await this.#realmIndexQueryEngine.css(url, opts);
+    if (cssEntry && cssEntry.type === 'css') {
+      return {
+        source: cssEntry.source,
+        lastModified: cssEntry.lastModified,
+        canonicalURL: new URL(cssEntry.canonicalURL),
+      };
     }
     return undefined;
   }

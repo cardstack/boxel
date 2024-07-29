@@ -2135,6 +2135,105 @@ module('Realm Server', function (hooks) {
       });
     });
   });
+
+  module('card css source GET request', function (_hooks) {
+    module('public readable realm', function (hooks) {
+      setupPermissionedRealm(hooks, {
+        '*': ['read'],
+      });
+
+      test('serves the request css for card that has css indexed', async function (assert) {
+        let response = await request
+          .get('/fancy-person')
+          .set('Accept', 'application/vnd.card+css');
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.notEqual(response.headers.etag, null, 'etag exists');
+        assert.strictEqual(
+          response.headers['cache-control'],
+          'must-revalidate',
+          'cache-control is correct',
+        );
+        assert.true(
+          /\.fancy-border\[data-scopedcss-[a-z0-9-]+\] \{ border: 1px solid pink; \}/.test(
+            response.text.replace(/\s+/g, ' '),
+          ),
+          'CSS is correct',
+        );
+      });
+
+      test('serves the request css for card that has no css indexed', async function (assert) {
+        let response = await request
+          .get('/person')
+          .set('Accept', 'application/vnd.card+css');
+
+        assert.strictEqual(response.status, 404, 'HTTP 404 status');
+      });
+
+      test('respects client etag', async function (assert) {
+        let response = await request
+          .head('/fancy-person')
+          .set('Accept', 'application/vnd.card+css');
+
+        let etag = response.headers.etag;
+        response = await request
+          .get('/fancy-person')
+          .set('Accept', 'application/vnd.card+css')
+          .set('If-None-Match', etag);
+
+        // 304 Not Modified
+        assert.strictEqual(response.status, 304, 'HTTP 304 status');
+        assert.deepEqual(response.body, {}, 'body is empty');
+      });
+    });
+
+    module('permissioned realm', function (hooks) {
+      setupPermissionedRealm(hooks, {
+        john: ['read'],
+      });
+
+      test('401 with invalid JWT', async function (assert) {
+        let response = await request
+          .get(`/_info`)
+          .set('Accept', 'application/vnd.api+json');
+
+        assert.strictEqual(response.status, 401, 'HTTP 401 status');
+      });
+
+      test('401 without a JWT', async function (assert) {
+        let response = await request
+          .get('/fancy-person')
+          .set('Accept', 'application/vnd.card+css'); // no Authorization header
+
+        assert.strictEqual(response.status, 401, 'HTTP 401 status');
+      });
+
+      test('403 without permission', async function (assert) {
+        let response = await request
+          .get('/fancy-person')
+          .set('Accept', 'application/vnd.card+css')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'not-john', testRealmHref)}`,
+          );
+
+        assert.strictEqual(response.status, 403, 'HTTP 403 status');
+      });
+
+      test('200 with permission', async function (assert) {
+        let response = await request
+          .get('/fancy-person')
+          .set('Accept', 'application/vnd.card+css')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'john', testRealmHref, ['read'])}`,
+          );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      });
+    });
+  });
+
   module('various other realm tests', function (hooks) {
     let testRealmServer2: Server;
     let testRealm2: Realm;
@@ -2605,6 +2704,14 @@ module('Realm Server serving from root', function (hooks) {
             'e.js': {
               links: {
                 related: `${testRealmHref}e.js`,
+              },
+              meta: {
+                kind: 'file',
+              },
+            },
+            'fancy-person.gts': {
+              links: {
+                related: `${testRealmHref}fancy-person.gts`,
               },
               meta: {
                 kind: 'file',
