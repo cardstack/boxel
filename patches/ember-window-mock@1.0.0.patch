@@ -1,0 +1,21 @@
+diff --git a/package.json b/package.json
+index 903370d1a4d5e9b453181894853ca2ffabb270fe..89b04e671fad004c4eeaf52274f3fd5c2518fe96 100644
+--- a/package.json
++++ b/package.json
+@@ -10,12 +10,12 @@
+   "author": "Simon Ihmig <simon.ihmig@gmail.com>",
+   "exports": {
+     ".": {
+-      "default": "./src/index.js",
+-      "types": "./index.d.ts"
++      "types": "./index.d.ts",
++      "default": "./src/index.js"
+     },
+     "./test-support": {
+-      "default": "./src/test-support/index.js",
+-      "types": "./index.d.ts"
++      "types": "./index.d.ts",
++      "default": "./src/test-support/index.js"
+     },
+     "./addon-main.js": "./addon-main.cjs"
+   },

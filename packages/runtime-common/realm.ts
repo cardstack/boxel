@@ -1,5 +1,4 @@
 import { Deferred } from './deferred';
-import { SearchIndex } from './search-index';
 import {
   transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
@@ -28,7 +27,7 @@ import {
   type DirectoryEntryRelationship,
   type DBAdapter,
   type Queue,
-  type IndexUpdater,
+  type IndexWriter,
   fetchUserPermissions,
   maybeHandleScopedCSSRequest,
   authorizationMiddleware,
@@ -71,6 +70,8 @@ import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
 
 import { RealmAuthDataSource } from './realm-auth-data-source';
 import { fetcher } from './fetcher';
+import { RealmIndexQueryEngine } from './realm-index-query-engine';
+import { RealmIndexUpdater } from './realm-index-updater';
 
 import qs from 'qs';
 
@@ -217,7 +218,8 @@ export type RequestContext = { realm: Realm; permissions: RealmPermissions };
 export class Realm {
   #startedUp = new Deferred<void>();
   #matrixClient: MatrixClient;
-  #searchIndex: SearchIndex;
+  #realmIndexUpdater: RealmIndexUpdater;
+  #realmIndexQueryEngine: RealmIndexQueryEngine;
   #adapter: RealmAdapter;
   #router: Router;
   #deferStartup: boolean;
@@ -232,8 +234,8 @@ export class Realm {
   #realmSecretSeed: string;
   #disableModuleCaching = false;
 
-  #onIndexUpdaterReady:
-    | ((indexUpdater: IndexUpdater) => Promise<void>)
+  #onIndexWriterReady:
+    | ((indexWriter: IndexWriter) => Promise<void>)
     | undefined;
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -275,7 +277,7 @@ export class Realm {
       dbAdapter,
       queue,
       virtualNetwork,
-      onIndexUpdaterReady,
+      onIndexWriterReady,
       assetsURL,
     }: {
       url: string;
@@ -286,7 +288,7 @@ export class Realm {
       dbAdapter: DBAdapter;
       queue: Queue;
       virtualNetwork: VirtualNetwork;
-      onIndexUpdaterReady?: (indexUpdater: IndexUpdater) => Promise<void>;
+      onIndexWriterReady?: (indexWriter: IndexWriter) => Promise<void>;
       assetsURL: URL;
     },
     opts?: Options,
@@ -325,11 +327,15 @@ export class Realm {
     this.loaderTemplate = loader;
 
     this.#adapter = adapter;
-    this.#onIndexUpdaterReady = onIndexUpdaterReady;
-    this.#searchIndex = new SearchIndex({
+    this.#onIndexWriterReady = onIndexWriterReady;
+    this.#realmIndexUpdater = new RealmIndexUpdater({
       realm: this,
       dbAdapter,
       queue,
+    });
+    this.#realmIndexQueryEngine = new RealmIndexQueryEngine({
+      realm: this,
+      dbAdapter,
     });
 
     this.#dbAdapter = dbAdapter;
@@ -433,7 +439,7 @@ export class Realm {
   }
 
   async fullIndex() {
-    await this.searchIndex.fullIndex();
+    await this.realmIndexUpdater.fullIndex();
   }
 
   async flushUpdateEvents() {
@@ -451,7 +457,7 @@ export class Realm {
   ): Promise<WriteResult> {
     await this.trackOwnWrite(path);
     let results = await this.#adapter.write(path, contents);
-    await this.#searchIndex.update(this.paths.fileURL(path), {
+    await this.#realmIndexUpdater.update(this.paths.fileURL(path), {
       onInvalidation: (invalidatedURLs: URL[]) => {
         this.sendServerEvent({
           type: 'index',
@@ -515,7 +521,7 @@ export class Realm {
   async delete(path: LocalPath): Promise<void> {
     await this.trackOwnWrite(path, { isDelete: true });
     await this.#adapter.remove(path);
-    await this.#searchIndex.update(this.paths.fileURL(path), {
+    await this.#realmIndexUpdater.update(this.paths.fileURL(path), {
       delete: true,
       onInvalidation: (invalidatedURLs: URL[]) => {
         this.sendServerEvent({
@@ -533,7 +539,7 @@ export class Realm {
     // the current loader used by the search index will contain the latest
     // module updates as we obtain a new loader for each indexing run.
     if (isNode) {
-      return this.searchIndex.loader;
+      return this.realmIndexUpdater.loader;
     } else {
       // when we are under test (via browser) we are using a loader that was
       // pre-configured and handed to us which is shared between the host app
@@ -547,18 +553,22 @@ export class Realm {
     }
   }
 
-  get searchIndex() {
-    return this.#searchIndex;
+  get realmIndexUpdater() {
+    return this.#realmIndexUpdater;
+  }
+
+  get realmIndexQueryEngine() {
+    return this.#realmIndexQueryEngine;
   }
 
   async reindex() {
-    await this.#searchIndex.run();
+    await this.#realmIndexUpdater.run();
     this.sendServerEvent({ type: 'index', data: { type: 'full' } });
   }
 
   async #startup() {
     await Promise.resolve();
-    await this.#searchIndex.run(this.#onIndexUpdaterReady);
+    await this.#realmIndexUpdater.run(this.#onIndexWriterReady);
     this.sendServerEvent({ type: 'index', data: { type: 'full' } });
     this.#perfLog.debug(
       `realm server startup in ${Date.now() - this.#startTime}ms`,
@@ -823,7 +833,7 @@ export class Realm {
           isWrite ? 'write' : 'read',
         );
       }
-      if (!this.searchIndex) {
+      if (!this.#realmIndexQueryEngine) {
         return systemError(requestContext, 'search index is not available');
       }
       if (this.#router.handles(request)) {
@@ -882,7 +892,7 @@ export class Realm {
       let useWorkInProgressIndex = Boolean(
         request.headers.get('X-Boxel-Use-WIP-Index'),
       );
-      let module = await this.#searchIndex.module(url, {
+      let module = await this.#realmIndexQueryEngine.module(url, {
         useWorkInProgressIndex,
       });
       if (module?.type === 'module') {
@@ -1232,8 +1242,8 @@ export class Realm {
     | undefined
   > {
     let [module, instance] = await Promise.all([
-      this.#searchIndex.module(url),
-      this.#searchIndex.instance(url),
+      this.#realmIndexQueryEngine.module(url),
+      this.#realmIndexQueryEngine.instance(url),
     ]);
     if (module?.type === 'module' || instance?.type === 'instance') {
       let canonicalURL =
@@ -1386,9 +1396,12 @@ export class Realm {
       JSON.stringify(fileSerialization, null, 2),
     );
     let newURL = fileURL.href.replace(/\.json$/, '');
-    let entry = await this.#searchIndex.cardDocument(new URL(newURL), {
-      loadLinks: true,
-    });
+    let entry = await this.#realmIndexQueryEngine.cardDocument(
+      new URL(newURL),
+      {
+        loadLinks: true,
+      },
+    );
     if (!entry || entry?.type === 'error') {
       let err = entry
         ? CardError.fromSerializableError(entry.error)
@@ -1428,7 +1441,9 @@ export class Realm {
     }
 
     let url = this.paths.fileURL(localPath);
-    let originalMaybeError = await this.#searchIndex.cardDocument(url);
+    let originalMaybeError = await this.#realmIndexQueryEngine.cardDocument(
+      url,
+    );
     if (!originalMaybeError) {
       return notFound(request, requestContext);
     }
@@ -1509,9 +1524,12 @@ export class Realm {
       request.headers.get('X-Boxel-Client-Request-Id'),
     );
     let instanceURL = url.href.replace(/\.json$/, '');
-    let entry = await this.#searchIndex.cardDocument(new URL(instanceURL), {
-      loadLinks: true,
-    });
+    let entry = await this.#realmIndexQueryEngine.cardDocument(
+      new URL(instanceURL),
+      {
+        loadLinks: true,
+      },
+    );
     if (!entry || entry?.type === 'error') {
       return systemError(
         requestContext,
@@ -1551,7 +1569,7 @@ export class Realm {
     );
 
     let url = this.paths.fileURL(localPath.replace(/\.json$/, ''));
-    let maybeError = await this.#searchIndex.cardDocument(url, {
+    let maybeError = await this.#realmIndexQueryEngine.cardDocument(url, {
       loadLinks: true,
       useWorkInProgressIndex,
     });
@@ -1604,7 +1622,7 @@ export class Realm {
     let reqURL = request.url.replace(/\.json$/, '');
     // strip off query params
     let url = new URL(new URL(reqURL).pathname, reqURL);
-    let result = await this.#searchIndex.cardDocument(url);
+    let result = await this.#realmIndexQueryEngine.cardDocument(url);
     if (!result) {
       return notFound(request, requestContext);
     }
@@ -1707,7 +1725,7 @@ export class Realm {
   }
 
   private async isIgnored(url: URL): Promise<boolean> {
-    return this.#searchIndex.isIgnored(url);
+    return this.#realmIndexUpdater.isIgnored(url);
   }
 
   private async search(
@@ -1721,7 +1739,7 @@ export class Realm {
     let cardsQuery = qs.parse(new URL(request.url).search.slice(1));
     assertQuery(cardsQuery);
 
-    let doc = await this.#searchIndex.search(cardsQuery, {
+    let doc = await this.#realmIndexQueryEngine.search(cardsQuery, {
       loadLinks: true,
       useWorkInProgressIndex,
     });
@@ -1760,10 +1778,13 @@ export class Realm {
     let cardsQuery = parsedQueryString;
     assertQuery(parsedQueryString);
 
-    let results = await this.#searchIndex.searchPrerendered(cardsQuery, {
-      useWorkInProgressIndex,
-      htmlFormat,
-    });
+    let results = await this.#realmIndexQueryEngine.searchPrerendered(
+      cardsQuery,
+      {
+        useWorkInProgressIndex,
+        htmlFormat,
+      },
+    );
 
     let doc = transformResultsToPrerenderedCardsDoc(results);
 
@@ -1914,7 +1935,7 @@ export class Realm {
     let items = [...this.#updateItems];
     this.#updateItems = [];
     for (let { operation, url } of items) {
-      await this.#searchIndex.update(url, {
+      await this.#realmIndexUpdater.update(url, {
         onInvalidation: (invalidatedURLs: URL[]) => {
           this.sendServerEvent({
             type: 'index',

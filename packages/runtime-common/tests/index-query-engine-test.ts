@@ -8,7 +8,7 @@ import {
   type Loader,
   type ResolvedCodeRef,
   DBAdapter,
-  IndexUpdater,
+  IndexWriter,
 } from '../index';
 import { serializeCard } from '../helpers/indexer';
 import { testRealmURL } from '../helpers/const';
@@ -1738,7 +1738,7 @@ const tests = Object.freeze({
     }
 
     // mutate the index
-    let batch = await new IndexUpdater(dbAdapter).createBatch(
+    let batch = await new IndexWriter(dbAdapter).createBatch(
       new URL(testRealmURL),
     );
     await batch.invalidate(new URL(`${testRealmURL}mango3.json`));
@@ -2699,6 +2699,11 @@ const tests = Object.freeze({
       prerenderedCards[0].html,
       '<div>Donald (FancyPerson embedded template)</div>',
     );
+    assert.deepEqual(prerenderedCards[0].cssModuleIds, [
+      `${testRealmURL}fancy-person`,
+      `${testRealmURL}person`,
+      'https://cardstack.com/base/card-api',
+    ]);
 
     assert.strictEqual(
       prerenderedCardCssItems.length,
