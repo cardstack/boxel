@@ -1620,4 +1620,420 @@ module('getModifyPrompt', () => {
       },
     });
   });
+
+  test.only('Return host result of tool call back to open ai', () => {
+    const history: IRoomEvent[] = [
+      {
+        type: 'm.room.message',
+        room_id: 'room-id-1',
+        sender: '@tintinthong:localhost',
+        content: {
+          msgtype: 'org.boxel.message',
+          body: 'search for the following card instances',
+          format: 'org.matrix.custom.html',
+          formatted_body: '<p>search for the following card instances</p>\n',
+          clientGeneratedId: '5bb0493e-64a3-4d8b-a99a-722daf084bee',
+          data: {
+            attachedCardsEventIds: ['attched-card-event-id'],
+            attachedSkillEventIds: ['attached-skill-event-id-1'],
+            context: {
+              openCardIds: ['http://localhost:4201/drafts/Author/1'],
+              tools: [
+                {
+                  type: 'function',
+                  function: {
+                    name: 'patchCard',
+                    description:
+                      'Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.',
+                    parameters: {
+                      type: 'object',
+                      properties: {
+                        card_id: {
+                          type: 'string',
+                          const: 'http://localhost:4201/drafts/Author/1',
+                        },
+                        description: {
+                          type: 'string',
+                        },
+                        attributes: {
+                          type: 'object',
+                          properties: {
+                            firstName: {
+                              type: 'string',
+                            },
+                            lastName: {
+                              type: 'string',
+                            },
+                            photo: {
+                              type: 'string',
+                            },
+                            body: {
+                              type: 'string',
+                            },
+                            description: {
+                              type: 'string',
+                            },
+                            thumbnailURL: {
+                              type: 'string',
+                            },
+                          },
+                        },
+                      },
+                      required: ['card_id', 'attributes', 'description'],
+                    },
+                  },
+                },
+                {
+                  type: 'function',
+                  function: {
+                    name: 'searchCard',
+                    description:
+                      'Propose a query to search for a card instance filtered by type. Always prioritise search based upon the card that was last shared.',
+                    parameters: {
+                      type: 'object',
+                      properties: {
+                        description: {
+                          type: 'string',
+                        },
+                        filter: {
+                          type: 'object',
+                          properties: {
+                            type: {
+                              type: 'object',
+                              properties: {
+                                module: {
+                                  type: 'string',
+                                  description:
+                                    'the absolute path of the module',
+                                },
+                                name: {
+                                  type: 'string',
+                                  description: 'the name of the module',
+                                },
+                              },
+                              required: ['module', 'name'],
+                            },
+                          },
+                        },
+                      },
+                      required: ['filter', 'description'],
+                    },
+                  },
+                },
+              ],
+              submode: 'interact',
+            },
+            attachedCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Author/1',
+                  attributes: {
+                    firstName: 'Alice',
+                    lastName: 'Enwunder',
+                    photo: null,
+                    body: 'Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4201/drafts/author',
+                      name: 'Author',
+                    },
+                  },
+                },
+              },
+            ],
+            skillCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'https://cardstack.com/base/SkillCard/card-editing',
+                  attributes: {
+                    instructions:
+                      '- If the user wants the data they see edited, AND the patchCard function is available, you MUST use the "patchCard" function to make the change.\n- If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCard, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCard function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCard; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCard" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
+                    title: 'Card Editing',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'https://cardstack.com/base/skill-card',
+                      name: 'SkillCard',
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        },
+        origin_server_ts: 1722242833562,
+        unsigned: {
+          age: 20470,
+        },
+        event_id: '$p_NQ4tvokzQrIkT24Wj08mdAxBBvmdLOz6ph7UQfMDw',
+        user_id: '@tintinthong:localhost',
+        age: 20470,
+      },
+      {
+        type: 'm.room.message',
+        room_id: 'room-id-1',
+        sender: '@ai-bot:localhost',
+        content: {
+          body: 'It looks like you want to search for card instances based on the "Author" card you provided. Just for clarity, would you like to search for more cards based on the "Author" module type or something else specific?\n\nFor example, do you want to find all card instances of type "Author" or a different type of card/module?',
+          msgtype: 'm.text',
+          formatted_body:
+            'It looks like you want to search for card instances based on the "Author" card you provided. Just for clarity, would you like to search for more cards based on the "Author" module type or something else specific?\n\nFor example, do you want to find all card instances of type "Author" or a different type of card/module?',
+          format: 'org.matrix.custom.html',
+          'm.new_content': {
+            body: 'It looks like you want to search for card instances based on the "Author" card you provided. Just for clarity, would you like to search for more cards based on the "Author" module type or something else specific?\n\nFor example, do you want to find all card instances of type "Author" or a different type of card/module?',
+            msgtype: 'm.text',
+            formatted_body:
+              'It looks like you want to search for card instances based on the "Author" card you provided. Just for clarity, would you like to search for more cards based on the "Author" module type or something else specific?\n\nFor example, do you want to find all card instances of type "Author" or a different type of card/module?',
+            format: 'org.matrix.custom.html',
+          },
+          isStreamingFinished: true,
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'message-event-id-1',
+          },
+        },
+        origin_server_ts: 1722242836727,
+        unsigned: {
+          age: 17305,
+          transaction_id: 'm1722242836705.8',
+        },
+        event_id: 'message-event-id-1',
+        user_id: '@aibot:localhost',
+        age: 17305,
+      },
+      {
+        type: 'm.room.message',
+        room_id: 'room-id-1',
+        sender: '@tintinthong:localhost',
+        content: {
+          msgtype: 'org.boxel.message',
+          body: 'yes module type',
+          format: 'org.matrix.custom.html',
+          formatted_body: '<p>yes module type</p>\n',
+          clientGeneratedId: 'd93c899f-9123-4b31-918c-a525afb40a7e',
+          data: {
+            attachedCardsEventIds: ['attched-card-event-id'],
+            attachedSkillEventIds: ['attached-skill-event-id-1'],
+            context: {
+              openCardIds: ['http://localhost:4201/drafts/Author/1'],
+              tools: [
+                {
+                  type: 'function',
+                  function: {
+                    name: 'patchCard',
+                    description:
+                      'Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.',
+                    parameters: {
+                      type: 'object',
+                      properties: {
+                        card_id: {
+                          type: 'string',
+                          const: 'http://localhost:4201/drafts/Author/1',
+                        },
+                        description: {
+                          type: 'string',
+                        },
+                        attributes: {
+                          type: 'object',
+                          properties: {
+                            firstName: {
+                              type: 'string',
+                            },
+                            lastName: {
+                              type: 'string',
+                            },
+                            photo: {
+                              type: 'string',
+                            },
+                            body: {
+                              type: 'string',
+                            },
+                            description: {
+                              type: 'string',
+                            },
+                            thumbnailURL: {
+                              type: 'string',
+                            },
+                          },
+                        },
+                      },
+                      required: ['card_id', 'attributes', 'description'],
+                    },
+                  },
+                },
+                {
+                  type: 'function',
+                  function: {
+                    name: 'searchCard',
+                    description:
+                      'Propose a query to search for a card instance filtered by type. Always prioritise search based upon the card that was last shared.',
+                    parameters: {
+                      type: 'object',
+                      properties: {
+                        description: {
+                          type: 'string',
+                        },
+                        filter: {
+                          type: 'object',
+                          properties: {
+                            type: {
+                              type: 'object',
+                              properties: {
+                                module: {
+                                  type: 'string',
+                                  description:
+                                    'the absolute path of the module',
+                                },
+                                name: {
+                                  type: 'string',
+                                  description: 'the name of the module',
+                                },
+                              },
+                              required: ['module', 'name'],
+                            },
+                          },
+                        },
+                      },
+                      required: ['filter', 'description'],
+                    },
+                  },
+                },
+              ],
+              submode: 'interact',
+            },
+            attachedCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Author/1',
+                  attributes: {
+                    firstName: 'Alice',
+                    lastName: 'Enwunder',
+                    photo: null,
+                    body: 'Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4201/drafts/author',
+                      name: 'Author',
+                    },
+                  },
+                },
+              },
+            ],
+            skillCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'https://cardstack.com/base/SkillCard/card-editing',
+                  attributes: {
+                    instructions:
+                      '- If the user wants the data they see edited, AND the patchCard function is available, you MUST use the "patchCard" function to make the change.\n- If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCard, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCard function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCard; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCard" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
+                    title: 'Card Editing',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'https://cardstack.com/base/skill-card',
+                      name: 'SkillCard',
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        },
+        origin_server_ts: 1722242847418,
+        unsigned: {
+          age: 6614,
+        },
+        event_id: '$FO2XfB0xFiTpm5FmOUiWQqFh_DPQSr4zix41Vj3eqNc',
+        user_id: '@tintinthong:localhost',
+        age: 6614,
+      },
+      {
+        type: 'm.room.message',
+        room_id: 'room-id-1',
+        sender: '@ai-bot:localhost',
+        content: {
+          body: "Search for card instances of type 'Author'",
+          msgtype: 'org.boxel.command',
+          formatted_body: "Search for card instances of type 'Author'",
+          format: 'org.matrix.custom.html',
+          data: {
+            eventId: 'command-event-id-1',
+            toolCall: {
+              type: 'function',
+              id: 'tool-call-id-1',
+              name: 'searchCard',
+              arguments: {
+                description: "Search for card instances of type 'Author'",
+                filter: {
+                  type: {
+                    module: 'http://localhost:4201/drafts/author',
+                    name: 'Author',
+                  },
+                },
+              },
+            },
+          },
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: 'command-event-id-1',
+          },
+        },
+        origin_server_ts: 1722242849094,
+        unsigned: {
+          age: 4938,
+          transaction_id: 'm1722242849075.10',
+        },
+        event_id: 'command-event-id-1',
+        user_id: '@ai-bot:localhost',
+        age: 4938,
+      },
+      {
+        type: 'm.room.message',
+        room_id: 'room-id-1',
+        sender: '@tintinthong:localhost',
+        content: {
+          'm.relates_to': {
+            event_id: 'command-event-id-1',
+            rel_type: 'm.annotation',
+            key: 'applied',
+          },
+          body: 'Command Results from command event $H7dH0ZzG0W3M_1k_YRjnDOirWRthYvWq7TKmfAfhQqw',
+          formatted_body:
+            '<p>Command Results from command event $H7dH0ZzG0W3M_1k_YRjnDOirWRthYvWq7TKmfAfhQqw</p>\n',
+          msgtype: 'org.boxel.commandResult',
+          result:
+            '[{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Alice","lastName":"Enwunder","photo":null,"body":"Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}]',
+        },
+        origin_server_ts: 1722242853988,
+        unsigned: {
+          age: 44,
+        },
+        event_id: 'command-result-id-1',
+        user_id: '@tintinthong:localhost',
+        age: 44,
+      },
+    ];
+    const tools = getTools(history, '@ai-bot:localhost');
+    const result = getModifyPrompt(history, '@ai-bot:localhost', tools);
+    assert.equal(result[5].role, 'tool');
+    assert.equal(result[5].tool_call_id, 'tool-call-id-1');
+    assert.equal(
+      result[5].content,
+      '[{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Alice","lastName":"Enwunder","photo":null,"body":"Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}]',
+    );
+  });
 });
