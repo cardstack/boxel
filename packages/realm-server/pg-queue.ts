@@ -12,6 +12,7 @@ import {
   logger,
   asExpressions,
   Deferred,
+  upsert,
   Job,
   setErrorReporter,
 } from '@cardstack/runtime-common';
@@ -217,14 +218,22 @@ export default class PgQueue implements Queue {
           category,
           status: 'idle',
         } as QueueTable);
-        await this.query([
-          'INSERT INTO queues',
-          ...addExplicitParens(separatedByCommas(nameExpressions)),
-          'VALUES',
-          ...addExplicitParens(separatedByCommas(valueExpressions)),
-          // we just need to seed this when it doesn't exist
-          // 'ON CONFLICT (working_queues_pkey) DO NOTHING',
-        ] as Expression);
+        // await this.query([
+        //   'INSERT INTO queues',
+        //   ...addExplicitParens(separatedByCommas(nameExpressions)),
+        //   'VALUES',
+        //   ...addExplicitParens(separatedByCommas(valueExpressions)),
+        //   // we just need to seed this when it doesn't exist
+        //   // 'ON CONFLICT (working_queues_pkey) DO NOTHING',
+        // ] as Expression);
+        await this.query(
+          upsert(
+            'queues',
+            'working_queues_pkey',
+            nameExpressions,
+            valueExpressions,
+          ),
+        );
       }
     }
     {
