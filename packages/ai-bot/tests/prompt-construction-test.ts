@@ -75,7 +75,10 @@ module('getModifyPrompt', () => {
     assert.equal(result.length, 2);
     assert.equal(result[0].role, 'system');
     assert.equal(result[1].role, 'user');
-    assert.equal(result[1].content, 'Hey');
+    assert.equal(
+      result[1].content,
+      'User message: Hey\n          Context: the user has no open cards.',
+    );
   });
 
   test('should generate a more structured response if the user uploads a card', () => {
@@ -1140,7 +1143,10 @@ module('getModifyPrompt', () => {
       assert.true(result[0].content?.includes(instructions1));
       assert.true(result[0].content?.includes(instructions2));
       assert.equal(result[1].role, 'user');
-      assert.equal(result[1].content, 'Hi');
+      assert.equal(
+        result[1].content,
+        'User message: Hi\n          Context: the user has no open cards.',
+      );
     });
 
     test('can include both skill cards and attached cards', () => {
