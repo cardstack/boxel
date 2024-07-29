@@ -21,7 +21,7 @@ export class FancyPerson extends Person {
           border: 1px solid pink;
         }
       </style>
-      <h1 data-test-card class='.fancy-border'><@fields.firstName /></h1>
+      <h1 data-test-card class='fancy-border'><@fields.firstName /></h1>
     </template>
   };
 }
