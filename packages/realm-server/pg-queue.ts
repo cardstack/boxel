@@ -222,6 +222,8 @@ export default class PgQueue implements Queue {
           ...addExplicitParens(separatedByCommas(nameExpressions)),
           'VALUES',
           ...addExplicitParens(separatedByCommas(valueExpressions)),
+          // we just need to seed this when it doesn't exist
+          'ON CONFLICT (working_queues_pkey) DO NOTHING',
         ] as Expression);
       }
     }

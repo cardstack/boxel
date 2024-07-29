@@ -890,46 +890,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test('displays error message if message is too large', async ({ page }) => {
-    await login(page, 'user1', 'pass');
-
-    await page.locator('[data-test-message-field]').fill('a'.repeat(65000));
-    await page.locator('[data-test-send-message-btn]').click();
-
-    await expect(page.locator('[data-test-ai-assistant-message]')).toHaveCount(
-      1,
-    );
-    await expect(page.locator('[data-test-card-error]')).toContainText(
-      'Message is too large',
-    );
-    await expect(page.locator('[data-test-ai-bot-retry-button]')).toHaveCount(
-      0,
-    );
-  });
-
-  /*
-    TODO: This matrix test appears to be leaking state. any tests that are 
-    run after it encounter this failure:
-
-    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:4202/test
-    Call log:
-      - navigating to "http://localhost:4202/test", waiting until "load"
-
-
-      at ../helpers/index.ts:63
-
-      61 |
-      62 | export async function openRoot(page: Page, url = testHost) {
-    > 63 |   await page.goto(url);
-        |              ^
-      64 |   await expect(page.locator('.cards-grid')).toHaveCount(1);
-      65 |   let isOperatorMode = !!(await page.evaluate(() =>
-      66 |     document.querySelector('dialog.operator-mode'),
-
-        at openRoot (/home/runner/work/boxel/boxel/packages/matrix/helpers/index.ts:63:14)
-        at login (/home/runner/work/boxel/boxel/packages/matrix/helpers/index.ts:232:11)
-        at /home/runner/work/boxel/boxel/packages/matrix/tests/messages.spec.ts:1013:16
-  */
+  // TODO: This matrix test mutates state in the index. please move that part into host tests
   test('attaches a card in a conversation multiple times', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
 
@@ -977,6 +938,7 @@ test.describe('Room messages', () => {
     expect(messageEvents.length).toEqual(3);
     expect(cardFragmentEvents.length).toEqual(2);
 
+    // TODO: this assertion needs to move into host tests!!
     //Test the scenario where there is an update to the card
     await page
       .locator(
@@ -1037,6 +999,9 @@ test.describe('Room messages', () => {
     expect(messageEvents.length).toEqual(4);
     expect(cardFragmentEvents.length).toEqual(3);
 
+    // TODO: the fact that we are reverting state in the index is a tell that
+    // this test should not be here
+
     // Revert updates
     await page
       .locator(`[data-test-stack-card="${testCard}"] [data-test-edit-button]`)
@@ -1047,5 +1012,22 @@ test.describe('Room messages', () => {
     await page
       .locator(`[data-test-stack-card="${testCard}"] [data-test-edit-button]`)
       .click();
+  });
+
+  test('displays error message if message is too large', async ({ page }) => {
+    await login(page, 'user1', 'pass');
+
+    await page.locator('[data-test-message-field]').fill('a'.repeat(65000));
+    await page.locator('[data-test-send-message-btn]').click();
+
+    await expect(page.locator('[data-test-ai-assistant-message]')).toHaveCount(
+      1,
+    );
+    await expect(page.locator('[data-test-card-error]')).toContainText(
+      'Message is too large',
+    );
+    await expect(page.locator('[data-test-ai-bot-retry-button]')).toHaveCount(
+      0,
+    );
   });
 });
