@@ -372,6 +372,18 @@ export function getModifyPrompt(
           });
         }
       } else {
+        if (
+          event.content.msgtype === 'org.boxel.message' &&
+          event.content.data?.context?.openCardIds
+        ) {
+          body = `User message: ${body}
+          Context: the user has the following cards open: ${JSON.stringify(
+            event.content.data.context.openCardIds,
+          )}`;
+        } else {
+          body = `User message: ${body}
+          Context: the user has no open cards.`;
+        }
         historicalMessages.push({
           role: 'user',
           content: body,
