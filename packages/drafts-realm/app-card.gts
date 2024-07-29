@@ -8,6 +8,7 @@ import {
   FieldDef,
   Component,
   realmURL,
+  StringField,
 } from 'https://cardstack.com/base/card-api';
 
 import { fn } from '@ember/helper';
@@ -35,49 +36,13 @@ import {
   codeRefWithAbsoluteURL,
   type Loader,
   type Query,
+  LooseSingleCardDocument,
+  isSingleCardDocument,
 } from '@cardstack/runtime-common';
 
-class CodeRefEdit extends Component<typeof EditableCodeRef> {
-  <template>
-    <FieldContainer @label='Module' @tag='label'>
-      <BoxelInput @value={{this.module}} @onInput={{this.onModuleInput}} />
-    </FieldContainer>
-    <FieldContainer @label='Name' @tag='label'>
-      <BoxelInput @value={{this.name}} @onInput={{this.onNameInput}} />
-    </FieldContainer>
-  </template>
-
-  @tracked name?: string = this.args.model?.name;
-  @tracked module?: string = this.args.model?.module;
-
-  get ref() {
-    if (!this.name?.trim().length || !this.module?.trim().length) {
-      return null;
-    }
-    return { name: this.name, module: this.module };
-  }
-
-  setFullRef() {
-    this.args.set(this.ref);
-  }
-
-  @action onModuleInput(val: string) {
-    this.module = val?.trim();
-    this.setFullRef();
-  }
-
-  @action onNameInput(val: string) {
-    this.name = val?.trim();
-    this.setFullRef();
-  }
-}
-
-class EditableCodeRef extends CodeRefField {
-  static edit = CodeRefEdit;
-}
-
-class Tab extends FieldDef {
-  @field ref = contains(EditableCodeRef);
+export class Tab extends FieldDef {
+  @field displayName = contains(StringField);
+  @field ref = contains(CodeRefField);
   @field isTable = contains(BooleanField);
 }
 
@@ -116,6 +81,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
     for (let [name, _declaration] of exportedCards) {
       tabs.push(
         new Tab({
+          displayName: name,
           ref: {
             name,
             module: this.moduleName,
@@ -144,7 +110,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
         </div>
         <nav class='app-card-nav'>
           <ul class='app-card-tab-list'>
-            {{#each @model.tabs as |tab index|}}
+            {{#each this.tabs as |tab index|}}
               <li>
                 <a
                   {{on 'click' (fn this.setActiveTab index)}}
@@ -483,6 +449,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
     </style>
   </template>
 
+  @tracked tabs = this.args.model.tabs;
   @tracked activeTabIndex = 0;
   @tracked private declare liveQuery: {
     instances: CardDef[];
@@ -500,10 +467,10 @@ class AppCardIsolated extends Component<typeof AppCard> {
   }
 
   get activeTab() {
-    if (!this.args.model.tabs?.length) {
+    if (!this.tabs?.length) {
       return;
     }
-    let tab = this.args.model.tabs[this.activeTabIndex];
+    let tab = this.tabs[this.activeTabIndex];
     if (!tab) {
       return;
     }
@@ -569,7 +536,14 @@ class AppCardIsolated extends Component<typeof AppCard> {
       if (!this.activeTabRef) {
         return;
       }
-      query = { filter: { type: this.activeTabRef } };
+      query = {
+        filter: {
+          every: [
+            { type: this.activeTabRef },
+            { not: { eq: { id: this.args.model.id! } } },
+          ],
+        },
+      };
     }
     this.liveQuery = getLiveCards(
       query,
@@ -591,25 +565,29 @@ class AppCardIsolated extends Component<typeof AppCard> {
     return this.liveQuery?.instances;
   }
 
-  @action createNew() {
-    this.createCard.perform();
+  @action createNew(value: unknown) {
+    let cardDoc = isSingleCardDocument(value) ? value : undefined;
+    this.createCard.perform(cardDoc);
   }
 
-  private createCard = restartableTask(async () => {
-    if (!this.activeTabRef) {
-      return;
-    }
-    try {
-      await this.args.context?.actions?.createCard?.(
-        this.activeTabRef,
-        undefined,
-      );
-    } catch (e) {
-      console.error(e);
-      this.errorMessage =
-        e instanceof Error ? `Error: ${e.message}` : 'An error occurred';
-    }
-  });
+  private createCard = restartableTask(
+    async (doc: LooseSingleCardDocument | undefined = undefined) => {
+      if (!this.activeTabRef) {
+        return;
+      }
+      try {
+        await this.args.context?.actions?.createCard?.(
+          this.activeTabRef,
+          this.currentRealm,
+          { doc },
+        );
+      } catch (e) {
+        console.error(e);
+        this.errorMessage =
+          e instanceof Error ? `Error: ${e.message}` : 'An error occurred';
+      }
+    },
+  );
 }
 
 export class AppCard extends CardDef {

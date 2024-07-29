@@ -11,7 +11,7 @@ import {
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { and } from '@cardstack/boxel-ui/helpers';
 
-export class Prompt extends FieldDef {
+class Prompt extends FieldDef {
   static displayName = 'Prompt';
   @field appType = contains(StringField);
   @field domain = contains(StringField);

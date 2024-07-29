@@ -1,9 +1,4 @@
-import {
-  CardDef,
-  // Component,
-  contains,
-  field,
-} from 'https://cardstack.com/base/card-api';
+import { type CardDef } from 'https://cardstack.com/base/card-api';
 import {
   CardContainer,
   FieldContainer,
@@ -11,22 +6,14 @@ import {
   Button,
 } from '@cardstack/boxel-ui/components';
 import { cssVar, eq, getContrastColor } from '@cardstack/boxel-ui/helpers';
-import { type Query } from '@cardstack/runtime-common';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-// @ts-ignore
-import cssUrl from 'ember-css-url';
-import {
-  Prompt,
-  ProductRequirementDocument,
-} from './product-requirement-document';
-import { AppCard } from './app-card';
+import { AppCard, Tab } from './app-card';
 
-const getEmbeddedComponent = (card: CardDef) => {
+const getComponent = (card: CardDef) => {
   if (!card) {
     return;
   }
@@ -34,33 +21,31 @@ const getEmbeddedComponent = (card: CardDef) => {
 };
 
 class Requirements extends GlimmerComponent<{
-  prd: ProductRequirementDocument | null;
+  instances: CardDef[] | [];
 }> {
   <template>
     <div class='requirements'>
       <aside class='recent-reqs-sidebar'>
         <h3 class='recent-reqs-title'>Recent Requirements</h3>
-        {{!-- <ul>
-          {{#each this.instances as |doc|}}
+        <ul>
+          {{#each @instances as |doc|}}
             <li>
               <button {{on 'click' (fn this.openDoc doc)}}>
                 {{doc.title}}
               </button>
             </li>
           {{/each}}
-        </ul> --}}
+        </ul>
       </aside>
-      <div>
-        {{#if @prd}}
-          {{#let (getEmbeddedComponent @prd) as |EmbeddedCard|}}
-            <EmbeddedCard />
-          {{/let}}
-        {{/if}}
-      </div>
+      {{#let (getComponent this.currentDoc) as |Card|}}
+        <div class='requirements-doc'>
+          <Card />
+        </div>
+      {{/let}}
     </div>
     <style>
       .requirements {
-        height: inherit;
+        height: 100%;
         display: grid;
         grid-template-columns: auto 1fr;
         gap: var(--boxel-sp);
@@ -72,18 +57,24 @@ class Requirements extends GlimmerComponent<{
         margin: 0;
         font: 700 var(--boxel-font);
       }
+      .requirements-doc > :deep(.field-component-card.embedded-format) {
+        --overlay-embedded-card-header-height: 0;
+      }
     </style>
   </template>
 
-  @tracked doc: ProductRequirementDocument | null = null;
+  @tracked _doc?: CardDef;
 
-  @action openDoc(doc: ProductRequirementDocument) {
-    this.doc = doc;
+  @action openDoc(doc: CardDef) {
+    this._doc = doc;
+  }
+
+  get currentDoc() {
+    return this._doc ?? this.args.instances?.[0];
   }
 }
 
 class Isolated extends AppCard.isolated {
-  tabs = ['Dashboard', 'Requirements' /*, 'Your Apps', 'Sample Apps'*/];
   <template>
     <section class='app'>
       <header
@@ -106,7 +97,7 @@ class Isolated extends AppCard.isolated {
                   {{on 'click' (fn this.setActiveTab index)}}
                   class={{if (eq this.activeTabIndex index) 'active'}}
                 >
-                  {{tab}}
+                  {{tab.displayName}}
                 </a>
               </li>
             {{/each}}
@@ -114,8 +105,8 @@ class Isolated extends AppCard.isolated {
         </nav>
       </header>
       <div class='app-content'>
-        {{#if (eq this.currentTabName 'Requirements')}}
-          <Requirements @prd={{this.prd}} />
+        {{#if (eq this.activeTabIndex 1)}}
+          <Requirements @instances={{this.instances}} />
         {{else}}
           <div class='dashboard'>
             <aside class='intro'>
@@ -179,7 +170,11 @@ class Isolated extends AppCard.isolated {
                       @onInput={{fn this.setPrompt 'customRequirements'}}
                     />
                   </FieldContainer>
-                  <Button @kind='primary-dark' {{on 'click' this.generatePrd}}>
+                  <Button
+                    class='generate-button'
+                    @kind='primary-dark'
+                    {{on 'click' this.generatePrd}}
+                  >
                     <span class='button-logo' />
                     Let's Get Started
                   </Button>
@@ -201,8 +196,8 @@ class Isolated extends AppCard.isolated {
                       fieldName=undefined
                     }}
                   >
-                    {{#let (getEmbeddedComponent card) as |EmbeddedCard|}}
-                      <EmbeddedCard />
+                    {{#let (getComponent card) as |Card|}}
+                      <Card />
                     {{/let}}
                   </li>
                 {{/each}}
@@ -368,8 +363,13 @@ class Isolated extends AppCard.isolated {
         border-bottom: 4px solid var(--boxel-dark);
         font-weight: 700;
       }
-      .prd-editor > * + * {
+      .prd-editor {
+        display: grid;
+        gap: var(--boxel-sp);
+      }
+      .generate-button {
         margin-top: var(--boxel-sp);
+        justify-self: end;
       }
       .features {
         --boxel-input-height: 4rem;
@@ -397,54 +397,50 @@ class Isolated extends AppCard.isolated {
     </style>
   </template>
 
-  @tracked prompt: {
+  @tracked tabs = [
+    new Tab({
+      displayName: 'Dashboard',
+      ref: {
+        name: 'AppCard',
+        module: `${this.currentRealm?.href}app-card`,
+      },
+    }),
+    new Tab({
+      displayName: 'Requirements',
+      ref: {
+        name: 'ProductRequirementDocument',
+        module: `${this.currentRealm?.href}product-requirement-document`,
+      },
+    }),
+  ];
+  @tracked prompt?: {
     appType: string;
     domain: string;
     customRequirements: string;
-  } = { appType: '', domain: '', customRequirements: '' };
-  @tracked prd: ProductRequirementDocument | null = null;
-
-  constructor(owner: Owner, args: any) {
-    super(owner, args);
-    // this.args.model.tabs = this.tabs;
-    if (this.currentRealm) {
-      let query: Query = {
-        filter: {
-          every: [
-            {
-              type: {
-                name: 'AppCard',
-                module: `${this.currentRealm?.href}app-card`,
-              },
-            },
-            {
-              not: {
-                eq: {
-                  id: this.args.model.id!,
-                },
-              },
-            },
-          ],
-        },
-      };
-      this.setSearch(query);
-    }
-  }
-
-  get currentTabName() {
-    return this.tabs[this.activeTabIndex];
-  }
+  } = undefined;
 
   @action setPrompt(key: string, value: string) {
-    this.prompt = { ...this.prompt, [key]: value };
+    let prompt = this.prompt ?? {
+      appType: '',
+      domain: '',
+      customRequirements: '',
+    };
+    this.prompt = { ...prompt, [key]: value };
   }
 
   @action generatePrd() {
-    this.prd = new ProductRequirementDocument({
-      prompt: new Prompt(this.prompt),
+    if (!this.activeTabRef) {
+      console.error('No active tab ref');
+      return;
+    }
+    this.setActiveTab(1);
+    this.createNew?.({
+      data: {
+        attributes: { prompt: this.prompt },
+        meta: { adoptsFrom: this.activeTabRef },
+      },
     });
-    this.activeTabIndex = 1;
-    // this.args.context?.actions?.viewCard(this.prd, 'isolated');
+    this.prompt = undefined;
   }
 }
 
@@ -452,6 +448,5 @@ export class AiAppGenerator extends AppCard {
   static displayName = 'AI App Generator';
   static prefersWideFormat = true;
   static headerColor = '#ffeb00';
-  @field prompt = contains(Prompt);
   static isolated = Isolated;
 }
