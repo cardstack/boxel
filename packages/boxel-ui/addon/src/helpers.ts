@@ -1,4 +1,5 @@
 import cn from './helpers/cn.ts';
+import { getContrastColor } from './helpers/contrast-color.ts';
 import cssVar from './helpers/css-var.ts';
 import dayjsFormat from './helpers/dayjs-format.ts';
 import element from './helpers/element.ts';
@@ -6,7 +7,6 @@ import menuDivider, { MenuDivider } from './helpers/menu-divider.ts';
 import menuItem, { MenuItem, menuItemFunc } from './helpers/menu-item.ts';
 import optional from './helpers/optional.ts';
 import pick from './helpers/pick.ts';
-import { getContrastColor } from './helpers/contrast-color.ts';
 import { and, bool, eq, gt, lt, not, or } from './helpers/truth-helpers.ts';
 
 export {
@@ -17,6 +17,7 @@ export {
   dayjsFormat,
   element,
   eq,
+  getContrastColor,
   gt,
   lt,
   MenuDivider,
@@ -28,5 +29,4 @@ export {
   optional,
   or,
   pick,
-  getContrastColor,
 };
