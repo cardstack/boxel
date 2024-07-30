@@ -413,9 +413,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             class={{cn 'header' header--icon-hovered=this.isHoverOnRealmIcon}}
             style={{cssVar
               boxel-header-background-color=@item.headerColor
-              boxel-header-text-color=(if
-                @item.headerColor (getContrastColor @item.headerColor)
-              )
+              boxel-header-text-color=(getContrastColor @item.headerColor)
             }}
             {{on
               'click'

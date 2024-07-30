@@ -489,7 +489,10 @@ class AppCardIsolated extends Component<typeof AppCard> {
   }
 
   get headerColor() {
-    return Object.getPrototypeOf(this.args.model).constructor.headerColor;
+    return (
+      Object.getPrototypeOf(this.args.model).constructor.headerColor ??
+      undefined
+    );
   }
 
   get tableData() {
@@ -593,7 +596,6 @@ class AppCardIsolated extends Component<typeof AppCard> {
 export class AppCard extends CardDef {
   static displayName = 'App Card';
   static prefersWideFormat = true;
-  static headerColor = '#ffffff';
   @field tabs = containsMany(Tab);
   static isolated = AppCardIsolated;
   static embedded = class Embedded extends Component<typeof this> {

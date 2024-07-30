@@ -81,9 +81,7 @@ class Isolated extends AppCard.isolated {
         class='app-header'
         style={{cssVar
           header-background-color=this.headerColor
-          header-text-color=(if
-            this.headerColor (getContrastColor this.headerColor)
-          )
+          header-text-color=(getContrastColor this.headerColor)
         }}
       >
         <div class='app-title-group'>
@@ -447,6 +445,5 @@ class Isolated extends AppCard.isolated {
 export class AiAppGenerator extends AppCard {
   static displayName = 'AI App Generator';
   static prefersWideFormat = true;
-  static headerColor = '#ffeb00';
   static isolated = Isolated;
 }
