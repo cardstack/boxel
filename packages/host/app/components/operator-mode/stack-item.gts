@@ -168,24 +168,26 @@ export default class OperatorModeStackItem extends Component<Signature> {
     );
   }
 
+  private get isItemFullWidth() {
+    return !this.isBuried && this.args.item.isWideFormat;
+  }
+
   private get styleForStackedCard(): SafeString {
     const stackItemMaxWidth = '50rem';
-    let itemsOnStackCount = this.args.stackItems.length;
-    let invertedIndex = itemsOnStackCount - this.args.index - 1;
-    let widthReductionPercent = 5; // Every new card on the stack is 5% wider than the previous one
-    let offsetPx = 30; // Every new card on the stack is 30px lower than the previous one
-    let width =
-      !this.isBuried && this.args.item.isWideFormat
-        ? '100%'
-        : `calc(${stackItemMaxWidth} * ${
-            100 - invertedIndex * widthReductionPercent
-          } / 100)`;
+    const widthReductionPercent = 5; // Every new card on the stack is 5% wider than the previous one
+    const offsetPx = 30; // Every new card on the stack is 30px lower than the previous one
+
+    let invertedIndex = this.args.stackItems.length - this.args.index - 1;
+    let maxWidthPercent = 100 - invertedIndex * widthReductionPercent;
+    let width = this.isItemFullWidth
+      ? '100%'
+      : `calc(${stackItemMaxWidth} * ${maxWidthPercent} / 100)`;
 
     return htmlSafe(`
       height: calc(100% - ${offsetPx}px * ${this.args.index});
       width: ${width};
-      max-width: ${100 - invertedIndex * widthReductionPercent}%;
-      z-index: ${itemsOnStackCount - invertedIndex};
+      max-width: ${maxWidthPercent}%;
+      z-index: calc(${this.args.index} + 1);
       margin-top: calc(${offsetPx}px * ${this.args.index});
     `); // using margin-top instead of padding-top to hide scrolled content from view
   }
