@@ -31,5 +31,5 @@ NODE_NO_WARNINGS=1 \
   --toUrl='https://realms-staging.stack.cards/published/' \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl='https://realms-staging.stack.cards/base/' \
-  --fromUrl='https://realms-staging.stack.card/base/' \
+  --fromUrl='https://realms-staging.stack.cards/base/' \
   --toUrl='https://realms-staging.stack.cards/base/'
