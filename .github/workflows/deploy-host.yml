@@ -30,7 +30,7 @@ jobs:
           if [ "$INPUT_ENVIRONMENT" = "production" ]; then
             echo "AWS_ROLE_ARN=arn:aws:iam::120317779495:role/boxel-host" >> $GITHUB_ENV
             echo "AWS_S3_BUCKET=cardstack-boxel-host-production" >> $GITHUB_ENV
-            echo "AWS_CLOUDFRONT_DISTRIBUTION=E2DDEHLJXF5LQ8" >> $GITHUB_ENV
+            echo "AWS_CLOUDFRONT_DISTRIBUTION=EIY7A542TLTVQ" >> $GITHUB_ENV
           elif [ "$INPUT_ENVIRONMENT" = "staging" ]; then
             echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/boxel-host" >> $GITHUB_ENV
             echo "AWS_S3_BUCKET=cardstack-boxel-host-staging" >> $GITHUB_ENV
