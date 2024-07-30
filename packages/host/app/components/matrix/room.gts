@@ -2,16 +2,17 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { cached, tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
 import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
+import { trackedFunction } from 'ember-resources/util/function';
 import { v4 as uuidv4 } from 'uuid';
 
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
-import { CardResource, getCard } from '@cardstack/host/resources/card-resource';
+import { getCard } from '@cardstack/host/resources/card-resource';
 import { getRoom } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -138,7 +139,6 @@ export default class Room extends Component<Signature> {
     () => this.topMostStackItems,
     () => this.cardsToAttach,
   );
-  private skillCardResources: Map<string, CardResource> = new Map();
 
   @tracked private currentMonacoContainer: number | undefined;
 
@@ -172,19 +172,19 @@ export default class Room extends Component<Signature> {
     return this.roomResource.messages;
   }
 
-  @cached
-  private get skills(): Skill[] {
-    // To avoid `ember/no-side-effects` error:
-    // I separated the logic to instantiate and cache skill card resources
-    // from this getter into the `ensureSkillCardResources` method.
-    this.ensureSkillCardResources();
-    let skills = [];
+  private get skills() {
+    return this.loadSkillsResource.value ?? [];
+  }
 
-    for (let skill of this.roomResource.skills) {
-      let skillCardResource = this.skillCardResources.get(skill.card.id);
+  private loadSkillsResource = trackedFunction(this, async () => {
+    let skills: Skill[] = [];
+
+    let promises = this.roomResource.skills.map(async (skill) => {
+      let skillCardResource = getCard(this, () => skill.card.id);
+      await skillCardResource.loaded;
       let newSkill = new Proxy(
         {
-          card: skillCardResource!.card ?? skill.card,
+          card: skillCardResource.card,
           isActive: skill.isActive,
         },
         {
@@ -197,22 +197,23 @@ export default class Room extends Component<Signature> {
             Reflect.set(target, property, value);
             return true;
           },
+          get(target, property, value) {
+            if (property === 'isActive' && target[property] !== value) {
+              return skill.isActive;
+            }
+            return Reflect.get(target, property, value);
+          },
         },
       ) as Skill;
       skills.push(newSkill);
-    }
-    return skills;
-  }
+    });
 
-  private ensureSkillCardResources(): void {
-    for (let skill of this.roomResource.skills) {
-      let skillCardResource = this.skillCardResources.get(skill.card.id);
-      if (!skillCardResource) {
-        skillCardResource = getCard(this, () => skill.card.id);
-        this.skillCardResources.set(skill.card.id, skillCardResource);
-      }
+    if (promises) {
+      await Promise.all(promises);
     }
-  }
+
+    return skills;
+  });
 
   private get room() {
     let room = this.roomResource.room;
