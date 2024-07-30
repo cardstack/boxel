@@ -445,5 +445,6 @@ class Isolated extends AppCard.isolated {
 export class AiAppGenerator extends AppCard {
   static displayName = 'AI App Generator';
   static prefersWideFormat = true;
+  static headerColor = '#ffeb00';
   static isolated = Isolated;
 }
