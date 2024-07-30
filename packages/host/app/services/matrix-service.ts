@@ -16,7 +16,7 @@ import {
   type ISendEventResponse,
 } from 'matrix-js-sdk';
 import { md5 } from 'super-fast-md5';
-import { TrackedMap } from 'tracked-built-ins';
+import { TrackedMap, TrackedObject } from 'tracked-built-ins';
 
 import {
   type LooseSingleCardDocument,
@@ -52,12 +52,16 @@ import type {
   ReactionEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 
+import { SkillCard } from 'https://cardstack.com/base/skill-card';
+
+import { Skill } from '../components/ai-assistant/skill-menu';
 import {
   Timeline,
   Membership,
   addRoomEvent,
   Context,
 } from '../lib/matrix-handlers';
+import { getCard } from '../resources/card-resource';
 import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
@@ -73,6 +77,8 @@ const { matrixURL } = ENV;
 const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_CARD_SIZE_KB = 60;
+
+const DefaultSkillCards = [`${baseRealm.url}SkillCard/card-editing`];
 
 export type Event = Partial<IEvent>;
 
@@ -115,10 +121,11 @@ export default class MatrixService
     new TrackedMap();
   cardHashes: Map<string, string> = new Map(); // hashes <> event id
   skillCardHashes: Map<string, string> = new Map(); // hashes <> event id
+  defaultSkills: Skill[] = [];
 
   constructor(owner: Owner) {
     super(owner);
-    this.#ready = this.loadSDK.perform();
+    this.#ready = this.loadState.perform();
   }
 
   get context(): Context {
@@ -145,7 +152,7 @@ export default class MatrixService
   }
 
   get isLoading() {
-    return this.loadSDK.isRunning;
+    return this.loadState.isRunning;
   }
 
   private cardAPIModule = importResource(
@@ -153,7 +160,12 @@ export default class MatrixService
     () => 'https://cardstack.com/base/card-api',
   );
 
-  private loadSDK = task(async () => {
+  private loadState = task(async () => {
+    await this.loadDefaultSkills();
+    await this.loadSDK();
+  });
+
+  private async loadSDK() {
     await this.cardAPIModule.loaded;
     // The matrix SDK is VERY big so we only load it when we need it
     this.#matrixSDK = await import('matrix-js-sdk');
@@ -173,7 +185,7 @@ export default class MatrixService
       ],
       [this.matrixSDK.RoomEvent.Receipt, Timeline.onReceipt(this)],
     ];
-  });
+  }
 
   get isLoggedIn() {
     return this.client.isLoggedIn();
@@ -769,6 +781,7 @@ export default class MatrixService
   }
 
   setRoom(roomId: string, room: RoomState) {
+    room.skills = [...this.defaultSkills];
     this.rooms.set(roomId, room);
     if (!this.roomResourcesCache.has(roomId)) {
       this.roomResourcesCache.set(
@@ -779,6 +792,15 @@ export default class MatrixService
           () => this.getRoom(roomId)?.events,
         ),
       );
+    }
+  }
+
+  private async loadDefaultSkills() {
+    for (let skillCardURL of DefaultSkillCards) {
+      let cardResource = getCard(this, () => skillCardURL);
+      await cardResource.loaded;
+      let card = cardResource.card as SkillCard;
+      this.defaultSkills.push(new TrackedObject({ card, isActive: true }));
     }
   }
 

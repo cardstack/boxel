@@ -237,9 +237,9 @@ test.describe('Room messages', () => {
         message.type === 'm.room.message' &&
         message.content?.msgtype === 'org.boxel.cardFragment',
     );
-    expect(cardFragments.length).toStrictEqual(3);
+    expect(cardFragments.length).toStrictEqual(4);
     let lastFragment = messages.findIndex((m) => m === cardFragments[2]);
-    let boxelMessage = messages[lastFragment + 1];
+    let boxelMessage = messages[lastFragment + 2];
     let boxelMessageData = JSON.parse(boxelMessage.content.data);
     // the card fragment events need to come before the boxel message event they
     // are used in, and the boxel message should point to the first fragment
@@ -282,7 +282,7 @@ test.describe('Room messages', () => {
     ]);
 
     let messages = await getRoomEvents();
-    let message = messages[messages.length - 2];
+    let message = messages[messages.length - 3];
     let messageData = JSON.parse(message.content.data);
     let serializeCard = JSON.parse(messageData.cardFragment);
 
@@ -890,7 +890,8 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test('attaches a card in a coversation multiple times', async ({ page }) => {
+  // TODO: This matrix test mutates state in the index. please move that part into host tests
+  test('attaches a card in a conversation multiple times', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
 
     await login(page, 'user1', 'pass');
@@ -935,8 +936,9 @@ test.describe('Room messages', () => {
         !e.content.data.nextFragment,
     );
     expect(messageEvents.length).toEqual(3);
-    expect(cardFragmentEvents.length).toEqual(1);
+    expect(cardFragmentEvents.length).toEqual(2);
 
+    // TODO: this assertion needs to move into host tests!!
     //Test the scenario where there is an update to the card
     await page
       .locator(
@@ -995,7 +997,10 @@ test.describe('Room messages', () => {
         !e.content.data.nextFragment,
     );
     expect(messageEvents.length).toEqual(4);
-    expect(cardFragmentEvents.length).toEqual(2);
+    expect(cardFragmentEvents.length).toEqual(3);
+
+    // TODO: the fact that we are reverting state in the index is a tell that
+    // this test should not be here
 
     // Revert updates
     await page

@@ -20,7 +20,7 @@ import {
   RunnerOptionsManager,
   type RealmInfo,
   type TokenClaims,
-  type IndexUpdater,
+  type IndexWriter,
   type RunnerRegistration,
   type IndexRunner,
   type IndexResults,
@@ -80,13 +80,6 @@ export function cleanWhiteSpace(text: string) {
   // to be appearing in date/time serialization in some envs
   // eslint-disable-next-line no-irregular-whitespace
   return text.replace(/[\s ]+/g, ' ').trim();
-}
-
-export function trimCardContainer(text: string) {
-  return cleanWhiteSpace(text).replace(
-    /<div .*? data-test-field-component-card>\s?[<!---->]*? (.*?) <\/div>$/g,
-    '$1',
-  );
 }
 
 export function getMonacoContent(): string {
@@ -198,7 +191,7 @@ async function makeRenderer() {
 class MockLocalIndexer extends Service {
   url = new URL(testRealmURL);
   #adapter: RealmAdapter | undefined;
-  #indexUpdater: IndexUpdater | undefined;
+  #indexWriter: IndexWriter | undefined;
   #fromScratch: ((realmURL: URL) => Promise<IndexResults>) | undefined;
   #incremental:
     | ((
@@ -223,7 +216,7 @@ class MockLocalIndexer extends Service {
   async configureRunner(
     registerRunner: RunnerRegistration,
     adapter: RealmAdapter,
-    indexUpdater: IndexUpdater,
+    indexWriter: IndexWriter,
   ) {
     if (!this.#fromScratch || !this.#incremental) {
       throw new Error(
@@ -231,7 +224,7 @@ class MockLocalIndexer extends Service {
       );
     }
     this.#adapter = adapter;
-    this.#indexUpdater = indexUpdater;
+    this.#indexWriter = indexWriter;
     await registerRunner(
       this.#fromScratch.bind(this),
       this.#incremental.bind(this),
@@ -243,11 +236,11 @@ class MockLocalIndexer extends Service {
     }
     return this.#adapter;
   }
-  get indexUpdater() {
-    if (!this.#indexUpdater) {
-      throw new Error(`indexUpdater not registered with MockLocalIndexer`);
+  get indexWriter() {
+    if (!this.#indexWriter) {
+      throw new Error(`indexWriter not registered with MockLocalIndexer`);
     }
-    return this.#indexUpdater;
+    return this.#indexWriter;
   }
 }
 
@@ -506,12 +499,13 @@ async function setupTestRealm({
 
   let adapter = new TestRealmAdapter(contents, new URL(realmURL));
   let indexRunner: IndexRunner = async (optsId) => {
-    let { registerRunner, indexUpdater } = runnerOptsMgr.getOptions(optsId);
-    await localIndexer.configureRunner(registerRunner, adapter, indexUpdater);
+    let { registerRunner, indexWriter } = runnerOptsMgr.getOptions(optsId);
+    await localIndexer.configureRunner(registerRunner, adapter, indexWriter);
   };
 
   let dbAdapter = await getDbAdapter();
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
+  let worker: Worker | undefined;
   realm = new Realm({
     url: realmURL,
     adapter,
@@ -522,14 +516,14 @@ async function setupTestRealm({
     virtualNetwork,
     dbAdapter,
     queue,
-    onIndexUpdaterReady: async (indexUpdater) => {
-      let worker = new Worker({
+    withIndexWriter: async (indexWriter, loader) => {
+      worker = new Worker({
         realmURL: new URL(realmURL!),
-        indexUpdater,
+        indexWriter,
         queue,
         realmAdapter: adapter,
         runnerOptsManager: runnerOptsMgr,
-        loader: realm.loaderTemplate,
+        loader,
         indexRunner,
       });
       await worker.run();
@@ -537,8 +531,11 @@ async function setupTestRealm({
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
   });
   virtualNetwork.mount(realm.maybeHandle);
-
-  await realm.ready;
+  if (!worker) {
+    throw new Error(`worker for realm ${realmURL} was not created`);
+  }
+  await worker.run();
+  await realm.start();
 
   return { realm, adapter };
 }

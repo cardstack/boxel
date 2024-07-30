@@ -118,7 +118,6 @@ export async function createRealm({
   queue,
   dbAdapter,
   matrixConfig = testMatrix,
-  deferStartUp,
 }: {
   dir: string;
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
@@ -148,32 +147,33 @@ export async function createRealm({
   }
 
   let adapter = new NodeAdapter(dir);
-  let realm = new Realm(
-    {
-      url: realmURL,
-      adapter,
-      getIndexHTML: fastbootState.getIndexHTML,
-      matrix: matrixConfig,
-      realmSecretSeed: "shhh! it's a secret",
-      virtualNetwork,
-      dbAdapter,
-      queue,
-      onIndexUpdaterReady: async (indexUpdater) => {
-        let worker = new Worker({
-          realmURL: new URL(realmURL!),
-          indexUpdater,
-          queue,
-          realmAdapter: adapter,
-          runnerOptsManager: manager,
-          loader: realm.loaderTemplate,
-          indexRunner,
-        });
-        await worker.run();
-      },
-      assetsURL: new URL(`http://example.com/notional-assets-host/`),
+  let worker: Worker | undefined;
+  let realm = new Realm({
+    url: realmURL,
+    adapter,
+    getIndexHTML: fastbootState.getIndexHTML,
+    matrix: matrixConfig,
+    realmSecretSeed: "shhh! it's a secret",
+    virtualNetwork,
+    dbAdapter,
+    queue,
+    withIndexWriter: (indexWriter, loader) => {
+      worker = new Worker({
+        realmURL: new URL(realmURL!),
+        indexWriter,
+        queue,
+        realmAdapter: adapter,
+        runnerOptsManager: manager,
+        loader,
+        indexRunner,
+      });
     },
-    { deferStartUp },
-  );
+    assetsURL: new URL(`http://example.com/notional-assets-host/`),
+  });
+  if (!worker) {
+    throw new Error(`worker for realm ${realmURL} was not created`);
+  }
+  await worker.run();
   return realm;
 }
 
@@ -214,7 +214,7 @@ export async function runBaseRealmServer(
     permissions,
   });
   virtualNetwork.mount(testBaseRealm.handle);
-  await testBaseRealm.ready;
+  await testBaseRealm.start();
   let testBaseRealmServer = new RealmServer([testBaseRealm], virtualNetwork);
   return testBaseRealmServer.listen(parseInt(localBaseRealmURL.port));
 }
@@ -249,7 +249,7 @@ export async function runTestRealmServer({
     dbAdapter,
   });
   virtualNetwork.mount(testRealm.handle);
-  await testRealm.ready;
+  await testRealm.start();
   let testRealmServer = await new RealmServer(
     [testRealm],
     virtualNetwork,

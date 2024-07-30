@@ -1,6 +1,6 @@
 import * as JSONTypes from 'json-typescript';
 import {
-  IndexUpdater,
+  IndexWriter,
   Loader,
   readFileAsText,
   Deferred,
@@ -48,7 +48,7 @@ export interface RunnerOpts {
   _fetch: typeof fetch;
   reader: Reader;
   registerRunner: RunnerRegistration;
-  indexUpdater: IndexUpdater;
+  indexWriter: IndexWriter;
 }
 
 export interface FromScratchArgs extends JSONTypes.Object {
@@ -109,7 +109,7 @@ export class Worker {
   #runner: IndexRunner;
   runnerOptsMgr: RunnerOptionsManager;
   #reader: Reader;
-  #indexUpdater: IndexUpdater;
+  #indexWriter: IndexWriter;
   #queue: Queue;
   #loader: Loader;
   #fromScratch:
@@ -126,7 +126,7 @@ export class Worker {
 
   constructor({
     realmURL,
-    indexUpdater,
+    indexWriter,
     queue,
     indexRunner,
     runnerOptsManager,
@@ -134,7 +134,7 @@ export class Worker {
     loader,
   }: {
     realmURL: URL;
-    indexUpdater: IndexUpdater;
+    indexWriter: IndexWriter;
     queue: Queue;
     indexRunner: IndexRunner;
     runnerOptsManager: RunnerOptionsManager;
@@ -143,7 +143,7 @@ export class Worker {
   }) {
     this.#realmURL = realmURL;
     this.#queue = queue;
-    this.#indexUpdater = indexUpdater;
+    this.#indexWriter = indexWriter;
     this.#reader = {
       readdir: realmAdapter.readdir.bind(realmAdapter),
       readFileAsText: (
@@ -165,14 +165,16 @@ export class Worker {
   async run() {
     await this.#queue.start();
 
-    this.#queue.register(
-      `from-scratch-index:${this.#realmURL}`,
-      this.fromScratch,
-    );
-    this.#queue.register(
-      `incremental-index:${this.#realmURL}`,
-      this.incremental,
-    );
+    await Promise.all([
+      this.#queue.register(
+        `from-scratch-index:${this.#realmURL}`,
+        this.fromScratch,
+      ),
+      this.#queue.register(
+        `incremental-index:${this.#realmURL}`,
+        this.incremental,
+      ),
+    ]);
   }
 
   private async prepareAndRunJob<T>(run: () => Promise<T>): Promise<T> {
@@ -180,7 +182,7 @@ export class Worker {
     let optsId = this.runnerOptsMgr.setOptions({
       _fetch: this.#loader.fetch.bind(this.#loader),
       reader: this.#reader,
-      indexUpdater: this.#indexUpdater,
+      indexWriter: this.#indexWriter,
       registerRunner: async (fromScratch, incremental) => {
         this.#fromScratch = fromScratch;
         this.#incremental = incremental;

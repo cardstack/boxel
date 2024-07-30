@@ -24,13 +24,25 @@ import {
   type RealmVersionsTable,
 } from './index-structure';
 
-export class IndexUpdater {
+export class IndexWriter {
   constructor(private dbAdapter: DBAdapter) {}
 
   async createBatch(realmURL: URL) {
     let batch = new Batch(this.dbAdapter, realmURL);
     await batch.ready;
     return batch;
+  }
+
+  private query(expression: Expression) {
+    return query(this.dbAdapter, expression, coerceTypes);
+  }
+
+  async isNewIndex(realm: URL): Promise<boolean> {
+    let [row] = (await this.query([
+      'SELECT current_version FROM realm_versions WHERE realm_url =',
+      param(realm.href),
+    ])) as Pick<RealmVersionsTable, 'current_version'>[];
+    return !row;
   }
 }
 

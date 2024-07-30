@@ -1,9 +1,9 @@
+import MarkdownField from './markdown';
 import { CardDef, Component, field, contains } from './card-api';
-import TextAreaField from './text-area';
 
 export class SkillCard extends CardDef {
   static displayName = 'Skill';
-  @field instructions = contains(TextAreaField);
+  @field instructions = contains(MarkdownField);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <@fields.title />

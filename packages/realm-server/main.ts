@@ -153,6 +153,7 @@ let dist: URL = new URL(distURL);
   let dbAdapter = new PgAdapter();
   let queue = new PgQueue(dbAdapter);
 
+  let workers: Worker[] = [];
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
 
@@ -190,7 +191,7 @@ let dist: URL = new URL(distURL);
         virtualNetwork,
         dbAdapter,
         queue,
-        onIndexUpdaterReady: async (indexUpdater) => {
+        withIndexWriter: (indexWriter, loader) => {
           // Note for future: we are taking advantage of the fact that the realm
           // does not need to auth with itself and are passing in the realm's
           // loader which includes a url handler for internal requests that
@@ -199,19 +200,18 @@ let dist: URL = new URL(distURL);
           // indexing.
           let worker = new Worker({
             realmURL: new URL(url),
-            indexUpdater,
+            indexWriter,
             queue,
             realmAdapter,
             runnerOptsManager: manager,
-            loader: realm.loaderTemplate,
+            loader,
             indexRunner: getRunner,
           });
-          await worker.run();
+          workers.push(worker);
         },
         assetsURL: dist,
       },
       {
-        deferStartUp: true,
         ...(process.env.DISABLE_MODULE_CACHING === 'true'
           ? { disableModuleCaching: true }
           : {}),
@@ -229,7 +229,14 @@ let dist: URL = new URL(distURL);
   let server = new RealmServer(realms, virtualNetwork);
 
   server.listen(port);
-  log.info(`Realm server listening on port ${port}:`);
+
+  await Promise.all(workers.map((worker) => worker.run()));
+
+  for (let realm of realms) {
+    await realm.start();
+  }
+
+  log.info(`Realm server listening on port ${port} is serving realms:`);
   let additionalMappings = hrefs.slice(paths.length);
   for (let [index, { url }] of realms.entries()) {
     log.info(`    ${url} => ${hrefs[index][1]}, serving path ${paths[index]}`);
@@ -241,18 +248,6 @@ let dist: URL = new URL(distURL);
     }
   }
   log.info(`Using host url: '${dist}' for card pre-rendering`);
-
-  for (let realm of realms) {
-    log.info(`Starting realm ${realm.url}...`);
-    await realm.start();
-    log.info(
-      `Realm ${realm.url} has started (${JSON.stringify(
-        realm.searchIndex.stats,
-        null,
-        2,
-      )})`,
-    );
-  }
 })().catch((e: any) => {
   Sentry.captureException(e);
   console.error(
