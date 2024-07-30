@@ -1,6 +1,7 @@
 import { registerDestructor } from '@ember/destroyable';
 
 import { service } from '@ember/service';
+import { waitForPromise } from '@ember/test-waiters';
 import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
@@ -39,7 +40,9 @@ export class Search extends Resource<Args> {
   modify(_positional: never[], named: Args['named']) {
     let { query, realms, isLive, doWhileRefreshing } = named;
     this.realmsToSearch = realms ?? this.cardService.realmURLs;
+
     this.loaded = this.search.perform(query);
+    waitForPromise(this.loaded);
 
     if (isLive) {
       // TODO this triggers a new search against all realms if any single realm
