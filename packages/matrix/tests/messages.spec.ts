@@ -890,7 +890,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test('attaches a card in a coversation multiple times', async ({ page }) => {
+  test('attaches a card in a conversation multiple times', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
 
     await login(page, 'user1', 'pass');

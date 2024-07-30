@@ -505,6 +505,7 @@ async function setupTestRealm({
 
   let dbAdapter = await getDbAdapter();
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
+  let worker: Worker | undefined;
   realm = new Realm({
     url: realmURL,
     adapter,
@@ -515,14 +516,14 @@ async function setupTestRealm({
     virtualNetwork,
     dbAdapter,
     queue,
-    onIndexWriterReady: async (indexWriter) => {
-      let worker = new Worker({
+    withIndexWriter: async (indexWriter, loader) => {
+      worker = new Worker({
         realmURL: new URL(realmURL!),
         indexWriter,
         queue,
         realmAdapter: adapter,
         runnerOptsManager: runnerOptsMgr,
-        loader: realm.loaderTemplate,
+        loader,
         indexRunner,
       });
       await worker.run();
@@ -530,8 +531,11 @@ async function setupTestRealm({
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
   });
   virtualNetwork.mount(realm.maybeHandle);
-
-  await realm.ready;
+  if (!worker) {
+    throw new Error(`worker for realm ${realmURL} was not created`);
+  }
+  await worker.run();
+  await realm.start();
 
   return { realm, adapter };
 }
