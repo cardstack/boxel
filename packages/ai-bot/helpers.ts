@@ -50,6 +50,7 @@ export function constructHistory(history: IRoomEvent[]) {
    */
   const fragments = new Map<string, CardFragmentContent>(); // eventId => fragment
   const latestEventsMap = new Map<string, DiscreteMatrixEvent>();
+  console.log('all history', JSON.stringify(history, null, 2));
   for (let rawEvent of history) {
     if (rawEvent.content.data) {
       try {
