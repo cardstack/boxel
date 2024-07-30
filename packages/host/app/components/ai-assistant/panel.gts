@@ -455,7 +455,6 @@ export default class AiAssistantPanel extends Component<Signature> {
     this.isShowingPastSessions = false;
   }
 
-  @cached
   private get aiSessionRooms() {
     let sessions: SessionRoomData[] = [];
     for (let resource of this.roomResources.values()) {
