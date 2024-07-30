@@ -1,6 +1,9 @@
 import Service, { service } from '@ember/service';
+import { buildWaiter } from '@ember/test-waiters';
 import { cached, tracked } from '@glimmer/tracking';
 
+import { ISendEventResponse } from 'matrix-js-sdk';
+import { md5 } from 'super-fast-md5';
 import { TrackedMap } from 'tracked-built-ins';
 
 import { v4 as uuid } from 'uuid';
@@ -26,17 +29,14 @@ import { OperatorModeContext } from '@cardstack/host/services/matrix-service';
 
 import RealmService from '@cardstack/host/services/realm';
 
+import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
 import { CardDef } from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { PatchField } from 'https://cardstack.com/base/command';
 import type {
   CardFragmentContent,
   ReactionEventContent,
 } from 'https://cardstack.com/base/matrix-event';
-import { md5 } from 'super-fast-md5';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
-import { ISendEventResponse } from 'matrix-js-sdk';
-import { buildWaiter } from '@ember/test-waiters';
 
 const waiter = buildWaiter('mock-matrix-service');
 
