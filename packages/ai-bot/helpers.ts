@@ -59,7 +59,29 @@ export function constructHistory(history: IRoomEvent[]) {
           'Error parsing JSON data',
           JSON.stringify(rawEvent.content.data, null, 2),
         );
-        throw e;
+        return [
+          {
+            type: 'm.room.message',
+            event_id: rawEvent.event_id,
+            origin_server_ts: rawEvent.origin_server_ts,
+            content: {
+              msgtype: 'org.boxel.message',
+              format: 'org.matrix.custom.html',
+              body: `Error parsing JSON data: ${e}`,
+              formatted_body: `Error parsing JSON data: ${e}`,
+              data: JSON.stringify({
+                context: {
+                  functions: [],
+                  openCardIds: [],
+                },
+                attachedCardsEventIds: [],
+              }),
+            },
+            sender: rawEvent.sender,
+            room_id: rawEvent.room_id,
+            unsigned: rawEvent.unsigned,
+          },
+        ];
       }
     }
     let event = { ...rawEvent } as DiscreteMatrixEvent;
