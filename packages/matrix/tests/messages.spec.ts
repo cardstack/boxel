@@ -890,7 +890,8 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test('attaches a card in a coversation multiple times', async ({ page }) => {
+  // TODO: This matrix test mutates state in the index. please move that part into host tests
+  test('attaches a card in a conversation multiple times', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
 
     await login(page, 'user1', 'pass');
@@ -937,6 +938,7 @@ test.describe('Room messages', () => {
     expect(messageEvents.length).toEqual(3);
     expect(cardFragmentEvents.length).toEqual(2);
 
+    // TODO: this assertion needs to move into host tests!!
     //Test the scenario where there is an update to the card
     await page
       .locator(
@@ -996,6 +998,9 @@ test.describe('Room messages', () => {
     );
     expect(messageEvents.length).toEqual(4);
     expect(cardFragmentEvents.length).toEqual(3);
+
+    // TODO: the fact that we are reverting state in the index is a tell that
+    // this test should not be here
 
     // Revert updates
     await page
