@@ -286,21 +286,5 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         cards: [{ id: testCard, title: 'Updated Name Abdel-Rahman' }],
       },
     ]);
-
-    // // There must be a new card fragments event because the card has been updated.
-    // events = await getRoomEvents();
-    // messageEvents = events.filter(
-    //   (e) =>
-    //     e.type === 'm.room.message' &&
-    //     e.content.msgtype === 'org.boxel.message',
-    // );
-    // cardFragmentEvents = events.filter(
-    //   (e) =>
-    //     e.type === 'm.room.message' &&
-    //     e.content.msgtype === 'org.boxel.cardFragment' &&
-    //     !e.content.data.nextFragment,
-    // );
-    // expect(messageEvents.length).toEqual(4);
-    // expect(cardFragmentEvents.length).toEqual(3);
   });
 });
