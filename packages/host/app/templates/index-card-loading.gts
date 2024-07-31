@@ -1,5 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+
 import RouteTemplate from 'ember-route-template';
+
 import CardController from '@cardstack/host/controllers/card';
 
 interface Signature {

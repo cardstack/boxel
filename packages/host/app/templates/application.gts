@@ -1,9 +1,9 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
+import { modifier } from 'ember-modifier';
 import RouteTemplate from 'ember-route-template';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
-import { modifier } from 'ember-modifier';
 
 interface ApplicationRouteSignature {
   Args: {};
@@ -19,7 +19,7 @@ const ApplicationRouteComponent: TemplateOnlyComponent<ApplicationRouteSignature
     <div data-test-boxel-root style='display: none;' {{removeLoading}}></div>
   </template>;
 
-let removeLoading = modifier((element, [eventName, handler]) => {
+let removeLoading = modifier(() => {
   document.querySelector('#host-loading')?.remove();
 });
 
