@@ -4,7 +4,9 @@ import {
   FieldContainer,
   BoxelInput,
   Button,
+  TabbedHeader,
 } from '@cardstack/boxel-ui/components';
+import { Sparkle } from '@cardstack/boxel-ui/icons';
 import { cssVar, eq, getContrastColor } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -77,6 +79,13 @@ class Requirements extends GlimmerComponent<{
 class Isolated extends AppCard.isolated {
   <template>
     <section class='app'>
+      {{!-- <TabbedHeader
+        @title={{@model.title}}
+        @icon={{Sparkle}}
+        @tabs={{this.tabs}}
+        @headerBackgroundColor={{this.headerColor}}
+        @onSetActiveTab={{fn this.setSearch}}
+      /> --}}
       <header
         class='app-header'
         style={{cssVar
@@ -92,10 +101,11 @@ class Isolated extends AppCard.isolated {
             {{#each this.tabs as |tab index|}}
               <li>
                 <a
+                  href='#{{tab.value}}'
                   {{on 'click' (fn this.setActiveTab index)}}
                   class={{if (eq this.activeTabIndex index) 'active'}}
                 >
-                  {{tab.displayName}}
+                  {{tab.label}}
                 </a>
               </li>
             {{/each}}
@@ -397,14 +407,16 @@ class Isolated extends AppCard.isolated {
 
   @tracked tabs = [
     new Tab({
-      displayName: 'Dashboard',
+      label: 'Dashboard',
+      value: 'dashboard',
       ref: {
         name: 'AppCard',
         module: `${this.currentRealm?.href}app-card`,
       },
     }),
     new Tab({
-      displayName: 'Requirements',
+      label: 'Requirements',
+      value: 'requirements',
       ref: {
         name: 'ProductRequirementDocument',
         module: `${this.currentRealm?.href}product-requirement-document`,

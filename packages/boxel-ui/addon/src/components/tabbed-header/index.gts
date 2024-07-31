@@ -116,15 +116,6 @@ export default class TabbedHeader extends Component<Signature> {
 
   @tracked activeTabIndex = 0;
 
-  constructor(owner: unknown, args: Signature['Args']) {
-    super(owner, args);
-    if (args.tabs) {
-      this.activeTabIndex = args.tabs.findIndex(
-        (tab) => tab.value === window.location.hash.slice(1),
-      );
-    }
-  }
-
   @action setActiveTab(index: number) {
     this.activeTabIndex = index;
     this.args.onSetActiveTab?.();

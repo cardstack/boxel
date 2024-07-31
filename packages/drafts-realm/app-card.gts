@@ -113,10 +113,11 @@ class AppCardIsolated extends Component<typeof AppCard> {
             {{#each this.tabs as |tab index|}}
               <li>
                 <a
+                  href='#{{tab.ref.name}}'
                   {{on 'click' (fn this.setActiveTab index)}}
                   class={{if (eq this.activeTabIndex index) 'active'}}
                 >
-                  {{tab.ref.name}}
+                  {{tab.displayName}}
                 </a>
               </li>
             {{/each}}
@@ -459,7 +460,17 @@ class AppCardIsolated extends Component<typeof AppCard> {
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
+    this.setTab();
     this.setSearch();
+  }
+
+  setTab() {
+    let index = this.tabs?.findIndex(
+      (tab: Tab) => tab.ref.name === window.location?.hash?.slice(1),
+    );
+    if (index && index !== -1) {
+      this.activeTabIndex = index;
+    }
   }
 
   get currentRealm() {
