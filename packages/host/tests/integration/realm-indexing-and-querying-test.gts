@@ -2636,6 +2636,8 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         instanceErrors: 0,
         instancesIndexed: 3,
         moduleErrors: 0,
+        modulesIndexed: 0,
+        totalIndexEntries: 0,
       },
       'instances are indexed without error',
     );
