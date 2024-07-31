@@ -11,6 +11,7 @@ import type { Icon } from '../../icons/types.ts';
 interface Signature {
   Args: {
     title: string;
+    activeTabIndex?: number;
     icon?: Icon;
     headerBackgroundColor?: string;
     tabs?: Array<{
@@ -114,7 +115,7 @@ export default class TabbedHeader extends Component<Signature> {
     </style>
   </template>
 
-  @tracked activeTabIndex = 0;
+  @tracked activeTabIndex = this.args.activeTabIndex ?? 0;
 
   @action setActiveTab(index: number) {
     this.activeTabIndex = index;

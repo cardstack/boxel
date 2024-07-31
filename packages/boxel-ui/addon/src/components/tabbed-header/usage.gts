@@ -31,12 +31,23 @@ export default class TabbedHeaderUsage extends Component {
   @tracked title = 'AI App Generator';
   @tracked icon = Icon;
   @tracked headerColor = '#ffd800';
+  @tracked activeTabIndex = 0;
+
+  constructor(owner: unknown, args: any) {
+    super(owner, args);
+    if (this.tabs) {
+      this.activeTabIndex = this.tabs.findIndex(
+        (tab) => tab.value === window.location?.hash?.slice(1),
+      );
+    }
+  }
 
   <template>
     <FreestyleUsage @name='TabbedHeader'>
       <:example>
         <TabbedHeader
           @title={{this.title}}
+          @activeTabIndex={{this.activeTabIndex}}
           @icon={{this.icon}}
           @tabs={{this.tabs}}
           @headerBackgroundColor={{this.headerColor}}
@@ -49,6 +60,13 @@ export default class TabbedHeaderUsage extends Component {
           @value={{this.title}}
           @onInput={{fn (mut this.title)}}
           @required={{true}}
+        />
+        <Args.Number
+          @name='activeTabIndex'
+          @description='Index of the active tab'
+          @defaultValue={{0}}
+          @value={{this.activeTabIndex}}
+          @onInput={{fn (mut this.activeTabIndex)}}
         />
         <Args.Component
           @name='icon'
