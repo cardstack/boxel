@@ -53,23 +53,7 @@ module('index-writer', function (hooks) {
     });
   });
 
-  test('can prevent concurrent batch invalidations from colliding when making new generation', async function (assert) {
-    await runSharedTest(indexWriterTests, assert, {
-      indexWriter,
-      indexQueryEngine,
-      adapter,
-    });
-  });
-
   test('can update an index entry', async function (assert) {
-    await runSharedTest(indexWriterTests, assert, {
-      indexWriter,
-      indexQueryEngine,
-      adapter,
-    });
-  });
-
-  test('can create a new generation of index entries', async function (assert) {
     await runSharedTest(indexWriterTests, assert, {
       indexWriter,
       indexQueryEngine,

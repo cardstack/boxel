@@ -1,3 +1,4 @@
+import { Memoize } from 'typescript-memoize';
 import flatten from 'lodash/flatten';
 import {
   type CardResource,
@@ -15,6 +16,7 @@ import {
   every,
   query,
   upsert,
+  realmVersionExpression,
 } from './expression';
 import { type SerializedError } from './error';
 import { type DBAdapter } from './db';
@@ -47,6 +49,10 @@ export class IndexWriter {
 }
 
 export type IndexEntry = InstanceEntry | ModuleEntry | CSSEntry | ErrorEntry;
+export type LastModifiedTimes = Map<
+  string,
+  { type: string; lastModified: number | null }
+>;
 
 export interface InstanceEntry {
   type: 'instance';
@@ -82,7 +88,7 @@ interface CSSEntry {
 
 export class Batch {
   readonly ready: Promise<void>;
-  private touched = new Set<string>();
+  #invalidations = new Set<string>();
   private isNewGeneration = false;
   private declare realmVersion: number;
 
@@ -93,8 +99,39 @@ export class Batch {
     this.ready = this.setNextRealmVersion();
   }
 
-  private query(expression: Expression) {
-    return query(this.dbAdapter, expression, coerceTypes);
+  get invalidations() {
+    return [...this.#invalidations];
+  }
+
+  @Memoize()
+  private get nodeResolvedInvalidations() {
+    return [...this.#invalidations].map(
+      (href) => trimExecutableExtension(new URL(href)).href,
+    );
+  }
+
+  async getModifiedTimes(): Promise<LastModifiedTimes> {
+    let results = (await this.query([
+      `SELECT i.url, i.type, i.last_modified
+       FROM boxel_index as i
+       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
+          WHERE i.realm_url =`,
+      param(this.realmURL.href),
+      'AND',
+      ...realmVersionExpression({ useWorkInProgressIndex: false }),
+    ] as Expression)) as Pick<
+      BoxelIndexTable,
+      'url' | 'type' | 'last_modified'
+    >[];
+    let result: LastModifiedTimes = new Map();
+    for (let { url, type, last_modified: lastModified } of results) {
+      result.set(url, {
+        type,
+        // lastModified is a Date.now() result, so it should be safe to cast to number
+        lastModified: lastModified == null ? null : parseInt(lastModified),
+      });
+    }
+    return result;
   }
 
   async updateEntry(url: URL, entry: IndexEntry): Promise<void> {
@@ -104,7 +141,7 @@ export class Batch {
       return;
     }
     let href = url.href;
-    this.touched.add(href);
+    this.#invalidations.add(url.href);
     let { nameExpressions, valueExpressions } = asExpressions(
       {
         url: href,
@@ -175,36 +212,7 @@ export class Batch {
     ]);
   }
 
-  async makeNewGeneration() {
-    await this.setNextGenerationRealmVersion();
-    this.isNewGeneration = true;
-    let cols = [
-      'url',
-      'file_alias',
-      'type',
-      'realm_url',
-      'realm_version',
-      'is_deleted',
-    ].map((c) => [c]);
-    await this.detectUniqueConstraintError(
-      () =>
-        // create tombstones for all card URLs
-        this.query([
-          `INSERT INTO boxel_index`,
-          ...addExplicitParens(separatedByCommas(cols)),
-          `SELECT i.url, i.file_alias, i.type, i.realm_url, ${this.realmVersion} as realm_version, true as is_deleted`,
-          'FROM boxel_index as i',
-          'INNER JOIN realm_versions r ON i.realm_url = r.realm_url',
-          'WHERE i.realm_url =',
-          param(this.realmURL.href),
-          'AND',
-          ...realmVersionExpression({ useWorkInProgressIndex: false }),
-        ] as Expression),
-      { isMakingNewGeneration: true },
-    );
-  }
-
-  async done(): Promise<void> {
+  async done(): Promise<{ totalIndexEntries: number }> {
     let { nameExpressions, valueExpressions } = asExpressions({
       realm_url: this.realmURL.href,
       current_version: this.realmVersion,
@@ -230,6 +238,25 @@ export class Batch {
         ]),
       ] as Expression);
     }
+    let totalIndexEntries = await this.numberOfIndexEntries();
+    return { totalIndexEntries };
+  }
+
+  private query(expression: Expression) {
+    return query(this.dbAdapter, expression, coerceTypes);
+  }
+
+  private async numberOfIndexEntries() {
+    let [{ total }] = (await this.query([
+      `SELECT count(i.url) as total
+       FROM boxel_index as i
+       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
+          WHERE i.realm_url =`,
+      param(this.realmURL.href),
+      'AND',
+      ...realmVersionExpression({ useWorkInProgressIndex: true }),
+    ] as Expression)) as { total: string }[];
+    return parseInt(total);
   }
 
   private async setNextRealmVersion() {
@@ -257,27 +284,19 @@ export class Batch {
     }
   }
 
-  // this will use a version higher than any in-progress indexing in case there
-  // are artifacts left over from a failed index
-  private async setNextGenerationRealmVersion() {
-    let [maxVersionRow] = (await this.query([
-      'SELECT MAX(realm_version) as max_version FROM boxel_index WHERE realm_url =',
-      param(this.realmURL.href),
-    ])) as { max_version: number }[];
-    let maxVersion = (maxVersionRow?.max_version ?? 0) + 1;
-    let nextVersion = Math.max(this.realmVersion, maxVersion);
-    this.realmVersion = nextVersion;
-  }
-
   async invalidate(url: URL): Promise<string[]> {
     await this.ready;
     let alias = trimExecutableExtension(url).href;
     let invalidations = [
       ...new Set([
-        url.href,
+        ...(!this.nodeResolvedInvalidations.includes(alias) ? [url.href] : []),
         ...(alias ? await this.calculateInvalidations(alias) : []),
       ]),
     ];
+
+    if (invalidations.length === 0) {
+      return [];
+    }
 
     // insert tombstone into next version of the realm index
     let columns = [
@@ -312,7 +331,7 @@ export class Batch {
       { url, invalidations },
     );
 
-    this.touched = new Set([...this.touched, ...invalidations]);
+    this.#invalidations = new Set([...this.#invalidations, ...invalidations]);
     return invalidations;
   }
 
@@ -415,7 +434,10 @@ export class Batch {
     alias: string,
     visited: string[] = [],
   ): Promise<string[]> {
-    if (visited.includes(alias)) {
+    if (
+      visited.includes(alias) ||
+      this.nodeResolvedInvalidations.includes(alias)
+    ) {
       return [];
     }
     let childInvalidations = await this.itemsThatReference(
@@ -439,26 +461,4 @@ export class Batch {
     ];
     return [...new Set(results)];
   }
-}
-
-function realmVersionExpression(opts?: {
-  useWorkInProgressIndex?: boolean;
-  withMaxVersion?: number;
-}) {
-  return [
-    'realm_version =',
-    ...addExplicitParens([
-      'SELECT MAX(i2.realm_version)',
-      'FROM boxel_index i2',
-      'WHERE i2.url = i.url',
-      ...(opts?.withMaxVersion
-        ? ['AND i2.realm_version <=', param(opts?.withMaxVersion)]
-        : !opts?.useWorkInProgressIndex
-        ? // if we are not using the work in progress index then we limit the max
-          // version permitted to the current version for the realm
-          ['AND i2.realm_version <= r.current_version']
-        : // otherwise we choose the highest version in the system
-          []),
-    ]),
-  ] as Expression;
 }

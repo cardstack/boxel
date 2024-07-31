@@ -107,7 +107,7 @@ module('Integration | realm', function (hooks) {
             module: 'https://cardstack.com/base/card-api',
             name: 'CardDef',
           },
-          lastModified: adapter.lastModified.get(
+          lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}dir/empty.json`,
           ),
           realmInfo: testRealmInfo,
@@ -202,7 +202,7 @@ module('Integration | realm', function (hooks) {
             module: 'http://localhost:4202/test/pet',
             name: 'Pet',
           },
-          lastModified: adapter.lastModified.get(
+          lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}dir/mango.json`,
           ),
           realmInfo: testRealmInfo,
@@ -229,7 +229,7 @@ module('Integration | realm', function (hooks) {
               module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
-            lastModified: adapter.lastModified.get(
+            lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}dir/owner.json`,
             ),
             realmInfo: testRealmInfo,
@@ -311,7 +311,7 @@ module('Integration | realm', function (hooks) {
             module: 'http://localhost:4202/test/pet',
             name: 'Pet',
           },
-          lastModified: adapter.lastModified.get(
+          lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}dir/mango.json`,
           ),
           realmInfo: testRealmInfo,
@@ -559,7 +559,7 @@ module('Integration | realm', function (hooks) {
             module: 'http://localhost:4202/test/pet',
             name: 'Pet',
           },
-          lastModified: adapter.lastModified.get(
+          lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}Pet/${id}.json`,
           ),
           realmInfo: testRealmInfo,
@@ -586,7 +586,7 @@ module('Integration | realm', function (hooks) {
               module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
-            lastModified: adapter.lastModified.get(
+            lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}dir/owner.json`,
             ),
             realmInfo: testRealmInfo,
@@ -779,7 +779,7 @@ module('Integration | realm', function (hooks) {
       );
       assert.strictEqual(
         json.data.meta.lastModified,
-        adapter.lastModified.get(`${testRealmURL}dir/card.json`),
+        adapter.lastModifiedMap.get(`${testRealmURL}dir/card.json`),
         'lastModified is correct',
       );
       let fileRef = await adapter.openFile('dir/card.json');
@@ -939,7 +939,7 @@ module('Integration | realm', function (hooks) {
             module: 'http://localhost:4202/test/booking',
             name: 'Booking',
           },
-          lastModified: adapter.lastModified.get(
+          lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}ski-trip.json`,
           ),
           realmInfo: testRealmInfo,
@@ -1109,7 +1109,9 @@ module('Integration | realm', function (hooks) {
             module: `http://localhost:4202/test/pet-person`,
             name: 'PetPerson',
           },
-          lastModified: adapter.lastModified.get(`${testRealmURL}jackie.json`),
+          lastModified: adapter.lastModifiedMap.get(
+            `${testRealmURL}jackie.json`,
+          ),
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
@@ -1132,7 +1134,7 @@ module('Integration | realm', function (hooks) {
               module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
-            lastModified: adapter.lastModified.get(
+            lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}dir/friend.json`,
             ),
             realmInfo: testRealmInfo,
@@ -1155,7 +1157,7 @@ module('Integration | realm', function (hooks) {
               module: `http://localhost:4202/test/pet`,
               name: 'Pet',
             },
-            lastModified: adapter.lastModified.get(
+            lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}dir/van-gogh.json`,
             ),
             realmInfo: testRealmInfo,
@@ -1322,7 +1324,7 @@ module('Integration | realm', function (hooks) {
           module: `http://localhost:4202/test/pet-person`,
           name: 'PetPerson',
         },
-        lastModified: adapter.lastModified.get(`${testRealmURL}jackie.json`),
+        lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
         realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
@@ -1434,7 +1436,7 @@ module('Integration | realm', function (hooks) {
           module: `http://localhost:4202/test/pet-person`,
           name: 'PetPerson',
         },
-        lastModified: adapter.lastModified.get(`${testRealmURL}jackie.json`),
+        lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
         realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
@@ -1537,7 +1539,7 @@ module('Integration | realm', function (hooks) {
           module: `http://localhost:4202/test/pet-person`,
           name: 'PetPerson',
         },
-        lastModified: adapter.lastModified.get(`${testRealmURL}jackie.json`),
+        lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
         realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
@@ -1665,7 +1667,7 @@ module('Integration | realm', function (hooks) {
           module: `http://localhost:4202/test/pet-person`,
           name: 'PetPerson',
         },
-        lastModified: adapter.lastModified.get(`${testRealmURL}jackie.json`),
+        lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
         realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
@@ -1807,7 +1809,7 @@ module('Integration | realm', function (hooks) {
           module: `http://localhost:4202/test/pet-person`,
           name: 'PetPerson',
         },
-        lastModified: adapter.lastModified.get(`${testRealmURL}jackie.json`),
+        lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
         realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
@@ -1933,7 +1935,7 @@ module('Integration | realm', function (hooks) {
             module: 'http://localhost:4202/test/pet',
             name: 'Pet',
           },
-          lastModified: adapter.lastModified.get(
+          lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}dir/mango.json`,
           ),
           realmInfo: testRealmInfo,
@@ -1960,7 +1962,7 @@ module('Integration | realm', function (hooks) {
               module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
-            lastModified: adapter.lastModified.get(
+            lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}dir/mariko.json`,
             ),
             realmInfo: testRealmInfo,
@@ -2119,7 +2121,7 @@ module('Integration | realm', function (hooks) {
               },
             },
           },
-          lastModified: adapter.lastModified.get(
+          lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}dir/driver.json`,
           ),
           realmInfo: testRealmInfo,
@@ -2869,7 +2871,7 @@ module('Integration | realm', function (hooks) {
               module: 'http://localhost:4202/test/pet',
               name: 'Pet',
             },
-            lastModified: adapter.lastModified.get(
+            lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}dir/mango.json`,
             ),
             realmInfo: testRealmInfo,
@@ -2895,7 +2897,7 @@ module('Integration | realm', function (hooks) {
               module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
-            lastModified: adapter.lastModified.get(
+            lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}dir/mariko.json`,
             ),
             realmInfo: testRealmInfo,
@@ -2930,7 +2932,7 @@ module('Integration | realm', function (hooks) {
               module: 'http://localhost:4202/test/pet',
               name: 'Pet',
             },
-            lastModified: adapter.lastModified.get(
+            lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}dir/vanGogh.json`,
             ),
             realmInfo: testRealmInfo,
