@@ -1,5 +1,6 @@
 import { Memoize } from 'typescript-memoize';
 import flatten from 'lodash/flatten';
+import flattenDeep from 'lodash/flattenDeep';
 import {
   type CardResource,
   hasExecutableExtension,
@@ -318,69 +319,20 @@ export class Batch {
       ].map((v) => [param(v)]),
     );
 
-    await this.detectUniqueConstraintError(
-      () =>
-        this.query([
-          `INSERT INTO boxel_index`,
-          ...addExplicitParens(separatedByCommas(columns)),
-          'VALUES',
-          ...separatedByCommas(
-            rows.map((value) => addExplicitParens(separatedByCommas(value))),
-          ),
-        ] as Expression),
-      { url, invalidations },
-    );
+    let names = flattenDeep(columns);
+    await this.query([
+      'INSERT INTO boxel_index',
+      ...addExplicitParens(separatedByCommas(columns)),
+      'VALUES',
+      ...separatedByCommas(
+        rows.map((value) => addExplicitParens(separatedByCommas(value))),
+      ),
+      'ON CONFLICT ON CONSTRAINT boxel_index_pkey DO UPDATE SET',
+      ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
+    ] as Expression);
 
     this.#invalidations = new Set([...this.#invalidations, ...invalidations]);
     return invalidations;
-  }
-
-  // invalidate will throw if 2 batches try to insert intersecting invalidation
-  // graph. If this happens we should cancel the job that threw because of
-  // primary key constraint violation and re-add it to the job queue with the
-  // original notifier to try again
-  private async detectUniqueConstraintError(
-    fn: () => Promise<unknown>,
-    opts?: {
-      url?: URL;
-      invalidations?: string[];
-      isMakingNewGeneration?: boolean;
-    },
-  ) {
-    try {
-      return await fn();
-    } catch (e: any) {
-      if (
-        e.message?.includes('violates unique constraint') || // postgres
-        e.result?.message?.includes('UNIQUE constraint failed') // sqlite
-      ) {
-        let message = `Invalidation conflict error in realm ${this.realmURL.href} version ${this.realmVersion}`;
-        if (opts?.url && opts?.invalidations) {
-          message =
-            `${message}: the invalidation ${
-              opts.url.href
-            } resulted in invalidation graph: ${JSON.stringify(
-              opts.invalidations,
-            )} that collides with unfinished indexing. The most likely reason this happens is that there ` +
-            `was an error encountered during incremental indexing that prevented the indexing from completing ` +
-            `(and realm version increasing), then there was another incremental update to the same document ` +
-            `that collided with the WIP artifacts from the indexing that never completed. Removing the WIP ` +
-            `indexing artifacts (the rows(s) that triggered the unique constraint will solve the immediate ` +
-            `problem, but likely the issue that triggered the unfinished indexing will need to be fixed to ` +
-            `prevent this from happening in the future.`;
-        } else if (opts?.isMakingNewGeneration) {
-          message =
-            `${message}. created a new generation while there was still unfinished indexing. ` +
-            `The most likely reason this happens is that there was an error encountered during incremental ` +
-            `indexing that prevented the indexing from completing (and realm version increasing), ` +
-            `then the realm was restarted and the left over WIP indexing artifact(s) collided with the ` +
-            `from-scratch indexing. To resolve this issue delete the WIP indexing artifacts (the row(s) ` +
-            `that triggered the unique constraint) and restart the realm.`;
-        }
-        throw new Error(message);
-      }
-      throw e;
-    }
   }
 
   private async itemsThatReference(
