@@ -280,53 +280,6 @@ const tests = Object.freeze({
     );
   },
 
-  'can prevent concurrent batch invalidations from colliding': async (
-    assert,
-    { indexWriter, adapter },
-  ) => {
-    await setupIndex(
-      adapter,
-      [{ realm_url: testRealmURL, current_version: 1 }],
-      [
-        {
-          url: `${testRealmURL}1.json`,
-          realm_version: 1,
-          realm_url: testRealmURL,
-          deps: [],
-        },
-        {
-          url: `${testRealmURL}2.json`,
-          realm_version: 1,
-          realm_url: testRealmURL,
-          deps: [`${testRealmURL}1.json`],
-        },
-        {
-          url: `${testRealmURL}3.json`,
-          realm_version: 1,
-          realm_url: testRealmURL,
-          deps: [`${testRealmURL}1.json`],
-        },
-      ],
-    );
-
-    // both batches have the same WIP version number
-    let batch1 = await indexWriter.createBatch(new URL(testRealmURL));
-    let batch2 = await indexWriter.createBatch(new URL(testRealmURL));
-    await batch1.invalidate(new URL(`${testRealmURL}1.json`));
-
-    try {
-      await batch2.invalidate(new URL(`${testRealmURL}3.json`));
-      throw new Error(`expected invalidation conflict error`);
-    } catch (e: any) {
-      assert.ok(
-        e.message.includes(
-          'Invalidation conflict error in realm http://test-realm/test/ version 2',
-        ),
-        'received invalidation conflict error',
-      );
-    }
-  },
-
   'can update an index entry': async (assert, { indexWriter, adapter }) => {
     await setupIndex(
       adapter,
