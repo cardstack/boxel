@@ -8,13 +8,11 @@ import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 import flatMap from 'lodash/flatMap';
 
-import { subscribeToRealm } from '@cardstack/runtime-common';
+import { type RealmCards, subscribeToRealm } from '@cardstack/runtime-common';
 
 import type { Query } from '@cardstack/runtime-common/query';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-
-import { type RealmCards } from '../components/card-catalog/modal';
 
 import type CardService from '../services/card-service';
 
@@ -126,13 +124,13 @@ export class Search extends Resource<Args> {
 
 export function getSearchResults(
   parent: object,
-  query: () => Query,
-  realms?: () => string[],
+  query: Query,
+  realms?: string[],
 ) {
   return Search.from(parent, () => ({
     named: {
-      query: query(),
-      realms: realms ? realms() : undefined,
+      query,
+      realms: realms ?? undefined,
     },
   })) as Search;
 }
@@ -143,15 +141,15 @@ export function getSearchResults(
 // order to keep the results stable between refreshes.
 export function getLiveSearchResults(
   parent: object,
-  query: () => Query,
-  realms?: () => string[],
+  query: Query,
+  realms?: string[],
   doWhileRefreshing?: () => (ready: Promise<void> | undefined) => Promise<void>,
 ) {
   return Search.from(parent, () => ({
     named: {
       isLive: true,
-      query: query(),
-      realms: realms ? realms() : undefined,
+      query,
+      realms: realms ?? undefined,
       doWhileRefreshing: doWhileRefreshing ? doWhileRefreshing() : undefined,
     },
   })) as Search;

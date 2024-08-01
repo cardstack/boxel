@@ -65,11 +65,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   // public API
   @action
   getCards(query: Query, realms?: string[]): Search {
-    return getSearchResults(
-      this,
-      () => query,
-      realms ? () => realms : undefined,
-    );
+    return getSearchResults(this, query, realms);
   }
 
   // public API
@@ -96,8 +92,8 @@ export default class OperatorModeContainer extends Component<Signature> {
   ): Search {
     return getLiveSearchResults(
       this,
-      () => query,
-      realms ? () => realms : undefined,
+      query,
+      realms,
       doWhileRefreshing ? () => doWhileRefreshing : undefined,
     );
   }
