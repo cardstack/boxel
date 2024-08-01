@@ -1,11 +1,19 @@
 import Service, { service } from '@ember/service';
+import { buildWaiter } from '@ember/test-waiters';
 import { cached, tracked } from '@glimmer/tracking';
 
+import { ISendEventResponse } from 'matrix-js-sdk';
+import { md5 } from 'super-fast-md5';
 import { TrackedMap } from 'tracked-built-ins';
 
 import { v4 as uuid } from 'uuid';
 
-import { Deferred } from '@cardstack/runtime-common';
+import {
+  Deferred,
+  loaderFor,
+  LooseSingleCardDocument,
+  splitStringIntoChunks,
+} from '@cardstack/runtime-common';
 
 import { baseRealm, LooseCardResource } from '@cardstack/runtime-common';
 
@@ -21,9 +29,18 @@ import { OperatorModeContext } from '@cardstack/host/services/matrix-service';
 
 import RealmService from '@cardstack/host/services/realm';
 
+import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
 import { CardDef } from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { PatchField } from 'https://cardstack.com/base/command';
-import type { ReactionEventContent } from 'https://cardstack.com/base/matrix-event';
+import type {
+  CardFragmentContent,
+  ReactionEventContent,
+} from 'https://cardstack.com/base/matrix-event';
+
+const waiter = buildWaiter('mock-matrix-service');
+
+const MAX_CARD_SIZE_KB = 60;
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let nonce = 0;
@@ -106,6 +123,7 @@ function generateMockMatrixService(
     messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
     cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
     failedCommandState: TrackedMap<string, Error> = new TrackedMap();
+    cardHashes: Map<string, string> = new Map(); // hashes <> event id
     currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
       new TrackedMap();
 
@@ -203,45 +221,131 @@ function generateMockMatrixService(
       }
     }
 
-    async sendEvent(roomId: string, eventType: string, content: any) {
-      await addRoomEvent(this, {
+    async sendEvent(
+      roomId: string,
+      eventType: string,
+      content: any,
+    ): Promise<ISendEventResponse> {
+      let encodedContent = content;
+      if ('data' in content) {
+        encodedContent = {
+          ...content,
+          data: JSON.stringify(content.data),
+        };
+      }
+      let roomEvent = {
         event_id: uuid(),
         room_id: roomId,
+        state_key: 'state',
         type: eventType,
         sender: this.userId,
         origin_server_ts: Date.now(),
-        content,
+        content: encodedContent,
         status: null,
-      });
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+      };
+      await addRoomEvent(this, roomEvent);
+      return roomEvent;
+    }
+
+    async getCardEventIds(
+      cards: CardDef[],
+      roomId: string,
+      cardHashes: Map<string, string>,
+      opts?: CardAPI.SerializeOpts,
+    ) {
+      if (!cards.length) {
+        return [];
+      }
+      let serializedCards = await Promise.all(
+        cards.map(async (card) => {
+          let { Base64ImageField } = await loaderFor(card).import<{
+            Base64ImageField: typeof Base64ImageFieldType;
+          }>(`${baseRealm.url}base64-image`);
+          return await this.cardService.serializeCard(card, {
+            omitFields: [Base64ImageField],
+            ...opts,
+          });
+        }),
+      );
+
+      let eventIds: string[] = [];
+      if (serializedCards.length) {
+        for (let card of serializedCards) {
+          let eventId = cardHashes.get(this.generateCardHashKey(roomId, card));
+          if (eventId === undefined) {
+            let responses = await this.sendCardFragments(roomId, card);
+            eventId = responses[0].event_id; // we only care about the first fragment
+            cardHashes.set(this.generateCardHashKey(roomId, card), eventId);
+          }
+          eventIds.push(eventId);
+        }
+      }
+      return eventIds;
     }
 
     async sendMessage(
       roomId: string,
       body: string | undefined,
-      _cards: CardDef[],
+      attachedCards: CardDef[],
       clientGeneratedId: string,
       _context?: OperatorModeContext,
     ) {
-      let event = {
-        room_id: roomId,
-        state_key: 'state',
-        type: 'm.room.message',
-        sender: this.userId,
-        content: {
-          body,
-          msgtype: 'org.boxel.message',
-          formatted_body: body,
-          format: 'org.matrix.custom.html',
-        },
-        origin_server_ts: Date.now(),
-        unsigned: {
-          age: 105,
-          transaction_id: '1',
-        },
-        status: null,
+      let waiterToken = waiter.beginAsync();
+      let attachedCardsEventIds = await this.getCardEventIds(
+        attachedCards,
+        roomId,
+        this.cardHashes,
+      );
+      let content = {
+        body,
+        msgtype: 'org.boxel.message',
+        formatted_body: body,
+        format: 'org.matrix.custom.html',
         clientGeneratedId,
+        data: {
+          attachedCardsEventIds,
+        },
       };
-      await addRoomEvent(this, event);
+      await this.sendEvent(roomId, 'm.room.message', content);
+      waiter.endAsync(waiterToken);
+    }
+
+    private async sendCardFragments(
+      roomId: string,
+      card: LooseSingleCardDocument,
+    ): Promise<ISendEventResponse[]> {
+      let fragments = splitStringIntoChunks(
+        JSON.stringify(card),
+        MAX_CARD_SIZE_KB,
+      );
+      let responses: ISendEventResponse[] = [];
+      for (let index = fragments.length - 1; index >= 0; index--) {
+        let cardFragment = fragments[index];
+        let response = await this.sendEvent(roomId, 'm.room.message', {
+          msgtype: 'org.boxel.cardFragment' as const,
+          format: 'org.boxel.card' as const,
+          body: `card fragment ${index + 1} of ${fragments.length}`,
+          formatted_body: `card fragment ${index + 1} of ${fragments.length}`,
+          data: {
+            ...(index < fragments.length - 1
+              ? { nextFragment: responses[0].event_id }
+              : {}),
+            cardFragment,
+            index,
+            totalParts: fragments.length,
+          },
+        } as CardFragmentContent);
+        responses.unshift(response);
+      }
+      return responses;
+    }
+
+    generateCardHashKey(roomId: string, card: LooseSingleCardDocument) {
+      return md5(roomId + JSON.stringify(card));
     }
 
     async logout() {
