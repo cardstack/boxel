@@ -57,6 +57,10 @@ export interface CardCollectionDocument<Identity extends Unsaved = Saved> {
   included?: CardResource<Saved>[];
 }
 
+export interface PrerenderedCardCollectionDocument {
+  data: PrerenderedCardResource[];
+}
+
 export type CardDocument = SingleCardDocument | CardCollectionDocument;
 
 export function isCardResource(resource: any): resource is CardResource {
@@ -245,6 +249,57 @@ export function isCardCollectionDocument(
     }
   }
   return data.every((resource) => isCardResource(resource));
+}
+
+export function isPrerenderedCardCollectionDocument(
+  doc: any,
+): doc is PrerenderedCardCollectionDocument {
+  if (typeof doc !== 'object' || doc == null) {
+    return false;
+  }
+  if (!('data' in doc)) {
+    return false;
+  }
+  let { data } = doc;
+  if (!Array.isArray(data)) {
+    return false;
+  }
+  return data.every((resource) => isPrerenderedCardResource(resource));
+}
+
+export interface PrerenderedCardResource {
+  id: string;
+  type: 'prerendered-card';
+  attributes: {
+    html: string;
+  };
+  relationships: {
+    'prerendered-card-css': {
+      data: { id: string }[];
+    };
+  };
+  meta: Meta & {};
+  links?: {
+    self?: string;
+  };
+}
+
+export function isPrerenderedCardResource(
+  resource: any,
+): resource is PrerenderedCardResource {
+  if (typeof resource !== 'object' || resource == null) {
+    return false;
+  }
+  if ('id' in resource && typeof resource.id !== 'string') {
+    return false;
+  }
+  if ('type' in resource && resource.type !== 'prerendered-card') {
+    return false;
+  }
+  if ('attributes' in resource && typeof resource.attributes !== 'object') {
+    return false;
+  }
+  return true;
 }
 
 function isIncluded(included: any): included is CardResource<Saved>[] {
