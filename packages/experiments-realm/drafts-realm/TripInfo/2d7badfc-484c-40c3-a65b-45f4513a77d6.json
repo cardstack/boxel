@@ -19,27 +19,27 @@
       },
       "traveler.countryOfOrigin": {
         "links": {
-          "self": "http://localhost:4201/drafts/Country/1"
+          "self": "http://localhost:4201/experiments/Country/1"
         }
       },
       "traveler.countriesVisited.0": {
         "links": {
-          "self": "http://localhost:4201/drafts/Country/4"
+          "self": "http://localhost:4201/experiments/Country/4"
         }
       },
       "traveler.nextTravelGoal.country": {
         "links": {
-          "self": "http://localhost:4201/drafts/Country/argentina"
+          "self": "http://localhost:4201/experiments/Country/argentina"
         }
       },
       "traveler.nextTravelGoal.alternateTrips.0": {
         "links": {
-          "self": "http://localhost:4201/drafts/Country/brazil"
+          "self": "http://localhost:4201/experiments/Country/brazil"
         }
       },
       "traveler.nextTravelGoal.alternateTrips.1": {
         "links": {
-          "self": "http://localhost:4201/drafts/Country/2"
+          "self": "http://localhost:4201/experiments/Country/2"
         }
       },
       "startLocation": {

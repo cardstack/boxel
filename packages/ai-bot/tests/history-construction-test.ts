@@ -406,7 +406,7 @@ module('constructHistory', () => {
           formatted_body: '',
           body: '',
           data: JSON.stringify({
-            cardFragment: `{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Ter`,
+            cardFragment: `{"data":{"type":"card","id":"http://localhost:4201/experiments/Author/1","attributes":{"firstName":"Ter`,
             index: 0,
             nextFragment: '1',
             totalParts: 2,
@@ -429,7 +429,7 @@ module('constructHistory', () => {
           formatted_body: '',
           body: '',
           data: JSON.stringify({
-            cardFragment: `{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Mango","lastName":"Abdel-Rahman"},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}`,
+            cardFragment: `{"data":{"type":"card","id":"http://localhost:4201/experiments/Author/1","attributes":{"firstName":"Mango","lastName":"Abdel-Rahman"},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}`,
             index: 1,
             totalParts: 1,
           }),
@@ -453,7 +453,7 @@ module('constructHistory', () => {
           data: JSON.stringify({
             context: {
               functions: [],
-              openCardIds: ['http://localhost:4201/drafts/Author/1'],
+              openCardIds: ['http://localhost:4201/experiments/Author/1'],
             },
             attachedCardsEventIds: ['2', '3'],
           }),
@@ -481,14 +481,14 @@ module('constructHistory', () => {
           data: {
             context: {
               functions: [],
-              openCardIds: ['http://localhost:4201/drafts/Author/1'],
+              openCardIds: ['http://localhost:4201/experiments/Author/1'],
             },
             attachedCardsEventIds: ['2', '3'],
             attachedCards: [
               {
                 data: {
                   type: 'card',
-                  id: 'http://localhost:4201/drafts/Author/1',
+                  id: 'http://localhost:4201/experiments/Author/1',
                   attributes: {
                     firstName: 'Terry',
                     lastName: 'Pratchett',
@@ -504,7 +504,7 @@ module('constructHistory', () => {
               {
                 data: {
                   type: 'card',
-                  id: 'http://localhost:4201/drafts/Author/1',
+                  id: 'http://localhost:4201/experiments/Author/1',
                   attributes: {
                     firstName: 'Mango',
                     lastName: 'Abdel-Rahman',
