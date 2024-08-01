@@ -32,7 +32,6 @@ module(`Integration | search resource`, function (hooks) {
 
   setupLocalIndexing(hooks);
   setupBaseRealm(hooks);
-
   hooks.beforeEach(async function (this: RenderingTestContext) {
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
@@ -258,7 +257,7 @@ module(`Integration | search resource`, function (hooks) {
     });
   });
 
-  test(`can search for cards by using the 'eq' filter`, async function (assert) {
+  test(`can search for card instances by using the 'eq' filter`, async function (assert) {
     let query: Query = {
       filter: {
         on: {
@@ -270,7 +269,6 @@ module(`Integration | search resource`, function (hooks) {
         },
       },
     };
-
     let search = Search.from(loaderService, () => ({
       named: {
         query,
