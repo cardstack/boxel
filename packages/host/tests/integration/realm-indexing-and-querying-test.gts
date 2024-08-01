@@ -118,6 +118,75 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     ]);
   });
 
+  test('full indexing skips over unchanged items in index', async function (assert) {
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'test1.json': {
+          data: {
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/card-api',
+                name: 'CardDef',
+              },
+            },
+          },
+        },
+        'test2.json': {
+          data: {
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/card-api',
+                name: 'CardDef',
+              },
+            },
+          },
+        },
+      },
+    });
+    assert.deepEqual(
+      realm.realmIndexUpdater.stats,
+      {
+        instanceErrors: 0,
+        instancesIndexed: 2,
+        moduleErrors: 0,
+        modulesIndexed: 0,
+        totalIndexEntries: 2,
+      },
+      'indexer stats are correct',
+    );
+
+    await adapter.write(
+      'test2.json',
+      JSON.stringify({
+        data: {
+          attributes: {
+            title: 'test',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/card-api',
+              name: 'CardDef',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+    await realm.fullIndex();
+
+    assert.deepEqual(
+      realm.realmIndexUpdater.stats,
+      {
+        instanceErrors: 0,
+        instancesIndexed: 1,
+        moduleErrors: 0,
+        modulesIndexed: 0,
+        totalIndexEntries: 2,
+      },
+      'indexer stats are correct',
+    );
+  });
+
   test('can recover from indexing a card with a broken link', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
@@ -243,7 +312,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       },
     });
     let queryEngine = realm.realmIndexQueryEngine;
-    let updateCard = realm.write(
+    let updateCard = await realm.write(
       'Pet/mango.json',
       JSON.stringify({
         data: {
