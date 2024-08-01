@@ -164,7 +164,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         --operator-mode-left-column: 14rem;
       }
       :global(button:focus:not(:disabled)) {
-        outline-color: var(--boxel-highlight);
+        outline-color: var(--boxel-header-text-color, var(--boxel-highlight));
         outline-offset: -2px;
       }
       :global(button:focus:not(:focus-visible)) {
