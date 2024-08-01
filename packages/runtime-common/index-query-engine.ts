@@ -60,6 +60,7 @@ interface IndexedModule {
   source: string;
   canonicalURL: string;
   lastModified: number;
+  deps: string[] | null;
 }
 
 interface IndexedCSS {
@@ -170,6 +171,7 @@ export class IndexQueryEngine {
       executableCode,
       source,
       lastModified: parseInt(lastModified),
+      deps: moduleEntry.deps,
     };
   }
 

@@ -85,6 +85,10 @@ module('indexing', function (hooks) {
               static embedded = class Isolated extends Component<typeof this> {
                 <template>
                   <h1> Embedded Card Person: <@fields.firstName/></h1>
+
+                  <style>
+                    h1 { color: red }
+                  </style>
                 </template>
               }
             }
@@ -98,12 +102,22 @@ module('indexing', function (hooks) {
             }
           `,
           'fancy-person.gts': `
-            import { contains, field } from "https://cardstack.com/base/card-api";
+            import { contains, field, Component } from "https://cardstack.com/base/card-api";
             import StringCard from "https://cardstack.com/base/string";
             import { Person } from "./person";
 
             export class FancyPerson extends Person {
               @field favoriteColor = contains(StringCard);
+
+              static embedded = class Embedded extends Component<typeof this> {
+                <template>
+                  <h1> Embedded Card Fancy Person: <@fields.firstName/></h1>
+
+                  <style>
+                    h1 { color: pink }
+                  </style>
+                </template>
+              }
             }
           `,
           'post.gts': `
@@ -668,6 +682,62 @@ module('indexing', function (hooks) {
       },
       'indexed correct number of files',
     );
+  });
+
+  test('sets urls containing encoded CSS for deps for a module', async function (assert) {
+    let entry = (await realm.realmIndexQueryEngine.module(
+      new URL('http://test-realm/fancy-person.gts'),
+    )) as { deps: string[] };
+
+    let assertCssDependency = (
+      deps: string[],
+      pattern: RegExp,
+      fileName: string,
+    ) => {
+      assert.true(
+        !!deps.find((dep) => pattern.test(dep)),
+        `css for ${fileName} is in the deps`,
+      );
+    };
+
+    let dependencies = [
+      {
+        pattern: /fancy-person\.gts.*\.glimmer-scoped\.css$/,
+        fileName: 'fancy-person.gts',
+      },
+      {
+        pattern: /test-realm\/person\.gts.*\.glimmer-scoped\.css$/,
+        fileName: 'person.gts',
+      },
+      {
+        pattern: /cardstack.com\/base\/card-api\.gts.*\.glimmer-scoped\.css$/,
+        fileName: 'card-api.gts',
+      },
+      {
+        pattern:
+          /cardstack.com\/base\/links-to-many-component.gts.*\.glimmer-scoped\.css$/,
+        fileName: 'links-to-many-component.gts',
+      },
+      {
+        pattern:
+          /cardstack.com\/base\/links-to-editor.gts.*\.glimmer-scoped\.css$/,
+        fileName: 'links-to-editor.gts',
+      },
+      {
+        pattern:
+          /cardstack.com\/base\/contains-many-component.gts.*\.glimmer-scoped\.css$/,
+        fileName: 'contains-many-component.gts',
+      },
+      {
+        pattern:
+          /cardstack.com\/base\/field-component.gts.*\.glimmer-scoped\.css$/,
+        fileName: 'field-component.gts',
+      },
+    ];
+
+    dependencies.forEach(({ pattern, fileName }) => {
+      assertCssDependency(entry.deps, pattern, fileName);
+    });
   });
 });
 
