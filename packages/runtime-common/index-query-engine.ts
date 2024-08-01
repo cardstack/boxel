@@ -105,11 +105,6 @@ interface WIPOptions {
   useWorkInProgressIndex?: boolean;
 }
 
-export interface PrerenderedCardCssItem {
-  cssModuleId: string;
-  source: string;
-}
-
 export interface PrerenderedCard {
   url: string;
   html: string;
@@ -425,7 +420,6 @@ export class IndexQueryEngine {
     opts: QueryOptions = {},
   ): Promise<{
     prerenderedCards: PrerenderedCard[];
-    prerenderedCardCssItems: PrerenderedCardCssItem[];
     meta: QueryResultsMeta;
   }> {
     if (
@@ -456,77 +450,25 @@ export class IndexQueryEngine {
       [
         'SELECT url, ANY_VALUE(file_alias) as file_alias, ANY_VALUE(',
         ...htmlColumnExpression,
-        ') as html',
+        ') as html, ANY_VALUE(deps) as deps',
       ],
     )) as {
       meta: QueryResultsMeta;
       results: (Partial<BoxelIndexTable> & { html: string })[];
     };
 
-    let realmVersion = meta.page.realmVersion;
-
-    let conditions: CardExpression[] = [
-      ['i.realm_version = ', param(realmVersion)],
-      ['i.type =', param('module')],
-      ['i.file_alias =', param(ref.module)],
-    ];
-
-    // This query will give us all the CSS that relates to the card ref's module and its dependencies
-    let cssSourceQuery = [
-      `WITH module_deps AS (
-        SELECT file_alias as module_file_alias, deps_each.value AS module_dep_file_alias
-        FROM boxel_index i, jsonb_array_elements_text(i.deps) AS deps_each
-        WHERE`,
-      ...every(conditions),
-      `UNION ALL SELECT `, // UNION ALL to include the css from module itself as well, not just its dependencies
-      param(ref.module),
-      `, `,
-      param(ref.module),
-      `),
-      css_deps AS (
-        SELECT
-          bi.file_alias AS css_module_id,
-          bi.source AS css_source
-        FROM boxel_index bi
-        JOIN module_deps md ON bi.file_alias = md.module_dep_file_alias WHERE`,
-      ...every([
-        [`bi.realm_version = `, param(realmVersion)],
-        ['bi.type =', param('css')],
-      ]),
-      `)
-        SELECT DISTINCT css_module_id, css_source
-        FROM css_deps
-      `,
-    ];
-
-    let groupedCssInstanceData = (await this.queryCards(
-      cssSourceQuery,
-      loader,
-    )) as {
-      css_module_id: string;
-      css_source: string;
-    }[];
-
     let prerenderedCards = results.map((card) => {
+      let scopedCssUrls = card.deps!.filter((dep: string) =>
+        dep.endsWith('glimmer-scoped.css'),
+      );
       return {
         url: card.url!,
         html: card.html,
-        cssModuleIds: groupedCssInstanceData
-          .map((cssRecord) => cssRecord.css_module_id)
-          .sort((a, b) => a.localeCompare(b)), // Sort by css module id for determinism (especially in tests). We do it in JS because SQLite and Postgres have different sorting behavior for urls
+        cssModuleIds: scopedCssUrls,
       };
     });
 
-    let prerenderedCardCssItems = groupedCssInstanceData
-      .map((cssRecord) => {
-        return {
-          cssModuleId: cssRecord.css_module_id,
-          source: cssRecord.css_source,
-        };
-      })
-      .sort((a, b) => a.cssModuleId.localeCompare(b.cssModuleId)); // Same comment for sorting as above
-
-    return { prerenderedCards, prerenderedCardCssItems, meta };
+    return { prerenderedCards, meta };
   }
 
   private async fetchCurrentRealmVersion(realmURL: URL) {
