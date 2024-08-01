@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Friends from ../friends",
+      "description": "Catalog entry for Friends from ../friends",
+      "isField": false,
+      "ref": {
+        "module": "../friends",
+        "name": "Friends"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}

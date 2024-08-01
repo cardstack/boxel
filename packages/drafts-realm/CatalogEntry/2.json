@@ -1,0 +1,20 @@
+{
+  "data": {
+    "attributes": {
+      "title": "Pet",
+      "description": "Catalog entry for Pet card",
+      "isField": false,
+      "ref": {
+        "module": "../pet",
+        "name": "Pet"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    },
+    "type": "card"
+  }
+}

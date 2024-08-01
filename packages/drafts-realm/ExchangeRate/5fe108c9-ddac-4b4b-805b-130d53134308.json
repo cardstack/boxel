@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "conversionRate": 89.34,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "asset1": {
+        "links": {
+          "self": "../Currency/2"
+        }
+      },
+      "asset2": {
+        "links": {
+          "self": "../Currency/3"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../exchange-rate",
+        "name": "ExchangeRate"
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "homePrice": 395000,
+      "downPaymentPercentage": 20,
+      "loanTermYears": 30,
+      "interestRatePercentage": 7.4,
+      "taxPerMonth": 320,
+      "insurancePerMonth": 50,
+      "hoaFeesPerMonth": 750,
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../mortgage-calculator",
+        "name": "MortgageCalculator"
+      }
+    }
+  }
+}

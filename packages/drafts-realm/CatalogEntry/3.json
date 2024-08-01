@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Chain from /chain",
+      "description": "Catalog entry for Chain from /chain",
+      "isField": false,
+      "ref": {
+        "module": "../chain",
+        "name": "Chain"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}

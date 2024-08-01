@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Mango",
+      "favoriteToy": null,
+      "favoriteTreat": null,
+      "cutenessRating": null,
+      "sleepsOnTheCouch": false,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../pet",
+        "name": "Pet"
+      }
+    }
+  }
+}

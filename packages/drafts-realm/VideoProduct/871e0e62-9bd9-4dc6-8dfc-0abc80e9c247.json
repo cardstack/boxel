@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "videoUrl": null,
+      "images": [],
+      "unitPriceCents": null,
+      "usShippingCostCents": null,
+      "leadTimeDays": null,
+      "deliveryWindowDays": null,
+      "isReturnable": null,
+      "details": null,
+      "title": null,
+      "description": null
+    },
+    "relationships": {
+      "seller": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../video-product",
+        "name": "VideoProduct"
+      }
+    }
+  }
+}
