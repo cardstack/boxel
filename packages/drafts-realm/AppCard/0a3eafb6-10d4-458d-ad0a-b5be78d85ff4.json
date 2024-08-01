@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "tabs": [
+        {
+          "displayName": "Country",
+          "ref": {
+            "name": "Country",
+            "module": "http://localhost:4201/drafts/country"
+          },
+          "isTable": true
+        },
+        {
+          "displayName": "Friend",
+          "ref": {
+            "name": "Friend",
+            "module": "http://localhost:4201/drafts/friend"
+          },
+          "isTable": true
+        }
+      ],
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../app-card",
+        "name": "AppCard"
+      }
+    }
+  }
+}

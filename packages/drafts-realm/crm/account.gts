@@ -4,6 +4,7 @@ import {
   CardDef,
   linksTo,
   linksToMany,
+  FieldDef,
 } from 'https://cardstack.com/base/card-api';
 
 import NumberField from 'https://cardstack.com/base/number';
@@ -39,3 +40,8 @@ export class CrmAccount extends CardDef {
     },
   });
 }
+
+// class LeadStatus extends StringField {
+//   statuses = ['converted', 'met'];
+//   @field value = contains(StringField);
+// }
