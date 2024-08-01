@@ -22,6 +22,7 @@ import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profi
 import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 import ENV from '@cardstack/host/config/environment';
+import { getCard } from '@cardstack/host/resources/card-resource';
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -139,9 +140,13 @@ export default class SubmodeLayout extends Component<Signature> {
     this.args.onSearchSheetOpened?.();
   }
 
-  @action private handleCardSelectFromSearch(card: CardDef) {
-    this.args.onCardSelectFromSearch(card);
-    this.closeSearchSheet();
+  @action private async handleCardSelectFromSearch(cardId: string) {
+    let cardResource = getCard(this, () => cardId);
+    await cardResource.loaded;
+    if (cardResource.card) {
+      this.args.onCardSelectFromSearch(cardResource.card);
+      this.closeSearchSheet();
+    }
   }
 
   @action private toggleProfileSettings() {

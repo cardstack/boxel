@@ -11,6 +11,7 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
+  Element: any;
   Args: {
     card: BaseDef;
     format?: Format;
@@ -25,7 +26,7 @@ export default class Preview extends Component<Signature> {
   }
 
   <template>
-    <this.renderedCard />
+    <this.renderedCard ...attributes />
   </template>
 
   get renderedCard() {

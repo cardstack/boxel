@@ -1,5 +1,8 @@
 import { service } from '@ember/service';
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
+
+import { tracked } from '@glimmer/tracking';
 
 import { WithBoundArgs } from '@glint/template';
 
@@ -13,7 +16,6 @@ import { Format } from 'https://cardstack.com/base/card-api';
 
 import CardService from '../services/card-service';
 import LoaderService from '../services/loader-service';
-import { tracked } from '@glimmer/tracking';
 
 interface Signature {
   Element: undefined;
@@ -24,7 +26,11 @@ interface Signature {
   };
   Blocks: {
     loading: [];
-    item: [item: WithBoundArgs<typeof PrerenderedCardComponent, 'item'>];
+    item: [
+      item: WithBoundArgs<typeof PrerenderedCardComponent, 'item'>,
+      cardId: string,
+      index: number,
+    ];
   };
 }
 
@@ -50,21 +56,20 @@ class PrerenderedCardComponent extends Component<PrerenderedCardComponentSignatu
   @tracked isCssLoaded = false;
   async ensureCssLoaded() {
     for (let cssModuleId of this.args.item.cssModuleIds) {
-      debugger;
       await this.loaderService.loader.import(cssModuleId);
     }
     this.isCssLoaded = true;
   }
   <template>
     {{#if this.isCssLoaded}}
-      {{{@item.html}}}
+      {{htmlSafe @item.html}}
     {{/if}}
   </template>
 }
 
 export default class PrerenderedCardSearch extends Component<Signature> {
   @service declare cardService: CardService;
-  private _instances: PrerenderedCard[] = [];
+  @tracked _instances: PrerenderedCard[] = [];
 
   private searchTask = restartableTask(async () => {
     let { query, format, realms } = this.args;
@@ -76,25 +81,6 @@ export default class PrerenderedCardSearch extends Component<Signature> {
         ),
       ),
     );
-
-    // let realmsWithResults = realms
-    //   .map((realmUrl) => {
-    //     let instances = this._instances.filter((prerenderedCard) =>
-    //       prerenderedCard.url.startsWith(realmUrl),
-    //     );
-    //     return { realmUrl, instances };
-    //   })
-    //   .filter((r) => r.instances.length > 0);
-
-    // this._instancesByRealm = await Promise.all(
-    //   realmsWithCards.map(async ({ url, cards }) => {
-    //     let realmInfo = await this.cardService.getRealmInfo(cards[0]);
-    //     if (!realmInfo) {
-    //       throw new Error(`Could not find realm info for card ${cards[0].id}`);
-    //     }
-    //     return { url, realmInfo, cards };
-    //   }),
-    // );
   });
   get isLoading() {
     return this.searchTask.isRunning;
@@ -112,8 +98,13 @@ export default class PrerenderedCardSearch extends Component<Signature> {
     {{#if this.search.isLoading}}
       {{yield to='loading'}}
     {{else}}
-      {{#each this._instances as |instance|}}
-        {{yield (component PrerenderedCardComponent item=instance) to='item'}}
+      {{#each this._instances as |instance i|}}
+        {{yield
+          (component PrerenderedCardComponent item=instance)
+          instance.url
+          i
+          to='item'
+        }}
       {{/each}}
     {{/if}}
   </template>

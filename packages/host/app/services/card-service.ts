@@ -19,6 +19,7 @@ import {
   type Relationship,
   PrerenderedCard,
 } from '@cardstack/runtime-common';
+import { isPrerenderedCardCollectionDocument } from '@cardstack/runtime-common/card-document';
 import type { Query } from '@cardstack/runtime-common/query';
 
 import ENV from '@cardstack/host/config/environment';
@@ -38,7 +39,6 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { trackCard, getCard } from '../resources/card-resource';
 
 import type LoaderService from './loader-service';
-import { isPrerenderedCardCollectionDocument } from '@cardstack/runtime-common/card-document';
 
 export type CardSaveSubscriber = (
   url: URL,

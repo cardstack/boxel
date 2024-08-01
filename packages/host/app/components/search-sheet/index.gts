@@ -17,6 +17,8 @@ import flatMap from 'lodash/flatMap';
 
 import { TrackedArray } from 'tracked-built-ins';
 
+import { CardContainer } from '@cardstack/boxel-ui/components';
+
 import {
   Button,
   Label,
@@ -24,7 +26,7 @@ import {
   BoxelInputBottomTreatments,
 } from '@cardstack/boxel-ui/components';
 
-import { eq, gt, or } from '@cardstack/boxel-ui/helpers';
+import { cn, eq, gt, or } from '@cardstack/boxel-ui/helpers';
 
 import {
   type ResolvedCodeRef,
@@ -37,8 +39,9 @@ import RecentCards from '@cardstack/host/services/recent-cards-service';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { getCard } from '../../resources/card-resource';
+import PrerenderedCardSearch from '../prerendered-card-search';
 
-import SearchResult from './search-result';
+import Preview from '../preview';
 
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
@@ -63,7 +66,7 @@ interface Signature {
     onFocus: () => void;
     onBlur: () => void;
     onSearch: (term: string) => void;
-    onCardSelect: (card: CardDef) => void;
+    onCardSelect: (cardId: string) => void;
     onInputInsertion?: (element: HTMLElement) => void;
   };
   Blocks: {};
@@ -190,15 +193,15 @@ export default class SearchSheet extends Component<Signature> {
     this.args.onCancel();
   }
 
-  @action private handleCardSelect(card: CardDef) {
+  @action private handleCardSelect(cardId: string) {
     this.resetState();
-    this.args.onCardSelect(card);
+    this.args.onCardSelect(cardId);
   }
 
   @action
   private doExternallyTriggeredSearch(term: string) {
     this.searchKey = term;
-    this.searchCard.perform(this.searchKey);
+    this.searchCard.perform();
   }
 
   private resetState() {
@@ -229,7 +232,7 @@ export default class SearchSheet extends Component<Signature> {
         this.getCard.perform(this.searchKey);
       } else {
         this.clearSearchCardResults();
-        this.searchCard.perform(this.searchKey);
+        this.searchCard.perform();
       }
     }
   }
@@ -246,10 +249,11 @@ export default class SearchSheet extends Component<Signature> {
     this.searchCardResults.splice(0, this.searchCardResults.length);
   }
 
-  private searchCard = restartableTask(async (searchKey: string) => {
+  get query() {
+    let { searchKey } = this;
     let type = getCodeRefFromSearchKey(searchKey);
     let searchTerm = !type ? searchKey : undefined;
-    let query = {
+    return {
       filter: {
         every: [
           {
@@ -273,11 +277,18 @@ export default class SearchSheet extends Component<Signature> {
         ],
       },
     };
+  }
 
+  get realms() {
+    return this.cardService.realmURLs;
+  }
+
+  private searchCard = restartableTask(async () => {
     let cards = flatMap(
       await Promise.all(
         this.cardService.realmURLs.map(
-          async (realm) => await this.cardService.search(query, new URL(realm)),
+          async (realm) =>
+            await this.cardService.search(this.query, new URL(realm)),
         ),
       ),
     );
@@ -332,14 +343,28 @@ export default class SearchSheet extends Component<Signature> {
             <Label data-test-search-label>{{this.searchLabel}}</Label>
             <div class='search-result-section__body'>
               <div class='search-result-section__cards'>
-                {{#each this.searchCardResults as |card i|}}
-                  <SearchResult
-                    @card={{card}}
-                    @compact={{eq this.sheetSize 'prompt'}}
-                    {{on 'click' (fn this.handleCardSelect card)}}
-                    data-test-search-sheet-search-result={{i}}
-                  />
-                {{/each}}
+                <PrerenderedCardSearch
+                  @query={{this.query}}
+                  @format='embedded'
+                  @realms={{this.realms}}
+                >
+                  <:item as |PrerenderedCard cardId i|>
+                    <CardContainer
+                      @displayBoundaries={{true}}
+                      {{on 'click' (fn this.handleCardSelect cardId)}}
+                      data-test-search-sheet-search-result={{i}}
+                      data-test-search-result={{cardId}}
+                      class={{cn
+                        'search-result'
+                        is-compact=(eq this.sheetSize 'prompt')
+                      }}
+                      ...attributes
+                    >
+                      <PrerenderedCard />
+                    </CardContainer>
+
+                  </:item>
+                </PrerenderedCardSearch>
               </div>
             </div>
           </div>
@@ -350,11 +375,15 @@ export default class SearchSheet extends Component<Signature> {
             <div class='search-result-section__body'>
               <div class='search-result-section__cards'>
                 {{#each this.orderedRecentCards as |card i|}}
-                  <SearchResult
+                  <Preview
                     @card={{card}}
-                    @compact={{eq this.sheetSize 'prompt'}}
-                    {{on 'click' (fn this.handleCardSelect card)}}
+                    @format='embedded'
+                    {{on 'click' (fn this.handleCardSelect card.id)}}
                     data-test-search-sheet-recent-card={{i}}
+                    class={{cn
+                      'search-result'
+                      is-compact=(eq this.sheetSize 'prompt')
+                    }}
                   />
                 {{/each}}
               </div>
@@ -500,6 +529,20 @@ export default class SearchSheet extends Component<Signature> {
         flex-wrap: nowrap;
         padding: var(--boxel-sp-xxs);
         gap: var(--boxel-sp-xs);
+      }
+      .search-result,
+      .search-result.field-component-card.embedded-format {
+        width: 311px;
+        height: 76px;
+        overflow: hidden;
+        cursor: pointer;
+        container-name: embedded-card;
+        container-type: size;
+      }
+      .search-result.is-compact,
+      .search-result.field-component-card.embedded-format.is-compact {
+        width: 199px;
+        height: 50px;
       }
     </style>
   </template>
