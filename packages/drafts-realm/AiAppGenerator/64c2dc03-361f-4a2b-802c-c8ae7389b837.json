@@ -2,15 +2,16 @@
   "data": {
     "type": "card",
     "attributes": {
-      "prompt": {
-        "appType": null,
-        "domain": null,
-        "customRequirements": null
-      },
       "tabs": [],
+      "headerIcon": {
+        "iconURL": "./AiAppGenerator/ai-app-gen-icon.png",
+        "backgroundColor": null,
+        "borderColor": null,
+        "coversAllAvailableSpace": true
+      },
       "title": "AI App Generator",
       "description": "Boxel AI Assistant app generator card",
-      "thumbnailURL": null
+      "thumbnailURL": "./AiAppGenerator/ai-app-gen-thumbnail.png"
     },
     "meta": {
       "adoptsFrom": {

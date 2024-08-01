@@ -105,10 +105,14 @@ class AppCardIsolated extends Component<typeof AppCard> {
         @onSetActiveTab={{this.setActiveTab}}
         @activeTabIndex={{this.activeTabIndex}}
         @headerBackgroundColor={{this.headerColor}}
-        @iconURL={{@model.thumbnailURL}}
-        @iconBackgroundColor={{@model.headerIconBackgroundColor}}
-        @iconBorderColor={{@model.headerIconBorderColor}}
-        @iconCoversAllAvailableSpace={{@model.headerIconCoversAllAvailableSpace}}
+        @iconURL={{if
+          @model.headerIcon.iconURL
+          @model.headerIcon.iconURL
+          @model.thumbnailURL
+        }}
+        @iconBackgroundColor={{@model.headerIcon.backgroundColor}}
+        @iconBorderColor={{@model.headerIcon.borderColor}}
+        @iconCoversAllAvailableSpace={{@model.headerIcon.coversAllAvailableSpace}}
       />
       <div class='app-card-content'>
         {{#if this.activeTab}}
@@ -278,9 +282,6 @@ class AppCardIsolated extends Component<typeof AppCard> {
       }
       tr:last-of-type {
         border-bottom: 2px solid #009879;
-      }
-      .tabbed-interface {
-        width: 100%;
       }
       .grid-card {
         width: var(--grid-card-width);
@@ -558,13 +559,18 @@ class AppCardIsolated extends Component<typeof AppCard> {
   );
 }
 
+class HeaderIcon extends FieldDef {
+  @field iconURL = contains(StringField);
+  @field backgroundColor = contains(StringField);
+  @field borderColor = contains(StringField);
+  @field coversAllAvailableSpace = contains(BooleanField);
+}
+
 export class AppCard extends CardDef {
   static displayName = 'App Card';
   static prefersWideFormat = true;
   static headerColor = '#ffffff';
   @field tabs = containsMany(Tab);
-  @field headerIconBackgroundColor = contains(StringField);
-  @field headerIconBorderColor = contains(StringField);
-  @field headerIconCoversAllAvailableSpace = contains(BooleanField);
+  @field headerIcon = contains(HeaderIcon);
   static isolated = AppCardIsolated;
 }

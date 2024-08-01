@@ -126,9 +126,6 @@ export default class TabbedHeader extends Component<Signature> {
         gap: var(--boxel-sp);
         flex-flow: row wrap;
       }
-      .app-tab-list > li + li {
-        margin-top: 0;
-      }
       .app-tab-list a {
         height: 100%;
         padding: var(--boxel-sp-xs) var(--boxel-sp-xxs);

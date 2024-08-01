@@ -22,12 +22,15 @@
           "isTable": false
         }
       ],
-      "headerIconBackgroundColor": "white",
-      "headerIconBorderColor": "green",
-      "headerIconCoversAllAvailableSpace": true,
-      "title": "My Garden",
+      "headerIcon": {
+        "iconURL": null,
+        "backgroundColor": "",
+        "borderColor": "",
+        "coversAllAvailableSpace": false
+      },
+      "title": "Garden App",
       "description": "Garden design app",
-      "thumbnailURL": "https://cdn-icons-png.flaticon.com/512/6938/6938908.png"
+      "thumbnailURL": ""
     },
     "meta": {
       "adoptsFrom": {
