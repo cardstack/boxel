@@ -999,27 +999,6 @@ importers:
         specifier: ^5.89.0
         version: 5.89.0
 
-  packages/drafts-realm:
-    devDependencies:
-      '@cardstack/boxel-ui':
-        specifier: workspace:*
-        version: link:../boxel-ui/addon
-      '@cardstack/runtime-common':
-        specifier: workspace:*
-        version: link:../runtime-common
-      '@types/lodash':
-        specifier: ^4.14.182
-        version: 4.14.182
-      chess.js:
-        specifier: 1.0.0-beta.8
-        version: 1.0.0-beta.8
-      ember-modifier:
-        specifier: ^4.1.0
-        version: 4.1.0(ember-source@5.4.1)
-      tracked-built-ins:
-        specifier: ^3.3.0
-        version: 3.3.0
-
   packages/host:
     devDependencies:
       '@babel/core':
@@ -9651,10 +9630,6 @@ packages:
   /check-more-types@2.24.0:
     resolution: {integrity: sha512-Pj779qHxV2tuapviy1bSZNEL1maXr13bPYpsvSDB68HlYcYuhlDrmGd63i0JHMCLKzc7rUSNIrpdJlhVlNwrxA==}
     engines: {node: '>= 0.8.0'}
-    dev: true
-
-  /chess.js@1.0.0-beta.8:
-    resolution: {integrity: sha512-UngzUMXmexcQaQA/UEJuJj5vatEy34awYMD5YMOp/FW3HM7lqspp7ymYs5JAmquDq0WROtURRfSffoa/vrCCyw==}
     dev: true
 
   /chokidar@2.1.8:
