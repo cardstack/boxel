@@ -37,6 +37,13 @@ type TextMessage = {
 
 export type Message = CommandMessage | TextMessage;
 
+export class HistoryConstructionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'HistoryConstructionError';
+  }
+}
+
 export function constructHistory(history: IRoomEvent[]) {
   /**
    * We send a lot of events to create messages,
