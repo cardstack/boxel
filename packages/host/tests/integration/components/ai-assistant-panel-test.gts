@@ -2063,4 +2063,38 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom('[data-test-message-idx="1"] [data-test-ai-message-content]')
       .containsText('A message from the background.');
   });
+
+  test('it should create a new lines in the right position when user type `Shift+Enter`', async function (assert) {
+    await setCardInOperatorModeState();
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await openAiAssistant();
+
+    await fillIn(
+      '[data-test-message-field]',
+      'This is 1st sentence This is 2nd sentence',
+    );
+
+    const textarea = document.querySelector(
+      '[data-test-message-field]',
+    ) as HTMLTextAreaElement;
+    textarea!.selectionStart = 21; // position after "This is 1st sentence"
+    textarea!.selectionEnd = 21;
+
+    await triggerEvent(textarea!, 'keydown', {
+      key: 'Enter',
+      code: 'Enter',
+      shiftKey: true,
+    });
+
+    assert
+      .dom('[data-test-message-field]')
+      .hasValue('This is 1st sentence \nThis is 2nd sentence');
+  });
 });
