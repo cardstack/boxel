@@ -11,7 +11,6 @@ import {
   StringField,
 } from 'https://cardstack.com/base/card-api';
 
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -27,8 +26,8 @@ import {
   FieldContainer,
   BoxelButton,
   BoxelInput,
+  TabbedHeader,
 } from '@cardstack/boxel-ui/components';
-import { cssVar, eq, getContrastColor } from '@cardstack/boxel-ui/helpers';
 
 import {
   getLiveCards,
@@ -42,6 +41,7 @@ import {
 
 export class Tab extends FieldDef {
   @field displayName = contains(StringField);
+  @field tabId = contains(StringField);
   @field ref = contains(CodeRefField);
   @field isTable = contains(BooleanField);
 }
@@ -82,6 +82,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
       tabs.push(
         new Tab({
           displayName: name,
+          tabId: name,
           ref: {
             name,
             module: this.moduleName,
@@ -98,33 +99,17 @@ class AppCardIsolated extends Component<typeof AppCard> {
 
   <template>
     <section class='app-card'>
-      <header
-        class='app-card-header'
-        style={{cssVar
-          header-background-color=this.headerColor
-          header-text-color=(getContrastColor this.headerColor)
-        }}
-      >
-        <div class='app-card-title-group'>
-          <h1 class='app-card-title'><@fields.title /></h1>
-        </div>
-        <nav class='app-card-nav'>
-          <ul class='app-card-tab-list'>
-            {{#each this.tabs as |tab index|}}
-              <li>
-                <a
-                  href='#{{tab.ref.name}}'
-                  {{on 'click' (fn this.setActiveTab index)}}
-                  class={{if (eq this.activeTabIndex index) 'active'}}
-                >
-                  {{tab.displayName}}
-                </a>
-              </li>
-            {{/each}}
-          </ul>
-        </nav>
-      </header>
-
+      <TabbedHeader
+        @title={{@model.title}}
+        @tabs={{this.tabs}}
+        @onSetActiveTab={{this.setActiveTab}}
+        @activeTabIndex={{this.activeTabIndex}}
+        @headerBackgroundColor={{this.headerColor}}
+        @iconURL={{@model.thumbnailURL}}
+        @iconBackgroundColor={{@model.headerIconBackgroundColor}}
+        @iconBorderColor={{@model.headerIconBorderColor}}
+        @iconCoversAllAvailableSpace={{@model.headerIconCoversAllAvailableSpace}}
+      />
       <div class='app-card-content'>
         {{#if this.activeTab}}
           {{#if this.activeTab.isTable}}
@@ -254,37 +239,6 @@ class AppCardIsolated extends Component<typeof AppCard> {
         color: var(--boxel-dark);
         font: var(--boxel-font);
         letter-spacing: var(--boxel-lsp);
-      }
-      .app-card-header {
-        padding: 0 var(--boxel-sp-lg);
-        background-color: var(--header-background-color, var(--boxel-light));
-        color: var(--header-text-color, var(--boxel-dark));
-        border-bottom: var(--boxel-border);
-      }
-      .app-card-title {
-        font: 900 var(--boxel-font);
-        letter-spacing: var(--boxel-lsp-xl);
-        text-transform: uppercase;
-      }
-      .app-card-nav {
-        font: var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-sm);
-      }
-      .app-card-tab-list {
-        list-style-type: none;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        gap: var(--boxel-sp-lg);
-      }
-      .app-card-tab-list a {
-        padding: var(--boxel-sp-xs) var(--boxel-sp-xxs);
-        font-weight: 700;
-      }
-      .app-card-tab-list a.active,
-      .app-card-tab-list a:hover:not(:disabled) {
-        color: var(--header-text-color, var(--boxel-dark));
-        border-bottom: 4px solid var(--header-text-color, var(--boxel-dark));
       }
       .app-card-content {
         width: 100%;
@@ -466,7 +420,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
 
   setTab() {
     let index = this.tabs?.findIndex(
-      (tab: Tab) => tab.ref.name === window.location?.hash?.slice(1),
+      (tab: Tab) => tab.tabId === window.location?.hash?.slice(1),
     );
     if (index && index !== -1) {
       this.activeTabIndex = index;
@@ -609,50 +563,8 @@ export class AppCard extends CardDef {
   static prefersWideFormat = true;
   static headerColor = '#ffffff';
   @field tabs = containsMany(Tab);
+  @field headerIconBackgroundColor = contains(StringField);
+  @field headerIconBorderColor = contains(StringField);
+  @field headerIconCoversAllAvailableSpace = contains(BooleanField);
   static isolated = AppCardIsolated;
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      <article class='app-card-embedded'>
-        <header>
-          <div class='icon' />
-          <div class='title-group'>
-            <h3><@fields.title /></h3>
-            <h4>{{@model.constructor.displayName}}</h4>
-          </div>
-        </header>
-        <p><@fields.description /></p>
-      </article>
-      <style>
-        .app-card-embedded {
-          padding: var(--boxel-sp);
-        }
-        header {
-          display: flex;
-          gap: var(--boxel-sp);
-          align-items: center;
-        }
-        h3 {
-          margin: 0;
-          font-size: 1.125rem;
-          letter-spacing: var(--boxel-lsp-xs);
-        }
-        h4 {
-          margin: 0;
-          font: 500 var(--boxel-font-xs);
-          line-height: 1.7;
-          letter-spacing: var(--boxel-lsp-xs);
-          color: var(--boxel-450);
-        }
-        p {
-          letter-spacing: var(--boxel-lsp-xs);
-        }
-        .icon {
-          width: 100px;
-          height: 100px;
-          background-color: var(--boxel-450);
-          border-radius: var(--boxel-border-radius-sm);
-        }
-      </style>
-    </template>
-  };
 }

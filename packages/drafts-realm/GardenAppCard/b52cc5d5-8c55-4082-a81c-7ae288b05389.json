@@ -1,0 +1,39 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "tabs": [
+        {
+          "displayName": "Garden Designs",
+          "tabId": "GardenDesign",
+          "ref": {
+            "name": "GardenDesign",
+            "module": "garden-design"
+          },
+          "isTable": false
+        },
+        {
+          "displayName": "Garden Items",
+          "tabId": "GardenItem",
+          "ref": {
+            "name": "GardenItem",
+            "module": "garden-design"
+          },
+          "isTable": false
+        }
+      ],
+      "headerIconBackgroundColor": "white",
+      "headerIconBorderColor": "green",
+      "headerIconCoversAllAvailableSpace": true,
+      "title": "My Garden",
+      "description": "Garden design app",
+      "thumbnailURL": "https://cdn-icons-png.flaticon.com/512/6938/6938908.png"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../garden-app",
+        "name": "GardenAppCard"
+      }
+    }
+  }
+}
