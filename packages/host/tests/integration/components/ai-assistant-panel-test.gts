@@ -2064,7 +2064,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .containsText('A message from the background.');
   });
 
-  test('it should create a new lines in the right position when user type `Shift+Enter`', async function (assert) {
+  test('it should create a new line in the right position when user type `Shift+Enter`', async function (assert) {
     await setCardInOperatorModeState();
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -2095,6 +2095,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     assert
       .dom('[data-test-message-field]')
-      .hasValue('This is 1st sentence \nThis is 2nd sentence');
+      .hasValue('This is 1st sentence \n\nThis is 2nd sentence');
   });
 });
