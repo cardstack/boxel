@@ -8,6 +8,10 @@ import type {
   CommandEvent,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
+import * as Sentry from '@sentry/node';
+import { logger } from '@cardstack/runtime-common';
+
+let log = logger('ai-bot');
 
 const MODIFY_SYSTEM_MESSAGE =
   '\
@@ -62,7 +66,8 @@ export function constructHistory(history: IRoomEvent[]) {
       try {
         rawEvent.content.data = JSON.parse(rawEvent.content.data);
       } catch (e) {
-        console.error('Error parsing JSON', e);
+        Sentry.captureException(e);
+        log.error('Error parsing JSON', e);
         throw new HistoryConstructionError((e as Error).message);
       }
     }
