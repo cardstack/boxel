@@ -252,10 +252,12 @@ export class Batch {
       `SELECT count(i.url) as total
        FROM boxel_index as i
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
-          WHERE i.realm_url =`,
-      param(this.realmURL.href),
-      'AND',
-      ...realmVersionExpression({ useWorkInProgressIndex: true }),
+          WHERE`,
+      ...every([
+        ['i.realm_url =', param(this.realmURL.href)],
+        ['i.type != ', param('error')],
+        realmVersionExpression({ useWorkInProgressIndex: true }),
+      ]),
     ] as Expression)) as { total: string }[];
     return parseInt(total);
   }

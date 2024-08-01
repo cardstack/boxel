@@ -312,7 +312,8 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       },
     });
     let queryEngine = realm.realmIndexQueryEngine;
-    let updateCard = await realm.write(
+    // intentionally not awaiting here
+    let updateCard = realm.write(
       'Pet/mango.json',
       JSON.stringify({
         data: {

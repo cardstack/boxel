@@ -371,7 +371,7 @@ module('indexing', function (hooks) {
         instanceErrors: 0,
         moduleErrors: 0,
         modulesIndexed: 0,
-        totalIndexEntries: 14,
+        totalIndexEntries: 12,
       },
       'indexed correct number of files',
     );
@@ -399,7 +399,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 1,
         modulesIndexed: 0,
-        totalIndexEntries: 16,
+        totalIndexEntries: 12,
       },
       'indexed correct number of files',
     );
@@ -418,7 +418,7 @@ module('indexing', function (hooks) {
         instanceErrors: 4, // 1 post, 2 persons, 1 bad-link post
         moduleErrors: 3, // post, fancy person, person
         modulesIndexed: 0,
-        totalIndexEntries: 22,
+        totalIndexEntries: 12,
       },
       'indexed correct number of files',
     );
@@ -451,7 +451,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
         modulesIndexed: 3,
-        totalIndexEntries: 16,
+        totalIndexEntries: 12,
       },
       'indexed correct number of files',
     );
@@ -487,7 +487,7 @@ module('indexing', function (hooks) {
         instanceErrors: 0,
         moduleErrors: 0,
         modulesIndexed: 0,
-        totalIndexEntries: 14,
+        totalIndexEntries: 12,
       },
       'index did not touch any files',
     );
@@ -528,7 +528,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
         modulesIndexed: 1,
-        totalIndexEntries: 14,
+        totalIndexEntries: 12,
       },
       'indexed correct number of files',
     );
@@ -570,7 +570,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
         modulesIndexed: 3,
-        totalIndexEntries: 14,
+        totalIndexEntries: 12,
       },
       'indexed correct number of files',
     );
@@ -623,7 +623,7 @@ module('indexing', function (hooks) {
         instanceErrors: 2,
         moduleErrors: 0,
         modulesIndexed: 0,
-        totalIndexEntries: 15,
+        totalIndexEntries: 12,
       },
       'indexed correct number of files',
     );
@@ -664,7 +664,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
         modulesIndexed: 1,
-        totalIndexEntries: 14,
+        totalIndexEntries: 12,
       },
       'indexed correct number of files',
     );
@@ -820,7 +820,7 @@ module('permissioned realm', function (hooks) {
           instancesIndexed: 0,
           moduleErrors: 1,
           modulesIndexed: 0,
-          totalIndexEntries: 4,
+          totalIndexEntries: 2,
         },
         'has a module error',
       );
