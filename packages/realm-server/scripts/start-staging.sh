@@ -19,7 +19,7 @@ NODE_NO_WARNINGS=1 \
   --path='/persistent/experiments' \
   --matrixURL='https://matrix-staging.stack.cards' \
   --username='experiments_realm' \
-  --password=${experiments_REALM_PASSWORD} \
+  --password=${EXPERIMENTS_REALM_PASSWORD} \
   --fromUrl='https://realms-staging.stack.cards/experiments/' \
   --toUrl='https://realms-staging.stack.cards/experiments/' \
   \
