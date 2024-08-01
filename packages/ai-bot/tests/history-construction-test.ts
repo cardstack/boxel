@@ -541,7 +541,13 @@ module('constructHistory', () => {
           format: 'org.boxel.card',
           body: 'card fragment 1 of 1',
           formatted_body: 'card fragment 1 of 1',
-          data: '{"cardFragment":"{\\"data\\":{\\"type\\":\\"card\\",\\"id\\":\\"https://cardstack.com/base/SkillCard/card-editing\\",\\"attributes\\":{\\"instructions\\":\\"- If the user wants the data they see edited, AND the patchCard function is available, you MUST use the \\\\\\"patchCard\\\\\\" function to make the change.\\\\n- If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you.\\\\n- If you do not call patchCard, the user will not see the change.\\\\n- You can ONLY modify cards shared with you. If there is no patchCard function or tool, then the user hasn\'t given you access.\\\\n- NEVER tell the user to use patchCard; you should always do it for them.\\",\\"title\\":\\"Card Editing\\",\\"description\\":null,\\"thumbnailURL\\":null},\\"meta\\":{\\"adoptsFrom\\":{\\"module\\":\\"../skill-card\\",\\"name\\":\\"SkillCard\\"}}}}","index":0,"totalParts":1}',
+          // data should be a JSON string
+          data: {
+            cardFragment:
+              '{"data":{"type":"card","id":"https://cardstack.com/base/SkillCard/card-editing","attributes":{"instructions":"- If the user wants the data they see edited, AND the patchCard function is available, you MUST use the \\"patchCard\\" function to make the change.\\n- If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you.\\n- If you do not call patchCard, the user will not see the change.\\n- You can ONLY modify cards shared with you. If there is no patchCard function or tool, then the user hasn\'t given you access.\\n- NEVER tell the user to use patchCard; you should always do it for them.","title":"Card Editing","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../skill-card","name":"SkillCard"}}}}',
+            index: 0,
+            totalParts: 1,
+          },
         },
         origin_server_ts: 1722374047192,
         unsigned: {
