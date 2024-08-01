@@ -3,54 +3,69 @@ import { tracked } from '@glimmer/tracking';
 import Component from '@glimmer/component';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import Icon from '../../icons/sparkle.gts';
+import { ALL_ICON_COMPONENTS } from '../../icons.gts';
 import TabbedHeader from './index.gts';
 
 export default class TabbedHeaderUsage extends Component {
   @tracked tabs = [
     {
-      label: 'Dashboard',
-      value: 'dashboard',
+      displayName: 'Dashboard',
+      tabId: 'dashboard',
     },
     {
-      label: 'Requirements',
-      value: 'requirements',
+      displayName: 'Requirements',
+      tabId: 'requirements',
     },
     {
-      label: 'Your Apps',
-      value: 'your-apps',
+      displayName: 'Your Apps',
+      tabId: 'your-apps',
     },
     {
-      label: 'Sample Apps',
-      value: 'sample-apps',
+      displayName: 'Sample Apps',
+      tabId: 'sample-apps',
     },
     {
-      label: 'Favorites',
-      value: 'favorites',
+      displayName: 'Favorites',
+      tabId: 'favorites',
     },
   ];
   @tracked title = 'AI App Generator';
-  @tracked icon = Icon;
-  @tracked headerColor = '#ffd800';
+  @tracked iconComponent = Icon;
+  @tracked iconURL = '';
   @tracked activeTabIndex = 0;
+  @tracked headerColor = '#ffd800';
+  @tracked iconBackgroundColor?: string;
+  @tracked iconBorderColor?: string;
+  @tracked iconCoversAllAvailableSpace = false;
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
-    if (this.tabs) {
-      this.activeTabIndex = this.tabs.findIndex(
-        (tab) => tab.value === window.location?.hash?.slice(1),
-      );
+    let index = this.tabs?.findIndex(
+      (tab) => tab.tabId === window.location?.hash?.slice(1),
+    );
+    if (index && index !== -1) {
+      this.activeTabIndex = index;
     }
   }
+
+  onSetActiveTab = (index: number) => {
+    this.activeTabIndex = index;
+  };
 
   <template>
     <FreestyleUsage @name='TabbedHeader'>
       <:example>
         <TabbedHeader
           @title={{this.title}}
-          @activeTabIndex={{this.activeTabIndex}}
-          @icon={{this.icon}}
           @tabs={{this.tabs}}
+          @onSetActiveTab={{fn this.onSetActiveTab}}
+          @activeTabIndex={{this.activeTabIndex}}
+          @iconComponent={{this.iconComponent}}
+          @iconURL={{this.iconURL}}
           @headerBackgroundColor={{this.headerColor}}
+          @iconBackgroundColor={{this.iconBackgroundColor}}
+          @iconBorderColor={{this.iconBorderColor}}
+          @iconCoversAllAvailableSpace={{this.iconCoversAllAvailableSpace}}
         />
       </:example>
       <:api as |Args|>
@@ -61,6 +76,12 @@ export default class TabbedHeaderUsage extends Component {
           @onInput={{fn (mut this.title)}}
           @required={{true}}
         />
+        <Args.Object
+          @name='tabs'
+          @description='Tabs for navigation'
+          @value={{this.tabs}}
+          @onInput={{fn (mut this.tabs)}}
+        />
         <Args.Number
           @name='activeTabIndex'
           @description='Index of the active tab'
@@ -68,9 +89,9 @@ export default class TabbedHeaderUsage extends Component {
           @value={{this.activeTabIndex}}
           @onInput={{fn (mut this.activeTabIndex)}}
         />
-        <Args.Component
-          @name='icon'
-          @description='Icon to be displayed with the title'
+        <Args.Action
+          @name='onSetActiveTab'
+          @description='Optional action to be called when a tab is clicked'
         />
         <Args.String
           @name='headerBackgroundColor'
@@ -79,15 +100,39 @@ export default class TabbedHeaderUsage extends Component {
           @onInput={{fn (mut this.headerColor)}}
           @defaultValue='#ffffff'
         />
-        <Args.Object
-          @name='tabs'
-          @description='Tabs for navigation'
-          @value={{this.tabs}}
-          @onInput={{fn (mut this.tabs)}}
+        <Args.String
+          @name='iconURL'
+          @description='Instead of an icon component, use an image URL for the icon'
+          @value={{this.iconURL}}
+          @onInput={{fn (mut this.iconURL)}}
         />
-        <Args.Action
-          @name='onSetActiveTab'
-          @description='Optional action to be called when a tab is clicked'
+        <Args.Component
+          @name='iconComponent'
+          @description='Icon component to be displayed with the title'
+          @value={{this.iconComponent}}
+          @options={{ALL_ICON_COMPONENTS}}
+          @onChange={{fn (mut this.iconComponent)}}
+        />
+        <Args.String
+          @name='iconBackgroundColor'
+          @description='Set a background color for the icon'
+          @value={{this.iconBackgroundColor}}
+          @onInput={{fn (mut this.iconBackgroundColor)}}
+          @defaultValue='undefined'
+        />
+        <Args.String
+          @name='iconBorderColor'
+          @description='Set a border color for the icon'
+          @value={{this.iconBorderColor}}
+          @onInput={{fn (mut this.iconBorderColor)}}
+          @defaultValue='undefined'
+        />
+        <Args.Bool
+          @name='iconCoversAllAvailableSpace'
+          @description='Icon image will cover all available space'
+          @defaultValue={{false}}
+          @value={{this.iconCoversAllAvailableSpace}}
+          @onInput={{fn (mut this.iconCoversAllAvailableSpace)}}
         />
       </:api>
     </FreestyleUsage>

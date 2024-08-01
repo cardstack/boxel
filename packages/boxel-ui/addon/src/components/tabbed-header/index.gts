@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import cn from '../../helpers/cn.ts';
 import { getContrastColor } from '../../helpers/contrast-color.ts';
 import cssVar from '../../helpers/css-var.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
@@ -12,13 +13,17 @@ interface Signature {
   Args: {
     title: string;
     activeTabIndex?: number;
-    icon?: Icon;
+    iconComponent?: Icon;
+    iconURL?: string;
     headerBackgroundColor?: string;
+    iconBackgroundColor?: string;
+    iconBorderColor?: string;
+    iconCoversAllAvailableSpace?: boolean;
     tabs?: Array<{
-      label: string;
-      value: string;
+      displayName: string;
+      tabId: string;
     }>;
-    onSetActiveTab?: () => void;
+    onSetActiveTab?: (index: number) => void;
   };
   Element: HTMLDivElement;
 }
@@ -33,8 +38,30 @@ export default class TabbedHeader extends Component<Signature> {
       }}
     >
       <div class='app-title-group'>
-        {{#if @icon}}
-          <@icon class='app-icon' width='25' height='25' role='presentation' />
+        {{#if @iconURL}}
+          <img
+            src={{@iconURL}}
+            alt='logo'
+            width='25'
+            height='25'
+            class={{cn 'app-icon' cover=@iconCoversAllAvailableSpace}}
+            style={{cssVar
+              icon-background-color=@iconBackgroundColor
+              icon-border-color=@iconBorderColor
+            }}
+          />
+        {{else if @iconComponent}}
+          <@iconComponent
+            width='25'
+            height='25'
+            class={{cn 'app-icon' cover=@iconCoversAllAvailableSpace}}
+            style={{cssVar
+              icon-color=(getContrastColor @headerBackgroundColor)
+              icon-background-color=@iconBackgroundColor
+              icon-border-color=@iconBorderColor
+            }}
+            role='presentation'
+          />
         {{/if}}
         <h1 class='app-title'>{{@title}}</h1>
       </div>
@@ -42,14 +69,14 @@ export default class TabbedHeader extends Component<Signature> {
         <ul class='app-tab-list'>
           {{#each @tabs as |tab index|}}
             <li>
-              {{! do not remove data-tab-label attribute }}
               <a
-                href='#{{tab.value}}'
+                href='#{{tab.tabId}}'
                 {{on 'click' (fn this.setActiveTab index)}}
                 class={{if (eq this.activeTabIndex index) 'active'}}
-                data-tab-label={{tab.label}}
+                data-tab-label={{tab.displayName}}
+                {{! do not remove data-tab-label attribute }}
               >
-                {{tab.label}}
+                {{tab.displayName}}
               </a>
             </li>
           {{/each}}
@@ -70,6 +97,16 @@ export default class TabbedHeader extends Component<Signature> {
       }
       .app-icon {
         flex-shrink: 0;
+        object-fit: contain;
+        object-position: center;
+        background-color: var(--icon-background-color);
+        padding: 1px; /* to prevent potential border from clipping the icon */
+        border: 1px solid var(--icon-border-color);
+        border-radius: 4px;
+      }
+      .app-icon.cover {
+        object-fit: cover;
+        padding: 0;
       }
       .app-title {
         margin: 0;
@@ -115,10 +152,13 @@ export default class TabbedHeader extends Component<Signature> {
     </style>
   </template>
 
-  @tracked activeTabIndex = this.args.activeTabIndex ?? 0;
+  @tracked activeTabIndex =
+    this.args.activeTabIndex && this.args.activeTabIndex !== -1
+      ? this.args.activeTabIndex
+      : 0;
 
   @action setActiveTab(index: number) {
     this.activeTabIndex = index;
-    this.args.onSetActiveTab?.();
+    this.args.onSetActiveTab?.(index);
   }
 }
