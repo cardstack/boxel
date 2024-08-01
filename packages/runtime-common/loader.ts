@@ -146,15 +146,15 @@ export class Loader {
 
   async getConsumedModules(
     moduleIdentifier: string,
-    consumed = new Set<string>(),
+    consumed: string[] = [],
     initialIdentifier = moduleIdentifier,
   ): Promise<string[]> {
-    if (consumed.has(moduleIdentifier)) {
+    if (consumed.includes(moduleIdentifier)) {
       return [];
     }
     // you can't consume yourself
     if (moduleIdentifier !== initialIdentifier) {
-      consumed.add(moduleIdentifier);
+      consumed.push(moduleIdentifier);
     }
 
     let resolvedModuleIdentifier = new URL(moduleIdentifier);
@@ -178,7 +178,8 @@ export class Loader {
     if (module?.state === 'evaluated' || module?.state === 'broken') {
       let cached = this.consumptionCache.get(module);
       if (cached) {
-        return cached;
+        consumed.push(...cached);
+        return [...new Set(consumed)];
       }
       for (let consumedModule of module?.consumedModules ?? []) {
         await this.getConsumedModules(
@@ -187,9 +188,10 @@ export class Loader {
           initialIdentifier,
         );
       }
-      cached = [...consumed];
+      cached = consumed;
       this.consumptionCache.set(module, cached);
-      return cached;
+
+      return [...new Set(cached)]; // Get rid of duplicates
     }
     return [];
   }
