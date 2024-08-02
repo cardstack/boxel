@@ -127,7 +127,7 @@ class _FileResource extends Resource<Args> {
       if (this.onRedirect && this._url != this.innerState.url) {
         // code below handles redirect returned by the realm server
         // this updates code path to be in-sync with the file.url
-        // For example, when inputting `drafts/author` will redirect to `drafts/author.gts`
+        // For example, when inputting `experiments/author` will redirect to `experiments/author.gts`
         this.onRedirect(this.innerState.url);
       }
     }
@@ -205,8 +205,8 @@ class _FileResource extends Resource<Args> {
             .pop()!
             .includes('.');
 
-          // This conditional is here because changes to card instance json files, for example `drafts/Authors/1.json`,
-          // will be in invalidations in the following form: `drafts/Authors/1` (without the .json extension)
+          // This conditional is here because changes to card instance json files, for example `experiments/Authors/1.json`,
+          // will be in invalidations in the following form: `experiments/Authors/1` (without the .json extension)
           if (invalidationUrlHasExtension) {
             return this.url === invalidationUrl;
           } else {
