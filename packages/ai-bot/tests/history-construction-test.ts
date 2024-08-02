@@ -1,5 +1,5 @@
 import { module, test, assert } from 'qunit';
-import { constructHistory } from '../helpers';
+import { constructHistory, HistoryConstructionError } from '../helpers';
 import { type IRoomEvent } from 'matrix-js-sdk';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
@@ -528,5 +528,41 @@ module('constructHistory', () => {
         },
       },
     ]);
+  });
+
+  test('handles invalid fragments', () => {
+    const history: IRoomEvent[] = [
+      {
+        type: 'm.room.message',
+        room_id: 'room1',
+        sender: '@user:localhost',
+        content: {
+          msgtype: 'org.boxel.cardFragment',
+          format: 'org.boxel.card',
+          body: 'card fragment 1 of 1',
+          formatted_body: 'card fragment 1 of 1',
+          // data should be a JSON string
+          data: {
+            cardFragment:
+              '{"data":{"type":"card","id":"https://cardstack.com/base/SkillCard/card-editing","attributes":{"instructions":"- If the user wants the data they see edited, AND the patchCard function is available, you MUST use the \\"patchCard\\" function to make the change.\\n- If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you.\\n- If you do not call patchCard, the user will not see the change.\\n- You can ONLY modify cards shared with you. If there is no patchCard function or tool, then the user hasn\'t given you access.\\n- NEVER tell the user to use patchCard; you should always do it for them.","title":"Card Editing","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../skill-card","name":"SkillCard"}}}}',
+            index: 0,
+            totalParts: 1,
+          },
+        },
+        origin_server_ts: 1722374047192,
+        unsigned: {
+          age: 81929388,
+        },
+        event_id: '$Kho0bl1orsUHUMo8XGcu8KzEH5mrtDmFOVO68ofsswc',
+        age: 81929388,
+      },
+    ];
+
+    try {
+      constructHistory(history);
+      assert.ok(false, 'Expected an error');
+    } catch (e) {
+      assert.ok(e instanceof HistoryConstructionError);
+    }
   });
 });
