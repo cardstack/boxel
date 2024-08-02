@@ -318,9 +318,10 @@ function isIncluded(included: any): included is CardResource<Saved>[] {
 
 export function transformResultsToPrerenderedCardsDoc(results: {
   prerenderedCards: PrerenderedCard[];
-  meta: QueryResultsMeta;
+  scopedCssUrls: string[];
+  meta: QueryResultsMeta & { scopedCssUrls?: string[] };
 }) {
-  let { prerenderedCards, meta } = results;
+  let { prerenderedCards, scopedCssUrls, meta } = results;
 
   let data = prerenderedCards.map((card) => ({
     type: 'prerendered-card',
@@ -328,17 +329,9 @@ export function transformResultsToPrerenderedCardsDoc(results: {
     attributes: {
       html: card.html,
     },
-    relationships: {
-      'prerendered-card-css': {
-        data: card.cssModuleIds.map((cssModuleId) => {
-          return {
-            type: 'prerendered-card-css',
-            id: cssModuleId,
-          };
-        }),
-      },
-    },
   }));
+
+  meta.scopedCssUrls = scopedCssUrls;
 
   return {
     data,
