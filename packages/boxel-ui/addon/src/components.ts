@@ -29,6 +29,7 @@ import ResizablePanelGroup, {
   ResizeHandle,
 } from './components/resizable-panel-group/index.gts';
 import BoxelSelect from './components/select/index.gts';
+import TabbedHeader from './components/tabbed-header/index.gts';
 import Tooltip from './components/tooltip/index.gts';
 
 export {
@@ -61,5 +62,6 @@ export {
   ResizablePanel,
   ResizablePanelGroup,
   ResizeHandle,
+  TabbedHeader,
   Tooltip,
 };

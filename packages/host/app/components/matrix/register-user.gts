@@ -71,7 +71,7 @@ export default class RegisterUser extends Component<Signature> {
       >Resend Email</Button>
     {{else if (eq this.currentPage 'token-form')}}
       <FieldContainer
-        @label='Registration Token'
+        @label='This site is currently invite-only. Enter your invite code here.'
         @tag='label'
         class='registration-field'
         @vertical={{true}}

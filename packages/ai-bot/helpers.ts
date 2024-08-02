@@ -8,6 +8,10 @@ import type {
   CommandEvent,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
+import * as Sentry from '@sentry/node';
+import { logger } from '@cardstack/runtime-common';
+
+let log = logger('ai-bot');
 
 const MODIFY_SYSTEM_MESSAGE =
   '\
@@ -37,6 +41,13 @@ type TextMessage = {
 
 export type Message = CommandMessage | TextMessage;
 
+export class HistoryConstructionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'HistoryConstructionError';
+  }
+}
+
 export function constructHistory(history: IRoomEvent[]) {
   /**
    * We send a lot of events to create messages,
@@ -52,7 +63,13 @@ export function constructHistory(history: IRoomEvent[]) {
   const latestEventsMap = new Map<string, DiscreteMatrixEvent>();
   for (let rawEvent of history) {
     if (rawEvent.content.data) {
-      rawEvent.content.data = JSON.parse(rawEvent.content.data);
+      try {
+        rawEvent.content.data = JSON.parse(rawEvent.content.data);
+      } catch (e) {
+        Sentry.captureException(e);
+        log.error('Error parsing JSON', e);
+        throw new HistoryConstructionError((e as Error).message);
+      }
     }
     let event = { ...rawEvent } as DiscreteMatrixEvent;
     if (event.type !== 'm.room.message') {

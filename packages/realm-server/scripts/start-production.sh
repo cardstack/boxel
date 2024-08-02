@@ -1,6 +1,6 @@
 #! /bin/sh
 pnpm setup:base-in-deployment
-pnpm setup:drafts-in-deployment
+pnpm setup:experiments-in-deployment
 pnpm setup:published-in-deployment
 NODE_NO_WARNINGS=1 \
   LOG_LEVELS='*=info' \
@@ -16,12 +16,12 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl='https://app.boxel.ai/base/' \
   \
-  --path='/persistent/drafts' \
+  --path='/persistent/experiments' \
   --matrixURL='https://matrix.boxel.ai' \
-  --username='drafts_realm' \
-  --password=${DRAFTS_REALM_PASSWORD} \
-  --fromUrl='https://app.boxel.ai/drafts/' \
-  --toUrl='https://app.boxel.ai/drafts/' \
+  --username='experiments_realm' \
+  --password=${EXPERIMENTS_REALM_PASSWORD} \
+  --fromUrl='https://app.boxel.ai/experiments/' \
+  --toUrl='https://app.boxel.ai/experiments/' \
   \
   --path='/persistent/published' \
   --matrixURL='https://matrix.boxel.ai' \
