@@ -7,11 +7,11 @@ import {
   linksTo,
 } from 'https://cardstack.com/base/card-api';
 import NumberField from 'https://cardstack.com/base/number';
-import { MonetaryAmount } from '../monetary-amount';
 
 class CountryCode extends CardDef {}
 class Country extends CardDef {}
 class Company extends CardDef {}
+class MonetaryAmount extends FieldDef {}
 class RangeCurrencyAmount extends FieldDef {}
 
 export class AddressInfo extends FieldDef {

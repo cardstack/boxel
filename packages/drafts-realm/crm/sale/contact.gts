@@ -15,6 +15,15 @@ class EmailAddress extends FieldDef {
   // put some validation logic here
 }
 
+export class LabelledPhoneNumeber extends FieldDef {
+  labels = [
+    { code: 1, displayName: 'home' },
+    { code: 2, displayName: 'office' },
+  ];
+  @field phoneNumber = contains(PhoneField);
+  @field label = contains(StringField);
+}
+
 class PhoneField extends FieldDef {
   static displayName = 'Phone';
   @field country = contains(NumberField);
@@ -28,7 +37,7 @@ export class Contact extends CardDef {
   @field firstName = contains(StringField);
   @field lastName = contains(StringField);
   @field address = contains(Address);
-  @field phoneNumber = contains(PhoneField);
+  @field phoneNumber = contains(LabelledPhoneNumeber);
   @field email = contains(EmailAddress);
   @field website = contains(WebUrl);
 
