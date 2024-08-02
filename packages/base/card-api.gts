@@ -3,13 +3,12 @@ import { action } from '@ember/object';
 import GlimmerComponent from '@glimmer/component';
 // @ts-ignore no types
 import cssUrl from 'ember-css-url';
-import { flatMap, merge, isEqual } from 'lodash';
+import { flatMap, merge, isEqual, startCase } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
 import { BoxelInput, FieldContainer } from '@cardstack/boxel-ui/components';
 import { cn, eq, not, pick } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
-import { startCase } from 'lodash';
 import {
   getBoxComponent,
   type BoxComponent,
@@ -51,6 +50,7 @@ import {
   type CardResource,
   type Actions,
   type RealmInfo,
+  CodeRef,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
@@ -1702,8 +1702,12 @@ export class BaseDef {
     return _createFromSerialized(this, data, doc, relativeTo, identityContext);
   }
 
-  static getComponent(card: BaseDef, field?: Field) {
-    return getComponent(card, field);
+  static getComponent(
+    card: BaseDef,
+    field?: Field,
+    opts?: { componentCodeRef?: CodeRef },
+  ) {
+    return getComponent(card, field, opts);
   }
 
   static assignInitialFieldValue(
@@ -1821,9 +1825,7 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
         <div class='info-section'>
           <h3 class='card-title' data-test-card-title>{{@model.title}}</h3>
           <h4 class='card-display-name' data-test-card-display-name>
-            <!-- __org.boxel.cardType START -->
             {{cardTypeDisplayName @model}}
-            <!-- __org.boxel.cardType END -->
           </h4>
         </div>
         <div
@@ -3232,12 +3234,17 @@ export type SignatureFor<CardT extends BaseDefConstructor> = {
   };
 };
 
-export function getComponent(model: BaseDef, field?: Field): BoxComponent {
+export function getComponent(
+  model: BaseDef,
+  field?: Field,
+  opts?: { componentCodeRef?: CodeRef },
+): BoxComponent {
   let box = Box.create(model);
   let boxComponent = getBoxComponent(
     model.constructor as BaseDefConstructor,
     box,
     field,
+    opts,
   );
   return boxComponent;
 }

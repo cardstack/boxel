@@ -15,13 +15,16 @@ import {
 import {
   CardContextName,
   DefaultFormatContextName,
-  type Permissions,
   PermissionsContextName,
   getField,
+  Loader,
+  type CodeRef,
+  type Permissions,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import Modifier from 'ember-modifier';
+import { isEqual } from 'lodash';
 import { initSharedState } from './shared-state';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { consume, provide } from 'ember-provide-consume-context';
@@ -110,7 +113,10 @@ export function getBoxComponent(
   cardOrField: typeof BaseDef,
   model: Box<BaseDef>,
   field: Field | undefined,
+  opts?: { componentCodeRef?: CodeRef },
 ): BoxComponent {
+  // the componentCodeRef is only set on the server during card prerendering,
+  // it should have no effect on component stability
   let stable = componentCache.get(model);
   if (stable) {
     return stable;
@@ -145,6 +151,26 @@ export function getBoxComponent(
     CardOrFieldFormatComponent: BaseDefComponent;
     fields: FieldsTypeFor<BaseDef>;
   } {
+    let currentCardOrFieldClass: typeof BaseDef | null = cardOrField;
+    let effectiveCardOrFieldComponent: typeof BaseDef | undefined;
+    while (
+      opts?.componentCodeRef &&
+      !effectiveCardOrFieldComponent &&
+      currentCardOrFieldClass
+    ) {
+      let ref = Loader.identify(currentCardOrFieldClass);
+      if (isEqual(ref, opts.componentCodeRef)) {
+        effectiveCardOrFieldComponent = currentCardOrFieldClass;
+        break;
+      }
+      currentCardOrFieldClass = Reflect.getPrototypeOf(
+        currentCardOrFieldClass,
+      ) as typeof BaseDef | null;
+    }
+    if (!effectiveCardOrFieldComponent) {
+      effectiveCardOrFieldComponent = cardOrField;
+    }
+
     let fields: FieldsTypeFor<BaseDef>;
     if (internalFieldsCache?.format === effectiveFormat) {
       fields = internalFieldsCache.fields;
@@ -153,7 +179,11 @@ export function getBoxComponent(
       internalFieldsCache = { fields, format: effectiveFormat };
     }
     return {
-      CardOrFieldFormatComponent: (cardOrField as any)[effectiveFormat],
+      // note that Fields do not have an "isolated" format--only Cards do,
+      // the "any" cast is hiding that type warning
+      CardOrFieldFormatComponent: (effectiveCardOrFieldComponent as any)[
+        effectiveFormat
+      ],
       fields,
     };
   }
