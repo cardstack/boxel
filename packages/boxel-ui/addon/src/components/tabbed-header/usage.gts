@@ -1,9 +1,10 @@
 import { fn } from '@ember/helper';
-import { tracked } from '@glimmer/tracking';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-import Icon from '../../icons/sparkle.gts';
+
 import { ALL_ICON_COMPONENTS } from '../../icons.gts';
+import Icon from '../../icons/sparkle.gts';
 import TabbedHeader from './index.gts';
 
 export default class TabbedHeaderUsage extends Component {

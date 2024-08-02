@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+
 import cn from '../../helpers/cn.ts';
 import { getContrastColor } from '../../helpers/contrast-color.ts';
 import cssVar from '../../helpers/css-var.ts';
@@ -11,19 +12,19 @@ import type { Icon } from '../../icons/types.ts';
 
 interface Signature {
   Args: {
-    title: string;
     activeTabIndex?: number;
-    iconComponent?: Icon;
-    iconURL?: string;
     headerBackgroundColor?: string;
     iconBackgroundColor?: string;
     iconBorderColor?: string;
+    iconComponent?: Icon;
     iconCoversAllAvailableSpace?: boolean;
+    iconURL?: string;
+    onSetActiveTab?: (index: number) => void;
     tabs?: Array<{
       displayName: string;
       tabId: string;
     }>;
-    onSetActiveTab?: (index: number) => void;
+    title: string;
   };
   Element: HTMLDivElement;
 }
