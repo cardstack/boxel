@@ -34,7 +34,6 @@
     "transform": {
       "include": [
         "../experiments-realm/**",
-        "../published-realm/**",
         "../base/**",
         "../boxel-ui/addon/**"
       ]
