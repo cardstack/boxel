@@ -108,6 +108,7 @@ interface WIPOptions {
 export interface PrerenderedCard {
   url: string;
   html: string;
+  cssModuleIds: string[];
 }
 
 export interface QueryResultsMeta {
