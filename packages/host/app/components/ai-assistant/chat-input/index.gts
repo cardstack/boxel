@@ -1,5 +1,6 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { next } from '@ember/runloop';
 import Component from '@glimmer/component';
 
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
@@ -107,8 +108,27 @@ export default class AiAssistantChatInput extends Component<Signature> {
     this.args.onSend(this.args.value);
   }
 
-  @action insertNewLine() {
-    this.args.onInput(`${this.args.value}\n\n`);
+  @action
+  insertNewLine(event: KeyboardEvent) {
+    const textarea = event.target as HTMLTextAreaElement;
+    if (!textarea) {
+      return;
+    }
+
+    const value = this.args.value;
+    const startPos = textarea.selectionStart;
+    const endPos = textarea.selectionEnd;
+
+    const newValue = `${value.substring(0, startPos)}\n\n${value.substring(
+      endPos,
+    )}`;
+
+    this.args.onInput(newValue);
+
+    // Set the cursor position to be right after the inserted new line
+    next(() => {
+      textarea.selectionStart = textarea.selectionEnd = startPos + 2;
+    });
   }
 
   get height() {
