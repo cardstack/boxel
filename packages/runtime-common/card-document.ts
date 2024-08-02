@@ -55,6 +55,7 @@ export interface CardCollectionDocument<Identity extends Unsaved = Saved> {
 
 export interface PrerenderedCardCollectionDocument {
   data: PrerenderedCardResource[];
+  meta: QueryResultsMeta & { scopedCssUrls?: string[] };
 }
 
 export type CardDocument = SingleCardDocument | CardCollectionDocument;
@@ -253,7 +254,7 @@ export function isPrerenderedCardCollectionDocument(
   if (typeof doc !== 'object' || doc == null) {
     return false;
   }
-  if (!('data' in doc)) {
+  if (!('data' in doc) || !('meta' in doc)) {
     return false;
   }
   let { data } = doc;
