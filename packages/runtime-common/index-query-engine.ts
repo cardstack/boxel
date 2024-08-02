@@ -108,7 +108,6 @@ interface WIPOptions {
 export interface PrerenderedCard {
   url: string;
   html: string;
-  cssModuleIds: string[];
 }
 
 export interface QueryResultsMeta {
@@ -420,6 +419,7 @@ export class IndexQueryEngine {
     opts: QueryOptions = {},
   ): Promise<{
     prerenderedCards: PrerenderedCard[];
+    scopedCssUrls: string[];
     meta: QueryResultsMeta;
   }> {
     if (
@@ -457,18 +457,27 @@ export class IndexQueryEngine {
       results: (Partial<BoxelIndexTable> & { html: string })[];
     };
 
+    // We need a way to get scoped css urls even from cards linked from foreign realms.These are saved in the deps column of instances and modules.
+    // It would be more efficient to return scoped css urls found only in deps of the module we are filtering on (i.e. `ref`),
+    // but in case the module is from a foreign realm, this module will not be indexed in this realm's index.
+    // That's why we gather all scoped css urls from all instances in the search results and include them in the result.
+
+    let scopedCssUrls = new Set<string>(); // Use a set for deduplication
+
     let prerenderedCards = results.map((card) => {
-      let scopedCssUrls = card.deps!.filter((dep: string) =>
-        dep.endsWith('glimmer-scoped.css'),
-      );
+      card.deps!.forEach((dep: string) => {
+        if (dep.endsWith('glimmer-scoped.css')) {
+          scopedCssUrls.add(dep);
+        }
+      });
+
       return {
         url: card.url!,
         html: card.html,
-        cssModuleIds: scopedCssUrls,
       };
     });
 
-    return { prerenderedCards, meta };
+    return { prerenderedCards, scopedCssUrls: [...scopedCssUrls], meta };
   }
 
   private async fetchCurrentRealmVersion(realmURL: URL) {

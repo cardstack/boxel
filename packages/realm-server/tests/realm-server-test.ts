@@ -1700,7 +1700,7 @@ module('Realm Server', function (hooks) {
 
           assertScopedCssUrlsContain(
             assert,
-            json.data[0].relationships['prerendered-card-css'].data,
+            json.meta.scopedCssUrls,
             cardDefModuleDependencies,
           );
 
@@ -1854,11 +1854,6 @@ module('Realm Server', function (hooks) {
             .includes('Person Aaron'),
           'embedded html looks correct (CardDef template)',
         );
-        assertScopedCssUrlsContain(
-          assert,
-          json.data[0].relationships['prerendered-card-css'].data,
-          cardDefModuleDependencies,
-        );
 
         // 2nd card: Person Craig
         assert.strictEqual(json.data[1].type, 'prerendered-card');
@@ -1867,11 +1862,6 @@ module('Realm Server', function (hooks) {
             .replace(/\s+/g, ' ')
             .includes('Person Craig'),
           'embedded html for Craig looks correct (CardDef template)',
-        );
-        assertScopedCssUrlsContain(
-          assert,
-          json.data[1].relationships['prerendered-card-css'].data,
-          cardDefModuleDependencies,
         );
 
         // 3rd card: FancyPerson Jane
@@ -1882,11 +1872,6 @@ module('Realm Server', function (hooks) {
             .includes('FancyPerson Jane'),
           'embedded html for Jane looks correct (CardDef template)',
         );
-        assertScopedCssUrlsContain(
-          assert,
-          json.data[2].relationships['prerendered-card-css'].data,
-          cardDefModuleDependencies,
-        );
 
         // 4th card: FancyPerson Jimmy
         assert.strictEqual(json.data[3].type, 'prerendered-card');
@@ -1896,9 +1881,10 @@ module('Realm Server', function (hooks) {
             .includes('FancyPerson Jimmy'),
           'embedded html for Jimmy looks correct (CardDef template)',
         );
+
         assertScopedCssUrlsContain(
           assert,
-          json.data[3].relationships['prerendered-card-css'].data,
+          json.meta.scopedCssUrls,
           cardDefModuleDependencies,
         );
 
@@ -1941,18 +1927,6 @@ module('Realm Server', function (hooks) {
           'embedded html for Jane looks correct (FancyPerson template)',
         );
 
-        assertScopedCssUrlsContain(
-          assert,
-          json.data[0].relationships['prerendered-card-css'].data,
-          [
-            ...cardDefModuleDependencies,
-            ...[
-              `${testRealmHref}fancy-person.gts`,
-              `${testRealmHref}person.gts`,
-            ],
-          ],
-        );
-
         //  2nd card: FancyPerson Jimmy
         assert.true(
           json.data[1].attributes.html
@@ -1961,17 +1935,10 @@ module('Realm Server', function (hooks) {
           'embedded html for Jimmy looks correct (FancyPerson template)',
         );
 
-        assertScopedCssUrlsContain(
-          assert,
-          json.data[1].relationships['prerendered-card-css'].data,
-          [
-            ...cardDefModuleDependencies,
-            ...[
-              `${testRealmHref}fancy-person.gts`,
-              `${testRealmHref}person.gts`,
-            ],
-          ],
-        );
+        assertScopedCssUrlsContain(assert, json.meta.scopedCssUrls, [
+          ...cardDefModuleDependencies,
+          ...[`${testRealmHref}fancy-person.gts`, `${testRealmHref}person.gts`],
+        ]);
       });
 
       test('can filter prerendered instances', async function (assert) {
@@ -2816,14 +2783,14 @@ module('Realm Server serving from a subdirectory', function (hooks) {
 
 function assertScopedCssUrlsContain(
   assert: Assert,
-  relationships: { id: string }[],
+  scopedCssUrls: string[],
   moduleUrls: string[],
 ) {
   moduleUrls.forEach((url) => {
     let pattern = new RegExp(`^${url}\\.[^.]+\\.glimmer-scoped\\.css$`);
 
     assert.true(
-      relationships.some((relationship) => pattern.test(relationship.id)),
+      scopedCssUrls.some((scopedCssUrl) => pattern.test(scopedCssUrl)),
       `css url for ${url} is in the deps`,
     );
   });
