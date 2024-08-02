@@ -28,7 +28,7 @@ import {
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import { CardDef } from '../../../../drafts-realm/re-export';
+import { CardDef } from '../../../../experiments-realm/re-export';
 import {
   percySnapshot,
   testRealmURL,

@@ -25,7 +25,7 @@ interface LoginOptions {
 
 export async function registerRealmUsers(synapse: SynapseInstance) {
   await registerUser(synapse, 'base_realm', 'password');
-  await registerUser(synapse, 'drafts_realm', 'password');
+  await registerUser(synapse, 'experiments_realm', 'password');
   await registerUser(synapse, 'published_realm', 'password');
   await registerUser(synapse, 'test_realm', 'password');
   await registerUser(synapse, 'node-test_realm', 'password');

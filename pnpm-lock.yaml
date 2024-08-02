@@ -999,7 +999,7 @@ importers:
         specifier: ^5.89.0
         version: 5.89.0
 
-  packages/drafts-realm:
+  packages/experiments-realm:
     devDependencies:
       '@cardstack/boxel-ui':
         specifier: workspace:*
@@ -2166,15 +2166,15 @@ packages:
     engines: {node: '>=6.9.0'}
     dependencies:
       '@ampproject/remapping': 2.2.1
-      '@babel/code-frame': 7.24.2
-      '@babel/generator': 7.24.1
+      '@babel/code-frame': 7.24.7
+      '@babel/generator': 7.24.10
       '@babel/helper-compilation-targets': 7.23.6
       '@babel/helper-module-transforms': 7.23.3(@babel/core@7.24.3)
       '@babel/helpers': 7.24.1(supports-color@8.1.1)
-      '@babel/parser': 7.24.1
-      '@babel/template': 7.24.0
-      '@babel/traverse': 7.24.1(supports-color@8.1.1)
-      '@babel/types': 7.24.0
+      '@babel/parser': 7.24.8
+      '@babel/template': 7.24.7
+      '@babel/traverse': 7.24.8(supports-color@8.1.1)
+      '@babel/types': 7.24.9
       convert-source-map: 2.0.0
       debug: 4.3.4(supports-color@8.1.1)
       gensync: 1.0.0-beta.2
@@ -2705,10 +2705,12 @@ packages:
       '@babel/core': ^7.0.0-0
     dependencies:
       '@babel/core': 7.24.3(supports-color@8.1.1)
-      '@babel/helper-annotate-as-pure': 7.22.5
-      '@babel/helper-create-class-features-plugin': 7.24.1(@babel/core@7.24.3)
-      '@babel/helper-plugin-utils': 7.24.0
+      '@babel/helper-annotate-as-pure': 7.24.7
+      '@babel/helper-create-class-features-plugin': 7.24.8(@babel/core@7.24.3)(supports-color@8.1.1)
+      '@babel/helper-plugin-utils': 7.24.8
       '@babel/plugin-syntax-private-property-in-object': 7.14.5(@babel/core@7.24.3)
+    transitivePeerDependencies:
+      - supports-color
 
   /@babel/plugin-syntax-async-generators@7.8.4(@babel/core@7.24.3):
     resolution: {integrity: sha512-tycmZxkGfZaxhMRbXlPXuVFpdWlXpir2W4AMhSJgRKzk/eDlIXOhb2LHWoLpDF7TEHylV5zNhykX6KAgHJmTNw==}
