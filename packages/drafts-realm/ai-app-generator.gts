@@ -84,15 +84,13 @@ class Isolated extends AppCard.isolated {
         @onSetActiveTab={{this.setActiveTab}}
         @activeTabIndex={{this.activeTabIndex}}
         @headerBackgroundColor={{this.headerColor}}
-        @iconURL={{if
-          @model.headerIcon.iconURL
-          @model.headerIcon.iconURL
-          @model.thumbnailURL
-        }}
-        @iconBackgroundColor={{@model.headerIcon.backgroundColor}}
-        @iconBorderColor={{@model.headerIcon.borderColor}}
-        @iconCoversAllAvailableSpace={{@model.headerIcon.coversAllAvailableSpace}}
-      />
+      >
+        <:headerIcon>
+          {{#if @model.headerIcon.base64}}
+            <@fields.headerIcon />
+          {{/if}}
+        </:headerIcon>
+      </TabbedHeader>
       <div class='app-content'>
         {{#if (eq this.activeTabIndex 1)}}
           <Requirements @instances={{this.instances}} />

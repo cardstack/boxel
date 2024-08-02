@@ -1,5 +1,6 @@
 import BooleanField from 'https://cardstack.com/base/boolean';
 import CodeRefField from 'https://cardstack.com/base/code-ref';
+import { Base64ImageField } from 'https://cardstack.com/base/base64-image';
 import {
   CardDef,
   field,
@@ -105,15 +106,13 @@ class AppCardIsolated extends Component<typeof AppCard> {
         @onSetActiveTab={{this.setActiveTab}}
         @activeTabIndex={{this.activeTabIndex}}
         @headerBackgroundColor={{this.headerColor}}
-        @iconURL={{if
-          @model.headerIcon.iconURL
-          @model.headerIcon.iconURL
-          @model.thumbnailURL
-        }}
-        @iconBackgroundColor={{@model.headerIcon.backgroundColor}}
-        @iconBorderColor={{@model.headerIcon.borderColor}}
-        @iconCoversAllAvailableSpace={{@model.headerIcon.coversAllAvailableSpace}}
-      />
+      >
+        <:headerIcon>
+          {{#if @model.headerIcon.base64}}
+            <@fields.headerIcon />
+          {{/if}}
+        </:headerIcon>
+      </TabbedHeader>
       <div class='app-card-content'>
         {{#if this.activeTab}}
           {{#if this.activeTab.isTable}}
@@ -559,18 +558,11 @@ class AppCardIsolated extends Component<typeof AppCard> {
   );
 }
 
-class HeaderIcon extends FieldDef {
-  @field iconURL = contains(StringField);
-  @field backgroundColor = contains(StringField);
-  @field borderColor = contains(StringField);
-  @field coversAllAvailableSpace = contains(BooleanField);
-}
-
 export class AppCard extends CardDef {
   static displayName = 'App Card';
   static prefersWideFormat = true;
   static headerColor = '#ffffff';
   @field tabs = containsMany(Tab);
-  @field headerIcon = contains(HeaderIcon);
+  @field headerIcon = contains(Base64ImageField);
   static isolated = AppCardIsolated;
 }

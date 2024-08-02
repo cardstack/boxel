@@ -4,27 +4,24 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import cn from '../../helpers/cn.ts';
 import { getContrastColor } from '../../helpers/contrast-color.ts';
 import cssVar from '../../helpers/css-var.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
-import type { Icon } from '../../icons/types.ts';
 
 interface Signature {
   Args: {
     activeTabIndex?: number;
     headerBackgroundColor?: string;
-    iconBackgroundColor?: string;
-    iconBorderColor?: string;
-    iconComponent?: Icon;
-    iconCoversAllAvailableSpace?: boolean;
-    iconURL?: string;
     onSetActiveTab?: (index: number) => void;
     tabs?: Array<{
       displayName: string;
       tabId: string;
     }>;
     title: string;
+  };
+  Blocks: {
+    default: [];
+    headerIcon: [];
   };
   Element: HTMLDivElement;
 }
@@ -39,30 +36,8 @@ export default class TabbedHeader extends Component<Signature> {
       }}
     >
       <div class='app-title-group'>
-        {{#if @iconURL}}
-          <img
-            src={{@iconURL}}
-            alt='logo'
-            width='25'
-            height='25'
-            class={{cn 'app-icon' cover=@iconCoversAllAvailableSpace}}
-            style={{cssVar
-              icon-background-color=@iconBackgroundColor
-              icon-border-color=@iconBorderColor
-            }}
-          />
-        {{else if @iconComponent}}
-          <@iconComponent
-            width='25'
-            height='25'
-            class={{cn 'app-icon' cover=@iconCoversAllAvailableSpace}}
-            style={{cssVar
-              icon-color=(getContrastColor @headerBackgroundColor)
-              icon-background-color=@iconBackgroundColor
-              icon-border-color=@iconBorderColor
-            }}
-            role='presentation'
-          />
+        {{#if (has-block 'headerIcon')}}
+          {{yield to='headerIcon'}}
         {{/if}}
         <h1 class='app-title'>{{@title}}</h1>
       </div>
@@ -95,19 +70,6 @@ export default class TabbedHeader extends Component<Signature> {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xs);
-      }
-      .app-icon {
-        flex-shrink: 0;
-        object-fit: contain;
-        object-position: center;
-        background-color: var(--icon-background-color);
-        padding: 1px; /* to prevent potential border from clipping the icon */
-        border: 1px solid var(--icon-border-color);
-        border-radius: 4px;
-      }
-      .app-icon.cover {
-        object-fit: cover;
-        padding: 0;
       }
       .app-title {
         margin: 0;

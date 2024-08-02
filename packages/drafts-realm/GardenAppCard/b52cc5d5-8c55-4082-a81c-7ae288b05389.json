@@ -23,13 +23,14 @@
         }
       ],
       "headerIcon": {
-        "iconURL": null,
-        "backgroundColor": "",
-        "borderColor": "",
-        "coversAllAvailableSpace": false
+        "altText": null,
+        "size": "actual",
+        "height": null,
+        "width": null,
+        "base64": null
       },
       "title": "Garden App",
-      "description": "Garden design app",
+      "description": "A mini-app for garden design.",
       "thumbnailURL": ""
     },
     "meta": {

@@ -3,7 +3,6 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import { ALL_ICON_COMPONENTS } from '../../icons.gts';
 import Icon from '../../icons/sparkle.gts';
 import TabbedHeader from './index.gts';
 
@@ -31,13 +30,8 @@ export default class TabbedHeaderUsage extends Component {
     },
   ];
   @tracked title = 'AI App Generator';
-  @tracked iconComponent = Icon;
-  @tracked iconURL = '';
   @tracked activeTabIndex = 0;
   @tracked headerColor = '#ffd800';
-  @tracked iconBackgroundColor?: string;
-  @tracked iconBorderColor?: string;
-  @tracked iconCoversAllAvailableSpace = false;
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -61,13 +55,12 @@ export default class TabbedHeaderUsage extends Component {
           @tabs={{this.tabs}}
           @onSetActiveTab={{fn this.onSetActiveTab}}
           @activeTabIndex={{this.activeTabIndex}}
-          @iconComponent={{this.iconComponent}}
-          @iconURL={{this.iconURL}}
           @headerBackgroundColor={{this.headerColor}}
-          @iconBackgroundColor={{this.iconBackgroundColor}}
-          @iconBorderColor={{this.iconBorderColor}}
-          @iconCoversAllAvailableSpace={{this.iconCoversAllAvailableSpace}}
-        />
+        >
+          <:headerIcon>
+            <Icon width='25' height='25' role='presentation' />
+          </:headerIcon>
+        </TabbedHeader>
       </:example>
       <:api as |Args|>
         <Args.String
@@ -100,40 +93,6 @@ export default class TabbedHeaderUsage extends Component {
           @value={{this.headerColor}}
           @onInput={{fn (mut this.headerColor)}}
           @defaultValue='#ffffff'
-        />
-        <Args.String
-          @name='iconURL'
-          @description='Instead of an icon component, use an image URL for the icon'
-          @value={{this.iconURL}}
-          @onInput={{fn (mut this.iconURL)}}
-        />
-        <Args.Component
-          @name='iconComponent'
-          @description='Icon component to be displayed with the title'
-          @value={{this.iconComponent}}
-          @options={{ALL_ICON_COMPONENTS}}
-          @onChange={{fn (mut this.iconComponent)}}
-        />
-        <Args.String
-          @name='iconBackgroundColor'
-          @description='Set a background color for the icon'
-          @value={{this.iconBackgroundColor}}
-          @onInput={{fn (mut this.iconBackgroundColor)}}
-          @defaultValue='undefined'
-        />
-        <Args.String
-          @name='iconBorderColor'
-          @description='Set a border color for the icon'
-          @value={{this.iconBorderColor}}
-          @onInput={{fn (mut this.iconBorderColor)}}
-          @defaultValue='undefined'
-        />
-        <Args.Bool
-          @name='iconCoversAllAvailableSpace'
-          @description='Icon image will cover all available space'
-          @defaultValue={{false}}
-          @value={{this.iconCoversAllAvailableSpace}}
-          @onInput={{fn (mut this.iconCoversAllAvailableSpace)}}
         />
       </:api>
     </FreestyleUsage>
