@@ -92,11 +92,18 @@ export default class TabbedHeader extends Component<Signature> {
       .app-tab-list a {
         height: 100%;
         padding: var(--boxel-sp-xs) var(--boxel-sp-xxs);
+        border-bottom: 4px solid transparent;
+        transition:
+          border-bottom-color 0.3s ease-in-out,
+          font-weight 0.3s ease-in-out;
       }
-      .app-tab-list a.active,
+      .app-tab-list a.active {
+        color: var(--header-text-color, var(--boxel-dark));
+        border-bottom-color: var(--header-text-color, var(--boxel-dark));
+        font-weight: 700;
+      }
       .app-tab-list a:hover:not(:disabled) {
         color: var(--header-text-color, var(--boxel-dark));
-        border-bottom: 4px solid var(--header-text-color, var(--boxel-dark));
         font-weight: 700;
       }
       /* this prevents layout shift when text turns bold on hover/active */
