@@ -6,8 +6,7 @@ import {
   Button,
   TabbedHeader,
 } from '@cardstack/boxel-ui/components';
-import { Sparkle } from '@cardstack/boxel-ui/icons';
-import { cssVar, eq, getContrastColor } from '@cardstack/boxel-ui/helpers';
+import { eq } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';

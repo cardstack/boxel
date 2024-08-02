@@ -1,7 +1,7 @@
 import { AppCard } from './app-card';
-import { Component } from 'https://cardstack.com/base/card-api';
+// import { Component } from 'https://cardstack.com/base/card-api';
 export class GardenAppCard extends AppCard {
-  static displayName = "Garden App Card";
+  static displayName = 'Garden App Card';
   static headerColor = '#355e3b';
   /*
   static isolated = class Isolated extends Component<typeof this> {
@@ -19,5 +19,6 @@ export class GardenAppCard extends AppCard {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
   */
 }
