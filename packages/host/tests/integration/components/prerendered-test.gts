@@ -11,7 +11,7 @@ module('Integration | prerendered-card-component', function (hooks) {
     let prerenderedCard1 = {
       url: 'http://test-realm/person/michael.json',
       html: "<div class='person-container'><div class='person'>Michael</div></div>",
-      cssModuleIds: [
+      cssModuleUrls: [
         encodeUrl('.person-container { border: 1px solid red; }'),
         encodeUrl('.person { color: red; }'),
       ],
@@ -20,7 +20,7 @@ module('Integration | prerendered-card-component', function (hooks) {
     let prerenderedCard2 = {
       url: 'http://test-realm/person/scotty.json',
       html: "<div class='person-container'><div class='person'>Scotty</div></div>",
-      cssModuleIds: [
+      cssModuleUrls: [
         encodeUrl('.person-container { border: 1px solid red; }'),
         encodeUrl('.person { color: red; }'),
         encodeUrl('.footer { size: 12px; }'),
@@ -35,21 +35,21 @@ module('Integration | prerendered-card-component', function (hooks) {
 
     await renderComponent(<template>
       <PrerenderedCardComponent
-        @item={{prerenderedCard1}}
+        @card={{prerenderedCard1}}
         @onCssLoaded={{onCssLoaded}}
       />
       <PrerenderedCardComponent
-        @item={{prerenderedCard2}}
+        @card={{prerenderedCard2}}
         @onCssLoaded={{onCssLoaded}}
       />
 
       {{! Repeat to test that css does not get inserted twice }}
       <PrerenderedCardComponent
-        @item={{prerenderedCard1}}
+        @card={{prerenderedCard1}}
         @onCssLoaded={{onCssLoaded}}
       />
       <PrerenderedCardComponent
-        @item={{prerenderedCard2}}
+        @card={{prerenderedCard2}}
         @onCssLoaded={{onCssLoaded}}
       />
     </template>);
