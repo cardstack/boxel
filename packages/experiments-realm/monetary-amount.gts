@@ -14,7 +14,7 @@ import { guidFor } from '@ember/object/internals';
 import GlimmerComponent from '@glimmer/component';
 
 // TODO: should this be configurable?
-const CURRENCIES_REALM_URL = 'http://localhost:4201/drafts/';
+const CURRENCIES_REALM_URL = 'http://localhost:4201/experiments/';
 
 interface MonetaryAmountAtomSignature {
   Element: HTMLSpanElement;

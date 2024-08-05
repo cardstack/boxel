@@ -21,12 +21,12 @@ NODE_ENV=development \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl='http://localhost:4201/base/' \
   \
-  --path='../drafts-realm' \
+  --path='../experiments-realm' \
   --matrixURL='http://localhost:8008' \
-  --username='drafts_realm' \
+  --username='experiments_realm' \
   --password='password' \
-  --fromUrl='http://localhost:4201/drafts/' \
-  --toUrl='http://localhost:4201/drafts/' \
+  --fromUrl='http://localhost:4201/experiments/' \
+  --toUrl='http://localhost:4201/experiments/' \
   \
   --path='../published-realm' \
   --matrixURL='http://localhost:8008' \

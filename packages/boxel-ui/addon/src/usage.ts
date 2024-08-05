@@ -21,6 +21,7 @@ import ModalUsage from './components/modal/usage.gts';
 import RadioInputUsage from './components/radio-input/usage.gts';
 import ResizablePanelGroupUsage from './components/resizable-panel-group/usage.gts';
 import SelectUsage from './components/select/usage.gts';
+import TabbedHeaderUsage from './components/tabbed-header/usage.gts';
 import TooltipUsage from './components/tooltip/usage.gts';
 
 export const ALL_USAGE_COMPONENTS = [
@@ -44,5 +45,6 @@ export const ALL_USAGE_COMPONENTS = [
   ['RadioInput', RadioInputUsage],
   ['ResizablePanelGroup', ResizablePanelGroupUsage],
   ['Select', SelectUsage],
+  ['TabbedHeader', TabbedHeaderUsage],
   ['Tooltip', TooltipUsage],
 ];

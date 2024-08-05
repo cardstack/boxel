@@ -3,53 +3,53 @@
     "type": "card",
     "attributes": {
       "traveler": {
-        "name": "Marcelius Wilde",
+        "name": "Mickey",
         "nextTravelGoal": {
-          "goalTitle": "Summer '25"
+          "goalTitle": null
         }
       },
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
-      "destinations.0": {
+      "destinations": {
         "links": {
-          "self": "../Country/2"
+          "self": null
         }
       },
       "traveler.countryOfOrigin": {
         "links": {
-          "self": "http://localhost:4201/drafts/Country/1"
+          "self": "http://localhost:4201/experiments/Country/1"
         }
       },
-      "traveler.countriesVisited.0": {
+      "traveler.countriesVisited": {
         "links": {
-          "self": "http://localhost:4201/drafts/Country/4"
+          "self": null
         }
       },
       "traveler.nextTravelGoal.country": {
         "links": {
-          "self": "http://localhost:4201/drafts/Country/argentina"
+          "self": "http://localhost:4201/experiments/Country/2"
         }
       },
       "traveler.nextTravelGoal.alternateTrips.0": {
         "links": {
-          "self": "http://localhost:4201/drafts/Country/brazil"
+          "self": "http://localhost:4201/experiments/Country/argentina"
         }
       },
       "traveler.nextTravelGoal.alternateTrips.1": {
         "links": {
-          "self": "http://localhost:4201/drafts/Country/2"
+          "self": "http://localhost:4201/experiments/Country/brazil"
         }
       },
       "startLocation": {
         "links": {
-          "self": "../Country/3"
+          "self": null
         }
       },
       "endLocation": {
         "links": {
-          "self": null
+          "self": "../Country/2"
         }
       }
     },
