@@ -23,8 +23,10 @@ export class RealmIndexUpdater {
   #ignoreData: Record<string, string> = {};
   #stats: Stats = {
     instancesIndexed: 0,
+    modulesIndexed: 0,
     instanceErrors: 0,
     moduleErrors: 0,
+    totalIndexEntries: 0,
   };
   #indexWriter: IndexWriter;
   #queue: Queue;
@@ -94,6 +96,9 @@ export class RealmIndexUpdater {
     return this.#indexingDeferred?.promise;
   }
 
+  // TODO consider triggering SSE events for invalidations now that we can
+  // calculate fine grained invalidations for from-scratch indexing by passing
+  // in an onInvalidation callback
   async fullIndex() {
     this.#indexingDeferred = new Deferred<void>();
     try {

@@ -1,4 +1,4 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 
 import { IndexWriter, IndexQueryEngine } from '@cardstack/runtime-common';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
@@ -48,31 +48,7 @@ module('Unit | index-writer', function (hooks) {
     });
   });
 
-  test('can prevent concurrent batch invalidations from colliding', async function (assert) {
-    await runSharedTest(indexWriterTests, assert, {
-      indexWriter,
-      indexQueryEngine,
-      adapter,
-    });
-  });
-
-  test('can prevent concurrent batch invalidations from colliding when making new generation', async function (assert) {
-    await runSharedTest(indexWriterTests, assert, {
-      indexWriter,
-      indexQueryEngine,
-      adapter,
-    });
-  });
-
   test('can update an index entry', async function (assert) {
-    await runSharedTest(indexWriterTests, assert, {
-      indexWriter,
-      indexQueryEngine,
-      adapter,
-    });
-  });
-
-  test('can create a new generation of index entries', async function (assert) {
     await runSharedTest(indexWriterTests, assert, {
       indexWriter,
       indexQueryEngine,
@@ -199,6 +175,4 @@ module('Unit | index-writer', function (hooks) {
       adapter,
     });
   });
-
-  skip('TODO: cross realm invalidation');
 });

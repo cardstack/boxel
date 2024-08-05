@@ -20,7 +20,6 @@ import {
   runTestRealmServer,
   runBaseRealmServer,
 } from './helpers';
-import isEqual from 'lodash/isEqual';
 import { shimExternals } from '../lib/externals';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { Server } from 'http';
@@ -378,13 +377,16 @@ module('indexing', function (hooks) {
       },
     });
     assert.strictEqual(result.length, 1, 'found updated document');
-    assert.ok(
-      // assert.deepEqual returns false because despite having the same shape, the constructors are different
-      isEqual(realm.realmIndexUpdater.stats, {
+    assert.deepEqual(
+      // we splat because despite having the same shape, the constructors are different
+      { ...realm.realmIndexUpdater.stats },
+      {
         instancesIndexed: 1,
         instanceErrors: 0,
         moduleErrors: 0,
-      }),
+        modulesIndexed: 0,
+        totalIndexEntries: 14,
+      },
       'indexed correct number of files',
     );
   });
@@ -403,13 +405,16 @@ module('indexing', function (hooks) {
           throw new Error('boom!');
         `,
     );
-    assert.ok(
-      // assert.deepEqual returns false because despite having the same shape, the constructors are different
-      isEqual(realm.realmIndexUpdater.stats, {
+    assert.deepEqual(
+      // we splat because despite having the same shape, the constructors are different
+      { ...realm.realmIndexUpdater.stats },
+      {
         instancesIndexed: 0,
         instanceErrors: 1,
         moduleErrors: 1,
-      }),
+        modulesIndexed: 0,
+        totalIndexEntries: 14,
+      },
       'indexed correct number of files',
     );
     await realm.write(
@@ -419,13 +424,16 @@ module('indexing', function (hooks) {
           export class IntentionallyThrownError {
         `,
     );
-    assert.ok(
-      // assert.deepEqual returns false because despite having the same shape, the constructors are different
-      isEqual(realm.realmIndexUpdater.stats, {
+    assert.deepEqual(
+      // we splat because despite having the same shape, the constructors are different
+      { ...realm.realmIndexUpdater.stats },
+      {
         instancesIndexed: 0,
         instanceErrors: 4, // 1 post, 2 persons, 1 bad-link post
         moduleErrors: 3, // post, fancy person, person
-      }),
+        modulesIndexed: 0,
+        totalIndexEntries: 12,
+      },
       'indexed correct number of files',
     );
     let { data: result } = await realm.realmIndexQueryEngine.search({
@@ -449,13 +457,16 @@ module('indexing', function (hooks) {
           }
         `,
     );
-    assert.ok(
-      // assert.deepEqual returns false because despite having the same shape, the constructors are different
-      isEqual(realm.realmIndexUpdater.stats, {
+    assert.deepEqual(
+      // we splat because despite having the same shape, the constructors are different
+      { ...realm.realmIndexUpdater.stats },
+      {
         instancesIndexed: 3, // 1 post and 2 persons
         instanceErrors: 1,
         moduleErrors: 0,
-      }),
+        modulesIndexed: 3,
+        totalIndexEntries: 13,
+      },
       'indexed correct number of files',
     );
     result = (
@@ -482,13 +493,16 @@ module('indexing', function (hooks) {
       },
     });
     assert.strictEqual(result.length, 0, 'found no documents');
-    assert.ok(
-      // assert.deepEqual returns false because despite having the same shape, the constructors are different
-      isEqual(realm.realmIndexUpdater.stats, {
+    assert.deepEqual(
+      // we splat because despite having the same shape, the constructors are different
+      { ...realm.realmIndexUpdater.stats },
+      {
         instancesIndexed: 0,
         instanceErrors: 0,
         moduleErrors: 0,
-      }),
+        modulesIndexed: 0,
+        totalIndexEntries: 14,
+      },
       'index did not touch any files',
     );
   });
@@ -520,13 +534,16 @@ module('indexing', function (hooks) {
       },
     });
     assert.strictEqual(result.length, 1, 'found updated document');
-    assert.ok(
-      // assert.deepEqual returns false because despite having the same shape, the constructors are different
-      isEqual(realm.realmIndexUpdater.stats, {
+    assert.deepEqual(
+      // we splat because despite having the same shape, the constructors are different
+      { ...realm.realmIndexUpdater.stats },
+      {
         instancesIndexed: 1,
         instanceErrors: 1,
         moduleErrors: 0,
-      }),
+        modulesIndexed: 1,
+        totalIndexEntries: 14,
+      },
       'indexed correct number of files',
     );
   });
@@ -559,13 +576,16 @@ module('indexing', function (hooks) {
       },
     });
     assert.strictEqual(result.length, 1, 'found updated document');
-    assert.ok(
-      // assert.deepEqual returns false because despite having the same shape, the constructors are different
-      isEqual(realm.realmIndexUpdater.stats, {
+    assert.deepEqual(
+      // we splat because despite having the same shape, the constructors are different
+      { ...realm.realmIndexUpdater.stats },
+      {
         instancesIndexed: 3,
         instanceErrors: 1,
         moduleErrors: 0,
-      }),
+        modulesIndexed: 3,
+        totalIndexEntries: 13,
+      },
       'indexed correct number of files',
     );
   });
@@ -590,9 +610,10 @@ module('indexing', function (hooks) {
     if (actual?.type === 'error') {
       assert.ok(actual.error.stack, 'stack trace is included');
       delete actual.error.stack;
-      assert.ok(
-        // assert.deepEqual returns false because despite having the same shape, the constructors are different
-        isEqual(actual, {
+      assert.deepEqual(
+        // we splat because despite having the same shape, the constructors are different
+        { ...actual },
+        {
           type: 'error',
           error: {
             isCardError: true,
@@ -602,19 +623,22 @@ module('indexing', function (hooks) {
             title: 'Not Found',
             deps: ['http://test-realm/post'],
           },
-        }),
+        },
         'card instance is an error document',
       );
     } else {
       assert.ok(false, 'search index entry is not an error document');
     }
-    assert.ok(
-      // assert.deepEqual returns false because despite having the same shape, the constructors are different
-      isEqual(realm.realmIndexUpdater.stats, {
+    assert.deepEqual(
+      // we splat because despite having the same shape, the constructors are different
+      { ...realm.realmIndexUpdater.stats },
+      {
         instancesIndexed: 0,
         instanceErrors: 2,
         moduleErrors: 0,
-      }),
+        modulesIndexed: 0,
+        totalIndexEntries: 14,
+      },
       'indexed correct number of files',
     );
 
@@ -646,13 +670,16 @@ module('indexing', function (hooks) {
       });
       assert.strictEqual(result.length, 1, 'found the post instance');
     }
-    assert.ok(
-      // assert.deepEqual returns false because despite having the same shape, the constructors are different
-      isEqual(realm.realmIndexUpdater.stats, {
+    assert.deepEqual(
+      // we splat because despite having the same shape, the constructors are different
+      { ...realm.realmIndexUpdater.stats },
+      {
         instancesIndexed: 1,
         instanceErrors: 1,
         moduleErrors: 0,
-      }),
+        modulesIndexed: 1,
+        totalIndexEntries: 14,
+      },
       'indexed correct number of files',
     );
   });
@@ -827,12 +854,16 @@ module('permissioned realm', function (hooks) {
     });
 
     test('has no module errors when trying to index a card from another realm when it has permission to read', async function (assert) {
-      assert.ok(
-        isEqual(testRealm2.realmIndexUpdater.stats, {
+      assert.deepEqual(
+        // we splat because despite having the same shape, the constructors are different
+        { ...testRealm2.realmIndexUpdater.stats },
+        {
           instancesIndexed: 1,
           instanceErrors: 0,
           moduleErrors: 0,
-        }),
+          modulesIndexed: 1,
+          totalIndexEntries: 2,
+        },
         'has no module errors',
       );
     });
@@ -851,12 +882,16 @@ module('permissioned realm', function (hooks) {
     test('has a module error when trying to index a module from another realm when it has no permission to read', async function (assert) {
       // Error during indexing will be: "Authorization error: Insufficient
       // permissions to perform this action"
-      assert.ok(
-        isEqual(testRealm2.realmIndexUpdater.stats, {
+      assert.deepEqual(
+        // we splat because despite having the same shape, the constructors are different
+        { ...testRealm2.realmIndexUpdater.stats },
+        {
           instanceErrors: 1,
           instancesIndexed: 0,
           moduleErrors: 1,
-        }),
+          modulesIndexed: 0,
+          totalIndexEntries: 2,
+        },
         'has a module error',
       );
     });
