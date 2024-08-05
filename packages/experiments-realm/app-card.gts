@@ -474,8 +474,8 @@ export class CardsGrid extends GlimmerComponent<{
     </ul>
     <style>
       .cards-grid {
-        --grid-card-width: 195px;
-        --grid-card-height: 224px;
+        --grid-card-width: 10.25rem; /* 164px */
+        --grid-card-height: 14rem; /* 224px */
         list-style-type: none;
         margin: 0;
         padding: var(--boxel-sp);
