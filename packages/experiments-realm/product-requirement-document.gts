@@ -59,70 +59,6 @@ class Prompt extends FieldDef {
   };
 }
 
-class prdTemplate extends Component<typeof ProductRequirementDocument> {
-  <template>
-    <section class='prd'>
-      <header>
-        <h1><@fields.title /></h1>
-        <p class='description'><@fields.description /></p>
-      </header>
-      <div class='content'>
-        <div class='item'>
-          <h2>Prompt</h2>
-          <p><@fields.prompt /></p>
-        </div>
-        <section class='item'>
-          <h2>Overview</h2>
-          <p><@fields.overview /></p>
-        </section>
-        <section class='item'>
-          <h2>Schema</h2>
-          <pre><@fields.schema /></pre>
-        </section>
-      </div>
-    </section>
-    <style>
-      .prd {
-        padding: var(--boxel-sp) var(--boxel-sp-xxl);
-      }
-      h1 {
-        font: 700 var(--boxel-font-xl);
-        margin: 0;
-      }
-      h2 {
-        margin: 0;
-      }
-      p {
-        margin: 0;
-      }
-      p + p {
-        margin-top: var(--boxel-sp);
-      }
-      .description {
-        margin-top: var(--boxel-sp-xxs);
-        color: var(--boxel-450);
-      }
-      .content {
-        margin-top: var(--boxel-sp-xl);
-      }
-      .item + .item {
-        margin-top: var(--boxel-sp-lg);
-      }
-      pre {
-        margin: 0;
-        max-width: 100%;
-        overflow: auto;
-      }
-      pre > :deep(div) {
-        margin-top: -200px;
-      }
-      pre :deep(p) {
-        margin: 0;
-      }
-    </style>
-  </template>
-}
-
 export class ProductRequirementDocument extends CardDef {
   static displayName = 'Product Requirements';
   @field prompt = contains(Prompt);
@@ -140,6 +76,69 @@ export class ProductRequirementDocument extends CardDef {
       return `${this.prompt.domain} ${this.prompt.appType}`;
     },
   });
-  static embedded = prdTemplate;
-  static isolated = prdTemplate;
+  static isolated = class PrdIsolated extends Component<
+    typeof ProductRequirementDocument
+  > {
+    <template>
+      <section class='prd'>
+        <header>
+          <h1><@fields.title /></h1>
+          <p class='description'><@fields.description /></p>
+        </header>
+        <div class='content'>
+          <div class='item'>
+            <h2>Prompt</h2>
+            <p><@fields.prompt /></p>
+          </div>
+          <section class='item'>
+            <h2>Overview</h2>
+            <p><@fields.overview /></p>
+          </section>
+          <section class='item'>
+            <h2>Schema</h2>
+            <pre><@fields.schema /></pre>
+          </section>
+        </div>
+      </section>
+      <style>
+        .prd {
+          padding: var(--boxel-sp) var(--boxel-sp-xxl);
+        }
+        h1 {
+          font: 700 var(--boxel-font-xl);
+          margin: 0;
+        }
+        h2 {
+          margin: 0;
+        }
+        p {
+          margin: 0;
+        }
+        p + p {
+          margin-top: var(--boxel-sp);
+        }
+        .description {
+          margin-top: var(--boxel-sp-xxs);
+          color: var(--boxel-450);
+        }
+        .content {
+          margin-top: var(--boxel-sp-xl);
+        }
+        .item + .item {
+          margin-top: var(--boxel-sp-lg);
+        }
+        pre {
+          margin: 0;
+          max-width: 100%;
+          overflow: auto;
+        }
+        pre > :deep(div) {
+          margin-top: -200px;
+        }
+        pre :deep(p) {
+          margin: 0;
+        }
+      </style>
+    </template>
+  };
 }

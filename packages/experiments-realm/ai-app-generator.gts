@@ -1,4 +1,3 @@
-import { type CardDef } from 'https://cardstack.com/base/card-api';
 import {
   CardContainer,
   FieldContainer,
@@ -6,74 +5,13 @@ import {
   Button,
   TabbedHeader,
 } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
+import { IconPlus } from '@cardstack/boxel-ui/icons';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { AppCard, Tab } from './app-card';
-
-const getComponent = (card: CardDef) => {
-  if (!card) {
-    return;
-  }
-  return card.constructor.getComponent(card);
-};
-
-class Requirements extends GlimmerComponent<{
-  instances: CardDef[] | [];
-}> {
-  <template>
-    <div class='requirements'>
-      <aside class='recent-reqs-sidebar'>
-        <h3 class='recent-reqs-title'>Recent Requirements</h3>
-        <ul>
-          {{#each @instances as |doc|}}
-            <li>
-              <button {{on 'click' (fn this.openDoc doc)}}>
-                {{doc.title}}
-              </button>
-            </li>
-          {{/each}}
-        </ul>
-      </aside>
-      {{#let (getComponent this.currentDoc) as |Card|}}
-        <div class='requirements-doc'>
-          <Card />
-        </div>
-      {{/let}}
-    </div>
-    <style>
-      .requirements {
-        height: 100%;
-        display: grid;
-        grid-template-columns: auto 1fr;
-        gap: var(--boxel-sp);
-      }
-      .recent-reqs-sidebar {
-        max-width: 235px;
-      }
-      .recent-reqs-title {
-        margin: 0;
-        font: 700 var(--boxel-font);
-      }
-      .requirements-doc > :deep(.field-component-card.embedded-format) {
-        --overlay-embedded-card-header-height: 0;
-      }
-    </style>
-  </template>
-
-  @tracked _doc?: CardDef;
-
-  @action openDoc(doc: CardDef) {
-    this._doc = doc;
-  }
-
-  get currentDoc() {
-    return this._doc ?? this.args.instances?.[0];
-  }
-}
+import { AppCard, Tab, CardsGrid, getComponent } from './app-card';
 
 class Isolated extends AppCard.isolated {
   <template>
@@ -92,9 +30,7 @@ class Isolated extends AppCard.isolated {
         </:headerIcon>
       </TabbedHeader>
       <div class='app-content'>
-        {{#if (eq this.activeTabIndex 1)}}
-          <Requirements @instances={{this.instances}} />
-        {{else}}
+        {{#if (eq this.activeTabIndex 0)}}
           <div class='dashboard'>
             <aside class='intro'>
               <header>
@@ -191,6 +127,25 @@ class Isolated extends AppCard.isolated {
               </ul>
             </aside>
           </div>
+        {{else}}
+          {{#if
+            (and (bool @context.actions.createCard) (eq this.activeTabIndex 1))
+          }}
+            <Button
+              @kind='text-only'
+              class='create-new-button'
+              {{on 'click' this.createNew}}
+            >
+              <IconPlus
+                class='plus-icon'
+                width='15'
+                height='15'
+                role='presentation'
+              />
+              Create New
+            </Button>
+          {{/if}}
+          <CardsGrid @instances={{this.instances}} @context={{@context}} />
         {{/if}}
       </div>
     </section>
@@ -341,6 +296,20 @@ class Isolated extends AppCard.isolated {
       .sample-apps-list-item > :deep(.field-component-card.embedded-format) {
         --overlay-embedded-card-header-height: 0;
       }
+
+      .create-new-button {
+        color: var(--boxel-dark);
+        font-weight: 500;
+        padding: var(--boxel-sp-xxs);
+        gap: var(--boxel-sp-xxs);
+      }
+      .create-new-button:hover:not(:disabled) {
+        --icon-color: var(--boxel-highlight);
+        color: var(--boxel-highlight);
+      }
+      .plus-icon {
+        stroke-width: 0;
+      }
     </style>
   </template>
 
@@ -359,6 +328,14 @@ class Isolated extends AppCard.isolated {
       ref: {
         name: 'ProductRequirementDocument',
         module: `${this.currentRealm?.href}product-requirement-document`,
+      },
+    }),
+    new Tab({
+      displayName: 'Your Apps',
+      tabId: 'your-apps',
+      ref: {
+        name: 'AppCard',
+        module: `${this.currentRealm?.href}app-card`,
       },
     }),
   ];
