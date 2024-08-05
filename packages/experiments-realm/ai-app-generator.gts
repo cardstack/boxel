@@ -4,8 +4,9 @@ import {
   FieldContainer,
   BoxelInput,
   Button,
+  TabbedHeader,
 } from '@cardstack/boxel-ui/components';
-import { cssVar, eq, getContrastColor } from '@cardstack/boxel-ui/helpers';
+import { eq } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -77,31 +78,19 @@ class Requirements extends GlimmerComponent<{
 class Isolated extends AppCard.isolated {
   <template>
     <section class='app'>
-      <header
-        class='app-header'
-        style={{cssVar
-          header-background-color=this.headerColor
-          header-text-color=(getContrastColor this.headerColor)
-        }}
+      <TabbedHeader
+        @title={{@model.title}}
+        @tabs={{this.tabs}}
+        @onSetActiveTab={{this.setActiveTab}}
+        @activeTabIndex={{this.activeTabIndex}}
+        @headerBackgroundColor={{this.headerColor}}
       >
-        <div class='app-title-group'>
-          <h1 class='app-title'><@fields.title /></h1>
-        </div>
-        <nav class='app-nav'>
-          <ul class='app-tab-list'>
-            {{#each this.tabs as |tab index|}}
-              <li>
-                <a
-                  {{on 'click' (fn this.setActiveTab index)}}
-                  class={{if (eq this.activeTabIndex index) 'active'}}
-                >
-                  {{tab.displayName}}
-                </a>
-              </li>
-            {{/each}}
-          </ul>
-        </nav>
-      </header>
+        <:headerIcon>
+          {{#if @model.headerIcon.base64}}
+            <@fields.headerIcon />
+          {{/if}}
+        </:headerIcon>
+      </TabbedHeader>
       <div class='app-content'>
         {{#if (eq this.activeTabIndex 1)}}
           <Requirements @instances={{this.instances}} />
@@ -217,14 +206,6 @@ class Isolated extends AppCard.isolated {
         margin-top: 0;
         margin-bottom: var(--boxel-sp);
       }
-      ul {
-        list-style-type: none;
-        margin: 0;
-        padding: 0;
-      }
-      ul > li + li {
-        margin-top: var(--boxel-sp-xs);
-      }
 
       .app {
         position: relative;
@@ -235,46 +216,6 @@ class Isolated extends AppCard.isolated {
         color: var(--boxel-dark);
         font: var(--boxel-font);
         letter-spacing: var(--boxel-lsp);
-      }
-      .app-header {
-        padding: 0 var(--boxel-sp-lg);
-        background-color: var(--header-background-color, var(--boxel-light));
-        color: var(--header-text-color, var(--boxel-dark));
-      }
-      .app-title-group {
-        padding: var(--boxel-sp-xs) 0;
-        display: flex;
-        align-items: center;
-      }
-      .app-title {
-        margin: 0;
-        font: 900 var(--boxel-font);
-        letter-spacing: var(--boxel-lsp-xl);
-        text-transform: uppercase;
-      }
-      .app-nav {
-        font: 500 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-sm);
-      }
-      .app-tab-list {
-        width: 520px;
-        display: grid;
-        gap: var(--boxel-sp);
-        grid-template-columns: repeat(4, minmax(90px, 1fr));
-        justify-items: center;
-        margin-left: -10px;
-      }
-      .app-tab-list > li + li {
-        margin-top: 0;
-      }
-      .app-tab-list a {
-        padding: var(--boxel-sp-xs) var(--boxel-sp-xxs);
-      }
-      .app-tab-list a.active,
-      .app-tab-list a:hover:not(:disabled) {
-        color: var(--header-text-color, var(--boxel-dark));
-        border-bottom: 4px solid var(--header-text-color, var(--boxel-dark));
-        font-weight: 700;
       }
       .app-content {
         padding: var(--boxel-sp);
@@ -386,8 +327,16 @@ class Isolated extends AppCard.isolated {
         line-height: 2;
         letter-spacing: var(--boxel-lsp-xs);
       }
+      .sample-apps-list {
+        list-style-type: none;
+        margin: 0;
+        padding: 0;
+      }
       .sample-apps-list-item {
         height: 260px;
+      }
+      .sample-apps-list-item + .sample-apps-list-item {
+        margin-top: var(--boxel-sp-xs);
       }
       .sample-apps-list-item > :deep(.field-component-card.embedded-format) {
         --overlay-embedded-card-header-height: 0;
@@ -398,6 +347,7 @@ class Isolated extends AppCard.isolated {
   @tracked tabs = [
     new Tab({
       displayName: 'Dashboard',
+      tabId: 'dashboard',
       ref: {
         name: 'AppCard',
         module: `${this.currentRealm?.href}app-card`,
@@ -405,6 +355,7 @@ class Isolated extends AppCard.isolated {
     }),
     new Tab({
       displayName: 'Requirements',
+      tabId: 'requirements',
       ref: {
         name: 'ProductRequirementDocument',
         module: `${this.currentRealm?.href}product-requirement-document`,

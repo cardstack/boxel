@@ -93,7 +93,7 @@ module('getModifyPrompt', () => {
               {
                 data: {
                   type: 'card',
-                  id: 'http://localhost:4201/drafts/Author/1',
+                  id: 'http://localhost:4201/experiments/Author/1',
                   attributes: {
                     firstName: 'Terry',
                     lastName: 'Pratchett',
@@ -187,7 +187,7 @@ module('getModifyPrompt', () => {
               {
                 data: {
                   type: 'card',
-                  id: 'http://localhost:4201/drafts/Friend/1',
+                  id: 'http://localhost:4201/experiments/Friend/1',
                   attributes: {
                     firstName: 'Original Name',
                     thumbnailURL: null,
@@ -199,7 +199,7 @@ module('getModifyPrompt', () => {
                       },
                       data: {
                         type: 'card',
-                        id: 'http://localhost:4201/drafts/Friend/2',
+                        id: 'http://localhost:4201/experiments/Friend/2',
                       },
                     },
                   },
@@ -240,7 +240,7 @@ module('getModifyPrompt', () => {
               {
                 data: {
                   type: 'card',
-                  id: 'http://localhost:4201/drafts/Friend/1',
+                  id: 'http://localhost:4201/experiments/Friend/1',
                   attributes: {
                     firstName: 'Changed Name',
                     thumbnailURL: null,
@@ -252,7 +252,7 @@ module('getModifyPrompt', () => {
                       },
                       data: {
                         type: 'card',
-                        id: 'http://localhost:4201/drafts/Friend/2',
+                        id: 'http://localhost:4201/experiments/Friend/2',
                       },
                     },
                   },
@@ -378,7 +378,7 @@ module('getModifyPrompt', () => {
               {
                 data: {
                   type: 'card',
-                  id: 'http://localhost:4201/drafts/Author/1',
+                  id: 'http://localhost:4201/experiments/Author/1',
                   attributes: {
                     firstName: 'Terry',
                     lastName: 'Pratchett',
@@ -428,7 +428,7 @@ module('getModifyPrompt', () => {
               {
                 data: {
                   type: 'card',
-                  id: 'http://localhost:4201/drafts/Author/1',
+                  id: 'http://localhost:4201/experiments/Author/1',
                   attributes: {
                     firstName: 'Terry',
                     lastName: 'Pratchett',
@@ -471,7 +471,7 @@ module('getModifyPrompt', () => {
               {
                 data: {
                   type: 'card',
-                  id: 'http://localhost:4201/drafts/Author/2',
+                  id: 'http://localhost:4201/experiments/Author/2',
                   attributes: {
                     firstName: 'Mr',
                     lastName: 'T',
@@ -521,7 +521,7 @@ module('getModifyPrompt', () => {
               {
                 data: {
                   type: 'card',
-                  id: 'http://localhost:4201/drafts/Author/1',
+                  id: 'http://localhost:4201/experiments/Author/1',
                   attributes: {
                     firstName: 'Terry',
                     lastName: 'Pratchett',
@@ -564,7 +564,7 @@ module('getModifyPrompt', () => {
               {
                 data: {
                   type: 'card',
-                  id: 'http://localhost:4201/drafts/Author/2',
+                  id: 'http://localhost:4201/experiments/Author/2',
                   attributes: {
                     firstName: 'Mr',
                     lastName: 'T',
@@ -599,10 +599,14 @@ module('getModifyPrompt', () => {
       (message) => message.role === 'system',
     );
     assert.true(
-      systemMessage?.content?.includes('http://localhost:4201/drafts/Author/1'),
+      systemMessage?.content?.includes(
+        'http://localhost:4201/experiments/Author/1',
+      ),
     );
     assert.true(
-      systemMessage?.content?.includes('http://localhost:4201/drafts/Author/2'),
+      systemMessage?.content?.includes(
+        'http://localhost:4201/experiments/Author/2',
+      ),
     );
   });
 
@@ -621,7 +625,7 @@ module('getModifyPrompt', () => {
               {
                 data: {
                   type: 'card',
-                  id: 'http://localhost:4201/drafts/Friend/1',
+                  id: 'http://localhost:4201/experiments/Friend/1',
                   attributes: {
                     firstName: 'Hassan',
                     thumbnailURL: null,
@@ -633,7 +637,7 @@ module('getModifyPrompt', () => {
                       },
                       data: {
                         type: 'card',
-                        id: 'http://localhost:4201/drafts/Friend/2',
+                        id: 'http://localhost:4201/experiments/Friend/2',
                       },
                     },
                   },
@@ -647,7 +651,7 @@ module('getModifyPrompt', () => {
               },
             ],
             context: {
-              openCardIds: ['http://localhost:4201/drafts/Friend/1'],
+              openCardIds: ['http://localhost:4201/experiments/Friend/1'],
               submode: 'interact',
               tools: [],
             },
@@ -736,9 +740,9 @@ module('getModifyPrompt', () => {
           formatted_body: '<p>set the name to dave</p>\n',
           data: {
             context: {
-              openCardIds: ['http://localhost:4201/drafts/Friend/1'],
+              openCardIds: ['http://localhost:4201/experiments/Friend/1'],
               tools: [
-                getPatchTool('http://localhost:4201/drafts/Friend/1', {
+                getPatchTool('http://localhost:4201/experiments/Friend/1', {
                   firstName: { type: 'string' },
                 }),
               ],
@@ -802,7 +806,7 @@ module('getModifyPrompt', () => {
                 {
                   data: {
                     type: 'card',
-                    id: 'http://localhost:4201/drafts/Friend/1',
+                    id: 'http://localhost:4201/experiments/Friend/1',
                     attributes: {
                       firstName: 'Hassan',
                       thumbnailURL: null,
@@ -814,7 +818,7 @@ module('getModifyPrompt', () => {
                         },
                         data: {
                           type: 'card',
-                          id: 'http://localhost:4201/drafts/Friend/2',
+                          id: 'http://localhost:4201/experiments/Friend/2',
                         },
                       },
                     },
@@ -828,7 +832,7 @@ module('getModifyPrompt', () => {
                 },
               ],
               tools: [
-                getPatchTool('http://localhost:4201/drafts/Friend/1', {
+                getPatchTool('http://localhost:4201/experiments/Friend/1', {
                   firstName: { type: 'string' },
                 }),
               ],
@@ -862,7 +866,7 @@ module('getModifyPrompt', () => {
             },
             card_id: {
               type: 'string',
-              const: 'http://localhost:4201/drafts/Friend/1',
+              const: 'http://localhost:4201/experiments/Friend/1',
             },
             attributes: {
               type: 'object',
@@ -891,9 +895,9 @@ module('getModifyPrompt', () => {
           formatted_body: '<p>set the name to dave</p>\n',
           data: {
             context: {
-              openCardIds: ['http://localhost:4201/drafts/Friend/1'],
+              openCardIds: ['http://localhost:4201/experiments/Friend/1'],
               tools: [
-                getPatchTool('http://localhost:4201/drafts/Friend/1', {
+                getPatchTool('http://localhost:4201/experiments/Friend/1', {
                   firstName: { type: 'string' },
                 }),
               ],
@@ -927,7 +931,7 @@ module('getModifyPrompt', () => {
             },
             card_id: {
               type: 'string',
-              const: 'http://localhost:4201/drafts/Friend/1',
+              const: 'http://localhost:4201/experiments/Friend/1',
             },
             attributes: {
               type: 'object',
@@ -956,9 +960,9 @@ module('getModifyPrompt', () => {
           formatted_body: '<p>set the name to dave</p>\n',
           data: {
             context: {
-              openCardIds: ['http://localhost:4201/drafts/Friend/1'],
+              openCardIds: ['http://localhost:4201/experiments/Friend/1'],
               tools: [
-                getPatchTool('http://localhost:4201/drafts/Friend/1', {
+                getPatchTool('http://localhost:4201/experiments/Friend/1', {
                   firstName: { type: 'string' },
                 }),
               ],
@@ -985,9 +989,9 @@ module('getModifyPrompt', () => {
           formatted_body: 'set the location to home',
           data: {
             context: {
-              openCardIds: ['http://localhost:4201/drafts/Meeting/2'],
+              openCardIds: ['http://localhost:4201/experiments/Meeting/2'],
               tools: [
-                getPatchTool('http://localhost:4201/drafts/Meeting/2', {
+                getPatchTool('http://localhost:4201/experiments/Meeting/2', {
                   location: { type: 'string' },
                 }),
               ],
@@ -1022,7 +1026,7 @@ module('getModifyPrompt', () => {
               },
               card_id: {
                 type: 'string',
-                const: 'http://localhost:4201/drafts/Meeting/2',
+                const: 'http://localhost:4201/experiments/Meeting/2',
               },
               attributes: {
                 type: 'object',
@@ -1046,7 +1050,7 @@ module('getModifyPrompt', () => {
     const skillCard1: SingleCardDocument = {
       data: {
         type: 'card',
-        id: 'http://localhost:4201/drafts/SkillCard/1',
+        id: 'http://localhost:4201/experiments/SkillCard/1',
         attributes: {
           title: 'Talk Like a Pirate',
           instructions: instructions1,
@@ -1063,7 +1067,7 @@ module('getModifyPrompt', () => {
     const skillCard2: SingleCardDocument = {
       data: {
         type: 'card',
-        id: 'http://localhost:4201/drafts/SkillCard/2',
+        id: 'http://localhost:4201/experiments/SkillCard/2',
         attributes: {
           title: 'SEO',
           instructions: instructions2,
@@ -1121,7 +1125,7 @@ module('getModifyPrompt', () => {
       const card: SingleCardDocument = {
         data: {
           type: 'card',
-          id: 'http://localhost:4201/drafts/Author/1',
+          id: 'http://localhost:4201/experiments/Author/1',
           attributes: {
             firstName: 'Terry',
             lastName: 'Pratchett',
@@ -1429,7 +1433,7 @@ module('getModifyPrompt', () => {
               {
                 data: {
                   type: 'card',
-                  id: 'http://localhost:4201/drafts/SkillCard/1',
+                  id: 'http://localhost:4201/experiments/SkillCard/1',
                   attributes: {
                     title: 'SEO',
                     instructions: instruction,
@@ -1471,7 +1475,7 @@ module('getModifyPrompt', () => {
               {
                 data: {
                   type: 'card',
-                  id: 'http://localhost:4201/drafts/SkillCard/1',
+                  id: 'http://localhost:4201/experiments/SkillCard/1',
                   attributes: {
                     title: 'SEO',
                     instructions: updatedInstruction,

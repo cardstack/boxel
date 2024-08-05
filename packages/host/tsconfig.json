@@ -33,7 +33,7 @@
     "environment": ["ember-loose", "ember-template-imports"],
     "transform": {
       "include": [
-        "../drafts-realm/**",
+        "../experiments-realm/**",
         "../published-realm/**",
         "../base/**",
         "app/**",
@@ -44,7 +44,7 @@
   },
   "include": [
     "../base/**/*",
-    "../drafts-realm/**/*",
+    "../experiments-realm/**/*",
     "../published-realm/**/*",
     "app/**/*",
     "tests/**/*",
