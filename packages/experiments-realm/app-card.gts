@@ -12,7 +12,7 @@ import {
   StringField,
   type CardContext,
 } from 'https://cardstack.com/base/card-api';
-
+import { cn } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -447,11 +447,15 @@ export const getComponent = (card: CardDef) => {
 };
 
 export class CardsGrid extends GlimmerComponent<{
-  instances: CardDef[] | [];
-  context?: CardContext;
+  Args: {
+    instances: CardDef[] | [];
+    context?: CardContext;
+    isListFormat?: boolean;
+  };
+  Element: HTMLElement;
 }> {
   <template>
-    <ul class='cards-grid'>
+    <ul class={{cn 'cards-grid' list-format=@isListFormat}} ...attributes>
       {{! use "key" to keep the list stable between refreshes }}
       {{#each @instances key='id' as |card|}}
         <li
@@ -478,11 +482,17 @@ export class CardsGrid extends GlimmerComponent<{
         --grid-card-height: 14rem; /* 224px */
         list-style-type: none;
         margin: 0;
-        padding: var(--boxel-sp);
+        padding: var(--cards-grid-padding, 0);
         display: grid;
         grid-template-columns: repeat(auto-fill, var(--grid-card-width));
         grid-auto-rows: max-content;
         gap: var(--boxel-sp-xl) var(--boxel-sp-lg);
+      }
+      .cards-grid.list-format {
+        --grid-card-width: 18.75rem; /* 300px */
+        --grid-card-height: 12rem; /* 192px */
+        grid-template-columns: 1fr;
+        gap: var(--boxel-sp);
       }
       .cards-grid-item {
         width: var(--grid-card-width);

@@ -19,7 +19,7 @@ import type {
   CodeRef,
   LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-import { AppCard, Tab, CardsGrid, getComponent } from './app-card';
+import { AppCard, Tab, CardsGrid } from './app-card';
 
 class HowToSidebar extends GlimmerComponent {
   <template>
@@ -112,27 +112,14 @@ class CardListSidebar extends GlimmerComponent<{
       <header class='sidebar-header'>
         <h3 class='sidebar-title'>{{@title}}</h3>
       </header>
-      <ul class='sidebar-list'>
-        {{#each @instances key='id' as |card|}}
-          <li
-            class='sidebar-list-item'
-            {{@context.cardComponentModifier
-              card=card
-              format='data'
-              fieldType=undefined
-              fieldName=undefined
-            }}
-          >
-            {{#let (getComponent card) as |Card|}}
-              <Card />
-            {{/let}}
-          </li>
-        {{/each}}
-      </ul>
+      <CardsGrid
+        @isListFormat={{true}}
+        @instances={{@instances}}
+        @context={{@context}}
+      />
     </aside>
     <style>
       .sidebar {
-        --sidebar-card-height: 11.25rem; /* 180px for 16px base font */
         width: 300px;
       }
       .sidebar-header {
@@ -145,20 +132,6 @@ class CardListSidebar extends GlimmerComponent<{
         font: 700 var(--boxel-font);
         line-height: 2;
         letter-spacing: var(--boxel-lsp-xs);
-      }
-      .sidebar-list {
-        list-style-type: none;
-        margin: 0;
-        padding: 0;
-      }
-      .sidebar-list-item {
-        height: var(--sidebar-card-height);
-      }
-      .sidebar-list-item + .sidebar-list-item {
-        margin-top: var(--boxel-sp-xs);
-      }
-      .sidebar-list-item > :deep(.field-component-card.embedded-format) {
-        --overlay-embedded-card-header-height: 0;
       }
     </style>
   </template>
@@ -330,7 +303,11 @@ class Isolated extends AppCard.isolated {
               Create New
             </Button>
           {{/if}}
-          <CardsGrid @instances={{this.instances}} @context={{@context}} />
+          <CardsGrid
+            class='grid-cards'
+            @instances={{this.instances}}
+            @context={{@context}}
+          />
         {{/if}}
       </div>
     </section>
@@ -348,6 +325,9 @@ class Isolated extends AppCard.isolated {
       .app-content {
         padding: var(--boxel-sp);
         background-color: #f7f7f7;
+      }
+      .grid-cards {
+        padding: var(--boxel-sp);
       }
 
       /* Dashboard */
