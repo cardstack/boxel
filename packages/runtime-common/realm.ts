@@ -113,6 +113,8 @@ export interface RealmAdapter {
 
   openFile(path: LocalPath): Promise<FileRef | undefined>;
 
+  lastModified(path: LocalPath): Promise<number | undefined>;
+
   exists(path: LocalPath): Promise<boolean>;
 
   write(path: LocalPath, contents: string): Promise<{ lastModified: number }>;

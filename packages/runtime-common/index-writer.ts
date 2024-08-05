@@ -1,4 +1,6 @@
+import { Memoize } from 'typescript-memoize';
 import flatten from 'lodash/flatten';
+import flattenDeep from 'lodash/flattenDeep';
 import {
   type CardResource,
   hasExecutableExtension,
@@ -15,6 +17,7 @@ import {
   every,
   query,
   upsert,
+  realmVersionExpression,
 } from './expression';
 import { type SerializedError } from './error';
 import { type DBAdapter } from './db';
@@ -47,6 +50,10 @@ export class IndexWriter {
 }
 
 export type IndexEntry = InstanceEntry | ModuleEntry | ErrorEntry;
+export type LastModifiedTimes = Map<
+  string,
+  { type: string; lastModified: number | null }
+>;
 
 export interface InstanceEntry {
   type: 'instance';
@@ -75,7 +82,7 @@ interface ModuleEntry {
 
 export class Batch {
   readonly ready: Promise<void>;
-  private touched = new Set<string>();
+  #invalidations = new Set<string>();
   private isNewGeneration = false;
   private declare realmVersion: number;
 
@@ -86,8 +93,39 @@ export class Batch {
     this.ready = this.setNextRealmVersion();
   }
 
-  private query(expression: Expression) {
-    return query(this.dbAdapter, expression, coerceTypes);
+  get invalidations() {
+    return [...this.#invalidations];
+  }
+
+  @Memoize()
+  private get nodeResolvedInvalidations() {
+    return [...this.#invalidations].map(
+      (href) => trimExecutableExtension(new URL(href)).href,
+    );
+  }
+
+  async getModifiedTimes(): Promise<LastModifiedTimes> {
+    let results = (await this.query([
+      `SELECT i.url, i.type, i.last_modified
+       FROM boxel_index as i
+       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
+          WHERE i.realm_url =`,
+      param(this.realmURL.href),
+      'AND',
+      ...realmVersionExpression({ useWorkInProgressIndex: false }),
+    ] as Expression)) as Pick<
+      BoxelIndexTable,
+      'url' | 'type' | 'last_modified'
+    >[];
+    let result: LastModifiedTimes = new Map();
+    for (let { url, type, last_modified: lastModified } of results) {
+      result.set(url, {
+        type,
+        // lastModified is a Date.now() result, so it should be safe to cast to number
+        lastModified: lastModified == null ? null : parseInt(lastModified),
+      });
+    }
+    return result;
   }
 
   async updateEntry(url: URL, entry: IndexEntry): Promise<void> {
@@ -97,7 +135,7 @@ export class Batch {
       return;
     }
     let href = url.href;
-    this.touched.add(href);
+    this.#invalidations.add(url.href);
     let { nameExpressions, valueExpressions } = asExpressions(
       {
         url: href,
@@ -161,36 +199,7 @@ export class Batch {
     ]);
   }
 
-  async makeNewGeneration() {
-    await this.setNextGenerationRealmVersion();
-    this.isNewGeneration = true;
-    let cols = [
-      'url',
-      'file_alias',
-      'type',
-      'realm_url',
-      'realm_version',
-      'is_deleted',
-    ].map((c) => [c]);
-    await this.detectUniqueConstraintError(
-      () =>
-        // create tombstones for all card URLs
-        this.query([
-          `INSERT INTO boxel_index`,
-          ...addExplicitParens(separatedByCommas(cols)),
-          `SELECT i.url, i.file_alias, i.type, i.realm_url, ${this.realmVersion} as realm_version, true as is_deleted`,
-          'FROM boxel_index as i',
-          'INNER JOIN realm_versions r ON i.realm_url = r.realm_url',
-          'WHERE i.realm_url =',
-          param(this.realmURL.href),
-          'AND',
-          ...realmVersionExpression({ useWorkInProgressIndex: false }),
-        ] as Expression),
-      { isMakingNewGeneration: true },
-    );
-  }
-
-  async done(): Promise<void> {
+  async done(): Promise<{ totalIndexEntries: number }> {
     let { nameExpressions, valueExpressions } = asExpressions({
       realm_url: this.realmURL.href,
       current_version: this.realmVersion,
@@ -216,6 +225,27 @@ export class Batch {
         ]),
       ] as Expression);
     }
+    let totalIndexEntries = await this.numberOfIndexEntries();
+    return { totalIndexEntries };
+  }
+
+  private query(expression: Expression) {
+    return query(this.dbAdapter, expression, coerceTypes);
+  }
+
+  private async numberOfIndexEntries() {
+    let [{ total }] = (await this.query([
+      `SELECT count(i.url) as total
+       FROM boxel_index as i
+       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
+          WHERE`,
+      ...every([
+        ['i.realm_url =', param(this.realmURL.href)],
+        ['i.type != ', param('error')],
+        realmVersionExpression({ useWorkInProgressIndex: true }),
+      ]),
+    ] as Expression)) as { total: string }[];
+    return parseInt(total);
   }
 
   private async setNextRealmVersion() {
@@ -243,27 +273,19 @@ export class Batch {
     }
   }
 
-  // this will use a version higher than any in-progress indexing in case there
-  // are artifacts left over from a failed index
-  private async setNextGenerationRealmVersion() {
-    let [maxVersionRow] = (await this.query([
-      'SELECT MAX(realm_version) as max_version FROM boxel_index WHERE realm_url =',
-      param(this.realmURL.href),
-    ])) as { max_version: number }[];
-    let maxVersion = (maxVersionRow?.max_version ?? 0) + 1;
-    let nextVersion = Math.max(this.realmVersion, maxVersion);
-    this.realmVersion = nextVersion;
-  }
-
   async invalidate(url: URL): Promise<string[]> {
     await this.ready;
     let alias = trimExecutableExtension(url).href;
     let invalidations = [
       ...new Set([
-        url.href,
+        ...(!this.nodeResolvedInvalidations.includes(alias) ? [url.href] : []),
         ...(alias ? await this.calculateInvalidations(alias) : []),
       ]),
     ];
+
+    if (invalidations.length === 0) {
+      return [];
+    }
 
     // insert tombstone into next version of the realm index
     let columns = [
@@ -285,69 +307,20 @@ export class Batch {
       ].map((v) => [param(v)]),
     );
 
-    await this.detectUniqueConstraintError(
-      () =>
-        this.query([
-          `INSERT INTO boxel_index`,
-          ...addExplicitParens(separatedByCommas(columns)),
-          'VALUES',
-          ...separatedByCommas(
-            rows.map((value) => addExplicitParens(separatedByCommas(value))),
-          ),
-        ] as Expression),
-      { url, invalidations },
-    );
+    let names = flattenDeep(columns);
+    await this.query([
+      'INSERT INTO boxel_index',
+      ...addExplicitParens(separatedByCommas(columns)),
+      'VALUES',
+      ...separatedByCommas(
+        rows.map((value) => addExplicitParens(separatedByCommas(value))),
+      ),
+      'ON CONFLICT ON CONSTRAINT boxel_index_pkey DO UPDATE SET',
+      ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
+    ] as Expression);
 
-    this.touched = new Set([...this.touched, ...invalidations]);
+    this.#invalidations = new Set([...this.#invalidations, ...invalidations]);
     return invalidations;
-  }
-
-  // invalidate will throw if 2 batches try to insert intersecting invalidation
-  // graph. If this happens we should cancel the job that threw because of
-  // primary key constraint violation and re-add it to the job queue with the
-  // original notifier to try again
-  private async detectUniqueConstraintError(
-    fn: () => Promise<unknown>,
-    opts?: {
-      url?: URL;
-      invalidations?: string[];
-      isMakingNewGeneration?: boolean;
-    },
-  ) {
-    try {
-      return await fn();
-    } catch (e: any) {
-      if (
-        e.message?.includes('violates unique constraint') || // postgres
-        e.result?.message?.includes('UNIQUE constraint failed') // sqlite
-      ) {
-        let message = `Invalidation conflict error in realm ${this.realmURL.href} version ${this.realmVersion}`;
-        if (opts?.url && opts?.invalidations) {
-          message =
-            `${message}: the invalidation ${
-              opts.url.href
-            } resulted in invalidation graph: ${JSON.stringify(
-              opts.invalidations,
-            )} that collides with unfinished indexing. The most likely reason this happens is that there ` +
-            `was an error encountered during incremental indexing that prevented the indexing from completing ` +
-            `(and realm version increasing), then there was another incremental update to the same document ` +
-            `that collided with the WIP artifacts from the indexing that never completed. Removing the WIP ` +
-            `indexing artifacts (the rows(s) that triggered the unique constraint will solve the immediate ` +
-            `problem, but likely the issue that triggered the unfinished indexing will need to be fixed to ` +
-            `prevent this from happening in the future.`;
-        } else if (opts?.isMakingNewGeneration) {
-          message =
-            `${message}. created a new generation while there was still unfinished indexing. ` +
-            `The most likely reason this happens is that there was an error encountered during incremental ` +
-            `indexing that prevented the indexing from completing (and realm version increasing), ` +
-            `then the realm was restarted and the left over WIP indexing artifact(s) collided with the ` +
-            `from-scratch indexing. To resolve this issue delete the WIP indexing artifacts (the row(s) ` +
-            `that triggered the unique constraint) and restart the realm.`;
-        }
-        throw new Error(message);
-      }
-      throw e;
-    }
   }
 
   private async itemsThatReference(
@@ -401,7 +374,10 @@ export class Batch {
     alias: string,
     visited: string[] = [],
   ): Promise<string[]> {
-    if (visited.includes(alias)) {
+    if (
+      visited.includes(alias) ||
+      this.nodeResolvedInvalidations.includes(alias)
+    ) {
       return [];
     }
     let childInvalidations = await this.itemsThatReference(
@@ -425,26 +401,4 @@ export class Batch {
     ];
     return [...new Set(results)];
   }
-}
-
-function realmVersionExpression(opts?: {
-  useWorkInProgressIndex?: boolean;
-  withMaxVersion?: number;
-}) {
-  return [
-    'realm_version =',
-    ...addExplicitParens([
-      'SELECT MAX(i2.realm_version)',
-      'FROM boxel_index i2',
-      'WHERE i2.url = i.url',
-      ...(opts?.withMaxVersion
-        ? ['AND i2.realm_version <=', param(opts?.withMaxVersion)]
-        : !opts?.useWorkInProgressIndex
-        ? // if we are not using the work in progress index then we limit the max
-          // version permitted to the current version for the realm
-          ['AND i2.realm_version <= r.current_version']
-        : // otherwise we choose the highest version in the system
-          []),
-    ]),
-  ] as Expression;
 }
