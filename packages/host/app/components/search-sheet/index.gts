@@ -313,7 +313,7 @@ export default class SearchSheet extends Component<Signature> {
     }
   }
 
-  @action private removeFileExtenion(cardId: string) {
+  @action private removeFileExtension(cardId: string) {
     return cardId.replace(/\.[^/.]+$/, '');
   }
 
@@ -357,7 +357,9 @@ export default class SearchSheet extends Component<Signature> {
                       @displayBoundaries={{true}}
                       {{on 'click' (fn this.handleCardSelect cardId)}}
                       data-test-search-sheet-search-result={{i}}
-                      data-test-search-result={{this.removeFileExtenion cardId}}
+                      data-test-search-result={{this.removeFileExtension
+                        cardId
+                      }}
                       class={{cn
                         'search-result'
                         is-compact=(eq this.sheetSize 'prompt')
