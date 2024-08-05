@@ -379,7 +379,7 @@ export class CurrentRun {
     let cardType: typeof CardDef | undefined;
     let isolatedHtml: string | undefined;
     let atomHtml: string | undefined;
-    let adjustedResource: CardResource | undefined;
+    let card: CardDef | undefined;
     try {
       let api = await this.loaderService.loader.import<typeof CardAPI>(
         `${baseRealm.url}card-api`,
@@ -393,7 +393,7 @@ export class CurrentRun {
         this.#realmInfo = (await realmInfoResponse.json())?.data?.attributes;
       }
 
-      adjustedResource = {
+      let adjustedResource: CardResource = {
         ...resource,
         ...{ id: instanceURL.href, type: 'card' },
       };
@@ -405,7 +405,7 @@ export class CurrentRun {
           realmURL: this.realmURL,
         },
       });
-      let card = await api.createFromSerialized<typeof CardDef>(
+      card = await api.createFromSerialized<typeof CardDef>(
         adjustedResource,
         { data: adjustedResource },
         new URL(fileURL),
@@ -477,10 +477,9 @@ export class CurrentRun {
       typesMaybeError = await this.getTypes(cardType);
     }
     let embeddedHtml: Record<string, string> | undefined;
-    if (adjustedResource && typesMaybeError?.type === 'types') {
+    if (card && typesMaybeError?.type === 'types') {
       embeddedHtml = await this.buildEmbeddedHtml(
-        adjustedResource,
-        searchData?._cardType ?? 'Card',
+        card,
         typesMaybeError.types,
         identityContext,
       );
@@ -533,47 +532,24 @@ export class CurrentRun {
   }
 
   private async buildEmbeddedHtml(
-    resource: CardResource,
-    typeName: string,
+    card: CardDef,
     types: CardType[],
     identityContext: IdentityContextType,
   ): Promise<{ [refURL: string]: string }> {
-    let api = await this.loaderService.loader.import<typeof CardAPI>(
-      `${baseRealm.url}card-api`,
-    );
     let result: { [refURL: string]: string } = {};
-    for (let { codeRef, refURL } of types) {
-      // we need to remove ourselves from the identity context so that we don't
-      // revive a cached instance with the original card class
-      let clonedIdentities = new Map([...identityContext.identities]);
-      clonedIdentities.delete(resource.id);
-      let modifiedContext = { identities: clonedIdentities };
-
-      let resourceForType = merge(resource, { meta: { adoptsFrom: codeRef } });
-      let card = await api.createFromSerialized<typeof CardDef>(
-        resourceForType,
-        { data: resourceForType },
-        new URL(resource.id),
-        {
-          identityContext: modifiedContext,
-        },
-      );
+    for (let { codeRef: componentCodeRef, refURL } of types) {
       let embeddedHtml = unwrap(
         sanitizeHTML(
           await this.#renderCard({
             card,
             format: 'embedded',
             visit: this.visitFile.bind(this),
-            identityContext: modifiedContext,
+            identityContext,
             realmPath: this.#realmPaths,
+            componentCodeRef,
           }),
         ),
       );
-      embeddedHtml = embeddedHtml.replace(
-        /<!-- __org\.boxel\.cardType START -->\s*.*?\s*<!-- __org\.boxel\.cardType END -->/gm,
-        typeName,
-      );
-
       result[refURL] = embeddedHtml;
     }
     return result;
