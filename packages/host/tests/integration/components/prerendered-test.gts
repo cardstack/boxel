@@ -1,8 +1,10 @@
 import { setupRenderingTest } from 'ember-qunit';
 import { module } from 'qunit';
 import { test } from 'qunit';
-import { renderComponent } from '../../helpers/render-component';
+
 import PrerenderedCardComponent from '@cardstack/host/components/prerendered';
+
+import { renderComponent } from '../../helpers/render-component';
 
 module('Integration | prerendered-card-component', function (hooks) {
   setupRenderingTest(hooks);

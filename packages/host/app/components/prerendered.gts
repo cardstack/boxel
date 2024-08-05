@@ -1,7 +1,8 @@
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
-import { tracked } from '@glimmer/tracking';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+
 import LoaderService from '../services/loader-service';
 
 interface PrerenderedCard {
