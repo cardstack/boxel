@@ -92,8 +92,12 @@ export class TestRealmAdapter implements RealmAdapter {
     throw new JsonWebTokenError(`unable to verify JWT: ${token}`);
   }
 
-  get lastModified() {
+  get lastModifiedMap() {
     return this.#lastModified;
+  }
+
+  async lastModified(path: string): Promise<number | undefined> {
+    return this.#lastModified.get(this.#paths.fileURL(path).href);
   }
 
   // this is to aid debugging since privates are actually not visible in the debugger

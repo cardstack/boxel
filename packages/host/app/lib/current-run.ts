@@ -31,6 +31,7 @@ import {
   type CardResource,
   type Relationship,
   type TextFileRef,
+  type LastModifiedTimes,
 } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import {
@@ -83,8 +84,10 @@ export class CurrentRun {
   #realmInfo?: RealmInfo;
   readonly stats: Stats = {
     instancesIndexed: 0,
+    modulesIndexed: 0,
     instanceErrors: 0,
     moduleErrors: 0,
+    totalIndexEntries: 0,
   };
   @service declare loaderService: LoaderService;
 
@@ -110,17 +113,29 @@ export class CurrentRun {
   }
 
   static async fromScratch(current: CurrentRun): Promise<IndexResults> {
+    let start = Date.now();
+    log.debug(`starting from scratch indexing`);
+
+    current.#batch = await current.#indexWriter.createBatch(current.realmURL);
+    let mtimes = await current.batch.getModifiedTimes();
+    await current.discoverInvalidations(current.realmURL, mtimes);
+    let invalidations = current.batch.invalidations.map(
+      (href) => new URL(href),
+    );
+
     await current.whileIndexing(async () => {
-      let start = Date.now();
-      log.debug(`starting from scratch indexing`);
-      current.#batch = await current.#indexWriter.createBatch(current.realmURL);
-      await current.batch.makeNewGeneration();
-      await current.visitDirectory(current.realmURL);
-      await current.batch.done();
+      for (let invalidation of invalidations) {
+        await current.tryToVisit(invalidation);
+      }
+      let { totalIndexEntries } = await current.batch.done();
+      current.stats.totalIndexEntries = totalIndexEntries;
       log.debug(`completed from scratch indexing in ${Date.now() - start}ms`);
     });
-    let { stats, ignoreData } = current;
-    return { invalidations: [], stats, ignoreData };
+    return {
+      invalidations: [...(invalidations ?? [])].map((url) => url.href),
+      ignoreData: current.#ignoreData,
+      stats: current.stats,
+    };
   }
 
   static async incremental(
@@ -150,7 +165,8 @@ export class CurrentRun {
         }
       }
 
-      await current.batch.done();
+      let { totalIndexEntries } = await current.batch.done();
+      current.stats.totalIndexEntries = totalIndexEntries;
 
       log.debug(
         `completed incremental indexing for ${url.href} in ${
@@ -207,7 +223,10 @@ export class CurrentRun {
     return ignoreMap;
   }
 
-  private async visitDirectory(url: URL): Promise<void> {
+  private async discoverInvalidations(
+    url: URL,
+    mtimes: LastModifiedTimes,
+  ): Promise<void> {
     let ignorePatterns = await this.#reader.readFileAsText(
       this.#realmPaths.local(new URL('.gitignore', url)),
     );
@@ -223,11 +242,26 @@ export class CurrentRun {
       if (isIgnored(this.#realmURL, this.ignoreMap, innerURL)) {
         continue;
       }
-      if (kind === 'file') {
-        await this.visitFile(innerURL, undefined);
-      } else {
+
+      if (kind === 'directory') {
         let directoryURL = this.#realmPaths.directoryURL(innerPath);
-        await this.visitDirectory(directoryURL);
+        await this.discoverInvalidations(directoryURL, mtimes);
+      } else {
+        let indexEntry = mtimes.get(innerURL.href);
+        if (
+          !indexEntry ||
+          indexEntry.type === 'error' ||
+          indexEntry.lastModified == null
+        ) {
+          await this.batch.invalidate(innerURL);
+          continue;
+        }
+
+        let localPath = this.#realmPaths.local(innerURL);
+        let lastModified = await this.#reader.lastModified(localPath);
+        if (lastModified !== indexEntry.lastModified) {
+          await this.batch.invalidate(innerURL);
+        }
       }
     }
   }
@@ -331,6 +365,7 @@ export class CurrentRun {
       lastModified: ref.lastModified,
       deps: new Set(deps),
     });
+    this.stats.modulesIndexed++;
 
     let request = await this.loaderService.loader.fetch(url.href);
     let transpiledSrc = await request.text();

@@ -29,6 +29,7 @@ import {
   fieldArity,
   tableValuedFunctionsPlaceholder,
   query,
+  realmVersionExpression,
 } from './expression';
 import {
   type Query,
@@ -993,28 +994,6 @@ async function loadFieldOrCard(
       );
     }
   }
-}
-
-function realmVersionExpression(opts?: {
-  useWorkInProgressIndex?: boolean;
-  withMaxVersion?: number;
-}) {
-  return [
-    'realm_version =',
-    ...addExplicitParens([
-      'SELECT MAX(i2.realm_version)',
-      'FROM boxel_index i2',
-      'WHERE i2.url = i.url',
-      ...(opts?.withMaxVersion
-        ? ['AND i2.realm_version <=', param(opts?.withMaxVersion)]
-        : !opts?.useWorkInProgressIndex
-        ? // if we are not using the work in progress index then we limit the max
-          // version permitted to the current version for the realm
-          ['AND i2.realm_version <= r.current_version']
-        : // otherwise we choose the highest version in the system
-          []),
-    ]),
-  ] as Expression;
 }
 
 function traveledThruPlural(pathTraveled: string) {
