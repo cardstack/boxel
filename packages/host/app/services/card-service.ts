@@ -435,12 +435,12 @@ export default class CardService extends Service {
       );
     }
 
-    let scopedCssUrls = json.meta.scopedCssUrls ?? [];
+    let cssModuleUrls = json.meta.scopedCssUrls ?? [];
     return json.data.filter(Boolean).map((r) => {
       return {
         url: r.id,
         html: r.attributes?.html,
-        cssModuleIds: scopedCssUrls,
+        cssModuleUrls,
       };
     }) as PrerenderedCard[];
   }

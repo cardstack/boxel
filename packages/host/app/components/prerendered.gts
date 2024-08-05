@@ -4,12 +4,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import LoaderService from '../services/loader-service';
-
-interface PrerenderedCard {
-  url: string;
-  html: string;
-  cssModuleUrls: string[];
-}
+import { PrerenderedCard } from '@cardstack/runtime-common';
 
 interface PrerenderedCardComponentSignature {
   Element: undefined;

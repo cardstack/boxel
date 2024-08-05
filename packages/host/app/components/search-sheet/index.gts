@@ -313,6 +313,10 @@ export default class SearchSheet extends Component<Signature> {
     }
   }
 
+  @action private removeFileExtenion(cardId: string) {
+    return cardId.replace(/\.[^/.]+$/, '');
+  }
+
   <template>
     <div
       id='search-sheet'
@@ -348,12 +352,12 @@ export default class SearchSheet extends Component<Signature> {
                   @format='embedded'
                   @realms={{this.realms}}
                 >
-                  <:item as |PrerenderedCard cardId i|>
+                  <:card as |PrerenderedCard cardId i|>
                     <CardContainer
                       @displayBoundaries={{true}}
                       {{on 'click' (fn this.handleCardSelect cardId)}}
                       data-test-search-sheet-search-result={{i}}
-                      data-test-search-result={{cardId}}
+                      data-test-search-result={{this.removeFileExtenion cardId}}
                       class={{cn
                         'search-result'
                         is-compact=(eq this.sheetSize 'prompt')
@@ -363,7 +367,7 @@ export default class SearchSheet extends Component<Signature> {
                       <PrerenderedCard />
                     </CardContainer>
 
-                  </:item>
+                  </:card>
                 </PrerenderedCardSearch>
               </div>
             </div>
