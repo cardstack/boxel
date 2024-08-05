@@ -52,8 +52,6 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import LoaderService from '../services/loader-service';
 import { type RenderCard } from '../services/render-service';
 
-import { getScopedCss } from './scoped-css';
-
 const log = logger('current-run');
 
 interface CardType {
@@ -300,7 +298,7 @@ export class CurrentRun {
       let deps = await (
         await this.loaderService.loader.getConsumedModules(url.href)
       ).filter((u) => u !== url.href);
-      await this.batch.updateEntry(new URL(url), {
+      await this.batch.updateEntry(url, {
         type: 'error',
         error: {
           status: 500,
@@ -331,18 +329,6 @@ export class CurrentRun {
       lastModified: ref.lastModified,
       deps: new Set(deps),
     });
-
-    let request = await this.loaderService.loader.fetch(url.href);
-    let transpiledSrc = await request.text();
-    let css = getScopedCss(transpiledSrc);
-    if (css) {
-      await this.batch.updateEntry(url, {
-        type: 'css',
-        source: css,
-        lastModified: ref.lastModified,
-        deps: new Set(deps),
-      });
-    }
   }
 
   private async indexCard({

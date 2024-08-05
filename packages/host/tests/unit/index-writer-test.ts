@@ -1,4 +1,4 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 
 import { IndexWriter, IndexQueryEngine } from '@cardstack/runtime-common';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
@@ -159,46 +159,4 @@ module('Unit | index-writer', function (hooks) {
       adapter,
     });
   });
-
-  test('can get css when requested with file extension', async function (assert) {
-    await runSharedTest(indexWriterTests, assert, {
-      indexWriter,
-      indexQueryEngine,
-      adapter,
-    });
-  });
-
-  test('can get css when requested without file extension', async function (assert) {
-    await runSharedTest(indexWriterTests, assert, {
-      indexWriter,
-      indexQueryEngine,
-      adapter,
-    });
-  });
-
-  test('can get css from WIP index', async function (assert) {
-    await runSharedTest(indexWriterTests, assert, {
-      indexWriter,
-      indexQueryEngine,
-      adapter,
-    });
-  });
-
-  test('can get error doc for css', async function (assert) {
-    await runSharedTest(indexWriterTests, assert, {
-      indexWriter,
-      indexQueryEngine,
-      adapter,
-    });
-  });
-
-  test('returns undefined when getting deleted css', async function (assert) {
-    await runSharedTest(indexWriterTests, assert, {
-      indexWriter,
-      indexQueryEngine,
-      adapter,
-    });
-  });
-
-  skip('TODO: cross realm invalidation');
 });

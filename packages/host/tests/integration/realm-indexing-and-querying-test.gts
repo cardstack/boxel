@@ -1005,65 +1005,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     );
   });
 
-  test('can capture css when indexing a card', async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
-      loader,
-      contents: {
-        // we use a string src here because shimmed modules are skipped by the indexer
-        'person.gts': `
-          import { contains, field, Component, CardDef } from 'https://cardstack.com/base/card-api';
-          import StringField from 'https://cardstack.com/base/string';
-
-          export class Person extends CardDef {
-            @field firstName = contains(StringField);
-            static isolated = class Isolated extends Component<typeof this> {
-              <template>
-                <h2><@fields.firstName /></h2>
-                <style>
-                  h2 {
-                    color: red;
-                  }
-                </style>
-              </template>
-            };
-          }
-        `,
-        'mango.json': {
-          data: {
-            attributes: { firstName: 'Mango' },
-            meta: {
-              adoptsFrom: { module: `./person`, name: 'Person' },
-            },
-          },
-        },
-      },
-    });
-
-    let indexer = realm.realmIndexQueryEngine;
-    let scope = `data-scopedcss-a61576b4d4-6ad446b263`;
-    let entry = await indexer.css(new URL(`${testRealmURL}person`));
-    if (entry?.type === 'css') {
-      assert.strictEqual(
-        cleanWhiteSpace(entry.source),
-        cleanWhiteSpace(`h2[${scope}] { color: red; }`),
-        'the CSS is correct',
-      );
-    } else {
-      assert.ok(
-        false,
-        `expected search entry to be a document but was: ${entry?.error.detail}`,
-      );
-    }
-    let { isolatedHtml } =
-      (await getInstance(realm, new URL(`${testRealmURL}mango`))) ?? {};
-    let fragment = isolatedHtml!.match(/<h2[^<]+<\/h2>/)![0];
-    assert.strictEqual(
-      cleanWhiteSpace(fragment),
-      cleanWhiteSpace(`<h2 ${scope}> Mango </h2>`),
-      'the HTML is correct',
-    );
-  });
-
   test(`can generate embedded HTML for instance's card class hierarchy`, async function (assert) {
     class Person extends CardDef {
       static displayName = 'Person';
