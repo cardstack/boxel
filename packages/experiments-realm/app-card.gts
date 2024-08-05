@@ -439,13 +439,6 @@ export class AppCard extends CardDef {
   static isolated = AppCardIsolated;
 }
 
-export const getComponent = (card: CardDef) => {
-  if (!card) {
-    return;
-  }
-  return card.constructor.getComponent(card);
-};
-
 export class CardsGrid extends GlimmerComponent<{
   Args: {
     instances: CardDef[] | [];
@@ -470,7 +463,7 @@ export class CardsGrid extends GlimmerComponent<{
             fieldName=undefined
           }}
         >
-          {{#let (getComponent card) as |Card|}}
+          {{#let (this.getComponent card) as |Card|}}
             <Card />
           {{/let}}
         </li>
@@ -503,4 +496,6 @@ export class CardsGrid extends GlimmerComponent<{
       }
     </style>
   </template>
+
+  getComponent = (card: CardDef) => card.constructor.getComponent(card);
 }
