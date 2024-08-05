@@ -7,7 +7,7 @@ import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
 import { BoxelInput, FieldContainer } from '@cardstack/boxel-ui/components';
-import { cn, eq, not, pick } from '@cardstack/boxel-ui/helpers';
+import { cn, eq, not } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import { startCase } from 'lodash';
 import {
@@ -2284,7 +2284,7 @@ export class FieldDef extends BaseDef {
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
 }
 
-class IDField extends FieldDef {
+export class ReadOnlyField extends FieldDef {
   static [primitive]: string;
   static [useIndexBasedKey]: never;
   static embedded = class Embedded extends Component<typeof this> {
@@ -2294,12 +2294,7 @@ class IDField extends FieldDef {
   };
   static edit = class Edit extends Component<typeof this> {
     <template>
-      {{! template-lint-disable require-input-label }}
-      <input
-        type='text'
-        value={{@model}}
-        {{on 'input' (pick 'target.value' @set)}}
-      />
+      {{@model}}
     </template>
   };
 }
@@ -2350,7 +2345,7 @@ export class CardDef extends BaseDef {
   [isSavedInstance] = false;
   [realmInfo]: RealmInfo | undefined = undefined;
   [realmURL]: URL | undefined = undefined;
-  @field id = contains(IDField);
+  @field id = contains(ReadOnlyField);
   @field title = contains(StringField);
   @field description = contains(StringField);
   // TODO: this will probably be an image or image url field card when we have it
@@ -3159,7 +3154,7 @@ function makeDescriptor<
   } else {
     descriptor.set = function (this: BaseInstanceType<CardT>, value: any) {
       if (
-        (field.card as typeof BaseDef) === IDField &&
+        (field.card as typeof BaseDef) === ReadOnlyField &&
         isCardInstance(this) &&
         this[isSavedInstance]
       ) {
@@ -3168,7 +3163,7 @@ function makeDescriptor<
             field.name
           }' on the saved card '${
             (this as any)[field.name]
-          }' because it is the card's identifier`,
+          }' because it is a read-only field`,
         );
       }
       value = field.validate(this, value);
