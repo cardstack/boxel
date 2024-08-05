@@ -22,8 +22,8 @@ import {
   type CodeRef,
   type CreateNewCard,
   Deferred,
-  type RealmInfo,
   Loader,
+  type RealmCards,
 } from '@cardstack/runtime-common';
 
 import type { Query, Filter } from '@cardstack/runtime-common/query';
@@ -52,12 +52,6 @@ import type LoaderService from '../../services/loader-service';
 
 interface Signature {
   Args: {};
-}
-
-export interface RealmCards {
-  url: string | null;
-  realmInfo: RealmInfo;
-  cards: CardDef[];
 }
 
 type Request = {
@@ -361,7 +355,7 @@ export default class CardCatalogModal extends Component<Signature> {
         opts?.multiSelect,
       );
       let request = new TrackedObject<Request>({
-        search: getSearchResults(this, () => query),
+        search: getSearchResults(this, query),
         deferred: new Deferred(),
         opts,
       });
