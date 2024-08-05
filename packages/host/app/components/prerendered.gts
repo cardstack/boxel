@@ -28,7 +28,7 @@ export default class PrerenderedCardComponent extends Component<PrerenderedCardC
   @tracked isCssLoaded = false;
 
   async ensureCssLoaded() {
-    // cssModuleId is a URL-encoded string, for example: http://localhost:4201/drafts/person.gts.LnBlcnNvbi1jb250YWluZXIgeyBib3JkZXI6IDFweCBzb2xpZCBncmF5IH0.glimmer-scoped.css
+    // cssModuleId is a URL-encoded string with CSS, for example: http://localhost:4201/drafts/person.gts.LnBlcnNvbi1jb250YWluZXIgeyBib3JkZXI6IDFweCBzb2xpZCBncmF5IH0.glimmer-scoped.css
     // these are created by glimmer scoped css and saved as a dependency of an instance in boxel index when the instance is indexed
     for (let cssModuleId of this.args.item.cssModuleIds) {
       await this.loaderService.loader.import(cssModuleId); // This will be intercepted by maybeHandleScopedCSSRequest middleware in the host app which will load the css into the DOM
