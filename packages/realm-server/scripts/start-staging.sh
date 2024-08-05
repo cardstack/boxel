@@ -1,6 +1,6 @@
 #! /bin/sh
 pnpm setup:base-in-deployment
-pnpm setup:drafts-in-deployment
+pnpm setup:experiments-in-deployment
 pnpm setup:published-in-deployment
 NODE_NO_WARNINGS=1 \
   LOG_LEVELS='perf=debug' \
@@ -16,12 +16,12 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl='https://realms-staging.stack.cards/base/' \
   \
-  --path='/persistent/drafts' \
+  --path='/persistent/experiments' \
   --matrixURL='https://matrix-staging.stack.cards' \
-  --username='drafts_realm' \
-  --password=${DRAFTS_REALM_PASSWORD} \
-  --fromUrl='https://realms-staging.stack.cards/drafts/' \
-  --toUrl='https://realms-staging.stack.cards/drafts/' \
+  --username='experiments_realm' \
+  --password=${EXPERIMENTS_REALM_PASSWORD} \
+  --fromUrl='https://realms-staging.stack.cards/experiments/' \
+  --toUrl='https://realms-staging.stack.cards/experiments/' \
   \
   --path='/persistent/published' \
   --matrixURL='https://matrix-staging.stack.cards' \
@@ -31,5 +31,5 @@ NODE_NO_WARNINGS=1 \
   --toUrl='https://realms-staging.stack.cards/published/' \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl='https://realms-staging.stack.cards/base/' \
-  --fromUrl='https://realms-staging.stack.card/base/' \
+  --fromUrl='https://realms-staging.stack.cards/base/' \
   --toUrl='https://realms-staging.stack.cards/base/'

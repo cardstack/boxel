@@ -1698,10 +1698,10 @@ module('Realm Server', function (hooks) {
             'embedded html looks correct',
           );
 
-          assert.deepEqual(
-            json.included,
-            [],
-            'no css is present in the response',
+          assertScopedCssUrlsContain(
+            assert,
+            json.meta.scopedCssUrls,
+            cardDefModuleDependencies,
           );
 
           assert.strictEqual(json.meta.page.total, 1, 'total count is correct');
@@ -1855,16 +1855,6 @@ module('Realm Server', function (hooks) {
           'embedded html looks correct (CardDef template)',
         );
 
-        // TODO: uncomment when we have a way to include cross realm css in the response
-        // This will be the same time when the test that follows this one should be unskipped
-        // assert.deepEqual(
-        //   json.data[0].relationships['prerendered-card-css'].data[0],
-        //   {
-        //     type: 'prerendered-card-css',
-        //     id: 'https://cardstack.com/base/card-api',
-        //   },
-        // );
-
         // 2nd card: Person Craig
         assert.strictEqual(json.data[1].type, 'prerendered-card');
         assert.true(
@@ -1892,12 +1882,16 @@ module('Realm Server', function (hooks) {
           'embedded html for Jimmy looks correct (CardDef template)',
         );
 
+        assertScopedCssUrlsContain(
+          assert,
+          json.meta.scopedCssUrls,
+          cardDefModuleDependencies,
+        );
+
         assert.strictEqual(json.meta.page.total, 4, 'total count is correct');
       });
 
-      // Skipped until we have a way to include cross realm css in the response
-      // @ts-ignore
-      test.skip('returns correct css in relationships, even the one indexed in another realm (CardDef)', async function (assert) {
+      test('returns correct css in relationships, even the one indexed in another realm (CardDef)', async function (assert) {
         let query: Query & { prerenderedHtmlFormat: string } = {
           filter: {
             on: {
@@ -1932,26 +1926,8 @@ module('Realm Server', function (hooks) {
             .includes('Embedded Card FancyPerson: Jane'),
           'embedded html for Jane looks correct (FancyPerson template)',
         );
-        assert.deepEqual(
-          json.data[0].relationships['prerendered-card-css'].data,
-          [
-            {
-              type: 'prerendered-card-css',
-              id: `${testRealmHref}fancy-person`,
-            },
-            {
-              type: 'prerendered-card-css',
-              id: `${testRealmHref}person`,
-            },
-            {
-              type: 'prerendered-card-css',
-              id: 'https://cardstack.com/base/card-api',
-            },
-          ],
-        );
 
         //  2nd card: FancyPerson Jimmy
-
         assert.true(
           json.data[1].attributes.html
             .replace(/\s+/g, ' ')
@@ -1959,38 +1935,10 @@ module('Realm Server', function (hooks) {
           'embedded html for Jimmy looks correct (FancyPerson template)',
         );
 
-        assert.deepEqual(
-          json.data[1].relationships['prerendered-card-css'].data,
-          [
-            {
-              type: 'prerendered-card-css',
-              id: `${testRealmHref}fancy-person`,
-            },
-            {
-              type: `prerendered-card-css`,
-              id: `${testRealmHref}person`,
-            },
-            {
-              type: `prerendered-card-css`,
-              id: `https://cardstack.com/base/card-api`,
-            },
-          ],
-        );
-
-        // Included css modules
-        assert.strictEqual(
-          json.included.length,
-          3,
-          '3 css modules are included',
-        );
-        assert.deepEqual(
-          json.included.map((i: any) => i.id),
-          [
-            `${testRealmHref}fancy-person`,
-            `${testRealmHref}person`,
-            'https://cardstack.com/base/card-api',
-          ],
-        );
+        assertScopedCssUrlsContain(assert, json.meta.scopedCssUrls, [
+          ...cardDefModuleDependencies,
+          ...[`${testRealmHref}fancy-person.gts`, `${testRealmHref}person.gts`],
+        ]);
       });
 
       test('can filter prerendered instances', async function (assert) {
@@ -2832,3 +2780,27 @@ module('Realm Server serving from a subdirectory', function (hooks) {
     );
   });
 });
+
+function assertScopedCssUrlsContain(
+  assert: Assert,
+  scopedCssUrls: string[],
+  moduleUrls: string[],
+) {
+  moduleUrls.forEach((url) => {
+    let pattern = new RegExp(`^${url}\\.[^.]+\\.glimmer-scoped\\.css$`);
+
+    assert.true(
+      scopedCssUrls.some((scopedCssUrl) => pattern.test(scopedCssUrl)),
+      `css url for ${url} is in the deps`,
+    );
+  });
+}
+
+// These modules have CSS that CardDef consumes, so we expect to see them in all relationships of a prerendered card
+let cardDefModuleDependencies = [
+  'https://cardstack.com/base/card-api.gts',
+  'https://cardstack.com/base/field-component.gts',
+  'https://cardstack.com/base/contains-many-component.gts',
+  'https://cardstack.com/base/links-to-editor.gts',
+  'https://cardstack.com/base/links-to-many-component.gts',
+];

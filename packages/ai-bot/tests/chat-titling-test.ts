@@ -378,7 +378,7 @@ module('shouldSetRoomTitle', () => {
             toolCall: {
               name: 'patchCard',
               arguments: {
-                card_id: 'http://localhost:4201/drafts/Friend/1',
+                card_id: 'http://localhost:4201/experiments/Friend/1',
                 attributes: {
                   firstName: 'Dave',
                 },

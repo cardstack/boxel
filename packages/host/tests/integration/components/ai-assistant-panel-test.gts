@@ -30,7 +30,7 @@ import {
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import { CardDef } from '../../../../drafts-realm/re-export';
+import { CardDef } from '../../../../experiments-realm/re-export';
 import {
   percySnapshot,
   testRealmURL,
@@ -2097,6 +2097,40 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert
       .dom('[data-test-message-idx="1"] [data-test-ai-message-content]')
       .containsText('A message from the background.');
+  });
+
+  test('it should create a new line in the right position when user type `Shift+Enter`', async function (assert) {
+    await setCardInOperatorModeState();
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await openAiAssistant();
+
+    await fillIn(
+      '[data-test-message-field]',
+      'This is 1st sentence This is 2nd sentence',
+    );
+
+    const textarea = document.querySelector(
+      '[data-test-message-field]',
+    ) as HTMLTextAreaElement;
+    textarea!.selectionStart = 21; // position after "This is 1st sentence"
+    textarea!.selectionEnd = 21;
+
+    await triggerEvent(textarea!, 'keydown', {
+      key: 'Enter',
+      code: 'Enter',
+      shiftKey: true,
+    });
+
+    assert
+      .dom('[data-test-message-field]')
+      .hasValue('This is 1st sentence \n\nThis is 2nd sentence');
   });
 
   test('after command is issued, a reaction event will be dispatched', async function (assert) {

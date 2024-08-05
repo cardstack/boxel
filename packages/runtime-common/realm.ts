@@ -145,7 +145,6 @@ export interface RealmAdapter {
 }
 
 interface Options {
-  deferStartUp?: true;
   useTestingDomain?: true;
   disableModuleCaching?: true;
 }
@@ -222,7 +221,6 @@ export class Realm {
   #realmIndexQueryEngine: RealmIndexQueryEngine;
   #adapter: RealmAdapter;
   #router: Router;
-  #deferStartup: boolean;
   #useTestingDomain = false;
   #log = logger('realm');
   #perfLog = logger('perf');
@@ -234,9 +232,6 @@ export class Realm {
   #realmSecretSeed: string;
   #disableModuleCaching = false;
 
-  #onIndexWriterReady:
-    | ((indexWriter: IndexWriter) => Promise<void>)
-    | undefined;
   #publicEndpoints: RouteTable<true> = new Map([
     [
       SupportedMimeType.Session,
@@ -277,7 +272,7 @@ export class Realm {
       dbAdapter,
       queue,
       virtualNetwork,
-      onIndexWriterReady,
+      withIndexWriter,
       assetsURL,
     }: {
       url: string;
@@ -288,7 +283,7 @@ export class Realm {
       dbAdapter: DBAdapter;
       queue: Queue;
       virtualNetwork: VirtualNetwork;
-      onIndexWriterReady?: (indexWriter: IndexWriter) => Promise<void>;
+      withIndexWriter?: (indexWriter: IndexWriter, loader: Loader) => void;
       assetsURL: URL;
     },
     opts?: Options,
@@ -327,11 +322,11 @@ export class Realm {
     this.loaderTemplate = loader;
 
     this.#adapter = adapter;
-    this.#onIndexWriterReady = onIndexWriterReady;
     this.#realmIndexUpdater = new RealmIndexUpdater({
       realm: this,
       dbAdapter,
       queue,
+      withIndexWriter,
     });
     this.#realmIndexQueryEngine = new RealmIndexQueryEngine({
       realm: this,
@@ -407,18 +402,13 @@ export class Realm {
         return createResponse({ init: { status: 200 }, requestContext });
       });
     });
-
-    this.#deferStartup = opts?.deferStartUp ?? false;
-    if (!opts?.deferStartUp) {
-      this.#startedUp.fulfill((() => this.#startup())());
-    }
   }
 
   private async readinessCheck(
     _request: Request,
     requestContext: RequestContext,
   ) {
-    await this.ready;
+    await this.#startedUp.promise;
 
     return createResponse({
       body: null,
@@ -430,12 +420,9 @@ export class Realm {
     });
   }
 
-  // it's only necessary to call this when the realm is using a deferred startup
   async start() {
-    if (this.#deferStartup) {
-      this.#startedUp.fulfill((() => this.#startup())());
-    }
-    await this.ready;
+    this.#startedUp.fulfill((() => this.#startup())());
+    await this.#startedUp.promise;
   }
 
   async fullIndex() {
@@ -568,15 +555,11 @@ export class Realm {
 
   async #startup() {
     await Promise.resolve();
-    await this.#realmIndexUpdater.run(this.#onIndexWriterReady);
+    await this.#realmIndexUpdater.run();
     this.sendServerEvent({ type: 'index', data: { type: 'full' } });
     this.#perfLog.debug(
       `realm server startup in ${Date.now() - this.#startTime}ms`,
     );
-  }
-
-  get ready(): Promise<void> {
-    return this.#startedUp.promise;
   }
 
   // TODO get rid of this
@@ -809,7 +792,7 @@ export class Realm {
       // local requests are allowed to query the realm as the index is being built up
       if (!isLocal) {
         let timeout = await Promise.race<void | Error>([
-          this.ready,
+          this.#startedUp.promise,
           new Promise((resolve) =>
             setTimeout(() => {
               resolve(

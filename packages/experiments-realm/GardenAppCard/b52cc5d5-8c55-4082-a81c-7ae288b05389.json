@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "tabs": [
+        {
+          "displayName": "Garden Designs",
+          "tabId": "GardenDesign",
+          "ref": {
+            "name": "GardenDesign",
+            "module": "garden-design"
+          },
+          "isTable": false
+        },
+        {
+          "displayName": "Garden Items",
+          "tabId": "GardenItem",
+          "ref": {
+            "name": "GardenItem",
+            "module": "garden-design"
+          },
+          "isTable": false
+        }
+      ],
+      "headerIcon": {
+        "altText": null,
+        "size": "actual",
+        "height": null,
+        "width": null,
+        "base64": null
+      },
+      "title": "Garden App",
+      "description": "A mini-app for garden design.",
+      "thumbnailURL": ""
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../garden-app",
+        "name": "GardenAppCard"
+      }
+    }
+  }
+}

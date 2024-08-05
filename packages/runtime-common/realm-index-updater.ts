@@ -1,6 +1,8 @@
 import { Memoize } from 'typescript-memoize';
 import {
   IndexWriter,
+  Deferred,
+  logger,
   type Stats,
   type DBAdapter,
   type Queue,
@@ -17,6 +19,7 @@ import ignore, { type Ignore } from 'ignore';
 export class RealmIndexUpdater {
   #realm: Realm;
   #loader: Loader;
+  #log = logger('realm-index-updater');
   #ignoreData: Record<string, string> = {};
   #stats: Stats = {
     instancesIndexed: 0,
@@ -25,15 +28,18 @@ export class RealmIndexUpdater {
   };
   #indexWriter: IndexWriter;
   #queue: Queue;
+  #indexingDeferred: Deferred<void> | undefined;
 
   constructor({
     realm,
     dbAdapter,
     queue,
+    withIndexWriter,
   }: {
     realm: Realm;
     dbAdapter: DBAdapter;
     queue: Queue;
+    withIndexWriter?: (indexWriter: IndexWriter, loader: Loader) => void;
   }) {
     if (!dbAdapter) {
       throw new Error(
@@ -44,6 +50,9 @@ export class RealmIndexUpdater {
     this.#queue = queue;
     this.#realm = realm;
     this.#loader = Loader.cloneLoader(this.#realm.loaderTemplate);
+    if (withIndexWriter) {
+      withIndexWriter(this.#indexWriter, this.#realm.loaderTemplate);
+    }
   }
 
   get stats() {
@@ -68,51 +77,82 @@ export class RealmIndexUpdater {
     return ignoreMap;
   }
 
-  async run(onIndexWriterReady?: (indexWriter: IndexWriter) => Promise<void>) {
+  async run() {
     await this.#queue.start();
-    if (onIndexWriterReady) {
-      await onIndexWriterReady(this.#indexWriter);
-    }
 
-    await this.fullIndex();
+    let isNewIndex = await this.#indexWriter.isNewIndex(this.realmURL);
+    if (isNewIndex) {
+      // we only await the full indexing at boot if this is a brand new index
+      await this.fullIndex();
+    } else {
+      // this promise is tracked in `this.indexing()` if consumers need it.
+      this.fullIndex();
+    }
+  }
+
+  indexing() {
+    return this.#indexingDeferred?.promise;
   }
 
   async fullIndex() {
-    let args: FromScratchArgs = {
-      realmURL: this.#realm.url,
-    };
-    let job = await this.#queue.publish<FromScratchResult>(
-      `from-scratch-index:${this.#realm.url}`,
-      args,
-    );
-    let { ignoreData, stats } = await job.done;
-    this.#stats = stats;
-    this.#ignoreData = ignoreData;
-    this.#loader = Loader.cloneLoader(this.#realm.loaderTemplate);
+    this.#indexingDeferred = new Deferred<void>();
+    try {
+      let args: FromScratchArgs = {
+        realmURL: this.#realm.url,
+      };
+      let job = await this.#queue.publish<FromScratchResult>(
+        `from-scratch-index:${this.#realm.url}`,
+        args,
+      );
+      let { ignoreData, stats } = await job.done;
+      this.#stats = stats;
+      this.#ignoreData = ignoreData;
+      this.#loader = Loader.cloneLoader(this.#realm.loaderTemplate);
+      this.#log.info(
+        `Realm ${this.realmURL.href} has completed indexing: ${JSON.stringify(
+          stats,
+          null,
+          2,
+        )}`,
+      );
+    } catch (e: any) {
+      this.#indexingDeferred.reject(e);
+      throw e;
+    } finally {
+      this.#indexingDeferred.fulfill();
+    }
   }
 
   async update(
     url: URL,
     opts?: { delete?: true; onInvalidation?: (invalidatedURLs: URL[]) => void },
   ): Promise<void> {
-    let args: IncrementalArgs = {
-      url: url.href,
-      realmURL: this.#realm.url,
-      operation: opts?.delete ? 'delete' : 'update',
-      ignoreData: { ...this.#ignoreData },
-    };
-    let job = await this.#queue.publish<IncrementalResult>(
-      `incremental-index:${this.#realm.url}`,
-      args,
-    );
-    let { invalidations, ignoreData, stats } = await job.done;
-    this.#stats = stats;
-    this.#ignoreData = ignoreData;
-    this.#loader = Loader.cloneLoader(this.#realm.loaderTemplate);
-    if (opts?.onInvalidation) {
-      opts.onInvalidation(
-        invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
+    this.#indexingDeferred = new Deferred<void>();
+    try {
+      let args: IncrementalArgs = {
+        url: url.href,
+        realmURL: this.#realm.url,
+        operation: opts?.delete ? 'delete' : 'update',
+        ignoreData: { ...this.#ignoreData },
+      };
+      let job = await this.#queue.publish<IncrementalResult>(
+        `incremental-index:${this.#realm.url}`,
+        args,
       );
+      let { invalidations, ignoreData, stats } = await job.done;
+      this.#stats = stats;
+      this.#ignoreData = ignoreData;
+      this.#loader = Loader.cloneLoader(this.#realm.loaderTemplate);
+      if (opts?.onInvalidation) {
+        opts.onInvalidation(
+          invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
+        );
+      }
+    } catch (e: any) {
+      this.#indexingDeferred.reject(e);
+      throw e;
+    } finally {
+      this.#indexingDeferred.fulfill();
     }
   }
 

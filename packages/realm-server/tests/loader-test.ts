@@ -166,7 +166,7 @@ module('loader', function (hooks) {
           queue,
         });
         virtualNetwork.mount(realm.handle.bind(realm));
-        await realm.ready;
+        await realm.start();
       },
     });
 

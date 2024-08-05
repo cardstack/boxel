@@ -38,7 +38,7 @@ There exists a "dev" mode in which we can use ember-cli to host the card runtime
 ### ember-cli Hosted App
 
 Prerequisite:
-Make sure that you have created a matrix user for the base realm, drafts realm, and for the published realm. To make it easier, you can execute `pnpm register-realm-users` in `packages/matrix/`, this will create a matrix user for the base realm, drafts realm, and a matrix user for the published realm.
+Make sure that you have created a matrix user for the base realm, experiments realm, and for the published realm. To make it easier, you can execute `pnpm register-realm-users` in `packages/matrix/`, this will create a matrix user for the base realm, experiments realm, and a matrix user for the published realm.
 
 In order to run the ember-cli hosted app:
 
@@ -75,11 +75,11 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 | Port  | Description                                               | Running `start:all` | Running `start:base` |
 | ----- | --------------------------------------------------------- | ------------------- | -------------------- |
 | :4201 | `/base` base realm                                        | ✅                  | ✅                   |
-| :4201 | `/drafts` draft realm                                     | ✅                  | 🚫                   |
-| :4201 | `/published` draft realm                                  | ✅                  | 🚫                   |
+| :4201 | `/experiments` experiments realm                          | ✅                  | 🚫                   |
+| :4201 | `/published` published realm                              | ✅                  | 🚫                   |
 | :4202 | `/test` host test realm, `/node-test` node test realm     | ✅                  | 🚫                   |
 | :4203 | `root (/)` base realm                                     | ✅                  | 🚫                   |
-| :4204 | `root (/)` drafts realm                                   | ✅                  | 🚫                   |
+| :4204 | `root (/)` experiments realm                              | ✅                  | 🚫                   |
 | :4205 | qunit server mounting realms in iframes for testing       | ✅                  | 🚫                   |
 | :5001 | Mail user interface for viewing emails sent to local SMTP | ✅                  | 🚫                   |
 | :5435 | Postgres DB                                               | ✅                  | 🚫                   |
@@ -87,7 +87,7 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 
 #### Using `start:development`
 
-You can also use `start:development` if you want the functionality of `start:all`, but without running the test realms. `start:development` will enable you to open http://localhost:4201 and allow to select between the cards in the /base and /drafts realm.
+You can also use `start:development` if you want the functionality of `start:all`, but without running the test realms. `start:development` will enable you to open http://localhost:4201 and allow to select between the cards in the /base and /experiments realm.
 
 ### Card Pre-rendering
 
@@ -116,6 +116,7 @@ Boxel uses a Postgres database. In development, the Postgres database runs withi
 When running tests we isolate the database between each test run by actually creating a new database for each test with a random database name (e.g. `test_db_1234567`). The test databases are dropped before the beginning of each test run.
 
 If you wish to drop the development databases you can execute:
+
 ```
 pnpm drop-all-dbs
 ```
@@ -123,35 +124,42 @@ pnpm drop-all-dbs
 You can then run `pnpm migrate up` (with `PGDATABASE` set accordingly if you want to migrate a database other than `boxel`) or just start the realm server (`pnpm start:all`) to create the database again.
 
 To interact with your local database directly you can use psql:
+
 ```
 psql -h localhost -p 5435 -U postgres
 ```
 
 #### DB Migrations
+
 When the realm server starts up it will automatically run DB migrations that live in the `packages/realm-server/migrations` folder. As part of development you may wish to run migrations manually as well as to create a new migration.
 
 To create a new migration, from `packages/realm-server`, execute:
+
 ```
 pnpm migrate create name-of-migration
 ```
-This creates a new migration file in `packages/realm-server/migrations`. You can then edit the newly created migration file with the details of your migration. We use `node-pg-migrate` to handle our migrations. You can find the API at https://salsita.github.io/node-pg-migrate. 
+
+This creates a new migration file in `packages/realm-server/migrations`. You can then edit the newly created migration file with the details of your migration. We use `node-pg-migrate` to handle our migrations. You can find the API at https://salsita.github.io/node-pg-migrate.
 
 To run the migration, execute:
+
 ```
 pnpm migrate up
 ```
 
 To revert the migration, execute:
+
 ```
 pnpm migrate down
 ```
 
 Boxel also uses SQLite in order to run the DB in the browser as part of running browser tests (and eventually we may run the realm server in the browser to provide a local index). We treat the Postgres database schema as the source of truth and derive the SQLite schema from it. Therefore, once you author and apply a migration, you should generate a new schema SQL file for SQLite. To generate a new SQLite schema, from `packages/realm-server`, execute:
+
 ```
 pnpm make-schema
 ```
-This will create a new SQLite schema based on the current postgres DB (the schema file will be placed in the `packages/host/config/schema` directory). This schema file will share the same timestamp as the latest migration file's timestamp. If you forget to generate a new schema file, the next time you start the host app, you will receive an error that the SQLite schema is out of date.
 
+This will create a new SQLite schema based on the current postgres DB (the schema file will be placed in the `packages/host/config/schema` directory). This schema file will share the same timestamp as the latest migration file's timestamp. If you forget to generate a new schema file, the next time you start the host app, you will receive an error that the SQLite schema is out of date.
 
 ### Matrix Server
 
