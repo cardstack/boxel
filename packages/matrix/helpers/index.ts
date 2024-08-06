@@ -368,7 +368,7 @@ export async function setupTwoStackItems(
     .click();
   await page.locator('[data-test-add-card-right-stack]').click();
   await page
-    .locator(`[data-test-search-result="${rightStackTopCardId}"]`)
+    .locator(`[data-test-search-sheet-recent-card="${rightStackTopCardId}"]`)
     .click();
 }
 
