@@ -300,11 +300,13 @@ module(`Integration | prerendered-card-search`, function (hooks) {
         <:loading>
           Loading...
         </:loading>
-        <:item as |PrerenderedCard|>
-          <div class='card-container'>
-            <PrerenderedCard />
-          </div>
-        </:item>
+        <:response as |response|>
+          <response.Results as |PrerenderedCard|>
+            <div class='card-container'>
+              <PrerenderedCard />
+            </div>
+          </response.Results>
+        </:response>
       </PrerenderedCardSearch>
     </template>);
     await waitFor('.card-container');

@@ -644,7 +644,9 @@ module('Integration | card-delete', function (hooks) {
         );
         await focus(`[data-test-search-field]`);
         assert
-          .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
+          .dom(
+            `[data-test-search-sheet-recent-card="${testRealmURL}Pet/mango"]`,
+          )
           .exists();
         await click('[data-test-search-sheet-cancel-button]');
         await click(
