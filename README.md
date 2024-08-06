@@ -44,10 +44,10 @@ In order to run the ember-cli hosted app:
 
 1. `pnpm build` in the boxel-ui/addon workspace to build the boxel-ui addon.
 2. `pnpm build` in the boxel-motion/addon workspace to build the boxel-motion addon.
-3. `pnpm start` in the host/ workspace to serve the ember app. Note that this script includes the environment variable `OWN_REALM_URL=http://localhost:4201/draft/` which configures the host to point to the experiments realm's cards realm by default.
+3. `pnpm start` in the host/ workspace to serve the ember app. Note that this script includes the environment variable `OWN_REALM_URL=http://localhost:4201/experiments/` which configures the host to point to the experiments realm's cards realm by default.
 4. `pnpm start:all` in the realm-server/ to serve the base and experiments realms -- this will also allow you to switch between the app and the tests without having to restart servers)
 
-The app is available at http://localhost:4200. It will serve the experiments realm (configurable with OWN_REALM_URL, as mentioned above). You can open the base and experiments cards workspace directly by entering http://localhost:4201/base or http://localhost:4201/draft in the browser.
+The app is available at http://localhost:4200. It will serve the experiments realm (configurable with OWN_REALM_URL, as mentioned above). You can open the base and experiments cards workspace directly by entering http://localhost:4201/base or http://localhost:4201/experiments in the browser.
 
 If you want to use operator mode, you need to register an account on Matrix. To make it easier, you can execute `pnpm register-test-user` in `packages/matrix/`. Now you can sign in with the test user using the credentials `username: user`, `password: password`.
 
@@ -64,7 +64,7 @@ In order to run the realm server hosted app:
 1. `pnpm start:build` in the host/ workspace to re-build the host app (this step can be omitted if you do not want host app re-builds)
 2. `pnpm start:all` in the realm-server/ to serve the base and experiments realms
 
-You can visit the URL of each realm server to view that realm's app. So for instance, the base realm's app is available at `http://localhost:4201/base` and the draft realm's app is at `http://localhost:4201/draft`.
+You can visit the URL of each realm server to view that realm's app. So for instance, the base realm's app is available at `http://localhost:4201/base` and the draft realm's app is at `http://localhost:4201/experiments`.
 
 Live reloads are not available in this mode, however, if you use start the server with the environment variable `DISABLE_MODULE_CACHING=true` you can just refresh the page to grab the latest code changes if you are running rebuilds (step #1 and #2 above).
 
