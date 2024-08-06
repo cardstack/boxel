@@ -175,6 +175,9 @@ export default class CardPrerender extends Component {
     } else {
       return {
         reader: {
+          lastModified: this.localIndexer.adapter.lastModified.bind(
+            this.localIndexer.adapter,
+          ),
           readdir: this.localIndexer.adapter.readdir.bind(
             this.localIndexer.adapter,
           ),

@@ -44,6 +44,7 @@ module('Integration | card-prerender', function (hooks) {
     let { default: StringField } = string;
 
     class Pet extends CardDef {
+      static displayName = 'Pet';
       @field firstName = contains(StringField);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
@@ -93,6 +94,7 @@ module('Integration | card-prerender', function (hooks) {
           import StringCard from "https://cardstack.com/base/string";
 
           export class Person extends CardDef {
+            static displayName = 'Person';
             @field firstName = contains(StringCard);
             static isolated = class Isolated extends Component<typeof this> {
               <template>
@@ -118,6 +120,7 @@ module('Integration | card-prerender', function (hooks) {
           import StringCard from "https://cardstack.com/base/string";
 
           export class FancyPerson extends Person {
+            static displayName = 'Fancy Person';
             @field favoriteColor = contains(StringCard);
 
             static embedded = class Embedded extends Component<typeof this> {
@@ -225,31 +228,6 @@ module('Integration | card-prerender', function (hooks) {
     );
 
     assert.strictEqual(
-      results.prerenderedCardCssItems.length,
-      2,
-      'the search results contain the correct number of css items (fancy person has 2 css items, one from person and one from fancy person)',
-    );
-
-    assert.strictEqual(
-      results.prerenderedCardCssItems[0].cssModuleId,
-      'http://test-realm/test/fancy-person',
-    );
-
-    assert.true(
-      results.prerenderedCardCssItems[0].source.includes('.fancy-border'),
-      'css for fancy person card looks correct',
-    );
-    assert.strictEqual(
-      results.prerenderedCardCssItems[1].cssModuleId,
-      'http://test-realm/test/person',
-    );
-
-    assert.true(
-      results.prerenderedCardCssItems[1].source.includes('.border'),
-      'css for person card looks correct',
-    );
-
-    assert.strictEqual(
       results.prerenderedCards.length,
       1,
       'only one prerendered card is returned with the specified filter',
@@ -286,8 +264,8 @@ module('Integration | card-prerender', function (hooks) {
     [
       ['test card: pet mango', 'Pet'],
       ['test card: pet vangogh', 'Pet'],
-      ['test card: person jane', 'FancyPerson'],
-      ['test card: person jimmy', 'FancyPerson'],
+      ['test card: person jane', 'Fancy Person'],
+      ['test card: person jimmy', 'Fancy Person'],
     ].forEach(([title, type], index) => {
       assert.strictEqual(
         cleanWhiteSpace(
@@ -297,7 +275,7 @@ module('Integration | card-prerender', function (hooks) {
         <div class="embedded-template">
           <div class="thumbnail-section">
             <div class="card-thumbnail">
-              <div class="card-thumbnail-text" data-test-card-thumbnail-text>Card</div>
+              <div class="card-thumbnail-text" data-test-card-thumbnail-text>${type}</div>
             </div>
           </div>
           <div class="info-section">

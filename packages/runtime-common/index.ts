@@ -38,6 +38,19 @@ export interface DirectoryEntryRelationship {
     kind: 'directory' | 'file';
   };
 }
+
+export interface RealmCards {
+  url: string | null;
+  realmInfo: RealmInfo;
+  cards: CardDef[];
+}
+
+export interface RealmPrerenderedCards {
+  url: string | null;
+  realmInfo: RealmInfo;
+  prerenderedCards: PrerenderedCard[];
+}
+
 import { RealmPaths, type LocalPath } from './paths';
 import { Query } from './query';
 import { Loader } from './loader';
@@ -121,6 +134,8 @@ import type {
   Format,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import { RealmInfo } from './realm';
+import { PrerenderedCard } from './index-query-engine';
 
 export const maxLinkDepth = 5;
 

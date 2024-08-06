@@ -14,8 +14,10 @@ import { Kind } from './realm';
 
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
+  modulesIndexed: number;
   instanceErrors: number;
   moduleErrors: number;
+  totalIndexEntries: number;
 }
 
 export interface IndexResults {
@@ -29,6 +31,7 @@ export interface Reader {
     path: LocalPath,
     opts?: { withFallbacks?: true },
   ) => Promise<TextFileRef | undefined>;
+  lastModified: (path: LocalPath) => Promise<number | undefined>;
   readdir: (
     path: string,
   ) => AsyncGenerator<{ name: string; path: string; kind: Kind }, void>;
@@ -146,6 +149,7 @@ export class Worker {
     this.#indexWriter = indexWriter;
     this.#reader = {
       readdir: realmAdapter.readdir.bind(realmAdapter),
+      lastModified: realmAdapter.lastModified.bind(realmAdapter),
       readFileAsText: (
         path: LocalPath,
         opts: { withFallbacks?: true } = {},

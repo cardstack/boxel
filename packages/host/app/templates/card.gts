@@ -89,11 +89,7 @@ class CardRouteComponent extends Component<CardRouteSignature> {
   }
 
   getCards(query: Query, realms?: string[]): Search {
-    return getSearchResults(
-      this,
-      () => query,
-      realms ? () => realms : undefined,
-    );
+    return getSearchResults(this, query, realms);
   }
 
   getCard(url: URL, opts?: { loader?: Loader; isLive?: boolean }) {
@@ -114,8 +110,8 @@ class CardRouteComponent extends Component<CardRouteSignature> {
   ): Search {
     return getLiveSearchResults(
       this,
-      () => query,
-      realms ? () => realms : undefined,
+      query,
+      realms,
       doWhileRefreshing ? () => doWhileRefreshing : undefined,
     );
   }
