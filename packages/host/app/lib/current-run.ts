@@ -273,7 +273,18 @@ export class CurrentRun {
     }
     let start = Date.now();
     log.debug(`begin visiting file ${url.href}`);
-    let localPath = this.#realmPaths.local(url);
+    let localPath: string;
+    try {
+      localPath = this.#realmPaths.local(url);
+    } catch (e) {
+      // until we have cross realm invalidation, if our invalidation
+      // graph cross a realm just skip over the file. it will be out
+      // of date, but such is life...
+      log.error(
+        `Visit of ${url.href} cannot be performed as it is in a different realm than the realm whose contents are being invalidated (${this.realmURL.href})`,
+      );
+      return;
+    }
 
     let fileRef = await this.#reader.readFileAsText(localPath);
     if (!fileRef) {
@@ -379,18 +390,7 @@ export class CurrentRun {
     resource: LooseCardResource;
     identityContext: IdentityContextType;
   }): Promise<void> {
-    let fileURL: string | undefined;
-    try {
-      fileURL = this.#realmPaths.fileURL(path).href;
-    } catch (e) {
-      // until we have cross realm invalidation, if our invalidation
-      // graph cross a realm just skip over the file. it will be out
-      // of date, but such is life...
-      log.error(
-        `Invalidation of ${path} cannot be performed as it is in a different realm than the realm whose contents are being invalidated (${this.realmURL.href})`,
-      );
-      return;
-    }
+    let fileURL = this.#realmPaths.fileURL(path).href;
     let indexingInstance = this.#indexingInstances.get(fileURL);
     if (indexingInstance) {
       return await indexingInstance;
