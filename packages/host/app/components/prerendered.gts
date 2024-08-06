@@ -3,8 +3,9 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import LoaderService from '../services/loader-service';
 import { PrerenderedCard } from '@cardstack/runtime-common';
+
+import LoaderService from '../services/loader-service';
 
 interface PrerenderedCardComponentSignature {
   Element: undefined;

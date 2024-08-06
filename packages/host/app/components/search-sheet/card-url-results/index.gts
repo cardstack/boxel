@@ -1,3 +1,5 @@
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
 import { cn } from '@cardstack/boxel-ui/helpers';
@@ -8,9 +10,6 @@ import Preview from '../../preview';
 import ResultsSection from '../results-section';
 
 import { removeFileExtension } from '../utils';
-
-import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
 
 interface Signature {
   Element: HTMLElement;

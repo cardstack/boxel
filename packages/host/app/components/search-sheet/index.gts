@@ -1,6 +1,7 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
+import { debounce } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -8,6 +9,8 @@ import { tracked } from '@glimmer/tracking';
 
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { modifier } from 'ember-modifier';
+
+import { trackedFunction } from 'ember-resources/util/function';
 
 import {
   Button,
@@ -17,6 +20,8 @@ import {
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
+import { getCard } from '@cardstack/host/resources/card-resource';
+import CardService from '@cardstack/host/services/card-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import CardQueryResults from './card-query-results';
@@ -26,10 +31,6 @@ import RecentCardsSection from './recent-cards-section';
 import { getCodeRefFromSearchKey } from './utils';
 
 import type LoaderService from '../../services/loader-service';
-import CardService from '@cardstack/host/services/card-service';
-import { trackedFunction } from 'ember-resources/util/function';
-import { getCard } from '@cardstack/host/resources/card-resource';
-import { debounce } from '@ember/runloop';
 
 export const SearchSheetModes = {
   Closed: 'closed',
