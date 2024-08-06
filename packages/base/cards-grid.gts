@@ -11,7 +11,11 @@ import {
   realmURL,
   type BaseDef,
 } from './card-api';
-import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
+import {
+  AddButton,
+  CardContainer,
+  Tooltip,
+} from '@cardstack/boxel-ui/components';
 import {
   chooseCard,
   catalogEntryRef,
@@ -20,7 +24,7 @@ import {
   cardTypeDisplayName,
   isCardInstance,
 } from '@cardstack/runtime-common';
-import { tracked } from '@glimmer/tracking';
+
 // @ts-ignore no types
 import cssUrl from 'ember-css-url';
 import { type CatalogEntry } from './catalog-entry';
@@ -29,6 +33,53 @@ import StringField from './string';
 class Isolated extends Component<typeof CardsGrid> {
   <template>
     <div class='cards-grid'>
+      <ul class='cards' data-test-cards-grid-cards>
+        {{#let
+          (component @context.prerenderedCardSearchComponent)
+          as |PrerenderedCardSearchComponent|
+        }}
+          <PrerenderedCardSearchComponent
+            @query={{this.query}}
+            @format='embedded'
+            @realms={{this.realms}}
+          >
+            <:card as |PrerenderedCard cardId i|>
+              <li
+                data-test-cards-grid-item={{cardId}}
+                {{! In order to support scrolling cards into view
+                we use a selector that is not pruned out in production builds }}
+                data-cards-grid-item={{cardId}}
+              >
+                <CardContainer
+                  @displayBoundaries={{true}}
+                  class='card'
+                  ...attributes
+                >
+                  <PrerenderedCard />
+                </CardContainer>
+              </li>
+            </:card>
+          </PrerenderedCardSearchComponent>
+        {{/let}}
+      </ul>
+
+      {{#if @context.actions.createCard}}
+        <div class='add-button'>
+          <Tooltip @placement='left' @offset={{6}}>
+            <:trigger>
+              <AddButton {{on 'click' this.createNew}} />
+            </:trigger>
+            <:content>
+              Add a new card to this collection
+            </:content>
+          </Tooltip>
+        </div>
+      {{/if}}
+    </div>
+
+    old:
+
+    {{!-- <div class='cards-grid'>
       <ul class='cards' data-test-cards-grid-cards>
         {{! use "key" to keep the list stable between refreshes }}
         {{#each this.instances key='id' as |card|}}
@@ -87,8 +138,15 @@ class Isolated extends Component<typeof CardsGrid> {
           </Tooltip>
         </div>
       {{/if}}
-    </div>
+    </div> --}}
     <style>
+      .card {
+        width: 200px;
+        height: 80px;
+        overflow: hidden;
+        container-name: embedded-card;
+        container-type: size;
+      }
       .cards-grid {
         --grid-card-text-thumbnail-height: 6.25rem;
         --grid-card-label-color: var(--boxel-450);
@@ -129,6 +187,14 @@ class Isolated extends Component<typeof CardsGrid> {
         width: var(--grid-card-width);
         height: var(--grid-card-height);
         padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
+      }
+      .grid-card.embedded-format {
+        width: 311px;
+        height: 76px;
+        overflow: hidden;
+        cursor: pointer;
+        container-name: embedded-card;
+        container-type: size;
       }
       .grid-card > *,
       .grid-thumbnail-text {
@@ -171,77 +237,39 @@ class Isolated extends Component<typeof CardsGrid> {
     </style>
   </template>
 
-  @tracked
-  private declare liveQuery: {
-    instances: CardDef[];
-    isLoading: boolean;
-  };
-
-  constructor(owner: Owner, args: any) {
-    super(owner, args);
-    this.liveQuery = getLiveCards(
-      {
-        filter: {
-          not: {
-            eq: {
-              _cardType: 'Cards Grid',
-            },
-          },
-        },
-        // sorting by title so that we can maintain stability in
-        // the ordering of the search results (server sorts results
-        // by order indexed by default)
-        sort: [
-          {
-            on: {
-              module: `${baseRealm.url}card-api`,
-              name: 'CardDef',
-            },
-            by: '_cardType',
-          },
-          {
-            on: {
-              module: `${baseRealm.url}card-api`,
-              name: 'CardDef',
-            },
-            by: 'title',
-          },
-        ],
-      },
-      this.args.model[realmURL] ? [this.args.model[realmURL].href] : undefined,
-      async (ready: Promise<void> | undefined) => {
-        if (this.args.context?.actions) {
-          this.args.context.actions.doWithStableScroll(
-            this.args.model as CardDef,
-            async () => {
-              await ready;
-            },
-          );
-        }
-      },
-    );
+  get realms(): string[] {
+    return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
   }
 
-  get instances() {
-    if (!this.liveQuery) {
-      return;
-    }
-
-    // This is a nice place to measure the end of the app boot as this is where
-    // we'll get the instances to show in the index card's grid which is usually
-    // what we present when showing the app for the first time
-    if (
-      (globalThis as any).__bootStart &&
-      (globalThis as any).__environment !== 'test' &&
-      this.liveQuery.instances.length > 0
-    ) {
-      console.log(
-        `time since app boot: ${
-          performance.now() - (globalThis as any).__bootStart
-        } ms`,
-      );
-    }
-    return this.liveQuery.instances;
+  get query() {
+    return {
+      filter: {
+        not: {
+          eq: {
+            _cardType: 'Cards Grid',
+          },
+        },
+      },
+      // sorting by title so that we can maintain stability in
+      // the ordering of the search results (server sorts results
+      // by order indexed by default)
+      sort: [
+        {
+          on: {
+            module: `${baseRealm.url}card-api`,
+            name: 'CardDef',
+          },
+          by: '_cardType',
+        },
+        {
+          on: {
+            module: `${baseRealm.url}card-api`,
+            name: 'CardDef',
+          },
+          by: 'title',
+        },
+      ],
+    };
   }
 
   @action
@@ -264,6 +292,11 @@ class Isolated extends Component<typeof CardsGrid> {
       realmURL: this.args.model[realmURL],
     });
   });
+
+  constructor(owner: Owner, args: typeof CardsGrid) {
+    super(owner, args);
+    debugger;
+  }
 }
 
 export class CardsGrid extends CardDef {

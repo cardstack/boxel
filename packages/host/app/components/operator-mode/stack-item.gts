@@ -80,6 +80,7 @@ import Preview from '../preview';
 import OperatorModeOverlays from './overlays';
 
 import type CardService from '../../services/card-service';
+import PrerenderedCardSearch from '../prerendered-card-search';
 
 interface Signature {
   Args: {
@@ -202,6 +203,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return {
       cardComponentModifier: this.cardTracker.trackElement,
       actions: this.args.publicAPI,
+      prerenderedCardSearchComponent: PrerenderedCardSearch,
     };
   }
 
