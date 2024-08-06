@@ -240,7 +240,7 @@ module('Integration | card-prerender', function (hooks) {
     );
 
     assert.ok(
-      results.prerenderedCards[0].html.includes('Embedded Card FancyPerson'),
+      results.prerenderedCards[0].html!.includes('Embedded Card FancyPerson'),
       'the embedded card html looks correct',
     );
   });
@@ -269,7 +269,7 @@ module('Integration | card-prerender', function (hooks) {
     ].forEach(([title, type], index) => {
       assert.strictEqual(
         cleanWhiteSpace(
-          stripScopedCSSAttributes(results.prerenderedCards[index].html),
+          stripScopedCSSAttributes(results.prerenderedCards[index].html!),
         ),
         cleanWhiteSpace(`
         <div class="embedded-template">
