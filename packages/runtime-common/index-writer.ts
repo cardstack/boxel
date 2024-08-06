@@ -49,7 +49,7 @@ export class IndexWriter {
   }
 }
 
-export type IndexEntry = InstanceEntry | ModuleEntry | CSSEntry | ErrorEntry;
+export type IndexEntry = InstanceEntry | ModuleEntry | ErrorEntry;
 export type LastModifiedTimes = Map<
   string,
   { type: string; lastModified: number | null }
@@ -75,13 +75,6 @@ export interface ErrorEntry {
 
 interface ModuleEntry {
   type: 'module';
-  source: string;
-  lastModified: number;
-  deps: Set<string>;
-}
-
-interface CSSEntry {
-  type: 'css';
   source: string;
   lastModified: number;
   deps: Set<string>;
@@ -176,13 +169,6 @@ export class Batch {
                 entry.source,
                 new RealmPaths(this.realmURL).local(url),
               ),
-            }
-          : entry.type === 'css'
-          ? {
-              type: 'css',
-              deps: [...entry.deps],
-              source: entry.source,
-              last_modified: entry.lastModified,
             }
           : {
               type: 'error',

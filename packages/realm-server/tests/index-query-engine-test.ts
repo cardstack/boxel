@@ -514,7 +514,7 @@ module('query', function (hooks) {
     });
   });
 
-  test('can get prerendered cards (html + css) from the indexer', async function (assert) {
+  test('can get prerendered cards from the indexer', async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
