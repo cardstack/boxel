@@ -38,7 +38,7 @@ There exists a "dev" mode in which we can use ember-cli to host the card runtime
 ### ember-cli Hosted App
 
 Prerequisite:
-Make sure that you have created a matrix user for the base and experiments realms. To make it easier, you can execute `pnpm register-realm-users` in `packages/matrix/`, this will create a matrix user for the base realm and experiments realms.
+Make sure that you have created a matrix user for the base and experiments realms. To make it easier, you can execute `pnpm register-realm-users` in `packages/matrix/`, this will create a matrix user for the base and experiments realms.
 
 In order to run the ember-cli hosted app:
 
