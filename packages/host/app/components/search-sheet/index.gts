@@ -26,6 +26,9 @@ import RecentCardsSection from './recent-cards-section';
 import { getCodeRefFromSearchKey } from './utils';
 
 import type LoaderService from '../../services/loader-service';
+import CardService from '@cardstack/host/services/card-service';
+import { trackedFunction } from 'ember-resources/util/function';
+import { getCard } from '@cardstack/host/resources/card-resource';
 
 export const SearchSheetModes = {
   Closed: 'closed',
@@ -64,8 +67,10 @@ let elementCallback = modifier(
 export default class SearchSheet extends Component<Signature> {
   @tracked private searchKey = '';
   @tracked cardURL = '';
+
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare loaderService: LoaderService;
+  @service declare cardService: CardService;
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -76,18 +81,6 @@ export default class SearchSheet extends Component<Signature> {
     return this.args.mode == SearchSheetModes.Closed
       ? BoxelInputBottomTreatments.Rounded
       : BoxelInputBottomTreatments.Flat;
-  }
-
-  private get inputValidationState() {
-    // if (
-    //   this.searchKeyIsURL &&
-    //   !this.getCard.isRunning &&
-    //   !this.searchCardResults.length
-    // ) {
-    //   return 'invalid';
-    // } else {
-    return 'initial';
-    // }
   }
 
   private get sheetSize() {
@@ -178,6 +171,52 @@ export default class SearchSheet extends Component<Signature> {
     return (this.searchKey?.trim() || '') === '';
   }
 
+  private fetchCardByUrl = trackedFunction(this, async () => {
+    if (!this.searchKeyIsURL) {
+      return;
+    }
+    let cardURL = this.searchKey;
+
+    let maybeIndexCardURL = this.cardService.realmURLs.find(
+      (u) => u === cardURL + '/',
+    );
+    let cardResource = getCard(this, () => maybeIndexCardURL ?? cardURL, {
+      isLive: () => false,
+    });
+
+    await cardResource.loaded;
+    let { card } = cardResource;
+
+    return {
+      card,
+    };
+  });
+
+  private get fetchCardByUrlResult() {
+    let value = this.fetchCardByUrl.value;
+    if (value) {
+      if (value.card) {
+        return { card: value.card };
+      } else {
+        return { card: null };
+      }
+    }
+
+    return undefined;
+  }
+
+  private get inputValidationState() {
+    if (
+      this.searchKeyIsURL &&
+      this.fetchCardByUrlResult &&
+      !this.fetchCardByUrlResult.card
+    ) {
+      return 'invalid';
+    } else {
+      return 'initial';
+    }
+  }
+
   <template>
     <div
       id='search-sheet'
@@ -205,6 +244,7 @@ export default class SearchSheet extends Component<Signature> {
             @url={{this.searchKey}}
             @handleCardSelect={{this.handleCardSelect}}
             @isCompact={{this.isCompact}}
+            @fetchCardByUrlResult={{this.fetchCardByUrlResult}}
           />
         {{else if this.isSearchKeyEmpty}}
           {{! nothing }}
