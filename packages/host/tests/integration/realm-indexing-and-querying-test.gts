@@ -1232,7 +1232,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           <div class="embedded-template">
             <div class="thumbnail-section">
               <div class="card-thumbnail">
-                <div class="card-thumbnail-text" data-test-card-thumbnail-text>Fancy Person</div>
+                <div class="card-thumbnail-placeholder" data-test-card-thumbnail-placeholder></div>
               </div>
             </div>
             <div class="info-section">
