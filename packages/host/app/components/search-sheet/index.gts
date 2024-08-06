@@ -29,6 +29,7 @@ import type LoaderService from '../../services/loader-service';
 import CardService from '@cardstack/host/services/card-service';
 import { trackedFunction } from 'ember-resources/util/function';
 import { getCard } from '@cardstack/host/resources/card-resource';
+import { debounce } from '@ember/runloop';
 
 export const SearchSheetModes = {
   Closed: 'closed',
@@ -141,14 +142,9 @@ export default class SearchSheet extends Component<Signature> {
     this.searchKey = '';
   }
 
-  // TODO: debounce impact of typing in search field?
-  // import debounce from 'lodash/debounce';
-  // private debouncedSearchFieldUpdate = debounce(() => {
-  //   if (!this.searchKey) {
-  //     return;
-  //   }
-  //   // trigger search
-  // }, 500);
+  @action private debouncedSetSearchKey(searchKey: string) {
+    debounce(this, this.setSearchKey, searchKey, 300);
+  }
 
   @action
   private setSearchKey(searchKey: string) {
@@ -232,7 +228,7 @@ export default class SearchSheet extends Component<Signature> {
         @state={{this.inputValidationState}}
         @placeholder={{this.placeholderText}}
         @onFocus={{@onFocus}}
-        @onInput={{this.setSearchKey}}
+        @onInput={{this.debouncedSetSearchKey}}
         {{elementCallback @onInputInsertion}}
         {{on 'keydown' this.onSearchInputKeyDown}}
         class='search-sheet__search-input-group'
