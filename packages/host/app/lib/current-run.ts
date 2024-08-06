@@ -53,8 +53,6 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import LoaderService from '../services/loader-service';
 import { type RenderCard } from '../services/render-service';
 
-import { getScopedCss } from './scoped-css';
-
 const log = logger('current-run');
 
 interface CardType {
@@ -334,7 +332,7 @@ export class CurrentRun {
       let deps = await (
         await this.loaderService.loader.getConsumedModules(url.href)
       ).filter((u) => u !== url.href);
-      await this.batch.updateEntry(new URL(url), {
+      await this.batch.updateEntry(url, {
         type: 'error',
         error: {
           status: 500,
@@ -366,18 +364,6 @@ export class CurrentRun {
       deps: new Set(deps),
     });
     this.stats.modulesIndexed++;
-
-    let request = await this.loaderService.loader.fetch(url.href);
-    let transpiledSrc = await request.text();
-    let css = getScopedCss(transpiledSrc);
-    if (css) {
-      await this.batch.updateEntry(url, {
-        type: 'css',
-        source: css,
-        lastModified: ref.lastModified,
-        deps: new Set(deps),
-      });
-    }
   }
 
   private async indexCard({
@@ -393,7 +379,18 @@ export class CurrentRun {
     resource: LooseCardResource;
     identityContext: IdentityContextType;
   }): Promise<void> {
-    let fileURL = this.#realmPaths.fileURL(path).href;
+    let fileURL: string | undefined;
+    try {
+      fileURL = this.#realmPaths.fileURL(path).href;
+    } catch (e) {
+      // until we have cross realm invalidation, if our invalidation
+      // graph cross a realm just skip over the file. it will be out
+      // of date, but such is life...
+      log.error(
+        `Invalidation of ${path} cannot be performed as it is in a different realm than the realm whose contents are being invalidated (${this.realmURL.href})`,
+      );
+      return;
+    }
     let indexingInstance = this.#indexingInstances.get(fileURL);
     if (indexingInstance) {
       return await indexingInstance;
