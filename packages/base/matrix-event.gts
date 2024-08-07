@@ -1,7 +1,9 @@
 import { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { EventStatus, MatrixError } from 'matrix-js-sdk';
-import { type Schema } from '@cardstack/runtime-common/helpers/ai';
-import { PatchObject } from './command';
+import {
+  FunctionToolCall,
+  type Schema,
+} from '@cardstack/runtime-common/helpers/ai';
 
 interface BaseMatrixEvent {
   sender: string;
@@ -130,11 +132,8 @@ interface CommandMessageContent {
   body: string;
   formatted_body: string;
   data: {
-    command: {
-      type: 'patchCard';
-      payload: PatchObject;
-      eventId: string;
-    };
+    toolCall: FunctionToolCall;
+    eventId: string;
   };
 }
 
@@ -220,12 +219,39 @@ export interface CardFragmentContent {
   };
 }
 
+export interface CommandResultEvent extends BaseMatrixEvent {
+  type: 'm.room.message';
+  content: CommandResultContent;
+  unsigned: {
+    age: number;
+    transaction_id: string;
+    prev_content?: any;
+    prev_sender?: string;
+  };
+}
+
+export interface CommandResultContent {
+  'm.relates_to'?: {
+    rel_type: 'm.annotation';
+    key: string;
+    event_id: string;
+    'm.in_reply_to'?: {
+      event_id: string;
+    };
+  };
+  formatted_body: string;
+  body: string;
+  msgtype: 'org.boxel.commandResult';
+  result: any;
+}
+
 export type MatrixEvent =
   | RoomCreateEvent
   | RoomJoinRules
   | RoomPowerLevels
   | MessageEvent
   | CommandEvent
+  | CommandResultEvent
   | ReactionEvent
   | CardMessageEvent
   | RoomNameEvent
