@@ -37,7 +37,7 @@ export const realmServerTestMatrix: MatrixConfig = {
   username: 'node-test_realm-server',
   password: 'password',
 };
-export const realmServerSecretSeed = `shhh! it's a realm server secret seed`;
+export const realmSecretSeed = `shhh! it's a secret`;
 
 let basePath = resolve(join(__dirname, '..', '..', '..', 'base'));
 
@@ -161,7 +161,7 @@ export async function createRealm({
     adapter,
     getIndexHTML: fastbootState.getIndexHTML,
     matrix: matrixConfig,
-    realmSecretSeed: "shhh! it's a secret",
+    realmSecretSeed: realmSecretSeed,
     virtualNetwork,
     dbAdapter,
     queue,
@@ -232,7 +232,7 @@ export async function runBaseRealmServer(
     [testBaseRealm],
     virtualNetwork,
     matrixClient,
-    realmServerSecretSeed,
+    realmSecretSeed,
   );
   return testBaseRealmServer.listen(parseInt(localBaseRealmURL.port));
 }
@@ -277,7 +277,7 @@ export async function runTestRealmServer({
     [testRealm],
     virtualNetwork,
     matrixClient,
-    realmServerSecretSeed,
+    realmSecretSeed,
   ).listen(parseInt(realmURL.port));
   return {
     testRealm,

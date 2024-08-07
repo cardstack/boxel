@@ -12,7 +12,6 @@ NODE_ENV=test \
   PGDATABASE=boxel_test \
   NODE_NO_WARNINGS=1 \
   REALM_SECRET_SEED="shhh! it's a secret" \
-  REALM_SERVER_SECRET_SEED="shhh! it's a secret" \
   MATRIX_URL=http://localhost:8008 \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   REALM_SERVER_MATRIX_PASSWORD=password \

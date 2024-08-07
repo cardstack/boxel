@@ -44,14 +44,6 @@ if (!REALM_SECRET_SEED) {
   process.exit(-1);
 }
 
-const REALM_SERVER_SECRET_SEED = process.env.REALM_SERVER_SECRET_SEED;
-if (!REALM_SERVER_SECRET_SEED) {
-  console.error(
-    `The REALM_SERVER_SECRET_SEED environment variable is not set. Please make sure this env var has a value`,
-  );
-  process.exit(-1);
-}
-
 const MATRIX_URL = process.env.MATRIX_URL;
 if (!MATRIX_URL) {
   console.error(
@@ -268,7 +260,7 @@ let dist: URL = new URL(distURL);
     realms,
     virtualNetwork,
     matrixClient,
-    REALM_SERVER_SECRET_SEED,
+    REALM_SECRET_SEED,
   );
 
   server.listen(port);

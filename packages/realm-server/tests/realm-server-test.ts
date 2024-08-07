@@ -40,7 +40,7 @@ import {
   setupDB,
   createRealm,
   realmServerTestMatrix,
-  realmServerSecretSeed,
+  realmSecretSeed,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
@@ -2683,7 +2683,7 @@ module('Realm server serving multiple realms', function (hooks) {
         [base, testRealm],
         virtualNetwork,
         matrixClient,
-        realmServerSecretSeed,
+        realmSecretSeed,
       ).listen(parseInt(localBaseRealmURL.port));
       await base.start();
       await testRealm.start();
@@ -2867,7 +2867,7 @@ module('Realm server authentication', function (hooks) {
       .set('Content-Type', 'application/json');
     assert.strictEqual(response.status, 201, 'HTTP 201 status');
     let token = response.headers['authorization'];
-    let decoded = jwt.verify(token, realmServerSecretSeed) as { user: string };
+    let decoded = jwt.verify(token, realmSecretSeed) as { user: string };
     assert.strictEqual(decoded.user, userId);
   });
 });
