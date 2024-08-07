@@ -16,7 +16,6 @@ done
 
 MATRIX_USERNAME=base_realm MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts
 MATRIX_USERNAME=experiments_realm MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts
-MATRIX_USERNAME=published_realm MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts
 MATRIX_USERNAME=realm_server MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts
 MATRIX_USERNAME=node-test_realm-server MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts
 MATRIX_USERNAME=node-test_realm MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts
