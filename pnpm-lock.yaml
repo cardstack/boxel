@@ -1473,15 +1473,6 @@ importers:
         specifier: ~5.1.6
         version: 5.1.6
 
-  packages/published-realm:
-    devDependencies:
-      '@cardstack/boxel-ui':
-        specifier: workspace:*
-        version: link:../boxel-ui/addon
-      '@types/lodash':
-        specifier: ^4.14.182
-        version: 4.14.182
-
   packages/realm-server:
     devDependencies:
       '@cardstack/boxel-ui':
