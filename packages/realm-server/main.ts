@@ -60,18 +60,18 @@ if (!MATRIX_URL) {
   process.exit(-1);
 }
 
-const USERNAME = process.env.USERNAME;
-if (!USERNAME) {
+const REALM_SERVER_MATRIX_USERNAME = process.env.REALM_SERVER_MATRIX_USERNAME;
+if (!REALM_SERVER_MATRIX_USERNAME) {
   console.error(
-    `The USERNAME environment variable is not set. Please make sure this env var has a value`,
+    `The REALM_SERVER_MATRIX_USERNAME environment variable is not set. Please make sure this env var has a value`,
   );
   process.exit(-1);
 }
 
-const PASSWORD = process.env.PASSWORD;
-if (!PASSWORD) {
+const REALM_SERVER_MATRIX_PASSWORD = process.env.REALM_SERVER_MATRIX_PASSWORD;
+if (!REALM_SERVER_MATRIX_PASSWORD) {
   console.error(
-    `The PASSWORD environment variable is not set. Please make sure this env var has a value`,
+    `The REALM_SERVER_MATRIX_PASSWORD environment variable is not set. Please make sure this env var has a value`,
   );
   process.exit(-1);
 }
@@ -259,7 +259,11 @@ let dist: URL = new URL(distURL);
     virtualNetwork.mount(realm.handle);
   }
 
-  let matrixClient = new MatrixClient(new URL(MATRIX_URL), USERNAME, PASSWORD);
+  let matrixClient = new MatrixClient(
+    new URL(MATRIX_URL),
+    REALM_SERVER_MATRIX_USERNAME,
+    REALM_SERVER_MATRIX_PASSWORD,
+  );
   let server = new RealmServer(
     realms,
     virtualNetwork,
