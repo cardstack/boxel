@@ -1,7 +1,6 @@
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { primitive } from '../constants';
 import { Loader } from '../loader';
-import { CardDef } from 'https://cardstack.com/base/card-api';
 
 type ArraySchema = {
   type: 'array';
@@ -368,73 +367,4 @@ export function generateCardPatchCallSpecification(
       relationships,
     };
   }
-}
-
-export function getPatchTool(attachedOpenCard: CardDef, patchSpec: any) {
-  return {
-    type: 'function',
-    function: {
-      name: 'patchCard',
-      description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.`,
-      parameters: {
-        type: 'object',
-        properties: {
-          card_id: {
-            type: 'string',
-            const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
-          },
-          description: {
-            type: 'string',
-          },
-          ...patchSpec,
-        },
-        required: ['card_id', 'attributes', 'description'],
-      },
-    },
-  };
-}
-
-export function getSearchTool() {
-  return {
-    type: 'function',
-    function: {
-      name: 'searchCard',
-      description: `Propose a query to search for a card instance filtered by type. Always prioritise search based upon the card that was last shared.`,
-      parameters: {
-        type: 'object',
-        properties: {
-          description: {
-            type: 'string',
-          },
-          filter: {
-            type: 'object',
-            properties: {
-              type: {
-                type: 'object',
-                properties: {
-                  module: {
-                    type: 'string',
-                    description: `the absolute path of the module`,
-                  },
-                  name: {
-                    type: 'string',
-                    description: 'the name of the module',
-                  },
-                },
-                required: ['module', 'name'],
-              },
-            },
-          },
-        },
-        required: ['filter', 'description'],
-      },
-    },
-  };
-}
-
-export interface FunctionToolCall {
-  id: string;
-  name: string;
-  arguments: { [key: string]: any };
-  type: 'function';
 }

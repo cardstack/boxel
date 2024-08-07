@@ -200,7 +200,7 @@ export interface CardSearch {
     realms?: string[],
   ): {
     instances: CardDef[];
-    loaded: Promise<void>;
+    ready: Promise<void>;
     isLoading: boolean;
   };
   getCard(
