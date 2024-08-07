@@ -28,7 +28,6 @@ export const localBaseRealm = 'http://localhost:4441/';
 const testMatrix: MatrixConfig = {
   url: new URL(`http://localhost:8008`),
   username: 'node-test_realm',
-  password: 'password',
 };
 
 let basePath = resolve(join(__dirname, '..', '..', '..', 'base'));
