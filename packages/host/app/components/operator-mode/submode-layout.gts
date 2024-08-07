@@ -49,7 +49,7 @@ interface Signature {
     hideAiAssistant?: boolean;
     onSearchSheetOpened?: () => void;
     onSearchSheetClosed?: () => void;
-    onCardSelectFromSearch: (card: CardDef) => void;
+    onCardSelectFromSearch: (cardId: string) => void;
   };
   Blocks: {
     default: [
@@ -141,12 +141,8 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   @action private async handleCardSelectFromSearch(cardId: string) {
-    let cardResource = getCard(this, () => cardId);
-    await cardResource.loaded;
-    if (cardResource.card) {
-      this.args.onCardSelectFromSearch(cardResource.card);
-      this.closeSearchSheet();
-    }
+    this.args.onCardSelectFromSearch(cardId);
+    this.closeSearchSheet();
   }
 
   @action private toggleProfileSettings() {

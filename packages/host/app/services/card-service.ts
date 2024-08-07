@@ -36,9 +36,10 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
-import { trackCard, getCard } from '../resources/card-resource';
+import { trackCard } from '../resources/card-resource';
 
 import type LoaderService from './loader-service';
+import { getCard } from '../../../runtime-common/index';
 
 export type CardSaveSubscriber = (
   url: URL,
@@ -285,12 +286,23 @@ export default class CardService extends Service {
       return;
     }
     let id = rel.links.self;
-    let cardResource = getCard(this, () => new URL(id, relativeTo).href);
-    await cardResource.loaded;
-    if (!cardResource.card && cardResource.cardError) {
-      throw cardResource.cardError;
+    let card = await this.getCard(new URL(id, relativeTo).href);
+    return card;
+  }
+
+  async getCard(url: URL | string): Promise<CardDef | undefined> {
+    if (typeof url === 'string') {
+      url = new URL(url);
     }
-    return cardResource.card;
+    let json = await this.fetchJSON(url);
+    if (!isSingleCardDocument(json)) {
+      throw new Error(
+        `bug: server returned a non card document for ${url}:
+      ${JSON.stringify(json, null, 2)}`,
+      );
+    }
+    let card = await this.createFromSerialized(json.data, json, url);
+    return card;
   }
 
   private async loadPatchedCards(
