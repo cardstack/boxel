@@ -18,6 +18,7 @@ import * as Sentry from '@sentry/node';
 import { setErrorReporter } from '@cardstack/runtime-common/realm';
 import PgAdapter from './pg-adapter';
 import PgQueue from './pg-queue';
+import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
 let log = logger('main');
 
@@ -39,6 +40,38 @@ const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
 if (!REALM_SECRET_SEED) {
   console.error(
     `The REALM_SECRET_SEED environment variable is not set. Please make sure this env var has a value`,
+  );
+  process.exit(-1);
+}
+
+const REALM_SERVER_SECRET_SEED = process.env.REALM_SERVER_SECRET_SEED;
+if (!REALM_SERVER_SECRET_SEED) {
+  console.error(
+    `The REALM_SERVER_SECRET_SEED environment variable is not set. Please make sure this env var has a value`,
+  );
+  process.exit(-1);
+}
+
+const MATRIX_URL = process.env.MATRIX_URL;
+if (!MATRIX_URL) {
+  console.error(
+    `The MATRIX_URL environment variable is not set. Please make sure this env var has a value`,
+  );
+  process.exit(-1);
+}
+
+const USERNAME = process.env.USERNAME;
+if (!USERNAME) {
+  console.error(
+    `The USERNAME environment variable is not set. Please make sure this env var has a value`,
+  );
+  process.exit(-1);
+}
+
+const PASSWORD = process.env.PASSWORD;
+if (!PASSWORD) {
+  console.error(
+    `The PASSWORD environment variable is not set. Please make sure this env var has a value`,
   );
   process.exit(-1);
 }
@@ -226,7 +259,13 @@ let dist: URL = new URL(distURL);
     virtualNetwork.mount(realm.handle);
   }
 
-  let server = new RealmServer(realms, virtualNetwork);
+  let matrixClient = new MatrixClient(new URL(MATRIX_URL), USERNAME, PASSWORD);
+  let server = new RealmServer(
+    realms,
+    virtualNetwork,
+    matrixClient,
+    REALM_SERVER_SECRET_SEED,
+  );
 
   server.listen(port);
 
