@@ -42,7 +42,7 @@ export default class CommandService extends Service {
   @service private declare cardService: CardService;
   @tracked query: Query = {};
 
-  searchCardResource = getSearchResults(this, () => this.query);
+  searchCardResource = getSearchResults(this, this.query);
 
   //TODO: Convert to non-EC async method after fixing CS-6987
   run = task(async (command: CommandField, roomId: string) => {
