@@ -27,6 +27,13 @@ interface SearchResultSignature {
     isCompact: boolean;
   };
 }
+
+// Render CardDef default embedded template for visual consistency of cards insearch results
+let resultsCardRef = {
+  name: 'CardDef',
+  module: 'https://cardstack.com/base/card-api',
+};
+
 class SearchResult extends Component<SearchResultSignature> {
   @service declare realm: RealmService;
 
@@ -46,6 +53,7 @@ class SearchResult extends Component<SearchResultSignature> {
         <Preview
           @card={{@card}}
           @format='embedded'
+          @codeRef={{resultsCardRef}}
           data-test-search-result={{removeFileExtension @cardId}}
           class='search-result'
           ...attributes
