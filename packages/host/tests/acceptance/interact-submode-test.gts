@@ -332,11 +332,17 @@ module('Acceptance | interact submode tests', function (hooks) {
       // Click on search result
       await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
 
-      assert.dom('[data-test-search-sheet]').doesNotHaveClass('results'); // Search closed
+      await waitUntil(
+        () =>
+          !document
+            .querySelector('[data-test-search-sheet]')!
+            .classList.contains('results'),
+      ); // Search closed
 
       // The card appears on a new stack
       await waitFor('[data-test-operator-mode-stack]');
 
+      await waitFor('[data-test-operator-mode-stack="0"]');
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
       assert
         .dom(
