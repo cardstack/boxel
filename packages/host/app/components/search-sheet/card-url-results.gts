@@ -2,14 +2,9 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
-import { cn } from '@cardstack/boxel-ui/helpers';
-
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
-import Preview from '../../preview';
-import ResultsSection from '../results-section';
-
-import { removeFileExtension } from '../utils';
+import ResultsSection from './results-section';
 
 interface Signature {
   Element: HTMLElement;
@@ -40,32 +35,20 @@ export default class CardURLResults extends Component<Signature> {
   }
 
   <template>
-    <ResultsSection @label={{this.searchLabel}} @isCompact={{@isCompact}}>
+    <ResultsSection
+      @label={{this.searchLabel}}
+      @isCompact={{@isCompact}}
+      as |SearchResult|
+    >
       {{#if this.card}}
-        <Preview
+        <SearchResult
           @card={{this.card}}
-          @format='embedded'
+          @cardId={{this.card.id}}
+          @isCompact={{@isCompact}}
           {{on 'click' (fn @handleCardSelect this.card.id)}}
-          class={{cn 'search-result' is-compact=@isCompact}}
           data-test-search-sheet-search-result='0'
-          data-test-search-result={{removeFileExtension this.card.id}}
         />
       {{/if}}
     </ResultsSection>
-    <style>
-      /* current duplicated in card-query-results */
-      .search-result.field-component-card.embedded-format {
-        width: 311px;
-        height: 76px;
-        overflow: hidden;
-        cursor: pointer;
-        container-name: embedded-card;
-        container-type: size;
-      }
-      .search-result.field-component-card.embedded-format.is-compact {
-        width: 199px;
-        height: 50px;
-      }
-    </style>
   </template>
 }

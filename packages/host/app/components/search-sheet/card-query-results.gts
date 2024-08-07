@@ -4,17 +4,17 @@ import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { CardContainer } from '@cardstack/boxel-ui/components';
-import { cn, eq, gt, or } from '@cardstack/boxel-ui/helpers';
+import { eq, gt, or } from '@cardstack/boxel-ui/helpers';
 
 import { catalogEntryRef } from '@cardstack/runtime-common';
 
-import PrerenderedCardSearch from '../../prerendered-card-search';
-import ResultsSection from '../results-section';
+import PrerenderedCardSearch from '../prerendered-card-search';
 
-import { getCodeRefFromSearchKey, removeFileExtension } from '../utils';
+import ResultsSection from './results-section';
 
-import type CardService from '../../../services/card-service';
+import { getCodeRefFromSearchKey } from './utils';
+
+import type CardService from '../../services/card-service';
 
 interface Signature {
   Element: HTMLElement;
@@ -90,37 +90,20 @@ export default class CardQueryResults extends Component<Signature> {
               '”'
             }}
             @isCompact={{@isCompact}}
+            as |SearchResult|
           >
             <response.Results as |PrerenderedCard cardId i|>
-              <CardContainer
-                @displayBoundaries={{true}}
+              <SearchResult
+                @component={{PrerenderedCard}}
+                @cardId={{cardId}}
+                @isCompact={{@isCompact}}
                 {{on 'click' (fn @handleCardSelect cardId)}}
                 data-test-search-sheet-search-result={{i}}
-                data-test-search-result={{removeFileExtension cardId}}
-                class={{cn 'search-result' is-compact=@isCompact}}
-                ...attributes
-              >
-                <PrerenderedCard />
-              </CardContainer>
+              />
             </response.Results>
           </ResultsSection>
         {{/if}}
       </:response>
     </PrerenderedCardSearch>
-    <style>
-      /* currently duplicated in search-sheet/recent-cards-section */
-      .search-result {
-        width: 311px;
-        height: 76px;
-        overflow: hidden;
-        cursor: pointer;
-        container-name: embedded-card;
-        container-type: size;
-      }
-      .search-result.is-compact {
-        width: 199px;
-        height: 50px;
-      }
-    </style>
   </template>
 }

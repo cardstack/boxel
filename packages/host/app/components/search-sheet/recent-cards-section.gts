@@ -5,13 +5,9 @@ import Component from '@glimmer/component';
 
 import { cached } from '@glimmer/tracking';
 
-import { cn } from '@cardstack/boxel-ui/helpers';
-
 import RecentCards from '@cardstack/host/services/recent-cards-service';
 
-import Preview from '../../preview';
-import ResultsSection from '../results-section';
-import { removeFileExtension } from '../utils';
+import ResultsSection from './results-section';
 
 interface Signature {
   Element: HTMLElement;
@@ -32,33 +28,21 @@ export default class RecentCardsSection extends Component<Signature> {
   }
   <template>
     {{#if this.recentCardsService.any}}
-      <ResultsSection @label='Recent' @isCompact={{@isCompact}}>
+      <ResultsSection
+        @label='Recent'
+        @isCompact={{@isCompact}}
+        as |SearchResult|
+      >
         {{#each this.orderedRecentCards as |card i|}}
-          <Preview
+          <SearchResult
             @card={{card}}
-            @format='embedded'
+            @cardId={{card.id}}
+            @isCompact={{@isCompact}}
             {{on 'click' (fn @handleCardSelect card.id)}}
             data-test-search-sheet-recent-card-index={{i}}
-            data-test-search-sheet-recent-card={{removeFileExtension card.id}}
-            class={{cn 'search-result' is-compact=@isCompact}}
           />
         {{/each}}
       </ResultsSection>
     {{/if}}
-    <style>
-      /* current duplicated in card-query-results */
-      .search-result.field-component-card.embedded-format {
-        width: 311px;
-        height: 76px;
-        overflow: hidden;
-        cursor: pointer;
-        container-name: embedded-card;
-        container-type: size;
-      }
-      .search-result.field-component-card.embedded-format.is-compact {
-        width: 199px;
-        height: 50px;
-      }
-    </style>
   </template>
 }
