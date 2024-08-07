@@ -1269,9 +1269,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await focus(`[data-test-search-field]`);
     assert
-      .dom(
-        `[data-test-search-sheet-recent-card="${testRealmURL}Person/fadhlan"]`,
-      )
+      .dom(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`)
       .exists();
     await click(`[data-test-search-sheet-cancel-button]`);
     await click(`[data-test-stack-card-index="1"] [data-test-close-button]`);
@@ -1281,15 +1279,15 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card-index="1"]`);
 
     await focus(`[data-test-search-field]`);
-    assert.dom(`[data-test-search-sheet-recent-card]`).exists({ count: 2 });
+    assert.dom(`[data-test-search-result]`).exists({ count: 2 });
     assert
       .dom(
-        `[data-test-search-sheet-recent-card-index="0"][data-test-search-sheet-recent-card="${testRealmURL}Person/burcu"]`,
+        `[data-test-search-result-index="0"][data-test-search-result="${testRealmURL}Person/burcu"]`,
       )
       .exists();
     assert
       .dom(
-        `[data-test-search-sheet-recent-card-index="1"][data-test-search-sheet-recent-card="${testRealmURL}Person/fadhlan"]`,
+        `[data-test-search-result-index="1"][data-test-search-result="${testRealmURL}Person/fadhlan"]`,
       )
       .exists();
   });
@@ -1323,8 +1321,8 @@ module('Integration | operator-mode', function (hooks) {
     }
 
     await focus(`[data-test-search-field]`);
-    await waitFor(`[data-test-search-sheet-recent-card]`);
-    assert.dom(`[data-test-search-sheet-recent-card]`).exists({ count: 10 });
+    await waitFor(`[data-test-search-result]`);
+    assert.dom(`[data-test-search-result]`).exists({ count: 10 });
   });
 
   test(`displays searching results`, async function (assert) {
@@ -1359,7 +1357,11 @@ module('Integration | operator-mode', function (hooks) {
     );
     assert.dom(`[data-test-search-label]`).containsText('4 Results for “ma”');
     assert.dom(`[data-test-search-sheet-search-result]`).exists({ count: 4 });
+    assert.dom(`[data-test-realm-name]`).exists({ count: 4 });
     assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
+    assert
+      .dom(`[data-test-realm-name]`)
+      .containsText('Operator Mode Workspace');
     assert
       .dom(`[data-test-search-result="${testRealmURL}Author/mark"]`)
       .exists();

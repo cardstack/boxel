@@ -479,12 +479,8 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click('[data-test-search-field]');
       assert.dom('[data-test-search-sheet]').hasClass('prompt');
 
-      await waitFor(
-        `[data-test-search-sheet-recent-card="${testRealmURL}person-entry"]`,
-      );
-      await click(
-        `[data-test-search-sheet-recent-card="${testRealmURL}person-entry"]`,
-      );
+      await waitFor(`[data-test-search-result="${testRealmURL}person-entry"]`);
+      await click(`[data-test-search-result="${testRealmURL}person-entry"]`);
 
       await waitFor(`[data-test-stack-card="${testRealmURL}person-entry"]`);
       assert
@@ -660,9 +656,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-field]').isFocused();
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
-      await click(
-        `[data-test-search-sheet-recent-card="${testRealmURL}Pet/mango"]`,
-      );
+      await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
       // There is some additional thing we are waiting on here, probably the
       // card to load in the card resource, but I'm not too sure so using waitUntil instead
       await waitUntil(() =>
@@ -698,9 +692,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
-      await click(
-        `[data-test-search-sheet-recent-card="${testRealmURL}Person/fadhlan"]`,
-      );
+      await click(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`);
 
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
@@ -737,9 +729,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
-      await click(
-        `[data-test-search-sheet-recent-card="${testRealmURL}Person/fadhlan"]`,
-      );
+      await click(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`);
 
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
@@ -785,9 +775,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
       // Click on a recent search
-      await click(
-        `[data-test-search-sheet-recent-card="${testRealmURL}Pet/mango"]`,
-      );
+      await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
       // There is some additional thing we are waiting on here, probably the
       // card to load in the card resource, but I'm not too sure so using waitUntil instead
       await waitUntil(
@@ -1437,9 +1425,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
       // Click on a recent search
-      await click(
-        `[data-test-search-sheet-recent-card="${testRealmURL}Person/fadhlan"]`,
-      );
+      await click(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`);
 
       // We have to wait untill there is only one stack item in rightmost stack,
       // because that's the expected behaviour when we open a card from card search.

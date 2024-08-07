@@ -1,11 +1,16 @@
 import { TemplateOnlyComponent } from '@ember/component/template-only';
 
+import { service } from '@ember/service';
+import Component from '@glimmer/component';
+
 import { WithBoundArgs } from '@glint/template';
 
 import { CardContainer, Label } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import RealmService from '@cardstack/host/services/realm';
+
+import { type CardDef } from 'https://cardstack.com/base/card-api';
 
 import PrerenderedCardComponent from '../prerendered';
 
@@ -22,43 +27,71 @@ interface SearchResultSignature {
     isCompact: boolean;
   };
 }
-let SearchResult: TemplateOnlyComponent<SearchResultSignature> = <template>
-  {{#if @component}}
-    <CardContainer
-      @displayBoundaries={{true}}
-      data-test-search-result={{removeFileExtension @cardId}}
-      class={{cn 'search-result' is-compact=@isCompact}}
-      ...attributes
-    >
-      <@component />
-    </CardContainer>
+class SearchResult extends Component<SearchResultSignature> {
+  @service declare realm: RealmService;
 
-  {{else if @card}}
-    <Preview
-      @card={{@card}}
-      @format='embedded'
-      data-test-search-sheet-recent-card={{removeFileExtension @cardId}}
-      class={{cn 'search-result' is-compact=@isCompact}}
-      ...attributes
-    />
-  {{/if}}
-  <style>
-    .search-result,
-    .search-result.field-component-card.embedded-format {
-      width: 311px;
-      height: 76px;
-      overflow: hidden;
-      cursor: pointer;
-      container-name: embedded-card;
-      container-type: size;
-    }
-    .search-result.is-compact,
-    .search-result.field-component-card.embedded-format.is-compact {
-      width: 199px;
-      height: 50px;
-    }
-  </style>
-</template>;
+  <template>
+    <div class={{cn 'container' is-compact=@isCompact}}>
+      {{#if @component}}
+        <CardContainer
+          @displayBoundaries={{true}}
+          data-test-search-result={{removeFileExtension @cardId}}
+          class='search-result'
+          ...attributes
+        >
+          <@component />
+        </CardContainer>
+
+      {{else if @card}}
+        <Preview
+          @card={{@card}}
+          @format='embedded'
+          data-test-search-result={{removeFileExtension @cardId}}
+          class='search-result'
+          ...attributes
+        />
+      {{/if}}
+      {{#let (this.realm.info @cardId) as |realmInfo|}}
+        <div class='realm-name' data-test-realm-name>{{realmInfo.name}}</div>
+      {{/let}}
+    </div>
+    <style>
+      .container {
+        display: flex;
+        flex-direction: column;
+        align-items: self-end;
+        width: 311px;
+        height: 96px;
+      }
+      .search-result,
+      .search-result.field-component-card.embedded-format {
+        width: 311px;
+        height: 76px;
+        overflow: hidden;
+        cursor: pointer;
+        container-name: embedded-card;
+        container-type: size;
+      }
+      .container.is-compact,
+      .is-compact .search-result,
+      .is-compact .search-result.field-component-card.embedded-format {
+        width: 199px;
+        height: 50px;
+      }
+      .realm-name {
+        font: 400 var(--boxel-font);
+        color: var(--boxel-400);
+        padding-top: var(--boxel-sp-4xs);
+        padding-right: var(--boxel-sp-xxs);
+        height: 20px;
+        font-size: var(--boxel-font-size-xs);
+      }
+      .is-compact .realm-name {
+        display: none;
+      }
+    </style>
+  </template>
+}
 
 interface Signature {
   Element: HTMLElement;

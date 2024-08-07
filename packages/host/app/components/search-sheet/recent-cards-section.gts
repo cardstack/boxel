@@ -26,6 +26,7 @@ export default class RecentCardsSection extends Component<Signature> {
     // Most recently added first
     return [...this.recentCardsService.recentCards].reverse();
   }
+
   <template>
     {{#if this.recentCardsService.any}}
       <ResultsSection
@@ -39,7 +40,7 @@ export default class RecentCardsSection extends Component<Signature> {
             @cardId={{card.id}}
             @isCompact={{@isCompact}}
             {{on 'click' (fn @handleCardSelect card.id)}}
-            data-test-search-sheet-recent-card-index={{i}}
+            data-test-search-result-index={{i}}
           />
         {{/each}}
       </ResultsSection>
