@@ -1,15 +1,17 @@
-import { Sha256 } from "@aws-crypto/sha256-js";
-import { MatrixClient, waitForMatrixMessage } from "./matrix-client";
+import { Sha256 } from '@aws-crypto/sha256-js';
+import { MatrixClient, waitForMatrixMessage } from './matrix-client';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface Utils {
   badRequest(message: string): Response;
-  createResponse(body: BodyInit | null, responseInit: ResponseInit | undefined): Response;
+  createResponse(
+    body: BodyInit | null,
+    responseInit: ResponseInit | undefined,
+  ): Response;
   createJWT(user: string): Promise<string>;
 }
 
 export class RealmAuthServer {
-
   constructor(
     private matrixClient: MatrixClient,
     private secretSeed: string,
@@ -26,13 +28,13 @@ export class RealmAuthServer {
       json = JSON.parse(body);
     } catch (e) {
       return this.utils.badRequest(
-        JSON.stringify({ errors: [`Request body is not valid JSON`] })
+        JSON.stringify({ errors: [`Request body is not valid JSON`] }),
       );
     }
     let { user, challenge } = json as { user?: string; challenge?: string };
     if (!user) {
       return this.utils.badRequest(
-        JSON.stringify({ errors: [`Request body missing 'user' property`] })
+        JSON.stringify({ errors: [`Request body missing 'user' property`] }),
       );
     }
 
@@ -75,7 +77,8 @@ export class RealmAuthServer {
         headers: {
           'Content-Type': 'application/json',
         },
-      });
+      },
+    );
   }
 
   private async verifyChallenge(user: string) {
@@ -133,7 +136,7 @@ export class RealmAuthServer {
 
     if (!latestAuthChallengeMessage) {
       return this.utils.badRequest(
-        JSON.stringify({ errors: [`No challenge found for user ${user}`] })
+        JSON.stringify({ errors: [`No challenge found for user ${user}`] }),
       );
     }
 
@@ -141,7 +144,7 @@ export class RealmAuthServer {
       return this.utils.badRequest(
         JSON.stringify({
           errors: [`No challenge response response found for user ${user}`],
-        })
+        }),
       );
     }
 
@@ -158,9 +161,7 @@ export class RealmAuthServer {
     hash.update(this.secretSeed);
     let hashedResponse = uint8ArrayToHex(await hash.digest());
     if (hashedResponse === challenge) {
-      let jwt = await this.utils.createJWT(
-        user
-      );
+      let jwt = await this.utils.createJWT(user);
       return this.utils.createResponse(null, {
         status: 201,
         headers: {
@@ -169,7 +170,8 @@ export class RealmAuthServer {
         },
       });
     } else {
-      return this.utils.createResponse(JSON.stringify({
+      return this.utils.createResponse(
+        JSON.stringify({
           errors: [
             `user ${user} failed auth challenge: latest challenge message: "${JSON.stringify(
               latestAuthChallengeMessage,
@@ -180,7 +182,8 @@ export class RealmAuthServer {
         }),
         {
           status: 401,
-        });
+        },
+      );
     }
   }
 }

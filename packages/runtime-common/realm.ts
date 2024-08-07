@@ -585,37 +585,44 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ) {
-    let realmAuthServer = new RealmAuthServer(this.#matrixClient, this.#realmSecretSeed, {
-      badRequest: function (message: string) {
-        return badRequest(message, requestContext);
-      },
-      createResponse: function (body: BodyInit | null, init: ResponseInit | undefined) {
-        return createResponse({
-          body,
-          init,
-          requestContext,
-        });
-      },
-      createJWT: async (user: string) => {
-        let permissions = requestContext.permissions;
+    let realmAuthServer = new RealmAuthServer(
+      this.#matrixClient,
+      this.#realmSecretSeed,
+      {
+        badRequest: function (message: string) {
+          return badRequest(message, requestContext);
+        },
+        createResponse: function (
+          body: BodyInit | null,
+          init: ResponseInit | undefined,
+        ) {
+          return createResponse({
+            body,
+            init,
+            requestContext,
+          });
+        },
+        createJWT: async (user: string) => {
+          let permissions = requestContext.permissions;
 
-        let userPermissions = await new RealmPermissionChecker(
-          permissions,
-          this.#matrixClient,
-        ).for(user);
+          let userPermissions = await new RealmPermissionChecker(
+            permissions,
+            this.#matrixClient,
+          ).for(user);
 
-        return this.#adapter.createJWT(
-          {
-            user,
-            realm: this.url,
-            permissions: userPermissions,
-          },
-          '7d',
-          this.#realmSecretSeed,
-        );
-      }
-    } as Utils)
-    
+          return this.#adapter.createJWT(
+            {
+              user,
+              realm: this.url,
+              permissions: userPermissions,
+            },
+            '7d',
+            this.#realmSecretSeed,
+          );
+        },
+      } as Utils,
+    );
+
     return await realmAuthServer.createSession(request);
   }
 
