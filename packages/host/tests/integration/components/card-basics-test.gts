@@ -69,6 +69,7 @@ import {
   subscribeToChanges,
   TextAreaField,
   unsubscribeFromChanges,
+  ReadOnlyField,
 } from '../../helpers/base-realm';
 import { mango } from '../../helpers/image-fixture';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
@@ -2473,6 +2474,27 @@ module('Integration | card-basics', function (hooks) {
         'The place where the person was born',
         getFieldDescription(Person, 'hometown'),
       );
+    });
+
+    test('ReadOnlyField wont display input field', async function (assert) {
+      class Person extends CardDef {
+        @field readOnlyField = contains(ReadOnlyField);
+        @field name = contains(StringField);
+
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            {{@model.readOnlyField}}
+            {{@model.name}}
+          </template>
+        };
+      }
+
+      let person = new Person({ readOnlyField: 'Test', name: 'Mango' });
+      await renderCard(loader, person, 'edit');
+      assert.dom('[data-test-field="name"] input').exists({ count: 1 });
+      assert
+        .dom('[data-test-field="readOnlyField"] input')
+        .exists({ count: 0 });
     });
   });
 });
