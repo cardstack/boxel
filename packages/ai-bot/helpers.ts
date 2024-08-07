@@ -1,18 +1,13 @@
-import {
-  LooseCardResource,
-  type LooseSingleCardDocument,
-  type CardResource,
+import type {
+  CardResource,
+  LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardFragmentContent,
   CommandEvent,
-  CommandResultEvent,
-  ReactionEvent,
-  Tool,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
-import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
 import * as Sentry from '@sentry/node';
 import { logger } from '@cardstack/runtime-common';
 
@@ -97,6 +92,7 @@ export function constructHistory(history: IRoomEvent[]) {
         );
       }
     }
+
     if (event.content['m.relates_to']?.rel_type === 'm.replace') {
       eventId = event.content['m.relates_to']!.event_id!;
       event.event_id = eventId;
@@ -163,9 +159,7 @@ export interface OpenAIPromptMessage {
    * The role of the messages author. One of `system`, `user`, `assistant`, or
    * `function`.
    */
-  role: 'system' | 'user' | 'assistant' | 'tool';
-  tool_calls?: ChatCompletionMessageToolCall[];
-  tool_call_id?: string;
+  role: 'system' | 'user' | 'assistant';
 }
 
 function setRelevantCards(
@@ -182,24 +176,10 @@ function setRelevantCards(
   return cardMap;
 }
 
-interface RelevantCards {
-  mostRecentlyAttachedCard: LooseCardResource | undefined;
-  attachedCards: LooseCardResource[];
-  skillCards: CardResource[];
-}
-
-function getMostRecentlyAttachedCard(attachedCards: LooseSingleCardDocument[]) {
-  let cardResources = attachedCards.filter((c) => c.data.id).map((c) => c.data);
-  return cardResources.length
-    ? cardResources[cardResources.length - 1]
-    : undefined;
-}
-
 export function getRelevantCards(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
-): RelevantCards {
-  let mostRecentlyAttachedCard: LooseCardResource | undefined;
+) {
   let attachedCardMap = new Map<string, CardResource>();
   let skillCardMap = new Map<string, CardResource>();
   let latestMessageEventId = history
@@ -213,11 +193,6 @@ export function getRelevantCards(
       let { content } = event;
       if (content.msgtype === 'org.boxel.message') {
         setRelevantCards(attachedCardMap, content.data?.attachedCards);
-        if (content.data?.attachedCards) {
-          mostRecentlyAttachedCard = getMostRecentlyAttachedCard(
-            content.data?.attachedCards,
-          );
-        }
 
         // setting skill card instructions only based on the latest boxel message event (not cumulative)
         if (event.event_id === latestMessageEventId) {
@@ -226,17 +201,14 @@ export function getRelevantCards(
       }
     }
   }
-  // Return the cards in a consistent manner
-  let sortedCards = Array.from(attachedCardMap.values()).sort((a, b) => {
-    return a.id.localeCompare(b.id);
-  });
-
+  let attachedCards = Array.from(attachedCardMap.values()).sort((a, b) =>
+    a.id.localeCompare(b.id),
+  );
   let skillCards = Array.from(skillCardMap.values()).sort((a, b) =>
     a.id.localeCompare(b.id),
   );
   return {
-    mostRecentlyAttachedCard: mostRecentlyAttachedCard,
-    attachedCards: sortedCards,
+    attachedCards,
     skillCards,
   };
 }
@@ -262,98 +234,10 @@ export function getTools(history: DiscreteMatrixEvent[], aiBotUserId: string) {
   }
 }
 
-export function isCommandResultEvent(
-  event: DiscreteMatrixEvent,
-): event is CommandResultEvent {
-  return (
-    event.type === 'm.room.message' &&
-    typeof event.content === 'object' &&
-    event.content.msgtype === 'org.boxel.commandResult'
-  );
-}
-
-export function isReactionEvent(
-  event: DiscreteMatrixEvent,
-): event is ReactionEvent {
-  return (
-    event.type === 'm.reaction' &&
-    event.content['m.relates_to'].rel_type === 'm.annotation'
-  );
-}
-
-function getReactionStatus(
-  commandEvent: DiscreteMatrixEvent,
-  history: DiscreteMatrixEvent[],
-) {
-  let maybeReactionEvent = history.find((e) => {
-    if (
-      isReactionEvent(e) &&
-      e.content['m.relates_to']?.event_id === commandEvent.event_id
-    ) {
-      return true;
-    }
-    return false;
-  });
-  return maybeReactionEvent && isReactionEvent(maybeReactionEvent)
-    ? maybeReactionEvent.content['m.relates_to'].key
-    : undefined;
-}
-
-function getCommandResult(
-  commandEvent: CommandEvent,
-  history: DiscreteMatrixEvent[],
-) {
-  let maybeCommandResultEvent = history.find((e) => {
-    if (
-      isCommandResultEvent(e) &&
-      e.content['m.relates_to']?.event_id === commandEvent.event_id
-    ) {
-      return true;
-    }
-    return false;
-  });
-  return maybeCommandResultEvent &&
-    isCommandResultEvent(maybeCommandResultEvent)
-    ? maybeCommandResultEvent.content.result
-    : undefined;
-}
-
-function toToolCall(event: CommandEvent): ChatCompletionMessageToolCall {
-  return {
-    id: event.content.data.toolCall.id,
-    function: {
-      name: event.content.data.toolCall.name,
-      arguments: JSON.stringify(event.content.data.toolCall.arguments),
-    },
-    type: 'function',
-  };
-}
-
-function toPromptMessageWithToolResult(
-  event: CommandEvent,
-  history: DiscreteMatrixEvent[],
-): OpenAIPromptMessage {
-  let commandResult = getCommandResult(event as CommandEvent, history);
-  if (commandResult) {
-    return {
-      role: 'tool',
-      content: commandResult,
-      tool_call_id: event.content.data.toolCall.id,
-    };
-  } else {
-    let reactionStatus = getReactionStatus(event, history);
-    return {
-      role: 'tool',
-      content: reactionStatus ?? 'pending',
-      tool_call_id: event.content.data.toolCall.id,
-    };
-  }
-}
-
 export function getModifyPrompt(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
-  tools: Tool[] = [],
+  tools: any[] = [],
 ) {
   // Need to make sure the passed in username is a full id
   if (
@@ -367,40 +251,14 @@ export function getModifyPrompt(
     if (event.type !== 'm.room.message') {
       continue;
     }
-    if (isCommandResultEvent(event)) {
-      continue;
-    }
     let body = event.content.body;
     if (body) {
       if (event.sender === aiBotUserId) {
-        if (isCommandEvent(event)) {
-          historicalMessages.push({
-            role: 'assistant',
-            content: body,
-            tool_calls: [toToolCall(event)],
-          });
-          historicalMessages.push(
-            toPromptMessageWithToolResult(event, history),
-          );
-        } else {
-          historicalMessages.push({
-            role: 'assistant',
-            content: body,
-          });
-        }
+        historicalMessages.push({
+          role: 'assistant',
+          content: body,
+        });
       } else {
-        if (
-          event.content.msgtype === 'org.boxel.message' &&
-          event.content.data?.context?.openCardIds
-        ) {
-          body = `User message: ${body}
-          Context: the user has the following cards open: ${JSON.stringify(
-            event.content.data.context.openCardIds,
-          )}`;
-        } else {
-          body = `User message: ${body}
-          Context: the user has no open cards.`;
-        }
         historicalMessages.push({
           role: 'user',
           content: body,
@@ -409,17 +267,13 @@ export function getModifyPrompt(
     }
   }
 
-  let { mostRecentlyAttachedCard, attachedCards, skillCards } =
-    getRelevantCards(history, aiBotUserId);
+  let { attachedCards, skillCards } = getRelevantCards(history, aiBotUserId);
   let systemMessage =
     MODIFY_SYSTEM_MESSAGE +
     `
   The user currently has given you the following data to work with:
   Cards:\n`;
-  systemMessage += attachedCardsToMessage(
-    mostRecentlyAttachedCard,
-    attachedCards,
-  );
+  systemMessage += attachedCardsToMessage(attachedCards);
 
   if (skillCards.length) {
     systemMessage += SKILL_INSTRUCTIONS_MESSAGE;
@@ -443,21 +297,8 @@ export function getModifyPrompt(
   return messages;
 }
 
-export const attachedCardsToMessage = (
-  mostRecentlyAttachedCard: LooseCardResource | undefined,
-  attachedCards: LooseCardResource[],
-) => {
-  let a =
-    mostRecentlyAttachedCard !== undefined
-      ? `Most recently shared card: ${JSON.stringify(
-          mostRecentlyAttachedCard,
-        )}.\n`
-      : ``;
-  let b =
-    attachedCards.length > 0
-      ? `All previously shared cards: ${JSON.stringify(attachedCards)}.\n`
-      : ``;
-  return a + b;
+export const attachedCardsToMessage = (cards: CardResource[]) => {
+  return `Full card data: ${JSON.stringify(cards)}`;
 };
 
 export const skillCardsToMessage = (cards: CardResource[]) => {
@@ -474,24 +315,16 @@ export function cleanContent(content: string) {
   return content.trim();
 }
 
-export const isCommandReactionEvent = (event?: MatrixEvent) => {
+//matrix-js-sdk extensions
+export const isPatchReactionEvent = (event?: MatrixEvent) => {
   if (event === undefined) {
     return false;
   }
   let content = event.getContent();
   return (
     event.getType() === 'm.reaction' &&
-    content['m.relates_to']?.rel_type === 'm.annotation'
-  );
-};
-
-export const isCommandReactionStatusApplied = (event?: MatrixEvent) => {
-  if (event === undefined) {
-    return false;
-  }
-  let content = event.getContent();
-  return (
-    isCommandReactionEvent(event) && content['m.relates_to']?.key === 'applied'
+    content['m.relates_to']?.rel_type === 'm.annotation' &&
+    content['m.relates_to']?.key === 'applied'
   );
 };
 
@@ -504,6 +337,14 @@ export function isCommandEvent(
     event.content.msgtype === 'org.boxel.command' &&
     event.content.format === 'org.matrix.custom.html' &&
     typeof event.content.data === 'object' &&
-    typeof event.content.data.toolCall === 'object'
+    typeof event.content.data.command === 'object'
+  );
+}
+
+export function isPatchCommandEvent(
+  event: DiscreteMatrixEvent,
+): event is CommandEvent {
+  return (
+    isCommandEvent(event) && event.content.data.command.type === 'patchCard'
   );
 }

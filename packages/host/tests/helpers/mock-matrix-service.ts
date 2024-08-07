@@ -13,11 +13,9 @@ import {
   loaderFor,
   LooseSingleCardDocument,
   splitStringIntoChunks,
-  baseRealm,
-  ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
-import { LooseCardResource } from '@cardstack/runtime-common';
+import { baseRealm, LooseCardResource } from '@cardstack/runtime-common';
 
 import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
@@ -32,14 +30,16 @@ import { OperatorModeContext } from '@cardstack/host/services/matrix-service';
 import RealmService from '@cardstack/host/services/realm';
 
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
-import { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
+import { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import { PatchField } from 'https://cardstack.com/base/command';
 import type {
   CardFragmentContent,
-  CommandResultContent,
   ReactionEventContent,
 } from 'https://cardstack.com/base/matrix-event';
+
 const waiter = buildWaiter('mock-matrix-service');
+
 const MAX_CARD_SIZE_KB = 60;
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -212,35 +212,6 @@ function generateMockMatrixService(
       try {
         await this.sendReactionDeferred?.promise;
         return await this.sendEvent(roomId, 'm.reaction', content);
-      } catch (e) {
-        throw new Error(
-          `Error sending reaction event: ${
-            'message' in (e as Error) ? (e as Error).message : e
-          }`,
-        );
-      }
-    }
-
-    async sendCommandResultMessage(
-      roomId: string,
-      eventId: string,
-      result: Record<string, any>,
-    ) {
-      let body = `Command Results from command event ${eventId}`;
-      let html = body;
-      let content: CommandResultContent = {
-        'm.relates_to': {
-          event_id: eventId,
-          rel_type: 'm.annotation',
-          key: 'applied', //this is aggregated key. All annotations must have one. This identifies the reaction event.
-        },
-        body,
-        formatted_body: html,
-        msgtype: 'org.boxel.commandResult',
-        result,
-      };
-      try {
-        return await this.sendEvent(roomId, 'm.room.message', content);
       } catch (e) {
         throw new Error(
           `Error sending reaction event: ${
@@ -478,19 +449,19 @@ function generateMockMatrixService(
       return resources;
     }
 
-    async createCard<T extends typeof BaseDef>(
-      codeRef: ResolvedCodeRef,
-      attr: Record<string, any>,
-    ) {
+    async createCommandField(attr: Record<string, any>): Promise<PatchField> {
       let data: LooseCardResource = {
         meta: {
-          adoptsFrom: codeRef,
+          adoptsFrom: {
+            name: 'PatchField',
+            module: `${baseRealm.url}command`,
+          },
         },
         attributes: {
           ...attr,
         },
       };
-      let card = await this.cardAPI.createFromSerialized<T>(
+      let card = this.cardAPI.createFromSerialized<typeof PatchField>(
         data,
         { data },
         undefined,
