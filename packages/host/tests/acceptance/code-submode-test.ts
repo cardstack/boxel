@@ -993,7 +993,12 @@ module('Acceptance | code submode tests', function (hooks) {
     // Click on search result
     await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
 
-    assert.dom('[data-test-search-sheet]').doesNotHaveClass('results'); // Search closed
+    await waitUntil(
+      () =>
+        !document
+          .querySelector('[data-test-search-sheet]')!
+          .classList.contains('results'),
+    ); // Search closed
 
     // The card appears in the editor
     await waitForCodeEditor();

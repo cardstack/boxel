@@ -385,7 +385,7 @@ module('indexing', function (hooks) {
         instanceErrors: 0,
         moduleErrors: 0,
         modulesIndexed: 0,
-        totalIndexEntries: 14,
+        totalIndexEntries: 12,
       },
       'indexed correct number of files',
     );
@@ -413,7 +413,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 1,
         modulesIndexed: 0,
-        totalIndexEntries: 14,
+        totalIndexEntries: 12,
       },
       'indexed correct number of files',
     );
@@ -465,7 +465,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
         modulesIndexed: 3,
-        totalIndexEntries: 13,
+        totalIndexEntries: 12,
       },
       'indexed correct number of files',
     );
@@ -501,7 +501,7 @@ module('indexing', function (hooks) {
         instanceErrors: 0,
         moduleErrors: 0,
         modulesIndexed: 0,
-        totalIndexEntries: 14,
+        totalIndexEntries: 12,
       },
       'index did not touch any files',
     );
@@ -542,7 +542,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
         modulesIndexed: 1,
-        totalIndexEntries: 14,
+        totalIndexEntries: 12,
       },
       'indexed correct number of files',
     );
@@ -584,7 +584,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
         modulesIndexed: 3,
-        totalIndexEntries: 13,
+        totalIndexEntries: 12,
       },
       'indexed correct number of files',
     );
@@ -637,7 +637,7 @@ module('indexing', function (hooks) {
         instanceErrors: 2,
         moduleErrors: 0,
         modulesIndexed: 0,
-        totalIndexEntries: 14,
+        totalIndexEntries: 12,
       },
       'indexed correct number of files',
     );
@@ -678,7 +678,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
         modulesIndexed: 1,
-        totalIndexEntries: 14,
+        totalIndexEntries: 12,
       },
       'indexed correct number of files',
     );

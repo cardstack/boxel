@@ -318,7 +318,7 @@ function isIncluded(included: any): included is CardResource<Saved>[] {
 }
 
 export function transformResultsToPrerenderedCardsDoc(results: {
-  prerenderedCards: PrerenderedCard[];
+  prerenderedCards: Partial<PrerenderedCard>[];
   scopedCssUrls: string[];
   meta: QueryResultsMeta & { scopedCssUrls?: string[] };
 }) {

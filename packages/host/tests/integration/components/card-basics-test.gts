@@ -552,7 +552,7 @@ module('Integration | card-basics', function (hooks) {
         .dom('[data-test-driver] [data-test-card-display-name]')
         .containsText('Person');
       assert
-        .dom('[data-test-driver] [data-test-card-thumbnail-text]')
+        .dom('[data-test-driver] [data-test-card-thumbnail-placeholder]')
         .doesNotExist();
       assert
         .dom('[data-test-driver] [data-test-card-title]')
@@ -599,8 +599,8 @@ module('Integration | card-basics', function (hooks) {
         .dom('[data-test-driver] [data-test-card-display-name]')
         .containsText('Person');
       assert
-        .dom('[data-test-driver] [data-test-card-thumbnail-text]')
-        .containsText('Person');
+        .dom('[data-test-driver] [data-test-card-thumbnail-placeholder]')
+        .exists();
 
       await percySnapshot(assert);
     });
@@ -2648,7 +2648,7 @@ function embeddedViewDriver() {
         <style>
           .card {
             /* this is how a border would appear around a card.
-             note that a card is not supposed to draw its own border 
+             note that a card is not supposed to draw its own border
           */
             box-shadow: 0 0 0 1px var(--boxel-light-500);
             overflow: hidden;
