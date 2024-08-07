@@ -233,6 +233,7 @@ export default class SearchSheet extends Component<Signature> {
         {{elementCallback @onInputInsertion}}
         {{on 'keydown' this.onSearchInputKeyDown}}
         class='search-sheet__search-input-group'
+        autocomplete='off'
         data-test-search-field
       />
       <div class='search-sheet-content'>
