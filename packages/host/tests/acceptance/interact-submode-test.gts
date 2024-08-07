@@ -668,8 +668,12 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
       // There are now 2 stacks
+      await waitUntil(
+        () =>
+          document.querySelectorAll('[data-test-operator-mode-stack]')
+            .length === 2,
+      );
 
-      assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
       assert.dom('[data-test-operator-mode-stack="0"]').includesText('Mango'); // Mango goes on the left stack
       assert.dom('[data-test-operator-mode-stack="1"]').includesText('Fadhlan');
 
