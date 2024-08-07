@@ -1,21 +1,18 @@
-import {
-  CardDef,
-  FieldDef,
-  StringField,
-  contains,
-  field,
-  primitive,
-} from './card-api';
-import { CommandResult } from './command-result';
+import { contains, field, primitive, FieldDef } from './card-api';
+import StringField from './string';
 
 type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
 
 type JSONObject = { [x: string]: JSONValue };
 
-type CommandObject = JSONObject;
+export type PatchObject = { patch: { attributes: JSONObject }; id: string };
 
-class CommandObjectField extends FieldDef {
-  static [primitive]: CommandObject;
+class PatchObjectField extends FieldDef {
+  static [primitive]: PatchObject;
+}
+
+class CommandType extends FieldDef {
+  static [primitive]: 'patchCard';
 }
 
 export type CommandStatus = 'applied' | 'ready';
@@ -24,11 +21,10 @@ class CommandStatusField extends FieldDef {
   static [primitive]: CommandStatus;
 }
 
-export class CommandField extends CardDef {
-  @field toolCallId = contains(StringField);
-  @field name = contains(StringField);
-  @field payload = contains(CommandObjectField); //arguments of toolCall. Its not called arguments due to lint
+// Subclass, add a validator that checks the fields required?
+export class PatchField extends FieldDef {
+  @field commandType = contains(CommandType);
+  @field payload = contains(PatchObjectField);
   @field eventId = contains(StringField);
   @field status = contains(CommandStatusField);
-  @field result = contains(CommandResult);
 }

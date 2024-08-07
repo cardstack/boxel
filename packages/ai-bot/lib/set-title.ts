@@ -2,10 +2,9 @@ import { type MatrixEvent, type IEventRelation } from 'matrix-js-sdk';
 import OpenAI from 'openai';
 import {
   type OpenAIPromptMessage,
-  isCommandReactionStatusApplied,
+  isPatchReactionEvent,
+  isPatchCommandEvent,
   attachedCardsToMessage,
-  isCommandEvent,
-  getRelevantCards,
 } from '../helpers';
 import { MatrixClient } from './matrix';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
@@ -29,7 +28,7 @@ export async function setTitle(
       content: SET_TITLE_SYSTEM_MESSAGE,
     },
     ...getStartOfConversation(history, userId),
-    ...getLatestCommandApplyMessage(history, userId, event),
+    ...getLatestPatchApplyMessage(history, userId, event),
     {
       role: 'user',
       content: 'Create a short title for this chat, limited to 6 words.',
@@ -86,7 +85,7 @@ export function getStartOfConversation(
   return messages;
 }
 
-export const getLatestCommandApplyMessage = (
+export const getLatestPatchApplyMessage = (
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
   event?: MatrixEvent,
@@ -99,15 +98,11 @@ export const getLatestCommandApplyMessage = (
     if (commandEvent === undefined) {
       return [];
     }
-    let { mostRecentlyAttachedCard, attachedCards } = getRelevantCards(
-      history,
-      aiBotUserId,
-    );
-    if (isCommandEvent(commandEvent)) {
-      let args = JSON.stringify(commandEvent.content.data.toolCall);
-      let content = `Applying command with args ${args}. Cards shared are: ${attachedCardsToMessage(
-        mostRecentlyAttachedCard,
-        attachedCards,
+    if (isPatchCommandEvent(commandEvent)) {
+      let patchMessage = JSON.stringify(commandEvent.content.data.command);
+      let content = `Applying patchCard with the payload ${patchMessage}. The patch being made is applied to the following ${attachedCardsToMessage(
+        history,
+        aiBotUserId,
       )}`;
       return [
         {
@@ -145,7 +140,7 @@ export function shouldSetRoomTitle(
   event?: MatrixEvent,
 ) {
   return (
-    (isCommandReactionStatusApplied(event) ||
+    (isPatchReactionEvent(event) ||
       userAlreadyHasSentNMessages(rawEventLog, aiBotUserId)) &&
     !roomTitleAlreadySet(rawEventLog)
   );
