@@ -37,6 +37,10 @@ class TravelGoal extends FieldDef {
         .container > * + * {
           margin-top: 20px;
         }
+        .container {
+          --embedded-card-width: 224px;
+          --embedded-card-height: 151px;
+        }
       </style>
     </template>
   };

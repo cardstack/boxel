@@ -1839,9 +1839,10 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
     </div>
     <style>
       .embedded-template {
-        width: 100%;
-        height: 100%;
+        width: var(--embedded-card-width, 100%);
+        height: var(--embedded-card-height, 100%);
         display: flex;
+        min-height: var(--embedded-card-height, 100px);
       }
 
       /* Aspect Ratio <= 1.0 */
@@ -1877,7 +1878,7 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
       }
       @container embedded-card (0.75 < aspect-ratio <= 1.0) {
         .thumbnail-section {
-          /* 
+          /*
              64.35px is the computed height for the info section--at this particular
              aspect ratio break-point the height is the dominant axis for which to
              base the dimensions of the thumbnail
@@ -1994,8 +1995,8 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
           display: none;
         }
         .card-thumbnail {
-          /* at this breakpoint, the dominant axis is the height for 
-             thumbnail 1:1 aspect ratio calculations 
+          /* at this breakpoint, the dominant axis is the height for
+             thumbnail 1:1 aspect ratio calculations
           */
           height: 100%;
         }
@@ -2019,8 +2020,8 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
           flex: 1 100%;
         }
         .card-thumbnail {
-          /* at this breakpoint, the dominant axis is the width for 
-             thumbnail 1:1 aspect ratio calculations 
+          /* at this breakpoint, the dominant axis is the width for
+             thumbnail 1:1 aspect ratio calculations
           */
           width: 100%;
         }

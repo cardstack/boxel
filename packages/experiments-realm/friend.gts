@@ -31,11 +31,11 @@ export class Friend extends CardDef {
   });
   @field thumbnailURL = contains(StringCard);
 
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      <GridContainer>
-        <@fields.firstName />
-      </GridContainer>
-    </template>
-  };
+  // static embedded = class Embedded extends Component<typeof this> {
+  //   <template>
+  //     <GridContainer>
+  //       <@fields.firstName />
+  //     </GridContainer>
+  //   </template>
+  // };
 }

@@ -15,9 +15,9 @@ export class Country extends CardDef {
     },
   });
 
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      <@fields.name />
-    </template>
-  };
+  // static embedded = class Embedded extends Component<typeof this> {
+  //   <template>
+  //     <@fields.name />
+  //   </template>
+  // };
 }

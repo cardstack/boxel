@@ -18,6 +18,7 @@ export class Friends extends CardDef {
       return this.firstName;
     },
   });
+  
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <GridContainer>
@@ -28,4 +29,19 @@ export class Friends extends CardDef {
       </GridContainer>
     </template>
   };
+  
+  // static isolated = class Isolated extends Component<typeof this> {
+  //   <template>
+  //     <div class='card'>
+  //       <@fields.friends />
+  //     </div>
+  //     <style>
+  //       .card {
+  //         --embedded-card-width: 300px;
+  //         --embedded-card-height: 151px;
+  //         padding: 20px;
+  //       }
+  //     </style>
+  //   </template>
+  // } 
 }
