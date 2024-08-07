@@ -8,6 +8,10 @@ NODE_NO_WARNINGS=1 \
   PGPORT=5435 \
   PGDATABASE=boxel_test_experiments_root \
   REALM_SECRET_SEED="shhh! it's a secret" \
+  REALM_SERVER_SECRET_SEED="shhh! it's a secret" \
+  MATRIX_URL=http://localhost:8008 \
+  USERNAME=realm_server \
+  PASSWORD=password \
   ts-node \
   --transpileOnly main \
   --port=4204 \
