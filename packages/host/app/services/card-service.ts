@@ -17,9 +17,7 @@ import {
   type Loader,
   type PatchData,
   type Relationship,
-  PrerenderedCard,
 } from '@cardstack/runtime-common';
-import { isPrerenderedCardCollectionDocument } from '@cardstack/runtime-common/card-document';
 import type { Query } from '@cardstack/runtime-common/query';
 
 import ENV from '@cardstack/host/config/environment';
@@ -31,12 +29,11 @@ import type {
   CardDef,
   FieldDef,
   Field,
-  Format,
   SerializeOpts,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
-import { trackCard, getCard } from '../resources/card-resource';
+import { trackCard } from '../resources/card-resource';
 
 import type LoaderService from './loader-service';
 
@@ -285,12 +282,23 @@ export default class CardService extends Service {
       return;
     }
     let id = rel.links.self;
-    let cardResource = getCard(this, () => new URL(id, relativeTo).href);
-    await cardResource.loaded;
-    if (!cardResource.card && cardResource.cardError) {
-      throw cardResource.cardError;
+    let card = await this.getCard(new URL(id, relativeTo).href);
+    return card;
+  }
+
+  async getCard(url: URL | string): Promise<CardDef | undefined> {
+    if (typeof url === 'string') {
+      url = new URL(url);
     }
-    return cardResource.card;
+    let json = await this.fetchJSON(url);
+    if (!isSingleCardDocument(json)) {
+      throw new Error(
+        `bug: server returned a non card document for ${url}:
+      ${JSON.stringify(json, null, 2)}`,
+      );
+    }
+    let card = await this.createFromSerialized(json.data, json, url);
+    return card;
   }
 
   private async loadPatchedCards(
@@ -415,34 +423,6 @@ export default class CardService extends Service {
         console.timeEnd('search deserialization');
       }
     }
-  }
-
-  async searchPrerendered(
-    query: Query,
-    format: Format,
-    realmURL: string,
-  ): Promise<PrerenderedCard[]> {
-    let json = await this.fetchJSON(
-      `${realmURL}_search-prerendered?${stringify({
-        ...query,
-        prerenderedHtmlFormat: format,
-      })}`,
-    );
-    if (!isPrerenderedCardCollectionDocument(json)) {
-      throw new Error(
-        `The realm search response was not a prerendered-card collection document:
-        ${JSON.stringify(json, null, 2)}`,
-      );
-    }
-
-    let cssModuleUrls = json.meta.scopedCssUrls ?? [];
-    return json.data.filter(Boolean).map((r) => {
-      return {
-        url: r.id,
-        html: r.attributes?.html,
-        cssModuleUrls,
-      };
-    }) as PrerenderedCard[];
   }
 
   async getFields(

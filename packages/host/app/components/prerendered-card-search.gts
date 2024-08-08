@@ -1,27 +1,68 @@
 import { TemplateOnlyComponent } from '@ember/component/template-only';
 import { hash } from '@ember/helper';
 import { service } from '@ember/service';
+import { htmlSafe } from '@ember/template';
 
 import { buildWaiter } from '@ember/test-waiters';
 import Component from '@glimmer/component';
-
 import { tracked } from '@glimmer/tracking';
 
 import { WithBoundArgs } from '@glint/template';
 
-import { restartableTask } from 'ember-concurrency';
-
+import { trackedFunction } from 'ember-resources/util/function';
 import { flatMap } from 'lodash';
+import { stringify } from 'qs';
 
 import { PrerenderedCard, Query } from '@cardstack/runtime-common';
+import { isPrerenderedCardCollectionDocument } from '@cardstack/runtime-common/card-document';
 
-import { Format } from 'https://cardstack.com/base/card-api';
+import { type Format } from 'https://cardstack.com/base/card-api';
 
 import CardService from '../services/card-service';
-
-import PrerenderedCardComponent from './prerendered';
+import LoaderService from '../services/loader-service';
 
 const waiter = buildWaiter('prerendered-card-search:waiter');
+
+interface PrerenderedCardComponentSignature {
+  Element: undefined;
+  Args: {
+    card: PrerenderedCard;
+    onCssLoaded?: () => void;
+  };
+}
+
+// This is only exported for testing purposes. Do not use this component directly.
+export class PrerenderedCardComponent extends Component<PrerenderedCardComponentSignature> {
+  @service declare loaderService: LoaderService;
+
+  constructor(
+    owner: unknown,
+    props: PrerenderedCardComponentSignature['Args'],
+  ) {
+    super(owner, props);
+
+    this.ensureCssLoaded();
+  }
+
+  @tracked isCssLoaded = false;
+
+  async ensureCssLoaded() {
+    // cssModuleUrl is a URL-encoded string with CSS, for example: http://localhost:4201/drafts/person.gts.LnBlcnNvbi1jb250YWluZXIgeyBib3JkZXI6IDFweCBzb2xpZCBncmF5IH0.glimmer-scoped.css
+    // These are created by glimmer scoped css and saved as a dependency of an instance in boxel index when the instance is indexed
+    for (let cssModuleUrl of this.args.card.cssModuleUrls) {
+      await this.loaderService.loader.import(cssModuleUrl); // This will be intercepted by maybeHandleScopedCSSRequest middleware in the host app which will load the css into the DOM
+    }
+    this.isCssLoaded = true;
+
+    this.args.onCssLoaded?.();
+  }
+
+  <template>
+    {{#if this.isCssLoaded}}
+      {{htmlSafe @card.html}}
+    {{/if}}
+  </template>
+}
 
 interface ResultsSignature {
   Element: undefined;
@@ -63,55 +104,67 @@ interface Signature {
 
 export default class PrerenderedCardSearch extends Component<Signature> {
   @service declare cardService: CardService;
-  @tracked _instances: PrerenderedCard[] = [];
   _lastSearchQuery: Query | null = null;
 
-  get isLoading() {
-    return this.searchTask.isRunning;
-  }
-  get search() {
-    if (this._lastSearchQuery !== this.args.query) {
-      // eslint-disable-next-line ember/no-side-effects
-      this._lastSearchQuery = this.args.query;
-      this.searchTask.perform();
+  async searchPrerendered(
+    query: Query,
+    format: Format,
+    realmURL: string,
+  ): Promise<PrerenderedCard[]> {
+    let json = await this.cardService.fetchJSON(
+      `${realmURL}_search-prerendered?${stringify({
+        ...query,
+        prerenderedHtmlFormat: format,
+      })}`,
+    );
+    if (!isPrerenderedCardCollectionDocument(json)) {
+      throw new Error(
+        `The realm search response was not a prerendered-card collection document:
+        ${JSON.stringify(json, null, 2)}`,
+      );
     }
-    let self = this;
-    return {
-      get isLoading() {
-        return self.searchTask.isRunning;
-      },
-    };
+
+    let cssModuleUrls = json.meta.scopedCssUrls ?? [];
+    return json.data.filter(Boolean).map((r) => {
+      return {
+        url: r.id,
+        html: r.attributes?.html,
+        cssModuleUrls,
+      };
+    }) as PrerenderedCard[];
   }
 
-  private searchTask = restartableTask(async () => {
+  private runSearch = trackedFunction(this, async () => {
     let { query, format, realms } = this.args;
     let token = waiter.beginAsync();
     try {
-      this._instances = flatMap(
+      let instances = flatMap(
         await Promise.all(
           realms.map(
-            async (realm) =>
-              await this.cardService.searchPrerendered(query, format, realm),
+            async (realm) => await this.searchPrerendered(query, format, realm),
           ),
         ),
       );
+      return { instances, isLoading: false };
     } finally {
       waiter.endAsync(token);
     }
   });
 
-  get count() {
-    return this._instances.length;
+  private get searchResults() {
+    return this.runSearch.value || { instances: null, isLoading: true };
   }
 
   <template>
-    {{#if this.search.isLoading}}
+    {{#if this.searchResults.isLoading}}
       {{yield to='loading'}}
     {{else}}
       {{yield
         (hash
-          count=this.count
-          Results=(component ResultsComponent instances=this._instances)
+          count=this.searchResults.instances.length
+          Results=(component
+            ResultsComponent instances=this.searchResults.instances
+          )
         )
         to='response'
       }}

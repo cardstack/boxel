@@ -12,8 +12,7 @@ import RealmService from '@cardstack/host/services/realm';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
-import PrerenderedCardComponent from '../prerendered';
-
+import { PrerenderedCardComponent } from '../prerendered-card-search';
 import Preview from '../preview';
 
 import { removeFileExtension } from './utils';
