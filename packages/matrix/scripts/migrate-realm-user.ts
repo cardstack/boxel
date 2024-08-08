@@ -1,6 +1,6 @@
 import { loginUser, updateUser } from '../docker/synapse';
 
-import { realmPassword } from './realm-credentials';
+import { realmPassword } from '../helpers/realm-credentials';
 
 let adminUser = process.env.ADMIN_USERNAME || 'admin';
 let adminPassword = process.env.ADMIN_PASSWORD || 'password';

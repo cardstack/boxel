@@ -1,4 +1,3 @@
-// @ts-expect-error no types
 import { Sha256 } from '@aws-crypto/sha256-js';
 
 export async function realmPassword(
