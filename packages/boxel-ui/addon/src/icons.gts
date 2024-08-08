@@ -37,6 +37,7 @@ import IconSearch from './icons/icon-search.gts';
 import IconTrash from './icons/icon-trash.gts';
 import IconTurnDownRight from './icons/icon-turn-down-right.gts';
 import IconX from './icons/icon-x.gts';
+import ImagePlaceholder from './icons/image-placeholder.gts';
 import LoadingIndicator from './icons/loading-indicator.gts';
 import Profile from './icons/profile.gts';
 import Search from './icons/search.gts';
@@ -82,6 +83,7 @@ export const ALL_ICON_COMPONENTS = [
   IconTrash,
   IconTurnDownRight,
   IconX,
+  ImagePlaceholder,
   LoadingIndicator,
   Profile,
   Search,
@@ -128,6 +130,7 @@ export {
   IconTrash,
   IconTurnDownRight,
   IconX,
+  ImagePlaceholder,
   LoadingIndicator,
   Profile,
   Search,
