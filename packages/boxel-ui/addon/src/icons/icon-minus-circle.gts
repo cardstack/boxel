@@ -13,7 +13,7 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
       stroke='var(--icon-border, #000)'
       stroke-linecap='round'
       stroke-linejoin='round'
-      stroke-width='var(--icon-stroke-width,1.5)'
+      stroke-width='1.5'
       transform='translate(.75 .75)'
     ><circle cx='8' cy='8' r='8' /><path
         stroke='var(--icon-color, #000)'

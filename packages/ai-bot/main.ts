@@ -11,7 +11,7 @@ import {
   constructHistory,
   getModifyPrompt,
   getTools,
-  isCommandReactionStatusApplied,
+  isPatchReactionEvent,
 } from './helpers';
 import {
   shouldSetRoomTitle,
@@ -152,7 +152,6 @@ Common issues are:
         if (event.getContent().msgtype === 'org.boxel.cardFragment') {
           return; // don't respond to card fragments, we just gather these in our history
         }
-
         if (event.getSender() === aiBotUserId) {
           return;
         }
@@ -219,12 +218,12 @@ Common issues are:
     },
   );
 
-  //handle set title by commands
+  //handle reaction events
   client.on(RoomEvent.Timeline, async function (event, room) {
     if (!room) {
       return;
     }
-    if (!isCommandReactionStatusApplied(event)) {
+    if (!isPatchReactionEvent(event)) {
       return;
     }
     log.info(
