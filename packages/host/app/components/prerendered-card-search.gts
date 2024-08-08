@@ -11,10 +11,12 @@ import { WithBoundArgs } from '@glint/template';
 
 import { trackedFunction } from 'ember-resources/util/function';
 import { flatMap } from 'lodash';
+import { stringify } from 'qs';
 
 import { PrerenderedCard, Query } from '@cardstack/runtime-common';
+import { isPrerenderedCardCollectionDocument } from '@cardstack/runtime-common/card-document';
 
-import { Format } from 'https://cardstack.com/base/card-api';
+import { type Format } from 'https://cardstack.com/base/card-api';
 
 import CardService from '../services/card-service';
 import LoaderService from '../services/loader-service';
@@ -104,6 +106,34 @@ export default class PrerenderedCardSearch extends Component<Signature> {
   @service declare cardService: CardService;
   _lastSearchQuery: Query | null = null;
 
+  async searchPrerendered(
+    query: Query,
+    format: Format,
+    realmURL: string,
+  ): Promise<PrerenderedCard[]> {
+    let json = await this.cardService.fetchJSON(
+      `${realmURL}_search-prerendered?${stringify({
+        ...query,
+        prerenderedHtmlFormat: format,
+      })}`,
+    );
+    if (!isPrerenderedCardCollectionDocument(json)) {
+      throw new Error(
+        `The realm search response was not a prerendered-card collection document:
+        ${JSON.stringify(json, null, 2)}`,
+      );
+    }
+
+    let cssModuleUrls = json.meta.scopedCssUrls ?? [];
+    return json.data.filter(Boolean).map((r) => {
+      return {
+        url: r.id,
+        html: r.attributes?.html,
+        cssModuleUrls,
+      };
+    }) as PrerenderedCard[];
+  }
+
   private runSearch = trackedFunction(this, async () => {
     let { query, format, realms } = this.args;
     let token = waiter.beginAsync();
@@ -111,8 +141,7 @@ export default class PrerenderedCardSearch extends Component<Signature> {
       let instances = flatMap(
         await Promise.all(
           realms.map(
-            async (realm) =>
-              await this.cardService.searchPrerendered(query, format, realm),
+            async (realm) => await this.searchPrerendered(query, format, realm),
           ),
         ),
       );

@@ -17,9 +17,7 @@ import {
   type Loader,
   type PatchData,
   type Relationship,
-  PrerenderedCard,
 } from '@cardstack/runtime-common';
-import { isPrerenderedCardCollectionDocument } from '@cardstack/runtime-common/card-document';
 import type { Query } from '@cardstack/runtime-common/query';
 
 import ENV from '@cardstack/host/config/environment';
@@ -31,7 +29,6 @@ import type {
   CardDef,
   FieldDef,
   Field,
-  Format,
   SerializeOpts,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -426,34 +423,6 @@ export default class CardService extends Service {
         console.timeEnd('search deserialization');
       }
     }
-  }
-
-  async searchPrerendered(
-    query: Query,
-    format: Format,
-    realmURL: string,
-  ): Promise<PrerenderedCard[]> {
-    let json = await this.fetchJSON(
-      `${realmURL}_search-prerendered?${stringify({
-        ...query,
-        prerenderedHtmlFormat: format,
-      })}`,
-    );
-    if (!isPrerenderedCardCollectionDocument(json)) {
-      throw new Error(
-        `The realm search response was not a prerendered-card collection document:
-        ${JSON.stringify(json, null, 2)}`,
-      );
-    }
-
-    let cssModuleUrls = json.meta.scopedCssUrls ?? [];
-    return json.data.filter(Boolean).map((r) => {
-      return {
-        url: r.id,
-        html: r.attributes?.html,
-        cssModuleUrls,
-      };
-    }) as PrerenderedCard[];
   }
 
   async getFields(
