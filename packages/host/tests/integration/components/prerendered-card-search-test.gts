@@ -16,13 +16,19 @@ import {
   setupLocalIndexing,
   testRealmURL,
 } from '../../helpers';
-import { Component, setupBaseRealm } from '../../helpers/base-realm';
+import {
+  CardDef,
+  FieldDef,
+  StringField,
+  contains,
+  field,
+  linksTo,
+  setupBaseRealm,
+} from '../../helpers/base-realm';
 
 module(`Integration | prerendered-card-search`, function (hooks) {
   let loader: Loader;
   let loaderService: LoaderService;
-  let cardApi: typeof import('https://cardstack.com/base/card-api');
-  let string: typeof import('https://cardstack.com/base/string');
 
   setupRenderingTest(hooks);
   hooks.beforeEach(function () {
@@ -33,12 +39,6 @@ module(`Integration | prerendered-card-search`, function (hooks) {
   setupLocalIndexing(hooks);
   setupBaseRealm(hooks);
   hooks.beforeEach(async function (this: RenderingTestContext) {
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-
-    let { contains, field, CardDef, FieldDef, linksTo } = cardApi;
-    let { default: StringField } = string;
-
     class PersonField extends FieldDef {
       @field firstName = contains(StringField);
       @field lastName = contains(StringField);
@@ -60,7 +60,10 @@ module(`Integration | prerendered-card-search`, function (hooks) {
       @field article = linksTo(Article);
     }
 
-    class Book extends CardDef {
+    const BookGtsImpl = `
+    import { Component, field, contains, CardDef } from 'https://cardstack.com/base/card-api';
+    import { PersonField } from './person';
+    export class Book extends CardDef {
       static displayName = 'Book';
       @field author = contains(PersonField);
       static embedded = class Embedded extends Component<typeof this> {
@@ -68,17 +71,23 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           <div class='book'>
             {{@model.title}}
             by
-            {{@model.author.firstName}}
-            {{@model.author.lastName}}
+            <span class="author">
+              {{@model.author.firstName}}
+              {{@model.author.lastName}}
+            </span>
           </div>
           <style>
             .book {
               background: yellow;
             }
+            .author {
+              color: blue;
+            }
           </style>
         </template>
       };
     }
+    `;
 
     const sampleCards: CardDocFiles = {
       'card-1.json': {
@@ -264,7 +273,8 @@ module(`Integration | prerendered-card-search`, function (hooks) {
       contents: {
         'article.gts': { Article },
         'blog-post.gts': { BlogPost },
-        'book.gts': { Book },
+        'book.gts': BookGtsImpl,
+        'person.gts': { PersonField },
         'post.gts': { Post },
         ...sampleCards,
       },
@@ -300,12 +310,12 @@ module(`Integration | prerendered-card-search`, function (hooks) {
         <:loading>
           Loading...
         </:loading>
-        <:response as |response|>
-          <response.Results as |PrerenderedCard|>
+        <:response as |cards|>
+          {{#each cards as |card|}}
             <div class='card-container'>
-              <PrerenderedCard />
+              <card.component />
             </div>
-          </response.Results>
+          {{/each}}
         </:response>
       </PrerenderedCardSearch>
     </template>);
@@ -320,5 +330,6 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     assert
       .dom('.card-container .book')
       .hasStyle({ backgroundColor: 'rgb(255, 255, 0)' });
+    assert.dom('.card-container .author').hasStyle({ color: 'rgb(0, 0, 255)' });
   });
 });
