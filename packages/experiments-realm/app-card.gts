@@ -18,7 +18,6 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-// @ts-ignore
 import { restartableTask } from 'ember-concurrency';
 
 import {

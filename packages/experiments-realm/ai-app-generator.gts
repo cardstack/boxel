@@ -13,7 +13,6 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-// @ts-ignore
 import { restartableTask } from 'ember-concurrency';
 import type {
   CodeRef,
