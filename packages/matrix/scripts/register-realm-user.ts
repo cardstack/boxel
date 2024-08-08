@@ -2,7 +2,7 @@ import * as childProcess from 'child_process';
 
 import { loginUser } from '../docker/synapse';
 
-import { realmPassword } from './realm-credentials';
+import { realmPassword } from '../helpers/realm-credentials';
 
 let realmSecretSeed = process.env.REALM_SECRET_SEED;
 
