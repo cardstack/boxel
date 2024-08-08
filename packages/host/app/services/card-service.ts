@@ -39,7 +39,6 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { trackCard } from '../resources/card-resource';
 
 import type LoaderService from './loader-service';
-import { getCard } from '../../../runtime-common/index';
 
 export type CardSaveSubscriber = (
   url: URL,
