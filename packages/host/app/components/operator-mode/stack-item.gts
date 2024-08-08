@@ -183,13 +183,19 @@ export default class OperatorModeStackItem extends Component<Signature> {
       ? '100%'
       : `calc(${stackItemMaxWidth} * ${maxWidthPercent} / 100)`;
 
-    return htmlSafe(`
+    let styles = `
       height: calc(100% - ${offsetPx}px * ${this.args.index});
       width: ${width};
       max-width: ${maxWidthPercent}%;
       z-index: calc(${this.args.index} + 1);
       margin-top: calc(${offsetPx}px * ${this.args.index});
-    `); // using margin-top instead of padding-top to hide scrolled content from view
+    `; // using margin-top instead of padding-top to hide scrolled content from view
+
+    if (this.args.item.isWideFormat) {
+      styles += 'transition: width var(--boxel-transition)';
+    }
+
+    return htmlSafe(styles);
   }
 
   private get isBuried() {
@@ -431,6 +437,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
                   <RealmIcon
                     @realmInfo={{realmInfo}}
                     class='header-icon'
+                    style={{cssVar
+                      realm-icon-background=(getContrastColor
+                        @item.headerColor 'transparent'
+                      )
+                    }}
                     data-test-boxel-header-icon={{realmInfo.iconURL}}
                     {{on 'mouseenter' this.hoverOnRealmIcon}}
                     {{on 'mouseleave' this.hoverOnRealmIcon}}
@@ -544,6 +555,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               @publicAPI={{@publicAPI}}
               @toggleSelect={{this.toggleSelect}}
               @selectedCards={{this.selectedCards}}
+              class={{if @item.isWideFormat 'delay'}}
             />
           </div>
         {{/if}}
@@ -571,6 +583,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .header-icon {
+        background-color: var(--realm-icon-background);
         border: 1px solid rgba(0, 0, 0, 0.15);
         border-radius: 7px;
       }
@@ -716,6 +729,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
         display: flex;
         justify: center;
         align-items: center;
+      }
+      .delay {
+        transition: all var(--boxel-transition);
       }
     </style>
   </template>
