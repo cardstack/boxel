@@ -300,7 +300,7 @@ class Isolated extends AppCard.isolated {
                 height='15'
                 role='presentation'
               />
-              Create New
+              Create new requirement
             </Button>
           {{/if}}
           <CardsGrid
@@ -403,9 +403,14 @@ class Isolated extends AppCard.isolated {
   }
   @action generateProductRequirementsDoc() {
     let ref = this.tabs[1].ref;
+    let appTitle = `${this.prompt.domain} ${this.prompt.appType}`;
+    let requirements = this.prompt.customRequirements
+      ? `that has these features: ${this.prompt.customRequirements}`
+      : '';
+    let prompt = `I want to make a ${this.prompt.appType} tailored for a ${this.prompt.domain} ${requirements}`;
     this.generatePrd.perform(ref, {
       data: {
-        attributes: { prompt: this.prompt },
+        attributes: { appTitle, prompt },
         meta: { adoptsFrom: ref },
       },
     });
