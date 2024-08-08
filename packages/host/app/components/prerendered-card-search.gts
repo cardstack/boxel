@@ -5,12 +5,9 @@ import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 import Component from '@glimmer/component';
 
-import { tracked } from '@glimmer/tracking';
-
 import { WithBoundArgs } from '@glint/template';
 
-import { restartableTask } from 'ember-concurrency';
-
+import { trackedFunction } from 'ember-resources/util/function';
 import { flatMap } from 'lodash';
 
 import { PrerenderedCard, Query } from '@cardstack/runtime-common';
@@ -63,31 +60,13 @@ interface Signature {
 
 export default class PrerenderedCardSearch extends Component<Signature> {
   @service declare cardService: CardService;
-  @tracked _instances: PrerenderedCard[] = [];
   _lastSearchQuery: Query | null = null;
 
-  get isLoading() {
-    return this.searchTask.isRunning;
-  }
-  get search() {
-    if (this._lastSearchQuery !== this.args.query) {
-      // eslint-disable-next-line ember/no-side-effects
-      this._lastSearchQuery = this.args.query;
-      this.searchTask.perform();
-    }
-    let self = this;
-    return {
-      get isLoading() {
-        return self.searchTask.isRunning;
-      },
-    };
-  }
-
-  private searchTask = restartableTask(async () => {
+  private runSearch = trackedFunction(this, async () => {
     let { query, format, realms } = this.args;
     let token = waiter.beginAsync();
     try {
-      this._instances = flatMap(
+      let instances = flatMap(
         await Promise.all(
           realms.map(
             async (realm) =>
@@ -95,23 +74,26 @@ export default class PrerenderedCardSearch extends Component<Signature> {
           ),
         ),
       );
+      return { instances, isLoading: false };
     } finally {
       waiter.endAsync(token);
     }
   });
 
-  get count() {
-    return this._instances.length;
+  private get searchResults() {
+    return this.runSearch.value || { instances: null, isLoading: true };
   }
 
   <template>
-    {{#if this.search.isLoading}}
+    {{#if this.searchResults.isLoading}}
       {{yield to='loading'}}
     {{else}}
       {{yield
         (hash
-          count=this.count
-          Results=(component ResultsComponent instances=this._instances)
+          count=this.searchResults.instances.length
+          Results=(component
+            ResultsComponent instances=this.searchResults.instances
+          )
         )
         to='response'
       }}
