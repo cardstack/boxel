@@ -73,7 +73,10 @@ import { RealmIndexQueryEngine } from './realm-index-query-engine';
 import { RealmIndexUpdater } from './realm-index-updater';
 
 import qs from 'qs';
-import { RealmAuthServer, Utils } from './realm-auth-server';
+import {
+  MatrixBackendAuthentication,
+  Utils,
+} from './matrix-backend-authentication';
 
 export interface RealmSession {
   canRead: boolean;
@@ -585,7 +588,7 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ) {
-    let realmAuthServer = new RealmAuthServer(
+    let matrixBackendAuthentication = new MatrixBackendAuthentication(
       this.#matrixClient,
       this.#realmSecretSeed,
       {
@@ -623,7 +626,7 @@ export class Realm {
       } as Utils,
     );
 
-    return await realmAuthServer.createSession(request);
+    return await matrixBackendAuthentication.createSession(request);
   }
 
   private async internalHandle(

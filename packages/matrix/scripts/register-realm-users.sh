@@ -20,5 +20,3 @@ MATRIX_USERNAME=realm_server MATRIX_PASSWORD=password ts-node --transpileOnly ./
 MATRIX_USERNAME=node-test_realm-server MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts
 MATRIX_USERNAME=node-test_realm MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts
 MATRIX_USERNAME=test_realm MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts
-# Block this username from being used by the user
-MATRIX_USERNAME=session MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts

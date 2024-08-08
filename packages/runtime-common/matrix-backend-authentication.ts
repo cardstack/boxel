@@ -11,7 +11,7 @@ export interface Utils {
   createJWT(user: string): Promise<string>;
 }
 
-export class RealmAuthServer {
+export class MatrixBackendAuthentication {
   constructor(
     private matrixClient: MatrixClient,
     private secretSeed: string,

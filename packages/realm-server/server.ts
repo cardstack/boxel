@@ -25,9 +25,9 @@ import { extractSupportedMimeType } from '@cardstack/runtime-common/router';
 import * as Sentry from '@sentry/node';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import {
-  RealmAuthServer,
+  MatrixBackendAuthentication,
   Utils,
-} from '@cardstack/runtime-common/realm-auth-server';
+} from '@cardstack/runtime-common/matrix-backend-authentication';
 import jwt from 'jsonwebtoken';
 
 export class RealmServer {
@@ -48,7 +48,7 @@ export class RealmServer {
     let router = new Router();
     router.head('/', livenessCheck);
     router.get('/', healthCheck, this.serveIndex(), this.serveFromRealm);
-    router.post('/session', this.createSession());
+    router.post('/_server-session', this.createSession());
 
     let app = new Koa<Koa.DefaultState, Koa.Context>()
       .use(httpLogging)
@@ -102,7 +102,7 @@ export class RealmServer {
     ctxt: Koa.Context,
     next: Koa.Next,
   ) => Promise<void> {
-    let realmAuthServer = new RealmAuthServer(
+    let matrixBackendAuthentication = new MatrixBackendAuthentication(
       this.matrixClient,
       this.secretSeed,
       {
@@ -126,7 +126,7 @@ export class RealmServer {
 
     return async (ctxt: Koa.Context, _next: Koa.Next) => {
       let request = await fetchRequestFromContext(ctxt);
-      let response = await realmAuthServer.createSession(request);
+      let response = await matrixBackendAuthentication.createSession(request);
       await setContextResponse(ctxt, response);
     };
   }

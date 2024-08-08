@@ -2841,7 +2841,7 @@ module('Realm server authentication', function (hooks) {
     let userId = matrixClient.getUserId();
 
     let response = await request
-      .post('/session')
+      .post('/_server-session')
       .send(JSON.stringify({ user: userId }))
       .set('Accept', 'application/json')
       .set('Content-Type', 'application/json');
@@ -2861,7 +2861,7 @@ module('Realm server authentication', function (hooks) {
     });
 
     response = await request
-      .post('/session')
+      .post('/_server-session')
       .send(JSON.stringify({ user: userId, challenge: json.challenge }))
       .set('Accept', 'application/json')
       .set('Content-Type', 'application/json');
