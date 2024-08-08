@@ -3,7 +3,7 @@ import Component from '@glimmer/component';
 import { BoxelDropdown, Menu } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
 
-import { type RealmCards } from './modal';
+import { type RealmCards } from '@cardstack/runtime-common';
 
 interface Signature {
   availableRealms: RealmCards[];

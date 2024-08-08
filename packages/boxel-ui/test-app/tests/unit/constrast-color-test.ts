@@ -55,4 +55,14 @@ module('Unit | contrast-color test', function () {
     let color = getContrastColor('#6638ff');
     assert.strictEqual(color, lightText);
   });
+
+  test('can use different lightColor value', function (assert) {
+    let color = getContrastColor('#000', undefined, '#ddd');
+    assert.strictEqual(color, '#ddd');
+  });
+
+  test('can use different darkColor value', function (assert) {
+    let color = getContrastColor('#fff', '#333');
+    assert.strictEqual(color, '#333');
+  });
 });

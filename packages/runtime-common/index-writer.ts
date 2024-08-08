@@ -49,7 +49,7 @@ export class IndexWriter {
   }
 }
 
-export type IndexEntry = InstanceEntry | ModuleEntry | CSSEntry | ErrorEntry;
+export type IndexEntry = InstanceEntry | ModuleEntry | ErrorEntry;
 export type LastModifiedTimes = Map<
   string,
   { type: string; lastModified: number | null }
@@ -75,13 +75,6 @@ export interface ErrorEntry {
 
 interface ModuleEntry {
   type: 'module';
-  source: string;
-  lastModified: number;
-  deps: Set<string>;
-}
-
-interface CSSEntry {
-  type: 'css';
   source: string;
   lastModified: number;
   deps: Set<string>;
@@ -176,13 +169,6 @@ export class Batch {
                 entry.source,
                 new RealmPaths(this.realmURL).local(url),
               ),
-            }
-          : entry.type === 'css'
-          ? {
-              type: 'css',
-              deps: [...entry.deps],
-              source: entry.source,
-              last_modified: entry.lastModified,
             }
           : {
               type: 'error',
@@ -290,10 +276,11 @@ export class Batch {
   async invalidate(url: URL): Promise<string[]> {
     await this.ready;
     let alias = trimExecutableExtension(url).href;
+    let visited = new Set<string>();
     let invalidations = [
       ...new Set([
         ...(!this.nodeResolvedInvalidations.includes(alias) ? [url.href] : []),
-        ...(alias ? await this.calculateInvalidations(alias) : []),
+        ...(alias ? await this.calculateInvalidations(alias, visited) : []),
       ]),
     ];
 
@@ -386,14 +373,12 @@ export class Batch {
 
   private async calculateInvalidations(
     alias: string,
-    visited: string[] = [],
+    visited: Set<string>,
   ): Promise<string[]> {
-    if (
-      visited.includes(alias) ||
-      this.nodeResolvedInvalidations.includes(alias)
-    ) {
+    if (visited.has(alias) || this.nodeResolvedInvalidations.includes(alias)) {
       return [];
     }
+    visited.add(alias);
     let childInvalidations = await this.itemsThatReference(
       alias,
       this.realmVersion,
@@ -407,9 +392,7 @@ export class Batch {
       ...invalidations,
       ...flatten(
         await Promise.all(
-          aliases.map((a) =>
-            this.calculateInvalidations(a, [...visited, alias]),
-          ),
+          aliases.map((a) => this.calculateInvalidations(a, visited)),
         ),
       ),
     ];
