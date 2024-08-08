@@ -993,15 +993,8 @@ module('Acceptance | code submode tests', function (hooks) {
     // Click on search result
     await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
 
-    await waitUntil(
-      () =>
-        !document
-          .querySelector('[data-test-search-sheet]')!
-          .classList.contains('results'),
-    ); // Search closed
-
-    // The card appears in the editor
-    await waitForCodeEditor();
+    await waitForCodeEditor(); // The card appears in the editor
+    assert.dom('[data-test-search-sheet]').doesNotHaveClass('results'); // Search sheet is closed
     assert.deepEqual(JSON.parse(getMonacoContent()), {
       data: {
         attributes: {
