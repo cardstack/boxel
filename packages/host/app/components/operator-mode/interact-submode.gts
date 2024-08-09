@@ -23,6 +23,7 @@ import {
   aiBotUsername,
   Deferred,
   baseCardRef,
+  skillCardRef,
   chooseCard,
   codeRefWithAbsoluteURL,
   moduleFrom,
@@ -37,7 +38,7 @@ import { StackItem } from '@cardstack/host/lib/stack-item';
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
 import { type CardDef, type Format } from 'https://cardstack.com/base/card-api';
-import type { LLMCommandCard } from 'https://cardstack.com/base/llmcommand';
+import { type SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
@@ -285,22 +286,17 @@ export default class InteractSubmode extends Component<Signature> {
           filter: {
             every: [
               {
-                on: {
-                  module: `https://cardstack.com/base/llmcommand`,
-                  name: 'LLMCommandCard',
-                },
-                eq: {
-                  appliesTo: ref,
-                  commandTitle,
-                },
+                on: skillCardRef,
+                eq: { title: commandTitle },
               },
             ],
           },
         },
         opts.realmURL,
       );
-      let command = commands[0] as LLMCommandCard;
+      let command = commands[0] as SkillCard;
       if (!command) {
+        console.error(`Could not find AI action "${commandTitle}"`);
         return;
       }
 
@@ -321,9 +317,9 @@ export default class InteractSubmode extends Component<Signature> {
 
       await this.matrixService.sendMessage(
         newRoomId,
-        command.message,
+        'Generating product requirements document...',
         [card],
-        command.attachedSkills,
+        [command],
       );
     },
   );

@@ -423,7 +423,7 @@ class Isolated extends AppCard.isolated {
           return;
         }
         await this.args.context?.actions?.runAiAction?.(
-          'Generate PRD',
+          'Generate Product Requirements',
           ref,
           this.currentRealm,
           { realmURL: this.currentRealm, doc },
