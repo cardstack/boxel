@@ -326,7 +326,6 @@ export interface Actions {
       realmURL?: URL;
       doc?: LooseSingleCardDocument;
       openInStackAfterCreation?: boolean;
-      stackModeAfterCreation?: Format;
     },
   ) => Promise<CardDef | undefined>;
   viewCard: (

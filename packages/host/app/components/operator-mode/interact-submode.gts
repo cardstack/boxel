@@ -148,7 +148,6 @@ export default class InteractSubmode extends Component<Signature> {
           isLinkedCard?: boolean;
           doc?: LooseSingleCardDocument; // fill in card data with values
           openInStackAfterCreation?: boolean;
-          stackModeAfterCreation?: Format;
         },
       ): Promise<CardDef | undefined> => {
         let cardModule = new URL(moduleFrom(ref), relativeTo);
@@ -188,14 +187,14 @@ export default class InteractSubmode extends Component<Signature> {
         let newItem = new StackItem({
           owner: here,
           card: newCard,
-          format: opts?.stackModeAfterCreation ?? 'edit',
+          format: 'edit',
           request: new Deferred(),
           isLinkedCard: opts?.isLinkedCard,
           stackIndex,
         });
         await newItem.ready();
         here.addToStack(newItem);
-        return newCard;
+        return await newItem.request?.promise;
       },
       viewCard: async (
         card: CardDef,
@@ -303,13 +302,14 @@ export default class InteractSubmode extends Component<Signature> {
       let card = await this.publicAPI(this, 0).createCard(ref, relativeTo, {
         realmURL: opts.realmURL,
         doc: opts.doc,
-        openInStackAfterCreation: true,
-        stackModeAfterCreation: 'isolated',
+        openInStackAfterCreation: false,
       });
       if (!card) {
         console.error('Failed to create card for AI action');
         return;
       }
+
+      await this.publicAPI(this, 0).viewCard(card, 'isolated');
 
       let newRoomId = await this.matrixService.createRoom(`New AI chat`, [
         aiBotUsername,
