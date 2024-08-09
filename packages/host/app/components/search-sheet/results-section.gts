@@ -3,8 +3,6 @@ import { TemplateOnlyComponent } from '@ember/component/template-only';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { WithBoundArgs } from '@glint/template';
-
 import { CardContainer, Label } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 
@@ -12,7 +10,7 @@ import RealmService from '@cardstack/host/services/realm';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
-import { PrerenderedCardComponent } from '../prerendered-card-search';
+import { type HTMLComponent } from '../../lib/html-component';
 import Preview from '../preview';
 
 import { removeFileExtension } from './utils';
@@ -20,7 +18,7 @@ import { removeFileExtension } from './utils';
 interface SearchResultSignature {
   Element: HTMLElement;
   Args: {
-    component?: WithBoundArgs<typeof PrerenderedCardComponent, 'card'>;
+    component?: HTMLComponent;
     card?: CardDef;
     cardId: string;
     isCompact: boolean;
