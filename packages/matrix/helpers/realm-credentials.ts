@@ -5,7 +5,8 @@ export async function realmPassword(
   realmSecretSeed: string,
 ): Promise<string> {
   let hash = new Sha256();
-  hash.update(realmUser);
+  let cleanUsername = realmUser.replace(/^@/, '').replace(/:.*$/, '');
+  hash.update(cleanUsername);
   hash.update(realmSecretSeed);
   return uint8ArrayToHex(await hash.digest());
 }

@@ -13,14 +13,14 @@ if (!realmSecretSeed) {
   process.exit(-1);
 }
 
-const [realmUser] = process.argv.slice(2);
+const [realmUser, matrixURL] = process.argv.slice(2);
 if (!realmUser) {
   console.error(`please specify the realm user to migrate`);
   process.exit(-1);
 }
 
 (async () => {
-  let cred = await loginUser(adminUser, adminPassword);
+  let cred = await loginUser(adminUser, adminPassword, matrixURL);
   if (!cred.userId) {
     console.error(
       `Incorrect admin credentials. Specify the matrix admin credentials in the ADMIN_USERNAME and ADMIN_PASSWORD environment variables`,
@@ -28,5 +28,6 @@ if (!realmUser) {
     process.exit(-1);
   }
   let password = await realmPassword(realmUser, realmSecretSeed);
-  await updateUser(cred.accessToken, realmUser, { password });
+  await updateUser(cred.accessToken, realmUser, { password, matrixURL });
+  console.log(`completed migration of ${realmUser}`);
 })().catch((e) => console.error(`unexpected error`, e));

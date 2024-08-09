@@ -1,5 +1,4 @@
 #! /bin/sh
-set -x
 
 if [ -z "$REALM_SECRET_SEED" ]; then
   echo "The REALM_SECRET_SEED env var must be specified"
