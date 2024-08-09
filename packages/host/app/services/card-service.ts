@@ -68,8 +68,6 @@ export default class CardService extends Service {
     return this.loaderToCardAPILoadingCache.get(loader)!;
   }
 
-  // This is temporary until we have a better way of discovering the realms that
-  // are available for a user // unresolved URLs
   realmURLs = new TrackedArray([ownRealmURL]);
 
   // Note that this should be the unresolved URL and that we need to rely on our
