@@ -214,15 +214,24 @@ export default class InteractSubmode extends Component<Signature> {
         let item = here.findCardInStack(card, stackIndex);
         here.save.perform(item, dismissItem);
       },
-      delete: (card: CardDef | URL | string): void => {
-        if (!card || card instanceof URL || typeof card === 'string') {
-          throw new Error(`bug: delete called with invalid card "${card}"`);
+      delete: async (card: CardDef | URL | string): Promise<void> => {
+        let loadedCard: CardDef;
+
+        if (typeof card === 'string') {
+          let _loadedCard = await here.cardService.getCard(card);
+          if (!_loadedCard) {
+            throw new Error(`Could not load card ${card}`);
+          }
+          loadedCard = _loadedCard;
+        } else {
+          loadedCard = card as CardDef;
         }
+
         if (!here.itemToDelete) {
-          here.itemToDelete = card;
+          here.itemToDelete = loadedCard;
           return;
         }
-        here.delete.perform(card);
+        here.delete.perform(loadedCard);
       },
       doWithStableScroll: async (
         card: CardDef,
@@ -446,8 +455,12 @@ export default class InteractSubmode extends Component<Signature> {
   }
 
   private openSelectedSearchResultInStack = restartableTask(
-    async (card: CardDef) => {
+    async (cardId: string) => {
       let searchSheetTrigger = this.searchSheetTrigger; // Will be set by showSearchWithTrigger
+      let card = await this.cardService.getCard(cardId);
+      if (!card) {
+        return;
+      }
 
       // In case the left button was clicked, whatever is currently in stack with index 0 will be moved to stack with index 1,
       // and the card will be added to stack with index 0. shiftStack executes this logic.

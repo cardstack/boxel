@@ -2,7 +2,7 @@ import { setupRenderingTest } from 'ember-qunit';
 import { module } from 'qunit';
 import { test } from 'qunit';
 
-import PrerenderedCardComponent from '@cardstack/host/components/prerendered';
+import { PrerenderedCardComponent } from '@cardstack/host/components/prerendered-card-search';
 
 import { renderComponent } from '../../helpers/render-component';
 

@@ -101,6 +101,7 @@ interface WIPOptions {
 export interface PrerenderedCard {
   url: string;
   html: string;
+  cssModuleUrls: string[];
 }
 
 export interface QueryResultsMeta {
@@ -375,7 +376,7 @@ export class IndexQueryEngine {
     loader: Loader,
     opts: QueryOptions = {},
   ): Promise<{
-    prerenderedCards: PrerenderedCard[];
+    prerenderedCards: Partial<PrerenderedCard>[];
     scopedCssUrls: string[];
     meta: QueryResultsMeta;
   }> {
