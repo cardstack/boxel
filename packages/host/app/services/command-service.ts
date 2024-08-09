@@ -1,24 +1,20 @@
 import Service, { service } from '@ember/service';
 
-import { tracked } from '@glimmer/tracking';
-
 import { task } from 'ember-concurrency';
+
+import flatMap from 'lodash/flatMap';
 
 import {
   type PatchData,
   baseRealm,
   LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-import {
-  CardTypeFilter,
-  Query,
-  assertQuery,
-} from '@cardstack/runtime-common/query';
+import { CardTypeFilter, assertQuery } from '@cardstack/runtime-common/query';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import { BaseDef } from 'https://cardstack.com/base/card-api';
+import { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
 import { CommandField } from 'https://cardstack.com/base/command';
 
 import { CommandResult } from 'https://cardstack.com/base/command-result';
@@ -28,7 +24,6 @@ import {
 } from 'https://cardstack.com/base/matrix-event';
 
 import { Message } from '../lib/matrix-classes/message';
-import { getSearchResults } from '../resources/search';
 
 import CardService from './card-service';
 
@@ -40,9 +35,6 @@ export default class CommandService extends Service {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
   @service private declare cardService: CardService;
-  @tracked query: Query = {};
-
-  searchCardResource = getSearchResults(this, () => this.query);
 
   //TODO: Convert to non-EC async method after fixing CS-6987
   run = task(async (command: CommandField, roomId: string) => {
@@ -69,13 +61,19 @@ export default class CommandService extends Service {
             "Search command can't run because it doesn't have all the arguments returned by open ai",
           );
         }
-        this.query = { filter: payload.filter };
-        await this.searchCardResource.loaded;
-        let promises = this.searchCardResource.instances.map((c) =>
-          this.cardService.serializeCard(c),
+        let query = { filter: payload.filter };
+        let realmUrls = this.cardService.realmURLs;
+        let instances: CardDef[] = flatMap(
+          await Promise.all(
+            realmUrls.map(
+              async (realm) =>
+                await this.cardService.search(query, new URL(realm)),
+            ),
+          ),
         );
-        res = await Promise.all(promises);
-        console.log(res);
+        res = await Promise.all(
+          instances.map((c) => this.cardService.serializeCard(c)),
+        );
       }
       await this.matrixService.sendReactionEvent(roomId, eventId, 'applied');
       if (res) {
