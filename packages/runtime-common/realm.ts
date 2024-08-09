@@ -174,7 +174,6 @@ interface UpdateEvent {
 export interface MatrixConfig {
   url: URL;
   username: string;
-  password: string;
 }
 
 export type UpdateEventData =
@@ -294,9 +293,13 @@ export class Realm {
     opts?: Options,
   ) {
     this.paths = new RealmPaths(new URL(url));
-    let { username, password, url: matrixURL } = matrix;
-    this.#matrixClient = new MatrixClient(matrixURL, username, password);
+    let { username, url: matrixURL } = matrix;
     this.#realmSecretSeed = realmSecretSeed;
+    this.#matrixClient = new MatrixClient({
+      matrixURL,
+      username,
+      seed: realmSecretSeed,
+    });
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
     this.#assetsURL = assetsURL;

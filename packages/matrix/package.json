@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "license": "MIT",
   "devDependencies": {
+    "@aws-crypto/sha256-js": "^5.2.0",
     "@playwright/test": "^1.43.1",
     "@types/fs-extra": "^9.0.13",
     "@types/jsonwebtoken": "^9.0.5",

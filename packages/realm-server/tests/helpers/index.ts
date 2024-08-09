@@ -29,13 +29,11 @@ export const localBaseRealm = 'http://localhost:4441/';
 const testMatrix: MatrixConfig = {
   url: new URL(`http://localhost:8008`),
   username: 'node-test_realm',
-  password: 'password',
 };
 
 export const realmServerTestMatrix: MatrixConfig = {
   url: new URL(`http://localhost:8008`),
   username: 'node-test_realm-server',
-  password: 'password',
 };
 export const realmSecretSeed = `shhh! it's a secret`;
 
@@ -223,11 +221,11 @@ export async function runBaseRealmServer(
   });
   virtualNetwork.mount(testBaseRealm.handle);
   await testBaseRealm.start();
-  let matrixClient = new MatrixClient(
-    realmServerTestMatrix.url,
-    realmServerTestMatrix.username,
-    realmServerTestMatrix.password,
-  );
+  let matrixClient = new MatrixClient({
+    matrixURL: realmServerTestMatrix.url,
+    username: realmServerTestMatrix.username,
+    seed: realmSecretSeed,
+  });
   let testBaseRealmServer = new RealmServer(
     [testBaseRealm],
     virtualNetwork,
@@ -268,11 +266,11 @@ export async function runTestRealmServer({
   });
   virtualNetwork.mount(testRealm.handle);
   await testRealm.start();
-  let matrixClient = new MatrixClient(
-    realmServerTestMatrix.url,
-    realmServerTestMatrix.username,
-    realmServerTestMatrix.password,
-  );
+  let matrixClient = new MatrixClient({
+    matrixURL: realmServerTestMatrix.url,
+    username: realmServerTestMatrix.username,
+    seed: realmSecretSeed,
+  });
   let testRealmServer = new RealmServer(
     [testRealm],
     virtualNetwork,

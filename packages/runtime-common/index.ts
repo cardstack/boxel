@@ -435,3 +435,9 @@ export function splitStringIntoChunks(str: string, maxSizeKB: number) {
   }
   return chunks;
 }
+
+export function uint8ArrayToHex(uint8: Uint8Array) {
+  return Array.from(uint8)
+    .map((i) => i.toString(16).padStart(2, '0'))
+    .join('');
+}

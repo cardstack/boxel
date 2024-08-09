@@ -2674,11 +2674,11 @@ module('Realm server serving multiple realms', function (hooks) {
       });
       virtualNetwork.mount(testRealm.handle);
 
-      let matrixClient = new MatrixClient(
-        realmServerTestMatrix.url,
-        realmServerTestMatrix.username,
-        realmServerTestMatrix.password,
-      );
+      let matrixClient = new MatrixClient({
+        matrixURL: realmServerTestMatrix.url,
+        username: realmServerTestMatrix.username,
+        seed: realmSecretSeed,
+      });
       testRealmServer = new RealmServer(
         [base, testRealm],
         virtualNetwork,
@@ -2832,11 +2832,13 @@ module('Realm server authentication', function (hooks) {
   });
 
   test('authenticates user', async function (assert) {
-    let matrixClient = new MatrixClient(
-      realmServerTestMatrix.url,
-      'test_realm',
-      'password',
-    );
+    let matrixClient = new MatrixClient({
+      matrixURL: realmServerTestMatrix.url,
+      // it's a little awkward that we are hijacking a realm user to pretend to
+      // act like a normal user, but that's what's happening here
+      username: 'test_realm',
+      seed: realmSecretSeed,
+    });
     await matrixClient.login();
     let userId = matrixClient.getUserId();
 

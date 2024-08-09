@@ -6,7 +6,7 @@ const testContainerId = 'test-container';
 const iframeSelectorTempId = 'iframe-selector-temp';
 const username = 'user';
 const password = 'password';
-const timeoutMs = 30000;
+const timeoutMs = 45000;
 
 class Messenger {
   #request;

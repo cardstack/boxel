@@ -82,7 +82,6 @@ let {
   toUrl: toUrls,
   useTestingDomain,
   username: usernames,
-  password: passwords,
   matrixURL: matrixURLs,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
@@ -127,11 +126,6 @@ let {
       demandOption: true,
       type: 'array',
     },
-    password: {
-      description: 'The matrix password for the realm user',
-      demandOption: true,
-      type: 'array',
-    },
   })
   .parseSync();
 
@@ -148,13 +142,9 @@ if (fromUrls.length < paths.length) {
   process.exit(-1);
 }
 
-if (
-  paths.length !== usernames.length ||
-  usernames.length !== passwords.length ||
-  paths.length !== matrixURLs.length
-) {
+if (paths.length !== usernames.length || paths.length !== matrixURLs.length) {
   console.error(
-    `not enough username/password pairs were provided to satisfy the paths provided. There must be at least one --username/--password/--matrixURL set for each --path parameter`,
+    `not enough usernames were provided to satisfy the paths provided. There must be at least one --username/--matrixURL set for each --path parameter`,
   );
   process.exit(-1);
 }
@@ -195,11 +185,6 @@ let dist: URL = new URL(distURL);
       console.error(`missing username for realm ${url}`);
       process.exit(-1);
     }
-    let password = String(passwords[i]);
-    if (password.length === 0) {
-      console.error(`missing password for realm ${url}`);
-      process.exit(-1);
-    }
     let { getRunner, getIndexHTML } = await makeFastBootIndexRunner(
       dist,
       manager.getOptions.bind(manager),
@@ -211,7 +196,7 @@ let dist: URL = new URL(distURL);
         url,
         adapter: realmAdapter,
         getIndexHTML,
-        matrix: { url: new URL(matrixURL), username, password },
+        matrix: { url: new URL(matrixURL), username },
         realmSecretSeed: REALM_SECRET_SEED,
         virtualNetwork,
         dbAdapter,
@@ -251,11 +236,11 @@ let dist: URL = new URL(distURL);
     virtualNetwork.mount(realm.handle);
   }
 
-  let matrixClient = new MatrixClient(
-    new URL(MATRIX_URL),
-    REALM_SERVER_MATRIX_USERNAME,
-    REALM_SERVER_MATRIX_PASSWORD,
-  );
+  let matrixClient = new MatrixClient({
+    matrixURL: new URL(MATRIX_URL),
+    username: REALM_SERVER_MATRIX_USERNAME,
+    seed: REALM_SECRET_SEED,
+  });
   let server = new RealmServer(
     realms,
     virtualNetwork,
