@@ -72,9 +72,8 @@ export default class OperatorModeOverlays extends Component<Signature> {
           data-test-overlay-card={{cardId}}
           data-test-overlay-card-display-name={{cardId}}
           style={{this.zIndexStyle renderedCard.element}}
-          ...attributes
         >
-          {{#if (this.isHeaderIncluded renderedCard)}}
+          {{#if (this.isIncludeHeader renderedCard)}}
             <OperatorModeOverlayItemHeader
               @item={{renderedCard}}
               @card={{this.asCard renderedCard.cardDefOrId}}
@@ -278,18 +277,18 @@ export default class OperatorModeOverlays extends Component<Signature> {
   }
 
   @action private asCard(cardDefOrId: CardDefOrId) {
-    if (!(cardDefOrId instanceof CardDef)) {
-      throw new Error('cardDefOrId must be a CardDef');
+    if (typeof cardDefOrId !== 'string' && 'id' in cardDefOrId) {
+      return cardDefOrId;
     }
-    return cardDefOrId;
+    throw new Error('cardDefOrId must be a CardDef');
   }
 
-  @action private getCardId(cardDefOrId: CardDefOrId) {
+  @action getCardId(cardDefOrId: CardDefOrId) {
     return typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
   }
 
   @action
-  private isHeaderIncluded(renderedCard: RenderedCardForOverlayActions) {
+  private isIncludeHeader(renderedCard: RenderedCardForOverlayActions) {
     return this.isEmbeddedCard(renderedCard) && renderedCard.format !== 'atom';
   }
 
@@ -357,6 +356,6 @@ export default class OperatorModeOverlays extends Component<Signature> {
       zIndexParentElement === 'auto'
         ? zIndexParentElement
         : String(Number(zIndexParentElement) + 1);
-    return htmlSafe(`z-index: ${zIndex};`);
+    return htmlSafe(`z-index: ${zIndex}`);
   }
 }
