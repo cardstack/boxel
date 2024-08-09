@@ -418,9 +418,16 @@ class Isolated extends AppCard.isolated {
     async (ref: CodeRef, doc: LooseSingleCardDocument) => {
       try {
         this.errorMessage = '';
-        await this.args.context?.actions?.createCard?.(ref, this.currentRealm, {
-          doc,
-        });
+        if (!this.currentRealm) {
+          console.error('No current realm');
+          return;
+        }
+        await this.args.context?.actions?.runAiAction?.(
+          'Generate PRD',
+          ref,
+          this.currentRealm,
+          { realmURL: this.currentRealm, doc },
+        );
         this.prompt = this.promptReset;
         this.setActiveTab(1);
       } catch (e) {

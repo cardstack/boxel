@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Command Card",
+      "description": "An LLM command with attached Skill Card",
+      "ref": {
+        "module": "https://cardstack.com/base/llmcommand",
+        "name": "LLMCommandCard"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}

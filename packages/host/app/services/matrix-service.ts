@@ -3,6 +3,7 @@ import type RouterService from '@ember/routing/router-service';
 import Service, { service } from '@ember/service';
 import { cached, tracked } from '@glimmer/tracking';
 
+import { v4 as uuidv4 } from 'uuid';
 import format from 'date-fns/format';
 
 import { task } from 'ember-concurrency';
@@ -494,7 +495,7 @@ export default class MatrixService
     body: string | undefined,
     attachedCards: CardDef[] = [],
     skillCards: CardDef[] = [],
-    clientGeneratedId: string,
+    clientGeneratedId = uuidv4(),
     context?: OperatorModeContext,
   ): Promise<void> {
     let html = markdownToHtml(body);

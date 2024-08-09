@@ -325,6 +325,8 @@ export interface Actions {
       isLinkedCard?: boolean;
       realmURL?: URL;
       doc?: LooseSingleCardDocument;
+      openInStackAfterCreation?: boolean;
+      stackModeAfterCreation?: Format;
     },
   ) => Promise<CardDef | undefined>;
   viewCard: (
@@ -341,6 +343,15 @@ export interface Actions {
     changeSizeCallback: () => Promise<void>,
   ) => Promise<void>;
   changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
+  runAiAction?: (
+    commandTitle: string,
+    ref: CodeRef,
+    relativeTo: URL | undefined,
+    opts: {
+      realmURL: URL;
+      doc?: LooseSingleCardDocument;
+    },
+  ) => Promise<void>;
 }
 
 export function hasExecutableExtension(path: string): boolean {

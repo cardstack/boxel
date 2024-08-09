@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "instructions": "Given a prompt, fill in the product requirements document. Update the prompt to be grammatically accurate. Description should be 1 or 2 short sentences. In overview, provide 1 or 2 paragraph summary. In schema, make a list of various schema contents for the app. In Layout & Navigation, provide brief information for the layout and navigation of the app.",
+      "title": "Generate Product Requirements",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/skill-card",
+        "name": "SkillCard"
+      }
+    }
+  }
+}

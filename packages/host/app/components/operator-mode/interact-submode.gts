@@ -20,6 +20,7 @@ import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { IconPlus, Download } from '@cardstack/boxel-ui/icons';
 
 import {
+  aiBotUsername,
   Deferred,
   baseCardRef,
   chooseCard,
@@ -35,7 +36,8 @@ import { StackItem } from '@cardstack/host/lib/stack-item';
 
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import { type CardDef, type Format } from 'https://cardstack.com/base/card-api';
+import type { LLMCommandCard } from 'https://cardstack.com/base/llmcommand';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
@@ -43,6 +45,7 @@ import OperatorModeStack from './stack';
 import SubmodeLayout from './submode-layout';
 
 import type CardService from '../../services/card-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RecentFilesService from '../../services/recent-files-service';
 import type { Submode } from '../submode-switcher';
@@ -116,6 +119,7 @@ interface Signature {
 
 export default class InteractSubmode extends Component<Signature> {
   @service private declare cardService: CardService;
+  @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare recentFilesService: RecentFilesService;
 
@@ -142,6 +146,8 @@ export default class InteractSubmode extends Component<Signature> {
           realmURL?: URL;
           isLinkedCard?: boolean;
           doc?: LooseSingleCardDocument; // fill in card data with values
+          openInStackAfterCreation?: boolean;
+          stackModeAfterCreation?: Format;
         },
       ): Promise<CardDef | undefined> => {
         let cardModule = new URL(moduleFrom(ref), relativeTo);
@@ -168,24 +174,27 @@ export default class InteractSubmode extends Component<Signature> {
           relativeTo,
         );
 
-        let newItem = new StackItem({
-          owner: here,
-          card: newCard,
-          format: 'edit',
-          request: new Deferred(),
-          isLinkedCard: opts?.isLinkedCard,
-          stackIndex,
-        });
-
         // TODO: it is important saveModel happens after newItem because it
         // looks like perhaps there is a race condition (or something else) when a
         // new linked card is created, and when it is added to the stack and closed
         // - the parent card is not updated with the new linked card
         await here.cardService.saveModel(here, newCard);
 
+        if (opts?.openInStackAfterCreation === false) {
+          return newCard;
+        }
+
+        let newItem = new StackItem({
+          owner: here,
+          card: newCard,
+          format: opts?.stackModeAfterCreation ?? 'edit',
+          request: new Deferred(),
+          isLinkedCard: opts?.isLinkedCard,
+          stackIndex,
+        });
         await newItem.ready();
         here.addToStack(newItem);
-        return await newItem.request?.promise;
+        return newCard;
       },
       viewCard: async (
         card: CardDef,
@@ -246,9 +255,78 @@ export default class InteractSubmode extends Component<Signature> {
         here.operatorModeStateService.updateCodePath(url);
         here.operatorModeStateService.updateSubmode(submode);
       },
+      runAiAction: async (
+        commandTitle: string,
+        ref: CodeRef,
+        relativeTo: URL | undefined,
+        opts: {
+          realmURL: URL;
+          doc?: LooseSingleCardDocument; // fill in card data with values
+        },
+      ): Promise<void> => {
+        await here.runAiAction.perform(commandTitle, ref, relativeTo, opts);
+      },
     };
   }
   stackBackgroundsState = stackBackgroundsResource(this);
+
+  private runAiAction = restartableTask(
+    async (
+      commandTitle: string,
+      ref: CodeRef,
+      relativeTo: URL | undefined,
+      opts: {
+        realmURL: URL;
+        doc?: LooseSingleCardDocument; // fill in card data with values
+      },
+    ) => {
+      let commands = await this.cardService.search(
+        {
+          filter: {
+            every: [
+              {
+                on: {
+                  module: `https://cardstack.com/base/llmcommand`,
+                  name: 'LLMCommandCard',
+                },
+                eq: {
+                  appliesTo: ref,
+                  commandTitle,
+                },
+              },
+            ],
+          },
+        },
+        opts.realmURL,
+      );
+      let command = commands[0] as LLMCommandCard;
+      if (!command) {
+        return;
+      }
+
+      let card = await this.publicAPI(this, 0).createCard(ref, relativeTo, {
+        realmURL: opts.realmURL,
+        doc: opts.doc,
+        openInStackAfterCreation: true,
+        stackModeAfterCreation: 'isolated',
+      });
+      if (!card) {
+        console.error('Failed to create card for AI action');
+        return;
+      }
+
+      let newRoomId = await this.matrixService.createRoom(`New AI chat`, [
+        aiBotUsername,
+      ]);
+
+      await this.matrixService.sendMessage(
+        newRoomId,
+        command.message,
+        [card],
+        command.attachedSkills,
+      );
+    },
+  );
 
   private get backgroundImageStyle() {
     // only return a background image when both stacks originate from the same realm
