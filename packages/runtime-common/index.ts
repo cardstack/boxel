@@ -323,9 +323,9 @@ export interface Actions {
     opts?: {
       // TODO: consider renaming isLinkedCard to be more semantic
       isLinkedCard?: boolean;
-      realmURL?: URL;
-      doc?: LooseSingleCardDocument;
-      openInStackAfterCreation?: boolean;
+      realmURL?: URL; // the realm to create the card in
+      doc?: LooseSingleCardDocument; // initial data for the card
+      openInStackAfterCreation?: boolean; // by default, the new card opens in the stack in edit mode
     },
   ) => Promise<CardDef | undefined>;
   viewCard: (
@@ -342,14 +342,11 @@ export interface Actions {
     changeSizeCallback: () => Promise<void>,
   ) => Promise<void>;
   changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
-  runAiAction?: (
-    commandTitle: string,
-    ref: CodeRef,
-    relativeTo: URL | undefined,
-    opts: {
-      realmURL: URL;
-      doc?: LooseSingleCardDocument;
-    },
+  runCommand?: (
+    card: CardDef, // the card that the command is being run on
+    skillCardId: string, // skill card id that the command is associated with
+    skillCardRealm: URL, // TODO: ideally figure this out from the id...
+    message?: string, // message that posts in the chat
   ) => Promise<void>;
 }
 

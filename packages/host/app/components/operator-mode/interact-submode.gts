@@ -23,7 +23,6 @@ import {
   aiBotUsername,
   Deferred,
   baseCardRef,
-  skillCardRef,
   chooseCard,
   codeRefWithAbsoluteURL,
   moduleFrom,
@@ -38,7 +37,6 @@ import { StackItem } from '@cardstack/host/lib/stack-item';
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
 import { type CardDef, type Format } from 'https://cardstack.com/base/card-api';
-import { type SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
@@ -255,74 +253,22 @@ export default class InteractSubmode extends Component<Signature> {
         here.operatorModeStateService.updateCodePath(url);
         here.operatorModeStateService.updateSubmode(submode);
       },
-      runAiAction: async (
-        commandTitle: string,
-        ref: CodeRef,
-        relativeTo: URL | undefined,
-        opts: {
-          realmURL: URL;
-          doc?: LooseSingleCardDocument; // fill in card data with values
-        },
+      runCommand: async (
+        card: CardDef,
+        skillCardId: string,
+        skillCardRealm: URL,
+        message?: string,
       ): Promise<void> => {
-        await here.runAiAction.perform(commandTitle, ref, relativeTo, opts);
+        await here.runCommand.perform(
+          card,
+          skillCardId,
+          skillCardRealm,
+          message ?? 'Run command',
+        );
       },
     };
   }
   stackBackgroundsState = stackBackgroundsResource(this);
-
-  private runAiAction = restartableTask(
-    async (
-      commandTitle: string,
-      ref: CodeRef,
-      relativeTo: URL | undefined,
-      opts: {
-        realmURL: URL;
-        doc?: LooseSingleCardDocument; // fill in card data with values
-      },
-    ) => {
-      let commands = await this.cardService.search(
-        {
-          filter: {
-            every: [
-              {
-                on: skillCardRef,
-                eq: { title: commandTitle },
-              },
-            ],
-          },
-        },
-        opts.realmURL,
-      );
-      let command = commands[0] as SkillCard;
-      if (!command) {
-        console.error(`Could not find AI action "${commandTitle}"`);
-        return;
-      }
-
-      let card = await this.publicAPI(this, 0).createCard(ref, relativeTo, {
-        realmURL: opts.realmURL,
-        doc: opts.doc,
-        openInStackAfterCreation: false,
-      });
-      if (!card) {
-        console.error('Failed to create card for AI action');
-        return;
-      }
-
-      await this.publicAPI(this, 0).viewCard(card, 'isolated');
-
-      let newRoomId = await this.matrixService.createRoom(`New AI chat`, [
-        aiBotUsername,
-      ]);
-
-      await this.matrixService.sendMessage(
-        newRoomId,
-        'Generating product requirements document...',
-        [card],
-        [command],
-      );
-    },
-  );
 
   private get backgroundImageStyle() {
     // only return a background image when both stacks originate from the same realm
@@ -393,6 +339,38 @@ export default class InteractSubmode extends Component<Signature> {
       );
     }
   });
+
+  private runCommand = restartableTask(
+    async (
+      card: CardDef,
+      skillCardId: string,
+      skillCardRealm: URL,
+      message: string,
+    ) => {
+      try {
+        let [commandCard] = await this.cardService.search(
+          { filter: { eq: { id: skillCardId } } },
+          skillCardRealm,
+        );
+        if (!commandCard) {
+          throw new Error(
+            `Could not find card "${skillCardId}" in realm "${skillCardRealm}"`,
+          );
+        }
+        let newRoomId = await this.matrixService.createRoom(`New AI chat`, [
+          aiBotUsername,
+        ]);
+        await this.matrixService.sendMessage(
+          newRoomId,
+          message,
+          [card],
+          [commandCard],
+        );
+      } catch (e) {
+        throw e;
+      }
+    },
+  );
 
   @action private onCancelDelete() {
     this.itemToDelete = undefined;
