@@ -30,4 +30,5 @@ declare const config: {
   sqlSchema: string;
   assetsURL: string;
   featureFlags?: {};
+  exportApplicationGlobal: boolean;
 };
