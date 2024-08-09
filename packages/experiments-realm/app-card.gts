@@ -10,16 +10,15 @@ import {
   Component,
   realmURL,
   StringField,
+  type CardContext,
 } from 'https://cardstack.com/base/card-api';
-
+import { cn } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
+import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-// @ts-ignore
 import { restartableTask } from 'ember-concurrency';
-// @ts-ignore
-import cssUrl from 'ember-css-url';
 
 import {
   AddButton,
@@ -32,7 +31,6 @@ import {
 
 import {
   getLiveCards,
-  cardTypeDisplayName,
   codeRefWithAbsoluteURL,
   type Loader,
   type Query,
@@ -143,53 +141,17 @@ class AppCardIsolated extends Component<typeof AppCard> {
               {{/if}}
             </div>
           {{else}}
-            <ul class='cards-grid' data-test-cards-grid-cards>
-              {{! use "key" to keep the list stable between refreshes }}
-              {{#each this.instances key='id' as |card|}}
-                <li
-                  {{@context.cardComponentModifier
-                    card=card
-                    format='data'
-                    fieldType=undefined
-                    fieldName=undefined
-                  }}
-                  data-test-cards-grid-item={{card.id}}
-                  {{! In order to support scrolling cards into view
-            we use a selector that is not pruned out in production builds }}
-                  data-cards-grid-item={{card.id}}
-                >
-                  <div class='grid-card'>
-                    <div
-                      class='grid-thumbnail'
-                      style={{cssUrl 'background-image' card.thumbnailURL}}
-                    >
-                      {{#unless card.thumbnailURL}}
-                        <div
-                          class='grid-thumbnail-text'
-                          data-test-cards-grid-item-thumbnail-text
-                        >{{cardTypeDisplayName card}}</div>
-                      {{/unless}}
-                    </div>
-                    <h3
-                      class='grid-title'
-                      data-test-cards-grid-item-title
-                    >{{card.title}}</h3>
-                    <h4
-                      class='grid-display-name'
-                      data-test-cards-grid-item-display-name
-                    >{{cardTypeDisplayName card}}</h4>
-                  </div>
-                </li>
+            {{#if this.instances.length}}
+              <CardsGrid @instances={{this.instances}} @context={{@context}} />
+            {{else}}
+              {{#if this.liveQuery.isLoading}}
+                Loading...
+              {{else if this.errorMessage}}
+                <p class='error'>{{this.errorMessage}}</p>
               {{else}}
-                {{#if this.liveQuery.isLoading}}
-                  Loading...
-                {{else if this.errorMessage}}
-                  <p class='error'>{{this.errorMessage}}</p>
-                {{else}}
-                  <p>No cards available</p>
-                {{/if}}
-              {{/each}}
-            </ul>
+                <p>No cards available</p>
+              {{/if}}
+            {{/if}}
           {{/if}}
           {{#if @context.actions.createCard}}
             <div class='add-card-button'>
@@ -282,36 +244,6 @@ class AppCardIsolated extends Component<typeof AppCard> {
       tr:last-of-type {
         border-bottom: 2px solid #009879;
       }
-      .grid-card {
-        width: var(--grid-card-width);
-        height: var(--grid-card-height);
-        padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
-      }
-      .grid-thumbnail {
-        display: flex;
-        align-items: center;
-        height: var(--grid-card-text-thumbnail-height);
-        background-color: var(--boxel-teal);
-        background-position: center;
-        background-size: cover;
-        background-repeat: no-repeat;
-        color: var(--boxel-light);
-        padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
-        border-radius: var(--boxel-border-radius);
-        font: 700 var(--boxel-font);
-        letter-spacing: var(--boxel-lsp);
-      }
-      .grid-title {
-        margin: 0;
-        font: 500 var(--boxel-font-sm);
-        text-align: center;
-      }
-      .grid-display-name {
-        margin: 0;
-        font: 500 var(--boxel-font-xs);
-        text-align: center;
-        color: var(--grid-card-label-color);
-      }
 
       .module-input-group {
         max-width: 800px;
@@ -325,24 +257,6 @@ class AppCardIsolated extends Component<typeof AppCard> {
       .module-input-group > button {
         margin-top: var(--boxel-sp);
       }
-      .cards-grid {
-        --grid-card-text-thumbnail-height: 6.25rem;
-        --grid-card-label-color: var(--boxel-450);
-        --grid-card-width: 10.125rem;
-        --grid-card-height: 15.125rem;
-        list-style-type: none;
-        margin: 0;
-        padding: 0;
-        display: grid;
-        grid-template-columns: repeat(
-          auto-fit,
-          minmax(var(--grid-card-width), 1fr)
-        );
-        grid-auto-rows: max-content;
-        gap: var(--boxel-sp);
-        justify-items: center;
-        height: 100%;
-      }
       .operator-mode .buried .cards,
       .operator-mode .buried .add-button {
         display: none;
@@ -354,49 +268,6 @@ class AppCardIsolated extends Component<typeof AppCard> {
         left: 100%;
         bottom: 20px;
         z-index: 1;
-      }
-      .grid-card {
-        width: var(--grid-card-width);
-        height: var(--grid-card-height);
-        padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
-      }
-      .grid-card > *,
-      .grid-thumbnail-text {
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-      }
-      .grid-thumbnail {
-        display: flex;
-        align-items: center;
-        height: var(--grid-card-text-thumbnail-height);
-        background-color: var(--boxel-teal);
-        background-position: center;
-        background-size: cover;
-        background-repeat: no-repeat;
-        color: var(--boxel-light);
-        padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
-        border-radius: var(--boxel-border-radius);
-        font: 700 var(--boxel-font);
-        letter-spacing: var(--boxel-lsp);
-      }
-      .grid-title {
-        margin: 0;
-        font: 500 var(--boxel-font-sm);
-        text-align: center;
-      }
-      .grid-display-name {
-        margin: 0;
-        font: 500 var(--boxel-font-xs);
-        text-align: center;
-        color: var(--grid-card-label-color);
-      }
-      .grid-thumbnail + * {
-        margin-top: var(--boxel-sp-lg);
-      }
-      .grid-title + .grid-display-name {
-        margin-top: 0.2em;
       }
       .error {
         color: var(--boxel-error-100);
@@ -565,4 +436,65 @@ export class AppCard extends CardDef {
   @field tabs = containsMany(Tab);
   @field headerIcon = contains(Base64ImageField);
   static isolated = AppCardIsolated;
+}
+
+export class CardsGrid extends GlimmerComponent<{
+  Args: {
+    instances: CardDef[] | [];
+    context?: CardContext;
+    isListFormat?: boolean;
+  };
+  Element: HTMLElement;
+}> {
+  <template>
+    <ul class={{cn 'cards-grid' list-format=@isListFormat}} ...attributes>
+      {{! use "key" to keep the list stable between refreshes }}
+      {{#each @instances key='id' as |card|}}
+        <li
+          class='cards-grid-item'
+          {{! In order to support scrolling cards into view
+            we use a selector that is not pruned out in production builds }}
+          data-cards-grid-item={{card.id}}
+          {{@context.cardComponentModifier
+            card=card
+            format='data'
+            fieldType=undefined
+            fieldName=undefined
+          }}
+        >
+          {{#let (this.getComponent card) as |Card|}}
+            <Card />
+          {{/let}}
+        </li>
+      {{/each}}
+    </ul>
+    <style>
+      .cards-grid {
+        --grid-card-width: 10.25rem; /* 164px */
+        --grid-card-height: 14rem; /* 224px */
+        list-style-type: none;
+        margin: 0;
+        padding: var(--cards-grid-padding, 0);
+        display: grid;
+        grid-template-columns: repeat(auto-fill, var(--grid-card-width));
+        grid-auto-rows: max-content;
+        gap: var(--boxel-sp-xl) var(--boxel-sp-lg);
+      }
+      .cards-grid.list-format {
+        --grid-card-width: 18.75rem; /* 300px */
+        --grid-card-height: 12rem; /* 192px */
+        grid-template-columns: 1fr;
+        gap: var(--boxel-sp);
+      }
+      .cards-grid-item {
+        width: var(--grid-card-width);
+        height: var(--grid-card-height);
+      }
+      .cards-grid-item > :deep(.field-component-card.embedded-format) {
+        --overlay-embedded-card-header-height: 0;
+      }
+    </style>
+  </template>
+
+  getComponent = (card: CardDef) => card.constructor.getComponent(card);
 }

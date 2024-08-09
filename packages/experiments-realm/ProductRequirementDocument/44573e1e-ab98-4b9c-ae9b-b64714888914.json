@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "appTitle": "PreSchool CRM",
+      "shortDescription": "PreSchool CRM is a comprehensive management tool designed specifically for pre-schools to efficiently manage tours, open houses, interest forms, interviews, and enrollment processes.",
+      "thumbnail": {
+        "altText": null,
+        "size": "actual",
+        "height": null,
+        "width": null,
+        "base64": null
+      },
+      "prompt": "I want to make a CRM tailored for a PreSchool that has these features: Keep tracks of tours, open houses, interest forms, interviews, and enrollment",
+      "overview": "PreSchool CRM is an all-encompassing management solution tailored for pre-schools to streamline and enhance their administrative processes. The application provides a user-friendly interface to efficiently manage critical activities such as tours, open houses, interest forms, interviews, and student enrollment. With a centralized dashboard offering quick access to vital statistics and schedules, PreSchool CRM ensures that staff can effortlessly track and organize interactions with prospective and current families. Key features include detailed forms for capturing essential data, intuitive tables for easy record management, and robust navigation to seamlessly switch between functionalities. By consolidating these tasks into one cohesive platform, PreSchool CRM empowers pre-schools to focus more on delivering quality education and care, ultimately improving operational efficiency and parent satisfaction.",
+      "schema": "**Dashboard**\n- Overview of all activities\n- Quick stats (upcoming tours, open houses, pending interest forms, scheduled interviews, and recent enrollments\n\n**Tours**\n- Tour Schedule (Table)",
+      "layoutAndNavigation": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product-requirement-document",
+        "name": "ProductRequirementDocument"
+      }
+    }
+  }
+}

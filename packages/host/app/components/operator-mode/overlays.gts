@@ -46,6 +46,7 @@ interface Signature {
     toggleSelect?: (cardDefOrId: CardDefOrId) => void;
     selectedCards: TrackedArray<CardDefOrId>;
   };
+  Element: HTMLElement;
 }
 
 let boundRenderedCardElement = new WeakSet<HTMLElement>();
@@ -71,6 +72,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
           data-test-overlay-card={{cardId}}
           data-test-overlay-card-display-name={{cardId}}
           style={{this.zIndexStyle renderedCard.element}}
+          ...attributes
         >
           {{#if (this.isHeaderIncluded renderedCard)}}
             <OperatorModeOverlayItemHeader
@@ -355,6 +357,6 @@ export default class OperatorModeOverlays extends Component<Signature> {
       zIndexParentElement === 'auto'
         ? zIndexParentElement
         : String(Number(zIndexParentElement) + 1);
-    return htmlSafe(`z-index: ${zIndex}`);
+    return htmlSafe(`z-index: ${zIndex};`);
   }
 }
