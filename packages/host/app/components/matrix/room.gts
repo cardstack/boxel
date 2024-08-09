@@ -6,11 +6,13 @@ import { tracked } from '@glimmer/tracking';
 
 import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
+import { trackedFunction } from 'ember-resources/util/function';
 import { v4 as uuidv4 } from 'uuid';
 
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
+import { getCard } from '@cardstack/host/resources/card-resource';
 import { getRoom } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -18,8 +20,8 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
-import type { SkillCard } from 'https://cardstack.com/base/skill-card';
+import { CardDef } from 'https://cardstack.com/base/card-api';
+import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import AiAssistantCardPicker from '../ai-assistant/card-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
@@ -170,9 +172,48 @@ export default class Room extends Component<Signature> {
     return this.roomResource.messages;
   }
 
-  private get skills(): Skill[] {
-    return this.roomResource.skills;
+  private get skills() {
+    return this.loadSkillsResource.value ?? [];
   }
+
+  private loadSkillsResource = trackedFunction(this, async () => {
+    let skills: Skill[] = [];
+
+    let promises = this.roomResource.skills.map(async (skill) => {
+      let skillCardResource = getCard(this, () => skill.card.id);
+      await skillCardResource.loaded;
+      let newSkill = new Proxy(
+        {
+          card: skillCardResource.card,
+          isActive: skill.isActive,
+        },
+        {
+          set(target, property, value) {
+            if (property === 'isActive' && target[property] !== value) {
+              Reflect.set(target, property, value);
+              skill.isActive = value;
+              return true;
+            }
+            Reflect.set(target, property, value);
+            return true;
+          },
+          get(target, property, value) {
+            if (property === 'isActive' && target[property] !== value) {
+              return skill.isActive;
+            }
+            return Reflect.get(target, property, value);
+          },
+        },
+      ) as Skill;
+      skills.push(newSkill);
+    });
+
+    if (promises) {
+      await Promise.all(promises);
+    }
+
+    return skills;
+  });
 
   private get room() {
     let room = this.roomResource.room;
