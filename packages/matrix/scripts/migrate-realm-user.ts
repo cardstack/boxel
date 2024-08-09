@@ -4,6 +4,7 @@ import { realmPassword } from '../helpers/realm-credentials';
 
 let adminUser = process.env.ADMIN_USERNAME || 'admin';
 let adminPassword = process.env.ADMIN_PASSWORD || 'password';
+let matrixURL = process.env.MATRIX_URL;
 let realmSecretSeed = process.env.REALM_SECRET_SEED;
 
 if (!realmSecretSeed) {
@@ -13,7 +14,7 @@ if (!realmSecretSeed) {
   process.exit(-1);
 }
 
-const [realmUser, matrixURL] = process.argv.slice(2);
+const [realmUser] = process.argv.slice(2);
 if (!realmUser) {
   console.error(`please specify the realm user to migrate`);
   process.exit(-1);
