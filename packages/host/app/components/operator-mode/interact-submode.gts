@@ -214,15 +214,24 @@ export default class InteractSubmode extends Component<Signature> {
         let item = here.findCardInStack(card, stackIndex);
         here.save.perform(item, dismissItem);
       },
-      delete: (card: CardDef | URL | string): void => {
-        if (!card || card instanceof URL || typeof card === 'string') {
-          throw new Error(`bug: delete called with invalid card "${card}"`);
+      delete: async (card: CardDef | URL | string): Promise<void> => {
+        let loadedCard: CardDef;
+
+        if (typeof card === 'string') {
+          let _loadedCard = await here.cardService.getCard(card);
+          if (!_loadedCard) {
+            throw new Error(`Could not load card ${card}`);
+          }
+          loadedCard = _loadedCard;
+        } else {
+          loadedCard = card as CardDef;
         }
+
         if (!here.itemToDelete) {
-          here.itemToDelete = card;
+          here.itemToDelete = loadedCard;
           return;
         }
-        here.delete.perform(card);
+        here.delete.perform(loadedCard);
       },
       doWithStableScroll: async (
         card: CardDef,
