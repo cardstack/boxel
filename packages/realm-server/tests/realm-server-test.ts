@@ -2834,8 +2834,8 @@ module('Realm server authentication', function (hooks) {
   test('authenticates user', async function (assert) {
     let matrixClient = new MatrixClient({
       matrixURL: realmServerTestMatrix.url,
-      username: realmServerTestMatrix.username,
-      seed: realmSecretSeed,
+      username: 'test_realm',
+      password: 'password',
     });
     await matrixClient.login();
     let userId = matrixClient.getUserId();
