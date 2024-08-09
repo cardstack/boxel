@@ -4,8 +4,7 @@ import config from '@cardstack/host/config/environment';
 
 export function initialize(appInstance: ApplicationInstance): void {
   if (
-    (config.environment !== 'production' ||
-      config.environment.exportApplicationGlobal) &&
+    (config.environment !== 'production' || config.exportApplicationGlobal) &&
     typeof window !== 'undefined'
   ) {
     let globalName = config.modulePrefix;
