@@ -48,7 +48,7 @@ interface Signature {
     hideAiAssistant?: boolean;
     onSearchSheetOpened?: () => void;
     onSearchSheetClosed?: () => void;
-    onCardSelectFromSearch: (card: CardDef) => void;
+    onCardSelectFromSearch: (cardId: string) => void;
   };
   Blocks: {
     default: [
@@ -139,8 +139,8 @@ export default class SubmodeLayout extends Component<Signature> {
     this.args.onSearchSheetOpened?.();
   }
 
-  @action private handleCardSelectFromSearch(card: CardDef) {
-    this.args.onCardSelectFromSearch(card);
+  @action private async handleCardSelectFromSearch(cardId: string) {
+    this.args.onCardSelectFromSearch(cardId);
     this.closeSearchSheet();
   }
 

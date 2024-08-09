@@ -1816,9 +1816,9 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
           >
             {{#unless @model.thumbnailURL}}
               <div
-                class='card-thumbnail-text'
-                data-test-card-thumbnail-text
-              >{{cardTypeDisplayName @model}}</div>
+                class='card-thumbnail-placeholder'
+                data-test-card-thumbnail-placeholder
+              ></div>
             {{/unless}}
           </div>
         </div>
@@ -1877,7 +1877,7 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
       }
       @container embedded-card (0.75 < aspect-ratio <= 1.0) {
         .thumbnail-section {
-          /* 
+          /*
              64.35px is the computed height for the info section--at this particular
              aspect ratio break-point the height is the dominant axis for which to
              base the dimensions of the thumbnail
@@ -1994,8 +1994,8 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
           display: none;
         }
         .card-thumbnail {
-          /* at this breakpoint, the dominant axis is the height for 
-             thumbnail 1:1 aspect ratio calculations 
+          /* at this breakpoint, the dominant axis is the height for
+             thumbnail 1:1 aspect ratio calculations
           */
           height: 100%;
         }
@@ -2019,8 +2019,8 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
           flex: 1 100%;
         }
         .card-thumbnail {
-          /* at this breakpoint, the dominant axis is the width for 
-             thumbnail 1:1 aspect ratio calculations 
+          /* at this breakpoint, the dominant axis is the width for
+             thumbnail 1:1 aspect ratio calculations
           */
           width: 100%;
         }
@@ -2073,8 +2073,7 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
         }
       }
 
-      .default-embedded-template > *,
-      .card-thumbnail-text {
+      .default-embedded-template > * {
         display: -webkit-box;
         -webkit-line-clamp: 2;
         -webkit-box-orient: vertical;
@@ -2090,8 +2089,6 @@ class DefaultEmbeddedTemplate extends GlimmerComponent<{
         background-size: cover;
         background-repeat: no-repeat;
         color: var(--boxel-light);
-        font: 700 var(--boxel-font);
-        letter-spacing: var(--boxel-lsp);
         border-radius: 6px;
       }
       .card-title {
