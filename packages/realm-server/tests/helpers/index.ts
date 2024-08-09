@@ -20,6 +20,7 @@ import { RealmServer } from '../../server';
 import PgAdapter from '../../pg-adapter';
 import PgQueue from '../../pg-queue';
 import { Server } from 'http';
+import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
 export * from '@cardstack/runtime-common/helpers/indexer';
 
@@ -30,6 +31,13 @@ const testMatrix: MatrixConfig = {
   username: 'node-test_realm',
   password: 'password',
 };
+
+export const realmServerTestMatrix: MatrixConfig = {
+  url: new URL(`http://localhost:8008`),
+  username: 'node-test_realm-server',
+  password: 'password',
+};
+export const realmSecretSeed = `shhh! it's a secret`;
 
 let basePath = resolve(join(__dirname, '..', '..', '..', 'base'));
 
@@ -153,7 +161,7 @@ export async function createRealm({
     adapter,
     getIndexHTML: fastbootState.getIndexHTML,
     matrix: matrixConfig,
-    realmSecretSeed: "shhh! it's a secret",
+    realmSecretSeed: realmSecretSeed,
     virtualNetwork,
     dbAdapter,
     queue,
@@ -215,7 +223,17 @@ export async function runBaseRealmServer(
   });
   virtualNetwork.mount(testBaseRealm.handle);
   await testBaseRealm.start();
-  let testBaseRealmServer = new RealmServer([testBaseRealm], virtualNetwork);
+  let matrixClient = new MatrixClient(
+    realmServerTestMatrix.url,
+    realmServerTestMatrix.username,
+    realmServerTestMatrix.password,
+  );
+  let testBaseRealmServer = new RealmServer(
+    [testBaseRealm],
+    virtualNetwork,
+    matrixClient,
+    realmSecretSeed,
+  );
   return testBaseRealmServer.listen(parseInt(localBaseRealmURL.port));
 }
 
@@ -250,9 +268,16 @@ export async function runTestRealmServer({
   });
   virtualNetwork.mount(testRealm.handle);
   await testRealm.start();
-  let testRealmServer = await new RealmServer(
+  let matrixClient = new MatrixClient(
+    realmServerTestMatrix.url,
+    realmServerTestMatrix.username,
+    realmServerTestMatrix.password,
+  );
+  let testRealmServer = new RealmServer(
     [testRealm],
     virtualNetwork,
+    matrixClient,
+    realmSecretSeed,
   ).listen(parseInt(realmURL.port));
   return {
     testRealm,
