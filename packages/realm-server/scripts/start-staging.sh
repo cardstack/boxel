@@ -3,6 +3,8 @@ pnpm setup:base-in-deployment
 pnpm setup:experiments-in-deployment
 NODE_NO_WARNINGS=1 \
   LOG_LEVELS='perf=debug' \
+  MATRIX_URL=https://matrix-staging.stack.cards \
+  REALM_SERVER_MATRIX_USERNAME=realm_server \
   ts-node \
   --transpileOnly main \
   --port=3000 \
