@@ -195,10 +195,12 @@ module('Responding', (hooks) => {
       role: 'assistant',
       tool_calls: [
         {
+          id: 'some-tool-call-id',
           function: {
             name: 'patchCard',
             arguments: JSON.stringify(patchArgs),
           },
+          type: 'function',
         },
       ],
     });
@@ -217,11 +219,18 @@ module('Responding', (hooks) => {
     assert.deepEqual(
       JSON.parse(sentEvents[1].content.data),
       {
-        command: {
-          type: 'patchCard',
-          id: patchArgs.card_id,
-          patch: { attributes: patchArgs.attributes },
-          eventId: '0',
+        eventId: '0',
+        toolCall: {
+          type: 'function',
+          id: 'some-tool-call-id',
+          name: 'patchCard',
+          arguments: {
+            card_id: 'card/1',
+            description: 'A new thing',
+            attributes: {
+              some: 'thing',
+            },
+          },
         },
       },
       'Tool call event should be sent with correct content',
@@ -255,10 +264,12 @@ module('Responding', (hooks) => {
       role: 'assistant',
       tool_calls: [
         {
+          id: 'some-tool-call-id',
           function: {
             name: 'patchCard',
             arguments: JSON.stringify(patchArgs),
           },
+          type: 'function',
         },
       ],
     });
@@ -277,10 +288,17 @@ module('Responding', (hooks) => {
     assert.deepEqual(
       JSON.parse(sentEvents[2].content.data),
       {
-        command: {
-          type: 'patchCard',
-          id: patchArgs.card_id,
-          patch: { attributes: patchArgs.attributes },
+        toolCall: {
+          type: 'function',
+          id: 'some-tool-call-id',
+          name: 'patchCard',
+          arguments: {
+            card_id: 'card/1',
+            description: 'A new thing',
+            attributes: {
+              some: 'thing',
+            },
+          },
         },
       },
       'Tool call event should be sent with correct content',

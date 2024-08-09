@@ -8,7 +8,12 @@ import {
 import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type {
+  CommandEvent,
+  CommandResultEvent,
+  MatrixEvent as DiscreteMatrixEvent,
+  ReactionEvent,
+} from 'https://cardstack.com/base/matrix-event';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
@@ -141,4 +146,69 @@ export async function updateRoomEvent(
       event as unknown as DiscreteMatrixEvent;
     resolvedRoom.events = [...resolvedRoom.events];
   }
+}
+
+export async function getRoomEvents(
+  context: EventSendingContext,
+  roomId: string,
+): Promise<DiscreteMatrixEvent[]> {
+  if (!roomId) {
+    throw new Error(
+      `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
+    );
+  }
+  let room = context.getRoom(roomId);
+  let resolvedRoom = await room;
+  return resolvedRoom?.events ?? [];
+}
+
+export async function getCommandResultEvents(
+  context: EventSendingContext,
+  roomId: string,
+): Promise<CommandResultEvent[]> {
+  let events = await getRoomEvents(context, roomId);
+  return events.filter((e) => isCommandResultEvent(e)) as CommandResultEvent[];
+}
+
+export async function getCommandReactionEvents(
+  context: EventSendingContext,
+  roomId: string,
+): Promise<ReactionEvent[]> {
+  let events = await getRoomEvents(context, roomId);
+  return events.filter((e) =>
+    isCommandReactionStatusApplied(e),
+  ) as ReactionEvent[];
+}
+
+export function isCommandEvent(
+  event: DiscreteMatrixEvent,
+): event is CommandEvent {
+  return (
+    event.type === 'm.room.message' &&
+    typeof event.content === 'object' &&
+    event.content.msgtype === 'org.boxel.command' &&
+    event.content.format === 'org.matrix.custom.html' &&
+    typeof event.content.data === 'object' &&
+    typeof event.content.data.toolCall === 'object'
+  );
+}
+
+export const isCommandReactionStatusApplied = (
+  event: DiscreteMatrixEvent,
+): event is ReactionEvent => {
+  return (
+    event.type === 'm.reaction' &&
+    event.content['m.relates_to']?.rel_type === 'm.annotation' &&
+    event.content['m.relates_to']?.key === 'applied'
+  );
+};
+
+export function isCommandResultEvent(
+  event: DiscreteMatrixEvent,
+): event is CommandResultEvent {
+  return (
+    event.type === 'm.room.message' &&
+    typeof event.content === 'object' &&
+    event.content.msgtype === 'org.boxel.commandResult'
+  );
 }

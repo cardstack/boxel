@@ -1,3 +1,4 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { schedule } from '@ember/runloop';
@@ -15,7 +16,6 @@ import { trackedFunction } from 'ember-resources/util/function';
 import { MatrixEvent } from 'matrix-js-sdk';
 
 import { Button } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
@@ -23,12 +23,14 @@ import { markdownToHtml } from '@cardstack/runtime-common';
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
+import CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
+import { type CommandField } from 'https://cardstack.com/base/command';
 
 import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
@@ -133,6 +135,10 @@ export default class RoomMessage extends Component<Signature> {
     return this.args.message.author.userId === aiBotUserId;
   }
 
+  get getComponent() {
+    return this.commandService.getCommandResultComponent(this.args.message);
+  }
+
   <template>
     {{! We Intentionally wait until message resources are loaded (i.e. have a value) before rendering the message.
       This is because if the message resources render asynchronously after the message is already rendered (e.g. card pills),
@@ -163,18 +169,21 @@ export default class RoomMessage extends Component<Signature> {
         @errorMessage={{this.errorMessage}}
         @isStreaming={{@isStreaming}}
         @retryAction={{if
-          (eq @message.command.commandType 'patchCard')
-          (perform this.patchCard)
+          this.hasCommandField
+          (fn (perform this.run) @message.command @roomId)
           @retryAction
         }}
         @isPending={{@isPending}}
         data-test-boxel-message-from={{@message.author.name}}
         ...attributes
       >
-        {{#if (eq @message.command.commandType 'patchCard')}}
+        {{#if this.hasCommandField}}
           <div
-            class='patch-button-bar'
-            data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
+            class='command-button-bar'
+            {{! In test, if we change this isIdle check to the task running locally on this component, it will fail because roomMessages get destroyed during re-indexing. 
+            Since services are long-lived so it we will not have this issue. I think this will go away when we convert our room field into a room component }}
+            {{! TODO: Convert to non-EC async method after fixing CS-6987 }}
+            data-test-command-card-idle={{this.commandService.run.isIdle}}
           >
             <Button
               class='view-code-button'
@@ -187,10 +196,14 @@ export default class RoomMessage extends Component<Signature> {
             </Button>
             <ApplyButton
               @state={{this.applyButtonState}}
-              {{on 'click' (perform this.patchCard)}}
+              {{on 'click' (fn (perform this.run) @message.command @roomId)}}
               data-test-command-apply={{this.applyButtonState}}
             />
           </div>
+
+          {{#let this.getComponent as |Component|}}
+            <Component @format='embedded' />
+          {{/let}}
           {{#if this.isDisplayingCode}}
             <div class='preview-code'>
               <Button
@@ -212,7 +225,7 @@ export default class RoomMessage extends Component<Signature> {
                 class='monaco-container'
                 {{this.scrollBottomIntoView}}
                 {{monacoModifier
-                  content=this.previewPatchCode
+                  content=this.previewCommandCode
                   contentChanged=undefined
                   monacoSDK=@monacoSDK
                   language='json'
@@ -238,7 +251,7 @@ export default class RoomMessage extends Component<Signature> {
         background: var(--boxel-200);
         color: var(--boxel-500);
       }
-      .patch-button-bar {
+      .command-button-bar {
         display: flex;
         justify-content: flex-end;
         gap: var(--boxel-sp-xs);
@@ -300,11 +313,12 @@ export default class RoomMessage extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
   @service private declare monacoService: MonacoService;
+  @service declare commandService: CommandService;
 
   @tracked private isDisplayingCode = false;
 
   private copyToClipboard = task(async () => {
-    await navigator.clipboard.writeText(this.previewPatchCode);
+    await navigator.clipboard.writeText(this.previewCommandCode);
   });
 
   private loadMessageResources = trackedFunction(this, async () => {
@@ -367,51 +381,20 @@ export default class RoomMessage extends Component<Signature> {
       .join(', ');
   }
 
-  get command() {
-    return this.args.message.command;
+  get hasCommandField() {
+    return Boolean(this.args.message.command);
   }
 
-  private patchCard = task(async () => {
-    if (this.operatorModeStateService.patchCard.isRunning) {
-      return;
-    }
+  private get previewCommandCode() {
     if (!this.command) {
-      throw new Error(
-        'patchCard requires a command on the message to be defined',
-      );
+      return JSON.stringify({}, null, 2);
     }
-    let { payload, eventId } = this.command!;
-    this.matrixService.failedCommandState.delete(eventId);
-    try {
-      await this.operatorModeStateService.patchCard.perform(
-        payload.id,
-        payload.patch,
-      );
-      //here is reaction event
-      await this.matrixService.sendReactionEvent(
-        this.args.roomId,
-        eventId,
-        'applied',
-      );
-    } catch (e) {
-      let error =
-        typeof e === 'string'
-          ? new Error(e)
-          : e instanceof Error
-          ? e
-          : new Error('Patch failed.');
-      this.matrixService.failedCommandState.set(eventId, error);
-    }
-  });
+    let { name, payload } = this.command;
+    return JSON.stringify({ name, payload }, null, 2);
+  }
 
-  private get previewPatchCode() {
-    if (!this.command) {
-      throw new Error(
-        'patchCard requires a command on the message to be defined',
-      );
-    }
-    let { commandType, payload } = this.command!;
-    return JSON.stringify({ commandType, payload }, null, 2);
+  get command() {
+    return this.args.message.command;
   }
 
   @cached
@@ -422,9 +405,13 @@ export default class RoomMessage extends Component<Signature> {
     return this.matrixService.failedCommandState.get(this.command.eventId);
   }
 
+  run = task(async (command: CommandField, roomId: string) => {
+    return this.commandService.run.perform(command, roomId);
+  });
+
   @cached
   private get applyButtonState(): ApplyButtonState {
-    if (this.patchCard.isRunning) {
+    if (this.run.isRunning) {
       return 'applying';
     }
     if (this.failedCommandState) {
