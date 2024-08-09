@@ -116,7 +116,7 @@ export interface CardContext {
   cardComponentModifier?: typeof Modifier<{
     Args: {
       Named: {
-        card: CardDef;
+        cardId: string;
         format: Format | 'data';
         fieldType: FieldType | undefined;
         fieldName: string | undefined;

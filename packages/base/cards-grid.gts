@@ -43,22 +43,27 @@ class Isolated extends Component<typeof CardsGrid> {
             @format='embedded'
             @realms={{this.realms}}
           >
-            <:card as |PrerenderedCard cardId i|>
-              <li
-                data-test-cards-grid-item={{cardId}}
-                {{! In order to support scrolling cards into view
-                we use a selector that is not pruned out in production builds }}
-                data-cards-grid-item={{cardId}}
-              >
-                <CardContainer
-                  @displayBoundaries={{true}}
-                  class='card'
-                  ...attributes
+
+            <:loading>
+              Loading...
+            </:loading>
+            <:response as |response|>
+              <response.Results as |PrerenderedCard cardId i|>
+                <li
+                  {{@context.cardComponentModifier
+                    cardId=cardId
+                    format='data'
+                    fieldType=undefined
+                    fieldName=undefined
+                  }}
                 >
-                  <PrerenderedCard />
-                </CardContainer>
-              </li>
-            </:card>
+                  <CardContainer class='card' ...attributes>
+                    <PrerenderedCard />
+                  </CardContainer>
+
+                </li>
+              </response.Results>
+            </:response>
           </PrerenderedCardSearchComponent>
         {{/let}}
       </ul>
@@ -77,71 +82,9 @@ class Isolated extends Component<typeof CardsGrid> {
       {{/if}}
     </div>
 
-    old:
-
-    {{!-- <div class='cards-grid'>
-      <ul class='cards' data-test-cards-grid-cards>
-        {{! use "key" to keep the list stable between refreshes }}
-        {{#each this.instances key='id' as |card|}}
-          <li
-            {{@context.cardComponentModifier
-              card=card
-              format='data'
-              fieldType=undefined
-              fieldName=undefined
-            }}
-            data-test-cards-grid-item={{card.id}}
-            {{! In order to support scrolling cards into view
-            we use a selector that is not pruned out in production builds }}
-            data-cards-grid-item={{card.id}}
-          >
-            <div class='grid-card'>
-              <div
-                class='grid-thumbnail'
-                style={{cssUrl 'background-image' card.thumbnailURL}}
-              >
-                {{#unless card.thumbnailURL}}
-                  <div
-                    class='grid-thumbnail-text'
-                    data-test-cards-grid-item-thumbnail-text
-                  >{{cardTypeDisplayName card}}</div>
-                {{/unless}}
-              </div>
-              <h3
-                class='grid-title'
-                data-test-cards-grid-item-title
-              >{{card.title}}</h3>
-              <h4
-                class='grid-display-name'
-                data-test-cards-grid-item-display-name
-              >{{cardTypeDisplayName card}}</h4>
-            </div>
-          </li>
-        {{else}}
-          {{#if this.liveQuery.isLoading}}
-            Loading...
-          {{else}}
-            <p>No cards available</p>
-          {{/if}}
-        {{/each}}
-      </ul>
-
-      {{#if @context.actions.createCard}}
-        <div class='add-button'>
-          <Tooltip @placement='left' @offset={{6}}>
-            <:trigger>
-              <AddButton {{on 'click' this.createNew}} />
-            </:trigger>
-            <:content>
-              Add a new card to this collection
-            </:content>
-          </Tooltip>
-        </div>
-      {{/if}}
-    </div> --}}
     <style>
       .card {
-        width: 200px;
+        width: 212px;
         height: 80px;
         overflow: hidden;
         container-name: embedded-card;
@@ -150,7 +93,7 @@ class Isolated extends Component<typeof CardsGrid> {
       .cards-grid {
         --grid-card-text-thumbnail-height: 6.25rem;
         --grid-card-label-color: var(--boxel-450);
-        --grid-card-width: 10.125rem;
+        --grid-card-width: 11.125rem;
         --grid-card-height: 15.125rem;
 
         max-width: 70rem;
@@ -292,11 +235,6 @@ class Isolated extends Component<typeof CardsGrid> {
       realmURL: this.args.model[realmURL],
     });
   });
-
-  constructor(owner: Owner, args: typeof CardsGrid) {
-    super(owner, args);
-    debugger;
-  }
 }
 
 export class CardsGrid extends CardDef {

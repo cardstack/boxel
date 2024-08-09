@@ -23,6 +23,7 @@ interface Signature {
     format?: Format;
     field?: Field;
     codeRef?: ResolvedCodeRef;
+    cardContext?: Record<string, any>;
   };
 }
 
@@ -38,6 +39,7 @@ export default class Preview extends Component<Signature> {
   private get context() {
     return {
       prerenderedCardSearchComponent: PrerenderedCardSearch,
+      ...this.args.cardContext,
     };
   }
 
