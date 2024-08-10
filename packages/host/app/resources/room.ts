@@ -178,7 +178,6 @@ export class RoomResource extends Resource<Args> {
 
   private async loadRoomMessages(roomId: string) {
     let index = this._messageCache.size;
-    let newMessages = new Map<string, Message>();
     for (let event of this.events) {
       if (event.type !== 'm.room.message') {
         continue;
@@ -294,19 +293,12 @@ export class RoomResource extends Resource<Args> {
           let d2 = messageField.created!;
           messageField.created = d1 < d2 ? d1 : d2;
         }
-        newMessages.set(
+
+        this._messageCache.set(
           (event.content as CardMessageContent).clientGeneratedId ?? event_id,
           messageField as any,
         );
       }
-    }
-
-    for (let [id, message] of newMessages) {
-      // The `id` can either be an `eventId` or `clientGeneratedId`.
-      // For messages sent by the user, we prefer to use `clientGeneratedId`
-      // because `eventId` can change in certain scenarios,
-      // such as when resending a failed message or updating its status from sending to sent.
-      this._messageCache.set(id, message);
     }
   }
 
