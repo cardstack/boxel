@@ -708,9 +708,19 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       // There are now 2 stacks
       await waitFor('[data-test-operator-mode-stack="0"] [data-test-person]');
+      await waitUntil(
+        () =>
+          document.querySelectorAll('[data-test-operator-mode-stack]')
+            .length === 2,
+      );
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
       assert.dom('[data-test-operator-mode-stack="0"]').includesText('Fadhlan');
-      assert.dom('[data-test-operator-mode-stack="1"]').includesText('Mango'); // Mango gets move onto the right stack
+      await waitUntil(() =>
+        document
+          .querySelector('[data-test-operator-mode-stack="1"]')
+          ?.textContent?.includes('Mango'),
+      );
+      assert.dom('[data-test-operator-mode-stack="1"]').includesText('Mango'); // Mango gets moved onto the right stack
 
       // Buttons to add a neighbor stack are gone
       assert.dom('[data-test-add-card-left-stack]').doesNotExist();
