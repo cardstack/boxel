@@ -729,7 +729,12 @@ test.describe('Room messages', () => {
       await expect(
         page.locator(`[data-test-attached-card="${testCard1}"]`),
       ).toHaveCount(1);
-      await page.locator('[data-test-card-format="embedded"]').click(); // click on embedded card
+
+      await page
+        .locator(
+          `[data-test-stack-card='${testCard1}'] [data-test-card-format="embedded"]`,
+        )
+        .click();
       await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
       await expect(
         page.locator(`[data-test-attached-card="${embeddedCard}"]`),

@@ -332,11 +332,17 @@ module('Acceptance | interact submode tests', function (hooks) {
       // Click on search result
       await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
 
-      assert.dom('[data-test-search-sheet]').doesNotHaveClass('results'); // Search closed
+      await waitUntil(
+        () =>
+          !document
+            .querySelector('[data-test-search-sheet]')!
+            .classList.contains('results'),
+      ); // Search closed
 
       // The card appears on a new stack
       await waitFor('[data-test-operator-mode-stack]');
 
+      await waitFor('[data-test-operator-mode-stack="0"]');
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
       assert
         .dom(
@@ -668,8 +674,18 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
       // There are now 2 stacks
+      await waitUntil(
+        () =>
+          document.querySelectorAll('[data-test-operator-mode-stack]')
+            .length === 2,
+      );
 
-      assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
+      await waitUntil(() =>
+        document
+          .querySelector('[data-test-operator-mode-stack="1"]')
+          ?.textContent?.includes('Mango'),
+      );
+
       assert.dom('[data-test-operator-mode-stack="0"]').includesText('Mango'); // Mango goes on the left stack
       assert.dom('[data-test-operator-mode-stack="1"]').includesText('Fadhlan');
 
@@ -697,10 +713,20 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
       // There are now 2 stacks
-      await waitFor('[data-test-operator-mode-stack="0"]');
+      await waitFor('[data-test-operator-mode-stack="0"] [data-test-person]');
+      await waitUntil(
+        () =>
+          document.querySelectorAll('[data-test-operator-mode-stack]')
+            .length === 2,
+      );
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
       assert.dom('[data-test-operator-mode-stack="0"]').includesText('Fadhlan');
-      assert.dom('[data-test-operator-mode-stack="1"]').includesText('Mango'); // Mango gets move onto the right stack
+      await waitUntil(() =>
+        document
+          .querySelector('[data-test-operator-mode-stack="1"]')
+          ?.textContent?.includes('Mango'),
+      );
+      assert.dom('[data-test-operator-mode-stack="1"]').includesText('Mango'); // Mango gets moved onto the right stack
 
       // Buttons to add a neighbor stack are gone
       assert.dom('[data-test-add-card-left-stack]').doesNotExist();
