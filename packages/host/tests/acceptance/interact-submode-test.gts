@@ -680,6 +680,12 @@ module('Acceptance | interact submode tests', function (hooks) {
             .length === 2,
       );
 
+      await waitUntil(() =>
+        document
+          .querySelector('[data-test-operator-mode-stack="1"]')
+          ?.textContent?.includes('Mango'),
+      );
+
       assert.dom('[data-test-operator-mode-stack="0"]').includesText('Mango'); // Mango goes on the left stack
       assert.dom('[data-test-operator-mode-stack="1"]').includesText('Fadhlan');
 
