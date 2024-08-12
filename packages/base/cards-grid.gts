@@ -54,6 +54,9 @@ class Isolated extends Component<typeof CardsGrid> {
                       fieldType=undefined
                       fieldName=undefined
                     }}
+                    data-test-cards-grid-item={{removeFileExtension card.url}}
+                    {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
+                    data-cards-grid-item={{removeFileExtension card.url}}
                   >
                     {{card.component}}
                   </li>
@@ -253,4 +256,7 @@ export class CardsGrid extends CardDef {
     }
     return this.displayName;
   }
+}
+function removeFileExtension(cardUrl: string) {
+  return cardUrl.replace(/\.[^/.]+$/, '');
 }

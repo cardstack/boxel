@@ -4,7 +4,7 @@ import { schedule } from '@ember/runloop';
 import Modifier from 'ember-modifier';
 import { TrackedArray } from 'tracked-built-ins';
 
-export default class ElementTracker<Meta = unknown> {
+export default class ElementTracker<Meta extends object = object> {
   elements: { element: HTMLElement; meta: Meta }[] = new TrackedArray();
 
   get trackElement(): typeof Modifier<{ Args: { Named: Meta } }> {

@@ -34,6 +34,8 @@ import RealmService from '@cardstack/host/services/realm';
 import type { Format } from 'https://cardstack.com/base/card-api';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
+import { removeFileExtension } from '../search-sheet/utils';
+
 import OperatorModeOverlayItemHeader from './overlay-item-header';
 import { CardDefOrId, RenderedCardForOverlayActions } from './stack-item';
 
@@ -69,8 +71,8 @@ export default class OperatorModeOverlays extends Component<Signature> {
           }}
           {{velcro renderedCard.element middleware=(Array this.offset)}}
           data-test-overlay-selected={{if isSelected cardId}}
-          data-test-overlay-card={{cardId}}
-          data-test-overlay-card-display-name={{cardId}}
+          data-test-overlay-card={{removeFileExtension cardId}}
+          data-test-overlay-card-display-name={{removeFileExtension cardId}}
           style={{this.zIndexStyle renderedCard.element}}
         >
           {{#if (this.isIncludeHeader renderedCard)}}
