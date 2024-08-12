@@ -1913,7 +1913,6 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     // Linked cards have the realm's icon in the overlaid header title
-    await this.pauseTest();
     await waitFor(`[data-test-overlay-card="${testRealmURL}Author/1"]`);
     assert
       .dom(
