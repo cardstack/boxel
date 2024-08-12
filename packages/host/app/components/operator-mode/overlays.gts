@@ -70,9 +70,11 @@ export default class OperatorModeOverlays extends Component<Signature> {
             hovered=(eq this.currentlyHoveredCard renderedCard)
           }}
           {{velcro renderedCard.element middleware=(Array this.offset)}}
-          data-test-overlay-selected={{if isSelected cardId}}
+          data-test-overlay-selected={{if
+            isSelected
+            (removeFileExtension cardId)
+          }}
           data-test-overlay-card={{removeFileExtension cardId}}
-          data-test-overlay-card-display-name={{removeFileExtension cardId}}
           style={{this.zIndexStyle renderedCard.element}}
         >
           {{#if (this.isIncludeHeader renderedCard)}}
@@ -102,7 +104,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
               class='hover-button select'
               @icon={{if isSelected IconCircleSelected IconCircle}}
               aria-label='select card'
-              data-test-overlay-select={{cardId}}
+              data-test-overlay-select={{removeFileExtension cardId}}
             />
             <IconButton
               {{on 'mouseenter' (fn this.setCurrentlyHoveredCard renderedCard)}}
