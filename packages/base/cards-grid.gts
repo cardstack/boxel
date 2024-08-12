@@ -33,9 +33,9 @@ class Isolated extends Component<typeof CardsGrid> {
       <ul class='cards' data-test-cards-grid-cards>
         {{#let
           (component @context.prerenderedCardSearchComponent)
-          as |PrerenderedCardSearchComponent|
+          as |PrerenderedCardSearch|
         }}
-          <PrerenderedCardSearchComponent
+          <PrerenderedCardSearch
             @query={{this.query}}
             @format='embedded'
             @realms={{this.realms}}
@@ -63,7 +63,7 @@ class Isolated extends Component<typeof CardsGrid> {
                 </CardContainer>
               {{/each}}
             </:response>
-          </PrerenderedCardSearchComponent>
+          </PrerenderedCardSearch>
         {{/let}}
       </ul>
 
@@ -82,16 +82,7 @@ class Isolated extends Component<typeof CardsGrid> {
     </div>
 
     <style>
-      .card {
-        width: 212px;
-        height: 80px;
-        overflow: hidden;
-        container-name: embedded-card;
-        container-type: size;
-      }
       .cards-grid {
-        --grid-card-text-thumbnail-height: 6.25rem;
-        --grid-card-label-color: var(--boxel-450);
         --grid-card-width: 11.125rem;
         --grid-card-height: 15.125rem;
 
@@ -113,11 +104,14 @@ class Isolated extends Component<typeof CardsGrid> {
         justify-items: center;
         height: 100%;
       }
-      .operator-mode .buried .cards,
-      .operator-mode .buried .add-button {
-        display: none;
+      .card {
+        width: var(--grid-card-width);
+        height: var(--grid-card-height);
+        overflow: hidden;
+        cursor: pointer;
+        container-name: embedded-card;
+        container-type: size;
       }
-
       .add-button {
         display: inline-block;
         position: sticky;
@@ -125,56 +119,9 @@ class Isolated extends Component<typeof CardsGrid> {
         bottom: var(--boxel-sp-xl);
         z-index: 1;
       }
-      .grid-card {
-        width: var(--grid-card-width);
-        height: var(--grid-card-height);
-        padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
-      }
-      .grid-card.embedded-format {
-        width: 311px;
-        height: 76px;
-        overflow: hidden;
-        cursor: pointer;
-        container-name: embedded-card;
-        container-type: size;
-      }
-      .grid-card > *,
-      .grid-thumbnail-text {
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-      }
-      .grid-thumbnail {
-        display: flex;
-        align-items: center;
-        height: var(--grid-card-text-thumbnail-height);
-        background-color: var(--boxel-teal);
-        background-position: center;
-        background-size: cover;
-        background-repeat: no-repeat;
-        color: var(--boxel-light);
-        padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
-        border-radius: var(--boxel-border-radius);
-        font: 700 var(--boxel-font);
-        letter-spacing: var(--boxel-lsp);
-      }
-      .grid-title {
-        margin: 0;
-        font: 500 var(--boxel-font-sm);
-        text-align: center;
-      }
-      .grid-display-name {
-        margin: 0;
-        font: 500 var(--boxel-font-xs);
-        text-align: center;
-        color: var(--grid-card-label-color);
-      }
-      .grid-thumbnail + * {
-        margin-top: var(--boxel-sp-lg);
-      }
-      .grid-title + .grid-display-name {
-        margin-top: 0.2em;
+      .operator-mode .buried .cards,
+      .operator-mode .buried .add-button {
+        display: none;
       }
     </style>
   </template>
