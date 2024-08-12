@@ -1,3 +1,4 @@
+import CodeRefField0 from 'https://cardstack.com/base/code-ref';
 import {
   CardDef,
   field,
@@ -5,6 +6,7 @@ import {
   StringField,
 } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
+import CodeRefField from 'https://cardstack.com/base/code-ref';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -13,7 +15,12 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 
 class Isolated extends Component<typeof CodeSource> {
   private createModule = restartableTask(async (model) => {
-    let url = `http://localhost:4201/experiments/${model.name}/1.gts`;
+    let formattedTimestamp = new Date()
+      .toISOString()
+      .replace(/[:.]/g, '-')
+      .replace('T', '_')
+      .slice(0, -5);
+    let url = `http://localhost:4201/experiments/${model.name}/${formattedTimestamp}.gts`;
     let response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -22,7 +29,12 @@ class Isolated extends Component<typeof CodeSource> {
       body: `
 import { CardDef, FieldDef, linksTo, linksToMany, field, contains, containsMany } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
-
+import { get } from '@ember/object';
+import { tracked } from '@glimmer/tracking';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import { restartableTask } from 'ember-concurrency';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import StringField from 'https://cardstack.com/base/string';
 import BooleanField from 'https://cardstack.com/base/boolean';
@@ -33,6 +45,7 @@ import NumberField from 'https://cardstack.com/base/number';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 
 
+${(model.supportingFields ?? '')}
 
 export class ${model.name}  extends CardDef {
   static displayName = '${model.name}';
@@ -40,12 +53,12 @@ export class ${model.name}  extends CardDef {
    ${model.fieldsCode}
 
  static isolated = class Isolated extends Component<typeof ${model.name}> {
-    ${model.templateCode}
+    ${model.templateCode ?? ''}
 
     <template>
-      ${model.templateMarkup}
+      ${(model.templateMarkup ?? '')}
       <style>
-      ${model.templateStyle}
+      ${(model.templateStyle ?? '')}
       </style>
     </template>
  };
@@ -61,6 +74,31 @@ export class ${model.name}  extends CardDef {
       console.error(errorMessage);
       throw new Error(errorMessage);
     }
+    model.latestVersion = {
+      module: `http://localhost:4201/experiments/${model.name}/${formattedTimestamp}`,
+      name: model.name,
+    };
+  });
+
+  createInstanceWithSampleData = restartableTask(async (model) => {
+    console.log(
+      'createInstanceWithSampleData',
+      model,
+      model.sampleData,
+      JSON.parse(model.sampleData),
+    );
+    await this.args.context?.actions?.createCard?.(
+      model.latestVersion,
+      'http://localhost:4201/experiments',
+      {
+        doc: {
+          data: {
+            attributes: JSON.parse(model.sampleData),
+            meta: { adoptsFrom: model.latestVersion },
+          },
+        },
+      },
+    );
   });
 
   @action
@@ -68,16 +106,34 @@ export class ${model.name}  extends CardDef {
     this.createModule.perform(this.args.model);
   }
 
+  @action
+  handleCreateInstanceWithSampleData() {
+    this.createInstanceWithSampleData.perform(this.args.model);
+  }
+
   <template>
     <div class='code-source-container'>
       <button
         {{on 'click' this.handleCreateModule}}
-        class='create-button'
+        class='button'
         disabled={{this.createModule.isRunning}}
       >Create Module</button>
 
+      <button
+        {{on 'click' this.handleCreateInstanceWithSampleData}}
+        class='button'
+        disabled={{this.createInstanceWithSampleData.isRunning}}
+      >Create Instance with Sample Data</button>
+
       <div class='field-display'>
         <h2>{{this.args.model.name}}</h2>
+
+        <div class='field'>
+          <label>Current Version:</label>
+          <span>{{this.args.model.latestVersion.module}}
+            /
+            {{this.args.model.latestVersion.name}}</span>
+        </div>
 
         <div class='field'>
           <label>Name:</label>
@@ -88,6 +144,22 @@ export class ${model.name}  extends CardDef {
           <label>Realm:</label>
           <span>{{this.args.model.realm}}</span>
         </div>
+
+        <div class='field'>
+          <label>Sample Data:</label>
+          <pre>{{this.args.model.sampleData}}</pre>
+        </div>
+
+        <div class='field'>
+          <label>Fields Code:</label>
+          <pre>{{this.args.model.fieldsCode}}</pre>
+        </div>
+
+        <div class='field'>
+          <label>Supporting Fields:</label>
+          <pre>{{this.args.model.supportingFields}}</pre>
+        </div>
+
 
         <div class='field'>
           <label>Template Markup:</label>
@@ -104,10 +176,6 @@ export class ${model.name}  extends CardDef {
           <pre>{{this.args.model.templateStyle}}</pre>
         </div>
 
-        <div class='field'>
-          <label>Fields Code:</label>
-          <pre>{{this.args.model.fieldsCode}}</pre>
-        </div>
       </div>
     </div>
 
@@ -116,7 +184,7 @@ export class ${model.name}  extends CardDef {
         padding: 20px;
         font-family: Arial, sans-serif;
       }
-      .create-button {
+      .button {
         background-color: #4caf50;
         border: none;
         color: white;
@@ -157,6 +225,10 @@ export class CodeSource extends CardDef {
   @field name = contains(StringField);
   @field realm = contains(StringField);
 
+  @field latestVersion = contains(CodeRefField);
+  @field sampleData = contains(StringField, {
+    description: `Sample data to create an instance with. This should be a JSON string, and *must* be updated whenever the template *fields* are changed`,
+  });
   @field templateMarkup = contains(StringField, {
     description: `Code that fits within <template></template> for a glimmer template. 
     Do not include the CSS style.
@@ -210,6 +282,10 @@ Example for a booking form:
 `,
   });
 
+  @field supportingFields = contains(StringField, {
+    description: "Any FieldDefs required for nested fields"
+  })
+
   static displayName = 'CodeSource';
 
   static isolated = Isolated;
@@ -227,13 +303,5 @@ Example for a booking form:
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
-
-
-
-
-
-
-
-
   */
 }

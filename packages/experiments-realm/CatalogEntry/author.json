@@ -2,11 +2,11 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Author",
-      "description": "Catalog entry for Author",
+      "title": "Coder",
+      "description": "Catalog entry for Coding",
       "ref": {
-        "name": "Author",
-        "module": "../author"
+        "name": "CodeSource",
+        "module": "../code-source"
       },
       "isField": false
     },
