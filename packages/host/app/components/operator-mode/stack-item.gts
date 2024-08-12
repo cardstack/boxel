@@ -88,8 +88,8 @@ interface Signature {
     publicAPI: Actions;
     close: (item: StackItem) => void;
     dismissStackedCardsAbove: (stackIndex: number) => void;
-    onSelectedCardIds: (
-      selectedCardIds: string[],
+    onSelectedCards: (
+      selectedCards: CardDefOrId[],
       stackItem: StackItem,
     ) => void;
     setupStackItem: (

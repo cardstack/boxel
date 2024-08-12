@@ -19,7 +19,10 @@ interface Signature {
     stackIndex: number;
     publicAPI: Actions;
     close: (stackItem: StackItem) => void;
-    onSelectedCards: (selectedCards: CardDef[], stackItem: StackItem) => void;
+    onSelectedCards: (
+      selectedCards: CardDefOrId[],
+      stackItem: StackItem,
+    ) => void;
     setupStackItem: (
       stackItem: StackItem,
       clearSelections: () => void,

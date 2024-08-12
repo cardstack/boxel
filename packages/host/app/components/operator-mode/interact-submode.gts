@@ -46,6 +46,7 @@ import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RecentFilesService from '../../services/recent-files-service';
 import type { Submode } from '../submode-switcher';
+import { CardDefOrId } from './stack-item';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 
@@ -383,6 +384,11 @@ export default class InteractSubmode extends Component<Signature> {
       sourceItem: StackItem,
       destinationItem: StackItem,
     ) => {
+      // if this.selectCards task is still running, wait for it to finish before copying
+      if (this.selectCards.isRunning) {
+        await this.selectCards.last;
+      }
+
       await this.withTestWaiters(async () => {
         let destinationRealmURL = await this.cardService.getRealmURL(
           destinationItem.card,
@@ -417,17 +423,32 @@ export default class InteractSubmode extends Component<Signature> {
   }
 
   @action
-  private onSelectedCards(selectedCards: CardDef[], stackItem: StackItem) {
-    let selected = cardSelections.get(stackItem);
-    if (!selected) {
-      selected = new TrackedSet([]);
-      cardSelections.set(stackItem, selected);
-    }
-    selected.clear();
-    for (let card of selectedCards) {
-      selected.add(card);
-    }
+  private onSelectedCards(selectedCards: CardDefOrId[], stackItem: StackItem) {
+    this.selectCards.perform(selectedCards, stackItem);
   }
+
+  private selectCards = restartableTask(
+    async (selectedCards: CardDefOrId[], stackItem: StackItem) => {
+      let loadedCards = await Promise.all(
+        selectedCards.map((cardDefOrId: CardDefOrId) => {
+          if (typeof cardDefOrId === 'string') {
+            return this.cardService.getCard(cardDefOrId);
+          }
+          return cardDefOrId;
+        }),
+      );
+
+      let selected = cardSelections.get(stackItem);
+      if (!selected) {
+        selected = new TrackedSet([]);
+        cardSelections.set(stackItem, selected);
+      }
+      selected.clear();
+      for (let card of loadedCards) {
+        selected.add(card!);
+      }
+    },
+  );
 
   private get selectedCards() {
     return this.operatorModeStateService
