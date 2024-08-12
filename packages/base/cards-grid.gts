@@ -47,22 +47,21 @@ class Isolated extends Component<typeof CardsGrid> {
             <:loading>
               Loading...
             </:loading>
-            <:response as |response|>
-              <response.Results as |PrerenderedCard cardId i|>
-                <li
-                  {{@context.cardComponentModifier
-                    cardId=cardId
-                    format='data'
-                    fieldType=undefined
-                    fieldName=undefined
-                  }}
-                >
-                  <CardContainer class='card' ...attributes>
-                    <PrerenderedCard />
-                  </CardContainer>
-
-                </li>
-              </response.Results>
+            <:response as |cards|>
+              {{#each cards as |card i|}}
+                <CardContainer class='card' ...attributes>
+                  <li
+                    {{@context.cardComponentModifier
+                      cardId=card.url
+                      format='data'
+                      fieldType=undefined
+                      fieldName=undefined
+                    }}
+                  >
+                    {{card.component}}
+                  </li>
+                </CardContainer>
+              {{/each}}
             </:response>
           </PrerenderedCardSearchComponent>
         {{/let}}
