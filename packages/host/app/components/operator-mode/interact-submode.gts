@@ -47,6 +47,7 @@ import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RecentFilesService from '../../services/recent-files-service';
 import type { Submode } from '../submode-switcher';
+import { end } from '@ember/runloop';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 
@@ -429,23 +430,28 @@ export default class InteractSubmode extends Component<Signature> {
 
   private selectCards = restartableTask(
     async (selectedCards: CardDefOrId[], stackItem: StackItem) => {
-      let loadedCards = await Promise.all(
-        selectedCards.map((cardDefOrId: CardDefOrId) => {
-          if (typeof cardDefOrId === 'string') {
-            return this.cardService.getCard(cardDefOrId);
-          }
-          return cardDefOrId;
-        }),
-      );
+      let waiterToken = waiter.beginAsync();
+      try {
+        let loadedCards = await Promise.all(
+          selectedCards.map((cardDefOrId: CardDefOrId) => {
+            if (typeof cardDefOrId === 'string') {
+              return this.cardService.getCard(cardDefOrId);
+            }
+            return cardDefOrId;
+          }),
+        );
 
-      let selected = cardSelections.get(stackItem);
-      if (!selected) {
-        selected = new TrackedSet([]);
-        cardSelections.set(stackItem, selected);
-      }
-      selected.clear();
-      for (let card of loadedCards) {
-        selected.add(card!);
+        let selected = cardSelections.get(stackItem);
+        if (!selected) {
+          selected = new TrackedSet([]);
+          cardSelections.set(stackItem, selected);
+        }
+        selected.clear();
+        for (let card of loadedCards) {
+          selected.add(card!);
+        }
+      } finally {
+        waiter.endAsync(waiterToken);
       }
     },
   );
