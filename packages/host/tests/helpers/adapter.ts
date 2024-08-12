@@ -64,6 +64,10 @@ export class TestRealmAdapter implements RealmAdapter {
     }
   }
 
+  get realmPath() {
+    return this.#paths;
+  }
+
   setLoader(loader: Loader) {
     // Should remove this once CS-6720 is finished
     this.#loader = loader;

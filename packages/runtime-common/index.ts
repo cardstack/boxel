@@ -34,9 +34,16 @@ export interface DirectoryEntryRelationship {
   links: {
     related: string;
   };
-  meta: {
-    kind: 'directory' | 'file';
-  };
+  meta: FileMeta | DirectoryMeta;
+}
+
+export interface FileMeta {
+  kind: 'file';
+  lastModified: number | null;
+}
+
+export interface DirectoryMeta {
+  kind: 'directory';
 }
 
 export interface RealmCards {

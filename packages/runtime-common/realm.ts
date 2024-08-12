@@ -21,17 +21,18 @@ import {
   isNode,
   isSingleCardDocument,
   logger,
+  fetchUserPermissions,
+  maybeHandleScopedCSSRequest,
+  authorizationMiddleware,
+  internalKeyFor,
   type CodeRef,
   type LooseSingleCardDocument,
   type ResourceObjectWithId,
   type DirectoryEntryRelationship,
   type DBAdapter,
   type Queue,
-  type IndexWriter,
-  fetchUserPermissions,
-  maybeHandleScopedCSSRequest,
-  authorizationMiddleware,
-  internalKeyFor,
+  type FileMeta,
+  type DirectoryMeta,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -276,7 +277,6 @@ export class Realm {
       dbAdapter,
       queue,
       virtualNetwork,
-      withIndexWriter,
       assetsURL,
     }: {
       url: string;
@@ -287,7 +287,6 @@ export class Realm {
       dbAdapter: DBAdapter;
       queue: Queue;
       virtualNetwork: VirtualNetwork;
-      withIndexWriter?: (indexWriter: IndexWriter, loader: Loader) => void;
       assetsURL: URL;
     },
     opts?: Options,
@@ -334,7 +333,6 @@ export class Realm {
       realm: this,
       dbAdapter,
       queue,
-      withIndexWriter,
     });
     this.#realmIndexQueryEngine = new RealmIndexQueryEngine({
       realm: this,
@@ -646,20 +644,22 @@ export class Realm {
     try {
       // local requests are allowed to query the realm as the index is being built up
       if (!isLocal) {
-        let timeout = await Promise.race<void | Error>([
-          this.#startedUp.promise,
-          new Promise((resolve) =>
-            setTimeout(() => {
-              resolve(
-                new Error(
-                  `Timeout waiting for realm ${this.url} to become ready`,
-                ),
-              );
-            }, 60 * 1000),
-          ),
-        ]);
-        if (timeout) {
-          return new Response(timeout.message, { status: 500 });
+        if (!request.headers.get('X-Boxel-Use-WIP-Index')) {
+          let timeout = await Promise.race<void | Error>([
+            this.#startedUp.promise,
+            new Promise((resolve) =>
+              setTimeout(() => {
+                resolve(
+                  new Error(
+                    `Timeout waiting for realm ${this.url} to become ready`,
+                  ),
+                );
+              }, 60 * 1000),
+            ),
+          ]);
+          if (timeout) {
+            return new Response(timeout.message, { status: 500 });
+          }
         }
 
         let isWrite = ['PUT', 'PATCH', 'POST', 'DELETE'].includes(
@@ -1525,6 +1525,15 @@ export class Realm {
       `/${join(dir, a.name)}`.localeCompare(`/${join(dir, b.name)}`),
     );
     for (let entry of entries) {
+      let meta: FileMeta | DirectoryMeta;
+      if (entry.kind === 'file') {
+        meta = {
+          kind: 'file',
+          lastModified: (await this.#adapter.lastModified(localPath)) ?? null,
+        };
+      } else {
+        meta = { kind: 'directory' };
+      }
       let relationship: DirectoryEntryRelationship = {
         links: {
           related:
@@ -1532,9 +1541,7 @@ export class Realm {
               ? this.paths.directoryURL(join(dir, entry.name)).href
               : this.paths.fileURL(join(dir, entry.name)).href,
         },
-        meta: {
-          kind: entry.kind as 'directory' | 'file',
-        },
+        meta,
       };
 
       data.relationships![

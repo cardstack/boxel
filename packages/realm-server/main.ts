@@ -7,6 +7,7 @@ import {
   RunnerOptionsManager,
   permissionsExist,
   insertPermissions,
+  IndexWriter,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
@@ -77,12 +78,12 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
 let {
   port,
   distURL = 'http://localhost:4200',
+  matrixURL,
   path: paths,
   fromUrl: fromUrls,
   toUrl: toUrls,
   useTestingDomain,
   username: usernames,
-  matrixURL: matrixURLs,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
   .options({
@@ -119,7 +120,7 @@ let {
     matrixURL: {
       description: 'The matrix homeserver for the realm',
       demandOption: true,
-      type: 'array',
+      type: 'string',
     },
     username: {
       description: 'The matrix username for the realm user',
@@ -142,9 +143,9 @@ if (fromUrls.length < paths.length) {
   process.exit(-1);
 }
 
-if (paths.length !== usernames.length || paths.length !== matrixURLs.length) {
+if (paths.length !== usernames.length) {
   console.error(
-    `not enough usernames were provided to satisfy the paths provided. There must be at least one --username/--matrixURL set for each --path parameter`,
+    `not enough usernames were provided to satisfy the paths provided. There must be at least one --username set for each --path parameter`,
   );
   process.exit(-1);
 }
@@ -167,28 +168,31 @@ let dist: URL = new URL(distURL);
   let realms: Realm[] = [];
   let dbAdapter = new PgAdapter();
   let queue = new PgQueue(dbAdapter);
+  let manager = new RunnerOptionsManager();
+  let { getRunner, getIndexHTML } = await makeFastBootIndexRunner(
+    dist,
+    manager.getOptions.bind(manager),
+  );
+  let worker = new Worker({
+    indexWriter: new IndexWriter(dbAdapter),
+    queue,
+    runnerOptsManager: manager,
+    virtualNetwork,
+    matrixURL: new URL(matrixURL),
+    secretSeed: REALM_SECRET_SEED,
+    indexRunner: getRunner,
+  });
 
-  let workers: Worker[] = [];
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
 
     await seedRealmPermissions(dbAdapter, new URL(url));
 
-    let manager = new RunnerOptionsManager();
-    let matrixURL = String(matrixURLs[i]);
-    if (matrixURL.length === 0) {
-      console.error(`missing matrix URL for realm ${url}`);
-      process.exit(-1);
-    }
     let username = String(usernames[i]);
     if (username.length === 0) {
       console.error(`missing username for realm ${url}`);
       process.exit(-1);
     }
-    let { getRunner, getIndexHTML } = await makeFastBootIndexRunner(
-      dist,
-      manager.getOptions.bind(manager),
-    );
 
     let realmAdapter = new NodeAdapter(resolve(String(path)));
     let realm = new Realm(
@@ -201,24 +205,6 @@ let dist: URL = new URL(distURL);
         virtualNetwork,
         dbAdapter,
         queue,
-        withIndexWriter: (indexWriter, loader) => {
-          // Note for future: we are taking advantage of the fact that the realm
-          // does not need to auth with itself and are passing in the realm's
-          // loader which includes a url handler for internal requests that
-          // bypasses auth. when workers are moved outside of the realm server
-          // they will need to provide realm authentication credentials when
-          // indexing.
-          let worker = new Worker({
-            realmURL: new URL(url),
-            indexWriter,
-            queue,
-            realmAdapter,
-            runnerOptsManager: manager,
-            loader,
-            indexRunner: getRunner,
-          });
-          workers.push(worker);
-        },
         assetsURL: dist,
       },
       {
@@ -250,7 +236,7 @@ let dist: URL = new URL(distURL);
 
   server.listen(port);
 
-  await Promise.all(workers.map((worker) => worker.run()));
+  await worker.run();
 
   for (let realm of realms) {
     await realm.start();

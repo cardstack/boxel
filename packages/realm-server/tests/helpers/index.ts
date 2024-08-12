@@ -13,6 +13,7 @@ import {
   type Queue,
   type IndexRunner,
   insertPermissions,
+  IndexWriter,
 } from '@cardstack/runtime-common';
 import { makeFastBootIndexRunner } from '../../fastboot';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -153,7 +154,15 @@ export async function createRealm({
   }
 
   let adapter = new NodeAdapter(dir);
-  let worker: Worker | undefined;
+  let worker = new Worker({
+    indexWriter: new IndexWriter(dbAdapter),
+    queue,
+    runnerOptsManager: manager,
+    indexRunner,
+    virtualNetwork,
+    matrixURL: matrixConfig.url,
+    secretSeed: realmSecretSeed,
+  });
   let realm = new Realm({
     url: realmURL,
     adapter,
@@ -163,17 +172,6 @@ export async function createRealm({
     virtualNetwork,
     dbAdapter,
     queue,
-    withIndexWriter: (indexWriter, loader) => {
-      worker = new Worker({
-        realmURL: new URL(realmURL!),
-        indexWriter,
-        queue,
-        realmAdapter: adapter,
-        runnerOptsManager: manager,
-        loader,
-        indexRunner,
-      });
-    },
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
   });
   if (!worker) {

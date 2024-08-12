@@ -5,8 +5,7 @@ import Component from '@glimmer/component';
 
 import { didCancel, enqueueTask, restartableTask } from 'ember-concurrency';
 
-import { type IndexWriter, type TextFileRef } from '@cardstack/runtime-common';
-import type { LocalPath } from '@cardstack/runtime-common/paths';
+import { type IndexWriter } from '@cardstack/runtime-common';
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
 import {
   type IndexResults,
@@ -152,15 +151,44 @@ export default class CardPrerender extends Component {
     indexWriter: IndexWriter;
   } {
     let self = this;
-    function readFileAsText(
-      path: LocalPath,
-      opts?: { withFallbacks?: true },
-    ): Promise<TextFileRef | undefined> {
+    async function readFile(url: URL): ReturnType<Reader['readFile']> {
+      let path = self.localIndexer.adapter.realmPath.local(url);
       return _readFileAsText(
         path,
         self.localIndexer.adapter.openFile.bind(self.localIndexer.adapter),
-        opts,
       );
+    }
+
+    async function directoryListing(
+      url: URL,
+    ): ReturnType<Reader['directoryListing']> {
+      let path = self.localIndexer.adapter.realmPath.local(url);
+      let entries: {
+        kind: 'directory' | 'file';
+        url: string;
+        lastModified: number | null;
+      }[] = [];
+      for await (let {
+        path: innerPath,
+        kind,
+      } of self.localIndexer.adapter.readdir(path)) {
+        if (kind === 'file') {
+          entries.push({
+            kind,
+            url: self.localIndexer.adapter.realmPath.fileURL(innerPath).href,
+            lastModified:
+              (await self.localIndexer.adapter.lastModified(innerPath))!,
+          });
+        } else {
+          entries.push({
+            kind,
+            url: self.localIndexer.adapter.realmPath.directoryURL(innerPath)
+              .href,
+            lastModified: null,
+          });
+        }
+      }
+      return entries;
     }
 
     if (this.fastboot.isFastBoot) {
@@ -174,15 +202,7 @@ export default class CardPrerender extends Component {
       };
     } else {
       return {
-        reader: {
-          lastModified: this.localIndexer.adapter.lastModified.bind(
-            this.localIndexer.adapter,
-          ),
-          readdir: this.localIndexer.adapter.readdir.bind(
-            this.localIndexer.adapter,
-          ),
-          readFileAsText,
-        },
+        reader: { directoryListing, readFile } as Reader,
         indexWriter: this.localIndexer.indexWriter,
       };
     }

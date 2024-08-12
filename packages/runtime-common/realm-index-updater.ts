@@ -6,7 +6,7 @@ import {
   type Stats,
   type DBAdapter,
   type Queue,
-  type FromScratchArgs,
+  type WorkerArgs,
   type FromScratchResult,
   type IncrementalArgs,
   type IncrementalResult,
@@ -36,12 +36,10 @@ export class RealmIndexUpdater {
     realm,
     dbAdapter,
     queue,
-    withIndexWriter,
   }: {
     realm: Realm;
     dbAdapter: DBAdapter;
     queue: Queue;
-    withIndexWriter?: (indexWriter: IndexWriter, loader: Loader) => void;
   }) {
     if (!dbAdapter) {
       throw new Error(
@@ -52,9 +50,6 @@ export class RealmIndexUpdater {
     this.#queue = queue;
     this.#realm = realm;
     this.#loader = Loader.cloneLoader(this.#realm.loaderTemplate);
-    if (withIndexWriter) {
-      withIndexWriter(this.#indexWriter, this.#realm.loaderTemplate);
-    }
   }
 
   get stats() {
@@ -102,11 +97,12 @@ export class RealmIndexUpdater {
   async fullIndex() {
     this.#indexingDeferred = new Deferred<void>();
     try {
-      let args: FromScratchArgs = {
+      let args: WorkerArgs = {
         realmURL: this.#realm.url,
+        realmUsername: await this.getRealmUsername(),
       };
       let job = await this.#queue.publish<FromScratchResult>(
-        `from-scratch-index:${this.#realm.url}`,
+        `from-scratch-index`,
         args,
       );
       let { ignoreData, stats } = await job.done;
@@ -137,11 +133,12 @@ export class RealmIndexUpdater {
       let args: IncrementalArgs = {
         url: url.href,
         realmURL: this.#realm.url,
+        realmUsername: await this.getRealmUsername(),
         operation: opts?.delete ? 'delete' : 'update',
         ignoreData: { ...this.#ignoreData },
       };
       let job = await this.#queue.publish<IncrementalResult>(
-        `incremental-index:${this.#realm.url}`,
+        `incremental-index`,
         args,
       );
       let { invalidations, ignoreData, stats } = await job.done;
@@ -172,6 +169,14 @@ export class RealmIndexUpdater {
       return true;
     }
     return isIgnored(this.realmURL, this.ignoreMap, url);
+  }
+
+  private async getRealmUsername(): Promise<string> {
+    // TODO for now we are just using the URL pattern to figure out the realm
+    // username. As part of the ticket to create dynamic realms this should be
+    // updated to look up the realm owner permission
+    let name = this.realmURL.href.replace(/\/$/, '').split('/').pop()!;
+    return `${name}_realm`;
   }
 }
 
