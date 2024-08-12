@@ -14,7 +14,17 @@ interface Signature {
   Return: void;
 }
 
-export default class SubscribeToRealmsHelper extends Helper<Signature> {
+/* Example usage:
+ *
+ * ```hbs
+ * <SubscribeToRealms @realms={{this.realms}} @callback={{this.handleMessage}} />
+ * ```
+ *
+ * The `handleMessage` function will be called with the `MessageEvent` and the realm URL
+ * when a SSE event is received from any of the realms in the `realms` array.
+ */
+
+export default class SubscribeToRealms extends Helper<Signature> {
   private subscriptions: { realm: string; unsubscribe: () => void }[] = [];
 
   private get subscribedRealms() {
