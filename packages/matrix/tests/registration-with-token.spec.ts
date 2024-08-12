@@ -150,6 +150,59 @@ test.describe('User Registration w/ Token', () => {
     });
   });
 
+  test('it shows an error when the username start with an underscore', async ({
+    page,
+  }) => {
+    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
+    await registerRealmUsers(synapse);
+    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
+    await clearLocalStorage(page);
+
+    await gotoRegistration(page);
+
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-name-field]').fill('Test User');
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-email-field]').fill('user1@example.com');
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-username-field]').fill('_user1');
+    await page.locator('[data-test-password-field]').fill('mypassword1!');
+    await page
+      .locator('[data-test-confirm-password-field]')
+      .fill('mypassword1!');
+
+    await expect(
+      page.locator(
+        '[data-test-username-field][data-test-boxel-input-group-validation-state="invalid"]',
+      ),
+      'username field displays invalid validation state',
+    ).toHaveCount(1);
+    await expect(
+      page.locator(
+        '[data-test-username-field] ~ [data-test-boxel-input-group-error-message]',
+      ),
+    ).toContainText('User Name cannot start with an underscore');
+
+    await page.locator('[data-test-username-field]').fill('user1');
+    await expect(
+      page.locator(
+        '[data-test-username-field] ~ [data-test-boxel-input-group-error-message]',
+      ),
+      'no error message is displayed',
+    ).toHaveCount(0);
+    await page.locator('[data-test-register-btn]').click();
+
+    await page.locator('[data-test-token-field]').fill('abc123');
+    await page.locator('[data-test-next-btn]').click();
+
+    await validateEmail(page, 'user1@example.com');
+
+    await assertLoggedIn(page, {
+      userId: '@user1:localhost',
+      displayName: 'Test User',
+    });
+  });
+
   test(`it show an error when a invalid registration token is used`, async ({
     page,
   }) => {

@@ -280,7 +280,7 @@ export class CurrentRun {
       // until we have cross realm invalidation, if our invalidation
       // graph cross a realm just skip over the file. it will be out
       // of date, but such is life...
-      log.error(
+      log.debug(
         `Visit of ${url.href} cannot be performed as it is in a different realm than the realm whose contents are being invalidated (${this.realmURL.href})`,
       );
       return;

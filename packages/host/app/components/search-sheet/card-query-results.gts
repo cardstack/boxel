@@ -78,13 +78,13 @@ export default class CardQueryResults extends Component<Signature> {
           @isCompact={{@isCompact}}
         />
       </:loading>
-      <:response as |response|>
-        {{#if (or (gt response.count 0) this.isSearchKeyNotEmpty)}}
+      <:response as |cards|>
+        {{#if (or (gt cards.length 0) this.isSearchKeyNotEmpty)}}
           <ResultsSection
             @label={{concat
-              response.count
+              cards.length
               ' Result'
-              (if (eq response.count 1) '' 's')
+              (if (eq cards.length 1) '' 's')
               ' for “'
               @searchKey
               '”'
@@ -92,15 +92,15 @@ export default class CardQueryResults extends Component<Signature> {
             @isCompact={{@isCompact}}
             as |SearchResult|
           >
-            <response.Results as |PrerenderedCard cardId i|>
+            {{#each cards as |card i|}}
               <SearchResult
-                @component={{PrerenderedCard}}
-                @cardId={{cardId}}
+                @component={{card.component}}
+                @cardId={{card.url}}
                 @isCompact={{@isCompact}}
-                {{on 'click' (fn @handleCardSelect cardId)}}
+                {{on 'click' (fn @handleCardSelect card.url)}}
                 data-test-search-sheet-search-result={{i}}
               />
-            </response.Results>
+            {{/each}}
           </ResultsSection>
         {{/if}}
       </:response>

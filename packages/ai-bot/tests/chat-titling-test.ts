@@ -375,10 +375,10 @@ module('shouldSetRoomTitle', () => {
           body: 'patching card',
           formatted_body: 'patching card',
           data: {
-            command: {
-              type: 'patchCard',
-              id: 'http://localhost:4201/experiments/Friend/1',
-              patch: {
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: 'http://localhost:4201/experiments/Friend/1',
                 attributes: {
                   firstName: 'Dave',
                 },
@@ -440,10 +440,10 @@ module('shouldSetRoomTitle', () => {
           body: 'patching card',
           formatted_body: 'patching card',
           data: {
-            command: {
-              type: 'patchCard',
-              id: 'http://localhost:4201/experiments/Friend/1',
-              patch: {
+            toolCall: {
+              name: 'patchCard',
+              arguments: {
+                card_id: 'http://localhost:4201/drafts/Friend/1',
                 attributes: {
                   firstName: 'Dave',
                 },

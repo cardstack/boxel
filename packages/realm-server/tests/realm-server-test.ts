@@ -39,6 +39,8 @@ import {
   localBaseRealm,
   setupDB,
   createRealm,
+  realmServerTestMatrix,
+  realmSecretSeed,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
@@ -46,6 +48,8 @@ import { shimExternals } from '../lib/externals';
 import { RealmServer } from '../server';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
+import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import jwt from 'jsonwebtoken';
 
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
@@ -2670,9 +2674,16 @@ module('Realm server serving multiple realms', function (hooks) {
       });
       virtualNetwork.mount(testRealm.handle);
 
+      let matrixClient = new MatrixClient(
+        realmServerTestMatrix.url,
+        realmServerTestMatrix.username,
+        realmServerTestMatrix.password,
+      );
       testRealmServer = new RealmServer(
         [base, testRealm],
         virtualNetwork,
+        matrixClient,
+        realmSecretSeed,
       ).listen(parseInt(localBaseRealmURL.port));
       await base.start();
       await testRealm.start();
@@ -2778,6 +2789,86 @@ module('Realm Server serving from a subdirectory', function (hooks) {
       response.headers['location'],
       'http://127.0.0.1:4446/demo/?operatorModeEnabled=true&operatorModeState=%7B%22stacks%22%3A%5B%7B%22items%22%3A%5B%7B%22card%22%3A%7B%22id%22%3A%22http%3A%2F%2Flocalhost%3A4204%2Findex%22%7D%2C%22format%22%3A%22isolated%22%7D%5D%7D%5D%7D',
     );
+  });
+});
+
+module('Realm server authentication', function (hooks) {
+  let testRealmServer: Server;
+
+  let request: SuperTest<Test>;
+
+  let dir: DirResult;
+
+  let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
+
+  setupCardLogs(
+    hooks,
+    async () => await loader.import(`${baseRealm.url}card-api`),
+  );
+
+  setupBaseRealmServer(hooks, virtualNetwork);
+
+  hooks.beforeEach(async function () {
+    dir = dirSync();
+    copySync(join(__dirname, 'cards'), dir.name);
+  });
+
+  setupDB(hooks, {
+    beforeEach: async (dbAdapter, queue) => {
+      testRealmServer = (
+        await runTestRealmServer({
+          virtualNetwork,
+          dir: dir.name,
+          realmURL: testRealmURL,
+          dbAdapter,
+          queue,
+        })
+      ).testRealmServer;
+      request = supertest(testRealmServer);
+    },
+    afterEach: async () => {
+      testRealmServer.close();
+    },
+  });
+
+  test('authenticates user', async function (assert) {
+    let matrixClient = new MatrixClient(
+      realmServerTestMatrix.url,
+      'test_realm',
+      'password',
+    );
+    await matrixClient.login();
+    let userId = matrixClient.getUserId();
+
+    let response = await request
+      .post('/_server-session')
+      .send(JSON.stringify({ user: userId }))
+      .set('Accept', 'application/json')
+      .set('Content-Type', 'application/json');
+
+    assert.strictEqual(response.status, 401, 'HTTP 401 status');
+    let json = response.body;
+
+    let { joined_rooms: rooms } = await matrixClient.getJoinedRooms();
+
+    if (!rooms.includes(json.room)) {
+      await matrixClient.joinRoom(json.room);
+    }
+
+    await matrixClient.sendEvent(json.room, 'm.room.message', {
+      body: `auth-response: ${json.challenge}`,
+      msgtype: 'm.text',
+    });
+
+    response = await request
+      .post('/_server-session')
+      .send(JSON.stringify({ user: userId, challenge: json.challenge }))
+      .set('Accept', 'application/json')
+      .set('Content-Type', 'application/json');
+    assert.strictEqual(response.status, 201, 'HTTP 201 status');
+    let token = response.headers['authorization'];
+    let decoded = jwt.verify(token, realmSecretSeed) as { user: string };
+    assert.strictEqual(decoded.user, userId);
   });
 });
 
