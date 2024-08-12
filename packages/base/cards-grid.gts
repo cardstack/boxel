@@ -1,5 +1,4 @@
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
 import { on } from '@ember/modifier';
 import { restartableTask } from 'ember-concurrency';
 import {
@@ -19,9 +18,7 @@ import {
 import {
   chooseCard,
   catalogEntryRef,
-  getLiveCards,
   baseRealm,
-  cardTypeDisplayName,
   isCardInstance,
 } from '@cardstack/runtime-common';
 
@@ -48,8 +45,8 @@ class Isolated extends Component<typeof CardsGrid> {
               Loading...
             </:loading>
             <:response as |cards|>
-              {{#each cards as |card i|}}
-                <CardContainer class='card' ...attributes>
+              {{#each cards as |card|}}
+                <CardContainer class='card'>
                   <li
                     {{@context.cardComponentModifier
                       cardId=card.url

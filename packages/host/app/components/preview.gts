@@ -29,13 +29,13 @@ interface Signature {
 
 export default class Preview extends Component<Signature> {
   @provide(DefaultFormatContextName)
-  // @ts-ignore
+  // @ts-ignore "defaultFormat is declared but not used"
   get defaultFormat() {
     return this.args.format ?? 'isolated';
   }
 
   @provide(CardContextName)
-  // @ts-ignore
+  // @ts-ignore "context is declared but not used"
   private get context() {
     return {
       prerenderedCardSearchComponent: PrerenderedCardSearch,

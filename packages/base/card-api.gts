@@ -116,13 +116,15 @@ export interface CardContext {
   cardComponentModifier?: typeof Modifier<{
     Args: {
       Named: {
-        cardId: string;
+        card?: CardDef;
+        cardId?: string;
         format: Format | 'data';
         fieldType: FieldType | undefined;
         fieldName: string | undefined;
       };
     };
   }>;
+  prerenderedCardSearchComponent: any;
 }
 
 function isNotLoadedValue(val: any): val is NotLoadedValue {

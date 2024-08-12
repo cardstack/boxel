@@ -12,6 +12,11 @@ export default class ElementTracker<Meta = unknown> {
     let observers = new Map<HTMLElement, MutationObserver>();
     return class TrackElement extends Modifier<{ Args: { Named: Meta } }> {
       modify(element: HTMLElement, _pos: unknown, meta: Meta) {
+        if (!('card' in meta) && !('cardId' in meta)) {
+          throw new Error(
+            'ElementTracker: meta.card or meta.cardId is required',
+          );
+        }
         // Without scheduling this after render, this produces the "attempted to update value, but it had already been used previously in the same computation" type error
         schedule('afterRender', () => {
           let updateTracker = () => {
