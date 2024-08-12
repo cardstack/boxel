@@ -325,7 +325,7 @@ export interface Actions {
       isLinkedCard?: boolean;
       realmURL?: URL; // the realm to create the card in
       doc?: LooseSingleCardDocument; // initial data for the card
-      openInStackAfterCreation?: boolean; // by default, the new card opens in the stack in edit mode
+      cardModeAfterCreation?: Format; // by default, the new card opens in the stack in edit mode
     },
   ) => Promise<CardDef | undefined>;
   viewCard: (

@@ -439,13 +439,12 @@ class Isolated extends AppCard.isolated {
         }
         let card = await createCard(ref, this.currentRealm, {
           doc,
-          openInStackAfterCreation: false,
+          cardModeAfterCreation: 'isolated',
         });
         if (!card) {
           this.errorMessage = 'Error: Failed to create card';
           return;
         }
-        await viewCard(card);
         await runCommand(
           card,
           `${baseRealm.url}SkillCard/generate-product-requirements`,

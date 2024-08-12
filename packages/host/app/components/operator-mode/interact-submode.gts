@@ -146,7 +146,7 @@ export default class InteractSubmode extends Component<Signature> {
           realmURL?: URL;
           isLinkedCard?: boolean;
           doc?: LooseSingleCardDocument; // fill in card data with values
-          openInStackAfterCreation?: boolean;
+          cardModeAfterCreation?: Format;
         },
       ): Promise<CardDef | undefined> => {
         let cardModule = new URL(moduleFrom(ref), relativeTo);
@@ -176,7 +176,7 @@ export default class InteractSubmode extends Component<Signature> {
         let newItem = new StackItem({
           owner: here,
           card: newCard,
-          format: 'edit',
+          format: opts?.cardModeAfterCreation ?? 'edit',
           request: new Deferred(),
           isLinkedCard: opts?.isLinkedCard,
           stackIndex,
@@ -188,13 +188,9 @@ export default class InteractSubmode extends Component<Signature> {
         // - the parent card is not updated with the new linked card
         await here.cardService.saveModel(here, newCard);
 
-        if (opts?.openInStackAfterCreation === false) {
-          return newCard;
-        }
-
         await newItem.ready();
         here.addToStack(newItem);
-        return await newItem.request?.promise;
+        return newCard;
       },
       viewCard: async (
         card: CardDef,
