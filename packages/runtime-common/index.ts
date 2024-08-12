@@ -345,7 +345,7 @@ export interface Actions {
   runCommand?: (
     card: CardDef, // the card that the command is being run on
     skillCardId: string, // skill card id that the command is associated with
-    skillCardRealm: URL, // TODO: ideally figure this out from the id...
+    skillCardRealm: URL, // realm of the skill card
     message?: string, // message that posts in the chat
   ) => Promise<void>;
 }

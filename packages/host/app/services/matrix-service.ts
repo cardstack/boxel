@@ -3,7 +3,6 @@ import type RouterService from '@ember/routing/router-service';
 import Service, { service } from '@ember/service';
 import { cached, tracked } from '@glimmer/tracking';
 
-import { v4 as uuidv4 } from 'uuid';
 import format from 'date-fns/format';
 
 import { task } from 'ember-concurrency';
@@ -18,6 +17,7 @@ import {
 } from 'matrix-js-sdk';
 import { md5 } from 'super-fast-md5';
 import { TrackedMap, TrackedObject } from 'tracked-built-ins';
+import { v4 as uuidv4 } from 'uuid';
 
 import {
   type LooseSingleCardDocument,

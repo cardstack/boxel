@@ -36,6 +36,8 @@ import { StackItem } from '@cardstack/host/lib/stack-item';
 
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
+import type MatrixService from '@cardstack/host/services/matrix-service';
+
 import { type CardDef, type Format } from 'https://cardstack.com/base/card-api';
 
 import CopyButton from './copy-button';
@@ -44,7 +46,6 @@ import OperatorModeStack from './stack';
 import SubmodeLayout from './submode-layout';
 
 import type CardService from '../../services/card-service';
-import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RecentFilesService from '../../services/recent-files-service';
 import type { Submode } from '../submode-switcher';
@@ -172,6 +173,15 @@ export default class InteractSubmode extends Component<Signature> {
           relativeTo,
         );
 
+        let newItem = new StackItem({
+          owner: here,
+          card: newCard,
+          format: 'edit',
+          request: new Deferred(),
+          isLinkedCard: opts?.isLinkedCard,
+          stackIndex,
+        });
+
         // TODO: it is important saveModel happens after newItem because it
         // looks like perhaps there is a race condition (or something else) when a
         // new linked card is created, and when it is added to the stack and closed
@@ -182,14 +192,6 @@ export default class InteractSubmode extends Component<Signature> {
           return newCard;
         }
 
-        let newItem = new StackItem({
-          owner: here,
-          card: newCard,
-          format: 'edit',
-          request: new Deferred(),
-          isLinkedCard: opts?.isLinkedCard,
-          stackIndex,
-        });
         await newItem.ready();
         here.addToStack(newItem);
         return await newItem.request?.promise;
@@ -347,28 +349,24 @@ export default class InteractSubmode extends Component<Signature> {
       skillCardRealm: URL,
       message: string,
     ) => {
-      try {
-        let [commandCard] = await this.cardService.search(
-          { filter: { eq: { id: skillCardId } } },
-          skillCardRealm,
+      let [commandCard] = await this.cardService.search(
+        { filter: { eq: { id: skillCardId } } },
+        skillCardRealm,
+      );
+      if (!commandCard) {
+        throw new Error(
+          `Could not find card "${skillCardId}" in realm "${skillCardRealm}"`,
         );
-        if (!commandCard) {
-          throw new Error(
-            `Could not find card "${skillCardId}" in realm "${skillCardRealm}"`,
-          );
-        }
-        let newRoomId = await this.matrixService.createRoom(`New AI chat`, [
-          aiBotUsername,
-        ]);
-        await this.matrixService.sendMessage(
-          newRoomId,
-          message,
-          [card],
-          [commandCard],
-        );
-      } catch (e) {
-        throw e;
       }
+      let newRoomId = await this.matrixService.createRoom(`New AI chat`, [
+        aiBotUsername,
+      ]);
+      await this.matrixService.sendMessage(
+        newRoomId,
+        message,
+        [card],
+        [commandCard],
+      );
     },
   );
 
