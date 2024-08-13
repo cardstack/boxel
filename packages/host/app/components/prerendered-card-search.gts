@@ -2,7 +2,7 @@ import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 import Component from '@glimmer/component';
 
-import { restartableTask } from 'ember-concurrency';
+import { didCancel, restartableTask } from 'ember-concurrency';
 import { trackedFunction } from 'ember-resources/util/function';
 import { flatMap } from 'lodash';
 import { stringify } from 'qs';
@@ -128,6 +128,15 @@ export default class PrerenderedCardSearch extends Component<Signature> {
       );
       this._lastSearchResults = results;
       return { instances: results, isLoading: false };
+    } catch (e) {
+      if (!didCancel(e)) {
+        // re-throw the non-cancelation error
+        throw e;
+      }
+      return {
+        instances: [],
+        isLoading: false,
+      };
     } finally {
       waiter.endAsync(token);
     }
