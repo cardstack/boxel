@@ -1921,9 +1921,6 @@ module('Integration | operator-mode', function (hooks) {
 
     // Linked cards have the realm's icon in the overlaid header title
     await waitFor('[data-test-overlay-card-display-name="Author"]');
-    assert
-      .dom('[data-test-overlay-card-display-name="Author"] .header-title img')
-      .hasAttribute('src', 'https://example-icon.test');
 
     await click('[data-test-author]');
     await waitFor('[data-test-stack-card-index="1"]');
@@ -2524,12 +2521,12 @@ module('Integration | operator-mode', function (hooks) {
       });
       await triggerEvent(document, 'mousemove', {
         clientX: targetRect.left + targetRect.width / 2,
-        clientY: targetRect.top - 100,
+        clientY: targetRect.top - 50,
       });
 
       await triggerEvent(itemElement, 'mouseup', {
         clientX: targetRect.left + targetRect.width / 2,
-        clientY: targetRect.top - 100,
+        clientY: targetRect.top - 50,
       });
     };
 

@@ -90,13 +90,6 @@ export default class OperatorModeStack extends Component<Signature> {
         display: none;
       }
 
-      /* Add some padding to accomodate for overlaid header for embedded cards in operator mode */
-      .operator-mode-stack :deep(.field-component-card.embedded-format) {
-        padding-top: calc(
-          var(--overlay-embedded-card-header-height) + var(--boxel-sp-lg)
-        );
-      }
-
       .operator-mode-stack
         :deep(
           .field-component-card.embedded-format .missing-embedded-template
