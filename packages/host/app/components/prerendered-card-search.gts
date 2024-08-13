@@ -145,13 +145,13 @@ export default class PrerenderedCardSearch extends Component<Signature> {
   });
 
   private get searchResults() {
-    return (this.runSearch.value || {
-        instances: this._lastSearchResults,
-        isLoading: false,
-      } || { instances: [], isLoading: true }) as {
-      instances: PrerenderedCard[];
-      isLoading: boolean;
-    };
+    if (this.runSearch.value) {
+      return this.runSearch.value;
+    } else if (this._lastSearchResults) {
+      return { instances: this._lastSearchResults, isLoading: false };
+    } else {
+      return { instances: [], isLoading: true };
+    }
   }
 
   private markRealmNeedsRefreshing = (ev: MessageEvent, realm: string) => {
