@@ -47,7 +47,6 @@ import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RecentFilesService from '../../services/recent-files-service';
 import type { Submode } from '../submode-switcher';
-import { end } from '@ember/runloop';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 
