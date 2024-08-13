@@ -7,16 +7,19 @@ until $(curl --output /dev/null --silent --head --fail http://localhost:8008); d
   printf '.'
   sleep 5
 
-  COUNT=$((COUNT+1))
+  COUNT=$((COUNT + 1))
   if [ "$COUNT" -eq "$MAX_ATTEMPTS" ]; then
     echo "Failed to reach Synapse after $MAX_ATTEMPTS attempts."
     exit 1
   fi
 done
 
-MATRIX_USERNAME=base_realm MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts
-MATRIX_USERNAME=experiments_realm MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts
-MATRIX_USERNAME=realm_server MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts
-MATRIX_USERNAME=node-test_realm-server MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts
-MATRIX_USERNAME=node-test_realm MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts
-MATRIX_USERNAME=test_realm MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts
+: ${REALM_SECRET_SEED:="shhh! it's a secret"}
+export REALM_SECRET_SEED
+
+ts-node --transpileOnly ./scripts/register-realm-user.ts realm-server
+ts-node --transpileOnly ./scripts/register-realm-user.ts node-test_realm-server
+ts-node --transpileOnly ./scripts/register-realm-user.ts base_realm
+ts-node --transpileOnly ./scripts/register-realm-user.ts experiments_realm
+ts-node --transpileOnly ./scripts/register-realm-user.ts node-test_realm
+ts-node --transpileOnly ./scripts/register-realm-user.ts test_realm

@@ -790,7 +790,6 @@ module('permissioned realm', function (hooks) {
           matrixConfig: {
             url: new URL(`http://localhost:8008`),
             username: matrixUser1,
-            password: 'password',
           },
           dbAdapter,
           queue,
@@ -823,7 +822,6 @@ module('permissioned realm', function (hooks) {
             matrixConfig: {
               url: new URL(`http://localhost:8008`),
               username: matrixUser2,
-              password: 'password',
             },
             dbAdapter,
             queue,
