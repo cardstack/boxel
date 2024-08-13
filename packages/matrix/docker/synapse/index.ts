@@ -237,9 +237,13 @@ export async function registerUser(
 export async function loginUser(
   username: string,
   password: string,
+  matrixURL?: string,
 ): Promise<Credentials> {
+  let url = matrixURL
+    ? `${matrixURL}/_matrix/client/r0/login`
+    : `http://localhost:${SYNAPSE_PORT}/_matrix/client/r0/login`;
   let response = await (
-    await fetch(`http://localhost:${SYNAPSE_PORT}/_matrix/client/r0/login`, {
+    await fetch(url, {
       method: 'POST',
       body: JSON.stringify({
         type: 'm.login.password',
@@ -316,35 +320,37 @@ export async function updateUser(
     displayname,
     avatar_url,
     emailAddresses,
+    matrixURL,
   }: {
     password?: string;
     displayname?: string;
     avatar_url?: string;
     emailAddresses?: string[];
+    matrixURL?: string;
   },
 ) {
-  let res = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_synapse/admin/v2/users/${userId}`,
-    {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${adminAccessToken}`,
-      },
-      body: JSON.stringify({
-        ...(password ? { password } : {}),
-        ...(displayname ? { displayname } : {}),
-        ...(avatar_url ? { avatar_url } : {}),
-        ...(emailAddresses
-          ? {
-              threepids: emailAddresses.map((address) => ({
-                medium: 'email',
-                address,
-              })),
-            }
-          : {}),
-      }),
+  let url = matrixURL
+    ? `${matrixURL}/_synapse/admin/v2/users/${userId}`
+    : `http://localhost:${SYNAPSE_PORT}/_synapse/admin/v2/users/${userId}`;
+  let res = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${adminAccessToken}`,
     },
-  );
+    body: JSON.stringify({
+      ...(password ? { password } : {}),
+      ...(displayname ? { displayname } : {}),
+      ...(avatar_url ? { avatar_url } : {}),
+      ...(emailAddresses
+        ? {
+            threepids: emailAddresses.map((address) => ({
+              medium: 'email',
+              address,
+            })),
+          }
+        : {}),
+    }),
+  });
   if (!res.ok) {
     throw new Error(
       `could not update user: ${res.status} - ${await res.text()}`,
