@@ -4,7 +4,7 @@ import Component from '@glimmer/component';
 
 import { didCancel, restartableTask } from 'ember-concurrency';
 import { trackedFunction } from 'ember-resources/util/function';
-import { flatMap } from 'lodash';
+import { flatMap, isEqual } from 'lodash';
 import { stringify } from 'qs';
 
 import { TrackedSet } from 'tracked-built-ins';
@@ -52,7 +52,7 @@ export default class PrerenderedCardSearch extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
   _lastSearchQuery: Query | null = null;
-  _lastSearchResults: PrerenderedCard[] = [];
+  _lastSearchResults: PrerenderedCard[] | undefined;
   realmsNeedingRefresh = new TrackedSet<string>();
 
   constructor(owner: unknown, args: Signature['Args']) {
@@ -109,7 +109,11 @@ export default class PrerenderedCardSearch extends Component<Signature> {
 
   runSearchTask = restartableTask(async () => {
     let { query, format } = this.args;
-    let results = [...this._lastSearchResults];
+    if (!isEqual(query, this._lastSearchQuery)) {
+      this._lastSearchResults = undefined;
+      this._lastSearchQuery = query;
+    }
+    let results = [...(this._lastSearchResults || [])];
     let realmsNeedingRefresh = Array.from(this.realmsNeedingRefresh);
     let token = waiter.beginAsync();
     try {
@@ -143,7 +147,13 @@ export default class PrerenderedCardSearch extends Component<Signature> {
   });
 
   private get searchResults() {
-    return this.runSearch.value || { instances: [], isLoading: true };
+    return (this.runSearch.value || {
+        instances: this._lastSearchResults,
+        isLoading: false,
+      } || { instances: [], isLoading: true }) as {
+      instances: PrerenderedCard[];
+      isLoading: boolean;
+    };
   }
 
   private markRealmNeedsRefreshing = (ev: MessageEvent, realm: string) => {
