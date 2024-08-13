@@ -10,10 +10,12 @@ import {
   fetcher,
   RealmPaths,
   SupportedMimeType,
+  fileContentToText,
   type Queue,
   type TextFileRef,
   type VirtualNetwork,
   type Relationship,
+  type ResponseWithNodeStream,
 } from '.';
 import { MatrixClient } from './matrix-client';
 
@@ -176,6 +178,10 @@ export class Worker {
       seed: this.#secretSeed,
     });
     let fetch = fetcher(this.#virtualNetwork.fetch, [
+      async (req, next) => {
+        req.headers.set('X-Boxel-Building-Index', 'true');
+        return next(req);
+      },
       // TODO do we need this in our indexer?
       async (req, next) => {
         return (await maybeHandleScopedCSSRequest(req)) || next(req);
@@ -223,16 +229,23 @@ export class Worker {
   private getReader(_fetch: typeof globalThis.fetch, realmURL: URL): Reader {
     return {
       readFile: async (url: URL) => {
-        let result = await _fetch(url, {
+        let response: ResponseWithNodeStream = await _fetch(url, {
           headers: {
             Accept: SupportedMimeType.CardSource,
           },
         });
-        if (!result.ok) {
+        if (!response.ok) {
           return undefined;
         }
-        let content = await result.text();
-        let lastModifiedRfc7321 = result.headers.get('last-modified');
+        let content: string;
+        if ('nodeStream' in response && response.nodeStream) {
+          content = await fileContentToText({
+            content: response.nodeStream,
+          });
+        } else {
+          content = await response.text();
+        }
+        let lastModifiedRfc7321 = response.headers.get('last-modified');
         if (!lastModifiedRfc7321) {
           throw new Error(
             `Response for ${url.href} has no 'last-modified' header`,
@@ -249,21 +262,21 @@ export class Worker {
           content,
           lastModified,
           path,
-          ...(Symbol.for('shimmed-module') in result
+          ...(Symbol.for('shimmed-module') in response
             ? { isShimmed: true }
             : {}),
         };
       },
 
       directoryListing: async (url: URL) => {
-        let result = await _fetch(url, {
+        let response = await _fetch(url, {
           headers: {
             Accept: SupportedMimeType.DirectoryListing,
           },
         });
         let {
           data: { relationships: _relationships },
-        } = await result.json();
+        } = await response.json();
         let relationships = _relationships as Record<string, Relationship>;
         return Object.values(relationships).map((entry) =>
           entry.meta!.kind === 'file'

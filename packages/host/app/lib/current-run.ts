@@ -225,6 +225,7 @@ export class CurrentRun {
     url: URL,
     mtimes: LastModifiedTimes,
   ): Promise<void> {
+    log.debug(`discovering invalidations in dir ${url.href}`);
     let ignorePatterns = await this.#reader.readFile(
       new URL('.gitignore', url),
     );

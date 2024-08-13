@@ -644,7 +644,7 @@ export class Realm {
     try {
       // local requests are allowed to query the realm as the index is being built up
       if (!isLocal) {
-        if (!request.headers.get('X-Boxel-Use-WIP-Index')) {
+        if (!request.headers.get('X-Boxel-Building-Index')) {
           let timeout = await Promise.race<void | Error>([
             this.#startedUp.promise,
             new Promise((resolve) =>
@@ -728,7 +728,7 @@ export class Realm {
 
     if (!this.#disableModuleCaching) {
       let useWorkInProgressIndex = Boolean(
-        request.headers.get('X-Boxel-Use-WIP-Index'),
+        request.headers.get('X-Boxel-Building-Index'),
       );
       let module = await this.#realmIndexQueryEngine.module(url, {
         useWorkInProgressIndex,
@@ -1403,7 +1403,7 @@ export class Realm {
     }
 
     let useWorkInProgressIndex = Boolean(
-      request.headers.get('X-Boxel-Use-WIP-Index'),
+      request.headers.get('X-Boxel-Building-Index'),
     );
 
     let url = this.paths.fileURL(localPath.replace(/\.json$/, ''));
@@ -1529,7 +1529,8 @@ export class Realm {
       if (entry.kind === 'file') {
         meta = {
           kind: 'file',
-          lastModified: (await this.#adapter.lastModified(localPath)) ?? null,
+          lastModified:
+            (await this.#adapter.lastModified(`${dir}${entry.name}`)) ?? null,
         };
       } else {
         meta = { kind: 'directory' };
@@ -1578,7 +1579,7 @@ export class Realm {
     requestContext: RequestContext,
   ): Promise<Response> {
     let useWorkInProgressIndex = Boolean(
-      request.headers.get('X-Boxel-Use-WIP-Index'),
+      request.headers.get('X-Boxel-Building-Index'),
     );
 
     let cardsQuery = qs.parse(new URL(request.url).search.slice(1));
@@ -1602,7 +1603,7 @@ export class Realm {
     requestContext: RequestContext,
   ): Promise<Response> {
     let useWorkInProgressIndex = Boolean(
-      request.headers.get('X-Boxel-Use-WIP-Index'),
+      request.headers.get('X-Boxel-Building-Index'),
     );
 
     let parsedQueryString = qs.parse(new URL(request.url).search.slice(1));
