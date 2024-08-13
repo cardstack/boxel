@@ -97,7 +97,14 @@ export default class PrerenderedCardSearch extends Component<Signature> {
     let { query, format } = this.args;
 
     if (query && format && this.realmsNeedingRefresh.size > 0) {
-      await this.runSearchTask.perform();
+      try {
+        await this.runSearchTask.perform();
+      } catch (e) {
+        if (!didCancel(e)) {
+          // re-throw the non-cancelation error
+          throw e;
+        }
+      }
     }
     return (
       this.runSearchTask.lastSuccessful?.value ?? {
@@ -132,15 +139,6 @@ export default class PrerenderedCardSearch extends Component<Signature> {
       );
       this._lastSearchResults = results;
       return { instances: results, isLoading: false };
-    } catch (e) {
-      if (!didCancel(e)) {
-        // re-throw the non-cancelation error
-        throw e;
-      }
-      return {
-        instances: [],
-        isLoading: false,
-      };
     } finally {
       waiter.endAsync(token);
     }
