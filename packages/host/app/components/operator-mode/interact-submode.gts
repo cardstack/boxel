@@ -446,8 +446,12 @@ export default class InteractSubmode extends Component<Signature> {
   }
 
   private openSelectedSearchResultInStack = restartableTask(
-    async (card: CardDef) => {
+    async (cardId: string) => {
       let searchSheetTrigger = this.searchSheetTrigger; // Will be set by showSearchWithTrigger
+      let card = await this.cardService.getCard(cardId);
+      if (!card) {
+        return;
+      }
 
       // In case the left button was clicked, whatever is currently in stack with index 0 will be moved to stack with index 1,
       // and the card will be added to stack with index 0. shiftStack executes this logic.

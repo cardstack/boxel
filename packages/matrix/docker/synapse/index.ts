@@ -442,3 +442,25 @@ interface MessageEvent {
   event_id: string;
   room_id: string;
 }
+
+export async function putEvent(
+  accessToken: string,
+  roomId: string,
+  eventType: string,
+  txnId: string,
+  body: any,
+) {
+  let url = `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/rooms/${roomId}/send/${eventType}/${txnId}`;
+  let res = await await fetch(url, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (res.ok) {
+    let r = await res.json();
+    return r;
+  }
+  return;
+}

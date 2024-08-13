@@ -640,8 +640,10 @@ export default class CodeSubmode extends Component<Signature> {
     this.updateCursorByName = updateCursorByName;
   };
 
-  @action private openSearchResultInEditor(card: CardDef) {
-    let codePath = new URL(card.id + '.json');
+  @action private openSearchResultInEditor(cardId: string) {
+    let codePath = cardId.endsWith('.json')
+      ? new URL(cardId)
+      : new URL(cardId + '.json');
     this.operatorModeStateService.updateCodePath(codePath);
   }
 
