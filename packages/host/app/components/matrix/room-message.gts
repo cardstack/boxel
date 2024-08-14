@@ -169,15 +169,15 @@ export default class RoomMessage extends Component<Signature> {
         @errorMessage={{this.errorMessage}}
         @isStreaming={{@isStreaming}}
         @retryAction={{if
-          this.hasCommandField
-          (fn (perform this.run) @message.command @roomId)
+          @message.command
+          (fn this.run @message.command @roomId)
           @retryAction
         }}
         @isPending={{@isPending}}
         data-test-boxel-message-from={{@message.author.name}}
         ...attributes
       >
-        {{#if this.hasCommandField}}
+        {{#if @message.command}}
           <div
             class='command-button-bar'
             {{! In test, if we change this isIdle check to the task running locally on this component, it will fail because roomMessages get destroyed during re-indexing. 
@@ -196,7 +196,7 @@ export default class RoomMessage extends Component<Signature> {
             </Button>
             <ApplyButton
               @state={{this.applyButtonState}}
-              {{on 'click' (fn (perform this.run) @message.command @roomId)}}
+              {{on 'click' (fn this.run @message.command @roomId)}}
               data-test-command-apply={{this.applyButtonState}}
             />
           </div>
@@ -381,10 +381,6 @@ export default class RoomMessage extends Component<Signature> {
       .join(', ');
   }
 
-  get hasCommandField() {
-    return Boolean(this.args.message.command);
-  }
-
   private get previewCommandCode() {
     if (!this.command) {
       return JSON.stringify({}, null, 2);
@@ -405,13 +401,14 @@ export default class RoomMessage extends Component<Signature> {
     return this.matrixService.failedCommandState.get(this.command.eventId);
   }
 
-  run = task(async (command: CommandField, roomId: string) => {
+  @action
+  async run(command: CommandField, roomId: string) {
     return this.commandService.run.perform(command, roomId);
-  });
+  }
 
   @cached
   private get applyButtonState(): ApplyButtonState {
-    if (this.run.isRunning) {
+    if (this.commandService.run.isRunning) {
       return 'applying';
     }
     if (this.failedCommandState) {
