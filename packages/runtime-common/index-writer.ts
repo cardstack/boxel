@@ -63,6 +63,7 @@ export interface InstanceEntry {
   searchData: Record<string, any>;
   isolatedHtml?: string;
   embeddedHtml?: Record<string, string>;
+  fittedHtml?: Record<string, string>;
   atomHtml?: string;
   types: string[];
   deps: Set<string>;
@@ -153,6 +154,7 @@ export class Batch {
               search_doc: entry.searchData,
               isolated_html: entry.isolatedHtml,
               embedded_html: entry.embeddedHtml,
+              fitted_html: entry.fittedHtml,
               atom_html: entry.atomHtml,
               deps: [...entry.deps],
               types: entry.types,

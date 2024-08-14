@@ -1625,6 +1625,11 @@ module('Realm Server', function (hooks) {
                     Embedded Card Person: <@fields.firstName/>
                   </template>
                 }
+                static fitted = class Fitted extends Component<typeof this> {
+                  <template>
+                    Fitted Card Person: <@fields.firstName/>
+                  </template>
+                }
               }
             `,
             'john.json': {

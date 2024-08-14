@@ -12,10 +12,10 @@ interface Signature {
     card: BaseDef;
   };
 }
-export default class EmbeddedFormatGallery extends Component<Signature> {
+export default class FittedFormatGallery extends Component<Signature> {
   @provide(DefaultFormatContextName)
   get defaultFormat() {
-    return 'embedded';
+    return 'fitted';
   }
 
   @cached
@@ -113,13 +113,13 @@ export default class EmbeddedFormatGallery extends Component<Signature> {
     <style>
       .card {
         /* this is how a border would appear around a card.
-           note that a card is not supposed to draw its own border 
+           note that a card is not supposed to draw its own border
          */
         box-shadow: 0 0 0 1px var(--boxel-light-500);
         height: 100%;
         overflow: hidden;
         border-radius: var(--boxel-border-radius);
-        container-name: embedded-card;
+        container-name: fitted-card;
         container-type: size;
       }
       .item {

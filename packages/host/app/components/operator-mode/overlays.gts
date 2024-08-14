@@ -87,7 +87,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
             <IconButton
               {{on 'mouseenter' (fn this.setCurrentlyHoveredCard renderedCard)}}
               {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
-              class='hover-button hover-button-embedded-card preview'
+              class='hover-button hover-button-fitted-card preview'
               @icon={{EyeIcon}}
               aria-label='preview card'
             />
@@ -156,7 +156,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
     {{/each}}
     <style>
       :global(:root) {
-        --overlay-embedded-card-header-height: 2.5rem;
+        --overlay-fitted-card-header-height: 2.5rem;
       }
       .actions-overlay {
         border-radius: var(--boxel-border-radius);
@@ -195,11 +195,11 @@ export default class OperatorModeOverlays extends Component<Signature> {
         bottom: 0;
         right: 0;
       }
-      .hover-button.hover-button-embedded-card {
+      .hover-button.hover-button-fitted-card {
         left: calc(100% - var(--boxel-sp-xl));
         top: calc(
-          (100% - var(--overlay-embedded-card-header-height)) / 2 +
-            var(--overlay-embedded-card-header-height) - 1em
+          (100% - var(--overlay-fitted-card-header-height)) / 2 +
+            var(--overlay-fitted-card-header-height) - 1em
         );
         position: absolute;
       }

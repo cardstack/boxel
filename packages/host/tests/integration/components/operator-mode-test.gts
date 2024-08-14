@@ -106,7 +106,14 @@ module('Integration | operator-mode', function (hooks) {
       });
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          <h3 data-test-pet={{@model.name}}>
+          <h3 data-test-pet={{@model.name}} data-test-embedded>
+            <@fields.name />
+          </h3>
+        </template>
+      };
+      static fitted = class Fitted extends Component<typeof this> {
+        <template>
+          <h3 data-test-pet={{@model.name}} data-test-fitted>
             <@fields.name />
           </h3>
         </template>
@@ -2519,15 +2526,14 @@ module('Integration | operator-mode', function (hooks) {
       });
       await triggerEvent(document, 'mousemove', {
         clientX: targetRect.left + targetRect.width / 2,
-        clientY: targetRect.top - 100,
+        clientY: targetRect.top - 50,
       });
 
       await triggerEvent(itemElement, 'mouseup', {
         clientX: targetRect.left + targetRect.width / 2,
-        clientY: targetRect.top - 100,
+        clientY: targetRect.top - 50,
       });
     };
-
     await dragAndDrop('[data-test-sort="1"]', '[data-test-sort="0"]');
     await dragAndDrop('[data-test-sort="2"]', '[data-test-sort="1"]');
     assert.dom(`[data-test-item]`).exists({ count: 3 });

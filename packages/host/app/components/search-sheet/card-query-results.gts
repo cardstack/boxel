@@ -69,7 +69,7 @@ export default class CardQueryResults extends Component<Signature> {
   <template>
     <PrerenderedCardSearch
       @query={{this.query}}
-      @format='embedded'
+      @format='fitted'
       @realms={{this.realms}}
     >
       <:loading>

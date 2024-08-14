@@ -884,7 +884,7 @@ module('Acceptance | code submode tests', function (hooks) {
       .hasClass('active');
     assert
       .dom(
-        '[data-test-code-mode-card-preview-body ] .field-component-card.embedded-format',
+        '[data-test-code-mode-card-preview-body ] .field-component-card.fitted-format',
       )
       .exists();
 

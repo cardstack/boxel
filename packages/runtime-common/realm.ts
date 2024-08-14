@@ -32,6 +32,7 @@ import {
   maybeHandleScopedCSSRequest,
   authorizationMiddleware,
   internalKeyFor,
+  isValidPrerenderedHtmlFormat,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -1600,7 +1601,7 @@ export class Realm {
 
     let parsedQueryString = qs.parse(new URL(request.url).search.slice(1));
     let htmlFormat = parsedQueryString.prerenderedHtmlFormat as string;
-    if (!htmlFormat || (htmlFormat !== 'embedded' && htmlFormat !== 'atom')) {
+    if (!isValidPrerenderedHtmlFormat(htmlFormat)) {
       return badRequest(
         JSON.stringify({
           errors: [

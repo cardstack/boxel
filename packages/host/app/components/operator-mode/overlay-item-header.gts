@@ -79,7 +79,7 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
             @height='20px'
             class='header-actions__button'
             aria-label='Edit'
-            data-test-embedded-card-edit-button
+            data-test-fitted-card-edit-button
             {{on
               'click'
               (fn
@@ -103,7 +103,7 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
                   @height='16px'
                   class='header-actions__button'
                   aria-label='Options'
-                  data-test-embedded-card-options-button
+                  data-test-fitted-card-options-button
                   {{bindings}}
                 />
               </:trigger>
@@ -128,7 +128,7 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
       .overlay-item-header {
         background-color: var(--boxel-light);
         border-bottom: 1px solid var(--boxel-200);
-        height: var(--overlay-embedded-card-header-height);
+        height: var(--overlay-fitted-card-header-height);
         display: flex;
         justify-content: space-between;
         padding: var(--boxel-sp-xxs);
@@ -160,10 +160,10 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
         display: flex;
         border-radius: 5px;
         height: calc(
-          var(--overlay-embedded-card-header-height) - 2 * var(--boxel-sp-xxxs)
+          var(--overlay-fitted-card-header-height) - 2 * var(--boxel-sp-xxxs)
         );
         width: calc(
-          var(--overlay-embedded-card-header-height) - 2 * var(--boxel-sp-xxxs)
+          var(--overlay-fitted-card-header-height) - 2 * var(--boxel-sp-xxxs)
         );
       }
       .header-actions__button:hover {

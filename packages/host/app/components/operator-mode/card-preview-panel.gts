@@ -33,7 +33,7 @@ import RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
-import EmbeddedFormatGallery from './embedded-format-gallery';
+import FittedFormatGallery from './fitted-format-gallery';
 
 interface Signature {
   Element: HTMLElement;
@@ -150,7 +150,7 @@ export default class CardPreviewPanel extends Component<Signature> {
       }}
     >
       {{#if (eq this.format 'embedded')}}
-        <EmbeddedFormatGallery @card={{@card}} />
+        <FittedFormatGallery @card={{@card}} />
       {{else}}
         <Preview @card={{@card}} @format={{this.format}} />
       {{/if}}
