@@ -169,7 +169,7 @@ export default class RoomMessage extends Component<Signature> {
         @errorMessage={{this.errorMessage}}
         @isStreaming={{@isStreaming}}
         @retryAction={{if
-          this.hasCommandField
+          @message.command
           (fn (perform this.run) @message.command @roomId)
           @retryAction
         }}
@@ -177,7 +177,7 @@ export default class RoomMessage extends Component<Signature> {
         data-test-boxel-message-from={{@message.author.name}}
         ...attributes
       >
-        {{#if this.hasCommandField}}
+        {{#if @message.command}}
           <div
             class='command-button-bar'
             {{! In test, if we change this isIdle check to the task running locally on this component, it will fail because roomMessages get destroyed during re-indexing. 
@@ -381,10 +381,6 @@ export default class RoomMessage extends Component<Signature> {
       .join(', ');
   }
 
-  get hasCommandField() {
-    return Boolean(this.args.message.command);
-  }
-
   private get previewCommandCode() {
     if (!this.command) {
       return JSON.stringify({}, null, 2);
@@ -406,7 +402,7 @@ export default class RoomMessage extends Component<Signature> {
   }
 
   run = task(async (command: CommandField, roomId: string) => {
-    return this.commandService.run.perform(command, roomId);
+    return this.commandService.run.unlinked().perform(command, roomId);
   });
 
   @cached
