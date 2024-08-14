@@ -3,6 +3,7 @@ import Component from '@glimmer/component';
 import { provide } from 'ember-provide-consume-context';
 
 import {
+  CardContextName,
   DefaultFormatContextName,
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -13,6 +14,8 @@ import type {
   Field,
 } from 'https://cardstack.com/base/card-api';
 
+import PrerenderedCardSearch from './prerendered-card-search';
+
 interface Signature {
   Element: any;
   Args: {
@@ -20,13 +23,24 @@ interface Signature {
     format?: Format;
     field?: Field;
     codeRef?: ResolvedCodeRef;
+    cardContext?: Record<string, any>;
   };
 }
 
 export default class Preview extends Component<Signature> {
   @provide(DefaultFormatContextName)
+  // @ts-ignore "defaultFormat is declared but not used"
   get defaultFormat() {
     return this.args.format ?? 'isolated';
+  }
+
+  @provide(CardContextName)
+  // @ts-ignore "context is declared but not used"
+  private get context() {
+    return {
+      prerenderedCardSearchComponent: PrerenderedCardSearch,
+      ...this.args.cardContext,
+    };
   }
 
   <template>
