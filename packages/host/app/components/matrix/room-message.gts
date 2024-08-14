@@ -170,7 +170,7 @@ export default class RoomMessage extends Component<Signature> {
         @isStreaming={{@isStreaming}}
         @retryAction={{if
           @message.command
-          (fn this.run @message.command @roomId)
+          (fn (perform this.run) @message.command @roomId)
           @retryAction
         }}
         @isPending={{@isPending}}
@@ -196,7 +196,7 @@ export default class RoomMessage extends Component<Signature> {
             </Button>
             <ApplyButton
               @state={{this.applyButtonState}}
-              {{on 'click' (fn this.run @message.command @roomId)}}
+              {{on 'click' (fn (perform this.run) @message.command @roomId)}}
               data-test-command-apply={{this.applyButtonState}}
             />
           </div>
@@ -401,14 +401,13 @@ export default class RoomMessage extends Component<Signature> {
     return this.matrixService.failedCommandState.get(this.command.eventId);
   }
 
-  @action
-  async run(command: CommandField, roomId: string) {
-    return this.commandService.run.perform(command, roomId);
-  }
+  run = task(async (command: CommandField, roomId: string) => {
+    return this.commandService.run.unlinked().perform(command, roomId);
+  });
 
   @cached
   private get applyButtonState(): ApplyButtonState {
-    if (this.commandService.run.isRunning) {
+    if (this.run.isRunning) {
       return 'applying';
     }
     if (this.failedCommandState) {
