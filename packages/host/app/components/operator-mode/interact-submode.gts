@@ -482,67 +482,75 @@ export default class InteractSubmode extends Component<Signature> {
 
   private openSelectedSearchResultInStack = restartableTask(
     async (cardId: string) => {
-      let searchSheetTrigger = this.searchSheetTrigger; // Will be set by showSearchWithTrigger
-      let card = await this.cardService.getCard(cardId);
-      if (!card) {
-        return;
-      }
-
-      // In case the left button was clicked, whatever is currently in stack with index 0 will be moved to stack with index 1,
-      // and the card will be added to stack with index 0. shiftStack executes this logic.
-      if (
-        searchSheetTrigger ===
-        SearchSheetTriggers.DropCardToLeftNeighborStackButton
-      ) {
-        for (
-          let stackIndex = this.stacks.length - 1;
-          stackIndex >= 0;
-          stackIndex--
-        ) {
-          this.operatorModeStateService.shiftStack(
-            this.stacks[stackIndex],
-            stackIndex + 1,
-          );
+      let waiterToken = waiter.beginAsync();
+      try {
+        let searchSheetTrigger = this.searchSheetTrigger; // Will be set by showSearchWithTrigger
+        let card = await this.cardService.getCard(cardId);
+        if (!card) {
+          return;
         }
-        this.publicAPI(this, 0).viewCard(card, 'isolated');
 
-        // In case the right button was clicked, the card will be added to stack with index 1.
-      } else if (
-        searchSheetTrigger ===
-        SearchSheetTriggers.DropCardToRightNeighborStackButton
-      ) {
-        this.publicAPI(this, this.stacks.length).viewCard(card, 'isolated');
-      } else {
-        // In case, that the search was accessed directly without clicking right and left buttons,
-        // the rightmost stack will be REPLACED by the selection
-        let numberOfStacks = this.operatorModeStateService.numberOfStacks();
-        let stackIndex = numberOfStacks - 1;
-        let stack: Stack | undefined;
-
+        // In case the left button was clicked, whatever is currently in stack with index 0 will be moved to stack with index 1,
+        // and the card will be added to stack with index 0. shiftStack executes this logic.
         if (
-          numberOfStacks === 0 ||
-          this.operatorModeStateService.stackIsEmpty(stackIndex)
+          searchSheetTrigger ===
+          SearchSheetTriggers.DropCardToLeftNeighborStackButton
         ) {
-          this.publicAPI(this, 0).viewCard(card, 'isolated');
+          for (
+            let stackIndex = this.stacks.length - 1;
+            stackIndex >= 0;
+            stackIndex--
+          ) {
+            this.operatorModeStateService.shiftStack(
+              this.stacks[stackIndex],
+              stackIndex + 1,
+            );
+          }
+          await this.publicAPI(this, 0).viewCard(card, 'isolated');
+
+          // In case the right button was clicked, the card will be added to stack with index 1.
+        } else if (
+          searchSheetTrigger ===
+          SearchSheetTriggers.DropCardToRightNeighborStackButton
+        ) {
+          await this.publicAPI(this, this.stacks.length).viewCard(
+            card,
+            'isolated',
+          );
         } else {
-          stack = this.operatorModeStateService.rightMostStack();
-          if (stack) {
-            let bottomMostItem = stack[0];
-            if (bottomMostItem) {
-              let stackItem = new StackItem({
-                owner: this,
-                card,
-                format: 'isolated',
-                stackIndex,
-              });
-              await stackItem.ready();
-              this.operatorModeStateService.clearStackAndAdd(
-                stackIndex,
-                stackItem,
-              );
+          // In case, that the search was accessed directly without clicking right and left buttons,
+          // the rightmost stack will be REPLACED by the selection
+          let numberOfStacks = this.operatorModeStateService.numberOfStacks();
+          let stackIndex = numberOfStacks - 1;
+          let stack: Stack | undefined;
+
+          if (
+            numberOfStacks === 0 ||
+            this.operatorModeStateService.stackIsEmpty(stackIndex)
+          ) {
+            await this.publicAPI(this, 0).viewCard(card, 'isolated');
+          } else {
+            stack = this.operatorModeStateService.rightMostStack();
+            if (stack) {
+              let bottomMostItem = stack[0];
+              if (bottomMostItem) {
+                let stackItem = new StackItem({
+                  owner: this,
+                  card,
+                  format: 'isolated',
+                  stackIndex,
+                });
+                await stackItem.ready();
+                this.operatorModeStateService.clearStackAndAdd(
+                  stackIndex,
+                  stackItem,
+                );
+              }
             }
           }
         }
+      } finally {
+        waiter.endAsync(waiterToken);
       }
     },
   );
