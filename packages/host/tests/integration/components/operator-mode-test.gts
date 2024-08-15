@@ -562,21 +562,14 @@ module('Integration | operator-mode', function (hooks) {
 
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
     assert.dom(`[data-test-cards-grid-item]`).exists();
+
     assert
-      .dom(
-        `[data-test-cards-grid-item="${testRealmURL}BlogPost/1"] [data-test-cards-grid-item-thumbnail-text]`,
-      )
-      .hasText('Blog Post');
+      .dom(`[data-test-cards-grid-item="${testRealmURL}BlogPost/1"]`)
+      .includesText('Blog Post');
     assert
-      .dom(
-        `[data-test-cards-grid-item="${testRealmURL}BlogPost/1"] [data-test-cards-grid-item-title]`,
-      )
-      .hasText('Outer Space Journey');
-    assert
-      .dom(
-        `[data-test-cards-grid-item="${testRealmURL}BlogPost/1"] [data-test-cards-grid-item-display-name]`,
-      )
-      .hasText('Blog Post');
+      .dom(`[data-test-cards-grid-item="${testRealmURL}BlogPost/1"] `)
+      .includesText('Outer Space Journey');
+
     assert
       .dom(
         `[data-test-cards-grid-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
@@ -1908,7 +1901,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-boxel-menu-item]').doesNotExist();
   });
 
-  test(`"links to" field has an overlay header and click on the embedded card will open it on the stack`, async function (assert) {
+  test(`click on "links to" the embedded card will open it on the stack`, async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1919,8 +1912,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
-    // Linked cards have the realm's icon in the overlaid header title
-    await waitFor('[data-test-overlay-card-display-name="Author"]');
+    await waitFor(`[data-test-overlay-card="${testRealmURL}Author/1"]`);
 
     await click('[data-test-author]');
     await waitFor('[data-test-stack-card-index="1"]');

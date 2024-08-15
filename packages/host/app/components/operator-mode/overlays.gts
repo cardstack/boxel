@@ -27,15 +27,18 @@ import {
   IconTrash,
 } from '@cardstack/boxel-ui/icons';
 
-import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
+import { type Actions } from '@cardstack/runtime-common';
 
 import type CardService from '@cardstack/host/services/card-service';
 
 import RealmService from '@cardstack/host/services/realm';
 
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import type { Format } from 'https://cardstack.com/base/card-api';
+import { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { RenderedCardForOverlayActions } from './stack-item';
+import { removeFileExtension } from '../search-sheet/utils';
+
+import { CardDefOrId, RenderedCardForOverlayActions } from './stack-item';
 
 import type { MiddlewareState } from '@floating-ui/dom';
 
@@ -43,8 +46,8 @@ interface Signature {
   Args: {
     renderedCardsForOverlayActions: RenderedCardForOverlayActions[];
     publicAPI: Actions;
-    toggleSelect?: (card: CardDef) => void;
-    selectedCards?: TrackedArray<CardDef>;
+    toggleSelect?: (cardDefOrId: CardDefOrId) => void;
+    selectedCards: TrackedArray<CardDefOrId>;
   };
   Element: HTMLElement;
 }
@@ -55,19 +58,23 @@ export default class OperatorModeOverlays extends Component<Signature> {
   <template>
     {{#each this.renderedCardsForOverlayActionsWithEvents as |renderedCard|}}
       {{#let
-        renderedCard.card (this.isSelected renderedCard.card)
-        as |card isSelected|
+        renderedCard.cardDefOrId
+        (this.getCardId renderedCard.cardDefOrId)
+        (this.isSelected renderedCard.cardDefOrId)
+        as |cardDefOrId cardId isSelected|
       }}
         <div
           class={{cn
             'actions-overlay'
             selected=isSelected
-            hovered=(this.isHovered card)
+            hovered=(this.isHovered renderedCard)
           }}
           {{velcro renderedCard.element middleware=(Array this.offset)}}
-          data-test-overlay-selected={{if isSelected card.id}}
-          data-test-overlay-card={{card.id}}
-          data-test-overlay-card-display-name={{cardTypeDisplayName card}}
+          data-test-overlay-selected={{if
+            isSelected
+            (removeFileExtension cardId)
+          }}
+          data-test-overlay-card={{removeFileExtension cardId}}
           style={{this.zIndexStyle renderedCard.element}}
           {{on 'mouseenter' (fn this.setCurrentlyHoveredCard renderedCard)}}
           {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
@@ -79,12 +86,12 @@ export default class OperatorModeOverlays extends Component<Signature> {
                 <IconButton
                   class='actions-item__button'
                   {{! @glint-ignore (glint thinks toggleSelect is not in this scope but it actually is - we check for it in the condition above) }}
-                  {{on 'click' (fn @toggleSelect card)}}
+                  {{on 'click' (fn @toggleSelect cardDefOrId)}}
                   @width='auto'
                   @height='auto'
                   @icon={{if isSelected IconCircleSelected IconCircle}}
                   aria-label='select card'
-                  data-test-overlay-select={{card.id}}
+                  data-test-overlay-select={{(removeFileExtension cardId)}}
                 />
               </div>
             {{/if}}
@@ -101,7 +108,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
                     'click'
                     (fn
                       this.openOrSelectCard
-                      card
+                      cardDefOrId
                       'edit'
                       renderedCard.fieldType
                       renderedCard.fieldName
@@ -143,7 +150,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
                           @closeMenu={{dd.close}}
                           @items={{array
                             (menuItem
-                              'View card' (fn this.openOrSelectCard card)
+                              'View card' (fn this.openOrSelectCard cardDefOrId)
                             )
                           }}
                           {{on
@@ -161,7 +168,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
                           @items={{array
                             (menuItem
                               'Delete'
-                              (fn @publicAPI.delete card)
+                              (fn @publicAPI.delete cardDefOrId)
                               icon=IconTrash
                               dangerous=true
                             )
@@ -394,7 +401,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
         // contained field was clicked
         e.stopPropagation();
         this.openOrSelectCard(
-          renderedCard.card,
+          renderedCard.cardDefOrId,
           renderedCard.stackItem.format,
           renderedCard.fieldType,
           renderedCard.fieldName,
@@ -417,7 +424,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
       case 'edit':
         return (
           this.isField(renderedCard) &&
-          this.realm.canWrite(renderedCard.card.id) &&
+          this.realm.canWrite(this.getCardId(renderedCard.cardDefOrId)) &&
           renderedCard.stackItem.format === 'edit'
         );
       case 'more-options':
@@ -441,7 +448,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
       case 'delete':
         return (
           !this.isField(renderedCard) &&
-          this.realm.canWrite(renderedCard.card.id)
+          this.realm.canWrite(this.getCardId(renderedCard.cardDefOrId))
         );
       default:
         return false;
@@ -454,6 +461,10 @@ export default class OperatorModeOverlays extends Component<Signature> {
       renderedCard.fieldType === 'linksTo' ||
       renderedCard.fieldType === 'linksToMany'
     );
+  }
+
+  @action getCardId(cardDefOrId: CardDefOrId) {
+    return typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
   }
 
   private setCurrentlyHoveredCard = (
@@ -493,35 +504,54 @@ export default class OperatorModeOverlays extends Component<Signature> {
   }
 
   @action private openOrSelectCard(
-    card: CardDef,
+    cardDefOrId: CardDefOrId,
     format: Format = 'isolated',
     fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
     fieldName?: string,
   ) {
     if (this.args.toggleSelect && this.args.selectedCards?.length) {
-      this.args.toggleSelect(card);
+      this.args.toggleSelect(cardDefOrId);
     } else {
-      this.viewCard.perform(card, format, fieldType, fieldName);
+      this.viewCard.perform(cardDefOrId, format, fieldType, fieldName);
     }
   }
 
-  @action private isSelected(card: CardDef) {
-    return this.args.selectedCards?.some((c: CardDef) => c === card);
+  @action private isSelected(cardDefOrId: CardDefOrId) {
+    return this.args.selectedCards?.some(
+      (card: CardDefOrId) => card === cardDefOrId,
+    );
   }
 
-  @action private isHovered(card: CardDef) {
-    return this.currentlyHoveredCard?.card.id === card.id;
+  @action private isHovered(renderedCard: RenderedCardForOverlayActions) {
+    return this.currentlyHoveredCard === renderedCard;
   }
 
   private viewCard = dropTask(
     async (
-      card: CardDef,
+      cardDefOrId: CardDefOrId,
       format: Format = 'isolated',
       fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
       fieldName?: string,
     ) => {
-      let canWrite = this.realm.canWrite(card.id);
+      let cardId =
+        typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
+
+      let canWrite = this.realm.canWrite(cardId);
+
       format = canWrite ? format : 'isolated';
+
+      let card: CardDef | undefined;
+      if (typeof cardDefOrId === 'string') {
+        card = await this.cardService.getCard(cardId);
+      } else {
+        card = cardDefOrId;
+      }
+
+      if (!card) {
+        console.error(`can't load card: ${cardId}`);
+        return;
+      }
+
       await this.args.publicAPI.viewCard(card, format, fieldType, fieldName);
     },
   );
@@ -535,6 +565,6 @@ export default class OperatorModeOverlays extends Component<Signature> {
       zIndexParentElement === 'auto'
         ? zIndexParentElement
         : String(Number(zIndexParentElement) + 1);
-    return htmlSafe(`z-index: ${zIndex};`);
+    return htmlSafe(`z-index: ${zIndex}`);
   }
 }

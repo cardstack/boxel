@@ -2,9 +2,12 @@ import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 import Component from '@glimmer/component';
 
+import { didCancel, restartableTask } from 'ember-concurrency';
 import { trackedFunction } from 'ember-resources/util/function';
-import { flatMap } from 'lodash';
+import { flatMap, isEqual } from 'lodash';
 import { stringify } from 'qs';
+
+import { TrackedSet } from 'tracked-built-ins';
 
 import {
   PrerenderedCard as PrerenderedCardData,
@@ -14,9 +17,11 @@ import { isPrerenderedCardCollectionDocument } from '@cardstack/runtime-common/c
 
 import { type Format } from 'https://cardstack.com/base/card-api';
 
+import SubscribeToRealms from '../helpers/subscribe-to-realms';
 import { type HTMLComponent, htmlComponent } from '../lib/html-component';
-import CardService from '../services/card-service';
-import LoaderService from '../services/loader-service';
+
+import type CardService from '../services/card-service';
+import type LoaderService from '../services/loader-service';
 
 const waiter = buildWaiter('prerendered-card-search:waiter');
 
@@ -47,6 +52,15 @@ export default class PrerenderedCardSearch extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
   _lastSearchQuery: Query | null = null;
+  _lastSearchResults: PrerenderedCard[] | undefined;
+  realmsNeedingRefresh = new TrackedSet<string>();
+
+  constructor(owner: unknown, args: Signature['Args']) {
+    super(owner, args);
+    for (const realm of this.args.realms) {
+      this.realmsNeedingRefresh.add(realm);
+    }
+  }
 
   async searchPrerendered(
     query: Query,
@@ -80,27 +94,74 @@ export default class PrerenderedCardSearch extends Component<Signature> {
   }
 
   private runSearch = trackedFunction(this, async () => {
-    let { query, format, realms } = this.args;
+    let { query, format } = this.args;
+
+    if (query && format && this.realmsNeedingRefresh.size > 0) {
+      try {
+        await this.runSearchTask.perform();
+      } catch (e) {
+        if (!didCancel(e)) {
+          // re-throw the non-cancelation error
+          throw e;
+        }
+      }
+    }
+    return (
+      this.runSearchTask.lastSuccessful?.value ?? {
+        instances: [],
+        isLoading: true,
+      }
+    );
+  });
+
+  runSearchTask = restartableTask(async () => {
+    let { query, format } = this.args;
+    if (!isEqual(query, this._lastSearchQuery)) {
+      this._lastSearchResults = undefined;
+      this._lastSearchQuery = query;
+    }
+    let results = [...(this._lastSearchResults || [])];
+    let realmsNeedingRefresh = Array.from(this.realmsNeedingRefresh);
     let token = waiter.beginAsync();
     try {
-      let instances = flatMap(
-        await Promise.all(
-          realms.map(
-            async (realm) => await this.searchPrerendered(query, format, realm),
+      for (let realmNeedingRefresh of realmsNeedingRefresh) {
+        results = results.filter((r) => !r.url.startsWith(realmNeedingRefresh));
+      }
+      results.push(
+        ...flatMap(
+          await Promise.all(
+            Array.from(realmsNeedingRefresh).map(
+              async (realm) =>
+                await this.searchPrerendered(query, format, realm),
+            ),
           ),
         ),
       );
-      return { instances, isLoading: false };
+      this._lastSearchResults = results;
+      return { instances: results, isLoading: false };
     } finally {
       waiter.endAsync(token);
     }
   });
 
   private get searchResults() {
-    return this.runSearch.value || { instances: null, isLoading: true };
+    if (this.runSearch.value) {
+      return this.runSearch.value;
+    } else if (this._lastSearchResults) {
+      return { instances: this._lastSearchResults, isLoading: false };
+    } else {
+      return { instances: [], isLoading: true };
+    }
   }
 
+  private markRealmNeedsRefreshing = (ev: MessageEvent, realm: string) => {
+    if (ev.type === 'index') {
+      this.realmsNeedingRefresh.add(realm);
+    }
+  };
+
   <template>
+    {{SubscribeToRealms @realms this.markRealmNeedsRefreshing}}
     {{#if this.searchResults.isLoading}}
       {{yield to='loading'}}
     {{else}}

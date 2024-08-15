@@ -1,19 +1,36 @@
-import { RenderingTestContext, render, waitFor } from '@ember/test-helpers';
+import {
+  RenderingTestContext,
+  type TestContext,
+  getContext,
+  render,
+  waitFor,
+} from '@ember/test-helpers';
+
+import { waitUntil } from '@ember/test-helpers';
 
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
-import { Loader, Query, baseRealm } from '@cardstack/runtime-common';
+import {
+  Loader,
+  Query,
+  type Realm,
+  baseRealm,
+} from '@cardstack/runtime-common';
 
+import CardPrerender from '@cardstack/host/components/card-prerender';
 import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
 
+import type CardService from '@cardstack/host/services/card-service';
 import LoaderService from '@cardstack/host/services/loader-service';
 
 import {
   CardDocFiles,
+  TestContextWithSSE,
   lookupLoaderService,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  setupServerSentEvents,
   testRealmURL,
 } from '../../helpers';
 import {
@@ -29,6 +46,7 @@ import {
 module(`Integration | prerendered-card-search`, function (hooks) {
   let loader: Loader;
   let loaderService: LoaderService;
+  let testRealm: Realm;
 
   setupRenderingTest(hooks);
   hooks.beforeEach(function () {
@@ -37,6 +55,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
   });
 
   setupLocalIndexing(hooks);
+  setupServerSentEvents(hooks);
   setupBaseRealm(hooks);
   hooks.beforeEach(async function (this: RenderingTestContext) {
     class PersonField extends FieldDef {
@@ -268,7 +287,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
       },
     };
 
-    await setupIntegrationTestRealm({
+    ({ realm: testRealm } = await setupIntegrationTestRealm({
       loader,
       contents: {
         'article.gts': { Article },
@@ -278,7 +297,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
         'post.gts': { Post },
         ...sampleCards,
       },
-    });
+    }));
   });
 
   test(`can search for cards by using the 'eq' filter`, async function (assert) {
@@ -331,5 +350,68 @@ module(`Integration | prerendered-card-search`, function (hooks) {
       .dom('.card-container .book')
       .hasStyle({ backgroundColor: 'rgb(255, 255, 0)' });
     assert.dom('.card-container .author').hasStyle({ color: 'rgb(0, 0, 255)' });
+  });
+
+  test<TestContextWithSSE>(`refreshes when a queried realm changes`, async function (assert) {
+    let query: Query = {
+      filter: {
+        on: {
+          module: `${testRealmURL}book`,
+          name: 'Book',
+        },
+        eq: {
+          'author.firstName': 'Cardy',
+        },
+      },
+      sort: [
+        {
+          by: 'author.lastName',
+          on: { module: `${testRealmURL}book`, name: 'Book' },
+        },
+      ],
+    };
+    let realms = [testRealmURL];
+    await render(<template>
+      <PrerenderedCardSearch
+        @query={{query}}
+        @format='embedded'
+        @realms={{realms}}
+      >
+        <:loading>
+          Loading...
+        </:loading>
+        <:response as |cards|>
+          {{#each cards as |card|}}
+            <div class='card-container'>
+              <card.component />
+            </div>
+          {{/each}}
+        </:response>
+      </PrerenderedCardSearch>
+
+      {{! to support incremental indexing }}
+      <CardPrerender />
+    </template>);
+    await waitFor('.card-container');
+    assert.dom('.card-container').exists({ count: 2 });
+
+    await this.expectEvents({
+      assert,
+      realm: testRealm,
+      expectedNumberOfEvents: 1,
+      callback: async () => {
+        let owner = (getContext() as TestContext).owner;
+        let cardService = owner.lookup('service:card-service') as CardService;
+        console.log('triggering card deletion');
+        await cardService.deleteSource(new URL(`${testRealmURL}card-2.json`));
+      },
+    });
+    await waitUntil(() => {
+      return document.querySelectorAll('.card-container').length === 1;
+    });
+    assert.dom('.card-container').exists({ count: 1 });
+    assert
+      .dom('.card-container:nth-child(1)')
+      .containsText('Cardy Stackington Jr. III');
   });
 });

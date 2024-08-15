@@ -4,7 +4,7 @@ import { schedule } from '@ember/runloop';
 import Modifier from 'ember-modifier';
 import { TrackedArray } from 'tracked-built-ins';
 
-export default class ElementTracker<Meta = unknown> {
+export default class ElementTracker<Meta extends object = object> {
   elements: { element: HTMLElement; meta: Meta }[] = new TrackedArray();
 
   get trackElement(): typeof Modifier<{ Args: { Named: Meta } }> {
@@ -12,6 +12,11 @@ export default class ElementTracker<Meta = unknown> {
     let observers = new Map<HTMLElement, MutationObserver>();
     return class TrackElement extends Modifier<{ Args: { Named: Meta } }> {
       modify(element: HTMLElement, _pos: unknown, meta: Meta) {
+        if (!('card' in meta) && !('cardId' in meta)) {
+          throw new Error(
+            'ElementTracker: meta.card or meta.cardId is required',
+          );
+        }
         // Without scheduling this after render, this produces the "attempted to update value, but it had already been used previously in the same computation" type error
         schedule('afterRender', () => {
           let updateTracker = () => {
