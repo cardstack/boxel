@@ -25,6 +25,7 @@ import {
   baseCardRef,
   chooseCard,
   codeRefWithAbsoluteURL,
+  getCard,
   moduleFrom,
   RealmPaths,
   type Actions,
@@ -254,13 +255,11 @@ export default class InteractSubmode extends Component<Signature> {
       runCommand: async (
         card: CardDef,
         skillCardId: string,
-        skillCardRealm: URL,
         message?: string,
       ): Promise<void> => {
         await here.runCommand.perform(
           card,
           skillCardId,
-          skillCardRealm,
           message ?? 'Run command',
         );
       },
@@ -339,20 +338,12 @@ export default class InteractSubmode extends Component<Signature> {
   });
 
   private runCommand = restartableTask(
-    async (
-      card: CardDef,
-      skillCardId: string,
-      skillCardRealm: URL,
-      message: string,
-    ) => {
-      let [commandCard] = await this.cardService.search(
-        { filter: { eq: { id: skillCardId } } },
-        skillCardRealm,
-      );
+    async (card: CardDef, skillCardId: string, message: string) => {
+      let resource = getCard(new URL(skillCardId));
+      await resource.loaded;
+      let commandCard = resource.card;
       if (!commandCard) {
-        throw new Error(
-          `Could not find card "${skillCardId}" in realm "${skillCardRealm}"`,
-        );
+        throw new Error(`Could not find card "${skillCardId}"`);
       }
       let newRoomId = await this.matrixService.createRoom(`New AI chat`, [
         aiBotUsername,

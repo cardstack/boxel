@@ -448,7 +448,6 @@ class Isolated extends AppCard.isolated {
         await runCommand(
           card,
           `${baseRealm.url}SkillCard/generate-product-requirements`,
-          new URL(baseRealm.url),
           'Generate product requirements document',
         );
         this.prompt = this.promptReset;

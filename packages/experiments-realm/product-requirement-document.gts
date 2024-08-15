@@ -56,7 +56,11 @@ export class ProductRequirementDocument extends CardDef {
               </div>
               <h1><@fields.title /></h1>
             </div>
-            <Button class='generate-button' @kind='primary-dark'>
+            <Button
+              class='generate-button'
+              @kind='primary-dark'
+              @disabled={{true}}
+            >
               <span class='generate-button-logo' />
               Generate App Now
             </Button>
