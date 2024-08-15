@@ -24,7 +24,7 @@ export default class EmbeddedPreview extends Component<Signature> {
   }
 
   <template>
-    <div class='card' style='margin: 20px;'>
+    <div class='card'>
       <this.renderedCard @displayContainer={{false}} />
     </div>
 
@@ -34,8 +34,9 @@ export default class EmbeddedPreview extends Component<Signature> {
            note that a card is not supposed to draw its own border
          */
         box-shadow: 0 0 0 1px var(--boxel-light-500);
-        overflow: hidden;
         border-radius: var(--boxel-border-radius);
+        overflow: hidden;
+        margin: 20px;
         container-name: embedded-card;
         container-type: inline-size;
       }

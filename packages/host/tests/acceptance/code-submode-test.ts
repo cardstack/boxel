@@ -869,6 +869,26 @@ module('Acceptance | code submode tests', function (hooks) {
       .dom('[data-test-preview-card-footer-button-isolated]')
       .hasClass('active');
 
+    await click('[data-test-preview-card-footer-button-fitted]');
+    assert
+      .dom('[data-test-preview-card-footer-button-fitted]')
+      .hasClass('active');
+    assert
+      .dom(
+        '[data-test-code-mode-card-preview-body ] .field-component-card.fitted-format',
+      )
+      .exists();
+
+    await click('[data-test-preview-card-footer-button-embedded]');
+    assert
+      .dom('[data-test-preview-card-footer-button-embedded]')
+      .hasClass('active');
+    assert
+      .dom(
+        '[data-test-code-mode-card-preview-body ] .field-component-card.embedded-format',
+      )
+      .exists();
+
     await click('[data-test-preview-card-footer-button-atom]');
     assert
       .dom('[data-test-preview-card-footer-button-atom]')
@@ -877,16 +897,6 @@ module('Acceptance | code submode tests', function (hooks) {
     assert
       .dom('[data-test-code-mode-card-preview-body] .atom-format')
       .includesText('Fadhlan');
-
-    await click('[data-test-preview-card-footer-button-embedded]');
-    assert
-      .dom('[data-test-preview-card-footer-button-embedded]')
-      .hasClass('active');
-    assert
-      .dom(
-        '[data-test-code-mode-card-preview-body ] .field-component-card.fitted-format',
-      )
-      .exists();
 
     await click('[data-test-preview-card-footer-button-edit]');
     assert

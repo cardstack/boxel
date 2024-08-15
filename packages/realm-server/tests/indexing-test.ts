@@ -736,8 +736,29 @@ module('indexing', function (hooks) {
         fileName: 'person.gts',
       },
       {
-        pattern: /cardstack.com\/base\/card-api\.gts.*\.glimmer-scoped\.css$/,
-        fileName: 'card-api.gts',
+        pattern:
+          /cardstack.com\/base\/default-templates\/fitted\.gts.*\.glimmer-scoped\.css$/,
+        fileName: 'default-templates/fitted.gts',
+      },
+      {
+        pattern:
+          /cardstack.com\/base\/default-templates\/embedded\.gts.*\.glimmer-scoped\.css$/,
+        fileName: 'default-templates/embedded.gts',
+      },
+      {
+        pattern:
+          /cardstack.com\/base\/default-templates\/isolated-and-edit\.gts.*\.glimmer-scoped\.css$/,
+        fileName: 'default-templates/isolated-and-edit.gts',
+      },
+      {
+        pattern:
+          /cardstack.com\/base\/default-templates\/missing-embedded\.gts.*\.glimmer-scoped\.css$/,
+        fileName: 'default-templates/missing-embedded.gts',
+      },
+      {
+        pattern:
+          /cardstack.com\/base\/default-templates\/field-edit\.gts.*\.glimmer-scoped\.css$/,
+        fileName: 'default-templates/field-edit.gts',
       },
       {
         pattern:

@@ -1207,6 +1207,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor('[data-test-cards-grid-item]');
     await click('[data-test-cards-grid-item]');
+    await waitFor(`[data-test-stack-card-index="2"]`);
     assert.dom(`[data-test-stack-card-index="2"]`).exists();
     await click('[data-test-stack-card-index="0"] [data-test-boxel-header]');
     assert.dom(`[data-test-stack-card-index="2"]`).doesNotExist();

@@ -33,8 +33,8 @@ import RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
-import FittedFormatGallery from './fitted-format-gallery';
 import EmbeddedPreview from './embedded-preview';
+import FittedFormatGallery from './fitted-format-gallery';
 
 interface Signature {
   Element: HTMLElement;
