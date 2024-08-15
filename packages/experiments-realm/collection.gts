@@ -18,7 +18,6 @@ import {
   chooseCard,
   catalogEntryRef,
   PrerenderedCard,
-  CardContextName,
 } from '@cardstack/runtime-common';
 
 import { action } from '@ember/object';
@@ -62,43 +61,24 @@ export class Grid extends GlimmerComponent<{
   Element: HTMLElement;
 }> {
   <template>
-    <ul class='cards' data-test-cards-grid-cards>
-      {{#let
-        (component @context.prerenderedCardSearchComponent)
-        as |PrerenderedCardSearch|
-      }}
-        <PrerenderedCardSearch
-          @query={{this.query}}
-          @format='embedded'
-          @realms={{this.realms}}
-        >
+    {{#let
+      (component @context.prerenderedCardSearchComponent)
+      as |PrerenderedCardSearch|
+    }}
+      <PrerenderedCardSearch
+        @query={{this.query}}
+        @format='embedded'
+        @realms={{this.realms}}
+      >
 
-          <:loading>
-            Loading...
-          </:loading>
-          <:response as |cards|>
-            {{!-- {{#each cards as |card|}}
-              <CardContainer class='card'>
-                <li
-                  {{@context.cardComponentModifier
-                    cardId=card.url
-                    format='data'
-                    fieldType=undefined
-                    fieldName=undefined
-                  }}
-                  data-test-cards-grid-item={{removeFileExtension card.url}}
-                  {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
-                  data-cards-grid-item={{removeFileExtension card.url}}
-                >
-                  {{card.component}}
-                </li>
-              </CardContainer>
-            {{/each}} --}}
-            <CardsGridComponent @instances={{cards}} />
-          </:response>
-        </PrerenderedCardSearch>
-      {{/let}}
-    </ul>
+        <:loading>
+          Loading...
+        </:loading>
+        <:response as |cards|>
+          <CardsGridComponent @instances={{cards}} />
+        </:response>
+      </PrerenderedCardSearch>
+    {{/let}}
 
     {{#if @context.actions.createCard}}
       <div class='add-button'>
@@ -113,19 +93,6 @@ export class Grid extends GlimmerComponent<{
       </div>
     {{/if}}
     <style>
-      .cards {
-        list-style-type: none;
-        margin: 0;
-        padding: 0;
-        display: grid;
-        grid-template-columns: repeat(
-          auto-fit,
-          minmax(var(--grid-card-width), 1fr)
-        );
-        gap: var(--boxel-sp);
-        justify-items: center;
-        height: 100%;
-      }
       .add-button {
         display: inline-block;
         position: sticky;
@@ -206,28 +173,12 @@ class Isolated extends Component<typeof Collection> {
   <template>
     <div class='breadcrumb'> </div>
 
-    <div>
-      <div class='filter-widget'> </div>
+    <div class='filter-widget'> </div>
+    <div class='view-control-panel'>
     </div>
-    <div>
-      <div class='view-control-panel'>
-      </div>
-      <div class='cards-grid'>
-        <Grid @context={{this.args.context}} />
-      </div>
-    </div>
+    <Grid @context={{this.args.context}} />
 
-    <style>
-      .cards-grid {
-        --grid-card-width: 11.125rem;
-        --grid-card-height: 15.125rem;
-
-        max-width: 70rem;
-        margin: 0 auto;
-        padding: var(--boxel-sp-xl);
-        position: relative; /* Do not change this */
-      }
-    </style>
+    <style></style>
   </template>
 }
 
@@ -313,27 +264,31 @@ export class CardsGridComponent extends GlimmerComponent<{
   Element: HTMLElement;
 }> {
   <template>
-    <ul class={{cn 'cards-grid' list-format=@isListFormat}} ...attributes>
-      {{! use "key" to keep the list stable between refreshes }}
+    <div>
+      <div class='cards-grid'>
+        <ul class={{cn 'cards' list-format=@isListFormat}} ...attributes>
+          {{! use "key" to keep the list stable between refreshes }}
 
-      {{#each @instances key='id' as |card|}}
-        <CardContainer class='card'>
-          <li
-            {{@context.cardComponentModifier
-              cardId=card.url
-              format='data'
-              fieldType=undefined
-              fieldName=undefined
-            }}
-            data-test-cards-grid-item={{removeFileExtension card.url}}
-            {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
-            data-cards-grid-item={{removeFileExtension card.url}}
-          >
-            {{card.component}}
-          </li>
-        </CardContainer>
-      {{/each}}
-    </ul>
+          {{#each @instances key='id' as |card|}}
+            <CardContainer class='card'>
+              <li
+                {{@context.cardComponentModifier
+                  cardId=card.url
+                  format='data'
+                  fieldType=undefined
+                  fieldName=undefined
+                }}
+                data-test-cards-grid-item={{removeFileExtension card.url}}
+                {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
+                data-cards-grid-item={{removeFileExtension card.url}}
+              >
+                {{card.component}}
+              </li>
+            </CardContainer>
+          {{/each}}
+        </ul>
+      </div>
+    </div>
     <style>
       .card {
         width: var(--grid-card-width);
@@ -344,21 +299,26 @@ export class CardsGridComponent extends GlimmerComponent<{
         container-type: size;
       }
       .cards-grid {
-        --grid-card-width: 10.25rem; /* 164px */
-        --grid-card-height: 14rem; /* 224px */
+        --grid-card-width: 11.125rem;
+        --grid-card-height: 15.125rem;
+
+        max-width: 70rem;
+        margin: 0 auto;
+        padding: var(--boxel-sp-xl);
+        position: relative; /* Do not change this */
+      }
+      .cards {
         list-style-type: none;
         margin: 0;
-        padding: var(--cards-grid-padding, 0);
+        padding: 0;
         display: grid;
-        grid-template-columns: repeat(auto-fill, var(--grid-card-width));
-        grid-auto-rows: max-content;
-        gap: var(--boxel-sp-xl) var(--boxel-sp-lg);
-      }
-      .cards-grid.list-format {
-        --grid-card-width: 18.75rem; /* 300px */
-        --grid-card-height: 12rem; /* 192px */
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(
+          auto-fit,
+          minmax(var(--grid-card-width), 1fr)
+        );
         gap: var(--boxel-sp);
+        justify-items: center;
+        height: 100%;
       }
     </style>
   </template>
