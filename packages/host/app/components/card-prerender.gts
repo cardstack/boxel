@@ -8,6 +8,7 @@ import { didCancel, enqueueTask, restartableTask } from 'ember-concurrency';
 import { type IndexWriter } from '@cardstack/runtime-common';
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
 import {
+  getReader,
   type IndexResults,
   type Reader,
   type RunnerOpts,
@@ -97,7 +98,7 @@ export default class CardPrerender extends Component {
   });
 
   private doFromScratch = enqueueTask(async (realmURL: URL) => {
-    let { reader, indexWriter } = this.getRunnerParams();
+    let { reader, indexWriter } = this.getRunnerParams(realmURL);
     await this.resetLoaderInFastboot.perform();
     let currentRun = new CurrentRun({
       realmURL,
@@ -119,7 +120,7 @@ export default class CardPrerender extends Component {
       operation: 'delete' | 'update',
       ignoreData: Record<string, string>,
     ) => {
-      let { reader, indexWriter } = this.getRunnerParams();
+      let { reader, indexWriter } = this.getRunnerParams(realmURL);
       await this.resetLoaderInFastboot.perform();
       let currentRun = new CurrentRun({
         realmURL,
@@ -146,51 +147,10 @@ export default class CardPrerender extends Component {
     }
   });
 
-  private getRunnerParams(): {
+  private getRunnerParams(realmURL: URL): {
     reader: Reader;
     indexWriter: IndexWriter;
   } {
-    let self = this;
-    async function readFile(url: URL): ReturnType<Reader['readFile']> {
-      let path = self.localIndexer.adapter.realmPath.local(url);
-      return _readFileAsText(
-        path,
-        self.localIndexer.adapter.openFile.bind(self.localIndexer.adapter),
-      );
-    }
-
-    async function directoryListing(
-      url: URL,
-    ): ReturnType<Reader['directoryListing']> {
-      let path = self.localIndexer.adapter.realmPath.local(url);
-      let entries: {
-        kind: 'directory' | 'file';
-        url: string;
-        lastModified: number | null;
-      }[] = [];
-      for await (let {
-        path: innerPath,
-        kind,
-      } of self.localIndexer.adapter.readdir(path)) {
-        if (kind === 'file') {
-          entries.push({
-            kind,
-            url: self.localIndexer.adapter.realmPath.fileURL(innerPath).href,
-            lastModified:
-              (await self.localIndexer.adapter.lastModified(innerPath))!,
-          });
-        } else {
-          entries.push({
-            kind,
-            url: self.localIndexer.adapter.realmPath.directoryURL(innerPath)
-              .href,
-            lastModified: null,
-          });
-        }
-      }
-      return entries;
-    }
-
     if (this.fastboot.isFastBoot) {
       let optsId = (globalThis as any).runnerOptsId;
       if (optsId == null) {
@@ -202,7 +162,10 @@ export default class CardPrerender extends Component {
       };
     } else {
       return {
-        reader: { directoryListing, readFile } as Reader,
+        reader: getReader(
+          this.loaderService.loader.fetch.bind(this.loaderService.loader),
+          realmURL,
+        ),
         indexWriter: this.localIndexer.indexWriter,
       };
     }

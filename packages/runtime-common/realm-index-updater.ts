@@ -172,9 +172,18 @@ export class RealmIndexUpdater {
   }
 
   private async getRealmUsername(): Promise<string> {
-    // TODO for now we are just using the URL pattern to figure out the realm
-    // username. As part of the ticket to create dynamic realms this should be
-    // updated to look up the realm owner permission
+    // TODO for now we are just using the URL pattern and hard coding test
+    // URLs to figure out the realm username. As part of the ticket to create
+    // dynamic realms this should be updated to look up the realm owner
+    // permission
+    if (
+      ['http://127.0.0.1:4444/', 'http://127.0.0.1:4445/'].includes(
+        this.realmURL.href,
+      )
+    ) {
+      return 'node-test_realm';
+    }
+
     let name = this.realmURL.href.replace(/\/$/, '').split('/').pop()!;
     return `${name}_realm`;
   }

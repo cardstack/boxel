@@ -156,6 +156,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       'indexer stats are correct',
     );
 
+    // the lastModified resolution is 1 second, so need to
+    // wait at least that long to see a difference
+    await new Promise((r) => setTimeout(r, 1000));
     await adapter.write(
       'test2.json',
       JSON.stringify({
@@ -2884,8 +2887,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
                 { id: mangoID },
                 {
                   id: vanGoghID,
-                  firstName: 'Van Gogh',
-                  friends: [{ id: hassanID }],
                 },
               ],
             },

@@ -35,6 +35,8 @@ function trimCardContainer(text: string) {
   );
 }
 
+const matrixURL = new URL('http://localhost:8008');
+
 setGracefulCleanup();
 // Using the node tests for indexing as it is much easier to support the dynamic
 // loading of cards necessary for indexing and the ability to manipulate the
@@ -60,11 +62,12 @@ module('indexing', function (hooks) {
   let dir: string;
   let realm: Realm;
 
-  setupBaseRealmServer(hooks, virtualNetwork);
+  setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
 
   setupDB(hooks, {
     beforeEach: async (dbAdapter, queue) => {
       dir = dirSync().name;
+      // TODO need to make a worker for this realm
       realm = await createRealm({
         dir,
         virtualNetwork,
@@ -772,6 +775,7 @@ module('permissioned realm', function (hooks) {
           virtualNetwork,
           queue,
           dbAdapter,
+          matrixURL,
         );
         ({ testRealmServer: testRealmServer1 } = await runTestRealmServer({
           virtualNetwork,
@@ -787,8 +791,9 @@ module('permissioned realm', function (hooks) {
             `,
           },
           permissions: permissions.provider,
+          matrixURL,
           matrixConfig: {
-            url: new URL(`http://localhost:8008`),
+            url: matrixURL,
             username: matrixUser1,
           },
           dbAdapter,
@@ -819,8 +824,9 @@ module('permissioned realm', function (hooks) {
               },
             },
             permissions: permissions.consumer,
+            matrixURL,
             matrixConfig: {
-              url: new URL(`http://localhost:8008`),
+              url: matrixURL,
               username: matrixUser2,
             },
             dbAdapter,

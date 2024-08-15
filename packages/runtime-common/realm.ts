@@ -117,6 +117,8 @@ export interface RealmAdapter {
 
   openFile(path: LocalPath): Promise<FileRef | undefined>;
 
+  // this should return unix time as it's the finest resolution that we can rely
+  // on across all envs
   lastModified(path: LocalPath): Promise<number | undefined>;
 
   exists(path: LocalPath): Promise<boolean>;
@@ -892,6 +894,12 @@ export class Realm {
     ref: FileRef,
     requestContext: RequestContext,
   ): Promise<ResponseWithNodeStream> {
+    let headers = {
+      'last-modified': formatRFC7231(ref.lastModified * 1000),
+      ...(Symbol.for('shimmed-module') in ref
+        ? { 'X-Boxel-Shimmed-Module': 'true' }
+        : {}),
+    };
     if (
       ref.content instanceof ReadableStream ||
       ref.content instanceof Uint8Array ||
@@ -899,11 +907,7 @@ export class Realm {
     ) {
       return createResponse({
         body: ref.content,
-        init: {
-          headers: {
-            'last-modified': formatRFC7231(ref.lastModified),
-          },
-        },
+        init: { headers },
         requestContext,
       });
     }
@@ -915,11 +919,7 @@ export class Realm {
     // add the node stream to the response which will get special handling in the node env
     let response = createResponse({
       body: null,
-      init: {
-        headers: {
-          'last-modified': formatRFC7231(ref.lastModified),
-        },
-      },
+      init: { headers },
       requestContext,
     }) as ResponseWithNodeStream;
 
@@ -1002,7 +1002,7 @@ export class Realm {
       body: null,
       init: {
         status: 204,
-        headers: { 'last-modified': formatRFC7231(lastModified) },
+        headers: { 'last-modified': formatRFC7231(lastModified * 1000) },
       },
       requestContext,
     });
@@ -1012,32 +1012,34 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<ResponseWithNodeStream> {
-    let indexedSource = await this.getSourceFromIndex(new URL(request.url));
-    if (indexedSource) {
-      let { canonicalURL, lastModified, source } = indexedSource;
-      if (request.url !== canonicalURL.href) {
+    if (!request.headers.get('X-Boxel-Building-Index')) {
+      let indexedSource = await this.getSourceFromIndex(new URL(request.url));
+      if (indexedSource) {
+        let { canonicalURL, lastModified, source } = indexedSource;
+        if (request.url !== canonicalURL.href) {
+          return createResponse({
+            body: null,
+            init: {
+              status: 302,
+              headers: {
+                Location: `${new URL(this.url).pathname}${this.paths.local(
+                  canonicalURL,
+                )}`,
+              },
+            },
+            requestContext,
+          });
+        }
         return createResponse({
-          body: null,
+          body: source,
           init: {
-            status: 302,
             headers: {
-              Location: `${new URL(this.url).pathname}${this.paths.local(
-                canonicalURL,
-              )}`,
+              'last-modified': formatRFC7231(lastModified * 1000),
             },
           },
           requestContext,
         });
       }
-      return createResponse({
-        body: source,
-        init: {
-          headers: {
-            'last-modified': formatRFC7231(lastModified),
-          },
-        },
-        requestContext,
-      });
     }
 
     // fallback to file system if there is an error document or this is the
@@ -1527,10 +1529,12 @@ export class Realm {
     for (let entry of entries) {
       let meta: FileMeta | DirectoryMeta;
       if (entry.kind === 'file') {
+        let innerPath = this.paths.local(
+          new URL(`${this.paths.directoryURL(dir).href}${entry.name}`),
+        );
         meta = {
           kind: 'file',
-          lastModified:
-            (await this.#adapter.lastModified(`${dir}${entry.name}`)) ?? null,
+          lastModified: (await this.#adapter.lastModified(innerPath)) ?? null,
         };
       } else {
         meta = { kind: 'directory' };
@@ -1857,7 +1861,7 @@ function lastModifiedHeader(
 ): {} | { 'last-modified': string } {
   return (
     card.data.meta.lastModified != null
-      ? { 'last-modified': formatRFC7231(card.data.meta.lastModified) }
+      ? { 'last-modified': formatRFC7231(card.data.meta.lastModified * 1000) }
       : {}
   ) as {} | { 'last-modified': string };
 }

@@ -20,6 +20,8 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+import { unixTime } from '@cardstack/runtime-common';
+
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
@@ -160,7 +162,11 @@ export default class Room extends Component<Signature> {
     return (
       !message.isStreamingFinished &&
       this.isLastMessage(messageIndex) &&
-      (new Date().getTime() - message.created.getTime()) / 1000 < 60 // Older events do not come with isStreamingFinished property so we have no other way to determine if the message is done streaming other than checking if they are old messages (older than 60 seconds as an arbitrary threshold)
+      // Older events do not come with isStreamingFinished property so we have
+      // no other way to determine if the message is done streaming other than
+      // checking if they are old messages (older than 60 seconds as an arbitrary
+      // threshold)
+      unixTime(new Date().getTime() - message.created.getTime()) < 60
     );
   }
 

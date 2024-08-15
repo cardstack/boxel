@@ -20,6 +20,7 @@ import { join } from 'path';
 
 setGracefulCleanup();
 
+const matrixURL = new URL('http://localhost:8008');
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealmHref = testRealmURL.href;
 
@@ -39,7 +40,7 @@ module('loader', function (hooks) {
     return new Loader(fetch, virtualNetwork.resolveImport);
   }
 
-  setupBaseRealmServer(hooks, virtualNetwork);
+  setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
 
   hooks.before(async function () {
     dir = dirSync();
@@ -54,6 +55,7 @@ module('loader', function (hooks) {
         realmURL: testRealmURL,
         dbAdapter,
         queue,
+        matrixURL,
       }));
     },
     after: async () => {
@@ -152,6 +154,7 @@ module('loader', function (hooks) {
     setupDB(hooks, {
       before: async (dbAdapter, queue) => {
         loader2 = createLoader();
+        // TODO need to make worker for this realm
         realm = await createRealm({
           dir: dir.name,
           fileSystem: {

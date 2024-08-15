@@ -2977,7 +2977,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve directory requests', async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
       contents: {
         'dir/empty.json': {
@@ -3025,6 +3025,9 @@ module('Integration | realm', function (hooks) {
               },
               meta: {
                 kind: 'file',
+                lastModified: adapter.lastModifiedMap.get(
+                  `${testRealmURL}dir/empty.json`,
+                ),
               },
             },
           },

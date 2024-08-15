@@ -1076,61 +1076,63 @@ module('Integration | ai-assistant-panel', function (hooks) {
   });
 
   test('when opening ai panel it opens the most recent room', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Pet/mango`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-
-    await matrixService.createAndJoinRoom('test1', 'test room 1');
-    const room2Id = await matrixService.createAndJoinRoom(
-      'test2',
-      'test room 2',
-    );
-    const room3Id = await matrixService.createAndJoinRoom(
-      'test3',
-      'test room 3',
-    );
-
-    await openAiAssistant();
-    await waitFor(`[data-room-settled]`);
-
-    assert
-      .dom(`[data-test-room="${room3Id}"]`)
-      .exists(
-        "test room 3 is the most recently created room and it's opened initially",
+    try {
+      await setCardInOperatorModeState(`${testRealmURL}Pet/mango`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
       );
 
-    await click('[data-test-past-sessions-button]');
-    await click(`[data-test-enter-room="${room2Id}"]`);
-
-    await click('[data-test-close-ai-assistant]');
-    await click('[data-test-open-ai-assistant]');
-    await waitFor(`[data-room-settled]`);
-    assert
-      .dom(`[data-test-room="${room2Id}"]`)
-      .exists(
-        "test room 2 is the most recently selected room and it's opened initially",
+      await matrixService.createAndJoinRoom('test1', 'test room 1');
+      const room2Id = await matrixService.createAndJoinRoom(
+        'test2',
+        'test room 2',
+      );
+      const room3Id = await matrixService.createAndJoinRoom(
+        'test3',
+        'test room 3',
       );
 
-    await click('[data-test-close-ai-assistant]');
-    window.localStorage.setItem(
-      currentRoomIdPersistenceKey,
-      "room-id-that-doesn't-exist-and-should-not-break-the-implementation",
-    );
-    await click('[data-test-open-ai-assistant]');
-    await waitFor(`[data-room-settled]`);
-    assert
-      .dom(`[data-test-room="${room3Id}"]`)
-      .exists(
-        "test room 3 is the most recently created room and it's opened initially",
-      );
+      await openAiAssistant();
+      await waitFor(`[data-room-settled]`);
 
-    window.localStorage.removeItem(currentRoomIdPersistenceKey); // Cleanup
+      assert
+        .dom(`[data-test-room="${room3Id}"]`)
+        .exists(
+          "test room 3 is the most recently created room and it's opened initially",
+        );
+
+      await click('[data-test-past-sessions-button]');
+      await click(`[data-test-enter-room="${room2Id}"]`);
+
+      await click('[data-test-close-ai-assistant]');
+      await click('[data-test-open-ai-assistant]');
+      await waitFor(`[data-room-settled]`);
+      assert
+        .dom(`[data-test-room="${room2Id}"]`)
+        .exists(
+          "test room 2 is the most recently selected room and it's opened initially",
+        );
+
+      await click('[data-test-close-ai-assistant]');
+      window.localStorage.setItem(
+        currentRoomIdPersistenceKey,
+        "room-id-that-doesn't-exist-and-should-not-break-the-implementation",
+      );
+      await click('[data-test-open-ai-assistant]');
+      await waitFor(`[data-room-settled]`);
+      assert
+        .dom(`[data-test-room="${room3Id}"]`)
+        .exists(
+          "test room 3 is the most recently created room and it's opened initially",
+        );
+    } finally {
+      window.localStorage.removeItem(currentRoomIdPersistenceKey); // Cleanup
+    }
   });
 
   test('can close past-sessions list on outside click', async function (assert) {
@@ -2383,7 +2385,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom('[data-test-toggle-show-button]')
       .containsText('Show 3 more results');
     await click('[data-test-toggle-show-button]');
-    await waitFor('[data-test-result-card-idx="7"]');
+
+    await waitFor('[data-test-result-card-idx', { count: 8 });
     assert.dom('[data-test-toggle-show-button]').containsText('See Less');
     assert.dom('[data-test-result-card-idx="0"]').containsText('0. Buck');
     assert.dom('[data-test-result-card-idx="1"]').containsText('1. Burcu');

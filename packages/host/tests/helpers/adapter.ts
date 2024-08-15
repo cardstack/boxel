@@ -6,6 +6,8 @@ import {
   baseRealm,
   createResponse,
   hasExecutableExtension,
+  Deferred,
+  unixTime,
 } from '@cardstack/runtime-common';
 
 import {
@@ -47,10 +49,12 @@ export class TestRealmAdapter implements RealmAdapter {
   #paths: RealmPaths;
   #subscriber: ((message: UpdateEventData) => void) | undefined;
   #loader: Loader | undefined; // Will be set in the realm's constructor - needed for openFile for shimming purposes
+  #ready = new Deferred<void>();
+  #potentialModulesAndInstances: { content: any; url: URL }[] = [];
 
   constructor(contents: TestAdapterContents, realmURL = new URL(testRealmURL)) {
     this.#paths = new RealmPaths(realmURL);
-    let now = Date.now();
+    let now = unixTime(Date.now());
 
     for (let [path, content] of Object.entries(contents)) {
       let segments = path.split('/');
@@ -59,8 +63,12 @@ export class TestRealmAdapter implements RealmAdapter {
       if (dir.kind === 'file') {
         throw new Error(`tried to use file as directory`);
       }
-      this.#lastModified.set(this.#paths.fileURL(path).href, now);
+      let url = this.#paths.fileURL(path);
+      this.#lastModified.set(url.href, now);
       dir.contents[last] = { kind: 'file', content };
+      if (typeof content === 'object') {
+        this.#potentialModulesAndInstances.push({ content, url });
+      }
     }
   }
 
@@ -68,9 +76,43 @@ export class TestRealmAdapter implements RealmAdapter {
     return this.#paths;
   }
 
+  get ready() {
+    return this.#ready.promise;
+  }
+
+  // We are eagerly establishing shims and preparing instances to be able to be
+  // serialized as our test realm needs to be able to serve these via the HTTP
+  // API (internally) in order to index itself at boot
+  private async prepareInstances() {
+    if (!this.#loader) {
+      throw new Error('bug: loader needs to be set in test adapter');
+    }
+
+    let cardApi = await this.#loader.import<CardAPI>(
+      `${baseRealm.url}card-api`,
+    );
+    for (let { content, url } of this.#potentialModulesAndInstances) {
+      if (cardApi.isCard(content)) {
+        cardApi.setCardAsSavedForTest(
+          content,
+          `${url.href.replace(/\.json$/, '')}`,
+        );
+        continue;
+      }
+      for (let [name, fn] of Object.entries(content)) {
+        if (typeof fn === 'function' && typeof name === 'string') {
+          this.#loader.shimModule(url.href, content);
+          continue;
+        }
+      }
+    }
+    this.#ready.fulfill();
+  }
+
   setLoader(loader: Loader) {
     // Should remove this once CS-6720 is finished
     this.#loader = loader;
+    this.prepareInstances();
   }
 
   createJWT(claims: TokenClaims, expiration: string, secret: string) {
@@ -88,7 +130,7 @@ export class TestRealmAdapter implements RealmAdapter {
         exp: number;
       } & TokenClaims;
       let expiration = claims.exp;
-      if (expiration > Date.now() / 1000) {
+      if (expiration > unixTime(Date.now())) {
         throw new TokenExpiredError(`JWT token expired at ${expiration}`);
       }
       return claims;
@@ -154,6 +196,7 @@ export class TestRealmAdapter implements RealmAdapter {
   }
 
   async openFile(path: LocalPath): Promise<FileRef | undefined> {
+    await this.#ready.promise;
     let content;
     try {
       content = this.#traverse(path.split('/'), 'file');
@@ -180,8 +223,6 @@ export class TestRealmAdapter implements RealmAdapter {
         `${baseRealm.url}card-api`,
       );
       if (cardApi.isCard(value)) {
-        value.id = `${this.#paths.url}${path.replace(/\.json$/, '')}`;
-        cardApi.setCardAsSavedForTest(value);
         let doc = cardApi.serializeCard(value);
         fileRefContent = JSON.stringify(doc);
       } else {
@@ -235,7 +276,7 @@ export class TestRealmAdapter implements RealmAdapter {
           ? contents
           : JSON.stringify(contents, null, 2),
     };
-    let lastModified = Date.now();
+    let lastModified = unixTime(Date.now());
     this.#lastModified.set(this.#paths.fileURL(path).href, lastModified);
 
     this.postUpdateEvent({ [type]: path } as

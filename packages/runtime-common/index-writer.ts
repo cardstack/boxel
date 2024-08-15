@@ -121,7 +121,7 @@ export class Batch {
     for (let { url, type, last_modified: lastModified } of results) {
       result.set(url, {
         type,
-        // lastModified is a Date.now() result, so it should be safe to cast to number
+        // lastModified is unix time, so it should be safe to cast to number
         lastModified: lastModified == null ? null : parseInt(lastModified),
       });
     }

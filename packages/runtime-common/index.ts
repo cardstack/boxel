@@ -448,3 +448,7 @@ export function uint8ArrayToHex(uint8: Uint8Array) {
     .map((i) => i.toString(16).padStart(2, '0'))
     .join('');
 }
+
+export function unixTime(epochTimeMs: number) {
+  return Math.floor(epochTimeMs / 1000);
+}

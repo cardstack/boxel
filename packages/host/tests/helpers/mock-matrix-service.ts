@@ -14,6 +14,7 @@ import {
   LooseSingleCardDocument,
   splitStringIntoChunks,
   baseRealm,
+  unixTime,
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
@@ -163,7 +164,7 @@ function generateMockMatrixService(
 
     async createRealmSession(realmURL: URL) {
       let secret = "shhh! it's a secret";
-      let nowInSeconds = Math.floor(Date.now() / 1000);
+      let nowInSeconds = unixTime(Date.now());
       let expires = nowInSeconds + (expiresInSec?.() ?? 60 * 60);
       let header = { alg: 'none', typ: 'JWT' };
       let payload = {

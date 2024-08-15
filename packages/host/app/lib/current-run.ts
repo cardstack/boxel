@@ -20,6 +20,7 @@ import {
   moduleFrom,
   isCardDef,
   IndexWriter,
+  unixTime,
   type Batch,
   type LooseCardResource,
   type InstanceEntry,
@@ -319,7 +320,7 @@ export class CurrentRun {
             log.warn(
               `No lastModified date available for ${url.href}, using current time`,
             );
-            lastModified = Date.now();
+            lastModified = unixTime(Date.now());
           }
           await this.indexCard({
             path: localPath,
@@ -482,7 +483,7 @@ export class CurrentRun {
         data: {
           id: instanceURL.href,
           meta: {
-            lastModified: lastModified,
+            lastModified,
             realmInfo: this.#realmInfo,
             realmURL: this.realmURL.href,
           },

@@ -11,6 +11,7 @@ import {
   RealmPaths,
   SupportedMimeType,
   fileContentToText,
+  unixTime,
   type Queue,
   type TextFileRef,
   type VirtualNetwork,
@@ -196,7 +197,7 @@ export class Worker {
     ]);
     let optsId = this.runnerOptsMgr.setOptions({
       _fetch: fetch,
-      reader: this.getReader(fetch, new URL(args.realmURL)),
+      reader: getReader(fetch, new URL(args.realmURL)),
       indexWriter: this.#indexWriter,
       registerRunner: async (fromScratch, incremental) => {
         this.#fromScratch = fromScratch;
@@ -224,77 +225,6 @@ export class Worker {
     let result = await deferred.promise;
     this.runnerOptsMgr.removeOptions(optsId);
     return result;
-  }
-
-  private getReader(_fetch: typeof globalThis.fetch, realmURL: URL): Reader {
-    return {
-      readFile: async (url: URL) => {
-        let response: ResponseWithNodeStream = await _fetch(url, {
-          headers: {
-            Accept: SupportedMimeType.CardSource,
-          },
-        });
-        if (!response.ok) {
-          return undefined;
-        }
-        let content: string;
-        if ('nodeStream' in response && response.nodeStream) {
-          content = await fileContentToText({
-            content: response.nodeStream,
-          });
-        } else {
-          content = await response.text();
-        }
-        let lastModifiedRfc7321 = response.headers.get('last-modified');
-        if (!lastModifiedRfc7321) {
-          throw new Error(
-            `Response for ${url.href} has no 'last-modified' header`,
-          );
-        }
-        // This is RFC-7321 format which is the last modified date format used in HTTP headers
-        let lastModified = parse(
-          lastModifiedRfc7321.replace(/ GMT$/, 'Z'),
-          'EEE, dd MMM yyyy HH:mm:ssX',
-          new Date(),
-        ).getTime();
-        let path = new RealmPaths(realmURL).local(url);
-        return {
-          content,
-          lastModified,
-          path,
-          ...(Symbol.for('shimmed-module') in response
-            ? { isShimmed: true }
-            : {}),
-        };
-      },
-
-      directoryListing: async (url: URL) => {
-        let response = await _fetch(url, {
-          headers: {
-            Accept: SupportedMimeType.DirectoryListing,
-          },
-        });
-        let {
-          data: { relationships: _relationships },
-        } = await response.json();
-        let relationships = _relationships as Record<string, Relationship>;
-        return Object.values(relationships).map((entry) =>
-          entry.meta!.kind === 'file'
-            ? {
-                url: entry.links.related!,
-                kind: 'file',
-                lastModified: (entry.meta?.lastModified ?? null) as
-                  | number
-                  | null,
-              }
-            : {
-                url: entry.links.related!,
-                kind: 'directory',
-                lastModified: null,
-              },
-        );
-      },
-    };
   }
 
   private fromScratch = async (args: WorkerArgs) => {
@@ -329,5 +259,80 @@ export class Worker {
         stats,
       };
     });
+  };
+}
+
+export function getReader(
+  _fetch: typeof globalThis.fetch,
+  realmURL: URL,
+): Reader {
+  return {
+    readFile: async (url: URL) => {
+      let response: ResponseWithNodeStream = await _fetch(url, {
+        headers: {
+          Accept: SupportedMimeType.CardSource,
+        },
+      });
+      if (!response.ok) {
+        return undefined;
+      }
+      let content: string;
+      if ('nodeStream' in response && response.nodeStream) {
+        content = await fileContentToText({
+          content: response.nodeStream,
+        });
+      } else {
+        content = await response.text();
+      }
+      let lastModifiedRfc7321 = response.headers.get('last-modified');
+      if (!lastModifiedRfc7321) {
+        throw new Error(
+          `Response for ${url.href} has no 'last-modified' header`,
+        );
+      }
+      // This is RFC-7321 format which is the last modified date format used in HTTP headers
+      let lastModified = unixTime(
+        parse(
+          lastModifiedRfc7321.replace(/ GMT$/, 'Z'),
+          'EEE, dd MMM yyyy HH:mm:ssX',
+          new Date(),
+        ).getTime(),
+      );
+      let path = new RealmPaths(realmURL).local(url);
+      return {
+        content,
+        lastModified,
+        path,
+        ...(Symbol.for('shimmed-module') in response ||
+        response.headers.get('X-Boxel-Shimmed-Module')
+          ? { isShimmed: true }
+          : {}),
+      };
+    },
+
+    directoryListing: async (url: URL) => {
+      let response = await _fetch(url, {
+        headers: {
+          Accept: SupportedMimeType.DirectoryListing,
+        },
+      });
+      let {
+        data: { relationships: _relationships },
+      } = await response.json();
+      let relationships = _relationships as Record<string, Relationship>;
+      return Object.values(relationships).map((entry) =>
+        entry.meta!.kind === 'file'
+          ? {
+              url: entry.links.related!,
+              kind: 'file',
+              lastModified: (entry.meta?.lastModified ?? null) as number | null,
+            }
+          : {
+              url: entry.links.related!,
+              kind: 'directory',
+              lastModified: null,
+            },
+      );
+    },
   };
 }

@@ -25,6 +25,7 @@ import {
   type IndexRunner,
   type IndexResults,
   insertPermissions,
+  unixTime,
 } from '@cardstack/runtime-common';
 
 import {
@@ -527,9 +528,7 @@ async function setupTestRealm({
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
   });
   virtualNetwork.mount(realm.maybeHandle);
-  if (!worker) {
-    throw new Error(`worker for realm ${realmURL} was not created`);
-  }
+  await adapter.ready;
   await worker.run();
   await realm.start();
 
@@ -559,8 +558,8 @@ export function createJWT(
   expiration: string,
   secret: string,
 ) {
-  let nowInSeconds = Math.floor(Date.now() / 1000);
-  let expires = nowInSeconds + ms(expiration) / 1000;
+  let nowInSeconds = unixTime(Date.now());
+  let expires = nowInSeconds + unixTime(ms(expiration));
   let header = { alg: 'none', typ: 'JWT' };
   let payload = {
     iat: nowInSeconds,
