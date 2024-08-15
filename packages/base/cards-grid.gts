@@ -30,6 +30,9 @@ import StringField from './string';
 class Isolated extends Component<typeof CardsGrid> {
   <template>
     <div class='cards-grid'>
+      {{#each this.realms as |d|}}
+        {{d}}
+      {{/each}}
       <ul class='cards' data-test-cards-grid-cards>
         {{#let
           (component @context.prerenderedCardSearchComponent)

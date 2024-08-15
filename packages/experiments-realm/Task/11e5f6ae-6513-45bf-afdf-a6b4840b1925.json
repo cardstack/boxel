@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "taskName": "Write Annual Report",
+      "taskDetail": "This task involves gathering all necessary financial statements and ensuring all monetary transactions are documented and compliant with regulations.",
+      "status": {
+        "index": 1,
+        "label": "In Progress"
+      },
+      "priority": {
+        "index": 2,
+        "label": "High"
+      },
+      "dueDate": "2023-12-31",
+      "title": "Annual Report Task",
+      "description": "Prepare and write the annual financial report for the company.",
+      "thumbnailURL": ""
+    },
+    "relationships": {
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/9cc25f04-5de5-4e7b-8740-429c6bfa05fe"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../productivity/task",
+        "name": "Task"
+      }
+    }
+  }
+}

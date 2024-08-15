@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Chuan",
+      "email": "chuan@cardstack.com",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "team": {
+        "links": {
+          "self": "../Team/72ec9a1e-33f7-4863-9880-77673f769aaf"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../productivity/task",
+        "name": "TeamMember"
+      }
+    }
+  }
+}

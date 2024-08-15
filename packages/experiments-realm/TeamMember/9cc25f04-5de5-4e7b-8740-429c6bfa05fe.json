@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Chris",
+      "email": "chris.tse@cardstack.com",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "team": {
+        "links": {
+          "self": "../Team/b2213815-999a-4dd5-865d-187a5e7b5586"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../productivity/task",
+        "name": "TeamMember"
+      }
+    }
+  }
+}

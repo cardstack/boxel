@@ -413,7 +413,10 @@ export function getLinksToManyComponent({
               data-test-plural-view-format={{effectiveFormat}}
             >
               {{#each (getComponents) as |Item i|}}
-                <div data-test-plural-view-item={{i}}>
+                <div
+                  class='linksToMany-field-item'
+                  data-test-plural-view-item={{i}}
+                >
                   <Item @format={{effectiveFormat}} />
                 </div>
               {{/each}}
@@ -425,12 +428,16 @@ export function getLinksToManyComponent({
         .linksToMany-field.embedded-effectiveFormat > div + div {
           margin-top: var(--boxel-sp);
         }
-        .linksToMany-field.atom-effectiveFormat {
+        .linksToMany .linksToMany-field.atom-effectiveFormat {
           display: flex;
           gap: var(--boxel-sp-sm);
           padding: var(--boxel-sp-sm);
           border: var(--boxel-border);
           border-radius: var(--boxel-border-radius);
+          height: 100%;
+        }
+        .linksToMany-field-item {
+          height: 100%;
         }
       </style>
     </template>

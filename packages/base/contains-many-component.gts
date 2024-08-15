@@ -207,7 +207,10 @@ export function getContainsManyComponent({
               data-test-plural-view-format={{effectiveFormat}}
             >
               {{#each (getComponents) as |Item i|}}
-                <div data-test-plural-view-item={{i}}>
+                <div
+                  class='containsMany-field-item'
+                  data-test-plural-view-item={{i}}
+                >
                   <Item
                     @format={{getPluralChildFormat effectiveFormat model}}
                   />
@@ -223,6 +226,12 @@ export function getContainsManyComponent({
           background-color: var(--boxel-100);
           border: none !important;
           border-radius: var(--boxel-border-radius);
+        }
+        .containsMany-field.embedded-format {
+          height: 100%;
+        }
+        .containsMany-field-item {
+          height: 100%;
         }
       </style>
     </template>;

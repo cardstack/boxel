@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "taskName": "Do design for listing ",
+      "taskDetail": "Create mocks and hand-over to Gardella",
+      "status": {
+        "index": 2,
+        "label": "Done"
+      },
+      "priority": {
+        "index": 0,
+        "label": "Low"
+      },
+      "dueDate": "2024-08-14",
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/9cc25f04-5de5-4e7b-8740-429c6bfa05fe"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../productivity/task",
+        "name": "Task"
+      }
+    }
+  }
+}

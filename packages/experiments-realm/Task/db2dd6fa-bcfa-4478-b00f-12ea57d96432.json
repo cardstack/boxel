@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "taskName": null,
+      "taskDetail": null,
+      "status": {
+        "index": null,
+        "label": null
+      },
+      "priority": {
+        "index": null,
+        "label": null
+      },
+      "dueDate": null,
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "assignee": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../productivity/task",
+        "name": "Task"
+      }
+    }
+  }
+}

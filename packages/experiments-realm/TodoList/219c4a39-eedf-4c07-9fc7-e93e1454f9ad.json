@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "taskName": "Walk the dog",
+      "isComplete": true,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../examples/todo-list",
+        "name": "Todo"
+      }
+    }
+  }
+}

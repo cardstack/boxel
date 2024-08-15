@@ -1,0 +1,56 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "query": null,
+      "isManual": true,
+      "view": {},
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "cardsList.0": {
+        "links": {
+          "self": "../Author/1"
+        }
+      },
+      "cardsList.1": {
+        "links": {
+          "self": "../Country/argentina"
+        }
+      },
+      "cardsList.2": {
+        "links": {
+          "self": "../Task/11e5f6ae-6513-45bf-afdf-a6b4840b1925"
+        }
+      },
+      "cardsList.3": {
+        "links": {
+          "self": "../Friend/dog/1"
+        }
+      },
+      "cardsList.4": {
+        "links": {
+          "self": "../Spell/d5858748-d81f-4e79-ba99-a4d62afa09c6"
+        }
+      },
+      "cardsList.5": {
+        "links": {
+          "self": "../PlantInfo/0e0bbf43-2a31-4321-a0af-fc5a4f71c395"
+        }
+      },
+      "cardsList.6": {
+        "links": {
+          "self": "https://cardstack.com/base/fields/boolean-field"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../collection",
+        "name": "Collection"
+      }
+    }
+  }
+}

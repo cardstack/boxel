@@ -1,0 +1,79 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "tabs": [
+        {
+          "displayName": "Issues",
+          "tabId": "Issues",
+          "ref": {
+            "name": "Issues",
+            "module": "./productivity/task"
+          },
+          "isTable": false
+        },
+        {
+          "displayName": "Projects",
+          "tabId": "Projects",
+          "ref": {
+            "name": "Projects",
+            "module": "./productivity/task"
+          },
+          "isTable": false
+        },
+        {
+          "displayName": "Task",
+          "tabId": "Task",
+          "ref": {
+            "name": "Task",
+            "module": "./productivity/task"
+          },
+          "isTable": false
+        },
+        {
+          "displayName": "Team",
+          "tabId": "Team",
+          "ref": {
+            "name": "Team",
+            "module": "./productivity/task"
+          },
+          "isTable": false
+        },
+        {
+          "displayName": "TeamMember",
+          "tabId": "TeamMember",
+          "ref": {
+            "name": "TeamMember",
+            "module": "./productivity/task"
+          },
+          "isTable": false
+        },
+        {
+          "displayName": "User",
+          "tabId": "User",
+          "ref": {
+            "name": "User",
+            "module": "./productivity/task"
+          },
+          "isTable": false
+        }
+      ],
+      "headerIcon": {
+        "altText": null,
+        "size": "actual",
+        "height": null,
+        "width": null,
+        "base64": null
+      },
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../productivity/plan",
+        "name": "PlanCard"
+      }
+    }
+  }
+}

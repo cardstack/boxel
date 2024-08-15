@@ -231,7 +231,10 @@ export function getBoxComponent(
                     />
                   </CardContainer>
                 {{else if (isCompoundField model.value)}}
+                  {{! thrusday boxel meeting question }}
                   <div
+                    class='field-component-card
+                      {{effectiveFormat}}-format display-container-{{displayContainer}}'
                     data-test-compound-field-format={{effectiveFormat}}
                     data-test-compound-field-component
                     {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
