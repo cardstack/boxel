@@ -21,17 +21,17 @@
     "relationships": {
       "pet": {
         "links": {
-          "self": "../Pet/2"
+          "self": null
         }
       },
       "trips.countriesVisited.0": {
         "links": {
-          "self": "../Country/1"
+          "self": "http://localhost:4201/experiments/Country/1"
         }
       },
       "trips.countriesVisited.1": {
         "links": {
-          "self": "../Country/2"
+          "self": "http://localhost:4201/experiments/Country/2"
         }
       }
     },

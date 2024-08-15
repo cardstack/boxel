@@ -18,6 +18,8 @@ import {
   chooseCard,
   catalogEntryRef,
   PrerenderedCard,
+  Query,
+  buildQueryString,
 } from '@cardstack/runtime-common';
 
 import { action } from '@ember/object';
@@ -33,6 +35,8 @@ import {
 // @ts-ignore no types
 import cssUrl from 'ember-css-url';
 import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+import { tracked } from 'tracked-built-ins';
+import { QueryWidget } from './query-widget';
 
 class ViewField extends FieldDef {
   static displayName = 'Collection View';
@@ -57,6 +61,7 @@ class ViewField extends FieldDef {
 export class Grid extends GlimmerComponent<{
   Args: {
     context?: CardContext;
+    query?: Query;
   };
   Element: HTMLElement;
 }> {
@@ -66,7 +71,7 @@ export class Grid extends GlimmerComponent<{
       as |PrerenderedCardSearch|
     }}
       <PrerenderedCardSearch
-        @query={{this.query}}
+        @query={{@query}}
         @format='embedded'
         @realms={{this.realms}}
       >
@@ -107,37 +112,6 @@ export class Grid extends GlimmerComponent<{
     </style>
   </template>
 
-  get query() {
-    return {
-      filter: {
-        not: {
-          eq: {
-            _cardType: 'Cards Grid',
-          },
-        },
-      },
-      // sorting by title so that we can maintain stability in
-      // the ordering of the search results (server sorts results
-      // by order indexed by default)
-      sort: [
-        {
-          on: {
-            module: `${baseRealm.url}card-api`,
-            name: 'CardDef',
-          },
-          by: '_cardType',
-        },
-        {
-          on: {
-            module: `${baseRealm.url}card-api`,
-            name: 'CardDef',
-          },
-          by: 'title',
-        },
-      ],
-    };
-  }
-
   get realms() {
     return ['http://localhost:4201/experiments/'];
   }
@@ -162,23 +136,128 @@ export class Grid extends GlimmerComponent<{
     });
   });
 }
+
 class Isolated extends Component<typeof Collection> {
-  queryResults = [];
+  widget = new QueryWidget();
+  @action filterByAssignee() {
+    let card = this.chooseCard.perform(); // maybe dont need chooesCard bcos we r only concern with data for query not the rendered form
+    this.updateQuery();
+  }
+
+  @action filterByStatus() {
+    // this.chooseCard.perform();
+  }
+
+  @action updateQuery() {
+    // this._query =
+  }
+
+  get query() {
+    return this.widget.query;
+  }
+
+  get queryString() {
+    return JSON.stringify(this.query, null, 2);
+  }
+
+  //opens up the modal
+  // - queries other options by type
+  private chooseCard = restartableTask(async () => {});
+
   get instances() {
     return this.args.model.showMaterialized
       ? this.args.model.cardsList ?? []
-      : this.queryResults;
+      : [];
   }
 
   <template>
-    <div class='breadcrumb'> </div>
+    <section>
+      <div class='breadcrumb'> </div>
 
-    <div class='filter-widget'> </div>
-    <div class='view-control-panel'>
-    </div>
-    <Grid @context={{this.args.context}} />
+      <main>
+        <div class='collection-panel'>
+          <div class='filter-widget'>
+            <h3>Filter By:</h3>
+            <ul>
 
-    <style></style>
+              <li>
+                <button {{on 'click' this.filterByAssignee}}>Assignee</button>
+              </li>
+              <li>
+                <button {{on 'click' this.filterByStatus}}>Status</button>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <div class='view-control-panel'>
+              <span>View Control</span>
+
+              <div class='view-control-rightbar'>
+                <div>
+                  <button>Table</button>
+                  <button>List</button>
+                </div>
+
+                <button>Sort</button>
+              </div>
+
+            </div>
+            <Grid @context={{this.args.context}} @query={{this.query}} />
+          </div>
+        </div>
+
+        <aside class='sidebar'>RelationShip</aside>
+      </main>
+    </section>
+    <style>
+      .breadcrumb {
+        padding: var(--boxel-sp);
+        background-color: var(--boxel-bg-2);
+      }
+      main {
+        display: grid;
+        grid-template-columns: 5fr 1fr;
+        gap: var(--boxel-sp);
+        padding: var(--boxel-sp);
+        container-type: inline-size;
+        container-name: main;
+      }
+
+      .collection-panel {
+        display: grid;
+        grid-template-columns: 1fr 3fr;
+        gap: var(--boxel-sp);
+        padding: var(--boxel-sp);
+        border: 1px solid #dddddd;
+        border-radius: 10px;
+      }
+      .filter-widget {
+        border: 1px solid #dddddd;
+        border-radius: 10px;
+        padding: var(--boxel-sp);
+      }
+      .view-control-panel {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--boxel-sp);
+        border: 1px solid #dddddd;
+        border-radius: 10px;
+        padding: var(--boxel-sp);
+        margin-bottom: var(--boxel-sp);
+      }
+      .view-control-rightbar {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp);
+      }
+      .sidebar {
+        border: 1px solid #dddddd;
+        border-radius: 10px;
+        padding: var(--boxel-sp);
+      }
+    </style>
   </template>
 }
 
@@ -192,37 +271,6 @@ export class Collection extends CardDef {
   // UI switcher
 
   @field cardsList = linksToMany(CardDef); //materialization point
-
-  get _query() {
-    return {
-      filter: {
-        not: {
-          eq: {
-            _cardType: 'Cards Grid',
-          },
-        },
-      },
-      // sorting by title so that we can maintain stability in
-      // the ordering of the search results (server sorts results
-      // by order indexed by default)
-      sort: [
-        {
-          on: {
-            module: `${baseRealm.url}card-api`,
-            name: 'CardDef',
-          },
-          by: '_cardType',
-        },
-        {
-          on: {
-            module: `${baseRealm.url}card-api`,
-            name: 'CardDef',
-          },
-          by: 'title',
-        },
-      ],
-    };
-  }
 
   // @field preferredSize
   //can use other ppls template
@@ -271,6 +319,7 @@ export class CardsGridComponent extends GlimmerComponent<{
 
           {{#each @instances key='id' as |card|}}
             <CardContainer class='card'>
+
               <li
                 {{@context.cardComponentModifier
                   cardId=card.url

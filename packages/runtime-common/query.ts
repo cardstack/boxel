@@ -29,7 +29,7 @@ export interface TypedFilter {
   on?: CodeRef;
 }
 
-interface SortExpression {
+export interface SortExpression {
   by: string;
   on: CodeRef;
   direction?: 'asc' | 'desc';
