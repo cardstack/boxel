@@ -20,10 +20,12 @@ import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { IconPlus, Download } from '@cardstack/boxel-ui/icons';
 
 import {
+  aiBotUsername,
   Deferred,
   baseCardRef,
   chooseCard,
   codeRefWithAbsoluteURL,
+  getCard,
   moduleFrom,
   RealmPaths,
   type Actions,
@@ -35,11 +37,14 @@ import { StackItem } from '@cardstack/host/lib/stack-item';
 
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import type MatrixService from '@cardstack/host/services/matrix-service';
+
+import { type CardDef, type Format } from 'https://cardstack.com/base/card-api';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
 import OperatorModeStack from './stack';
+import { CardDefOrId } from './stack-item';
 import SubmodeLayout from './submode-layout';
 
 import type CardService from '../../services/card-service';
@@ -116,6 +121,7 @@ interface Signature {
 
 export default class InteractSubmode extends Component<Signature> {
   @service private declare cardService: CardService;
+  @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare recentFilesService: RecentFilesService;
 
@@ -142,6 +148,7 @@ export default class InteractSubmode extends Component<Signature> {
           realmURL?: URL;
           isLinkedCard?: boolean;
           doc?: LooseSingleCardDocument; // fill in card data with values
+          cardModeAfterCreation?: Format;
         },
       ): Promise<CardDef | undefined> => {
         let cardModule = new URL(moduleFrom(ref), relativeTo);
@@ -171,7 +178,7 @@ export default class InteractSubmode extends Component<Signature> {
         let newItem = new StackItem({
           owner: here,
           card: newCard,
-          format: 'edit',
+          format: opts?.cardModeAfterCreation ?? 'edit',
           request: new Deferred(),
           isLinkedCard: opts?.isLinkedCard,
           stackIndex,
@@ -185,7 +192,7 @@ export default class InteractSubmode extends Component<Signature> {
 
         await newItem.ready();
         here.addToStack(newItem);
-        return await newItem.request?.promise;
+        return newCard;
       },
       viewCard: async (
         card: CardDef,
@@ -214,15 +221,24 @@ export default class InteractSubmode extends Component<Signature> {
         let item = here.findCardInStack(card, stackIndex);
         here.save.perform(item, dismissItem);
       },
-      delete: (card: CardDef | URL | string): void => {
-        if (!card || card instanceof URL || typeof card === 'string') {
-          throw new Error(`bug: delete called with invalid card "${card}"`);
+      delete: async (card: CardDef | URL | string): Promise<void> => {
+        let loadedCard: CardDef;
+
+        if (typeof card === 'string') {
+          let _loadedCard = await here.cardService.getCard(card);
+          if (!_loadedCard) {
+            throw new Error(`Could not load card ${card}`);
+          }
+          loadedCard = _loadedCard;
+        } else {
+          loadedCard = card as CardDef;
         }
+
         if (!here.itemToDelete) {
-          here.itemToDelete = card;
+          here.itemToDelete = loadedCard;
           return;
         }
-        here.delete.perform(card);
+        here.delete.perform(loadedCard);
       },
       doWithStableScroll: async (
         card: CardDef,
@@ -245,6 +261,17 @@ export default class InteractSubmode extends Component<Signature> {
       changeSubmode: (url: URL, submode: Submode = 'code'): void => {
         here.operatorModeStateService.updateCodePath(url);
         here.operatorModeStateService.updateSubmode(submode);
+      },
+      runCommand: async (
+        card: CardDef,
+        skillCardId: string,
+        message?: string,
+      ): Promise<void> => {
+        await here.runCommand.perform(
+          card,
+          skillCardId,
+          message ?? 'Run command',
+        );
       },
     };
   }
@@ -320,6 +347,26 @@ export default class InteractSubmode extends Component<Signature> {
     }
   });
 
+  private runCommand = restartableTask(
+    async (card: CardDef, skillCardId: string, message: string) => {
+      let resource = getCard(new URL(skillCardId));
+      await resource.loaded;
+      let commandCard = resource.card;
+      if (!commandCard) {
+        throw new Error(`Could not find card "${skillCardId}"`);
+      }
+      let newRoomId = await this.matrixService.createRoom(`New AI chat`, [
+        aiBotUsername,
+      ]);
+      await this.matrixService.sendMessage(
+        newRoomId,
+        message,
+        [card],
+        [commandCard],
+      );
+    },
+  );
+
   @action private onCancelDelete() {
     this.itemToDelete = undefined;
   }
@@ -374,6 +421,11 @@ export default class InteractSubmode extends Component<Signature> {
       sourceItem: StackItem,
       destinationItem: StackItem,
     ) => {
+      // if this.selectCards task is still running, wait for it to finish before copying
+      if (this.selectCards.isRunning) {
+        await this.selectCards.last;
+      }
+
       await this.withTestWaiters(async () => {
         let destinationRealmURL = await this.cardService.getRealmURL(
           destinationItem.card,
@@ -408,17 +460,37 @@ export default class InteractSubmode extends Component<Signature> {
   }
 
   @action
-  private onSelectedCards(selectedCards: CardDef[], stackItem: StackItem) {
-    let selected = cardSelections.get(stackItem);
-    if (!selected) {
-      selected = new TrackedSet([]);
-      cardSelections.set(stackItem, selected);
-    }
-    selected.clear();
-    for (let card of selectedCards) {
-      selected.add(card);
-    }
+  private onSelectedCards(selectedCards: CardDefOrId[], stackItem: StackItem) {
+    this.selectCards.perform(selectedCards, stackItem);
   }
+
+  private selectCards = restartableTask(
+    async (selectedCards: CardDefOrId[], stackItem: StackItem) => {
+      let waiterToken = waiter.beginAsync();
+      try {
+        let loadedCards = await Promise.all(
+          selectedCards.map((cardDefOrId: CardDefOrId) => {
+            if (typeof cardDefOrId === 'string') {
+              return this.cardService.getCard(cardDefOrId);
+            }
+            return cardDefOrId;
+          }),
+        );
+
+        let selected = cardSelections.get(stackItem);
+        if (!selected) {
+          selected = new TrackedSet([]);
+          cardSelections.set(stackItem, selected);
+        }
+        selected.clear();
+        for (let card of loadedCards) {
+          selected.add(card!);
+        }
+      } finally {
+        waiter.endAsync(waiterToken);
+      }
+    },
+  );
 
   private get selectedCards() {
     return this.operatorModeStateService
@@ -447,67 +519,75 @@ export default class InteractSubmode extends Component<Signature> {
 
   private openSelectedSearchResultInStack = restartableTask(
     async (cardId: string) => {
-      let searchSheetTrigger = this.searchSheetTrigger; // Will be set by showSearchWithTrigger
-      let card = await this.cardService.getCard(cardId);
-      if (!card) {
-        return;
-      }
-
-      // In case the left button was clicked, whatever is currently in stack with index 0 will be moved to stack with index 1,
-      // and the card will be added to stack with index 0. shiftStack executes this logic.
-      if (
-        searchSheetTrigger ===
-        SearchSheetTriggers.DropCardToLeftNeighborStackButton
-      ) {
-        for (
-          let stackIndex = this.stacks.length - 1;
-          stackIndex >= 0;
-          stackIndex--
-        ) {
-          this.operatorModeStateService.shiftStack(
-            this.stacks[stackIndex],
-            stackIndex + 1,
-          );
+      let waiterToken = waiter.beginAsync();
+      try {
+        let searchSheetTrigger = this.searchSheetTrigger; // Will be set by showSearchWithTrigger
+        let card = await this.cardService.getCard(cardId);
+        if (!card) {
+          return;
         }
-        this.publicAPI(this, 0).viewCard(card, 'isolated');
 
-        // In case the right button was clicked, the card will be added to stack with index 1.
-      } else if (
-        searchSheetTrigger ===
-        SearchSheetTriggers.DropCardToRightNeighborStackButton
-      ) {
-        this.publicAPI(this, this.stacks.length).viewCard(card, 'isolated');
-      } else {
-        // In case, that the search was accessed directly without clicking right and left buttons,
-        // the rightmost stack will be REPLACED by the selection
-        let numberOfStacks = this.operatorModeStateService.numberOfStacks();
-        let stackIndex = numberOfStacks - 1;
-        let stack: Stack | undefined;
-
+        // In case the left button was clicked, whatever is currently in stack with index 0 will be moved to stack with index 1,
+        // and the card will be added to stack with index 0. shiftStack executes this logic.
         if (
-          numberOfStacks === 0 ||
-          this.operatorModeStateService.stackIsEmpty(stackIndex)
+          searchSheetTrigger ===
+          SearchSheetTriggers.DropCardToLeftNeighborStackButton
         ) {
-          this.publicAPI(this, 0).viewCard(card, 'isolated');
+          for (
+            let stackIndex = this.stacks.length - 1;
+            stackIndex >= 0;
+            stackIndex--
+          ) {
+            this.operatorModeStateService.shiftStack(
+              this.stacks[stackIndex],
+              stackIndex + 1,
+            );
+          }
+          await this.publicAPI(this, 0).viewCard(card, 'isolated');
+
+          // In case the right button was clicked, the card will be added to stack with index 1.
+        } else if (
+          searchSheetTrigger ===
+          SearchSheetTriggers.DropCardToRightNeighborStackButton
+        ) {
+          await this.publicAPI(this, this.stacks.length).viewCard(
+            card,
+            'isolated',
+          );
         } else {
-          stack = this.operatorModeStateService.rightMostStack();
-          if (stack) {
-            let bottomMostItem = stack[0];
-            if (bottomMostItem) {
-              let stackItem = new StackItem({
-                owner: this,
-                card,
-                format: 'isolated',
-                stackIndex,
-              });
-              await stackItem.ready();
-              this.operatorModeStateService.clearStackAndAdd(
-                stackIndex,
-                stackItem,
-              );
+          // In case, that the search was accessed directly without clicking right and left buttons,
+          // the rightmost stack will be REPLACED by the selection
+          let numberOfStacks = this.operatorModeStateService.numberOfStacks();
+          let stackIndex = numberOfStacks - 1;
+          let stack: Stack | undefined;
+
+          if (
+            numberOfStacks === 0 ||
+            this.operatorModeStateService.stackIsEmpty(stackIndex)
+          ) {
+            await this.publicAPI(this, 0).viewCard(card, 'isolated');
+          } else {
+            stack = this.operatorModeStateService.rightMostStack();
+            if (stack) {
+              let bottomMostItem = stack[0];
+              if (bottomMostItem) {
+                let stackItem = new StackItem({
+                  owner: this,
+                  card,
+                  format: 'isolated',
+                  stackIndex,
+                });
+                await stackItem.ready();
+                this.operatorModeStateService.clearStackAndAdd(
+                  stackIndex,
+                  stackItem,
+                );
+              }
             }
           }
         }
+      } finally {
+        waiter.endAsync(waiterToken);
       }
     },
   );
