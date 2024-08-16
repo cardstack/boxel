@@ -40,6 +40,10 @@ module.exports = function (defaults) {
               test: /\.woff2$/,
               type: 'asset',
             },
+            {
+              test: /\.otf$/,
+              type: 'asset',
+            },
           ],
         },
       },
