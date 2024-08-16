@@ -44,7 +44,7 @@ export default class DefaultEmbeddedTemplate extends GlimmerComponent<{
       {{/if}}
     </div>
     <style>
-      .fitted-template {
+      .embedded-template {
         width: 100%;
         height: 100%;
         display: flex;
@@ -94,7 +94,7 @@ export default class DefaultEmbeddedTemplate extends GlimmerComponent<{
         justify-content: center;
       }
 
-      @container fitted-card (width < 150px) {
+      @container embedded-card (width < 150px) {
         .card-title {
           font: 500 var(--boxel-font-sm);
           line-height: 1.23;
@@ -102,7 +102,7 @@ export default class DefaultEmbeddedTemplate extends GlimmerComponent<{
         }
       }
 
-      @container fitted-card (width < 200px) {
+      @container embedded-card (width < 200px) {
         .thumbnail-section {
           display: none;
         }
