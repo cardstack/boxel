@@ -46,3 +46,13 @@
   src: url('./OpenSans-Bold.woff2') format('woff2');
   font-weight: 700;
 }
+@font-face {
+  font-family: 'Rustica';
+  src: url('./Rustica-Regular.otf') format('opentype');
+  font-weight: 400;
+}
+@font-face {
+  font-family: 'Rustica';
+  src: url('./Rustica-Bold.otf') format('opentype');
+  font-weight: 700;
+}
