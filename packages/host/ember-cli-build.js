@@ -52,6 +52,10 @@ module.exports = function (defaults) {
                 test: /\.webp$/,
                 type: 'asset',
               },
+              {
+                test: /\.otf$/,
+                type: 'asset',
+              },
             ],
           },
           plugins: [
