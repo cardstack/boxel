@@ -2386,7 +2386,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .containsText('Show 3 more results');
     await click('[data-test-toggle-show-button]');
 
-    await waitFor('[data-test-result-card-idx', { count: 8 });
+    await waitFor('[data-test-result-card-idx]', { count: 8 });
     assert.dom('[data-test-toggle-show-button]').containsText('See Less');
     assert.dom('[data-test-result-card-idx="0"]').containsText('0. Buck');
     assert.dom('[data-test-result-card-idx="1"]').containsText('1. Burcu');

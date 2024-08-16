@@ -10,6 +10,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { not } from '@cardstack/boxel-ui/helpers';
 
+import { unixTime } from '@cardstack/runtime-common';
+
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
@@ -19,8 +21,6 @@ import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
-import { unixTime } from '@cardstack/runtime-common';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type { SkillCard } from 'https://cardstack.com/base/skill-card';
