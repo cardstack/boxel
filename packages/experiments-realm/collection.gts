@@ -8,35 +8,22 @@ import {
   FieldDef,
   Component,
   type CardContext,
-  realmURL,
 } from 'https://cardstack.com/base/card-api';
 
 import GlimmerComponent from '@glimmer/component';
-import { cn } from '@cardstack/boxel-ui/helpers';
-import {
-  baseRealm,
-  chooseCard,
-  catalogEntryRef,
-  PrerenderedCard,
-  Query,
-  buildQueryString,
-} from '@cardstack/runtime-common';
+import { chooseCard, catalogEntryRef, Query } from '@cardstack/runtime-common';
 
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { restartableTask } from 'ember-concurrency';
-import {
-  AddButton,
-  CardContainer,
-  Tooltip,
-} from '@cardstack/boxel-ui/components';
+import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
 // import { CardsGrid } from 'https://cardstack.com/base/cards-grid';
 
 // @ts-ignore no types
 import cssUrl from 'ember-css-url';
 import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
-import { tracked } from 'tracked-built-ins';
 import { QueryWidget } from './query-widget';
+import { CardsGridComponent } from './cards-grid-component';
 
 class ViewField extends FieldDef {
   static displayName = 'Collection View';
@@ -140,7 +127,7 @@ export class Grid extends GlimmerComponent<{
 class Isolated extends Component<typeof Collection> {
   widget = new QueryWidget();
   @action filterByAssignee() {
-    let card = this.chooseCard.perform(); // maybe dont need chooesCard bcos we r only concern with data for query not the rendered form
+    // let card = this.chooseCard.perform(); // maybe dont need chooesCard bcos we r only concern with data for query not the rendered form
     this.updateQuery();
   }
 
@@ -162,7 +149,7 @@ class Isolated extends Component<typeof Collection> {
 
   //opens up the modal
   // - queries other options by type
-  private chooseCard = restartableTask(async () => {});
+  // private chooseCard = restartableTask(async () => {});
 
   get instances() {
     return this.args.model.showMaterialized
@@ -175,11 +162,11 @@ class Isolated extends Component<typeof Collection> {
       <div class='breadcrumb'> </div>
 
       <main>
-        <div class='collection-panel'>
-          <div class='filter-widget'>
+
+        <aside class='widget-panel'>
+          <div>
             <h3>Filter By:</h3>
             <ul>
-
               <li>
                 <button {{on 'click' this.filterByAssignee}}>Assignee</button>
               </li>
@@ -188,6 +175,20 @@ class Isolated extends Component<typeof Collection> {
               </li>
             </ul>
           </div>
+          <div>
+            <h3>Sort By:</h3>
+            <ul>
+              <li>
+                asc
+              </li>
+              <li>
+                desc
+              </li>
+            </ul>
+          </div>
+        </aside>
+
+        <div class='collection-panel'>
 
           <div>
             <div class='view-control-panel'>
@@ -198,8 +199,6 @@ class Isolated extends Component<typeof Collection> {
                   <button>Table</button>
                   <button>List</button>
                 </div>
-
-                <button>Sort</button>
               </div>
 
             </div>
@@ -207,7 +206,7 @@ class Isolated extends Component<typeof Collection> {
           </div>
         </div>
 
-        <aside class='sidebar'>RelationShip</aside>
+        <aside class='side-panel'>RelationShip</aside>
       </main>
     </section>
     <style>
@@ -217,25 +216,30 @@ class Isolated extends Component<typeof Collection> {
       }
       main {
         display: grid;
-        grid-template-columns: 5fr 1fr;
+        grid-template-columns: 1fr 4fr 1fr;
         gap: var(--boxel-sp);
         padding: var(--boxel-sp);
         container-type: inline-size;
         container-name: main;
       }
-
+      .widget-panel {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp);
+        border: 1px solid #dddddd;
+        border-radius: 10px;
+        padding: var(--boxel-sp);
+      }
+      .widget-panel > * + * {
+        margin-top: var(--boxel-sp);
+        border-top: 1px solid #dddddd;
+      }
       .collection-panel {
         display: grid;
-        grid-template-columns: 1fr 3fr;
         gap: var(--boxel-sp);
         padding: var(--boxel-sp);
         border: 1px solid #dddddd;
         border-radius: 10px;
-      }
-      .filter-widget {
-        border: 1px solid #dddddd;
-        border-radius: 10px;
-        padding: var(--boxel-sp);
       }
       .view-control-panel {
         display: flex;
@@ -252,7 +256,7 @@ class Isolated extends Component<typeof Collection> {
         align-items: center;
         gap: var(--boxel-sp);
       }
-      .sidebar {
+      .side-panel {
         border: 1px solid #dddddd;
         border-radius: 10px;
         padding: var(--boxel-sp);
@@ -261,7 +265,9 @@ class Isolated extends Component<typeof Collection> {
   </template>
 }
 
-//each item always has a conforming UI
+// - collection is needed to persist views
+// - materialise cards grid query into cards so it can be shared
+// - maintains query field state inside card -- clarify with chris & luke
 export class Collection extends CardDef {
   static displayName = 'Collection';
   @field query = contains(StringField); //serialized
@@ -301,80 +307,3 @@ export class Collection extends CardDef {
 // class BoardView extends GlimmerComponent<{
 
 // }>
-
-//only takes in pre-rendered card
-export class CardsGridComponent extends GlimmerComponent<{
-  Args: {
-    instances: PrerenderedCard[] | [];
-    context?: CardContext;
-    isListFormat?: boolean;
-  };
-  Element: HTMLElement;
-}> {
-  <template>
-    <div>
-      <div class='cards-grid'>
-        <ul class={{cn 'cards' list-format=@isListFormat}} ...attributes>
-          {{! use "key" to keep the list stable between refreshes }}
-
-          {{#each @instances key='id' as |card|}}
-            <CardContainer class='card'>
-
-              <li
-                {{@context.cardComponentModifier
-                  cardId=card.url
-                  format='data'
-                  fieldType=undefined
-                  fieldName=undefined
-                }}
-                data-test-cards-grid-item={{removeFileExtension card.url}}
-                {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
-                data-cards-grid-item={{removeFileExtension card.url}}
-              >
-                {{card.component}}
-              </li>
-            </CardContainer>
-          {{/each}}
-        </ul>
-      </div>
-    </div>
-    <style>
-      .card {
-        width: var(--grid-card-width);
-        height: var(--grid-card-height);
-        overflow: hidden;
-        cursor: pointer;
-        container-name: embedded-card;
-        container-type: size;
-      }
-      .cards-grid {
-        --grid-card-width: 11.125rem;
-        --grid-card-height: 15.125rem;
-
-        max-width: 70rem;
-        margin: 0 auto;
-        padding: var(--boxel-sp-xl);
-        position: relative; /* Do not change this */
-      }
-      .cards {
-        list-style-type: none;
-        margin: 0;
-        padding: 0;
-        display: grid;
-        grid-template-columns: repeat(
-          auto-fit,
-          minmax(var(--grid-card-width), 1fr)
-        );
-        gap: var(--boxel-sp);
-        justify-items: center;
-        height: 100%;
-      }
-    </style>
-  </template>
-
-  getComponent = (card: CardDef) => card.constructor.getComponent(card);
-}
-
-function removeFileExtension(cardUrl: string) {
-  return cardUrl.replace(/\.[^/.]+$/, '');
-}

@@ -4,11 +4,12 @@
     "attributes": {
       "title": "AppCard",
       "description": "Catalog entry for AppCard",
-      "isField": false,
       "ref": {
-        "module": "../app-card",
-        "name": "AppCard"
-      }
+        "name": "AppCard",
+        "module": "../app-card"
+      },
+      "isField": false,
+      "demo": {}
     },
     "meta": {
       "adoptsFrom": {

@@ -31,6 +31,7 @@ const DEFAULT_QUERY = {
   ],
 };
 
+// data class
 export class QueryWidget {
   @tracked _query: Query = DEFAULT_QUERY;
   get query() {

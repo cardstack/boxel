@@ -22,13 +22,13 @@
           "isTable": true
         },
         {
-          "displayName": "TeamMember",
+          "displayName": "Author",
           "tabId": "TeamMember",
           "ref": {
-            "name": "TeamMember",
-            "module": "productivity/task"
+            "name": "Author",
+            "module": "author"
           },
-          "isTable": true
+          "isTable": false
         }
       ],
       "headerIcon": {
