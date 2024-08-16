@@ -409,6 +409,10 @@ class AppCardIsolated extends Component<typeof AppCard> {
     this.createCard.perform(cardDoc);
   }
 
+  get isCreateCardRunning() {
+    return this.createCard.isRunning;
+  }
+
   private createCard = restartableTask(
     async (doc: LooseSingleCardDocument | undefined = undefined) => {
       if (!this.activeTabRef) {

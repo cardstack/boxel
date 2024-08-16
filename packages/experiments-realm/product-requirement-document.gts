@@ -8,6 +8,7 @@ import {
   StringField,
   Component,
 } from 'https://cardstack.com/base/card-api';
+import { Button } from '@cardstack/boxel-ui/components';
 import { ImagePlaceholder } from '@cardstack/boxel-ui/icons';
 import { bool, cn, not } from '@cardstack/boxel-ui/helpers';
 
@@ -34,25 +35,35 @@ export class ProductRequirementDocument extends CardDef {
     <template>
       <section class='prd'>
         <header>
-          <div class='title-group'>
-            <div
-              class={{cn
-                'app-icon-container'
-                placeholder=(not @model.thumbnail.base64)
-              }}
-            >
-              {{#if @model.thumbnail.base64}}
-                <@fields.thumbnail />
-              {{else}}
-                <ImagePlaceholder
-                  class='icon-placeholder'
-                  width='50'
-                  height='50'
-                  role='presentation'
-                />
-              {{/if}}
+          <div class='header-button-group'>
+            <div class='title-group'>
+              <div
+                class={{cn
+                  'app-icon-container'
+                  placeholder=(not @model.thumbnail.base64)
+                }}
+              >
+                {{#if @model.thumbnail.base64}}
+                  <@fields.thumbnail />
+                {{else}}
+                  <ImagePlaceholder
+                    class='icon-placeholder'
+                    width='50'
+                    height='50'
+                    role='presentation'
+                  />
+                {{/if}}
+              </div>
+              <h1><@fields.title /></h1>
             </div>
-            <h1><@fields.title /></h1>
+            <Button
+              class='generate-button'
+              @kind='primary-dark'
+              @disabled={{true}}
+            >
+              <span class='generate-button-logo' />
+              Generate App Now
+            </Button>
           </div>
           <p class='description'><@fields.description /></p>
         </header>
@@ -91,6 +102,33 @@ export class ProductRequirementDocument extends CardDef {
           display: flex;
           align-items: center;
           gap: var(--boxel-sp);
+        }
+        .header-button-group {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: var(--boxel-sp);
+        }
+        .generate-button {
+          --icon-size: 20px;
+          --boxel-button-loading-icon-size: var(--icon-size);
+          padding: var(--boxel-sp-xxs) var(--boxel-sp);
+          justify-self: end;
+          gap: var(--boxel-sp-sm);
+        }
+        .generate-button :deep(svg) {
+          width: var(--icon-size);
+          height: var(--icon-size);
+        }
+        .generate-button :deep(.loading-indicator) {
+          margin-right: 0;
+        }
+        .generate-button-logo {
+          display: inline-block;
+          width: var(--icon-size);
+          height: var(--icon-size);
+          background: url('./ai-assist-icon@2x.webp') no-repeat center;
+          background-size: contain;
         }
         .app-icon-container {
           flex-shrink: 0;
