@@ -359,13 +359,13 @@ export default class SubmodeLayout extends Component<Signature> {
 
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-xs);
+        gap: var(--boxel-sp-sm);
       }
 
       .boxel-title {
         color: var(--boxel-light);
-        font: 600 var(--boxel-font-lg);
-        letter-spacing: var(--boxel-lsp-xxl);
+        font: 900 var(--boxel-font-size-med) 'Rustica';
+        letter-spacing: 3px;
       }
 
       .profile-icon-container {
