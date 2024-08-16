@@ -65,7 +65,6 @@ export class RealmIndexUpdater {
     return new URL(this.#realm.url);
   }
 
-  @Memoize()
   private get ignoreMap() {
     let ignoreMap = new Map<string, Ignore>();
     for (let [url, contents] of Object.entries(this.#ignoreData)) {
