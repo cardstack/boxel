@@ -16,6 +16,7 @@ import {
   type ISendEventResponse,
 } from 'matrix-js-sdk';
 import { md5 } from 'super-fast-md5';
+import { TrackedArray } from 'tracked-built-ins';
 import { TrackedMap, TrackedObject } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -188,6 +189,15 @@ export default class MatrixService
         Timeline.onUpdateEventStatus(this),
       ],
       [this.matrixSDK.RoomEvent.Receipt, Timeline.onReceipt(this)],
+      [
+        this.matrixSDK.ClientEvent.AccountData,
+        (e) => {
+          if (e.event.type == 'com.cardstack.boxel.realms') {
+            console.log('updating realms from account data', e.event.content);
+            this.cardService.setRealms(e.event.content.realms);
+          }
+        },
+      ],
     ];
   }
 

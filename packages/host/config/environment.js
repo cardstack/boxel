@@ -19,6 +19,9 @@ module.exports = function (environment) {
       },
     },
 
+    // FIXME remove before merging
+    exportApplicationGlobal: true,
+
     APP: {
       // Here you can pass flags/options to your application instance
       // when it is created
@@ -39,6 +42,10 @@ module.exports = function (environment) {
     minSaveTaskDurationMs: 1000,
 
     // the fields below may be rewritten by the realm server
+    // FIXME remove outdated realm URL properiets
+    initialRealmURLs: [
+      process.env.INITIAL_REALM_URL || 'http://localhost:4200/',
+    ],
     ownRealmURL:
       environment === 'test'
         ? 'http://test-realm/test/'
@@ -75,6 +82,12 @@ module.exports = function (environment) {
     // keep test console output quieter
     ENV.APP.LOG_ACTIVE_GENERATION = false;
     ENV.APP.LOG_VIEW_LOOKUPS = false;
+
+    // FIXME can the base realm URL be extracted from runtime-common?
+    ENV.initialRealmURLs = [
+      'http://test-realm/test/',
+      'https://cardstack.com/base/',
+    ];
 
     ENV.APP.rootElement = '#ember-testing';
     ENV.APP.autoboot = false;

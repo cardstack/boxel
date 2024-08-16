@@ -13,6 +13,7 @@ declare const config: {
   APP: Record<string, unknown>;
   ownRealmURL: string;
   otherRealmURLs: string[];
+  initialRealmURLs: string[];
   matrixURL: string;
   matrixServerName: string;
   experimentalAIEnabled: boolean;
@@ -30,4 +31,5 @@ declare const config: {
   sqlSchema: string;
   assetsURL: string;
   featureFlags?: {};
+  exportApplicationGlobal: boolean;
 };

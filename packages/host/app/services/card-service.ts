@@ -1,7 +1,10 @@
 import Service, { service } from '@ember/service';
 
+import { tracked } from '@glimmer/tracking';
+
 import { stringify } from 'qs';
 
+import { TrackedArray } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
@@ -42,7 +45,7 @@ export type CardSaveSubscriber = (
   content: SingleCardDocument | string,
 ) => void;
 
-const { ownRealmURL, otherRealmURLs, environment } = ENV;
+const { ownRealmURL, otherRealmURLs, environment, initialRealmURLs } = ENV;
 
 export default class CardService extends Service {
   @service private declare loaderService: LoaderService;
@@ -67,9 +70,7 @@ export default class CardService extends Service {
     return this.loaderToCardAPILoadingCache.get(loader)!;
   }
 
-  // This is temporary until we have a better way of discovering the realms that
-  // are available for a user // unresolved URLs
-  realmURLs = [...new Set([ownRealmURL, baseRealm.url, ...otherRealmURLs])];
+  @tracked realmURLs = new TrackedArray(initialRealmURLs);
 
   // Note that this should be the unresolved URL and that we need to rely on our
   // fetch to do any URL resolution.
@@ -83,6 +84,11 @@ export default class CardService extends Service {
 
   unregisterSaveSubscriber() {
     this.subscriber = undefined;
+  }
+
+  setRealms(realms: string[]) {
+    console.log('setting realms', realms);
+    this.realmURLs = new TrackedArray([...new Set([ownRealmURL, ...realms])]);
   }
 
   async fetchJSON(
