@@ -43,9 +43,7 @@ module.exports = function (environment) {
 
     // the fields below may be rewritten by the realm server
     // FIXME remove outdated realm URL properiets
-    initialRealmURLs: [
-      process.env.INITIAL_REALM_URL || 'http://localhost:4200/',
-    ],
+    initialRealmURLs: [process.env.OWN_REALM_URL || 'http://localhost:4200/'],
     ownRealmURL:
       environment === 'test'
         ? 'http://test-realm/test/'
