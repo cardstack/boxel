@@ -16,7 +16,7 @@ import {
 import { IconButton } from '@cardstack/boxel-ui/components';
 import { and, not } from '@cardstack/boxel-ui/helpers';
 
-import { BoxelIcon, DarkBoxelIcon } from '@cardstack/boxel-ui/icons';
+import { BoxelIcon } from '@cardstack/boxel-ui/icons';
 
 import AiAssistantButton from '@cardstack/host/components/ai-assistant/button';
 import AiAssistantPanel from '@cardstack/host/components/ai-assistant/panel';
@@ -218,9 +218,10 @@ export default class SubmodeLayout extends Component<Signature> {
         >
           <div class='top-left-menu'>
             <IconButton
-              @icon={{if this.workspaceChooserOpened BoxelIcon DarkBoxelIcon}}
+              @icon={{BoxelIcon}}
               @width='40px'
               @height='40px'
+              class={{if (not this.workspaceChooserOpened) 'dark-icon' ''}}
               {{on 'click' this.toggleWorkspaceChooser}}
               data-test-submode-layout-boxel-icon-button
             />
@@ -388,6 +389,11 @@ export default class SubmodeLayout extends Component<Signature> {
         border: 0;
         padding: 0;
         background: transparent;
+      }
+
+      .dark-icon {
+        --icon-bg-opacity: 1;
+        --icon-color: black;
       }
     </style>
   </template>
