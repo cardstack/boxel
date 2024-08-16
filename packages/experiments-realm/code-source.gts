@@ -45,23 +45,29 @@ import NumberField from 'https://cardstack.com/base/number';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 
 
-${(model.supportingFields ?? '')}
+${model.supportingFields ?? ''}
 
 export class ${model.name}  extends CardDef {
   static displayName = '${model.name}';
 
    ${model.fieldsCode}
 
- static isolated = class Isolated extends Component<typeof ${model.name}> {
+ ${
+   model.templateMarkup
+     ? `static isolated = class Isolated extends Component<typeof ${
+         model.name
+       }> {
     ${model.templateCode ?? ''}
 
     <template>
-      ${(model.templateMarkup ?? '')}
+      ${model.templateMarkup}
       <style>
-      ${(model.templateStyle ?? '')}
+      ${model.templateStyle ?? ''}
       </style>
     </template>
- };
+ };`
+     : ''
+ }
 }
 
       `,
@@ -160,7 +166,6 @@ export class ${model.name}  extends CardDef {
           <pre>{{this.args.model.supportingFields}}</pre>
         </div>
 
-
         <div class='field'>
           <label>Template Markup:</label>
           <pre>{{this.args.model.templateMarkup}}</pre>
@@ -220,6 +225,7 @@ export class ${model.name}  extends CardDef {
     </style>
   </template>
 }
+
 
 export class CodeSource extends CardDef {
   @field name = contains(StringField);
@@ -283,8 +289,8 @@ Example for a booking form:
   });
 
   @field supportingFields = contains(StringField, {
-    description: "Any FieldDefs required for nested fields"
-  })
+    description: 'Any FieldDefs required for nested fields',
+  });
 
   static displayName = 'CodeSource';
 
@@ -303,5 +309,6 @@ Example for a booking form:
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
   */
 }
