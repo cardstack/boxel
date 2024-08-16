@@ -428,6 +428,10 @@ export class Realm {
     });
   }
 
+  async indexing() {
+    return this.#realmIndexUpdater.indexing();
+  }
+
   async start() {
     this.#startedUp.fulfill((() => this.#startup())());
     await this.#startedUp.promise;
@@ -450,6 +454,7 @@ export class Realm {
     contents: string,
     clientRequestId?: string | null,
   ): Promise<WriteResult> {
+    await this.indexing();
     await this.trackOwnWrite(path);
     let results = await this.#adapter.write(path, contents);
     await this.#realmIndexUpdater.update(this.paths.fileURL(path), {

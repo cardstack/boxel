@@ -25,9 +25,6 @@ import {
   Realm,
   RealmPermissions,
   type LooseSingleCardDocument,
-  Loader,
-  fetcher,
-  maybeHandleScopedCSSRequest,
 } from '@cardstack/runtime-common';
 import { stringify } from 'qs';
 import { Query } from '@cardstack/runtime-common/query';
@@ -40,6 +37,8 @@ import {
   realmServerTestMatrix,
   realmSecretSeed,
   createVirtualNetwork,
+  createVirtualNetworkAndLoader,
+  matrixURL,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
@@ -51,7 +50,6 @@ import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import jwt from 'jsonwebtoken';
 
 setGracefulCleanup();
-const matrixURL = new URL('http://localhost:8008');
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealm2URL = new URL('http://127.0.0.1:4445/');
 const testRealmHref = testRealmURL.href;
@@ -67,17 +65,6 @@ let createJWT = (
 ) => {
   return realm.createJWT({ user, realm: realmUrl, permissions }, '7d');
 };
-
-function createVirtualNetworkAndLoader() {
-  let virtualNetwork = createVirtualNetwork();
-  let fetch = fetcher(virtualNetwork.fetch, [
-    async (req, next) => {
-      return (await maybeHandleScopedCSSRequest(req)) || next(req);
-    },
-  ]);
-  let loader = new Loader(fetch, virtualNetwork.resolveImport);
-  return { virtualNetwork, loader };
-}
 
 module('Realm Server', function (hooks) {
   async function expectEvent<T>({
@@ -1411,6 +1398,9 @@ module('Realm Server', function (hooks) {
           'realm is public readable',
         );
         let json = response.body;
+        for (let relationship of Object.values(json.data.relationships)) {
+          delete (relationship as any).meta.lastModified;
+        }
         assert.deepEqual(
           json,
           {
@@ -2463,7 +2453,9 @@ module('Realm Server serving from root', function (hooks) {
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
     let json = response.body;
-    // TODO elide the lastModified field in the meta props
+    for (let relationship of Object.values(json.data.relationships)) {
+      delete (relationship as any).meta.lastModified;
+    }
     assert.deepEqual(
       json,
       {
@@ -2650,9 +2642,9 @@ module('Realm server serving multiple realms', function (hooks) {
     beforeEach: async (dbAdapter, queue) => {
       let localBaseRealmURL = new URL('http://127.0.0.1:4446/base/');
       virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
-      // TODO need to sort out the worker and private networks
 
       base = await createRealm({
+        withWorker: true,
         dir: basePath,
         realmURL: baseRealm.url,
         virtualNetwork,
@@ -2663,6 +2655,7 @@ module('Realm server serving multiple realms', function (hooks) {
       virtualNetwork.mount(base.handle);
 
       testRealm = await createRealm({
+        withWorker: true,
         dir: dir.name,
         virtualNetwork,
         realmURL: 'http://127.0.0.1:4446/demo/',

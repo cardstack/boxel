@@ -176,16 +176,23 @@ export class RealmIndexUpdater {
     // URLs to figure out the realm username. As part of the ticket to create
     // dynamic realms this should be updated to look up the realm owner
     // permission
-    if (
-      ['http://127.0.0.1:4444/', 'http://127.0.0.1:4445/'].includes(
-        this.realmURL.href,
-      )
-    ) {
-      return 'node-test_realm';
-    }
+    switch (this.realmURL.href) {
+      case 'http://127.0.0.1:4441/':
+        return 'base_realm';
 
-    let name = this.realmURL.href.replace(/\/$/, '').split('/').pop()!;
-    return `${name}_realm`;
+      case 'http://127.0.0.1:4447/':
+        return 'test_realm';
+
+      case 'http://127.0.0.1:4444/':
+      case 'http://127.0.0.1:4445/':
+      case 'http://127.0.0.1:4448/':
+        return 'node-test_realm';
+
+      default: {
+        let name = this.realmURL.href.replace(/\/$/, '').split('/').pop()!;
+        return `${name}_realm`;
+      }
+    }
   }
 }
 

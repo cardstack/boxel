@@ -12,6 +12,7 @@ import {
   setupBaseRealmServer,
   runTestRealmServer,
   setupDB,
+  matrixURL,
 } from './helpers';
 import { copySync } from 'fs-extra';
 import { shimExternals } from '../lib/externals';
@@ -20,7 +21,6 @@ import { join } from 'path';
 
 setGracefulCleanup();
 
-const matrixURL = new URL('http://localhost:8008');
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealmHref = testRealmURL.href;
 
@@ -154,8 +154,8 @@ module('loader', function (hooks) {
     setupDB(hooks, {
       before: async (dbAdapter, queue) => {
         loader2 = createLoader();
-        // TODO need to make worker for this realm
         realm = await createRealm({
+          withWorker: true,
           dir: dir.name,
           fileSystem: {
             'foo.js': `

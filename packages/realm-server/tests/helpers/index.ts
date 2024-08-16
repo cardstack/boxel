@@ -9,11 +9,14 @@ import {
   VirtualNetwork,
   Worker,
   RunnerOptionsManager,
+  Loader,
+  fetcher,
+  maybeHandleScopedCSSRequest,
+  insertPermissions,
+  IndexWriter,
   type MatrixConfig,
   type Queue,
   type IndexRunner,
-  insertPermissions,
-  IndexWriter,
 } from '@cardstack/runtime-common';
 import { makeFastBootIndexRunner } from '../../fastboot';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -28,13 +31,14 @@ export * from '@cardstack/runtime-common/helpers/indexer';
 
 export const testRealm = 'http://test-realm/';
 export const localBaseRealm = 'http://localhost:4441/';
+export const matrixURL = new URL('http://localhost:8008');
 const testMatrix: MatrixConfig = {
-  url: new URL(`http://localhost:8008`),
+  url: matrixURL,
   username: 'node-test_realm',
 };
 
 export const realmServerTestMatrix: MatrixConfig = {
-  url: new URL(`http://localhost:8008`),
+  url: matrixURL,
   username: 'node-test_realm-server',
 };
 export const realmSecretSeed = `shhh! it's a secret`;
@@ -46,12 +50,24 @@ let fastbootState:
   | { getRunner: IndexRunner; getIndexHTML: () => Promise<string> }
   | undefined;
 
+export function createVirtualNetworkAndLoader() {
+  let virtualNetwork = createVirtualNetwork();
+  let fetch = fetcher(virtualNetwork.fetch, [
+    async (req, next) => {
+      return (await maybeHandleScopedCSSRequest(req)) || next(req);
+    },
+  ]);
+  let loader = new Loader(fetch, virtualNetwork.resolveImport);
+  return { virtualNetwork, loader };
+}
+
 export function createVirtualNetwork() {
   let virtualNetwork = new VirtualNetwork();
   shimExternals(virtualNetwork);
   virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
   return virtualNetwork;
 }
+
 export function prepareTestDB(): void {
   process.env.PGDATABASE = `test_db_${Math.floor(10000000 * Math.random())}`;
 }
@@ -142,6 +158,7 @@ export async function createRealm({
   queue,
   dbAdapter,
   matrixConfig = testMatrix,
+  withWorker,
 }: {
   dir: string;
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
@@ -152,6 +169,9 @@ export async function createRealm({
   queue: Queue;
   dbAdapter: PgAdapter;
   deferStartUp?: true;
+  // if you are creating a realm  to test it directly without a server, you can
+  // also specify `withWorker: true` to also include a worker with your realm
+  withWorker?: true;
 }): Promise<Realm> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
@@ -165,6 +185,19 @@ export async function createRealm({
 
   let getIndexHTML = (await getFastbootState()).getIndexHTML;
   let adapter = new NodeAdapter(dir);
+  let worker: Worker | undefined;
+  if (withWorker) {
+    let indexRunner = (await getFastbootState()).getRunner;
+    worker = new Worker({
+      indexWriter: new IndexWriter(dbAdapter),
+      queue,
+      runnerOptsManager: manager,
+      indexRunner,
+      virtualNetwork,
+      matrixURL: matrixConfig.url,
+      secretSeed: realmSecretSeed,
+    });
+  }
   let realm = new Realm({
     url: realmURL,
     adapter,
@@ -176,6 +209,10 @@ export async function createRealm({
     queue,
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
   });
+  if (worker) {
+    virtualNetwork.mount(realm.maybeHandle);
+    await worker.run();
+  }
   return realm;
 }
 
@@ -196,6 +233,12 @@ export function setupBaseRealmServer(
     },
     after: async () => {
       baseRealmServer.close();
+      // TODO I'm still trying to track this down, but there is some additional
+      // async we need to await in order for the base realm to shut down
+      // properly. failure to await this "thing" results in subsequent requests
+      // to new base realm servers to fail to load. this is most readily seen in
+      // the indexing-test.ts
+      await new Promise((r) => setTimeout(r, 1000));
     },
   });
 }
