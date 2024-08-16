@@ -283,7 +283,13 @@ export default class SubmodeLayout extends Component<Signature> {
             />
           {{/if}}
         </ResizablePanel>
-        {{#if (and APP.experimentalAIEnabled (not @hideAiAssistant))}}
+        {{#if
+          (and
+            APP.experimentalAIEnabled
+            (not @hideAiAssistant)
+            (not this.workspaceChooserOpened)
+          )
+        }}
           <ResizablePanel
             @defaultLengthFraction={{0.3}}
             @minLengthPx={{371}}
