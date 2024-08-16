@@ -12,7 +12,16 @@ let WorkspaceChooser: TemplateOnlyComponent<Signature> = <template>
     <span class='workspace-chooser__title'>Community Catalogs</span>
   </div>
   <style>
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
+    }
     .workspace-chooser {
+      opacity: 0;
       display: flex;
       flex-direction: column;
       gap: var(--boxel-sp-lg);
@@ -20,6 +29,7 @@ let WorkspaceChooser: TemplateOnlyComponent<Signature> = <template>
       background-color: var(--boxel-700);
       height: 100%;
       padding: 10rem 11.5rem;
+      animation: fadeIn 1s ease-in forwards;
     }
     .workspace-chooser__title {
       color: var(--boxel-light);
