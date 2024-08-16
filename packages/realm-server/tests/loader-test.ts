@@ -13,6 +13,7 @@ import {
   runTestRealmServer,
   setupDB,
   matrixURL,
+  closeServer,
 } from './helpers';
 import { copySync } from 'fs-extra';
 import { shimExternals } from '../lib/externals';
@@ -59,7 +60,7 @@ module('loader', function (hooks) {
       }));
     },
     after: async () => {
-      testRealmServer.close();
+      await closeServer(testRealmServer);
     },
   });
 

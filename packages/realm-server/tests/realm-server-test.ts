@@ -39,6 +39,7 @@ import {
   createVirtualNetwork,
   createVirtualNetworkAndLoader,
   matrixURL,
+  closeServer,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
@@ -167,8 +168,8 @@ module('Realm Server', function (hooks) {
     copySync(join(__dirname, 'cards'), dir.name);
   });
 
-  hooks.afterEach(function () {
-    testRealmServer.close();
+  hooks.afterEach(async function () {
+    await closeServer(testRealmServer);
   });
 
   module('card GET request', function (_hooks) {
@@ -2099,7 +2100,7 @@ module('Realm Server', function (hooks) {
           }));
       },
       afterEach: async () => {
-        testRealmServer2.close();
+        await closeServer(testRealmServer2);
       },
     });
 
@@ -2442,7 +2443,7 @@ module('Realm Server serving from root', function (hooks) {
       request = supertest(testRealmServer);
     },
     afterEach: async () => {
-      testRealmServer.close();
+      await closeServer(testRealmServer);
     },
   });
 
@@ -2682,7 +2683,7 @@ module('Realm server serving multiple realms', function (hooks) {
       request = supertest(testRealmServer);
     },
     afterEach: async () => {
-      testRealmServer.close();
+      await closeServer(testRealmServer);
     },
   });
 
@@ -2757,7 +2758,7 @@ module('Realm Server serving from a subdirectory', function (hooks) {
       request = supertest(testRealmServer);
     },
     afterEach: async () => {
-      testRealmServer.close();
+      await closeServer(testRealmServer);
     },
   });
 
@@ -2820,7 +2821,7 @@ module('Realm server authentication', function (hooks) {
       request = supertest(testRealmServer);
     },
     afterEach: async () => {
-      testRealmServer.close();
+      await closeServer(testRealmServer);
     },
   });
 

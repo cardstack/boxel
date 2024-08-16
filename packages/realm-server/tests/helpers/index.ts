@@ -72,6 +72,10 @@ export function prepareTestDB(): void {
   process.env.PGDATABASE = `test_db_${Math.floor(10000000 * Math.random())}`;
 }
 
+export async function closeServer(server: Server) {
+  await new Promise<void>((r) => server.close(() => r()));
+}
+
 type BeforeAfterCallback = (
   dbAdapter: PgAdapter,
   queue: Queue,
@@ -232,13 +236,7 @@ export function setupBaseRealmServer(
       );
     },
     after: async () => {
-      baseRealmServer.close();
-      // TODO I'm still trying to track this down, but there is some additional
-      // async we need to await in order for the base realm to shut down
-      // properly. failure to await this "thing" results in subsequent requests
-      // to new base realm servers to fail to load. this is most readily seen in
-      // the indexing-test.ts
-      await new Promise((r) => setTimeout(r, 1000));
+      await closeServer(baseRealmServer);
     },
   });
 }

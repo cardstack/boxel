@@ -16,6 +16,7 @@ import {
   createVirtualNetwork,
   createVirtualNetworkAndLoader,
   matrixURL,
+  closeServer,
 } from './helpers';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { Server } from 'http';
@@ -821,8 +822,8 @@ module('permissioned realm', function (hooks) {
           }));
       },
       afterEach: async () => {
-        testRealmServer1.close();
-        testRealmServer2.close();
+        await closeServer(testRealmServer1);
+        await closeServer(testRealmServer2);
       },
     });
   }
