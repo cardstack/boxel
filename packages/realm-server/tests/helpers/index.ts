@@ -146,7 +146,7 @@ export function setupDB(
 async function getFastbootState() {
   if (!fastbootState) {
     fastbootState = await makeFastBootIndexRunner(
-      new URL('http://localhost:4200/'),
+      new URL(process.env.HOST_URL ?? 'http://localhost:4200/'),
       manager.getOptions.bind(manager),
     );
   }
