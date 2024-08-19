@@ -82,7 +82,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
         >
           <div class={{cn 'actions' field=(this.isField renderedCard)}}>
             {{#if (this.isButtonDisplayed 'select' renderedCard)}}
-              <div class='actions-item'>
+              <div class='actions-item select'>
                 <IconButton
                   class='actions-item__button'
                   {{! @glint-ignore (glint thinks toggleSelect is not in this scope but it actually is - we check for it in the condition above) }}
@@ -349,6 +349,9 @@ export default class OperatorModeOverlays extends Component<Signature> {
         --icon-bg: var(--boxel-dark);
         --icon-color: var(--boxel-dark);
         background-color: var(--boxel-cyan);
+      }
+      .selected .actions-item.select {
+        visibility: visible;
       }
     </style>
   </template>
