@@ -144,6 +144,9 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { RealmInfo } from './realm';
 import { PrerenderedCard } from './index-query-engine';
 
+import camelCase from 'camelcase';
+export { camelCase };
+
 export const maxLinkDepth = 5;
 
 export interface MatrixCardError {

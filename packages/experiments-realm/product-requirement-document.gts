@@ -7,10 +7,268 @@ import {
   contains,
   StringField,
   Component,
+  realmURL,
 } from 'https://cardstack.com/base/card-api';
 import { Button } from '@cardstack/boxel-ui/components';
 import { ImagePlaceholder } from '@cardstack/boxel-ui/icons';
 import { bool, cn, not } from '@cardstack/boxel-ui/helpers';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import { tracked } from '@glimmer/tracking';
+import { restartableTask } from 'ember-concurrency';
+import { camelCase } from '@cardstack/runtime-common';
+
+class Isolated extends Component<typeof ProductRequirementDocument> {
+  <template>
+    <section class='prd'>
+      <header>
+        <div class='header-button-group'>
+          <div class='title-group'>
+            <div
+              class={{cn
+                'app-icon-container'
+                placeholder=(not @model.thumbnail.base64)
+              }}
+            >
+              {{#if @model.thumbnail.base64}}
+                <@fields.thumbnail />
+              {{else}}
+                <ImagePlaceholder
+                  class='icon-placeholder'
+                  width='50'
+                  height='50'
+                  role='presentation'
+                />
+              {{/if}}
+            </div>
+            <h1><@fields.title /></h1>
+          </div>
+          <Button
+            {{on 'click' this.generateApp}}
+            class='generate-button'
+            @kind='primary-dark'
+            @disabled={{this.createModule.isRunning}}
+            @loading={{this.createModule.isRunning}}
+          >
+            {{#unless this.createModule.isRunning}}
+              <span class='generate-button-logo' />
+            {{/unless}}
+            Generate App Now
+          </Button>
+        </div>
+        {{#if this.errorMessage}}
+          <p class='error'>{{this.errorMessage}}</p>
+        {{/if}}
+        <p class='description'><@fields.description /></p>
+      </header>
+      <div class='content'>
+        <details open={{bool @model.prompt}}>
+          <summary><span>Prompt</span></summary>
+          <div class='details-content'>
+            <@fields.prompt />
+          </div>
+        </details>
+        <details open={{bool @model.overview}}>
+          <summary><span>Overview</span></summary>
+          <div class='details-content'>
+            <@fields.overview />
+          </div>
+        </details>
+        <details open={{bool @model.schema}}>
+          <summary><span>Schema</span></summary>
+          <div class='details-content'>
+            <@fields.schema />
+          </div>
+        </details>
+        <details open={{bool @model.layoutAndNavigation}}>
+          <summary><span>Layout & Navigation</span></summary>
+          <div class='details-content'>
+            <@fields.layoutAndNavigation />
+          </div>
+        </details>
+      </div>
+    </section>
+    <style>
+      .prd {
+        padding: var(--boxel-sp) var(--boxel-sp-xxl);
+      }
+      .title-group {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp);
+      }
+      .header-button-group {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: var(--boxel-sp);
+      }
+      .generate-button {
+        --icon-size: 20px;
+        --boxel-button-loading-icon-size: var(--icon-size);
+        padding: var(--boxel-sp-xxs) var(--boxel-sp);
+        justify-self: end;
+        gap: var(--boxel-sp-sm);
+      }
+      .generate-button :deep(svg) {
+        width: var(--icon-size);
+        height: var(--icon-size);
+      }
+      .generate-button :deep(.loading-indicator) {
+        width: var(--icon-size);
+        height: var(--icon-size);
+        margin-right: 0;
+      }
+      .generate-button-logo {
+        flex-shrink: 0;
+        display: inline-block;
+        width: var(--icon-size);
+        height: var(--icon-size);
+        background: url('./ai-assist-icon@2x.webp') no-repeat center;
+        background-size: contain;
+      }
+      .app-icon-container {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 80px;
+        height: 80px;
+        border: 1px solid var(--boxel-200);
+        border-radius: var(--boxel-border-radius-xl);
+      }
+      .placeholder {
+        background-color: var(--boxel-200);
+      }
+      .icon-placeholder {
+        --icon-color: #212121;
+      }
+      h1 {
+        margin: 0;
+        font-weight: 700;
+        font-size: 1.5rem;
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      details {
+        margin-top: var(--boxel-sp-sm);
+        padding-top: var(--boxel-sp-sm);
+        border-top: 1px solid var(--boxel-200);
+      }
+      summary {
+        margin: 0;
+        font: 700 var(--boxel-font);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      summary:hover {
+        cursor: pointer;
+      }
+      summary > span {
+        display: inline-block;
+        margin-left: var(--boxel-sp-xxxs);
+      }
+      .details-content {
+        margin-top: var(--boxel-sp);
+      }
+      .description {
+        margin-top: var(--boxel-sp-sm);
+        font: 500 var(--boxel-font);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      .content {
+        margin-top: var(--boxel-sp-lg);
+      }
+      .error {
+        color: var(--boxel-danger);
+        font-weight: 700;
+      }
+    </style>
+  </template>
+
+  @tracked errorMessage = '';
+
+  get currentRealm() {
+    return this.args.model[realmURL];
+  }
+
+  @action generateApp() {
+    this.createModule.perform();
+  }
+
+  private createModule = restartableTask(async () => {
+    this.errorMessage = '';
+    try {
+      if (!this.currentRealm) {
+        throw new Error('Realm URL is not available');
+      }
+      if (!this.args.context?.actions) {
+        throw new Error('Context actions are not available');
+      }
+      // TODO: Use runCommand action to send generate command
+      let { appTitle } = this.args.model;
+      let fileName = appTitle?.replace(' ', '-').toLowerCase();
+      let moduleName = camelCase(appTitle ?? 'AppCard', { pascalCase: true });
+      let moduleId = `${this.currentRealm.href}${fileName}`;
+
+      // TODO: Replace/update code below with ai generated code
+      let response = await fetch(`${moduleId}.gts`, {
+        method: 'POST',
+        headers: { Accept: 'application/vnd.card+source' },
+        body: `import { CardDef, FieldDef, linksTo, linksToMany, field, contains, containsMany } from 'https://cardstack.com/base/card-api';
+import { Component } from 'https://cardstack.com/base/card-api';
+import { get } from '@ember/object';
+import { tracked } from '@glimmer/tracking';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import { restartableTask } from 'ember-concurrency';
+import { eq } from '@cardstack/boxel-ui/helpers';
+
+import StringField from 'https://cardstack.com/base/string';
+import BooleanField from 'https://cardstack.com/base/boolean';
+import DateField from 'https://cardstack.com/base/date';
+import DateTimeField from 'https://cardstack.com/base/datetime';
+import NumberField from 'https://cardstack.com/base/number';
+
+import MarkdownField from 'https://cardstack.com/base/markdown';
+
+import { AppCard } from './app-card';
+
+export class ${moduleName} extends AppCard {
+  static displayName = '${appTitle}';
+}`,
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Could not write file "${moduleId}.gts", status ${response.status}: ${
+            response.statusText
+          } - ${await response.text()}`,
+        );
+      }
+      let moduleRef = { module: moduleId, name: moduleName };
+      // TODO: update initial card data
+      let card = await this.args.context?.actions?.createCard?.(
+        moduleRef,
+        undefined,
+        {
+          realmURL: this.currentRealm,
+          doc: {
+            data: {
+              attributes: { title: appTitle },
+              meta: { adoptsFrom: moduleRef },
+            },
+          },
+        },
+      );
+      if (!card) {
+        throw new Error('Could not create card');
+      }
+    } catch (e) {
+      console.error(e);
+      this.errorMessage =
+        e instanceof Error ? `Error: ${e.message}` : 'An error has occurred';
+    }
+  });
+}
 
 export class ProductRequirementDocument extends CardDef {
   static displayName = 'Product Requirements';
@@ -31,156 +289,5 @@ export class ProductRequirementDocument extends CardDef {
       return this.shortDescription;
     },
   });
-  static isolated = class Isolated extends Component<typeof this> {
-    <template>
-      <section class='prd'>
-        <header>
-          <div class='header-button-group'>
-            <div class='title-group'>
-              <div
-                class={{cn
-                  'app-icon-container'
-                  placeholder=(not @model.thumbnail.base64)
-                }}
-              >
-                {{#if @model.thumbnail.base64}}
-                  <@fields.thumbnail />
-                {{else}}
-                  <ImagePlaceholder
-                    class='icon-placeholder'
-                    width='50'
-                    height='50'
-                    role='presentation'
-                  />
-                {{/if}}
-              </div>
-              <h1><@fields.title /></h1>
-            </div>
-            <Button
-              class='generate-button'
-              @kind='primary-dark'
-              @disabled={{true}}
-            >
-              <span class='generate-button-logo' />
-              Generate App Now
-            </Button>
-          </div>
-          <p class='description'><@fields.description /></p>
-        </header>
-        <div class='content'>
-          <details open={{bool @model.prompt}}>
-            <summary><span>Prompt</span></summary>
-            <div class='details-content'>
-              <@fields.prompt />
-            </div>
-          </details>
-          <details open={{bool @model.overview}}>
-            <summary><span>Overview</span></summary>
-            <div class='details-content'>
-              <@fields.overview />
-            </div>
-          </details>
-          <details open={{bool @model.schema}}>
-            <summary><span>Schema</span></summary>
-            <div class='details-content'>
-              <@fields.schema />
-            </div>
-          </details>
-          <details open={{bool @model.layoutAndNavigation}}>
-            <summary><span>Layout & Navigation</span></summary>
-            <div class='details-content'>
-              <@fields.layoutAndNavigation />
-            </div>
-          </details>
-        </div>
-      </section>
-      <style>
-        .prd {
-          padding: var(--boxel-sp) var(--boxel-sp-xxl);
-        }
-        .title-group {
-          display: flex;
-          align-items: center;
-          gap: var(--boxel-sp);
-        }
-        .header-button-group {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: var(--boxel-sp);
-        }
-        .generate-button {
-          --icon-size: 20px;
-          --boxel-button-loading-icon-size: var(--icon-size);
-          padding: var(--boxel-sp-xxs) var(--boxel-sp);
-          justify-self: end;
-          gap: var(--boxel-sp-sm);
-        }
-        .generate-button :deep(svg) {
-          width: var(--icon-size);
-          height: var(--icon-size);
-        }
-        .generate-button :deep(.loading-indicator) {
-          margin-right: 0;
-        }
-        .generate-button-logo {
-          display: inline-block;
-          width: var(--icon-size);
-          height: var(--icon-size);
-          background: url('./ai-assist-icon@2x.webp') no-repeat center;
-          background-size: contain;
-        }
-        .app-icon-container {
-          flex-shrink: 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 80px;
-          height: 80px;
-          border: 1px solid var(--boxel-200);
-          border-radius: var(--boxel-border-radius-xl);
-        }
-        .placeholder {
-          background-color: var(--boxel-200);
-        }
-        .icon-placeholder {
-          --icon-color: #212121;
-        }
-        h1 {
-          margin: 0;
-          font-weight: 700;
-          font-size: 1.5rem;
-          letter-spacing: var(--boxel-lsp-xs);
-        }
-        details {
-          margin-top: var(--boxel-sp-sm);
-          padding-top: var(--boxel-sp-sm);
-          border-top: 1px solid var(--boxel-200);
-        }
-        summary {
-          margin: 0;
-          font: 700 var(--boxel-font);
-          letter-spacing: var(--boxel-lsp-xs);
-        }
-        summary:hover {
-          cursor: pointer;
-        }
-        summary > span {
-          display: inline-block;
-          margin-left: var(--boxel-sp-xxxs);
-        }
-        .details-content {
-          margin-top: var(--boxel-sp);
-        }
-        .description {
-          margin-top: var(--boxel-sp-sm);
-          font: 500 var(--boxel-font);
-          letter-spacing: var(--boxel-lsp-xs);
-        }
-        .content {
-          margin-top: var(--boxel-sp-lg);
-        }
-      </style>
-    </template>
-  };
+  static isolated = Isolated;
 }
