@@ -2494,6 +2494,12 @@ const tests = Object.freeze({
           'https://cardstack.com/base/card-api/CardDef':
             '<div>Van Gogh (CardDef embedded template)</div>',
         },
+        fitted_html: {
+          [`${testRealmURL}person/Person`]:
+            '<div>Van Gogh (Person fitted template)</div>',
+          'https://cardstack.com/base/card-api/CardDef':
+            '<div>Van Gogh (CardDef fitted template)</div>',
+        },
         atom_html: 'Van Gogh',
         search_doc: { name: 'Van Gogh' },
       },
@@ -2514,6 +2520,12 @@ const tests = Object.freeze({
             '<div>Jimmy (Person embedded template)</div>',
           'https://cardstack.com/base/card-api/CardDef':
             '<div>Jimmy (CardDef embedded template)</div>',
+        },
+        fitted_html: {
+          [`${testRealmURL}person/1`]:
+            '<div>Jimmy (Person fitted template)</div>',
+          'https://cardstack.com/base/card-api/CardDef':
+            '<div>Jimmy (CardDef fitted template)</div>',
         },
         atom_html: 'Jimmy',
         search_doc: { name: 'Jimmy' },
@@ -2537,6 +2549,14 @@ const tests = Object.freeze({
             '<div>Donald (Person embedded template)</div>',
           'https://cardstack.com/base/card-api/CardDef':
             '<div>Donald (CardDef embedded template)</div>',
+        },
+        fitted_html: {
+          [`${testRealmURL}fancy-person/FancyPerson`]:
+            '<div>Donald (FancyPerson fitted template)</div>',
+          [`${testRealmURL}person/Person`]:
+            '<div>Donald (Person fitted template)</div>',
+          'https://cardstack.com/base/card-api/CardDef':
+            '<div>Donald (CardDef fitted template)</div>',
         },
         atom_html: 'Donald',
         search_doc: { name: 'Donald' },

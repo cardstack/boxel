@@ -915,11 +915,11 @@ module('Acceptance | interact submode tests', function (hooks) {
       });
       assert
         .dom(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-embedded-card-edit-button]`,
+          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-fitted-card-edit-button]`,
         )
         .exists();
       await click(
-        `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-embedded-card-edit-button]`,
+        `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-fitted-card-edit-button]`,
       );
       await waitFor(`[data-test-stack-card="${testRealmURL}Pet/mango"]`);
       assert
@@ -1170,7 +1170,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         .exists();
       assert
         .dom(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-embedded-card-edit-button]`,
+          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-fitted-card-edit-button]`,
         )
         .doesNotExist('edit icon not displayed for linked card');
       await click(

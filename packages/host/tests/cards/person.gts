@@ -37,6 +37,12 @@ export class Person extends CardDef {
       <h1><@fields.title /></h1>
     </template>
   };
+  static fitted = class Fitted extends Component<typeof this> {
+    <template>
+      <h3>Person: <@fields.firstName /></h3>
+      <h1><@fields.title /></h1>
+    </template>
+  };
 }
 
 export class PersonField extends FieldDef {
