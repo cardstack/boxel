@@ -336,6 +336,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
         border: 1px solid var(--boxel-450);
         border-radius: 5px;
         gap: var(--boxel-sp-xxxs);
+        box-shadow: 0 3px 3px 0 rgba(0, 0, 0, 0.5);
       }
       .actions-item__button {
         --icon-bg: var(--boxel-dark);
