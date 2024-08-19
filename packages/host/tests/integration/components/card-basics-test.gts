@@ -1228,11 +1228,12 @@ module('Integration | card-basics', function (hooks) {
       class Pet extends CardDef {
         @field firstName = contains(StringField);
         @field friend = linksTo(() => Pet);
-        static embedded = class Embedded extends Component<typeof this> {
+        static fitted = class Fitted extends Component<typeof this> {
           <template>
             <div data-test-pet={{@model.firstName}}>
               <@fields.firstName />
-              <@fields.friend />
+              {{! template-lint-disable no-inline-styles }}
+              <@fields.friend style='margin: 10px' />
             </div>
           </template>
         };
@@ -1242,7 +1243,11 @@ module('Integration | card-basics', function (hooks) {
         @field pet = linksTo(Pet);
         static embedded = class Embedded extends Component<typeof this> {
           <template>
-            <div data-test-person><@fields.firstName /><@fields.pet /></div>
+            <div data-test-person>
+              <h1><@fields.firstName /></h1>
+              {{! template-lint-disable no-inline-styles }}
+              <@fields.pet style='margin: 10px' />
+            </div>
           </template>
         };
       }
@@ -1258,6 +1263,9 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-person]').containsText('Hassan');
       assert.dom('[data-test-pet="Mango"]').containsText('Mango');
       assert.dom('[data-test-pet="Van Gogh"]').containsText('Van Gogh');
+      assert
+        .dom('[data-test-card-format="fitted"]')
+        .hasStyle({ margin: '10px' });
     });
 
     test('render whole composite field', async function (assert) {
@@ -1596,7 +1604,7 @@ module('Integration | card-basics', function (hooks) {
     test('can #each over a linksToMany @fields', async function (this: RenderingTestContext, assert) {
       class Person extends CardDef {
         @field firstName = contains(StringField);
-        static embedded = class Embedded extends Component<typeof this> {
+        static fitted = class Fitted extends Component<typeof this> {
           <template>
             <div data-test-person-firstName><@fields.firstName /></div>
           </template>

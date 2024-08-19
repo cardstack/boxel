@@ -95,7 +95,7 @@ module('Integration | card-editor', function (hooks) {
     class Pet extends CardDef {
       static displayName = 'Pet';
       @field name = contains(StringField);
-      static embedded = class Embedded extends Component<typeof this> {
+      static fitted = class Fitted extends Component<typeof this> {
         <template>
           <h3 data-test-pet={{@model.name}}>
             <@fields.name />
@@ -106,7 +106,7 @@ module('Integration | card-editor', function (hooks) {
     class FancyPet extends Pet {
       static displayName = 'FancyPet';
       @field favoriteToy = contains(StringField);
-      static embedded = class Embedded extends Component<typeof this> {
+      static fitted = class Fitted extends Component<typeof this> {
         <template>
           <h3 data-test-pet={{@model.name}}>
             <@fields.name />
@@ -120,7 +120,7 @@ module('Integration | card-editor', function (hooks) {
       static displayName = 'Person';
       @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
-      static isolated = class Embedded extends Component<typeof this> {
+      static isolated = class Isolated extends Component<typeof this> {
         <template>
           <h2 data-test-person={{@model.firstName}}>
             <@fields.firstName />

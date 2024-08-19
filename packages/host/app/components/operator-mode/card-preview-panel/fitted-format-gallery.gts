@@ -3,7 +3,7 @@ import { cached } from '@glimmer/tracking';
 
 import { provide } from 'ember-provide-consume-context';
 
-import { DefaultFormatContextName } from '@cardstack/runtime-common';
+import { DefaultFormatsContextName } from '@cardstack/runtime-common';
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
@@ -13,9 +13,9 @@ interface Signature {
   };
 }
 export default class FittedFormatGallery extends Component<Signature> {
-  @provide(DefaultFormatContextName)
+  @provide(DefaultFormatsContextName)
   get defaultFormat() {
-    return 'fitted';
+    return { cardDef: 'fitted', fieldDef: 'fitted' };
   }
 
   @cached

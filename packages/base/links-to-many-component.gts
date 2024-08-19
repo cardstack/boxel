@@ -13,7 +13,7 @@ import {
 } from './card-api';
 import {
   BoxComponentSignature,
-  DefaultFormatConsumer,
+  DefaultFormatsConsumer,
   PermissionsConsumer,
   getBoxComponent,
 } from './field-component';
@@ -358,7 +358,7 @@ function getEditorChildFormat(
   ) {
     return 'atom';
   }
-  return 'embedded';
+  return 'embedded'; // TODO: correct?
 }
 
 function coalesce<T>(arg1: T | undefined, arg2: T): T {
@@ -394,17 +394,24 @@ export function getLinksToManyComponent({
   let isComputed = !!field.computeVia;
   let linksToManyComponent = class LinksToManyComponent extends GlimmerComponent<BoxComponentSignature> {
     <template>
-      <DefaultFormatConsumer as |defaultFormat|>
-        {{#if (shouldRenderEditor @format defaultFormat isComputed)}}
+      <DefaultFormatsConsumer as |defaultFormats|>
+        {{#if (shouldRenderEditor @format defaultFormats.cardDef isComputed)}}
           <LinksToManyEditor
             @model={{model}}
             @arrayField={{arrayField}}
             @field={{field}}
             @cardTypeFor={{cardTypeFor}}
-            @childFormat={{getEditorChildFormat @format defaultFormat model}}
+            @childFormat={{getEditorChildFormat
+              @format
+              defaultFormats.cardDef
+              model
+            }}
           />
         {{else}}
-          {{#let (coalesce @format defaultFormat) as |effectiveFormat|}}
+          {{#let
+            (coalesce @format defaultFormats.cardDef)
+            as |effectiveFormat|
+          }}
             <div
               class='plural-field linksToMany-field
                 {{effectiveFormat}}-effectiveFormat
@@ -420,7 +427,7 @@ export function getLinksToManyComponent({
             </div>
           {{/let}}
         {{/if}}
-      </DefaultFormatConsumer>
+      </DefaultFormatsConsumer>
       <style>
         .linksToMany-field.embedded-effectiveFormat > div + div {
           margin-top: var(--boxel-sp);

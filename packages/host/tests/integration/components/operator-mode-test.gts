@@ -179,7 +179,7 @@ module('Integration | operator-mode', function (hooks) {
       static displayName = 'Friend';
       @field name = contains(StringField);
       @field friend = linksTo(() => Friend);
-      static embedded = class Embedded extends Component<typeof this> {
+      static fitted = class Fitted extends Component<typeof this> {
         <template>
           <@fields.name />
         </template>
@@ -262,7 +262,7 @@ module('Integration | operator-mode', function (hooks) {
           </div>
         </template>
       };
-      static embedded = class Embedded extends Component<typeof this> {
+      static fitted = class Fitted extends Component<typeof this> {
         <template>
           <span data-test-author='{{@model.firstName}}'>
             <@fields.firstName />
@@ -278,7 +278,7 @@ module('Integration | operator-mode', function (hooks) {
       @field slug = contains(StringField);
       @field body = contains(TextAreaField);
       @field authorBio = linksTo(Author);
-      static embedded = class Embedded extends Component<typeof this> {
+      static fitted = class Fitted extends Component<typeof this> {
         <template>
           <@fields.title /> by <@fields.authorBio />
         </template>
