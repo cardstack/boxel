@@ -3,6 +3,7 @@ import AddButton from './components/add-button/index.gts';
 import Button from './components/button/index.gts';
 import BoxelButton from './components/button/index.gts';
 import CardContainer from './components/card-container/index.gts';
+import CardContentContainer from './components/card-content-container/index.gts';
 import CircleSpinner from './components/circle-spinner/index.gts';
 import BoxelDropdown from './components/dropdown/index.gts';
 import FieldContainer from './components/field-container/index.gts';
@@ -48,6 +49,7 @@ export {
   BoxelSelect,
   Button,
   CardContainer,
+  CardContentContainer,
   CircleSpinner,
   FieldContainer,
   GridContainer,

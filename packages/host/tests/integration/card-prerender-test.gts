@@ -249,7 +249,7 @@ module('Integration | card-prerender', function (hooks) {
     let results = await realm.realmIndexQueryEngine.searchPrerendered(
       {},
       {
-        htmlFormat: 'embedded',
+        htmlFormat: 'fitted',
       },
     );
 
@@ -272,7 +272,7 @@ module('Integration | card-prerender', function (hooks) {
           stripScopedCSSAttributes(results.prerenderedCards[index].html!),
         ),
         cleanWhiteSpace(`
-        <div class="embedded-template">
+        <div class="fitted-template">
           <div class="thumbnail-section">
             <div class="card-thumbnail">
               <div class="card-thumbnail-placeholder" data-test-card-thumbnail-placeholder></div>

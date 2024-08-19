@@ -492,13 +492,13 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       .containsText('Currency');
     assert
       .dom(
-        `[data-test-overlay-card="${testRealmURL}usd"] [data-test-embedded-card-edit-button]`,
+        `[data-test-overlay-card="${testRealmURL}usd"] [data-test-fitted-card-edit-button]`,
       )
       .exists()
       .isNotDisabled();
     assert
       .dom(
-        `[data-test-overlay-card="${testRealmURL}usd"] [data-test-embedded-card-options-button]`,
+        `[data-test-overlay-card="${testRealmURL}usd"] [data-test-fitted-card-options-button]`,
       )
       .exists()
       .isNotDisabled();

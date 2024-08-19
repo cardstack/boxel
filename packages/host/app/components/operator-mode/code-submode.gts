@@ -58,7 +58,7 @@ import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import FileTree from '../editor/file-tree';
 
-import CardPreviewPanel from './card-preview-panel';
+import CardPreviewPanel from './card-preview-panel/index';
 import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
 import InnerContainer from './code-submode/inner-container';
