@@ -418,18 +418,23 @@ export function getLinksToManyComponent({
                 {{unless arrayField.children.length "empty"}}'
               data-test-plural-view={{field.fieldType}}
               data-test-plural-view-format={{effectiveFormat}}
+              ...attributes
             >
               {{#each (getComponents) as |Item i|}}
-                <div data-test-plural-view-item={{i}}>
-                  <Item @format={{effectiveFormat}} />
-                </div>
+                <Item
+                  @format={{effectiveFormat}}
+                  class='linksToMany-item'
+                  data-test-plural-view-item={{i}}
+                />
               {{/each}}
             </div>
           {{/let}}
         {{/if}}
       </DefaultFormatsConsumer>
       <style>
-        .linksToMany-field.embedded-effectiveFormat > div + div {
+        .linksToMany-field.fitted-effectiveFormat
+          > .linksToMany-item
+          + .linksToMany-item {
           margin-top: var(--boxel-sp);
         }
         .linksToMany-field.atom-effectiveFormat {

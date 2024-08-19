@@ -482,14 +482,10 @@ module('Integration | card-basics', function (hooks) {
         )
         .exists();
       assert
-        .dom(
-          '[data-test-plural-view-item="0"] > [data-test-card-format="atom"]',
-        )
+        .dom('[data-test-plural-view-item="0"][data-test-card-format="atom"]')
         .containsText('Madeleine');
       assert
-        .dom(
-          '[data-test-plural-view-item="1"] > [data-test-card-format="atom"]',
-        )
+        .dom('[data-test-plural-view-item="1"][data-test-card-format="atom"]')
         .containsText('Marcus');
     });
 
@@ -1601,6 +1597,55 @@ module('Integration | card-basics', function (hooks) {
       );
     });
 
+    test('can render a linksToMany field', async function (this: RenderingTestContext, assert) {
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        static fitted = class Fitted extends Component<typeof this> {
+          <template>
+            <div data-test-person-firstName><@fields.firstName /></div>
+          </template>
+        };
+      }
+
+      class Family extends CardDef {
+        @field people = linksToMany(Person);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <div>
+              {{! template-lint-disable no-inline-styles }}
+              <@fields.people style='margin: 5px' />
+            </div>
+          </template>
+        };
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Family, Person });
+      let mango = new Person({
+        firstName: 'Mango',
+      });
+      let vanGogh = new Person({
+        firstName: 'Van Gogh',
+      });
+      await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
+      await saveCard(vanGogh, `${testRealmURL}Pet/vanGogh`, loader);
+      let abdelRahmanDogs = new Family({
+        people: [mango, vanGogh],
+      });
+      await renderCard(loader, abdelRahmanDogs, 'isolated');
+      assert.deepEqual(
+        [...this.element.querySelectorAll('[data-test-person-firstName]')].map(
+          (element) => element.textContent?.trim(),
+        ),
+        ['Mango', 'Van Gogh'],
+      );
+      assert
+        .dom('[data-test-plural-view="linksToMany"]')
+        .hasStyle({ margin: '5px' });
+      assert.dom('[data-test-card-format="fitted"]').exists({ count: 2 });
+      assert
+        .dom('[data-test-card-format="fitted"]:nth-child(2)')
+        .hasStyle({ marginTop: '20px' });
+    });
+
     test('can #each over a linksToMany @fields', async function (this: RenderingTestContext, assert) {
       class Person extends CardDef {
         @field firstName = contains(StringField);
@@ -1617,7 +1662,8 @@ module('Integration | card-basics', function (hooks) {
           <template>
             <div>
               {{#each @fields.people as |Person|}}
-                <Person />
+                {{! template-lint-disable no-inline-styles }}
+                <Person style='margin: 10px' />
               {{/each}}
             </div>
           </template>
@@ -1642,6 +1688,10 @@ module('Integration | card-basics', function (hooks) {
         ),
         ['Mango', 'Van Gogh'],
       );
+      assert.dom('[data-test-card-format="fitted"]').exists({ count: 2 });
+      assert
+        .dom('[data-test-card-format="fitted"]')
+        .hasStyle({ margin: '10px' });
     });
 
     // note that polymorphic "contains" field rendering is inherently tested via the catalog entry tests
