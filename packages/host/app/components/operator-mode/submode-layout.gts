@@ -13,7 +13,10 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
+import { IconButton } from '@cardstack/boxel-ui/components';
 import { and, not } from '@cardstack/boxel-ui/helpers';
+
+import { BoxelIcon } from '@cardstack/boxel-ui/icons';
 
 import AiAssistantButton from '@cardstack/host/components/ai-assistant/button';
 import AiAssistantPanel from '@cardstack/host/components/ai-assistant/panel';
@@ -31,6 +34,8 @@ import SearchSheet, {
   SearchSheetModes,
 } from '../search-sheet';
 import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
+
+import WorkspaceChooser from './workspace-chooser';
 
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -65,6 +70,7 @@ export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSettingsOpened = false;
   @tracked private profileSummaryOpened = false;
+  @tracked private workspaceChooserOpened = false;
   private panelWidths: PanelWidths = {
     submodePanel: 500,
     aiAssistantPanel: 200,
@@ -144,6 +150,10 @@ export default class SubmodeLayout extends Component<Signature> {
     this.closeSearchSheet();
   }
 
+  @action private toggleWorkspaceChooser() {
+    this.workspaceChooserOpened = !this.workspaceChooserOpened;
+  }
+
   @action private toggleProfileSettings() {
     this.profileSettingsOpened = !this.profileSettingsOpened;
 
@@ -206,17 +216,37 @@ export default class SubmodeLayout extends Component<Signature> {
           @collapsible={{false}}
           class='main-panel'
         >
-          <SubmodeSwitcher
-            @submode={{this.operatorModeStateService.state.submode}}
-            @onSubmodeSelect={{this.updateSubmode}}
-            class='submode-switcher'
-          />
-          {{yield
-            (hash
-              openSearchToPrompt=this.openSearchSheetToPrompt
-              openSearchToResults=this.openSearchAndShowResults
-            )
-          }}
+          <div class='top-left-menu'>
+            <IconButton
+              @icon={{BoxelIcon}}
+              @width='40px'
+              @height='40px'
+              class={{if (not this.workspaceChooserOpened) 'dark-icon' ''}}
+              {{on 'click' this.toggleWorkspaceChooser}}
+              data-test-submode-layout-boxel-icon-button
+            />
+            {{#if this.workspaceChooserOpened}}
+              <span
+                class='boxel-title'
+                data-test-submode-layout-title
+              >BOXEL</span>
+            {{else}}
+              <SubmodeSwitcher
+                @submode={{this.operatorModeStateService.state.submode}}
+                @onSubmodeSelect={{this.updateSubmode}}
+              />
+            {{/if}}
+          </div>
+          {{#if this.workspaceChooserOpened}}
+            <WorkspaceChooser />
+          {{else}}
+            {{yield
+              (hash
+                openSearchToPrompt=this.openSearchSheetToPrompt
+                openSearchToResults=this.openSearchAndShowResults
+              )
+            }}
+          {{/if}}
           <div class='profile-icon-container'>
             <button
               class='profile-icon-button'
@@ -236,7 +266,13 @@ export default class SubmodeLayout extends Component<Signature> {
             @onCardSelect={{this.handleCardSelectFromSearch}}
             @onInputInsertion={{this.storeSearchElement}}
           />
-          {{#if (and APP.experimentalAIEnabled (not @hideAiAssistant))}}
+          {{#if
+            (and
+              APP.experimentalAIEnabled
+              (not @hideAiAssistant)
+              (not this.workspaceChooserOpened)
+            )
+          }}
             <AiAssistantToast
               @hide={{this.isAiAssistantVisible}}
               @onViewInChatClick={{this.toggleChat}}
@@ -248,7 +284,13 @@ export default class SubmodeLayout extends Component<Signature> {
             />
           {{/if}}
         </ResizablePanel>
-        {{#if (and APP.experimentalAIEnabled (not @hideAiAssistant))}}
+        {{#if
+          (and
+            APP.experimentalAIEnabled
+            (not @hideAiAssistant)
+            (not this.workspaceChooserOpened)
+          )
+        }}
           <ResizablePanel
             @defaultLengthFraction={{0.3}}
             @minLengthPx={{371}}
@@ -315,12 +357,22 @@ export default class SubmodeLayout extends Component<Signature> {
         z-index: 2;
       }
 
-      .submode-switcher {
+      .top-left-menu {
         position: absolute;
         top: 0;
         left: 0;
         padding: var(--boxel-sp);
         z-index: 1;
+
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+      }
+
+      .boxel-title {
+        color: var(--boxel-light);
+        font: 900 var(--boxel-font-size-med) 'Rustica';
+        letter-spacing: 3px;
       }
 
       .profile-icon-container {
@@ -337,6 +389,11 @@ export default class SubmodeLayout extends Component<Signature> {
         border: 0;
         padding: 0;
         background: transparent;
+      }
+
+      .dark-icon {
+        --icon-bg-opacity: 1;
+        --icon-color: black;
       }
     </style>
   </template>
