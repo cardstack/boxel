@@ -61,6 +61,11 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
             - Empty -
           {{/if}}
         {{else}}
+          <DefaultFormatsProvider
+            @value={{hash cardDef='fitted' fieldDef='embedded'}}
+          >
+            <this.linkedCard />
+          </DefaultFormatsProvider>
           {{#if permissions.canWrite}}
             <IconButton
               @variant='primary'
@@ -74,11 +79,6 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
               data-test-remove-card
             />
           {{/if}}
-          <DefaultFormatsProvider
-            @value={{hash cardDef='fitted' fieldDef='embedded'}}
-          >
-            <this.linkedCard />
-          </DefaultFormatsProvider>
         {{/if}}
       </div>
     </PermissionsConsumer>

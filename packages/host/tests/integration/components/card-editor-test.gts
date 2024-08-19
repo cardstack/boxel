@@ -378,7 +378,6 @@ module('Integration | card-editor', function (hooks) {
     );
 
     assert.dom('[data-test-pet="Mango"]').containsText('Mango');
-
     await click('[data-test-remove-card]');
     await click('[data-test-add-new]');
     await waitFor(
@@ -402,6 +401,9 @@ module('Integration | card-editor', function (hooks) {
     assert
       .dom('[data-test-card-catalog-modal]')
       .doesNotExist('card catalog modal dismissed');
+    assert
+      .dom('[data-test-links-to-editor="pet"] [data-test-card-format="fitted"]')
+      .exists();
     assert.dom('[data-test-pet="Van Gogh"]').containsText('Van Gogh');
   });
 
