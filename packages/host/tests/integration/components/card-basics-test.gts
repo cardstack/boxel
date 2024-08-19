@@ -494,7 +494,7 @@ module('Integration | card-basics', function (hooks) {
     });
 
     test('can render a card with an empty field', async function (assert) {
-      let EmbeddedViewDriver = embeddedViewDriver();
+      let EmbeddedViewDriver = fittedViewDriver();
 
       loader.shimModule(`${testRealmURL}test-cards`, {
         EmbeddedViewDriver,
@@ -508,7 +508,7 @@ module('Integration | card-basics', function (hooks) {
       await percySnapshot(assert);
     });
 
-    test('renders a default (CardDef) embedded view for card with thumbnail', async function (assert) {
+    test('renders a default (CardDef) fitted view for card with thumbnail', async function (assert) {
       class Person extends CardDef {
         static displayName = 'Person';
         @field firstName = contains(StringField);
@@ -525,11 +525,11 @@ module('Integration | card-basics', function (hooks) {
         });
       }
 
-      let EmbeddedViewDriver = embeddedViewDriver();
+      let FittedViewDriver = fittedViewDriver();
 
       loader.shimModule(`${testRealmURL}test-cards`, {
         Person,
-        EmbeddedViewDriver,
+        FittedViewDriver,
       });
 
       let mang = new Person({
@@ -543,7 +543,7 @@ module('Integration | card-basics', function (hooks) {
           base64: `data:image/png;base64,${mango}`,
         }),
       });
-      let driver = new EmbeddedViewDriver({ card: mang });
+      let driver = new FittedViewDriver({ card: mang });
       await renderCard(loader, driver, 'isolated');
 
       assert
@@ -565,7 +565,7 @@ module('Integration | card-basics', function (hooks) {
       await percySnapshot(assert);
     });
 
-    test('renders a default (CardDef) embedded view for card without thumbnail', async function (assert) {
+    test('renders a default (CardDef) fitted view for card without thumbnail', async function (assert) {
       class Person extends CardDef {
         static displayName = 'Person';
         @field firstName = contains(StringField);
@@ -582,15 +582,15 @@ module('Integration | card-basics', function (hooks) {
         });
       }
 
-      let EmbeddedViewDriver = embeddedViewDriver();
+      let FittedViewDriver = fittedViewDriver();
 
       loader.shimModule(`${testRealmURL}test-cards`, {
         Person,
-        EmbeddedViewDriver,
+        FittedViewDriver,
       });
 
       let vang = new Person({ firstName: 'Van Gogh' });
-      let driver = new EmbeddedViewDriver({ card: vang });
+      let driver = new FittedViewDriver({ card: vang });
       await renderCard(loader, driver, 'isolated');
 
       assert
@@ -2561,8 +2561,8 @@ let assertRadioInput = (
   }
 };
 
-function embeddedViewDriver() {
-  class EmbeddedViewDriver extends CardDef {
+function fittedViewDriver() {
+  class FitedViewDriver extends CardDef {
     @field card = linksTo(CardDef);
     static isolated = class Isolated extends Component<typeof this> {
       <template>
@@ -2576,43 +2576,43 @@ function embeddedViewDriver() {
               class='card'
               style='width: 226px; height: 226px'
             >
-              <@fields.card />
+              <@fields.card @format='fitted' />
             </div>
           </div>
           <div class='item'>
             <div class='desc'>AR 0.73: 164px x 224px</div>
             <div class='card' style='width: 164px; height: 224px'>
-              <@fields.card />
+              <@fields.card @format='fitted' />
             </div>
           </div>
           <div class='item'>
             <div class='desc'>AR 0.91: 164px x 180px</div>
             <div class='card' style='width: 164px; height: 180px'>
-              <@fields.card />
+              <@fields.card @format='fitted' />
             </div>
           </div>
           <div class='item'>
             <div class='desc'>AR 0.95: 140px x 148px</div>
             <div class='card' style='width: 140px; height: 148px'>
-              <@fields.card />
+              <@fields.card @format='fitted' />
             </div>
           </div>
           <div class='item'>
             <div class='desc'>AR 0.94: 120px x 128px</div>
             <div class='card' style='width: 120px; height: 128px'>
-              <@fields.card />
+              <@fields.card @format='fitted' />
             </div>
           </div>
           <div class='item'>
             <div class='desc'>AR 0.85: 100px x 118px</div>
             <div class='card' style='width: 100px; height: 118px'>
-              <@fields.card />
+              <@fields.card @format='fitted' />
             </div>
           </div>
           <div class='item'>
             <div class='desc'>AR 0.2: 100px x 500px</div>
             <div class='card' style='width: 100px; height: 500px'>
-              <@fields.card />
+              <@fields.card @format='fitted' />
             </div>
           </div>
         </div>
@@ -2622,19 +2622,19 @@ function embeddedViewDriver() {
           <div class='item'>
             <div class='desc'>AR 1.9: 151px x 78px</div>
             <div class='card' style='width: 151px; height: 78px'>
-              <@fields.card />
+              <@fields.card @format='fitted' />
             </div>
           </div>
           <div class='item'>
             <div class='desc'>AR 1.99: 300px x 151px</div>
             <div class='card' style='width: 300px; height: 151px'>
-              <@fields.card />
+              <@fields.card @format='fitted' />
             </div>
           </div>
           <div class='item'>
             <div class='desc'>AR 1.66: 300px x 180px</div>
             <div class='card' style='width: 300px; height: 180px'>
-              <@fields.card />
+              <@fields.card @format='fitted' />
             </div>
           </div>
         </div>
@@ -2644,25 +2644,25 @@ function embeddedViewDriver() {
           <div class='item'>
             <div class='desc'>AR 3.4: 100px x 29px</div>
             <div class='card' style='width: 100px; height: 29px'>
-              <@fields.card />
+              <@fields.card @format='fitted' />
             </div>
           </div>
           <div class='item'>
             <div class='desc'>AR 2.6: 150px x 58px</div>
             <div class='card' style='width: 150px; height: 58px'>
-              <@fields.card />
+              <@fields.card @format='fitted' />
             </div>
           </div>
           <div class='item'>
             <div class='desc'>AR 3.9: 226px x 58px</div>
             <div class='card' style='width: 226px; height: 58px'>
-              <@fields.card />
+              <@fields.card @format='fitted' />
             </div>
           </div>
           <div class='item'>
             <div class='desc'>AR 2.6: 300px x 115px</div>
             <div class='card' style='width: 300px; height: 115px'>
-              <@fields.card />
+              <@fields.card @format='fitted' />
             </div>
           </div>
         </div>
@@ -2693,5 +2693,5 @@ function embeddedViewDriver() {
     };
   }
 
-  return EmbeddedViewDriver;
+  return FitedViewDriver;
 }

@@ -85,7 +85,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     export class Book extends CardDef {
       static displayName = 'Book';
       @field author = contains(PersonField);
-      static embedded = class Embedded extends Component<typeof this> {
+      static fitted = class Fitted extends Component<typeof this> {
         <template>
           <div class='book'>
             {{@model.title}}
@@ -323,7 +323,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     await render(<template>
       <PrerenderedCardSearch
         @query={{query}}
-        @format='embedded'
+        @format='fitted'
         @realms={{realms}}
       >
         <:loading>
@@ -374,7 +374,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     await render(<template>
       <PrerenderedCardSearch
         @query={{query}}
-        @format='embedded'
+        @format='fitted'
         @realms={{realms}}
       >
         <:loading>
