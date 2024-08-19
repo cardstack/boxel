@@ -1,7 +1,5 @@
 import Service, { service } from '@ember/service';
 
-import { tracked } from '@glimmer/tracking';
-
 import { stringify } from 'qs';
 
 import { TrackedArray } from 'tracked-built-ins';
@@ -70,7 +68,7 @@ export default class CardService extends Service {
     return this.loaderToCardAPILoadingCache.get(loader)!;
   }
 
-  @tracked realmURLs = new TrackedArray(initialRealmURLs);
+  realmURLs = new TrackedArray(initialRealmURLs);
 
   // Note that this should be the unresolved URL and that we need to rely on our
   // fetch to do any URL resolution.
@@ -88,7 +86,17 @@ export default class CardService extends Service {
 
   setRealms(realms: string[]) {
     console.log('setting realms', realms);
-    this.realmURLs = new TrackedArray([...new Set([ownRealmURL, ...realms])]);
+    realms.forEach((realm) => {
+      if (!this.realmURLs.includes(realm)) {
+        this.realmURLs.push(realm);
+      }
+    });
+
+    this.realmURLs.forEach((realm) => {
+      if (!realms.includes(realm)) {
+        this.realmURLs.splice(this.realmURLs.indexOf(realm), 1);
+      }
+    });
   }
 
   async fetchJSON(
