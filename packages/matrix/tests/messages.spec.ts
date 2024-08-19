@@ -20,6 +20,7 @@ import {
 import {
   synapseStart,
   synapseStop,
+  updateAccountData,
   type SynapseInstance,
 } from '../docker/synapse';
 
@@ -30,6 +31,14 @@ test.describe('Room messages', () => {
     synapse = await synapseStart();
     await registerRealmUsers(synapse);
     userCred = await registerUser(synapse, 'user1', 'pass');
+    await updateAccountData(
+      '@user1:localhost',
+      userCred.accessToken,
+      'com.cardstack.boxel.realms',
+      JSON.stringify({
+        realms: ['http://localhost:4202/test/', 'htps://cardstack.com/base/'],
+      }),
+    );
   });
   test.afterEach(async () => {
     await synapseStop(synapse.synapseId);
