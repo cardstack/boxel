@@ -17,7 +17,7 @@ import {
   Tooltip,
   BoxelDropdownAPI,
 } from '@cardstack/boxel-ui/components';
-import { cn, menuItem } from '@cardstack/boxel-ui/helpers';
+import { cn, menuItem, or } from '@cardstack/boxel-ui/helpers';
 
 import {
   ThreeDotsHorizontal,
@@ -87,107 +87,115 @@ export default class OperatorModeOverlays extends Component<Signature> {
                   class='actions-item__button'
                   {{! @glint-ignore (glint thinks toggleSelect is not in this scope but it actually is - we check for it in the condition above) }}
                   {{on 'click' (fn @toggleSelect cardDefOrId)}}
-                  @width='auto'
-                  @height='auto'
+                  @width='100%'
+                  @height='100%'
                   @icon={{if isSelected IconCircleSelected IconCircle}}
                   aria-label='select card'
                   data-test-overlay-select={{(removeFileExtension cardId)}}
                 />
               </div>
             {{/if}}
-            <div class='actions-item'>
-              {{#if (this.isButtonDisplayed 'edit' renderedCard)}}
-                <IconButton
-                  @icon={{IconPencil}}
-                  @width='auto'
-                  @height='auto'
-                  class='actions-item__button'
-                  aria-label='Edit'
-                  data-test-overlay-edit
-                  {{on
-                    'click'
-                    (fn
-                      this.openOrSelectCard
-                      cardDefOrId
-                      'edit'
-                      renderedCard.fieldType
-                      renderedCard.fieldName
-                    )
-                  }}
-                />
-              {{/if}}
-              {{#if (this.isButtonDisplayed 'more-options' renderedCard)}}
-                <div>
-                  <BoxelDropdown
-                    @registerAPI={{(this.registerDropdownAPI renderedCard)}}
+            {{#if
+              (or
+                (this.isButtonDisplayed 'edit' renderedCard)
+                (this.isButtonDisplayed 'more-options' renderedCard)
+              )
+            }}
+              <div class='actions-item'>
+                {{#if (this.isButtonDisplayed 'edit' renderedCard)}}
+                  <IconButton
+                    @icon={{IconPencil}}
+                    @width='100%'
+                    @height='100%'
+                    class='actions-item__button'
+                    aria-label='Edit'
+                    data-test-overlay-edit
                     {{on
-                      'mouseenter'
-                      (fn this.setCurrentlyHoveredCard renderedCard)
+                      'click'
+                      (fn
+                        this.openOrSelectCard
+                        cardDefOrId
+                        'edit'
+                        renderedCard.fieldType
+                        renderedCard.fieldName
+                      )
                     }}
-                    {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
-                  >
-                    <:trigger as |bindings|>
-                      <Tooltip @placement='top'>
-                        <:trigger>
-                          <IconButton
-                            @icon={{ThreeDotsHorizontal}}
-                            @width='auto'
-                            @height='auto'
-                            class='actions-item__button'
-                            aria-label='Options'
-                            data-test-overlay-more-options
-                            {{bindings}}
+                  />
+                {{/if}}
+                {{#if (this.isButtonDisplayed 'more-options' renderedCard)}}
+                  <div>
+                    <BoxelDropdown
+                      @registerAPI={{(this.registerDropdownAPI renderedCard)}}
+                      {{on
+                        'mouseenter'
+                        (fn this.setCurrentlyHoveredCard renderedCard)
+                      }}
+                      {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
+                    >
+                      <:trigger as |bindings|>
+                        <Tooltip @placement='top'>
+                          <:trigger>
+                            <IconButton
+                              @icon={{ThreeDotsHorizontal}}
+                              @width='auto'
+                              @height='auto'
+                              class='actions-item__button'
+                              aria-label='Options'
+                              data-test-overlay-more-options
+                              {{bindings}}
+                            />
+                          </:trigger>
+                          <:content>
+                            More Options
+                          </:content>
+                        </Tooltip>
+                      </:trigger>
+                      <:content as |dd|>
+                        {{#if (this.isMenuDisplayed 'view' renderedCard)}}
+                          <Menu
+                            @closeMenu={{dd.close}}
+                            @items={{array
+                              (menuItem
+                                'View card'
+                                (fn this.openOrSelectCard cardDefOrId)
+                              )
+                            }}
+                            {{on
+                              'mouseenter'
+                              (fn this.setCurrentlyHoveredCard renderedCard)
+                            }}
+                            {{on
+                              'mouseleave'
+                              (fn this.setCurrentlyHoveredCard null)
+                            }}
                           />
-                        </:trigger>
-                        <:content>
-                          More Options
-                        </:content>
-                      </Tooltip>
-                    </:trigger>
-                    <:content as |dd|>
-                      {{#if (this.isMenuDisplayed 'view' renderedCard)}}
-                        <Menu
-                          @closeMenu={{dd.close}}
-                          @items={{array
-                            (menuItem
-                              'View card' (fn this.openOrSelectCard cardDefOrId)
-                            )
-                          }}
-                          {{on
-                            'mouseenter'
-                            (fn this.setCurrentlyHoveredCard renderedCard)
-                          }}
-                          {{on
-                            'mouseleave'
-                            (fn this.setCurrentlyHoveredCard null)
-                          }}
-                        />
-                      {{else if (this.isMenuDisplayed 'delete' renderedCard)}}
-                        <Menu
-                          @closeMenu={{dd.close}}
-                          @items={{array
-                            (menuItem
-                              'Delete'
-                              (fn @publicAPI.delete cardDefOrId)
-                              icon=IconTrash
-                              dangerous=true
-                            )
-                          }}
-                          {{on
-                            'mouseenter'
-                            (fn this.setCurrentlyHoveredCard renderedCard)
-                          }}
-                          {{on
-                            'mouseleave'
-                            (fn this.setCurrentlyHoveredCard null)
-                          }}
-                        />
-                      {{/if}}
-                    </:content>
-                  </BoxelDropdown>
-                </div>
-              {{/if}}
-            </div>
+                        {{else if (this.isMenuDisplayed 'delete' renderedCard)}}
+                          <Menu
+                            @closeMenu={{dd.close}}
+                            @items={{array
+                              (menuItem
+                                'Delete'
+                                (fn @publicAPI.delete cardDefOrId)
+                                icon=IconTrash
+                                dangerous=true
+                              )
+                            }}
+                            {{on
+                              'mouseenter'
+                              (fn this.setCurrentlyHoveredCard renderedCard)
+                            }}
+                            {{on
+                              'mouseleave'
+                              (fn this.setCurrentlyHoveredCard null)
+                            }}
+                          />
+                        {{/if}}
+                      </:content>
+                    </BoxelDropdown>
+                  </div>
+                {{/if}}
+              </div>
+            {{/if}}
           </div>
         </div>
       {{/let}}
@@ -340,7 +348,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
       .actions-item__button:hover {
         --icon-bg: var(--boxel-dark);
         --icon-color: var(--boxel-dark);
-        background-color: var(--boxel-highlight);
+        background-color: var(--boxel-cyan);
       }
     </style>
   </template>
@@ -422,11 +430,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
       case 'select':
         return !this.isField(renderedCard) && !!this.args.toggleSelect;
       case 'edit':
-        return (
-          this.isField(renderedCard) &&
-          this.realm.canWrite(this.getCardId(renderedCard.cardDefOrId)) &&
-          renderedCard.stackItem.format === 'edit'
-        );
+        return this.realm.canWrite(this.getCardId(renderedCard.cardDefOrId));
       case 'more-options':
         return (
           this.isMenuDisplayed('view', renderedCard) ||
@@ -480,15 +484,12 @@ export default class OperatorModeOverlays extends Component<Signature> {
         }`,
       );
 
-      if (!dropdownContentElement) {
-        return;
+      if (dropdownContentElement) {
+        const dropdownElement = dropdownContentElement as HTMLElement;
+        dropdownElement.style.visibility =
+          dropdownElement.style.visibility === 'hidden' ? 'visible' : 'hidden';
       }
-
-      const dropdownElement = dropdownContentElement as HTMLElement;
-      dropdownElement.style.visibility =
-        dropdownElement.style.visibility === 'hidden' ? 'visible' : 'hidden';
     }
-
     this.currentlyHoveredCard = renderedCard;
   };
 
