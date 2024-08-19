@@ -145,4 +145,10 @@ export class Task extends CardDef {
   @field priority = contains(TaskPriorityField);
   @field assignee = linksTo(TeamMember);
   @field dueDate = contains(DateField);
+
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      {{@model.taskName}}
+    </template>
+  };
 }

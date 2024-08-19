@@ -1,36 +1,54 @@
 import BooleanField from 'https://cardstack.com/base/boolean';
 import {
   CardDef,
-  StringField,
   contains,
   field,
   linksToMany,
-  FieldDef,
   Component,
   type CardContext,
+  FieldDef,
+  serialize,
+  deserialize,
+  BaseInstanceType,
+  BaseDefConstructor,
+  formatQuery,
+  queryableValue,
+  realmURL,
 } from 'https://cardstack.com/base/card-api';
 
 import GlimmerComponent from '@glimmer/component';
-import { chooseCard, catalogEntryRef, Query } from '@cardstack/runtime-common';
+import {
+  chooseCard,
+  catalogEntryRef,
+  primitive,
+  Query,
+  assertQuery,
+  stringifyQuery,
+  parseToQuery,
+  codeRefWithAbsoluteURL,
+  Filter,
+} from '@cardstack/runtime-common';
 
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { restartableTask } from 'ember-concurrency';
-import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
+import {
+  AddButton,
+  BoxelSelect,
+  Tooltip,
+} from '@cardstack/boxel-ui/components';
+
 // import { CardsGrid } from 'https://cardstack.com/base/cards-grid';
 
 // @ts-ignore no types
 import cssUrl from 'ember-css-url';
 import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
-import { QueryWidget } from './query-widget';
 import { CardsGridComponent } from './cards-grid-component';
-
-class ViewField extends FieldDef {
-  static displayName = 'Collection View';
-
-  // .     card-chooser + ,cards-grid, table (app-card), board don't touch yet
-  views = ['list', 'grid', 'table', 'board'];
-}
+import CodeRefField from '../base/code-ref';
+import { ViewField } from './view';
+import { tracked } from '@glimmer/tracking';
+import { TrackedArray } from 'tracked-built-ins';
+import { EqFilter } from '@cardstack/runtime-common/query';
 
 // class QueryField extends FieldDef {
 //   get serialized() {}
@@ -71,44 +89,179 @@ export class Grid extends GlimmerComponent<{
         </:response>
       </PrerenderedCardSearch>
     {{/let}}
-
-    {{#if @context.actions.createCard}}
-      <div class='add-button'>
-        <Tooltip @placement='left' @offset={{6}}>
-          <:trigger>
-            <AddButton {{on 'click' this.createNew}} />
-          </:trigger>
-          <:content>
-            Add a new card to this collection
-          </:content>
-        </Tooltip>
-      </div>
-    {{/if}}
-    <style>
-      .add-button {
-        display: inline-block;
-        position: sticky;
-        left: 100%;
-        bottom: var(--boxel-sp-xl);
-        z-index: 1;
-      }
-      .operator-mode .buried .cards,
-      .operator-mode .buried .add-button {
-        display: none;
-      }
-    </style>
   </template>
 
   get realms() {
     return ['http://localhost:4201/experiments/'];
   }
-  @action
-  createNew() {
-    this.createCard.perform();
+}
+
+export class SortField extends FieldDef {
+  // private chooseCard = restartableTask(async () => {
+  //   let type = identifyCard(this.args.field.card) ?? baseCardRef;
+  //   let chosenCard: CardDef | undefined = await chooseCard(
+  //     { filter: { type } },
+  //     {
+  //       offerToCreate: { ref: type, relativeTo: undefined },
+  //       createNewCard: this.cardContext?.actions?.createCard,
+  //     },
+  //   );
+  //   if (chosenCard) {
+  //     this.args.model.value = chosenCard;
+  //   }
+  // });
+}
+
+export class QueryField extends FieldDef {
+  static [primitive]: Query;
+
+  static [serialize](query: Query) {
+    assertQuery(query);
+    return stringifyQuery(query);
+  }
+  static async [deserialize]<T extends BaseDefConstructor>(this: T, val: any) {
+    if (val === undefined || val === null) {
+      return {} as BaseInstanceType<T>;
+    }
+    return parseToQuery(val) as BaseInstanceType<T>;
   }
 
-  private createCard = restartableTask(async () => {
-    let card = await chooseCard<CatalogEntry>({
+  static [queryableValue](query: Query | undefined) {
+    if (!query) {
+      return undefined;
+    }
+    return stringifyQuery(query);
+  }
+
+  static [formatQuery](query: Query) {
+    return stringifyQuery(query);
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    get query() {
+      return JSON.stringify(this.args.model, null, 2);
+    }
+    <template>
+      {{this.query}}
+    </template>
+  };
+}
+
+export class BaseView extends Component<typeof QueryField> {
+  <template>
+    {{! Filter: }}
+    {{!-- {{@model.filter}} --}}
+    {{! Sort: }}
+    {{!-- {{@model.name}} --}}
+  </template>
+
+  get getFilters() {
+    return;
+  }
+
+  get getSorts() {
+    return;
+  }
+}
+
+export interface FilterWithState {
+  active: boolean;
+  filter: Filter;
+}
+
+type StatusOptions = 'To Do' | 'In Progress' | 'Done';
+
+const statusOptionVals: StatusOptions = ['To Do', 'In Progress', 'Done'];
+
+class Isolated extends Component<typeof Collection> {
+  // widget = new QueryWidget();
+  @tracked filters: TrackedArray<Filter> = new TrackedArray([]);
+
+  get availableFilters() {
+    return {
+      assignee: this.assigneeFilter,
+      status: this.statusFilter,
+    };
+  }
+
+  //linksTo
+  assigneeFilter(value: string) {
+    return {
+      eq: {
+        'assignee.label': value,
+      },
+    };
+  }
+
+  //contains compound
+  statusFilter(value: StatusOptions) {
+    return {
+      on: {
+        ...this.codeRef,
+      },
+      eq: {
+        'status.label': value,
+      },
+    } as EqFilter;
+  }
+
+  get currentRealm() {
+    return this.args.model[realmURL];
+  }
+
+  get codeRef() {
+    if (!this.args.model.ref) {
+      return;
+    }
+    // this kinda sucks
+    return codeRefWithAbsoluteURL(this.args.model.ref, this.currentRealm);
+  }
+
+  get realms() {
+    return ['http://localhost:4201/experiments/'];
+  }
+
+  get query() {
+    return {
+      filter: {
+        every: [
+          {
+            ...{
+              type: {
+                ...this.codeRef,
+              },
+            },
+          },
+          ,
+          ...this.filters,
+        ],
+      },
+    } as Query;
+  }
+
+  @action updateQuery() {
+    this.args.model.query = { ...this.query };
+  }
+
+  //buttons
+  //should use card chooser
+  @action activateAssigneeFilter(value: string) {
+    this.filters.push(this.assigneeFilter(value));
+    this.updateQuery();
+  }
+
+  @action activateStatusFilter(value: StatusOptions) {
+    this.filters.push(this.statusFilter('To Do'));
+    // this.filters.push({ eq: { 'status.label': value } });
+    this.updateQuery();
+  }
+
+  @action add() {
+    this.chooseCard.perform();
+  }
+
+  private chooseCard = restartableTask(async () => {
+    let card = await chooseCard({
       filter: {
         on: catalogEntryRef,
         eq: { isField: false },
@@ -117,31 +270,7 @@ export class Grid extends GlimmerComponent<{
     if (!card) {
       return;
     }
-
-    await this.args.context?.actions?.createCard?.(card.ref, new URL(card.id), {
-      realmURL: new URL('http://localhost:4201/experiments/'), //this.args.model[realmURL],
-    });
   });
-}
-
-class Isolated extends Component<typeof Collection> {
-  widget = new QueryWidget();
-  @action filterByAssignee() {
-    // let card = this.chooseCard.perform(); // maybe dont need chooesCard bcos we r only concern with data for query not the rendered form
-    this.updateQuery();
-  }
-
-  @action filterByStatus() {
-    // this.chooseCard.perform();
-  }
-
-  @action updateQuery() {
-    // this._query =
-  }
-
-  get query() {
-    return this.widget.query;
-  }
 
   get queryString() {
     return JSON.stringify(this.query, null, 2);
@@ -157,8 +286,24 @@ class Isolated extends Component<typeof Collection> {
       : [];
   }
 
+  get listOfStatuses() {
+    if (!this.args.model.ref) {
+      return;
+    }
+    // this kinda sucks
+    let codeRef = codeRefWithAbsoluteURL(
+      this.args.model.ref,
+      this.currentRealm,
+    );
+    console.log(codeRef);
+  }
+
   <template>
     <section>
+      <@fields.ref />
+      <div>
+        {{this.queryString}}
+      </div>
       <div class='breadcrumb'> </div>
 
       <main>
@@ -168,11 +313,50 @@ class Isolated extends Component<typeof Collection> {
             <h3>Filter By:</h3>
             <ul>
               <li>
-                <button {{on 'click' this.filterByAssignee}}>Assignee</button>
+                <button {{on 'click' this.add}}>Assignee</button>
               </li>
-              <li>
-                <button {{on 'click' this.filterByStatus}}>Status</button>
-              </li>
+
+              {{#let
+                (component @context.prerenderedCardSearchComponent)
+                as |PrerenderedCardSearch|
+              }}
+                <PrerenderedCardSearch
+                  @query={{this.query}}
+                  @format='atom'
+                  @realms={{this.realms}}
+                >
+
+                  <:loading>
+                    Loading...
+                  </:loading>
+                  <:response as |cards|>
+                    {{!-- <ul>
+                      {{#each cards as |c|}}
+                        <li>
+                          {{c.component}}
+                        </li>
+                      {{/each}}
+                    </ul> --}}
+
+                    <h2>Power select</h2>
+                    <BoxelSelect
+                      @placeholder={{'Select Item'}}
+                      @options={{cards}}
+                      @onChange={{this.onChangePower}}
+                      {{!-- @selected={{this.selectedEventType}}
+                @options={{this.eventTypeItems}} --}}
+                      {{! @dropdownClass='boxel-select-usage'
+                class='select' }}
+                      as |item|
+                    >
+                      <div>{{item.component}}</div>
+                    </BoxelSelect>
+                  </:response>
+                </PrerenderedCardSearch>
+              {{/let}}
+              {{!-- <li>
+                <button {{on 'click' this.add}}>Status</button>
+              </li> --}}
             </ul>
           </div>
           <div>
@@ -203,6 +387,17 @@ class Isolated extends Component<typeof Collection> {
 
             </div>
             <Grid @context={{this.args.context}} @query={{this.query}} />
+
+            <div class='add-button'>
+              <Tooltip @placement='left' @offset={{6}}>
+                <:trigger>
+                  <AddButton {{on 'click' this.createNew}} />
+                </:trigger>
+                <:content>
+                  Add a new card to this collection
+                </:content>
+              </Tooltip>
+            </div>
           </div>
         </div>
 
@@ -261,22 +456,54 @@ class Isolated extends Component<typeof Collection> {
         border-radius: 10px;
         padding: var(--boxel-sp);
       }
+
+      .add-button {
+        display: inline-block;
+        position: sticky;
+        left: 100%;
+        bottom: var(--boxel-sp-xl);
+        z-index: 1;
+      }
     </style>
   </template>
+
+  @action onChangePower() {
+    console.log('changed power');
+  }
+  @action
+  createNew() {
+    this.createCard.perform();
+  }
+
+  private createCard = restartableTask(async () => {
+    let card = await chooseCard<CatalogEntry>({
+      filter: {
+        on: catalogEntryRef,
+        eq: { isField: false },
+      },
+    });
+    if (!card) {
+      return;
+    }
+
+    await this.args.context?.actions?.createCard?.(card.ref, new URL(card.id), {
+      realmURL: new URL('http://localhost:4201/experiments/'), //this.args.model[realmURL],
+    });
+  });
 }
 
+// collection has a few purposes
+// - specifies its own query based upon a type
 // - collection is needed to persist views
 // - materialise cards grid query into cards so it can be shared
-// - maintains query field state inside card -- clarify with chris & luke
 export class Collection extends CardDef {
   static displayName = 'Collection';
-  @field query = contains(StringField); //serialized
-  @field showMaterialized = contains(BooleanField);
+  @field ref = contains(CodeRefField);
+  @field query = contains(QueryField);
   @field view = contains(ViewField); //format , table / list / grid / board
+  @field showMaterialized = contains(BooleanField);
   // a collection should be able to determine its preferred embedded template root class
   // UI switcher
-
-  @field cardsList = linksToMany(CardDef); //materialization point
 
   // @field preferredSize
   //can use other ppls template
@@ -287,23 +514,7 @@ export class Collection extends CardDef {
   // dont have to care about your child template
 
   materializeToCard() {}
+  @field cardsList = linksToMany(CardDef); //materialization point
 
   static isolated = Isolated;
 }
-
-// class View extends GlimmerComponent<{
-
-// }>
-
-// class GridView extends GlimmerComponent<{
-
-// }>
-// class ListView extends GlimmerComponent<{
-
-// }>
-// class TableView extends GlimmerComponent<{
-
-// }>
-// class BoardView extends GlimmerComponent<{
-
-// }>

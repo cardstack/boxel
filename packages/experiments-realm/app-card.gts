@@ -11,6 +11,7 @@ import {
   realmURL,
   StringField,
   type CardContext,
+  linksTo,
 } from 'https://cardstack.com/base/card-api';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
@@ -37,12 +38,14 @@ import {
   LooseSingleCardDocument,
   isSingleCardDocument,
 } from '@cardstack/runtime-common';
+import { Collection } from 'collection';
 
 export class Tab extends FieldDef {
   @field displayName = contains(StringField);
   @field tabId = contains(StringField);
   @field ref = contains(CodeRefField);
   @field isTable = contains(BooleanField);
+  @field collection = linksTo(Collection);
 }
 
 class AppCardIsolated extends Component<typeof AppCard> {

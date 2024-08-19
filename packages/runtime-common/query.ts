@@ -101,7 +101,15 @@ export function isAnyFilter(filter: Filter): filter is AnyFilter {
 }
 
 export function buildQueryString(query: Query): string {
-  return `?${qs.stringify(query)}`;
+  return `?${stringifyQuery(query)}`;
+}
+
+export function stringifyQuery(query: Query): string {
+  return qs.stringify(query);
+}
+
+export function parseToQuery(queryString: string): Query {
+  return qs.parse(queryString) as Query; 
 }
 
 export function assertQuery(

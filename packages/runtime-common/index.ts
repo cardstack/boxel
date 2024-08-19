@@ -52,8 +52,8 @@ export interface RealmPrerenderedCards {
 }
 
 import { RealmPaths, type LocalPath } from './paths';
-import { Query } from './query';
-export { buildQueryString, Filter, SortExpression, Sort } from './query';
+import { Query} from './query';
+export { assertQuery, stringifyQuery, parseToQuery, Filter, SortExpression, Sort } from './query';
 import { Loader } from './loader';
 export * from './constants';
 export * from './queue';
