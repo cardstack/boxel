@@ -14,14 +14,16 @@ import {
   BoxelDropdown,
   IconButton,
   Menu,
+  Tooltip,
+  BoxelDropdownAPI,
 } from '@cardstack/boxel-ui/components';
-import { and, bool, cn, eq, menuItem, not } from '@cardstack/boxel-ui/helpers';
+import { cn, menuItem, or } from '@cardstack/boxel-ui/helpers';
 
 import {
-  Eye as EyeIcon,
   ThreeDotsHorizontal,
   IconCircle,
   IconCircleSelected,
+  IconPencil,
   IconTrash,
 } from '@cardstack/boxel-ui/icons';
 
@@ -36,7 +38,6 @@ import { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { removeFileExtension } from '../search-sheet/utils';
 
-import OperatorModeOverlayItemHeader from './overlay-item-header';
 import { CardDefOrId, RenderedCardForOverlayActions } from './stack-item';
 
 import type { MiddlewareState } from '@floating-ui/dom';
@@ -60,14 +61,13 @@ export default class OperatorModeOverlays extends Component<Signature> {
         renderedCard.cardDefOrId
         (this.getCardId renderedCard.cardDefOrId)
         (this.isSelected renderedCard.cardDefOrId)
-        (this.realm.canWrite (this.getCardId renderedCard.cardDefOrId))
-        as |cardDefOrId cardId isSelected canWrite|
+        as |cardDefOrId cardId isSelected|
       }}
         <div
           class={{cn
             'actions-overlay'
             selected=isSelected
-            hovered=(eq this.currentlyHoveredCard renderedCard)
+            hovered=(this.isHovered renderedCard)
           }}
           {{velcro renderedCard.element middleware=(Array this.offset)}}
           data-test-overlay-selected={{if
@@ -76,81 +76,127 @@ export default class OperatorModeOverlays extends Component<Signature> {
           }}
           data-test-overlay-card={{removeFileExtension cardId}}
           style={{this.zIndexStyle renderedCard.element}}
+          {{on 'mouseenter' (fn this.setCurrentlyHoveredCard renderedCard)}}
+          {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
+          ...attributes
         >
-          {{#if (this.isIncludeHeader renderedCard)}}
-            <OperatorModeOverlayItemHeader
-              @item={{renderedCard}}
-              @card={{this.asCard renderedCard.cardDefOrId}}
-              @canWrite={{canWrite}}
-              @openOrSelectCard={{this.openOrSelectCard}}
-            />
-            <IconButton
-              {{on 'mouseenter' (fn this.setCurrentlyHoveredCard renderedCard)}}
-              {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
-              class='hover-button hover-button-fitted-card preview'
-              @icon={{EyeIcon}}
-              aria-label='preview card'
-            />
-          {{/if}}
-
-          {{#if
-            (and (bool @toggleSelect) (not (this.isEmbeddedCard renderedCard)))
-          }}
-            <IconButton
-              {{! @glint-ignore (glint thinks toggleSelect is not in this scope but it actually is - we check for it in the condition above) }}
-              {{on 'click' (fn @toggleSelect cardId)}}
-              {{on 'mouseenter' (fn this.setCurrentlyHoveredCard renderedCard)}}
-              {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
-              class='hover-button select'
-              @icon={{if isSelected IconCircleSelected IconCircle}}
-              aria-label='select card'
-              data-test-overlay-select={{removeFileExtension cardId}}
-            />
-            <IconButton
-              {{on 'mouseenter' (fn this.setCurrentlyHoveredCard renderedCard)}}
-              {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
-              class='hover-button preview'
-              @icon={{EyeIcon}}
-              aria-label='preview card'
-            />
-            {{! Since there is just one item in the drop down, if that one item
-                  cannot be shown then we just don't show the drop down. This should
-                  change if we add more items in the dropdown }}
-            {{#if canWrite}}
-              <BoxelDropdown>
-                <:trigger as |bindings|>
+          <div class={{cn 'actions' field=(this.isField renderedCard)}}>
+            {{#if (this.isButtonDisplayed 'select' renderedCard)}}
+              <div class='actions-item select'>
+                <IconButton
+                  class='actions-item__button'
+                  {{! @glint-ignore (glint thinks toggleSelect is not in this scope but it actually is - we check for it in the condition above) }}
+                  {{on 'click' (fn @toggleSelect cardDefOrId)}}
+                  @width='100%'
+                  @height='100%'
+                  @icon={{if isSelected IconCircleSelected IconCircle}}
+                  aria-label='select card'
+                  data-test-overlay-select={{(removeFileExtension cardId)}}
+                />
+              </div>
+            {{/if}}
+            {{#if
+              (or
+                (this.isButtonDisplayed 'edit' renderedCard)
+                (this.isButtonDisplayed 'more-options' renderedCard)
+              )
+            }}
+              <div class='actions-item'>
+                {{#if (this.isButtonDisplayed 'edit' renderedCard)}}
                   <IconButton
+                    @icon={{IconPencil}}
+                    @width='100%'
+                    @height='100%'
+                    class='actions-item__button'
+                    aria-label='Edit'
+                    data-test-overlay-edit
                     {{on
-                      'mouseenter'
-                      (fn this.setCurrentlyHoveredCard renderedCard)
-                    }}
-                    {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
-                    class='hover-button more-actions'
-                    @icon={{ThreeDotsHorizontal}}
-                    aria-label='more actions'
-                    {{bindings}}
-                  />
-                </:trigger>
-                <:content as |dd|>
-                  <Menu
-                    @closeMenu={{dd.close}}
-                    @items={{array
-                      (menuItem
-                        'Delete'
-                        (fn @publicAPI.delete cardDefOrId)
-                        icon=IconTrash
-                        dangerous=true
+                      'click'
+                      (fn
+                        this.openOrSelectCard
+                        cardDefOrId
+                        'edit'
+                        renderedCard.fieldType
+                        renderedCard.fieldName
                       )
                     }}
-                    {{on
-                      'mouseenter'
-                      (fn this.setCurrentlyHoveredCard renderedCard)
-                    }}
                   />
-                </:content>
-              </BoxelDropdown>
+                {{/if}}
+                {{#if (this.isButtonDisplayed 'more-options' renderedCard)}}
+                  <div>
+                    <BoxelDropdown
+                      @registerAPI={{(this.registerDropdownAPI renderedCard)}}
+                      {{on
+                        'mouseenter'
+                        (fn this.setCurrentlyHoveredCard renderedCard)
+                      }}
+                      {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
+                    >
+                      <:trigger as |bindings|>
+                        <Tooltip @placement='top'>
+                          <:trigger>
+                            <IconButton
+                              @icon={{ThreeDotsHorizontal}}
+                              @width='auto'
+                              @height='auto'
+                              class='actions-item__button'
+                              aria-label='Options'
+                              data-test-overlay-more-options
+                              {{bindings}}
+                            />
+                          </:trigger>
+                          <:content>
+                            More Options
+                          </:content>
+                        </Tooltip>
+                      </:trigger>
+                      <:content as |dd|>
+                        {{#if (this.isMenuDisplayed 'view' renderedCard)}}
+                          <Menu
+                            @closeMenu={{dd.close}}
+                            @items={{array
+                              (menuItem
+                                'View card'
+                                (fn this.openOrSelectCard cardDefOrId)
+                              )
+                            }}
+                            {{on
+                              'mouseenter'
+                              (fn this.setCurrentlyHoveredCard renderedCard)
+                            }}
+                            {{on
+                              'mouseleave'
+                              (fn this.setCurrentlyHoveredCard null)
+                            }}
+                          />
+                        {{else if (this.isMenuDisplayed 'delete' renderedCard)}}
+                          <Menu
+                            @closeMenu={{dd.close}}
+                            @items={{array
+                              (menuItem
+                                'Delete'
+                                (fn @publicAPI.delete cardDefOrId)
+                                icon=IconTrash
+                                dangerous=true
+                              )
+                            }}
+                            {{on
+                              'mouseenter'
+                              (fn this.setCurrentlyHoveredCard renderedCard)
+                            }}
+                            {{on
+                              'mouseleave'
+                              (fn this.setCurrentlyHoveredCard null)
+                            }}
+                          />
+                        {{/if}}
+                      </:content>
+                    </BoxelDropdown>
+                  </div>
+                {{/if}}
+              </div>
             {{/if}}
-          {{/if}}
+          </div>
         </div>
       {{/let}}
     {{/each}}
@@ -161,6 +207,9 @@ export default class OperatorModeOverlays extends Component<Signature> {
       .actions-overlay {
         border-radius: var(--boxel-border-radius);
         pointer-events: none;
+
+        container-name: actions-overlay;
+        container-type: size;
       }
       .actions-overlay.selected {
         box-shadow: 0 0 0 2px var(--boxel-highlight);
@@ -179,32 +228,131 @@ export default class OperatorModeOverlays extends Component<Signature> {
       .hovered .hover-button.select {
         display: block;
       }
-      .hover-button:not(:disabled):hover {
-        --icon-color: var(--boxel-highlight);
+
+      @container actions-overlay (aspect-ratio <= 1.0) {
+        .actions {
+          --overlay-embedded-card-header-height: 2.2rem;
+        }
+
+        .actions-item {
+          padding: var(--boxel-sp-5xs);
+        }
+
+        .actions-item__button {
+          padding: var(--boxel-sp-4xs);
+          --boxel-icon-button-width: calc(
+            var(--overlay-embedded-card-header-height) -
+              calc(var(--boxel-sp-4xs) + var(--boxel-sp-5xs))
+          );
+          --boxel-icon-button-height: calc(
+            var(--overlay-embedded-card-header-height) -
+              calc(var(--boxel-sp-4xs) + var(--boxel-sp-5xs))
+          );
+        }
       }
-      .hover-button.select {
-        top: 0;
-        right: 0;
+
+      @container actions-overlay (aspect-ratio <= 1.0) and (width <= 120px) {
+        .actions {
+          --overlay-embedded-card-header-height: 1.8rem;
+        }
+
+        .actions-item__button {
+          padding: var(--boxel-sp-5xs);
+          --boxel-icon-button-width: calc(
+            var(--overlay-embedded-card-header-height) -
+              calc(var(--boxel-sp-5xs) * 2)
+          );
+          --boxel-icon-button-height: calc(
+            var(--overlay-embedded-card-header-height) -
+              calc(var(--boxel-sp-5xs) * 2)
+          );
+        }
       }
-      .hover-button.preview {
-        top: 0;
-        left: 0;
-        visibility: collapse; /* remove this line to no longer hide the preview icon */
+
+      @container actions-overlay (aspect-ratio > 1.0) {
+        .actions {
+          --overlay-embedded-card-header-height: 2.2rem;
+        }
+
+        .actions-item {
+          padding: var(--boxel-sp-5xs);
+        }
+
+        .actions-item__button {
+          padding: var(--boxel-sp-4xs);
+          --boxel-icon-button-width: calc(
+            var(--overlay-embedded-card-header-height) -
+              calc(var(--boxel-sp-4xs) + var(--boxel-sp-5xs))
+          );
+          --boxel-icon-button-height: calc(
+            var(--overlay-embedded-card-header-height) -
+              calc(var(--boxel-sp-4xs) + var(--boxel-sp-5xs))
+          );
+        }
       }
-      .hover-button.more-actions {
-        bottom: 0;
-        right: 0;
+
+      @container actions-overlay (aspect-ratio > 2.0) and (height <= 57px) {
+        .actions {
+          --overlay-embedded-card-header-height: 1.5rem;
+          margin-top: var(--boxel-sp-5xs);
+        }
+
+        .actions-item {
+          padding: var(--boxel-sp-6xs);
+        }
+
+        .actions-item__button {
+          padding: var(--boxel-sp-6xs);
+          --boxel-icon-button-width: calc(
+            var(--overlay-embedded-card-header-height) -
+              calc(var(--boxel-sp-6xs) * 2)
+          );
+          --boxel-icon-button-height: calc(
+            var(--overlay-embedded-card-header-height) -
+              calc(var(--boxel-sp-6xs) * 2)
+          );
+        }
       }
-      .hover-button.hover-button-fitted-card {
-        left: calc(100% - var(--boxel-sp-xl));
-        top: calc(
-          (100% - var(--overlay-fitted-card-header-height)) / 2 +
-            var(--overlay-fitted-card-header-height) - 1em
-        );
-        position: absolute;
+      .hovered .actions {
+        visibility: visible;
       }
-      .hover-button > svg {
-        height: 100%;
+      .actions {
+        visibility: hidden;
+        height: auto;
+        display: flex;
+        justify-content: space-between;
+
+        margin-top: var(--boxel-sp-xxxs);
+        margin-left: var(--boxel-sp-xxxs);
+        margin-right: var(--boxel-sp-xxxs);
+      }
+      .actions.field {
+        justify-content: flex-end;
+      }
+      .actions-item {
+        display: flex;
+        align-items: center;
+        background: var(--boxel-light);
+        border: 1px solid var(--boxel-450);
+        border-radius: 5px;
+        gap: var(--boxel-sp-xxxs);
+        box-shadow: 0 3px 3px 0 rgba(0, 0, 0, 0.5);
+      }
+      .actions-item__button {
+        --icon-bg: var(--boxel-dark);
+        --icon-color: var(--boxel-dark);
+
+        pointer-events: auto; /* pointer events are disabled in the overlay, we re-enable it here for header actions */
+        display: flex;
+        border-radius: 5px;
+      }
+      .actions-item__button:hover {
+        --icon-bg: var(--boxel-dark);
+        --icon-color: var(--boxel-dark);
+        background-color: var(--boxel-cyan);
+      }
+      .selected .actions-item.select {
+        visibility: visible;
       }
     </style>
   </template>
@@ -232,6 +380,11 @@ export default class OperatorModeOverlays extends Component<Signature> {
     },
   };
 
+  private dropdownAPIs: WeakMap<
+    RenderedCardForOverlayActions,
+    BoxelDropdownAPI
+  > = new Map();
+
   // Since we put absolutely positined overlays containing operator mode actions on top of the rendered cards,
   // we are running into a problem where the overlays are interfering with scrolling of the container that holds the rendered cards.
   // That means scrolling stops when the cursor gets over the overlay, which is a bug. We solved this problem by disabling pointer
@@ -248,12 +401,12 @@ export default class OperatorModeOverlays extends Component<Signature> {
       renderedCard.element.addEventListener(
         'mouseenter',
         // eslint-disable-next-line ember/no-side-effects
-        (_e: MouseEvent) => (this.currentlyHoveredCard = renderedCard),
+        (_e: MouseEvent) => this.setCurrentlyHoveredCard(renderedCard),
       );
       renderedCard.element.addEventListener(
         'mouseleave',
         // eslint-disable-next-line ember/no-side-effects
-        (_e: MouseEvent) => (this.currentlyHoveredCard = null),
+        (_e: MouseEvent) => this.setCurrentlyHoveredCard(null),
       );
       renderedCard.element.addEventListener('click', (e: MouseEvent) => {
         // prevent outer nested contains fields from triggering when inner most
@@ -272,7 +425,45 @@ export default class OperatorModeOverlays extends Component<Signature> {
     return renderedCards;
   }
 
-  private isEmbeddedCard(renderedCard: RenderedCardForOverlayActions) {
+  @action
+  private isButtonDisplayed(
+    type: string,
+    renderedCard: RenderedCardForOverlayActions,
+  ): boolean {
+    switch (type) {
+      case 'select':
+        return !this.isField(renderedCard) && !!this.args.toggleSelect;
+      case 'edit':
+        return this.realm.canWrite(this.getCardId(renderedCard.cardDefOrId));
+      case 'more-options':
+        return (
+          this.isMenuDisplayed('view', renderedCard) ||
+          this.isMenuDisplayed('delete', renderedCard)
+        );
+      default:
+        return false;
+    }
+  }
+
+  @action
+  private isMenuDisplayed(
+    type: string,
+    renderedCard: RenderedCardForOverlayActions,
+  ) {
+    switch (type) {
+      case 'view':
+        return this.isField(renderedCard);
+      case 'delete':
+        return (
+          !this.isField(renderedCard) &&
+          this.realm.canWrite(this.getCardId(renderedCard.cardDefOrId))
+        );
+      default:
+        return false;
+    }
+  }
+
+  private isField(renderedCard: RenderedCardForOverlayActions) {
     return (
       renderedCard.fieldType === 'contains' ||
       renderedCard.fieldType === 'linksTo' ||
@@ -280,27 +471,42 @@ export default class OperatorModeOverlays extends Component<Signature> {
     );
   }
 
-  @action private asCard(cardDefOrId: CardDefOrId) {
-    if (typeof cardDefOrId !== 'string' && 'id' in cardDefOrId) {
-      return cardDefOrId;
-    }
-    throw new Error('cardDefOrId must be a CardDef');
-  }
-
   @action getCardId(cardDefOrId: CardDefOrId) {
     return typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
-  }
-
-  @action
-  private isIncludeHeader(renderedCard: RenderedCardForOverlayActions) {
-    return this.isEmbeddedCard(renderedCard) && renderedCard.format !== 'atom';
   }
 
   private setCurrentlyHoveredCard = (
     renderedCard: RenderedCardForOverlayActions | null,
   ) => {
+    // Hide the dropdown content when the overlay is not hovered.
+    // Make it visible again when it is hovered.
+    let hoveredCard = this.currentlyHoveredCard ?? renderedCard;
+    if (hoveredCard) {
+      let dropdownContentElement = document.querySelector(
+        `#ember-basic-dropdown-content-${
+          this.dropdownAPIs.get(hoveredCard)?.uniqueId
+        }`,
+      );
+
+      if (dropdownContentElement) {
+        const dropdownElement = dropdownContentElement as HTMLElement;
+        dropdownElement.style.visibility =
+          dropdownElement.style.visibility === 'hidden' ? 'visible' : 'hidden';
+      }
+    }
     this.currentlyHoveredCard = renderedCard;
   };
+
+  @action
+  private registerDropdownAPI(renderedCard: RenderedCardForOverlayActions) {
+    return (dropdownAPI: BoxelDropdownAPI) => {
+      if (this.dropdownAPIs.has(renderedCard)) {
+        return;
+      }
+
+      this.dropdownAPIs.set(renderedCard, dropdownAPI);
+    };
+  }
 
   @action private openOrSelectCard(
     cardDefOrId: CardDefOrId,
@@ -319,6 +525,10 @@ export default class OperatorModeOverlays extends Component<Signature> {
     return this.args.selectedCards?.some(
       (card: CardDefOrId) => card === cardDefOrId,
     );
+  }
+
+  @action private isHovered(renderedCard: RenderedCardForOverlayActions) {
+    return this.currentlyHoveredCard === renderedCard;
   }
 
   private viewCard = dropTask(
