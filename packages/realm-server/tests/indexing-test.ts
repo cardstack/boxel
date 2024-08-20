@@ -82,9 +82,18 @@ module('indexing', function (hooks) {
                   <h1><@fields.firstName/></h1>
                 </template>
               }
-              static embedded = class Isolated extends Component<typeof this> {
+              static embedded = class Embedded extends Component<typeof this> {
                 <template>
                   <h1> Embedded Card Person: <@fields.firstName/></h1>
+
+                  <style>
+                    h1 { color: red }
+                  </style>
+                </template>
+              }
+              static fitted = class Fitted extends Component<typeof this> {
+                <template>
+                  <h1> Fitted Card Person: <@fields.firstName/></h1>
 
                   <style>
                     h1 { color: red }
@@ -280,6 +289,15 @@ module('indexing', function (hooks) {
         cleanWhiteSpace(`<h1> Embedded Card Person: Mango </h1>`),
         'pre-rendered embedded format html is correct',
       );
+      assert.strictEqual(
+        trimCardContainer(
+          stripScopedCSSAttributes(
+            entry!.fittedHtml![`${testRealm}person/Person`],
+          ),
+        ),
+        cleanWhiteSpace(`<h1> Fitted Card Person: Mango </h1>`),
+        'pre-rendered fitted format html is correct',
+      );
     } else {
       assert.ok(false, 'expected index entry not to be an error');
     }
@@ -321,6 +339,14 @@ module('indexing', function (hooks) {
               ),
             ),
             cleanWhiteSpace(`<h1> Embedded Card Person: Van Gogh </h1>`),
+          );
+          assert.strictEqual(
+            trimCardContainer(
+              stripScopedCSSAttributes(
+                item.fittedHtml![`${testRealm}person/Person`]!,
+              ),
+            ),
+            cleanWhiteSpace(`<h1> Fitted Card Person: Van Gogh </h1>`),
           );
         } else {
           assert.ok(false, 'expected index entry not to be an error');
@@ -710,8 +736,29 @@ module('indexing', function (hooks) {
         fileName: 'person.gts',
       },
       {
-        pattern: /cardstack.com\/base\/card-api\.gts.*\.glimmer-scoped\.css$/,
-        fileName: 'card-api.gts',
+        pattern:
+          /cardstack.com\/base\/default-templates\/fitted\.gts.*\.glimmer-scoped\.css$/,
+        fileName: 'default-templates/fitted.gts',
+      },
+      {
+        pattern:
+          /cardstack.com\/base\/default-templates\/embedded\.gts.*\.glimmer-scoped\.css$/,
+        fileName: 'default-templates/embedded.gts',
+      },
+      {
+        pattern:
+          /cardstack.com\/base\/default-templates\/isolated-and-edit\.gts.*\.glimmer-scoped\.css$/,
+        fileName: 'default-templates/isolated-and-edit.gts',
+      },
+      {
+        pattern:
+          /cardstack.com\/base\/default-templates\/missing-embedded\.gts.*\.glimmer-scoped\.css$/,
+        fileName: 'default-templates/missing-embedded.gts',
+      },
+      {
+        pattern:
+          /cardstack.com\/base\/default-templates\/field-edit\.gts.*\.glimmer-scoped\.css$/,
+        fileName: 'default-templates/field-edit.gts',
       },
       {
         pattern:

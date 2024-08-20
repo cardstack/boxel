@@ -202,7 +202,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
     {{/each}}
     <style>
       :global(:root) {
-        --overlay-embedded-card-header-height: 2.5rem;
+        --overlay-fitted-card-header-height: 2.5rem;
       }
       .actions-overlay {
         border-radius: var(--boxel-border-radius);

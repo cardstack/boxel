@@ -92,9 +92,7 @@ export default class OperatorModeStack extends Component<Signature> {
       }
 
       .operator-mode-stack
-        :deep(
-          .field-component-card.embedded-format .missing-embedded-template
-        ) {
+        :deep(.field-component-card.fitted-format .missing-embedded-template) {
         margin-top: calc(-1 * var(--boxel-sp-lg));
         border-radius: 0;
         border-bottom-left-radius: var(--boxel-form-control-border-radius);

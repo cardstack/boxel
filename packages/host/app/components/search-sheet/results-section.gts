@@ -26,7 +26,7 @@ interface SearchResultSignature {
   };
 }
 
-// Render CardDef default embedded template for visual consistency of cards insearch results
+// Render CardDef default fitted template for visual consistency of cards insearch results
 let resultsCardRef = {
   name: 'CardDef',
   module: 'https://cardstack.com/base/card-api',
@@ -50,7 +50,7 @@ class SearchResult extends Component<SearchResultSignature> {
       {{else if @card}}
         <Preview
           @card={{@card}}
-          @format='embedded'
+          @format='fitted'
           @codeRef={{resultsCardRef}}
           data-test-search-result={{removeFileExtension @cardId}}
           class='search-result'
@@ -70,17 +70,17 @@ class SearchResult extends Component<SearchResultSignature> {
         height: 96px;
       }
       .search-result,
-      .search-result.field-component-card.embedded-format {
+      .search-result.field-component-card.fitted-format {
         width: 311px;
         height: 76px;
         overflow: hidden;
         cursor: pointer;
-        container-name: embedded-card;
+        container-name: fitted-card;
         container-type: size;
       }
       .container.is-compact,
       .is-compact .search-result,
-      .is-compact .search-result.field-component-card.embedded-format {
+      .is-compact .search-result.field-component-card.fitted-format {
         width: 199px;
         height: 50px;
       }

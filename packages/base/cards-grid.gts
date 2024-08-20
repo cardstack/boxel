@@ -37,7 +37,7 @@ class Isolated extends Component<typeof CardsGrid> {
         }}
           <PrerenderedCardSearch
             @query={{this.query}}
-            @format='embedded'
+            @format='fitted'
             @realms={{this.realms}}
           >
 
@@ -109,7 +109,7 @@ class Isolated extends Component<typeof CardsGrid> {
         height: var(--grid-card-height);
         overflow: hidden;
         cursor: pointer;
-        container-name: embedded-card;
+        container-name: fitted-card;
         container-type: size;
       }
       .add-button {

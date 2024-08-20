@@ -328,6 +328,7 @@ export async function openRoom(page: Page, roomId: string) {
 
 export async function openRenameMenu(page: Page, roomId: string) {
   await page.locator(`[data-test-past-sessions-button]`).click();
+  await page.waitForTimeout(500); // without this, the click on the options button result in the menu staying open
   await page
     .locator(`[data-test-past-session-options-button="${roomId}"]`)
     .click();
