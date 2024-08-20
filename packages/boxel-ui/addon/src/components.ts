@@ -7,6 +7,7 @@ import CardContentContainer from './components/card-content-container/index.gts'
 import CircleSpinner from './components/circle-spinner/index.gts';
 import BoxelDropdown from './components/dropdown/index.gts';
 import FieldContainer from './components/field-container/index.gts';
+import FilterList, { type Filter } from './components/filter-list/index.gts';
 import GridContainer from './components/grid-container/index.gts';
 import BoxelHeader from './components/header/index.gts';
 import Header from './components/header/index.gts';
@@ -52,6 +53,8 @@ export {
   CardContentContainer,
   CircleSpinner,
   FieldContainer,
+  Filter,
+  FilterList,
   GridContainer,
   Header,
   IconButton,
