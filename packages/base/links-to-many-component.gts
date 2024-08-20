@@ -41,6 +41,7 @@ import {
 import { action } from '@ember/object';
 
 interface Signature {
+  Element: HTMLElement;
   Args: {
     model: Box<CardDef>;
     arrayField: Box<CardDef[]>;
@@ -66,6 +67,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
           @cardTypeFor={{@cardTypeFor}}
           @add={{this.add}}
           @remove={{this.remove}}
+          ...attributes
         />
       {{else}}
         <LinksToManyStandardEditor
@@ -75,6 +77,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
           @cardTypeFor={{@cardTypeFor}}
           @add={{this.add}}
           @remove={{this.remove}}
+          ...attributes
         />
       {{/if}}
     </div>
@@ -113,6 +116,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
 }
 
 interface LinksToManyStandardEditorSignature {
+  Element: HTMLElement;
   Args: {
     model: Box<CardDef>;
     arrayField: Box<CardDef[]>;
@@ -137,7 +141,11 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
   <template>
     <PermissionsConsumer as |permissions|>
       {{#if @arrayField.children.length}}
-        <ul class='list' {{sortableGroup onChange=(fn this.setItems)}}>
+        <ul
+          class='list'
+          {{sortableGroup onChange=(fn this.setItems)}}
+          ...attributes
+        >
           {{#each @arrayField.children as |boxedElement i|}}
             <li
               class='editor'
@@ -176,7 +184,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
                 )
                 as |Item|
               }}
-                <Item @format='embedded' />
+                <Item @format='fitted' />
               {{/let}}
             </li>
           {{/each}}
@@ -209,7 +217,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         display: grid;
         grid-template-columns: 1fr var(--boxel-icon-lg);
       }
-      .editor > :deep(.boxel-card-container.embedded-format) {
+      .editor > :deep(.boxel-card-container.fitted-format) {
         order: -1;
       }
       .remove {
@@ -222,8 +230,8 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         --icon-bg: var(--boxel-dark);
         --icon-border: var(--boxel-dark);
       }
-      .remove:focus + :deep(.boxel-card-container.embedded-format),
-      .remove:hover + :deep(.boxel-card-container.embedded-format) {
+      .remove:focus + :deep(.boxel-card-container.fitted-format),
+      .remove:hover + :deep(.boxel-card-container.fitted-format) {
         box-shadow:
           0 0 0 1px var(--boxel-light-500),
           var(--boxel-box-shadow-hover);
@@ -254,6 +262,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
 }
 
 interface LinksToManyCompactEditorSignature {
+  Element: HTMLElement;
   Args: {
     model: Box<CardDef>;
     arrayField: Box<CardDef[]>;
@@ -270,7 +279,7 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
   @consume(CardContextName) declare cardContext: CardContext;
 
   <template>
-    <div class='boxel-pills' data-test-pills>
+    <div class='boxel-pills' data-test-pills ...attributes>
       {{#each @arrayField.children as |boxedElement i|}}
         {{#let
           (getBoxComponent
@@ -406,6 +415,7 @@ export function getLinksToManyComponent({
               defaultFormats.cardDef
               model
             }}
+            ...attributes
           />
         {{else}}
           {{#let

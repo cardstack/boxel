@@ -962,6 +962,11 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom('[data-test-field="friends"]')
       .containsText('Jackie Woody Buzz Mango');
+    assert
+      .dom(
+        '[data-test-links-to-many="friends"] [data-test-card-format="fitted"]',
+      )
+      .exists({ count: 4 });
   });
 
   test('can add a card to a linksTo field creating a loop', async function (assert) {
