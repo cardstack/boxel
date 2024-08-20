@@ -36,7 +36,7 @@ test.describe('Room messages', () => {
       userCred.accessToken,
       'com.cardstack.boxel.realms',
       JSON.stringify({
-        realms: ['http://localhost:4202/test/', 'htps://cardstack.com/base/'],
+        realms: ['http://localhost:4202/test/', 'https://cardstack.com/base/'],
       }),
     );
   });
