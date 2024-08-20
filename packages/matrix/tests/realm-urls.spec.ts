@@ -66,6 +66,9 @@ test.describe('Realm URLs in Matrix account data', () => {
       }),
     );
 
+    await page.waitForFunction(
+      async () => (await page.locator('[data-test-workspace]').count()) === 2,
+    );
     expect(await page.locator('[data-test-workspace]').count()).toBe(2);
 
     expect(page.locator('[data-test-workspace]:first-child')).toHaveText(
