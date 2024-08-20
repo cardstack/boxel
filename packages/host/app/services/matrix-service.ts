@@ -190,10 +190,12 @@ export default class MatrixService
       [this.matrixSDK.RoomEvent.Receipt, Timeline.onReceipt(this)],
       [
         this.matrixSDK.ClientEvent.AccountData,
-        (e) => {
+        async (e) => {
           if (e.event.type == 'com.cardstack.boxel.realms') {
             console.log('updating realms from account data', e.event.content);
             this.cardService.setRealms(e.event.content.realms);
+            // FIXME does it make sense?
+            await this.loginToRealms();
           }
         },
       ],
