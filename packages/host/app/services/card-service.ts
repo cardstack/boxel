@@ -6,7 +6,6 @@ import { TrackedArray } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
-  baseRealm,
   SupportedMimeType,
   type LooseCardResource,
   isSingleCardDocument,
@@ -43,7 +42,7 @@ export type CardSaveSubscriber = (
   content: SingleCardDocument | string,
 ) => void;
 
-const { ownRealmURL, otherRealmURLs, environment, initialRealmURLs } = ENV;
+const { ownRealmURL, environment, initialRealmURLs } = ENV;
 
 export default class CardService extends Service {
   @service private declare loaderService: LoaderService;

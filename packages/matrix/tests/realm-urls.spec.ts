@@ -1,4 +1,4 @@
-import { expect, type Page, test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import {
   synapseStart,
   synapseStop,
@@ -8,13 +8,7 @@ import {
   updateUser,
 } from '../docker/synapse';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
-import {
-  login,
-  validateEmail,
-  assertLoggedOut,
-  assertLoggedIn,
-  registerRealmUsers,
-} from '../helpers';
+import { login, registerRealmUsers } from '../helpers';
 
 // FIXME how to import? but it should be localhost:4202 anyway, not test-realm
 // import { testRealmURL } from '@cardstack/runtime-common/helpers/const';
@@ -40,7 +34,7 @@ test.describe('Realm URLs in Matrix account data', () => {
       '@user1:localhost',
       user.accessToken,
       'com.cardstack.boxel.realms',
-      JSON.stringify({ realms: ['http://localhost:4202/test/'] }),
+      JSON.stringify({ realms: [testRealmURL] }),
     );
   });
 
