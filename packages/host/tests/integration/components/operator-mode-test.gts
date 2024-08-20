@@ -1914,7 +1914,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-boxel-menu-item]').doesNotExist();
   });
 
-  test(`"links to" field has an overlay header and click on the embedded card will open it on the stack`, async function (assert) {
+  test(`click on "links to" the embedded card will open it on the stack`, async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1925,13 +1925,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
-    // Linked cards have the realm's icon in the overlaid header title
     await waitFor(`[data-test-overlay-card="${testRealmURL}Author/1"]`);
-    assert
-      .dom(
-        `[data-test-overlay-card="${testRealmURL}Author/1"] .header-title img`,
-      )
-      .hasAttribute('src', 'https://example-icon.test');
 
     await click('[data-test-author]');
     await waitFor('[data-test-stack-card-index="1"]');

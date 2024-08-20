@@ -7,6 +7,8 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 
+import { triggerEvent } from '@ember/test-helpers';
+
 import { setupApplicationTest } from 'ember-qunit';
 
 import window from 'ember-window-mock';
@@ -915,11 +917,11 @@ module('Acceptance | interact submode tests', function (hooks) {
       });
       assert
         .dom(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-fitted-card-edit-button]`,
+          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-edit]`,
         )
         .exists();
       await click(
-        `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-fitted-card-edit-button]`,
+        `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-edit]`,
       );
       await waitFor(`[data-test-stack-card="${testRealmURL}Pet/mango"]`);
       assert
@@ -1149,7 +1151,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       );
       assert
         .dom(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.more-actions`,
+          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
         )
         .doesNotExist('"..." menu does not exist');
     });
@@ -1170,7 +1172,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         .exists();
       assert
         .dom(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-fitted-card-edit-button]`,
+          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-edit]`,
         )
         .doesNotExist('edit icon not displayed for linked card');
       await click(
@@ -1308,16 +1310,20 @@ module('Acceptance | interact submode tests', function (hooks) {
       );
       assert
         .dom(
-          `[data-test-operator-mode-stack="0"] [data-test-overlay-card="${testRealmURL}Pet/mango"] button.more-actions`,
+          `[data-test-operator-mode-stack="0"] [data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
         )
         .doesNotExist('"..." menu does not exist');
 
       await waitFor(
         `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/ringo"]`,
       );
+      await triggerEvent(
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/ringo"]`,
+        'mouseenter',
+      );
       assert
         .dom(
-          `[data-test-operator-mode-stack="1"] [data-test-overlay-card="${testRealm2URL}Pet/ringo"] button.more-actions`,
+          `[data-test-operator-mode-stack="1"] [data-test-overlay-card="${testRealm2URL}Pet/ringo"] [data-test-overlay-more-options]`,
         )
         .exists('"..." menu exists');
     });

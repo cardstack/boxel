@@ -556,7 +556,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-command-apply]').doesNotExist();
     assert.dom('[data-test-person]').hasText('Fadhlan');
 
-    await waitFor('[data-test-fitted-card-options-button]');
+    await waitFor('[data-test-overlay-card] [data-test-overlay-more-options]');
     await percySnapshot(
       'Integration | ai-assistant-panel | it only applies changes from the chat if the stack contains a card with that ID | error',
     );
@@ -576,8 +576,9 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await waitUntil(
       () =>
-        document.querySelectorAll('[data-test-fitted-card-options-button]')
-          .length === 2,
+        document.querySelectorAll(
+          '[data-test-overlay-card] [data-test-overlay-more-options]',
+        ).length === 2,
     );
     await percySnapshot(
       'Integration | ai-assistant-panel | it only applies changes from the chat if the stack contains a card with that ID | error fixed',
