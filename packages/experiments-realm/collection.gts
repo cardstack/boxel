@@ -130,7 +130,7 @@ export class DropdownMenu extends GlimmerComponent<{
             @selected={{this.selected}}
             as |item|
           >
-            <div>{{item.component}}</div>
+            <div>{{item.url}}</div>
           </BoxelSelect>
         </:response>
       </PrerenderedCardSearch>
@@ -138,11 +138,7 @@ export class DropdownMenu extends GlimmerComponent<{
   </template>
 
   @tracked selected: any = null; //state for selection
-
   @action onSelect(selection: any) {
-    //resolve type here. selection should be pre-rendered
-    // let id = selection.data.url;
-    // this.selectCard.perform(id);
     this.selected = selection;
   }
 
@@ -293,7 +289,7 @@ export interface FilterWithState {
 
 type StatusOptions = 'To Do' | 'In Progress' | 'Done';
 
-const statusOptionVals: StatusOptions = ['To Do', 'In Progress', 'Done'];
+// const statusOptionVals: StatusOptions = ['To Do', 'In Progress', 'Done'];
 
 class Isolated extends Component<typeof Collection> {
   // widget = new QueryWidget();
@@ -368,19 +364,6 @@ class Isolated extends Component<typeof Collection> {
 
   @action onFilterField(value: string) {
     this.filters.push(this.assigneeFilter(value));
-    this.updateQuery();
-  }
-
-  //buttons
-  //should use card chooser
-  @action activateAssigneeFilter(value: string) {
-    this.filters.push(this.assigneeFilter(value));
-    this.updateQuery();
-  }
-
-  @action activateStatusFilter(value: StatusOptions) {
-    this.filters.push(this.statusFilter('To Do'));
-    // this.filters.push({ eq: { 'status.label': value } });
     this.updateQuery();
   }
 
