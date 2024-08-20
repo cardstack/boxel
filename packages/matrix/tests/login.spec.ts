@@ -3,6 +3,7 @@ import { registerUser } from '../docker/synapse';
 import {
   synapseStart,
   synapseStop,
+  updateAccountData,
   type SynapseInstance,
 } from '../docker/synapse';
 import {
@@ -14,7 +15,6 @@ import {
   openRoot,
   toggleOperatorMode,
   registerRealmUsers,
-  testHost,
 } from '../helpers';
 import jwt from 'jsonwebtoken';
 
@@ -28,7 +28,21 @@ test.describe('Login', () => {
     testInfo.setTimeout(testInfo.timeout + 30000);
     synapse = await synapseStart();
     await registerRealmUsers(synapse);
-    await registerUser(synapse, 'user1', 'pass');
+
+    let user = await registerUser(synapse, 'user1', 'pass');
+    await updateAccountData(
+      '@user1:localhost',
+      user.accessToken,
+      'com.cardstack.boxel.realms',
+      JSON.stringify({
+        realms: [
+          'http://localhost:4202/test/',
+          'http://localhost:4201/experiments/',
+          'https://cardstack.com/base/',
+        ],
+      }),
+    );
+
     await clearLocalStorage(page);
   });
   test.afterEach(async () => {
@@ -53,8 +67,9 @@ test.describe('Login', () => {
       await new Promise((res) => setTimeout(res, 1000));
       return window.localStorage.getItem('boxel-session');
     });
+    // FIXME this was test-host before, is it okay to change?
     let token = (JSON.parse(boxelSession!) as { [realmURL: string]: string })[
-      `${testHost}/`
+      'http://localhost:4201/experiments/'
     ];
     let claims = jwt.verify(token, REALM_SECRET_SEED) as {
       user: string;
@@ -62,7 +77,7 @@ test.describe('Login', () => {
       permissions: ('read' | 'write')[];
     };
     expect(claims.user).toStrictEqual('@user1:localhost');
-    expect(claims.realm).toStrictEqual(`${testHost}/`);
+    expect(claims.realm).toStrictEqual(`http://localhost:4201/experiments/`);
     expect(claims.permissions).toMatchObject(['read', 'write']);
 
     // reload to page to show that the access token persists
