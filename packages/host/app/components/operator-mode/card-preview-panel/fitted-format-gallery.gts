@@ -27,101 +27,104 @@ export default class FittedFormatGallery extends Component<Signature> {
     {{! template-lint-disable no-inline-styles }}
     <div class='item'>
       <div class='desc'>Aspect Ratio 1.0, 226px &times; 226px</div>
-      <div class='card' style='width: 226px; height: 226px'>
-        <this.renderedCard />
-      </div>
+      <this.renderedCard
+        @displayContainer={{true}}
+        style='width: 226px; height: 226px'
+      />
     </div>
     <div class='item'>
       <div class='desc'>Aspect Ratio 0.73, 164px &times; 224px</div>
-      <div class='card' style='width: 164px; height: 224px'>
-        <this.renderedCard />
-      </div>
+      <this.renderedCard
+        @displayContainer={{true}}
+        style='width: 164px; height: 224px'
+      />
     </div>
     <div class='item'>
       <div class='desc'>Aspect Ratio 0.91, 164px &times; 180px</div>
-      <div class='card' style='width: 164px; height: 180px'>
-        <this.renderedCard />
-      </div>
+      <this.renderedCard
+        @displayContainer={{true}}
+        style='width: 164px; height: 180px'
+      />
     </div>
     <div class='item'>
       <div class='desc'>Aspect Ratio 0.95, 140px &times; 148px</div>
-      <div class='card' style='width: 140px; height: 148px'>
-        <this.renderedCard />
-      </div>
+      <this.renderedCard
+        @displayContainer={{true}}
+        style='width: 140px; height: 148px'
+      />
     </div>
     <div class='item'>
       <div class='desc'>Aspect Ratio 0.94, 120px &times; 128px</div>
-      <div class='card' style='width: 120px; height: 128px'>
-        <this.renderedCard />
-      </div>
+      <this.renderedCard
+        @displayContainer={{true}}
+        style='width: 120px; height: 128px'
+      />
     </div>
     <div class='item'>
       <div class='desc'>Aspect Ratio 0.85, 100px &times; 118px</div>
-      <div class='card' style='width: 100px; height: 118px'>
-        <this.renderedCard />
-      </div>
+      <this.renderedCard
+        @displayContainer={{true}}
+        style='width: 100px; height: 118px'
+      />
     </div>
     <div class='item'>
       <div class='desc'>Aspect Ratio 0.2, 100px &times; 500px</div>
-      <div class='card' style='width: 100px; height: 500px'>
-        <this.renderedCard />
-      </div>
+      <this.renderedCard
+        @displayContainer={{true}}
+        style='width: 100px; height: 500px'
+      />
     </div>
     <div class='item'>
       <div class='desc'>Aspect Ratio 1.9, 151px &times; 78px</div>
-      <div class='card' style='width: 151px; height: 78px'>
-        <this.renderedCard />
-      </div>
+      <this.renderedCard
+        @displayContainer={{true}}
+        style='width: 151px; height: 78px'
+      />
     </div>
     <div class='item'>
       <div class='desc'>Aspect Ratio 1.99, 300px &times; 151px</div>
-      <div class='card' style='width: 300px; height: 151px'>
-        <this.renderedCard />
-      </div>
+      <this.renderedCard
+        @displayContainer={{true}}
+        style='width: 300px; height: 151px'
+      />
     </div>
     <div class='item'>
       <div class='desc'>Aspect Ratio 1.66, 300px &times; 180px</div>
-      <div class='card' style='width: 300px; height: 180px'>
-        <this.renderedCard />
-      </div>
+      <this.renderedCard
+        @displayContainer={{true}}
+        style='width: 300px; height: 180px'
+      />
     </div>
     <div class='item'>
       <div class='desc'>Aspect Ratio 3.4, 100px &times; 29px</div>
-      <div class='card' style='width: 100px; height: 29px'>
-        <this.renderedCard />
-      </div>
+      <this.renderedCard
+        @displayContainer={{true}}
+        style='width: 100px; height: 29px'
+      />
     </div>
     <div class='item'>
       <div class='desc'>Aspect Ratio 2.6, 150px &times; 58px</div>
-      <div class='card' style='width: 150px; height: 58px'>
-        <this.renderedCard />
-      </div>
+      <this.renderedCard
+        @displayContainer={{true}}
+        style='width: 150px; height: 58px'
+      />
     </div>
     <div class='item'>
       <div class='desc'>Aspect Ratio 3.9, 226px &times; 58px</div>
-      <div class='card' style='width: 226px; height: 58px'>
-        <this.renderedCard />
-      </div>
+      <this.renderedCard
+        @displayContainer={{true}}
+        style='width: 226px; height: 58px'
+      />
     </div>
     <div class='item'>
       <div class='desc'>Aspect Ratio 2.6, 300px &times; 115px</div>
-      <div class='card' style='width: 300px; height: 115px'>
-        <this.renderedCard />
-      </div>
+      <this.renderedCard
+        @displayContainer={{true}}
+        style='width: 300px; height: 115px'
+      />
     </div>
 
     <style>
-      .card {
-        /* this is how a border would appear around a card.
-           note that a card is not supposed to draw its own border
-         */
-        box-shadow: 0 0 0 1px var(--boxel-light-500);
-        height: 100%;
-        overflow: hidden;
-        border-radius: var(--boxel-border-radius);
-        container-name: fitted-card;
-        container-type: size;
-      }
       .item {
         position: relative;
         padding: var(--boxel-sp);

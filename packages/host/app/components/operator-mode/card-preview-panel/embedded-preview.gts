@@ -24,21 +24,13 @@ export default class EmbeddedPreview extends Component<Signature> {
   }
 
   <template>
-    <div class='card'>
-      <this.renderedCard @displayContainer={{false}} />
+    <div class='wrapper'>
+      <this.renderedCard @displayContainer={{true}} class='card' />
     </div>
 
     <style>
-      .card {
-        /* this is how a border would appear around a card.
-           note that a card is not supposed to draw its own border
-         */
-        box-shadow: 0 0 0 1px var(--boxel-light-500);
-        border-radius: var(--boxel-border-radius);
-        overflow: hidden;
+      .wrapper {
         margin: 20px;
-        container-name: embedded-card;
-        container-type: inline-size;
       }
     </style>
   </template>
