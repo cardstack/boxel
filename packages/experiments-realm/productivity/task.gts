@@ -56,6 +56,7 @@ class Edit extends Component<typeof StatusField> {
   }
 
   @action onSelectStatus(status: StatusFieldData): void {
+    //#Pattern1: Updating field of containsMany
     this.label = status.label;
     this.args.model.label = this.selectedStatus?.label;
     this.args.model.index = this.selectedStatus?.index;

@@ -27,6 +27,9 @@ import {
   parseToQuery,
   codeRefWithAbsoluteURL,
   Filter,
+  getCard,
+  ResolvedCodeRef,
+  PrerenderedCard,
 } from '@cardstack/runtime-common';
 
 import { action } from '@ember/object';
@@ -63,7 +66,7 @@ import { EqFilter } from '@cardstack/runtime-common/query';
 //   //where we can choose from a dropdown
 // }
 
-export class Grid extends GlimmerComponent<{
+export class ConfigurableCardsGrid extends GlimmerComponent<{
   Args: {
     context?: CardContext;
     query?: Query;
@@ -90,6 +93,125 @@ export class Grid extends GlimmerComponent<{
       </PrerenderedCardSearch>
     {{/let}}
   </template>
+
+  get realms() {
+    return ['http://localhost:4201/experiments/'];
+  }
+}
+
+export class DropdownMenu extends GlimmerComponent<{
+  Args: {
+    context?: CardContext;
+    query?: Query;
+    model?: any;
+    currentRealm?: URL;
+  };
+  Element: HTMLElement;
+}> {
+  <template>
+    {{#let
+      (component @context.prerenderedCardSearchComponent)
+      as |PrerenderedCardSearch|
+    }}
+      <PrerenderedCardSearch
+        @query={{this.query}}
+        @format='atom'
+        @realms={{this.realms}}
+      >
+
+        <:loading>
+          Loading...
+        </:loading>
+        <:response as |cards|>
+          <h2>Power select</h2>
+          <BoxelSelect
+            @options={{cards}}
+            @onChange={{this.onSelect}}
+            @selected={{this.selected}}
+            as |item|
+          >
+            <div>{{item.component}}</div>
+          </BoxelSelect>
+        </:response>
+      </PrerenderedCardSearch>
+    {{/let}}
+  </template>
+
+  @tracked selected: any = null; //state for selection
+
+  @action onSelect(selection: any) {
+    //resolve type here. selection should be pre-rendered
+    // let id = selection.data.url;
+    // this.selectCard.perform(id);
+    this.selected = selection;
+  }
+
+  // export type BaseDefComponent = ComponentLike<{
+  //   Blocks: {};
+  //   Element: any;
+  //   Args: {
+  //     cardOrField: typeof BaseDef;
+  //     fields: any;
+  //     format: Format;
+  //     model: any;
+  //     set: Setter;
+  //     fieldName: string | undefined;
+  //     context?: CardContext;
+  //     canEdit?: boolean;
+  //   };
+  // }>;
+
+  //   export type SignatureFor<CardT extends BaseDefConstructor> = {
+  //   Args: {
+  //     model: PartialBaseInstanceType<CardT>;
+  //     fields: FieldsTypeFor<InstanceType<CardT>>;
+  //     set: Setter;
+  //     fieldName: string | undefined;
+  //     context?: CardContext;
+  //     canEdit?: boolean;
+  //   };
+  // };
+
+  private selectCard = restartableTask(async (id: string) => {
+    //chosenCard
+    let url = new URL(id);
+    let cardResource = await getCard(url);
+    await cardResource.loaded;
+    let card = cardResource.card;
+    //#Pattern2: Linking card
+    //im not sure if this is the right way to do this
+    let currentCardList = this.args.model['cardsList'] ?? [];
+    if (card) {
+      let newCardList = [...currentCardList, card];
+      this.args.model['cardsList'] = newCardList;
+    }
+
+    // this.args.model;
+    // this.args.fields;
+  });
+
+  get query() {
+    let assigneeCodeRef = {
+      name: 'TeamMember',
+      module: 'productivity/task',
+    } as ResolvedCodeRef;
+    let codeRef = codeRefWithAbsoluteURL(
+      assigneeCodeRef,
+      this.args.currentRealm,
+    );
+    return {
+      filter: {
+        every: [
+          {
+            ...{
+              type: codeRef,
+            },
+          },
+          ,
+        ],
+      },
+    };
+  }
 
   get realms() {
     return ['http://localhost:4201/experiments/'];
@@ -205,16 +327,16 @@ class Isolated extends Component<typeof Collection> {
     } as EqFilter;
   }
 
-  get currentRealm() {
-    return this.args.model[realmURL];
-  }
-
   get codeRef() {
     if (!this.args.model.ref) {
       return;
     }
     // this kinda sucks
     return codeRefWithAbsoluteURL(this.args.model.ref, this.currentRealm);
+  }
+
+  get currentRealm() {
+    return this.args.model[realmURL];
   }
 
   get realms() {
@@ -228,6 +350,7 @@ class Isolated extends Component<typeof Collection> {
           {
             ...{
               type: {
+                //task type
                 ...this.codeRef,
               },
             },
@@ -241,6 +364,11 @@ class Isolated extends Component<typeof Collection> {
 
   @action updateQuery() {
     this.args.model.query = { ...this.query };
+  }
+
+  @action onFilterField(value: string) {
+    this.filters.push(this.assigneeFilter(value));
+    this.updateQuery();
   }
 
   //buttons
@@ -280,23 +408,24 @@ class Isolated extends Component<typeof Collection> {
   // - queries other options by type
   // private chooseCard = restartableTask(async () => {});
 
-  get instances() {
+  get materializedInstances() {
     return this.args.model.showMaterialized
       ? this.args.model.cardsList ?? []
       : [];
   }
 
-  get listOfStatuses() {
-    if (!this.args.model.ref) {
-      return;
-    }
-    // this kinda sucks
-    let codeRef = codeRefWithAbsoluteURL(
-      this.args.model.ref,
-      this.currentRealm,
-    );
-    console.log(codeRef);
-  }
+  // not used
+  // get listOfStatuses() {
+  //   if (!this.args.model.ref) {
+  //     return;
+  //   }
+  //   // this kinda sucks
+  //   let codeRef = codeRefWithAbsoluteURL(
+  //     this.args.model.ref,
+  //     this.currentRealm,
+  //   );
+  //   console.log(codeRef);
+  // }
 
   <template>
     <section>
@@ -310,53 +439,19 @@ class Isolated extends Component<typeof Collection> {
 
         <aside class='widget-panel'>
           <div>
-            <h3>Filter By:</h3>
+            <h3>Filter By Field:</h3>
             <ul>
               <li>
                 <button {{on 'click' this.add}}>Assignee</button>
               </li>
-
-              {{#let
-                (component @context.prerenderedCardSearchComponent)
-                as |PrerenderedCardSearch|
-              }}
-                <PrerenderedCardSearch
-                  @query={{this.query}}
-                  @format='atom'
-                  @realms={{this.realms}}
-                >
-
-                  <:loading>
-                    Loading...
-                  </:loading>
-                  <:response as |cards|>
-                    {{!-- <ul>
-                      {{#each cards as |c|}}
-                        <li>
-                          {{c.component}}
-                        </li>
-                      {{/each}}
-                    </ul> --}}
-
-                    <h2>Power select</h2>
-                    <BoxelSelect
-                      @placeholder={{'Select Item'}}
-                      @options={{cards}}
-                      @onChange={{this.onChangePower}}
-                      {{!-- @selected={{this.selectedEventType}}
-                @options={{this.eventTypeItems}} --}}
-                      {{! @dropdownClass='boxel-select-usage'
-                class='select' }}
-                      as |item|
-                    >
-                      <div>{{item.component}}</div>
-                    </BoxelSelect>
-                  </:response>
-                </PrerenderedCardSearch>
-              {{/let}}
-              {{!-- <li>
-                <button {{on 'click' this.add}}>Status</button>
-              </li> --}}
+              <li>
+                <h2>Assignee</h2>
+                <DropdownMenu
+                  @context={{@context}}
+                  @model={{@model}}
+                  @currentRealm={{this.currentRealm}}
+                />
+              </li>
             </ul>
           </div>
           <div>
@@ -386,7 +481,11 @@ class Isolated extends Component<typeof Collection> {
               </div>
 
             </div>
-            <Grid @context={{this.args.context}} @query={{this.query}} />
+            {{! Search here }}
+            <ConfigurableCardsGrid
+              @context={{this.args.context}}
+              @query={{this.query}}
+            />
 
             <div class='add-button'>
               <Tooltip @placement='left' @offset={{6}}>
@@ -467,11 +566,14 @@ class Isolated extends Component<typeof Collection> {
     </style>
   </template>
 
-  @action onChangePower() {
-    console.log('changed power');
+  get fields() {
+    debugger;
+    return this.args.fields;
   }
+
   @action
   createNew() {
+    //maybe create and link to cardsList
     this.createCard.perform();
   }
 

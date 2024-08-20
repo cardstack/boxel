@@ -43,6 +43,21 @@
         "links": {
           "self": "https://cardstack.com/base/fields/boolean-field"
         }
+      },
+      "cardsList.6": {
+        "links": {
+          "self": "../TeamMember/9cc25f04-5de5-4e7b-8740-429c6bfa05fe"
+        }
+      },
+      "cardsList.7": {
+        "links": {
+          "self": "../TeamMember/d696766f-4f85-4ae4-82c9-70989998ec3e"
+        }
+      },
+      "cardsList.8": {
+        "links": {
+          "self": "../TeamMember/d696766f-4f85-4ae4-82c9-70989998ec3e"
+        }
       }
     },
     "meta": {
