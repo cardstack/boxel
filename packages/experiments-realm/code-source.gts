@@ -23,49 +23,7 @@ class Isolated extends Component<typeof CodeSource> {
       headers: {
         Accept: 'application/vnd.card+source',
       },
-      body: `
-        import { CardDef, FieldDef, linksTo, linksToMany, field, contains, containsMany } from 'https://cardstack.com/base/card-api';
-        import { Component } from 'https://cardstack.com/base/card-api';
-        import { get } from '@ember/object';
-        import { tracked } from '@glimmer/tracking';
-        import { on } from '@ember/modifier';
-        import { action } from '@ember/object';
-        import { restartableTask } from 'ember-concurrency';
-        import { eq } from '@cardstack/boxel-ui/helpers';
-
-        import StringField from 'https://cardstack.com/base/string';
-        import BooleanField from 'https://cardstack.com/base/boolean';
-        import DateField from 'https://cardstack.com/base/date';
-        import DateTimeField from 'https://cardstack.com/base/datetime';
-        import NumberField from 'https://cardstack.com/base/number';
-
-        import MarkdownField from 'https://cardstack.com/base/markdown';
-
-        ${model.supportingFields ?? ''}
-
-        export class ${model.name}  extends CardDef {
-          static displayName = '${model.name}';
-
-          ${model.fieldsCode}
-
-        ${
-          model.templateMarkup
-            ? `static isolated = class Isolated extends Component<typeof ${
-                model.name
-              }> {
-            ${model.templateCode ?? ''}
-
-            <template>
-              ${model.templateMarkup}
-              <style>
-              ${model.templateStyle ?? ''}
-              </style>
-            </template>
-        };`
-            : ''
-        }
-        }
-      `,
+      body: model.fieldsCode,
     });
 
     if (!response.ok) {
@@ -303,6 +261,7 @@ Example for a booking form:
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
 
 
 

@@ -1,4 +1,5 @@
 import { Base64ImageField } from 'https://cardstack.com/base/base64-image';
+import CodeRefField from 'https://cardstack.com/base/code-ref';
 import TextAreaField from 'https://cardstack.com/base/text-area';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import {
@@ -16,7 +17,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
-import { camelCase } from '@cardstack/runtime-common';
+import { baseRealm, camelCase } from '@cardstack/runtime-common';
 
 class Isolated extends Component<typeof ProductRequirementDocument> {
   <template>
@@ -43,18 +44,46 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
             </div>
             <h1><@fields.title /></h1>
           </div>
-          <Button
-            {{on 'click' this.generateApp}}
-            class='generate-button'
-            @kind='primary-dark'
-            @disabled={{this.createModule.isRunning}}
-            @loading={{this.createModule.isRunning}}
-          >
-            {{#unless this.createModule.isRunning}}
-              <span class='generate-button-logo' />
-            {{/unless}}
-            Generate App Now
-          </Button>
+          {{#if @model.latestVersion.module}}
+            <Button
+              {{on 'click' this.createInstance}}
+              class='generate-button'
+              @kind='primary-dark'
+              @disabled={{this._createApp.isRunning}}
+              @loading={{this._createApp.isRunning}}
+            >
+              {{#unless this._createApp.isRunning}}
+                <span class='generate-button-logo' />
+              {{/unless}}
+              Create App Instance
+            </Button>
+          {{else if @model.fieldsCode}}
+            <Button
+              {{on 'click' this.createModule}}
+              class='generate-button'
+              @kind='primary-dark'
+              @disabled={{this._createModule.isRunning}}
+              @loading={{this._createModule.isRunning}}
+            >
+              {{#unless this._createModule.isRunning}}
+                <span class='generate-button-logo' />
+              {{/unless}}
+              Create Module
+            </Button>
+          {{else}}
+            <Button
+              {{on 'click' this.generateApp}}
+              class='generate-button'
+              @kind='primary-dark'
+              @disabled={{this._generateCode.isRunning}}
+              @loading={{this._generateCode.isRunning}}
+            >
+              {{#unless this._generateCode.isRunning}}
+                <span class='generate-button-logo' />
+              {{/unless}}
+              Generate App Now
+            </Button>
+          {{/if}}
         </div>
         {{#if this.errorMessage}}
           <p class='error'>{{this.errorMessage}}</p>
@@ -84,6 +113,24 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
           <summary><span>Layout & Navigation</span></summary>
           <div class='details-content'>
             <@fields.layoutAndNavigation />
+          </div>
+        </details>
+        <details open={{bool @model.fieldsCode}}>
+          <summary><span>Code</span></summary>
+          <div class='details-content'>
+            <pre><@fields.fieldsCode /></pre>
+          </div>
+        </details>
+        <details open={{bool @model.latestVersion}}>
+          <summary><span>Module</span></summary>
+          <div class='details-content'>
+            <@fields.latestVersion />
+          </div>
+        </details>
+        <details open={{bool @model.sampleData}}>
+          <summary><span>Sample Data</span></summary>
+          <div class='details-content'>
+            <pre><@fields.sampleData /></pre>
           </div>
         </details>
       </div>
@@ -191,52 +238,63 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
   }
 
   @action generateApp() {
-    this.createModule.perform();
+    this._generateCode.perform();
+  }
+  @action createModule() {
+    this._createModule.perform();
+  }
+  @action createInstance() {
+    this._createApp.perform();
   }
 
-  private createModule = restartableTask(async () => {
+  private _generateCode = restartableTask(async () => {
     this.errorMessage = '';
     try {
       if (!this.currentRealm) {
         throw new Error('Realm URL is not available');
       }
-      if (!this.args.context?.actions) {
-        throw new Error('Context actions are not available');
+      if (!this.args.context?.actions?.runCommand) {
+        throw new Error('Context action "runCommand" is not available');
       }
-      // TODO: Use runCommand action to send generate command
-      let { appTitle } = this.args.model;
-      let fileName = appTitle?.replace(' ', '-').toLowerCase();
-      let moduleName = camelCase(appTitle ?? 'AppCard', { pascalCase: true });
-      let moduleId = `${this.currentRealm.href}${fileName}`;
+      await this.args.context.actions.runCommand(
+        this.args.model as CardDef,
+        `${baseRealm.url}SkillCard/app-generator`,
+        'Generate code',
+      );
+    } catch (e) {
+      console.error(e);
+      this.errorMessage =
+        e instanceof Error ? `Error: ${e.message}` : 'An error has occurred';
+    }
+  });
 
-      // TODO: Replace/update code below with ai generated code
+  private _createModule = restartableTask(async () => {
+    try {
+      if (!this.currentRealm) {
+        throw new Error('Realm URL is not available');
+      }
+      if (!this.args.model.fieldsCode) {
+        throw new Error('App code is not available');
+      }
+      let fileName =
+        this.args.model?.appTitle?.replace(' ', '-').toLowerCase() ??
+        `untitled-app-${Date.now()}`;
+      let moduleName = camelCase(this.args.model?.appTitle ?? 'AppCard', {
+        pascalCase: true,
+      });
+      let moduleId = `${this.currentRealm.href}${fileName}`;
       let response = await fetch(`${moduleId}.gts`, {
         method: 'POST',
         headers: { Accept: 'application/vnd.card+source' },
-        body: `import { CardDef, FieldDef, linksTo, linksToMany, field, contains, containsMany } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
-import { get } from '@ember/object';
-import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
-import { action } from '@ember/object';
-import { restartableTask } from 'ember-concurrency';
-import { eq } from '@cardstack/boxel-ui/helpers';
-
-import StringField from 'https://cardstack.com/base/string';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import DateField from 'https://cardstack.com/base/date';
-import DateTimeField from 'https://cardstack.com/base/datetime';
-import NumberField from 'https://cardstack.com/base/number';
-
-import MarkdownField from 'https://cardstack.com/base/markdown';
-
-import { AppCard } from './app-card';
+        body: `import { AppCard } from './app-card';
 
 export class ${moduleName} extends AppCard {
-  static displayName = '${appTitle}';
-}`,
-      });
+  static displayName = '${this.args.model.appTitle ?? 'Untitled App'}';
+}
 
+${this.args.model.fieldsCode}
+`,
+      });
       if (!response.ok) {
         throw new Error(
           `Could not write file "${moduleId}.gts", status ${response.status}: ${
@@ -245,7 +303,32 @@ export class ${moduleName} extends AppCard {
         );
       }
       let moduleRef = { module: moduleId, name: moduleName };
-      // TODO: update initial card data
+      this.args.model['latestVersion'] = moduleRef;
+    } catch (e) {
+      console.error(e);
+      this.errorMessage =
+        e instanceof Error ? `Error: ${e.message}` : 'An error has occurred';
+    }
+  });
+
+  private _createApp = restartableTask(async () => {
+    this.errorMessage = '';
+    try {
+      if (!this.currentRealm) {
+        throw new Error('Realm URL is not available');
+      }
+      if (!this.args.context?.actions?.createCard) {
+        throw new Error('Context action "createCard" is not available');
+      }
+      if (!this.args.model.latestVersion) {
+        throw new Error('Module is not available');
+      }
+      // if (!this.args.model.sampleData) {
+      //   throw new Error('Sample data is not available');
+      // }
+      let { module, name } = this.args.model.latestVersion;
+      let moduleRef = { module, name };
+
       let card = await this.args.context?.actions?.createCard?.(
         moduleRef,
         undefined,
@@ -253,7 +336,10 @@ export class ${moduleName} extends AppCard {
           realmURL: this.currentRealm,
           doc: {
             data: {
-              attributes: { title: appTitle },
+              attributes: {
+                title: this.args.model.appTitle,
+                // ...JSON.parse(this.args.model.sampleData),
+              },
               meta: { adoptsFrom: moduleRef },
             },
           },
@@ -279,6 +365,49 @@ export class ProductRequirementDocument extends CardDef {
   @field overview = contains(MarkdownField);
   @field schema = contains(MarkdownField);
   @field layoutAndNavigation = contains(MarkdownField);
+  @field latestVersion = contains(CodeRefField);
+  @field fieldsCode = contains(StringField, {
+    description: `Use typescript for the code. Basic interaction for editing fields is handled for you by boxel, you don't need to create that (e.g. StringField has an edit template that allows a user to edit the data). Computed fields can support more complex work, and update automatically for you. Interaction (button clicks, filtering on user typed content) will require work on templates that will happen elsewhere and is not yours to do.
+
+Never leave sections of code unfilled or with placeholders, finish all code you write.
+
+You have available:
+
+StringField
+MarkdownField
+NumberField
+BooleanField
+DateField
+DateTimeField
+
+Fields do not have default values.
+
+Computed fields can be created with a computeVia function
+
+ @field computedData = contains(NumberField, {
+   computeVia: function (this) {
+     // implementation logic here
+     return 1;
+   }});
+
+
+Use contains for a single field and containsMany for a list.
+
+Example for a booking form:
+
+@field guestNames = containsMany(StringField);
+@field startDate = contains(DateField);
+@field endDate = contains(DateField);
+@field guests = contains(NumberField, {
+   computeVia: function (this) {
+     return guestNames.length;
+   })
+
+`,
+  });
+  @field sampleData = contains(StringField, {
+    description: `Sample data to create an instance with. This should be a JSON string, and *must* be updated whenever the template *fields* are changed`,
+  });
   @field title = contains(StringField, {
     computeVia: function (this: ProductRequirementDocument) {
       return this.appTitle ?? 'Untitled App';
