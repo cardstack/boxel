@@ -3,7 +3,6 @@ import {
   click,
   fillIn,
   triggerKeyEvent,
-  waitUntil,
 } from '@ember/test-helpers';
 
 import { triggerEvent } from '@ember/test-helpers';
@@ -1399,13 +1398,6 @@ module('Acceptance | interact submode tests', function (hooks) {
         },
       });
 
-      await waitUntil(() =>
-        document
-          .querySelector(
-            '[data-test-operator-mode-stack="0"] [data-test-person]',
-          )
-          ?.textContent?.includes('FadhlanXXX'),
-      );
       assert
         .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
         .hasText('FadhlanXXX');
