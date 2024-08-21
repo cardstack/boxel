@@ -812,9 +812,6 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-add-new]').exists();
     await click('[data-test-add-new]');
     await waitFor(`[data-test-card-catalog-modal]`);
-    await click(`[data-test-card-catalog-create-new-button]`);
-
-    await click('[data-test-add-new]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
     await click(`[data-test-select="${testRealmURL}Author/2"]`);
     assert
