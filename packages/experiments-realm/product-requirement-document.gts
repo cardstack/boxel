@@ -1,5 +1,4 @@
 import { Base64ImageField } from 'https://cardstack.com/base/base64-image';
-import CodeRefField from 'https://cardstack.com/base/code-ref';
 import TextAreaField from 'https://cardstack.com/base/text-area';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import {
@@ -17,7 +16,9 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
-import { baseRealm, camelCase } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
+import { AppCard } from './app-card';
+import CodeRefField from '../base/code-ref';
 
 class Isolated extends Component<typeof ProductRequirementDocument> {
   <template>
@@ -44,20 +45,28 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
             </div>
             <h1><@fields.title /></h1>
           </div>
-          {{#if @model.latestVersion.module}}
+          {{#if @model.moduleRef.module}}
+            <Button
+              {{on 'click' this.viewModule}}
+              class='generate-button'
+              @kind='primary-dark'
+            >
+              View Module
+            </Button>
             <Button
               {{on 'click' this.createInstance}}
               class='generate-button'
               @kind='primary-dark'
-              @disabled={{this._createApp.isRunning}}
-              @loading={{this._createApp.isRunning}}
+              @disabled={{this._createInstance.isRunning}}
+              @loading={{this._createInstance.isRunning}}
             >
-              {{#unless this._createApp.isRunning}}
+              {{#unless this._createInstance.isRunning}}
                 <span class='generate-button-logo' />
               {{/unless}}
               Create App Instance
             </Button>
-          {{else if @model.fieldsCode}}
+          {{/if}}
+          {{#if @model.fieldsCode}}
             <Button
               {{on 'click' this.createModule}}
               class='generate-button'
@@ -68,7 +77,8 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
               {{#unless this._createModule.isRunning}}
                 <span class='generate-button-logo' />
               {{/unless}}
-              Create Module
+              {{if @model.moduleRef.module 'Regenerate' 'Create'}}
+              Module
             </Button>
           {{else}}
             <Button
@@ -84,6 +94,10 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
               Generate App Now
             </Button>
           {{/if}}
+        </div>
+        <div>
+          <button {{on 'click' this.clearModule}}>Clear Module</button>
+          <button {{on 'click' this.clearCode}}>Clear Code</button>
         </div>
         {{#if this.errorMessage}}
           <p class='error'>{{this.errorMessage}}</p>
@@ -115,24 +129,6 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
             <@fields.layoutAndNavigation />
           </div>
         </details>
-        <details open={{bool @model.fieldsCode}}>
-          <summary><span>Code</span></summary>
-          <div class='details-content'>
-            <pre><@fields.fieldsCode /></pre>
-          </div>
-        </details>
-        <details open={{bool @model.latestVersion}}>
-          <summary><span>Module</span></summary>
-          <div class='details-content'>
-            <@fields.latestVersion />
-          </div>
-        </details>
-        <details open={{bool @model.sampleData}}>
-          <summary><span>Sample Data</span></summary>
-          <div class='details-content'>
-            <pre><@fields.sampleData /></pre>
-          </div>
-        </details>
       </div>
     </section>
     <style>
@@ -156,6 +152,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
         padding: var(--boxel-sp-xxs) var(--boxel-sp);
         justify-self: end;
         gap: var(--boxel-sp-sm);
+        white-space: normal;
       }
       .generate-button :deep(svg) {
         width: var(--icon-size);
@@ -232,6 +229,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
   </template>
 
   @tracked errorMessage = '';
+  @tracked moduleName = '';
 
   get currentRealm() {
     return this.args.model[realmURL];
@@ -244,7 +242,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
     this._createModule.perform();
   }
   @action createInstance() {
-    this._createApp.perform();
+    this._createInstance.perform();
   }
 
   private _generateCode = restartableTask(async () => {
@@ -276,34 +274,43 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
       if (!this.args.model.fieldsCode) {
         throw new Error('App code is not available');
       }
+
       let fileName =
-        this.args.model?.appTitle?.replace(' ', '-').toLowerCase() ??
+        this.args.model?.appTitle?.replace(/ /g, '-').toLowerCase() ??
         `untitled-app-${Date.now()}`;
-      let moduleName = camelCase(this.args.model?.appTitle ?? 'AppCard', {
-        pascalCase: true,
-      });
-      let moduleId = `${this.currentRealm.href}${fileName}`;
-      let response = await fetch(`${moduleId}.gts`, {
+      let moduleId = `${this.currentRealm.href}${fileName}.gts`;
+      let response = await fetch(moduleId, {
         method: 'POST',
         headers: { Accept: 'application/vnd.card+source' },
-        body: `import { AppCard } from './app-card';
-
-export class ${moduleName} extends AppCard {
-  static displayName = '${this.args.model.appTitle ?? 'Untitled App'}';
-}
-
-${this.args.model.fieldsCode}
-`,
+        body: this.args.model.fieldsCode,
       });
       if (!response.ok) {
         throw new Error(
-          `Could not write file "${moduleId}.gts", status ${response.status}: ${
+          `Could not write file "${moduleId}", status ${response.status}: ${
             response.statusText
           } - ${await response.text()}`,
         );
       }
-      let moduleRef = { module: moduleId, name: moduleName };
-      this.args.model['latestVersion'] = moduleRef;
+
+      let loader = (import.meta as any).loader;
+      let module = await loader.import(moduleId);
+      let appCard = Object.entries(module).find(
+        ([_, declaration]) =>
+          declaration &&
+          typeof declaration === 'function' &&
+          'isCardDef' in declaration &&
+          AppCard.isPrototypeOf(declaration),
+      );
+      console.log(appCard);
+      if (!appCard) {
+        this.viewModule();
+      } else {
+        let moduleRef = {
+          module: moduleId.replace('.gts', ''),
+          name: appCard[0],
+        };
+        this.args.model['moduleRef'] = moduleRef;
+      }
     } catch (e) {
       console.error(e);
       this.errorMessage =
@@ -311,7 +318,7 @@ ${this.args.model.fieldsCode}
     }
   });
 
-  private _createApp = restartableTask(async () => {
+  private _createInstance = restartableTask(async () => {
     this.errorMessage = '';
     try {
       if (!this.currentRealm) {
@@ -320,17 +327,18 @@ ${this.args.model.fieldsCode}
       if (!this.args.context?.actions?.createCard) {
         throw new Error('Context action "createCard" is not available');
       }
-      if (!this.args.model.latestVersion) {
-        throw new Error('Module is not available');
+      if (
+        !this.args.model.moduleRef?.module ||
+        !this.args.model.moduleRef?.name
+      ) {
+        throw new Error('Module ref is not available');
       }
       // if (!this.args.model.sampleData) {
       //   throw new Error('Sample data is not available');
       // }
-      let { module, name } = this.args.model.latestVersion;
-      let moduleRef = { module, name };
-
+      console.log(this.args.model.moduleRef);
       let card = await this.args.context?.actions?.createCard?.(
-        moduleRef,
+        this.args.model.moduleRef,
         undefined,
         {
           realmURL: this.currentRealm,
@@ -338,11 +346,13 @@ ${this.args.model.fieldsCode}
             data: {
               attributes: {
                 title: this.args.model.appTitle,
+                moduleId: this.args.model.moduleRef.module,
                 // ...JSON.parse(this.args.model.sampleData),
               },
-              meta: { adoptsFrom: moduleRef },
+              meta: { adoptsFrom: this.args.model.moduleRef },
             },
           },
+          cardModeAfterCreation: 'isolated',
         },
       );
       if (!card) {
@@ -354,6 +364,29 @@ ${this.args.model.fieldsCode}
         e instanceof Error ? `Error: ${e.message}` : 'An error has occurred';
     }
   });
+
+  @action viewModule() {
+    if (!this.args.model.moduleRef?.module) {
+      throw new Error('Module ref is not available');
+    }
+    if (!this.args.context?.actions?.changeSubmode) {
+      throw new Error(
+        'Unable to view module. Context action "changeSubmode" is not available',
+      );
+    }
+    this.args.context.actions.changeSubmode(
+      new URL(`${this.args.model.moduleRef.module}.gts`),
+      'code',
+    );
+  }
+
+  @action clearModule() {
+    this.args.model['moduleRef'] = undefined;
+  }
+
+  @action clearCode() {
+    this.args.model['fieldsCode'] = undefined;
+  }
 }
 
 export class ProductRequirementDocument extends CardDef {
@@ -365,7 +398,7 @@ export class ProductRequirementDocument extends CardDef {
   @field overview = contains(MarkdownField);
   @field schema = contains(MarkdownField);
   @field layoutAndNavigation = contains(MarkdownField);
-  @field latestVersion = contains(CodeRefField);
+  @field moduleRef = contains(CodeRefField);
   @field fieldsCode = contains(StringField, {
     description: `Use typescript for the code. Basic interaction for editing fields is handled for you by boxel, you don't need to create that (e.g. StringField has an edit template that allows a user to edit the data). Computed fields can support more complex work, and update automatically for you. Interaction (button clicks, filtering on user typed content) will require work on templates that will happen elsewhere and is not yours to do.
 

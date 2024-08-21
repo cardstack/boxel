@@ -48,7 +48,7 @@ class Isolated extends Component<typeof CodeSource> {
     );
     await this.args.context?.actions?.createCard?.(
       model.latestVersion,
-      'http://localhost:4201/experiments',
+      new URL('http://localhost:4201/experiments'),
       {
         doc: {
           data: {
@@ -261,6 +261,7 @@ Example for a booking form:
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
 
 
 

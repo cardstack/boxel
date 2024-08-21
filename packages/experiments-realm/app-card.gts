@@ -52,18 +52,23 @@ class AppCardIsolated extends Component<typeof AppCard> {
     this.moduleName = val;
   }
   @action async setupInitialTabs() {
-    if (!this.moduleName) {
-      this.errorMessage = 'Module name is required';
-      return;
+    console.log(this.moduleId);
+    if (!this.moduleId) {
+      if (!this.moduleName) {
+        this.errorMessage = 'Module name is required';
+        return;
+      }
+      if (!this.currentRealm) {
+        this.errorMessage = 'Current realm is not available';
+        return;
+      }
+      this.moduleId = this.currentRealm.href + this.moduleName;
     }
-    if (!this.currentRealm) {
-      this.errorMessage = 'Current realm is not available';
-      return;
-    }
+
     let loader: Loader = (import.meta as any).loader;
     let module;
     try {
-      module = await loader.import(this.currentRealm.href + this.moduleName);
+      module = await loader.import(this.moduleId);
     } catch (e) {
       console.error(e);
       this.errorMessage =
@@ -84,7 +89,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
           tabId: name,
           ref: {
             name,
-            module: this.moduleName,
+            module: this.moduleId.replace('.gts', ''),
           },
           isTable: false,
         }),
@@ -275,6 +280,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
     </style>
   </template>
 
+  @tracked moduleId = this.args.model.moduleId;
   @tracked tabs = this.args.model.tabs;
   @tracked activeTabIndex = 0;
   @tracked private declare liveQuery: {
@@ -285,6 +291,9 @@ class AppCardIsolated extends Component<typeof AppCard> {
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
+    if (!this.tabs?.length) {
+      this.setupInitialTabs();
+    }
     this.setTab();
     this.setSearch();
   }
@@ -437,6 +446,7 @@ export class AppCard extends CardDef {
   static displayName = 'App Card';
   static prefersWideFormat = true;
   static headerColor = '#ffffff';
+  @field moduleId = contains(StringField);
   @field tabs = containsMany(Tab);
   @field headerIcon = contains(Base64ImageField);
   static isolated = AppCardIsolated;
