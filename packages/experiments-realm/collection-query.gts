@@ -74,6 +74,15 @@ export class QueryField extends FieldDef {
       {{this.query}}
     </template>
   };
+
+  static embedded = class Embedded extends Component<typeof this> {
+    get query() {
+      return JSON.stringify(this.args.model, null, 2);
+    }
+    <template>
+      {{this.query}}
+    </template>
+  };
 }
 
 export class BaseView extends Component<typeof QueryField> {

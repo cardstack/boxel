@@ -7,6 +7,8 @@ import {
   Component,
   type CardContext,
   realmURL,
+  getFields,
+  BaseDef,
 } from 'https://cardstack.com/base/card-api';
 
 import GlimmerComponent from '@glimmer/component';
@@ -16,6 +18,11 @@ import {
   Query,
   codeRefWithAbsoluteURL,
   Filter,
+  getCard,
+  loadCard,
+  isResolvedCodeRef,
+  Loader,
+  getLiveCards,
 } from '@cardstack/runtime-common';
 
 import { action } from '@ember/object';
@@ -115,21 +122,21 @@ class Isolated extends Component<typeof Collection> {
     return ['http://localhost:4201/experiments/'];
   }
 
+  get baseFilter() {
+    return {
+      ...{
+        type: {
+          //task type
+          ...this.codeRef,
+        },
+      },
+    };
+  }
+
   get query() {
     return {
       filter: {
-        every: [
-          {
-            ...{
-              type: {
-                //task type
-                ...this.codeRef,
-              },
-            },
-          },
-          ,
-          ...this.filters,
-        ],
+        every: [this.baseFilter, ...this.filters],
       },
     } as Query;
   }
@@ -172,11 +179,22 @@ class Isolated extends Component<typeof Collection> {
 
   <template>
     <section>
-      <@fields.ref />
-      <div>
-        {{this.queryString}}
-      </div>
       <div class='breadcrumb'> </div>
+      <div>
+        <h3>Ref:</h3>
+        <@fields.ref />
+      </div>
+      <div>
+        <h3>Query:</h3>
+        <div>
+          <h5>Base Query:</h5>
+          {{this.queryString}}
+        </div>
+        <div>
+          <h5>Query:</h5>
+          <@fields.query />
+        </div>
+      </div>
 
       <main>
 
@@ -190,6 +208,7 @@ class Isolated extends Component<typeof Collection> {
                   @context={{@context}}
                   @model={{@model}}
                   @currentRealm={{this.currentRealm}}
+                  @onSelect={{this.onSelect}}
                 />
               </li>
             </ul>
@@ -306,10 +325,74 @@ class Isolated extends Component<typeof Collection> {
     </style>
   </template>
 
-  get fields() {
-    debugger;
-    return this.args.fields;
+  @action
+  onSelect(selection: any) {
+    console.log(this.args.fields);
+    console.log(selection);
+    if (selection.data.url) {
+      this.selectCard.perform(selection.data.url);
+      // this.importCodeRef.perform();
+    }
   }
+
+  // we need something to go from codeRef -> typeof BaseDef
+
+  @tracked definition: typeof BaseDef | undefined;
+
+  loadRootCard = restartableTask(async () => {
+    let codeRef = this.codeRef;
+    if (codeRef && isResolvedCodeRef(codeRef)) {
+      await loadCard(codeRef, { loader: Loader });
+    }
+  });
+  // getCardType(this, () => cardDefinition);
+
+  // importCodeRef = restartableTask(async () => {
+  //   let codeRef = this.codeRef;
+  //   if (codeRef && isResolvedCodeRef(codeRef)) {
+  //     let loader: Loader = (import.meta as any).loader;
+  //     let module = await loader.import(codeRef.module);
+  //     let exportedCards = Object.entries(module).filter(
+  //       ([_, declaration]) =>
+  //         declaration &&
+  //         typeof declaration === 'function' &&
+  //         'isCardDef' in declaration,
+  //     );
+  //     console.log('===');
+  //     console.log(exportedCards);
+  //   }
+  // });
+
+  // selectCard = restartableTask(async (id: string) => {
+  //   let url = new URL(id);
+  //   let cardResource = await getCard(url);
+  //   await cardResource.loaded;
+  //   let card = cardResource.card;
+  //   let cardConstructor = card?.constructor;
+  //   if (cardConstructor) {
+  //     let fields = getFields(cardConstructor);
+  //   }
+
+  //   let codeRef = this.codeRef;
+  //   if (codeRef) {
+  //     if (isResolvedCodeRef(codeRef)) {
+  //       let cardResource = await getCard(new URL(codeRef.module));
+  //       await cardResource.loaded;
+  //       let cardConstructor = card?.constructor;
+  //       if (cardConstructor) {
+  //         let fields = getFields(cardConstructor);
+  //         debugger;
+  //         Object.entries(fields).map(([name, field]) => {
+  //           console.log('====');
+  //           console.log(name);
+  //           console.log(field.fieldType);
+  //         });
+  //       }
+  //     }
+
+  //     // let type = await loadCard(this.codeRef);
+  //   }
+  // });
 
   @action
   createNew() {

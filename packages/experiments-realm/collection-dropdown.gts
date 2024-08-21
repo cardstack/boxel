@@ -19,6 +19,7 @@ export class DropdownMenu extends GlimmerComponent<{
     query?: Query;
     model?: any;
     currentRealm?: URL;
+    onSelect?: (value: any) => void;
   };
   Element: HTMLElement;
 }> {
@@ -55,6 +56,7 @@ export class DropdownMenu extends GlimmerComponent<{
   @tracked selected: any = null; //state for selection
   @action onSelect(selection: any) {
     this.selected = selection;
+    this.args.onSelect?.(selection);
   }
 
   // selecting a links to card
