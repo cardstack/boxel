@@ -232,6 +232,7 @@ export default class SubmodeLayout extends Component<Signature> {
               >BOXEL</span>
             {{else}}
               <SubmodeSwitcher
+                class='switcher'
                 @submode={{this.operatorModeStateService.state.submode}}
                 @onSubmodeSelect={{this.updateSubmode}}
               />
@@ -358,6 +359,7 @@ export default class SubmodeLayout extends Component<Signature> {
       }
 
       .top-left-menu {
+        width: var(--operator-mode-left-column);
         position: absolute;
         top: 0;
         left: 0;
@@ -366,7 +368,10 @@ export default class SubmodeLayout extends Component<Signature> {
 
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-sm);
+      }
+      .switcher {
+        width: 100%;
+        margin-left: var(--boxel-sp-sm);
       }
 
       .boxel-title {
