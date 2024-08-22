@@ -98,31 +98,6 @@ class Isolated extends Component<typeof Collection> {
   // widget = new QueryWidget();
   filters: TrackedMap<string, FiltersToQuery> = new TrackedMap();
 
-  // assignee.name => FiltersToQuery
-  // filters2: TrackedMap<string, FiltersToQuery> = new TrackedMap();
-  // @tracked filtersAvailable:
-
-  //linksTo
-  assigneeFilter(value: string) {
-    return {
-      eq: {
-        'assignee.label': value,
-      },
-    };
-  }
-
-  //contains compound
-  statusFilter(value: StatusOptions) {
-    return {
-      on: {
-        ...this.codeRef,
-      },
-      eq: {
-        'status.label': value,
-      },
-    } as EqFilter;
-  }
-
   get codeRef() {
     if (!this.args.model.ref) {
       return;
@@ -150,16 +125,12 @@ class Isolated extends Component<typeof Collection> {
     };
   }
 
-  get parsedFiltersToQuery() {
-    return Array.from(this.filtersAsArray).filter(
-      (f) => f.active && f.instance,
-    );
-  }
-
   get correctFilters() {
-    return this.parsedFiltersToQuery.reduce((acc: any[], filter) => {
-      return [...acc, filter.instance];
-    }, []);
+    return this.filtersAsArray
+      .filter((f) => f.active && f.instance)
+      .reduce((acc: any[], filter) => {
+        return [...acc, filter.instance];
+      }, []);
   }
 
   get filtersAsArray() {
@@ -185,6 +156,7 @@ class Isolated extends Component<typeof Collection> {
       filter.active = !filter.active;
       // let newFilter = { ...filter, active: !filter.active };
       this.filters.set(key, filter);
+      this.updateQuery();
     }
   }
 
@@ -217,7 +189,7 @@ class Isolated extends Component<typeof Collection> {
 
   <template>
     <section>
-      <button {{on 'click' this.displayQuery}}>Display Query</button>
+      <button {{on 'click' this.displayQuery}}>Display Filter Component</button>
       <div class='breadcrumb'> </div>
       <div>
         <h3>Ref:</h3>
@@ -225,14 +197,11 @@ class Isolated extends Component<typeof Collection> {
       </div>
       <div>
         <h3>Query:</h3>
-        <div>
-          <h5>Base Query:</h5>
-          {{this.queryString}}
-        </div>
-        <div>
-          <h5>Query:</h5>
-          <@fields.query />
-        </div>
+        <h5>Query (in Component)</h5>
+
+        {{this.queryString}}
+        <h5>Query (in Card)</h5>
+        <@fields.query />
       </div>
 
       <main>
@@ -408,6 +377,7 @@ class Isolated extends Component<typeof Collection> {
           filter.instance = filter.filterQuery(val);
           // let newFilter = { ...filter, instance: filter.filterQuery(val) };
           this.filters.set(key, filter);
+          this.updateQuery();
         }
         console.log(this.filters.get(key));
         console.log(this.filters.get(key));
@@ -463,8 +433,7 @@ class Isolated extends Component<typeof Collection> {
                 },
               };
               this.filters.set(key, fieldFilter);
-              console.log('==setting');
-              console.log(key);
+              this.updateQuery();
             }
           });
         }
