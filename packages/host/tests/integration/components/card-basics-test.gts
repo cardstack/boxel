@@ -1264,15 +1264,17 @@ module('Integration | card-basics', function (hooks) {
         .hasStyle({ margin: '10px' });
     });
 
-    test('render whole composite field', async function (assert) {
+    test('render whole composite contains field', async function (assert) {
       class Person extends FieldDef {
-        @field firstName = contains(StringField);
         @field title = contains(StringField);
+        @field firstName = contains(StringField);
+        @field lastName = contains(StringField);
         @field number = contains(NumberField);
         static embedded = class Embedded extends Component<typeof this> {
           <template>
             <div data-test-embedded-person><@fields.title />
               <@fields.firstName />
+              <@fields.lastName />
               <@fields.number /></div>
           </template>
         };
@@ -1280,23 +1282,39 @@ module('Integration | card-basics', function (hooks) {
 
       class Post extends CardDef {
         @field author = contains(Person);
+        @field body = contains(StringField);
         static isolated = class Isolated extends Component<typeof this> {
           <template>
-            <div data-test><@fields.author /></div>
+            <div data-test-title><@fields.title /></div>
+            <div data-test-author><@fields.author style='width: 120px' /></div>
+            <div data-test-body><@fields.body /></div>
           </template>
         };
       }
       loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
       let helloWorld = new Post({
+        title: 'This is My First Post',
         author: new Person({
           firstName: 'Arthur',
+          lastName: 'Mephistophoclesiasticallious',
           title: 'Mr',
           number: 10,
         }),
+        body: 'Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
       });
       await renderCard(loader, helloWorld, 'isolated');
-      assert.dom('[data-test-embedded-person]').containsText('Mr Arthur 10');
+      assert
+        .dom(
+          '[data-test-compound-field-format="embedded"] [data-test-embedded-person]',
+        )
+        .exists();
+      assert
+        .dom('[data-test-compound-field-format="embedded"]')
+        .hasStyle({ width: '120px' });
+      assert
+        .dom('[data-test-embedded-person]')
+        .containsText('Mr Arthur Mephistophoclesiasticallious 10');
     });
 
     test('render nested composite field', async function (assert) {
