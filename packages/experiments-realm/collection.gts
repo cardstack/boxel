@@ -182,8 +182,9 @@ class Isolated extends Component<typeof Collection> {
     let filter = this.filters.get(key);
     if (filter) {
       console.log('toggling active');
-      let newFilter = { ...filter, active: !filter.active };
-      this.filters.set(key, newFilter);
+      filter.active = !filter.active;
+      // let newFilter = { ...filter, active: !filter.active };
+      this.filters.set(key, filter);
     }
   }
 
@@ -404,9 +405,9 @@ class Isolated extends Component<typeof Collection> {
         let filter = this.filters.get(key);
         if (filter) {
           let val = card[innerName];
-
-          let newFilter = { ...filter, instance: filter.filterQuery(val) };
-          this.filters.set(key, newFilter);
+          filter.instance = filter.filterQuery(val);
+          // let newFilter = { ...filter, instance: filter.filterQuery(val) };
+          this.filters.set(key, filter);
         }
         console.log(this.filters.get(key));
         console.log(this.filters.get(key));

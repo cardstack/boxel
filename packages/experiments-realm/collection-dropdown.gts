@@ -46,13 +46,14 @@ export class DropdownMenu extends GlimmerComponent<{
           <h4>{{@filter.name}}.{{@filter.innerName}}</h4>
 
           <button type='button' {{on 'click' this.toggleActive}}>
-            {{@filter.active}}
+            Toggle active
           </button>
           <div>
             <BoxelSelect
               @options={{cards}}
               @onChange={{this.onSelect}}
               @selected={{this.selected}}
+              @placeholder={{'Select Item'}}
               as |item|
             >
               {{#let (component item.component) as |Component|}}
@@ -70,6 +71,8 @@ export class DropdownMenu extends GlimmerComponent<{
   @action onSelect(selection: any) {
     debugger;
     this.selected = selection;
+    console.log('===');
+    console.log(this.selected);
     this.args.onSelect?.(
       selection,
       this.args.filter?.name,
