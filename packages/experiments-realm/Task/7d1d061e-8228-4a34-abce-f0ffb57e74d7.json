@@ -22,6 +22,11 @@
         "links": {
           "self": "../TeamMember/9cc25f04-5de5-4e7b-8740-429c6bfa05fe"
         }
+      },
+      "project": {
+        "links": {
+          "self": "../Project/a4b4ee67-a2dd-4ad8-bbe6-17c5389eb5ce"
+        }
       }
     },
     "meta": {

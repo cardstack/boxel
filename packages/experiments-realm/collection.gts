@@ -8,7 +8,8 @@ import {
   type CardContext,
   realmURL,
   getFields,
-  BaseDef,
+  BaseDefConstructor,
+  Field,
 } from 'https://cardstack.com/base/card-api';
 
 import GlimmerComponent from '@glimmer/component';
@@ -21,8 +22,7 @@ import {
   getCard,
   loadCard,
   isResolvedCodeRef,
-  Loader,
-  getLiveCards,
+  identifyCard,
 } from '@cardstack/runtime-common';
 
 import { action } from '@ember/object';
@@ -81,9 +81,19 @@ type StatusOptions = 'To Do' | 'In Progress' | 'Done';
 
 // const statusOptionVals: StatusOptions = ['To Do', 'In Progress', 'Done'];
 
+interface FiltersToQuery {
+  active: boolean;
+  name: string;
+  field: any;
+  filter: (
+    fieldName: string,
+    value: string | number | boolean | undefined,
+  ) => Filter; // our query filter
+}
+
 class Isolated extends Component<typeof Collection> {
   // widget = new QueryWidget();
-  @tracked filters: TrackedArray<Filter> = new TrackedArray([]);
+  @tracked filters: TrackedArray<FiltersToQuery> = new TrackedArray([]);
 
   //linksTo
   assigneeFilter(value: string) {
@@ -133,21 +143,22 @@ class Isolated extends Component<typeof Collection> {
     };
   }
 
+  get parsedFilters() {
+    return Array.from(this.filters).filter((f) => f.active);
+  }
+
   get query() {
+    console.log('===query====');
+    console.log(this.parsedFilters);
     return {
       filter: {
-        every: [this.baseFilter, ...this.filters],
+        every: [this.baseFilter, ...this.parsedFilters],
       },
     } as Query;
   }
 
   @action updateQuery() {
     this.args.model.query = { ...this.query };
-  }
-
-  @action onFilterField(value: string) {
-    this.filters.push(this.assigneeFilter(value));
-    this.updateQuery();
   }
 
   get queryString() {
@@ -179,6 +190,7 @@ class Isolated extends Component<typeof Collection> {
 
   <template>
     <section>
+      <button {{on 'click' this.displayQuery}}>Display Query</button>
       <div class='breadcrumb'> </div>
       <div>
         <h3>Ref:</h3>
@@ -203,13 +215,18 @@ class Isolated extends Component<typeof Collection> {
             <h3>Filter By Field:</h3>
             <ul>
               <li>
-                <h2>Assignee</h2>
-                <DropdownMenu
-                  @context={{@context}}
-                  @model={{@model}}
-                  @currentRealm={{this.currentRealm}}
-                  @onSelect={{this.onSelect}}
-                />
+                {{#each this.filters as |filter|}}
+                  <div>
+                    <h4>{{filter.name}}</h4>
+                    <DropdownMenu
+                      @codeRef={{filter.codeRef}}
+                      @context={{@context}}
+                      @model={{@model}}
+                      @currentRealm={{this.currentRealm}}
+                      @onSelect={{this.onSelect}}
+                    />
+                  </div>
+                {{/each}}
               </li>
             </ul>
           </div>
@@ -326,25 +343,84 @@ class Isolated extends Component<typeof Collection> {
   </template>
 
   @action
-  onSelect(selection: any) {
-    console.log(this.args.fields);
-    console.log(selection);
-    if (selection.data.url) {
-      this.selectCard.perform(selection.data.url);
+  onSelect(selection: any, fieldName?: string) {
+    let id = selection.data.url; //card id
+    if (id) {
+      this.selectCard.perform(id);
+      //   let cardResource = await getCard(url);
+      //   await cardResource.loaded;
+      //   let card = cardResource.card;
+      // this.loadRootCard.perform();
+      // this.selectCard.perform(selection.data.url);
       // this.importCodeRef.perform();
     }
   }
 
   // we need something to go from codeRef -> typeof BaseDef
+  @action displayQuery() {
+    this.loadRootCard.perform();
+  }
 
-  @tracked definition: typeof BaseDef | undefined;
+  // we need this bcos we need to know the field values inside of the card
+  selectCard = restartableTask(async (id: string) => {
+    let cardResource = await getCard(new URL(id));
+    await cardResource.loaded;
+    let card = cardResource.card;
+    if (card) {
+      //reason why I need to load the card is becos I need to know its values so I can create a proper filter
+      // and its oso pre-rendered
+      //look into my map of filters
+      //iterate thru filters via fieldName
+      //check if my card has a fieldValue for a filter
+    }
+  });
 
   loadRootCard = restartableTask(async () => {
     let codeRef = this.codeRef;
     if (codeRef && isResolvedCodeRef(codeRef)) {
-      await loadCard(codeRef, { loader: Loader });
+      // let loader = (globalThis as any).loader;
+      let card = await loadCard(codeRef, { loader: import.meta.loader }); //https://linear.app/cardstack/issue/CS-7122/fix-and-add-type-to-importmetaloader
+      let fields = getFields(card); //use card-type resource
+      let entries = Object.entries(fields).map(async ([fieldName, field]) => {
+        if (
+          field.fieldType === 'linksTo' ||
+          field.fieldType === 'linksToMany'
+        ) {
+          debugger;
+          let codeRef = await identifyCard(field.card);
+          let fieldFilter: FiltersToQuery = {
+            name: fieldName,
+            active: true,
+            codeRef,
+            field: field,
+          };
+          //perhaps use queryableValue
+          // this.filters.push(fieldFilter);
+          let fields2 = getFields(field.card);
+          Object.entries(fields2).map(([fieldName2, field2]) => {
+            fieldFilter.filter = (value: string) => {
+              return {
+                eq: {
+                  [fieldName2]: value,
+                },
+              };
+            };
+            // console.log({
+            //   eq: {
+            //     ``: value,
+            //   },
+            // });
+          });
+        }
+      });
     }
   });
+
+  fieldToFilter(
+    codeRef: ResolvedCodeRef,
+    fieldName: string,
+    field: Field<BaseDefConstructor>,
+  ) {}
   // getCardType(this, () => cardDefinition);
 
   // importCodeRef = restartableTask(async () => {

@@ -2,6 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
+      "taskName": null,
+      "taskDetail": null,
       "status": {
         "index": 0,
         "label": "To Do"
@@ -19,6 +21,11 @@
       "assignee": {
         "links": {
           "self": null
+        }
+      },
+      "project": {
+        "links": {
+          "self": "../Project/0c9a2d69-f26a-4345-8db4-4a8db276c240"
         }
       }
     },

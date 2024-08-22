@@ -129,9 +129,14 @@ export class TeamMember extends User {
   @field team = linksTo(Team);
 }
 
-export class Projects extends CardDef {
-  static displayName = 'Projects';
+export class Project extends CardDef {
+  static displayName = 'Project';
   @field name = contains(StringField);
+  @field title = contains(StringField, {
+    computeVia: function (this: Project) {
+      return this.name;
+    },
+  });
 }
 
 export class Issues extends CardDef {
@@ -145,6 +150,7 @@ export class Task extends CardDef {
   @field status = contains(TaskStatusField);
   @field priority = contains(TaskPriorityField);
   @field assignee = linksTo(TeamMember);
+  @field project = linksTo(Project);
   @field dueDate = contains(DateField);
 
   static atom = class Atom extends Component<typeof this> {

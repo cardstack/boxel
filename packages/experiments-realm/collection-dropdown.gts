@@ -15,6 +15,7 @@ import { tracked } from '@glimmer/tracking';
 
 export class DropdownMenu extends GlimmerComponent<{
   Args: {
+    codeRef: ResolvedCodeRef;
     context?: CardContext;
     query?: Query;
     model?: any;
@@ -79,20 +80,12 @@ export class DropdownMenu extends GlimmerComponent<{
   });
 
   get query() {
-    let assigneeCodeRef = {
-      name: 'TeamMember',
-      module: 'productivity/task',
-    } as ResolvedCodeRef;
-    let codeRef = codeRefWithAbsoluteURL(
-      assigneeCodeRef,
-      this.args.currentRealm,
-    );
     return {
       filter: {
         every: [
           {
             ...{
-              type: codeRef,
+              type: this.args.codeRef,
             },
           },
           ,
