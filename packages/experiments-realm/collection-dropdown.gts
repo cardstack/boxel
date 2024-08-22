@@ -1,7 +1,12 @@
 import { type CardContext } from 'https://cardstack.com/base/card-api';
 
 import GlimmerComponent from '@glimmer/component';
-import { Query, getCard } from '@cardstack/runtime-common';
+import {
+  CodeRef,
+  Query,
+  ResolvedCodeRef,
+  getCard,
+} from '@cardstack/runtime-common';
 
 import { action } from '@ember/object';
 import { restartableTask } from 'ember-concurrency';
@@ -17,8 +22,8 @@ export class DropdownMenu extends GlimmerComponent<{
     query?: Query;
     model?: any;
     currentRealm?: URL;
-    onSelect?: (value: any, fieldName?: string) => void;
-    toggleActive: () => void;
+    onSelect?: (value: any, fieldName?: string, innerName?: string) => void;
+    toggleActive: (key: string) => void;
   };
   Element: HTMLElement;
 }> {
@@ -39,7 +44,8 @@ export class DropdownMenu extends GlimmerComponent<{
         <:response as |cards|>
 
           <h4>{{@filter.name}}.{{@filter.innerName}}</h4>
-          <button type='button' {{on 'click' this.args.toggleActive}}>
+
+          <button type='button' {{on 'click' this.toggleActive}}>
             {{@filter.active}}
           </button>
           <div>
@@ -64,7 +70,16 @@ export class DropdownMenu extends GlimmerComponent<{
   @action onSelect(selection: any) {
     debugger;
     this.selected = selection;
-    this.args.onSelect?.(selection, this.args.filter?.innerName);
+    this.args.onSelect?.(
+      selection,
+      this.args.filter?.name,
+      this.args.filter?.innerName,
+    );
+  }
+
+  @action toggleActive() {
+    let key = this.args.filter?.name + '.' + this.args.filter?.innerName;
+    this.args.toggleActive(key);
   }
 
   // selecting a links to card
