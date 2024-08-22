@@ -32,19 +32,15 @@ import { on } from '@ember/modifier';
 import { restartableTask } from 'ember-concurrency';
 import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
 
-// import { CardsGrid } from 'https://cardstack.com/base/cards-grid';
-
 // @ts-ignore no types
 import cssUrl from 'ember-css-url';
 import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import { CardsGridComponent } from './cards-grid-component';
 import CodeRefField from '../base/code-ref';
 import { ViewField } from './view';
-import { TrackedArray, TrackedMap } from 'tracked-built-ins';
-import { EqFilter } from '@cardstack/runtime-common/query';
+import { TrackedMap } from 'tracked-built-ins';
 import { DropdownMenu } from './collection-dropdown';
 import { QueryField } from './collection-query';
-import { filter } from 'lodash';
 
 export class ConfigurableCardsGrid extends GlimmerComponent<{
   Args: {
@@ -78,10 +74,6 @@ export class ConfigurableCardsGrid extends GlimmerComponent<{
     return ['http://localhost:4201/experiments/'];
   }
 }
-
-type StatusOptions = 'To Do' | 'In Progress' | 'Done';
-
-// const statusOptionVals: StatusOptions = ['To Do', 'In Progress', 'Done'];
 
 export interface FiltersToQuery {
   active: boolean;
@@ -164,28 +156,11 @@ class Isolated extends Component<typeof Collection> {
     return JSON.stringify(this.query, null, 2);
   }
 
-  //opens up the modal
-  // - queries other options by type
-  // private chooseCard = restartableTask(async () => {});
-
   get materializedInstances() {
     return this.args.model.showMaterialized
       ? this.args.model.cardsList ?? []
       : [];
   }
-
-  // not used
-  // get listOfStatuses() {
-  //   if (!this.args.model.ref) {
-  //     return;
-  //   }
-  //   // this kinda sucks
-  //   let codeRef = codeRefWithAbsoluteURL(
-  //     this.args.model.ref,
-  //     this.currentRealm,
-  //   );
-  //   console.log(codeRef);
-  // }
 
   <template>
     <section>
