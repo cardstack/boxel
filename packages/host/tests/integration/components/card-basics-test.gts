@@ -1286,6 +1286,7 @@ module('Integration | card-basics', function (hooks) {
         static isolated = class Isolated extends Component<typeof this> {
           <template>
             <div data-test-title><@fields.title /></div>
+            {{! template-lint-disable no-inline-styles }}
             <div data-test-author><@fields.author style='width: 120px' /></div>
             <div data-test-body><@fields.body /></div>
           </template>
@@ -1507,9 +1508,18 @@ module('Integration | card-basics', function (hooks) {
     test('render a containsMany composite field', async function (this: RenderingTestContext, assert) {
       class Person extends FieldDef {
         @field firstName = contains(StringField);
+        @field lastName = contains(StringField);
         static embedded = class Embedded extends Component<typeof this> {
           <template>
-            <div data-test-person-firstName><@fields.firstName /></div>
+            {{! template-lint-disable no-inline-styles }}
+            <div
+              data-test-person-firstName
+              style='height: 12px'
+            ><@fields.firstName /></div>
+            <div
+              data-test-person-lastName
+              style='height: 20px'
+            ><@fields.lastName /></div>
           </template>
         };
       }
@@ -1526,12 +1536,12 @@ module('Integration | card-basics', function (hooks) {
 
       let abdelRahmans = new Family({
         people: [
-          new Person({ firstName: 'Mango' }),
-          new Person({ firstName: 'Van Gogh' }),
-          new Person({ firstName: 'Hassan' }),
-          new Person({ firstName: 'Mariko' }),
-          new Person({ firstName: 'Yume' }),
-          new Person({ firstName: 'Sakura' }),
+          new Person({ firstName: 'Mango', lastName: 'Abdel-Rahman' }),
+          new Person({ firstName: 'Van Gogh', lastName: 'Abdel-Rahman' }),
+          new Person({ firstName: 'Hassan', lastName: 'Abdel-Rahman' }),
+          new Person({ firstName: 'Mariko', lastName: 'Abdel-Rahman' }),
+          new Person({ firstName: 'Yume', lastName: 'Abdel-Rahman' }),
+          new Person({ firstName: 'Sakura', lastName: 'Abdel-Rahman' }),
         ],
       });
 
@@ -1542,6 +1552,12 @@ module('Integration | card-basics', function (hooks) {
         ),
         ['Mango', 'Van Gogh', 'Hassan', 'Mariko', 'Yume', 'Sakura'],
       );
+      assert
+        .dom('[data-test-compound-field-format="embedded"]')
+        .exists({ count: 6 });
+      assert
+        .dom('[data-test-plural-view-item="1"]')
+        .hasStyle({ height: '32px' });
     });
 
     test('can #each over a containsMany primitive @fields', async function (assert) {
