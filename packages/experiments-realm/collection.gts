@@ -416,60 +416,6 @@ class Isolated extends Component<typeof Collection> {
     }
   });
 
-  fieldToFilter(
-    codeRef: ResolvedCodeRef,
-    fieldName: string,
-    field: Field<BaseDefConstructor>,
-  ) {}
-  // getCardType(this, () => cardDefinition);
-
-  // importCodeRef = restartableTask(async () => {
-  //   let codeRef = this.codeRef;
-  //   if (codeRef && isResolvedCodeRef(codeRef)) {
-  //     let loader: Loader = (import.meta as any).loader;
-  //     let module = await loader.import(codeRef.module);
-  //     let exportedCards = Object.entries(module).filter(
-  //       ([_, declaration]) =>
-  //         declaration &&
-  //         typeof declaration === 'function' &&
-  //         'isCardDef' in declaration,
-  //     );
-  //     console.log('===');
-  //     console.log(exportedCards);
-  //   }
-  // });
-
-  // selectCard = restartableTask(async (id: string) => {
-  //   let url = new URL(id);
-  //   let cardResource = await getCard(url);
-  //   await cardResource.loaded;
-  //   let card = cardResource.card;
-  //   let cardConstructor = card?.constructor;
-  //   if (cardConstructor) {
-  //     let fields = getFields(cardConstructor);
-  //   }
-
-  //   let codeRef = this.codeRef;
-  //   if (codeRef) {
-  //     if (isResolvedCodeRef(codeRef)) {
-  //       let cardResource = await getCard(new URL(codeRef.module));
-  //       await cardResource.loaded;
-  //       let cardConstructor = card?.constructor;
-  //       if (cardConstructor) {
-  //         let fields = getFields(cardConstructor);
-  //         debugger;
-  //         Object.entries(fields).map(([name, field]) => {
-  //           console.log('====');
-  //           console.log(name);
-  //           console.log(field.fieldType);
-  //         });
-  //       }
-  //     }
-
-  //     // let type = await loadCard(this.codeRef);
-  //   }
-  // });
-
   @action
   createNew() {
     //maybe create and link to cardsList
