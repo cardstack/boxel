@@ -23,11 +23,13 @@ import {
   loadCard,
   isResolvedCodeRef,
   identifyCard,
+  ResolvedCodeRef,
+  CodeRef,
 } from '@cardstack/runtime-common';
 
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { restartableTask } from 'ember-concurrency';
+import { Resolved, restartableTask } from 'ember-concurrency';
 import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
 
 // import { CardsGrid } from 'https://cardstack.com/base/cards-grid';
@@ -85,7 +87,8 @@ interface FiltersToQuery {
   active: boolean;
   name: string;
   field: any;
-  filter: (
+  codeRef: CodeRef | undefined;
+  filterQuery?: (
     fieldName: string,
     value: string | number | boolean | undefined,
   ) => Filter; // our query filter
@@ -143,16 +146,17 @@ class Isolated extends Component<typeof Collection> {
     };
   }
 
-  get parsedFilters() {
+  get parsedFiltersToQuery() {
     return Array.from(this.filters).filter((f) => f.active);
   }
 
   get query() {
     console.log('===query====');
-    console.log(this.parsedFilters);
+    console.log(this.parsedFiltersToQuery);
+    let correctFilters = [];
     return {
       filter: {
-        every: [this.baseFilter, ...this.parsedFilters],
+        every: [this.baseFilter, ...this.parsedFiltersToQuery],
       },
     } as Query;
   }
@@ -214,20 +218,18 @@ class Isolated extends Component<typeof Collection> {
           <div>
             <h3>Filter By Field:</h3>
             <ul>
-              <li>
-                {{#each this.filters as |filter|}}
-                  <div>
-                    <h4>{{filter.name}}</h4>
-                    <DropdownMenu
-                      @codeRef={{filter.codeRef}}
-                      @context={{@context}}
-                      @model={{@model}}
-                      @currentRealm={{this.currentRealm}}
-                      @onSelect={{this.onSelect}}
-                    />
-                  </div>
-                {{/each}}
-              </li>
+              {{#each this.filters as |filter|}}
+                <div>
+                  <h4>{{filter.name}}</h4>
+                  <DropdownMenu
+                    @codeRef={{filter.codeRef}}
+                    @context={{@context}}
+                    @model={{@model}}
+                    @currentRealm={{this.currentRealm}}
+                    @onSelect={{this.onSelect}}
+                  />
+                </div>
+              {{/each}}
             </ul>
           </div>
           <div>
@@ -391,26 +393,23 @@ class Isolated extends Component<typeof Collection> {
           let fieldFilter: FiltersToQuery = {
             name: fieldName,
             active: true,
+            field,
             codeRef,
-            field: field,
           };
-          //perhaps use queryableValue
-          // this.filters.push(fieldFilter);
           let fields2 = getFields(field.card);
           Object.entries(fields2).map(([fieldName2, field2]) => {
-            fieldFilter.filter = (value: string) => {
+            fieldFilter.filterQuery = (value: string) => {
+              let key = `${fieldName}.${fieldName2}`;
               return {
                 eq: {
-                  [fieldName2]: value,
+                  [key]: value,
                 },
               };
             };
-            // console.log({
-            //   eq: {
-            //     ``: value,
-            //   },
-            // });
           });
+          console.log('====');
+          console.log(fieldFilter);
+          this.filters.push(fieldFilter);
         }
       });
     }
