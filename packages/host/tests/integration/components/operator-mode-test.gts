@@ -9,6 +9,7 @@ import {
   triggerEvent,
   triggerKeyEvent,
   typeIn,
+  settled,
 } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
@@ -812,9 +813,6 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-add-new]').exists();
     await click('[data-test-add-new]');
     await waitFor(`[data-test-card-catalog-modal]`);
-    await click(`[data-test-card-catalog-create-new-button]`);
-
-    await click('[data-test-add-new]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
     await click(`[data-test-select="${testRealmURL}Author/2"]`);
     assert
@@ -1341,10 +1339,8 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       },
     );
-    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    assert.dom(`[data-test-stack-card-header]`).containsText(realmName);
 
-    await waitFor(`[data-test-cards-grid-item]`);
+    assert.dom(`[data-test-stack-card-header]`).containsText(realmName);
 
     await focus(`[data-test-search-field]`);
     typeIn(`[data-test-search-field]`, 'ma');
@@ -1354,13 +1350,8 @@ module('Integration | operator-mode', function (hooks) {
       )?.innerText.includes('Searching for “ma”'),
     );
     assert.dom(`[data-test-search-label]`).containsText('Searching for “ma”');
+    await settled();
 
-    await waitFor(`[data-test-search-sheet-search-result]`);
-    await waitUntil(() =>
-      (
-        document.querySelector('[data-test-search-label]') as HTMLElement
-      )?.innerText.includes('4'),
-    );
     assert.dom(`[data-test-search-label]`).containsText('4 Results for “ma”');
     assert.dom(`[data-test-search-sheet-search-result]`).exists({ count: 4 });
     assert.dom(`[data-test-realm-name]`).exists({ count: 4 });
@@ -1376,12 +1367,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await focus(`[data-test-search-field]`);
     await typeIn(`[data-test-search-field]`, 'Mark J');
-    await waitFor(`[data-test-search-sheet-search-result]`);
-    await waitUntil(() =>
-      (
-        document.querySelector('[data-test-search-label]') as HTMLElement
-      )?.innerText.includes('1'),
-    );
+
     assert
       .dom(`[data-test-search-label]`)
       .containsText('1 Result for “Mark J”');
@@ -1404,15 +1390,8 @@ module('Integration | operator-mode', function (hooks) {
       .dom(`[data-test-search-label]`)
       .containsText('Searching for “No Cards”');
 
-    await waitUntil(
-      () =>
-        (
-          document.querySelector('[data-test-search-label]') as HTMLElement
-        )?.innerText.includes('0'),
-      {
-        timeoutMessage: 'timed out waiting for search label to show 0 results',
-      },
-    );
+    await settled();
+
     assert
       .dom(`[data-test-search-label]`)
       .containsText('0 Results for “No Cards”');
