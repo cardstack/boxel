@@ -29,7 +29,7 @@ import {
 
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { Resolved, restartableTask } from 'ember-concurrency';
+import { restartableTask } from 'ember-concurrency';
 import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
 
 // import { CardsGrid } from 'https://cardstack.com/base/cards-grid';
@@ -40,8 +40,7 @@ import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import { CardsGridComponent } from './cards-grid-component';
 import CodeRefField from '../base/code-ref';
 import { ViewField } from './view';
-import { tracked } from '@glimmer/tracking';
-import { TrackedArray } from 'tracked-built-ins';
+import { TrackedArray, TrackedMap } from 'tracked-built-ins';
 import { EqFilter } from '@cardstack/runtime-common/query';
 import { DropdownMenu } from './collection-dropdown';
 import { QueryField } from './collection-query';
@@ -99,6 +98,9 @@ export interface FiltersToQuery {
 class Isolated extends Component<typeof Collection> {
   // widget = new QueryWidget();
   filters: TrackedArray<FiltersToQuery> = new TrackedArray([]);
+
+  // assignee.name => FiltersToQuery
+  // filters2: TrackedMap<string, FiltersToQuery> = new TrackedMap();
   // @tracked filtersAvailable:
 
   //linksTo
@@ -168,6 +170,10 @@ class Isolated extends Component<typeof Collection> {
     this.args.model.query = { ...this.query };
   }
 
+  @action toggleActive() {
+    console.log('toggling active');
+  }
+
   get queryString() {
     return JSON.stringify(this.query, null, 2);
   }
@@ -229,6 +235,7 @@ class Isolated extends Component<typeof Collection> {
                     @model={{@model}}
                     @currentRealm={{this.currentRealm}}
                     @onSelect={{this.onSelect}}
+                    @toggleActive={{this.toggleActive}}
                   />
                 </div>
               {{/each}}
@@ -377,6 +384,7 @@ class Isolated extends Component<typeof Collection> {
     let card = cardResource.card;
     if (card) {
       console.log('---selected card');
+
       console.log(fieldName);
       console.log(card);
 

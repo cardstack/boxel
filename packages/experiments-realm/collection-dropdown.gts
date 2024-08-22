@@ -5,9 +5,10 @@ import { Query, getCard } from '@cardstack/runtime-common';
 
 import { action } from '@ember/object';
 import { restartableTask } from 'ember-concurrency';
-import { BoxelSelect } from '@cardstack/boxel-ui/components';
+import { BoxelInput, BoxelSelect } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import { FiltersToQuery } from './collection';
+import { on } from '@ember/modifier';
 
 export class DropdownMenu extends GlimmerComponent<{
   Args: {
@@ -17,6 +18,7 @@ export class DropdownMenu extends GlimmerComponent<{
     model?: any;
     currentRealm?: URL;
     onSelect?: (value: any, fieldName?: string) => void;
+    toggleActive: () => void;
   };
   Element: HTMLElement;
 }> {
@@ -37,19 +39,25 @@ export class DropdownMenu extends GlimmerComponent<{
         <:response as |cards|>
 
           <h4>{{@filter.name}}.{{@filter.innerName}}</h4>
-          <BoxelSelect
-            @options={{cards}}
-            @onChange={{this.onSelect}}
-            @selected={{this.selected}}
-            as |item|
-          >
-            {{#let (component item.component) as |Component|}}
-              <Component />
-            {{/let}}
-          </BoxelSelect>
+          <button type='button' {{on 'click' this.args.toggleActive}}>
+            {{@filter.active}}
+          </button>
+          <div>
+            <BoxelSelect
+              @options={{cards}}
+              @onChange={{this.onSelect}}
+              @selected={{this.selected}}
+              as |item|
+            >
+              {{#let (component item.component) as |Component|}}
+                <Component />
+              {{/let}}
+            </BoxelSelect>
+          </div>
         </:response>
       </PrerenderedCardSearch>
     {{/let}}
+    <style></style>
   </template>
 
   @tracked selected: any = null; //state for selection
