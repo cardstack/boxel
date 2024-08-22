@@ -91,7 +91,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           return this.name;
         },
       });
-      static embedded = class Embedded extends Component<typeof this> {
+      static fitted = class Fitted extends Component<typeof this> {
         <template>
           <h3 data-test-pet={{@model.name}}>
             <@fields.name />

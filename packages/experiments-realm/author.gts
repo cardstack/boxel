@@ -17,6 +17,11 @@ export class Author extends CardDef {
       return [this.firstName, this.lastName].filter(Boolean).join(' ');
     },
   });
+  @field description = contains(StringCard, {
+    computeVia: function (this: Author) {
+      return this.body;
+    },
+  });
   @field photo = contains(StringCard); // TODO: image card
   @field body = contains(TextAreaCard); // TODO: markdown card
 
