@@ -50,7 +50,7 @@ interface Signature {
       field: Field<typeof BaseDef>,
       boxedElement: Box<BaseDef>,
     ): typeof BaseDef;
-    childFormat: 'atom' | 'embedded';
+    childFormat: 'atom' | 'fitted';
   };
 }
 
@@ -367,7 +367,7 @@ function getEditorChildFormat(
   ) {
     return 'atom';
   }
-  return 'embedded'; // TODO: correct?
+  return 'fitted';
 }
 
 function coalesce<T>(arg1: T | undefined, arg2: T): T {
