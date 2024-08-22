@@ -6,9 +6,8 @@ import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { restartableTask, task } from 'ember-concurrency';
+import { restartableTask, task, timeout } from 'ember-concurrency';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
-import debounce from 'lodash/debounce';
 
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
@@ -389,7 +388,7 @@ export default class CardCatalogModal extends Component<Signature> {
     if (!this.state.searchKey) {
       this.resetState();
     } else {
-      this.debouncedSearchFieldUpdate();
+      this.debouncedSearchFieldUpdate.perform();
     }
   }
 
@@ -405,7 +404,10 @@ export default class CardCatalogModal extends Component<Signature> {
     }
   }
 
-  debouncedSearchFieldUpdate = debounce(() => this.onSearchFieldUpdated(), 500);
+  debouncedSearchFieldUpdate = restartableTask(async () => {
+    await timeout(500);
+    this.onSearchFieldUpdated();
+  });
 
   @action setCardURL(cardURL: string) {
     if (!this.state) {

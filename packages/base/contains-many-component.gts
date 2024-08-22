@@ -13,7 +13,7 @@ import {
 import {
   type BoxComponentSignature,
   getBoxComponent,
-  DefaultFormatConsumer,
+  DefaultFormatsConsumer,
   PermissionsConsumer,
 } from './field-component';
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
@@ -189,8 +189,8 @@ export function getContainsManyComponent({
   }
   let containsManyComponent: TemplateOnlyComponent<BoxComponentSignature> =
     <template>
-      <DefaultFormatConsumer as |defaultFormat|>
-        {{#if (shouldRenderEditor @format defaultFormat isComputed)}}
+      <DefaultFormatsConsumer as |defaultFormats|>
+        {{#if (shouldRenderEditor @format defaultFormats.fieldDef isComputed)}}
           <ContainsManyEditor
             @model={{model}}
             @arrayField={{arrayField}}
@@ -198,7 +198,10 @@ export function getContainsManyComponent({
             @cardTypeFor={{cardTypeFor}}
           />
         {{else}}
-          {{#let (coalesce @format defaultFormat) as |effectiveFormat|}}
+          {{#let
+            (coalesce @format defaultFormats.fieldDef)
+            as |effectiveFormat|
+          }}
             <div
               class='plural-field containsMany-field
                 {{effectiveFormat}}-format
@@ -216,7 +219,7 @@ export function getContainsManyComponent({
             </div>
           {{/let}}
         {{/if}}
-      </DefaultFormatConsumer>
+      </DefaultFormatsConsumer>
       <style>
         .containsMany-field.edit-format {
           padding: var(--boxel-sp-sm);

@@ -403,7 +403,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       @field currencyName = contains(StringField);
       @field icon = contains(StringField);
 
-      static embedded = class Embedded extends Component<typeof this> {
+      static fitted = class Fitted extends Component<typeof this> {
         <template>
           <div class='currency' data-test-currency-embedded>
             <@fields.icon />
