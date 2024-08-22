@@ -36,7 +36,7 @@ class Isolated extends Component<typeof CardsGrid> {
       <FilterList
         @filters={{this.filters}}
         @activeFilter={{this.activeFilter}}
-        @onClickFilter={{this.onClickFilter}}
+        @onChanged={{this.onFilterChanged}}
       />
       <div class='content'>
         <span class='headline'>{{this.activeFilter.displayName}}</span>
@@ -197,7 +197,7 @@ class Isolated extends Component<typeof CardsGrid> {
   ];
   @tracked activeFilter = this.filters[0];
 
-  @action onClickFilter(filter: Filter) {
+  @action onFilterChanged(filter: Filter) {
     this.activeFilter = filter;
   }
 

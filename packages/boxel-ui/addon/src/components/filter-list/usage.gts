@@ -6,7 +6,7 @@ import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import FilterList, { type Filter } from './index.gts';
 
 export default class FilterListUsage extends Component {
-  filters: Filter[] = [
+  filters = [
     {
       displayName: 'All Apps',
       query: {
@@ -56,7 +56,7 @@ export default class FilterListUsage extends Component {
         <FilterList
           @filters={{this.filters}}
           @activeFilter={{this.activeFilter}}
-          @onClickFilter={{fn (mut this.activeFilter)}}
+          @onChanged={{fn (mut this.activeFilter)}}
         />
       </:example>
 
@@ -73,7 +73,7 @@ export default class FilterListUsage extends Component {
           @value={{this.activeFilter}}
         />
         <Args.Object
-          @name='onClickFilter'
+          @name='onChanged'
           @description='A callback function that is triggered when a filter is selected.'
           @defaultValue='undefined'
         />

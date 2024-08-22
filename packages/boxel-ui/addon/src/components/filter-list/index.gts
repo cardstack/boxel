@@ -7,22 +7,21 @@ import { cn, eq } from '../../helpers.ts';
 
 export type Filter = {
   displayName: string;
-  query: any;
 };
 
 interface Signature {
   Args: {
     activeFilter?: Filter;
     filters: Filter[];
-    onClickFilter?: (filter: Filter) => void;
+    onChanged?: (filter: Filter) => void;
   };
   Element: HTMLElement;
 }
 
 export default class FilterList extends Component<Signature> {
   @action
-  onClickFilter(filter: Filter) {
-    this.args.onClickFilter?.(filter);
+  onChanged(filter: Filter) {
+    this.args.onChanged?.(filter);
   }
 
   <template>
@@ -30,7 +29,7 @@ export default class FilterList extends Component<Signature> {
       {{#each @filters as |filter|}}
         <button
           class={{cn 'filter-list__button' selected=(eq @activeFilter filter)}}
-          {{on 'click' (fn this.onClickFilter filter)}}
+          {{on 'click' (fn this.onChanged filter)}}
         >{{filter.displayName}}</button>
       {{/each}}
     </div>
