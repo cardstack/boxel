@@ -83,11 +83,13 @@ type StatusOptions = 'To Do' | 'In Progress' | 'Done';
 
 // const statusOptionVals: StatusOptions = ['To Do', 'In Progress', 'Done'];
 
-interface FiltersToQuery {
+export interface FiltersToQuery {
   active: boolean;
   name: string;
   field: any;
   codeRef: CodeRef | undefined;
+  typeName: string;
+  innerName?: string;
   filterQuery?: (
     fieldName: string,
     value: string | number | boolean | undefined,
@@ -96,7 +98,8 @@ interface FiltersToQuery {
 
 class Isolated extends Component<typeof Collection> {
   // widget = new QueryWidget();
-  @tracked filters: TrackedArray<FiltersToQuery> = new TrackedArray([]);
+  filters: TrackedArray<FiltersToQuery> = new TrackedArray([]);
+  // @tracked filtersAvailable:
 
   //linksTo
   assigneeFilter(value: string) {
@@ -220,9 +223,8 @@ class Isolated extends Component<typeof Collection> {
             <ul>
               {{#each this.filters as |filter|}}
                 <div>
-                  <h4>{{filter.name}}</h4>
                   <DropdownMenu
-                    @codeRef={{filter.codeRef}}
+                    @filter={{filter}}
                     @context={{@context}}
                     @model={{@model}}
                     @currentRealm={{this.currentRealm}}
@@ -348,7 +350,7 @@ class Isolated extends Component<typeof Collection> {
   onSelect(selection: any, fieldName?: string) {
     let id = selection.data.url; //card id
     if (id) {
-      this.selectCard.perform(id);
+      this.selectCard.perform(id, fieldName);
       //   let cardResource = await getCard(url);
       //   await cardResource.loaded;
       //   let card = cardResource.card;
@@ -363,12 +365,21 @@ class Isolated extends Component<typeof Collection> {
     this.loadRootCard.perform();
   }
 
+  getAvailableFilters(card: CardDef) {
+    //get all the filters available
+    return card;
+  }
+
   // we need this bcos we need to know the field values inside of the card
-  selectCard = restartableTask(async (id: string) => {
+  selectCard = restartableTask(async (id: string, fieldName?: string) => {
     let cardResource = await getCard(new URL(id));
     await cardResource.loaded;
     let card = cardResource.card;
     if (card) {
+      console.log('---selected card');
+      console.log(fieldName);
+      console.log(card);
+
       //reason why I need to load the card is becos I need to know its values so I can create a proper filter
       // and its oso pre-rendered
       //look into my map of filters
@@ -376,6 +387,10 @@ class Isolated extends Component<typeof Collection> {
       //check if my card has a fieldValue for a filter
     }
   });
+
+  findFilter(card: CardDef) {
+    return;
+  }
 
   loadRootCard = restartableTask(async () => {
     let codeRef = this.codeRef;
@@ -388,30 +403,37 @@ class Isolated extends Component<typeof Collection> {
           field.fieldType === 'linksTo' ||
           field.fieldType === 'linksToMany'
         ) {
-          debugger;
           let codeRef = await identifyCard(field.card);
           let fieldFilter: FiltersToQuery = {
             name: fieldName,
-            active: true,
+            typeName: field.card.name,
+            active: false,
             field,
             codeRef,
           };
           let fields2 = getFields(field.card);
           Object.entries(fields2).map(([fieldName2, field2]) => {
-            fieldFilter.filterQuery = (value: string) => {
-              let key = `${fieldName}.${fieldName2}`;
-              return {
-                eq: {
-                  [key]: value,
+            if (field2.fieldType === 'contains') {
+              console.log(fieldName2);
+              fieldFilter = {
+                ...fieldFilter,
+                innerName: fieldName2,
+                filterQuery: (value: string) => {
+                  let key = `${fieldName}.${fieldName2}`;
+                  return {
+                    eq: {
+                      [key]: value,
+                    },
+                  };
                 },
               };
-            };
+              this.filters.push(fieldFilter);
+            }
           });
-          console.log('====');
-          console.log(fieldFilter);
-          this.filters.push(fieldFilter);
         }
       });
+      console.log('list of available filters');
+      console.log(Array.from(this.filters));
     }
   });
 

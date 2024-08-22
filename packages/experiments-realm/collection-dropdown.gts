@@ -1,26 +1,22 @@
 import { type CardContext } from 'https://cardstack.com/base/card-api';
 
 import GlimmerComponent from '@glimmer/component';
-import {
-  Query,
-  codeRefWithAbsoluteURL,
-  getCard,
-  ResolvedCodeRef,
-} from '@cardstack/runtime-common';
+import { Query, getCard } from '@cardstack/runtime-common';
 
 import { action } from '@ember/object';
 import { restartableTask } from 'ember-concurrency';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
+import { FiltersToQuery } from './collection';
 
 export class DropdownMenu extends GlimmerComponent<{
   Args: {
-    codeRef: ResolvedCodeRef;
+    filter: FiltersToQuery;
     context?: CardContext;
     query?: Query;
     model?: any;
     currentRealm?: URL;
-    onSelect?: (value: any) => void;
+    onSelect?: (value: any, fieldName?: string) => void;
   };
   Element: HTMLElement;
 }> {
@@ -39,6 +35,8 @@ export class DropdownMenu extends GlimmerComponent<{
           Loading...
         </:loading>
         <:response as |cards|>
+
+          <h4>{{@filter.name}}.{{@filter.innerName}}</h4>
           <BoxelSelect
             @options={{cards}}
             @onChange={{this.onSelect}}
@@ -56,8 +54,9 @@ export class DropdownMenu extends GlimmerComponent<{
 
   @tracked selected: any = null; //state for selection
   @action onSelect(selection: any) {
+    debugger;
     this.selected = selection;
-    this.args.onSelect?.(selection);
+    this.args.onSelect?.(selection, this.args.filter?.innerName);
   }
 
   // selecting a links to card
@@ -85,7 +84,7 @@ export class DropdownMenu extends GlimmerComponent<{
         every: [
           {
             ...{
-              type: this.args.codeRef,
+              type: this.args.filter.codeRef,
             },
           },
           ,
