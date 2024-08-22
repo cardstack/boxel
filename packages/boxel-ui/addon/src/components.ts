@@ -1,5 +1,6 @@
 import Accordion from './components/accordion/index.gts';
 import AddButton from './components/add-button/index.gts';
+import BasicFitted from './components/basic-fitted/index.gts';
 import Button from './components/button/index.gts';
 import BoxelButton from './components/button/index.gts';
 import CardContainer from './components/card-container/index.gts';
@@ -39,6 +40,7 @@ import Tooltip from './components/tooltip/index.gts';
 export {
   Accordion,
   AddButton,
+  BasicFitted,
   BoxelButton,
   BoxelDropdown,
   BoxelDropdownAPI,
