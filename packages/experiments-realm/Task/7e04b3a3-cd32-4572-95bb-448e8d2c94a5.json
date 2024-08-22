@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "taskName": null,
+      "taskName": "Pre-rendered task",
       "taskDetail": null,
       "status": {
         "index": 0,
@@ -13,7 +13,6 @@
         "label": "Medium"
       },
       "dueDate": null,
-      "title": null,
       "description": null,
       "thumbnailURL": null
     },

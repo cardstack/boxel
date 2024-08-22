@@ -153,6 +153,12 @@ export class Task extends CardDef {
   @field project = linksTo(Project);
   @field dueDate = contains(DateField);
 
+  @field title = contains(StringField, {
+    computeVia: function (this: Task) {
+      return this.taskName;
+    },
+  });
+
   static atom = class Atom extends Component<typeof this> {
     <template>
       {{@model.taskName}}
