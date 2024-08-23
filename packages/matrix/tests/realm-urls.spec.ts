@@ -8,11 +8,9 @@ import {
   updateUser,
 } from '../docker/synapse';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
-import { login, registerRealmUsers } from '../helpers';
+import { login, registerRealmUsers, testHost } from '../helpers';
 
-// FIXME how to import? but it should be localhost:4202 anyway, not test-realm
-// import { testRealmURL } from '@cardstack/runtime-common/helpers/const';
-const testRealmURL = `http://localhost:4202/test/`;
+const testRealmURL = `${testHost}/`;
 
 test.describe('Realm URLs in Matrix account data', () => {
   let synapse: SynapseInstance;
