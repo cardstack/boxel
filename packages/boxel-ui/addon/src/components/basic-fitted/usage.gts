@@ -18,7 +18,7 @@ export default class BasicFittedUsage extends Component {
       @description='Designed to render well inside a CSS container with container-name: fitted, container-type: size'
     >
       <:example>
-        <div class='scroller'>
+        <div class='scroller' tabindex='0'>
           <div class='item'>
             <div class='desc'>Aspect Ratio 1.0, 226px &times; 226px</div>
             <CardContainer
