@@ -89,7 +89,7 @@ export default class SubmodeSwitcher extends Component<Signature> {
 
         height: var(--submode-switcher-trigger-height);
         border: none;
-        padding: var(--boxel-sp-xxs);
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
         border-radius: var(--boxel-border-radius);
         background: var(--boxel-dark);
         color: var(--boxel-light);
@@ -101,7 +101,7 @@ export default class SubmodeSwitcher extends Component<Signature> {
         align-items: center;
         width: var(--submode-switcher-width);
         height: var(--submode-switcher-height);
-        gap: var(--boxel-sp-sm);
+        gap: var(--boxel-sp-xs);
 
         transition:
           border-bottom-right-radius var(--boxel-transition),
