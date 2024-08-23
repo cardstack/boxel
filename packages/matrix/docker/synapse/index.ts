@@ -228,7 +228,7 @@ export async function registerUser(
   ).json();
 
   await updateAccountData(
-    `@{username}:localhost`,
+    response.user_id,
     response.access_token,
     'com.cardstack.boxel.realms',
     JSON.stringify({
