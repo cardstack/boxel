@@ -36,8 +36,13 @@ test.describe('Room messages', () => {
       userCred.accessToken,
       'com.cardstack.boxel.realms',
       JSON.stringify({
-        realms: ['http://localhost:4202/test/', 'https://cardstack.com/base/'],
+        realms: [
+          'http://localhost:4202/test/',
+          'https://localhost:4201/experiments',
+          'https://cardstack.com/base/',
+        ],
       }),
+      // share between all tests, maybe in registerUser?
     );
   });
   test.afterEach(async () => {
