@@ -20,6 +20,7 @@ import { TrackedMap, TrackedObject } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
+  Deferred,
   type LooseSingleCardDocument,
   markdownToHtml,
   aiBotUsername,
@@ -109,6 +110,7 @@ export default class MatrixService
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
+  accountDataProcessed = new Deferred<void>();
   rooms: TrackedMap<string, RoomState> = new TrackedMap();
   roomResourcesCache: TrackedMap<string, RoomResource> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
@@ -194,7 +196,7 @@ export default class MatrixService
           if (e.event.type == 'com.cardstack.boxel.realms') {
             console.log('updating realms from account data', e.event.content);
             this.cardService.setRealms(e.event.content.realms);
-            // FIXME does it make sense?
+            this.accountDataProcessed.fulfill();
             await this.loginToRealms();
           }
         },
@@ -320,6 +322,7 @@ export default class MatrixService
 
       try {
         await this._client.startClient();
+        await this.accountDataProcessed.promise;
         await this.loginToRealms();
         await this.initializeRooms();
       } catch (e) {
