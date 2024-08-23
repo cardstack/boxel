@@ -148,7 +148,7 @@ test.describe('Login', () => {
     await assertLoggedIn(page);
   });
 
-  test.only('it returns to login when auth is invalid', async ({ page }) => {
+  test('it returns to login when auth is invalid', async ({ page }) => {
     await page.addInitScript({
       content: `
         window.localStorage.setItem(
