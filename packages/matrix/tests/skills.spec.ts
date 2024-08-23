@@ -17,7 +17,6 @@ import {
 import {
   synapseStart,
   synapseStop,
-  updateAccountData,
   type SynapseInstance,
 } from '../docker/synapse';
 
@@ -26,17 +25,7 @@ test.describe('Skills', () => {
   test.beforeEach(async () => {
     synapse = await synapseStart();
     await registerRealmUsers(synapse);
-    let user1 = await registerUser(synapse, 'user1', 'pass');
-
-    await updateAccountData(
-      '@user1:localhost',
-      user1.accessToken,
-      'com.cardstack.boxel.realms',
-      JSON.stringify({
-        realms: ['http://localhost:4202/test/', 'https://cardstack.com/base/'],
-      }),
-    );
-
+    await registerUser(synapse, 'user1', 'pass');
     await registerUser(synapse, 'user2', 'pass');
   });
   test.afterEach(async () => {

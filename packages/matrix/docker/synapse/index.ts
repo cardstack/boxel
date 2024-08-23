@@ -226,6 +226,20 @@ export async function registerUser(
       },
     })
   ).json();
+
+  await updateAccountData(
+    `@{username}:localhost`,
+    response.access_token,
+    'com.cardstack.boxel.realms',
+    JSON.stringify({
+      realms: [
+        'http://localhost:4202/test/',
+        'http://localhost:4201/experiments/',
+        'https://cardstack.com/base/',
+      ],
+    }),
+  );
+
   return {
     homeServer: response.home_server,
     accessToken: response.access_token,

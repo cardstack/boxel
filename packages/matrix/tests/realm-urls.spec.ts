@@ -30,6 +30,7 @@ test.describe('Realm URLs in Matrix account data', () => {
     await updateUser(admin.accessToken, '@user1:localhost', {
       emailAddresses: ['user1@localhost'],
     });
+
     await updateAccountData(
       '@user1:localhost',
       user.accessToken,
