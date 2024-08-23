@@ -4,7 +4,7 @@ import { provide } from 'ember-provide-consume-context';
 
 import {
   CardContextName,
-  DefaultFormatContextName,
+  DefaultFormatsContextName,
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
@@ -28,10 +28,12 @@ interface Signature {
 }
 
 export default class Preview extends Component<Signature> {
-  @provide(DefaultFormatContextName)
+  @provide(DefaultFormatsContextName)
   // @ts-ignore "defaultFormat is declared but not used"
   get defaultFormat() {
-    return this.args.format ?? 'isolated';
+    let { format } = this.args;
+    format = format ?? 'isolated';
+    return { cardDef: format, fieldDef: format };
   }
 
   @provide(CardContextName)

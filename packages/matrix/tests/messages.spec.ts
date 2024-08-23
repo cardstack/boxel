@@ -746,7 +746,7 @@ test.describe('Room messages', () => {
 
       await page
         .locator(
-          `[data-test-stack-card='${testCard1}'] [data-test-card-format="embedded"]`,
+          `[data-test-stack-card='${testCard1}'] [data-test-card-format="fitted"]`,
         )
         .click();
       await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
