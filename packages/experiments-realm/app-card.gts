@@ -23,22 +23,18 @@ import { restartableTask } from 'ember-concurrency';
 import {
   AddButton,
   Tooltip,
-  FieldContainer,
-  BoxelButton,
-  BoxelInput,
   TabbedHeader,
 } from '@cardstack/boxel-ui/components';
 
 import {
   getLiveCards,
   codeRefWithAbsoluteURL,
-  type Loader,
   type Query,
   LooseSingleCardDocument,
   isSingleCardDocument,
 } from '@cardstack/runtime-common';
 
-export class Tab extends FieldDef {
+export class TabField extends FieldDef {
   @field displayName = contains(StringField);
   @field tabId = contains(StringField);
   @field ref = contains(CodeRefField);
@@ -46,61 +42,6 @@ export class Tab extends FieldDef {
 }
 
 class AppCardIsolated extends Component<typeof AppCard> {
-  @tracked moduleName = '';
-  @action updateModuleName(val: string) {
-    this.errorMessage = '';
-    this.moduleName = val;
-  }
-  @action async setupInitialTabs() {
-    console.log(this.moduleId);
-    if (!this.moduleId) {
-      if (!this.moduleName) {
-        this.errorMessage = 'Module name is required';
-        return;
-      }
-      if (!this.currentRealm) {
-        this.errorMessage = 'Current realm is not available';
-        return;
-      }
-      this.moduleId = this.currentRealm.href + this.moduleName;
-    }
-
-    let loader: Loader = (import.meta as any).loader;
-    let module;
-    try {
-      module = await loader.import(this.moduleId);
-    } catch (e) {
-      console.error(e);
-      this.errorMessage =
-        e instanceof Error ? `Error: ${e.message}` : 'An error occurred';
-      return;
-    }
-    let exportedCards = Object.entries(module).filter(
-      ([_, declaration]) =>
-        declaration &&
-        typeof declaration === 'function' &&
-        'isCardDef' in declaration,
-    );
-    let tabs = [];
-    for (let [name, _declaration] of exportedCards) {
-      tabs.push(
-        new Tab({
-          displayName: name,
-          tabId: name,
-          ref: {
-            name,
-            module: this.moduleId.replace('.gts', ''),
-          },
-          isTable: false,
-        }),
-      );
-    }
-
-    this.args.model.tabs = tabs;
-    this.setActiveTab(0);
-    this.moduleName = '';
-  }
-
   <template>
     <section class='app-card'>
       <TabbedHeader
@@ -170,32 +111,6 @@ class AppCardIsolated extends Component<typeof AppCard> {
               </Tooltip>
             </div>
           {{/if}}
-        {{else}}
-          <p>
-            It looks like this app hasn't been setup yet. For a quick setup,
-            enter the module name and click create.
-          </p>
-          <div class='module-input-group'>
-            <FieldContainer
-              @label='Module Name'
-              @vertical={{true}}
-              @tag='label'
-            >
-              <BoxelInput
-                @value={{this.moduleName}}
-                @onInput={{this.updateModuleName}}
-                @state={{if this.errorMessage 'invalid' 'initial'}}
-                @errorMessage={{this.errorMessage}}
-              />
-            </FieldContainer>
-            <BoxelButton
-              @kind='primary'
-              @size='touch'
-              {{on 'click' this.setupInitialTabs}}
-            >
-              Create
-            </BoxelButton>
-          </div>
         {{/if}}
       </div>
     </section>
@@ -280,7 +195,6 @@ class AppCardIsolated extends Component<typeof AppCard> {
     </style>
   </template>
 
-  @tracked moduleId = this.args.model.moduleId;
   @tracked tabs = this.args.model.tabs;
   @tracked activeTabIndex = 0;
   @tracked private declare liveQuery: {
@@ -291,16 +205,13 @@ class AppCardIsolated extends Component<typeof AppCard> {
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
-    if (!this.tabs?.length) {
-      this.setupInitialTabs();
-    }
     this.setTab();
     this.setSearch();
   }
 
   setTab() {
     let index = this.tabs?.findIndex(
-      (tab: Tab) => tab.tabId === window.location?.hash?.slice(1),
+      (tab: TabField) => tab.tabId === window.location?.hash?.slice(1),
     );
     if (index && index !== -1) {
       this.activeTabIndex = index;
@@ -446,8 +357,7 @@ export class AppCard extends CardDef {
   static displayName = 'App Card';
   static prefersWideFormat = true;
   static headerColor = '#ffffff';
-  @field moduleId = contains(StringField);
-  @field tabs = containsMany(Tab);
+  @field tabs = containsMany(TabField);
   @field headerIcon = contains(Base64ImageField);
   static isolated = AppCardIsolated;
 }

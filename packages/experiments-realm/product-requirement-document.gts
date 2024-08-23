@@ -8,6 +8,7 @@ import {
   StringField,
   Component,
   realmURL,
+  linksToMany,
 } from 'https://cardstack.com/base/card-api';
 import { Button } from '@cardstack/boxel-ui/components';
 import { ImagePlaceholder } from '@cardstack/boxel-ui/icons';
@@ -57,11 +58,9 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
               {{/unless}}
               Generate App Now
             </Button>
+          {{else}}
+            <button {{on 'click' this.reset}}>Reset</button>
           {{/unless}}
-        </div>
-        <div>
-          <button {{on 'click' this.clearModule}}>Clear Module</button>
-          <button {{on 'click' this.clearCode}}>Clear Code</button>
         </div>
         {{#if this.errorMessage}}
           <p class='error'>{{this.errorMessage}}</p>
@@ -69,7 +68,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
         <p class='description'><@fields.description /></p>
       </header>
       <div class='content'>
-        {{#if @model.fieldsCode}}
+        {{#if (or @model.fieldsCode @model.moduleURL)}}
           <details open={{or (bool @model.fieldsCode) (bool @model.moduleURL)}}>
             <summary><span>Module</span></summary>
             <div class='details-content'>
@@ -81,20 +80,6 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
                 >
                   <@fields.moduleURL />
                 </Button>
-                {{#unless @model.appURL}}
-                  <Button
-                    {{on 'click' this.createInstance}}
-                    class='generate-button'
-                    @kind='primary-dark'
-                    @disabled={{this._createInstance.isRunning}}
-                    @loading={{this._createInstance.isRunning}}
-                  >
-                    {{#unless this._createInstance.isRunning}}
-                      <span class='generate-button-logo' />
-                    {{/unless}}
-                    Create App Instance
-                  </Button>
-                {{/unless}}
               {{/if}}
               <Button
                 {{on 'click' this.createModule}}
@@ -112,17 +97,11 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
             </div>
           </details>
         {{/if}}
-        {{#if @model.appURL}}
-          <details open={{bool @model.appURL}}>
+        {{#if @model.moduleURL}}
+          <details open={{bool @model.appCard}}>
             <summary><span>App</span></summary>
             <div class='details-content'>
-              <Button
-                {{on 'click' this.viewApp}}
-                class='view-app-button'
-                @kind='text-only'
-              >
-                <@fields.appURL />
-              </Button>
+              <@fields.appCard />
               <Button
                 {{on 'click' this.createInstance}}
                 class='generate-button'
@@ -138,6 +117,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
             </div>
           </details>
         {{/if}}
+
         <details open={{bool @model.prompt}}>
           <summary><span>Prompt</span></summary>
           <div class='details-content'>
@@ -311,7 +291,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
       let fileName =
         this.args.model?.appTitle?.replace(/ /g, '-').toLowerCase() ??
         `untitled-app-${Date.now()}`;
-      let moduleId = `${this.currentRealm.href}${fileName}.gts`;
+      let moduleId = `${this.currentRealm.href}AppModules/${fileName}.gts`;
       let response = await fetch(moduleId, {
         method: 'POST',
         headers: { Accept: 'application/vnd.card+source' },
@@ -379,7 +359,6 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
             data: {
               attributes: {
                 title: this.args.model.appTitle,
-                moduleId: moduleRef.module,
                 // ...JSON.parse(this.args.model.sampleData),
               },
               meta: { adoptsFrom: moduleRef },
@@ -388,11 +367,13 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
           cardModeAfterCreation: 'isolated',
         },
       );
-      console.log('created card', card);
       if (!card) {
         throw new Error('Could not create card');
       }
-      this.args.model.appURL = card.id;
+      this.args.model.appCard = [
+        ...(this.args.model.appCard ?? []),
+        card as AppCard,
+      ];
     } catch (e) {
       console.error(e);
       this.errorMessage =
@@ -423,16 +404,10 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
     );
   }
 
-  @action viewApp() {
-    // this.args.context?.actions?.viewCard?.(this.args.model.appURL);
-  }
-
-  @action clearModule() {
+  @action reset() {
     this.args.model.moduleURL = undefined;
-  }
-
-  @action clearCode() {
     this.args.model.fieldsCode = undefined;
+    this.args.model.appCard = undefined;
   }
 }
 
@@ -446,7 +421,7 @@ export class ProductRequirementDocument extends CardDef {
   @field schema = contains(MarkdownField);
   @field layoutAndNavigation = contains(MarkdownField);
   @field moduleURL = contains(StringField);
-  @field appURL = contains(StringField);
+  @field appCard = linksToMany(AppCard);
   @field fieldsCode = contains(StringField, {
     description: `Use typescript for the code. Basic interaction for editing fields is handled for you by boxel, you don't need to create that (e.g. StringField has an edit template that allows a user to edit the data). Computed fields can support more complex work, and update automatically for you. Interaction (button clicks, filtering on user typed content) will require work on templates that will happen elsewhere and is not yours to do.
 
