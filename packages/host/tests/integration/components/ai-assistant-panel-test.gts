@@ -556,6 +556,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-command-apply]').doesNotExist();
     assert.dom('[data-test-person]').hasText('Fadhlan');
 
+    await triggerEvent(
+      `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-field-component-card][data-test-card-format="fitted"]`,
+      'mouseenter',
+    );
     await waitFor('[data-test-overlay-card] [data-test-overlay-more-options]');
     await percySnapshot(
       'Integration | ai-assistant-panel | it only applies changes from the chat if the stack contains a card with that ID | error',
@@ -574,12 +578,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-command-apply]').doesNotExist();
     assert.dom('[data-test-ai-bot-retry-button]').doesNotExist();
 
-    await waitUntil(
-      () =>
-        document.querySelectorAll(
-          '[data-test-overlay-card] [data-test-overlay-more-options]',
-        ).length === 2,
+    await triggerEvent(
+      `[data-test-stack-card="${testRealmURL}Person/burcu"] [data-test-plural-view="linksToMany"] [data-test-plural-view-item="0"]`,
+      'mouseenter',
     );
+    assert
+      .dom('[data-test-overlay-card] [data-test-overlay-more-options]')
+      .exists();
     await percySnapshot(
       'Integration | ai-assistant-panel | it only applies changes from the chat if the stack contains a card with that ID | error fixed',
     );
