@@ -3,6 +3,7 @@
 
 import AccordionUsage from './components/accordion/usage.gts';
 import AddButtonUsage from './components/add-button/usage.gts';
+import BreadCrumbUsage from './components/breadcrumb/usage.gts';
 import ButtonUsage from './components/button/usage.gts';
 import CardContainerUsage from './components/card-container/usage.gts';
 import CardContentContainerUsage from './components/card-content-container/usage.gts';
@@ -29,6 +30,7 @@ import TooltipUsage from './components/tooltip/usage.gts';
 export const ALL_USAGE_COMPONENTS = [
   ['Accordion', AccordionUsage],
   ['AddButton', AddButtonUsage],
+  ['BreadCrumb', BreadCrumbUsage],
   ['Button', ButtonUsage],
   ['CardContainer', CardContainerUsage],
   ['CardContentContainer', CardContentContainerUsage],
