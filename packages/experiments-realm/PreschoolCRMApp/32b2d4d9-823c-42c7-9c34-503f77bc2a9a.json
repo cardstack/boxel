@@ -1,0 +1,113 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "overview": null,
+      "tabs": [
+        {
+          "displayName": "ClassesCard",
+          "tabId": "ClassesCard",
+          "ref": {
+            "name": "ClassesCard",
+            "module": "http://localhost:4201/experiments/AppModules/preschool-crm"
+          },
+          "isTable": false
+        },
+        {
+          "displayName": "CommunicationsCard",
+          "tabId": "CommunicationsCard",
+          "ref": {
+            "name": "CommunicationsCard",
+            "module": "http://localhost:4201/experiments/AppModules/preschool-crm"
+          },
+          "isTable": false
+        },
+        {
+          "displayName": "ParentsCard",
+          "tabId": "ParentsCard",
+          "ref": {
+            "name": "ParentsCard",
+            "module": "http://localhost:4201/experiments/AppModules/preschool-crm"
+          },
+          "isTable": false
+        },
+        {
+          "displayName": "StaffCard",
+          "tabId": "StaffCard",
+          "ref": {
+            "name": "StaffCard",
+            "module": "http://localhost:4201/experiments/AppModules/preschool-crm"
+          },
+          "isTable": false
+        },
+        {
+          "displayName": "StudentsCard",
+          "tabId": "StudentsCard",
+          "ref": {
+            "name": "StudentsCard",
+            "module": "http://localhost:4201/experiments/AppModules/preschool-crm"
+          },
+          "isTable": false
+        },
+        {
+          "displayName": "ToursCard",
+          "tabId": "ToursCard",
+          "ref": {
+            "name": "ToursCard",
+            "module": "http://localhost:4201/experiments/AppModules/preschool-crm"
+          },
+          "isTable": false
+        }
+      ],
+      "headerIcon": {
+        "altText": null,
+        "size": "actual",
+        "height": null,
+        "width": null,
+        "base64": null
+      },
+      "moduleId": "http://localhost:4201/experiments/AppModules/preschool-crm",
+      "title": "Preschool CRM",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "tours": {
+        "links": {
+          "self": null
+        }
+      },
+      "students": {
+        "links": {
+          "self": null
+        }
+      },
+      "parents": {
+        "links": {
+          "self": null
+        }
+      },
+      "staff": {
+        "links": {
+          "self": null
+        }
+      },
+      "classes": {
+        "links": {
+          "self": null
+        }
+      },
+      "communications": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../AppModules/preschool-crm",
+        "name": "PreschoolCRMApp"
+      }
+    }
+  }
+}

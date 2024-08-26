@@ -432,6 +432,71 @@ export function getSearchTool() {
   };
 }
 
+export function getGenerateAppModuleTool(attachedOpenCardId: string) {
+  return {
+    type: 'function',
+    function: {
+      name: 'generateAppModule',
+      description: `Propose a post request to generate a new app module. Insert the module code in the 'moduleCode' property of the payload and the title for the module in the 'appTitle' property. Ensure the description explains what change you are making.`,
+      parameters: {
+        type: 'object',
+        properties: {
+          attached_card_id: {
+            type: 'string',
+            const: attachedOpenCardId,
+          },
+          description: {
+            type: 'string',
+          },
+          appTitle: {
+            type: 'string',
+          },
+          moduleCode: {
+            type: 'string',
+            description: `Use typescript for the code. Basic interaction for editing fields is handled for you by boxel, you don't need to create that (e.g. StringField has an edit template that allows a user to edit the data). Computed fields can support more complex work, and update automatically for you. Interaction (button clicks, filtering on user typed content) will require work on templates that will happen elsewhere and is not yours to do.
+
+            Never leave sections of code unfilled or with placeholders, finish all code you write.
+
+            You have available:
+            StringField
+            MarkdownField
+            NumberField
+            BooleanField
+            DateField
+            DateTimeField
+
+            Fields do not have default values.
+
+            Computed fields can be created with a computeVia function:
+
+             @field computedData = contains(NumberField, {
+               computeVia: function (this) {
+                 // implementation logic here
+                 return 1;
+               }});
+
+
+            Use contains for a single field and containsMany for a list.
+
+            Example for a booking form:
+
+            @field guestNames = containsMany(StringField);
+            @field startDate = contains(DateField);
+            @field endDate = contains(DateField);
+            @field guests = contains(NumberField, {
+               computeVia: function (this) {
+                 return guestNames.length;
+               })
+
+            `,
+          },
+        },
+        required: ['attached_card_id', 'description', 'appTitle', 'moduleCode'],
+      },
+    },
+  };
+}
+
 export interface FunctionToolCall {
   id: string;
   name: string;

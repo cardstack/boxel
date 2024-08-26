@@ -12,7 +12,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { Button } from '@cardstack/boxel-ui/components';
 import { ImagePlaceholder } from '@cardstack/boxel-ui/icons';
-import { bool, cn, not, or } from '@cardstack/boxel-ui/helpers';
+import { bool, cn, not } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
@@ -45,7 +45,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
             </div>
             <h1><@fields.title /></h1>
           </div>
-          {{#unless @model.fieldsCode}}
+          {{#if @context.actions.runCommand}}
             <Button
               {{on 'click' this.generateApp}}
               class='generate-button'
@@ -56,11 +56,9 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
               {{#unless this._generateCode.isRunning}}
                 <span class='generate-button-logo' />
               {{/unless}}
-              Generate App Now
+              {{if @model.moduleURL 'Regenerate App' 'Generate App Now'}}
             </Button>
-          {{else}}
-            <button {{on 'click' this.reset}}>Reset</button>
-          {{/unless}}
+          {{/if}}
         </div>
         {{#if this.errorMessage}}
           <p class='error'>{{this.errorMessage}}</p>
@@ -68,8 +66,8 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
         <p class='description'><@fields.description /></p>
       </header>
       <div class='content'>
-        {{#if (or @model.fieldsCode @model.moduleURL)}}
-          <details open={{or (bool @model.fieldsCode) (bool @model.moduleURL)}}>
+        {{#if @model.moduleURL}}
+          <details open={{bool @model.moduleURL}}>
             <summary><span>Module</span></summary>
             <div class='details-content'>
               {{#if @model.moduleURL}}
@@ -81,19 +79,6 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
                   <@fields.moduleURL />
                 </Button>
               {{/if}}
-              <Button
-                {{on 'click' this.createModule}}
-                class='generate-button'
-                @kind='primary-dark'
-                @disabled={{this._createModule.isRunning}}
-                @loading={{this._createModule.isRunning}}
-              >
-                {{#unless this._createModule.isRunning}}
-                  <span class='generate-button-logo' />
-                {{/unless}}
-                {{if @model.moduleURL 'Regenerate' 'Create'}}
-                Module
-              </Button>
             </div>
           </details>
         {{/if}}
@@ -102,18 +87,20 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
             <summary><span>App</span></summary>
             <div class='details-content'>
               <@fields.appCard />
-              <Button
-                {{on 'click' this.createInstance}}
-                class='generate-button'
-                @kind='primary-dark'
-                @disabled={{this._createInstance.isRunning}}
-                @loading={{this._createInstance.isRunning}}
-              >
-                {{#unless this._createInstance.isRunning}}
-                  <span class='generate-button-logo' />
-                {{/unless}}
-                Create New Instance
-              </Button>
+              {{#if @context.actions.createCard}}
+                <Button
+                  {{on 'click' this.createInstance}}
+                  class='generate-button new-instance-button'
+                  @kind='primary-dark'
+                  @disabled={{this._createInstance.isRunning}}
+                  @loading={{this._createInstance.isRunning}}
+                >
+                  {{#unless this._createInstance.isRunning}}
+                    <span class='generate-button-logo' />
+                  {{/unless}}
+                  Create New Instance
+                </Button>
+              {{/if}}
             </div>
           </details>
         {{/if}}
@@ -184,6 +171,9 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
         background: url('./ai-assist-icon@2x.webp') no-repeat center;
         background-size: contain;
       }
+      .new-instance-button {
+        margin-top: var(--boxel-sp);
+      }
       .app-icon-container {
         flex-shrink: 0;
         display: flex;
@@ -251,9 +241,6 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
   @action generateApp() {
     this._generateCode.perform();
   }
-  @action createModule() {
-    this._createModule.perform();
-  }
   @action createInstance() {
     this._createInstance.perform();
   }
@@ -272,44 +259,6 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
         `${baseRealm.url}SkillCard/app-generator`,
         'Generate code',
       );
-    } catch (e) {
-      console.error(e);
-      this.errorMessage =
-        e instanceof Error ? `Error: ${e.message}` : 'An error has occurred';
-    }
-  });
-
-  private _createModule = restartableTask(async () => {
-    try {
-      if (!this.currentRealm) {
-        throw new Error('Realm URL is not available');
-      }
-      if (!this.args.model.fieldsCode) {
-        throw new Error('App code is not available');
-      }
-
-      let fileName =
-        this.args.model?.appTitle?.replace(/ /g, '-').toLowerCase() ??
-        `untitled-app-${Date.now()}`;
-      let moduleId = `${this.currentRealm.href}AppModules/${fileName}.gts`;
-      let response = await fetch(moduleId, {
-        method: 'POST',
-        headers: { Accept: 'application/vnd.card+source' },
-        body: this.args.model.fieldsCode,
-      });
-      if (!response.ok) {
-        throw new Error(
-          `Could not write file "${moduleId}", status ${response.status}: ${
-            response.statusText
-          } - ${await response.text()}`,
-        );
-      }
-      this.args.model.moduleURL = moduleId
-        .replace('.gts', '')
-        .replace(this.currentRealm.href, '../');
-      if (!this.args.model.moduleURL) {
-        throw new Error('Module URL was not set');
-      }
     } catch (e) {
       console.error(e);
       this.errorMessage =
@@ -350,6 +299,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
         module: url,
         name: appCard[0],
       };
+
       let card = await this.args.context?.actions?.createCard?.(
         moduleRef,
         undefined,
@@ -359,6 +309,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
             data: {
               attributes: {
                 title: this.args.model.appTitle,
+                moduleId: url,
                 // ...JSON.parse(this.args.model.sampleData),
               },
               meta: { adoptsFrom: moduleRef },
@@ -382,16 +333,19 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
   });
 
   @action viewModule() {
+    this.errorMessage = '';
     if (!this.currentRealm) {
-      throw new Error('Realm URL is not available');
+      this.errorMessage = 'Realm URL is not available';
+      return;
     }
     if (!this.args.model.moduleURL) {
-      throw new Error('Module url is not available');
+      this.errorMessage = 'Module url is not available';
+      return;
     }
     if (!this.args.context?.actions?.changeSubmode) {
-      throw new Error(
-        'Unable to view module. Context action "changeSubmode" is not available',
-      );
+      this.errorMessage =
+        'Unable to view module. Context action "changeSubmode" is not available';
+      return;
     }
     this.args.context.actions.changeSubmode(
       new URL(
@@ -402,12 +356,6 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
       ),
       'code',
     );
-  }
-
-  @action reset() {
-    this.args.model.moduleURL = undefined;
-    this.args.model.fieldsCode = undefined;
-    this.args.model.appCard = undefined;
   }
 }
 
@@ -422,45 +370,6 @@ export class ProductRequirementDocument extends CardDef {
   @field layoutAndNavigation = contains(MarkdownField);
   @field moduleURL = contains(StringField);
   @field appCard = linksToMany(AppCard);
-  @field fieldsCode = contains(StringField, {
-    description: `Use typescript for the code. Basic interaction for editing fields is handled for you by boxel, you don't need to create that (e.g. StringField has an edit template that allows a user to edit the data). Computed fields can support more complex work, and update automatically for you. Interaction (button clicks, filtering on user typed content) will require work on templates that will happen elsewhere and is not yours to do.
-
-Never leave sections of code unfilled or with placeholders, finish all code you write.
-
-You have available:
-
-StringField
-MarkdownField
-NumberField
-BooleanField
-DateField
-DateTimeField
-
-Fields do not have default values.
-
-Computed fields can be created with a computeVia function
-
- @field computedData = contains(NumberField, {
-   computeVia: function (this) {
-     // implementation logic here
-     return 1;
-   }});
-
-
-Use contains for a single field and containsMany for a list.
-
-Example for a booking form:
-
-@field guestNames = containsMany(StringField);
-@field startDate = contains(DateField);
-@field endDate = contains(DateField);
-@field guests = contains(NumberField, {
-   computeVia: function (this) {
-     return guestNames.length;
-   })
-
-`,
-  });
   @field sampleData = contains(StringField, {
     description: `Sample data to create an instance with. This should be a JSON string, and *must* be updated whenever the template *fields* are changed`,
   });

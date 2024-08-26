@@ -30,6 +30,7 @@ import {
   getLiveCards,
   codeRefWithAbsoluteURL,
   type Query,
+  type Loader,
   LooseSingleCardDocument,
   isSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -42,6 +43,45 @@ export class TabField extends FieldDef {
 }
 
 class AppCardIsolated extends Component<typeof AppCard> {
+  @action async setupInitialTabs(moduleId: string) {
+    this.errorMessage = '';
+    console.log(moduleId);
+    let loader: Loader = (import.meta as any).loader;
+    let module;
+    try {
+      module = await loader.import(moduleId);
+    } catch (e) {
+      console.error(e);
+      this.errorMessage =
+        e instanceof Error ? `Error: ${e.message}` : 'An error occurred';
+      return;
+    }
+    let exportedCards = Object.entries(module).filter(
+      ([_, declaration]) =>
+        declaration &&
+        typeof declaration === 'function' &&
+        'isCardDef' in declaration &&
+        !AppCard.isPrototypeOf(declaration),
+    );
+    let tabs = [];
+    for (let [name, _declaration] of exportedCards) {
+      tabs.push(
+        new TabField({
+          displayName: name,
+          tabId: name,
+          ref: {
+            name,
+            module: moduleId.replace('.gts', ''),
+          },
+          isTable: false,
+        }),
+      );
+    }
+
+    this.args.model.tabs = tabs;
+    this.setActiveTab(0);
+  }
+
   <template>
     <section class='app-card'>
       <TabbedHeader
@@ -205,6 +245,14 @@ class AppCardIsolated extends Component<typeof AppCard> {
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
+    if (!this.tabs?.length) {
+      if (!this.args.model.moduleId) {
+        this.errorMessage = 'ModuleId is not available.';
+        return;
+      }
+      this.setupInitialTabs(this.args.model.moduleId);
+      return;
+    }
     this.setTab();
     this.setSearch();
   }
@@ -359,6 +407,7 @@ export class AppCard extends CardDef {
   static headerColor = '#ffffff';
   @field tabs = containsMany(TabField);
   @field headerIcon = contains(Base64ImageField);
+  @field moduleId = contains(StringField);
   static isolated = AppCardIsolated;
 }
 

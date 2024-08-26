@@ -74,8 +74,28 @@ export default class CommandService extends Service {
         res = await Promise.all(
           instances.map((c) => this.cardService.serializeCard(c)),
         );
+      } else if (command.name === 'generateAppModule') {
+        let realmURL = this.cardService.defaultURL;
+        let fileName =
+          (payload.appTitle as string)?.replace(/ /g, '-').toLowerCase() ??
+          `untitled-app-${Date.now()}`;
+        let moduleId = `${realmURL.href}AppModules/${fileName}.gts`;
+        let content = (payload.moduleCode as string) ?? '';
+        res = await this.cardService.saveSource(new URL(moduleId), content);
+        if (!payload.attached_card_id) {
+          throw new Error(
+            `Could not update 'moduleURL' with a link to the generated module.`,
+          );
+        }
+        let formattedModuleId = moduleId
+          .replace('.gts', '')
+          .replace(realmURL.href, '../');
+        await this.operatorModeStateService.patchCard.perform(
+          String(payload.attached_card_id),
+          { attributes: { moduleURL: formattedModuleId } },
+        );
       }
-      await this.matrixService.sendReactionEvent(roomId, eventId, 'applied');
+      // await this.matrixService.sendReactionEvent(roomId, eventId, 'applied');
       if (res) {
         await this.matrixService.sendCommandResultMessage(roomId, eventId, res);
       }
