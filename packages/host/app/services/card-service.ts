@@ -72,7 +72,7 @@ export default class CardService extends Service {
   // Note that this should be the unresolved URL and that we need to rely on our
   // fetch to do any URL resolution.
   get defaultURL(): URL {
-    return new URL(ownRealmURL);
+    return new URL(this.realmURLs[0]);
   }
 
   onSave(subscriber: CardSaveSubscriber) {
