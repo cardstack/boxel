@@ -15,6 +15,7 @@ import PgAdapter from './pg-adapter';
 import PgQueue from './pg-queue';
 
 let log = logger('worker');
+console.log('====> worker started');
 log.info('starting worker');
 
 if (process.env.REALM_SENTRY_DSN) {

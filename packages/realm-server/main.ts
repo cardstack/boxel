@@ -247,6 +247,11 @@ let dist: URL = new URL(distURL);
     },
   );
 
+  if (worker.stdout) {
+    worker.stdout.on('data', (data) => console.log(data));
+  }
+
+  console.log('====> waiting for worker to be ready');
   let timeout = await Promise.race([
     new Promise<void>((r) => {
       worker.on('message', (message) => {
