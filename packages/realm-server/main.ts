@@ -61,14 +61,6 @@ if (!REALM_SERVER_MATRIX_USERNAME) {
   process.exit(-1);
 }
 
-const REALM_SERVER_MATRIX_PASSWORD = process.env.REALM_SERVER_MATRIX_PASSWORD;
-if (!REALM_SERVER_MATRIX_PASSWORD) {
-  console.error(
-    `The REALM_SERVER_MATRIX_PASSWORD environment variable is not set. Please make sure this env var has a value`,
-  );
-  process.exit(-1);
-}
-
 if (process.env.DISABLE_MODULE_CACHING === 'true') {
   console.warn(
     `module caching has been disabled, module executables will be served directly from the filesystem`,

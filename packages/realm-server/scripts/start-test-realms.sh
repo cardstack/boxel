@@ -23,13 +23,11 @@ NODE_ENV=test \
   \
   --path='./tests/cards' \
   --username='node-test_realm' \
-  --password='password' \
   --fromUrl='/node-test/' \
   --toUrl='/node-test/' \
   \
   --path='../host/tests/cards' \
   --username='test_realm' \
-  --password='password' \
   --fromUrl='/test/' \
   --toUrl='/test/' \
   --fromUrl='https://cardstack.com/base/' \
