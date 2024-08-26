@@ -75,7 +75,7 @@
     "start:smtp": "cd ../matrix && pnpm assert-smtp-running",
     "start:pg": "./scripts/start-pg.sh",
     "stop:pg": "./scripts/stop-pg.sh",
-    "test:wait-for-servers": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run wait' 'http-get://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson' 'pnpm run wait' 'http-get://localhost:4202/node-test/_readiness-check?acceptHeader=application%2Fvnd.json%2Bjson|http://localhost:8008|http://localhost:5001' 'test'",
+    "test:wait-for-servers": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run wait' 'http-get://localhost:4201/base/fields/boolean-field?acceptHeader=application%2Fvnd.card%2Bjson' 'pnpm run wait' 'http-get://localhost:4202/node-test/person-1?acceptHeader=application%2Fvnd.card%2Bjson|http://localhost:8008|http://localhost:5001' 'test'",
     "setup:base-in-deployment": "mkdir -p /persistent/base && cp --verbose --update --recursive ../base/. /persistent/base/",
     "setup:experiments-in-deployment": "mkdir -p /persistent/experiments && cp --verbose --update --recursive ../experiments-realm/. /persistent/experiments/",
     "start": "PGPORT=5435 NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
