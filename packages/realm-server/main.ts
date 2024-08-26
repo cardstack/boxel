@@ -1,18 +1,17 @@
 import './setup-logger'; // This should be first
 import {
   Realm,
-  Worker,
   VirtualNetwork,
   logger,
   RunnerOptionsManager,
   permissionsExist,
   insertPermissions,
-  IndexWriter,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
 import { RealmServer } from './server';
 import { resolve } from 'path';
+import { spawn } from 'child_process';
 import { makeFastBootIndexRunner } from './fastboot';
 import { shimExternals } from './lib/externals';
 import * as Sentry from '@sentry/node';
@@ -20,6 +19,7 @@ import { setErrorReporter } from '@cardstack/runtime-common/realm';
 import PgAdapter from './pg-adapter';
 import PgQueue from './pg-queue';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import flattenDeep from 'lodash/flattenDeep';
 
 let log = logger('main');
 
@@ -169,19 +169,10 @@ let dist: URL = new URL(distURL);
   let dbAdapter = new PgAdapter();
   let queue = new PgQueue(dbAdapter);
   let manager = new RunnerOptionsManager();
-  let { getRunner, getIndexHTML } = await makeFastBootIndexRunner(
+  let { getIndexHTML } = await makeFastBootIndexRunner(
     dist,
     manager.getOptions.bind(manager),
   );
-  let worker = new Worker({
-    indexWriter: new IndexWriter(dbAdapter),
-    queue,
-    runnerOptsManager: manager,
-    virtualNetwork,
-    matrixURL: new URL(matrixURL),
-    secretSeed: REALM_SECRET_SEED,
-    indexRunner: getRunner,
-  });
 
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
@@ -236,7 +227,40 @@ let dist: URL = new URL(distURL);
 
   server.listen(port);
 
-  await worker.run();
+  let worker = spawn(
+    'ts-node',
+    [
+      '--transpileOnly',
+      'worker',
+      `--port=${port}`,
+      `--matrixURL='${matrixURL}'`,
+      `--distURL='${distURL}'`,
+      ...flattenDeep(
+        urlMappings.map(([from, to]) => [
+          `--fromUrl='${from}'`,
+          `--toUrl='${to}'`,
+        ]),
+      ),
+    ],
+    {
+      stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+    },
+  );
+
+  let timeout = await Promise.race([
+    new Promise<void>((r) => {
+      worker.on('message', (message) => {
+        if (message === 'ready') {
+          r();
+        }
+      });
+    }),
+    new Promise<true>((r) => setTimeout(() => r(true), 30_000)),
+  ]);
+  if (timeout) {
+    console.error(`timed-out waiting for worker to start. Stopping server`);
+    process.exit(-2);
+  }
 
   for (let realm of realms) {
     await realm.start();
