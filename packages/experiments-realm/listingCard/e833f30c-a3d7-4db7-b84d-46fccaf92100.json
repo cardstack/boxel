@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "tabs": [
+        {
+          "displayName": "Featured",
+          "tabId": "featured",
+          "view": {
+            "displayFormat": "grid"
+          }
+        },
+        {
+          "displayName": "App",
+          "tabId": "app",
+          "view": {
+            "displayFormat": "list"
+          }
+        }
+      ],
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../listing-card",
+        "name": "listingCard"
+      }
+    }
+  }
+}
