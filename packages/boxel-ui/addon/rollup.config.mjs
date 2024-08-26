@@ -20,6 +20,7 @@ export default {
     // addon. Anything not listed here may get optimized away.
     addon.publicEntrypoints([
       'components.js',
+      'components/basic-fitted/index.js',
       'helpers.js',
       'icons.js',
       'modifiers.js',
