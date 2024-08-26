@@ -194,7 +194,6 @@ export default class MatrixService
         this.matrixSDK.ClientEvent.AccountData,
         async (e) => {
           if (e.event.type == 'com.cardstack.boxel.realms') {
-            console.log('updating realms from account data', e.event.content);
             this.cardService.setRealms(e.event.content.realms);
             this.accountDataProcessed.fulfill();
             await this.loginToRealms();
