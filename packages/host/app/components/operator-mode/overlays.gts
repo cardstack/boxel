@@ -137,8 +137,8 @@ export default class OperatorModeOverlays extends Component<Signature> {
                           <:trigger>
                             <IconButton
                               @icon={{ThreeDotsHorizontal}}
-                              @width='auto'
-                              @height='auto'
+                              @width='100%'
+                              @height='100%'
                               class='actions-item__button'
                               aria-label='Options'
                               data-test-overlay-more-options
@@ -334,7 +334,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
         align-items: center;
         background: var(--boxel-light);
         border: 1px solid var(--boxel-450);
-        border-radius: 5px;
+        border-radius: var(--boxel-border-radius-sm);
         gap: var(--boxel-sp-xxxs);
         box-shadow: 0 3px 3px 0 rgba(0, 0, 0, 0.5);
       }

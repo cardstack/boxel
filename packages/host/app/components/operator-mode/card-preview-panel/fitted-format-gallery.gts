@@ -123,6 +123,12 @@ export default class FittedFormatGallery extends Component<Signature> {
         style='width: 300px; height: 115px'
       />
     </div>
+    <div class='item'>
+      <div class='desc'>Aspect Ratio 8.6, 500px &times; 58px</div>
+      <div class='card' style='width: 500px; height: 58px'>
+        <this.renderedCard />
+      </div>
+    </div>
 
     <style>
       .item {
