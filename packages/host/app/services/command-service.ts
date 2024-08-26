@@ -95,7 +95,7 @@ export default class CommandService extends Service {
           { attributes: { moduleURL: formattedModuleId } },
         );
       }
-      // await this.matrixService.sendReactionEvent(roomId, eventId, 'applied');
+      await this.matrixService.sendReactionEvent(roomId, eventId, 'applied');
       if (res) {
         await this.matrixService.sendCommandResultMessage(roomId, eventId, res);
       }
