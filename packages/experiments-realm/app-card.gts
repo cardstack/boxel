@@ -45,7 +45,6 @@ export class TabField extends FieldDef {
 class AppCardIsolated extends Component<typeof AppCard> {
   @action async setupInitialTabs(moduleId: string) {
     this.errorMessage = '';
-    console.log(moduleId);
     let loader: Loader = (import.meta as any).loader;
     let module;
     try {
