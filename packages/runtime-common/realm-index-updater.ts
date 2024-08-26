@@ -74,8 +74,6 @@ export class RealmIndexUpdater {
   }
 
   async run() {
-    await this.#queue.start();
-
     let isNewIndex = await this.#indexWriter.isNewIndex(this.realmURL);
     if (isNewIndex) {
       // we only await the full indexing at boot if this is a brand new index

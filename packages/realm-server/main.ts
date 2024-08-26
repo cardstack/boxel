@@ -174,6 +174,8 @@ let dist: URL = new URL(distURL);
     manager.getOptions.bind(manager),
   );
 
+  await startWorker();
+
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
 
@@ -227,53 +229,6 @@ let dist: URL = new URL(distURL);
 
   server.listen(port);
 
-  let worker = spawn(
-    'ts-node',
-    [
-      '--transpileOnly',
-      'worker',
-      `--port=${port}`,
-      `--matrixURL='${matrixURL}'`,
-      `--distURL='${distURL}'`,
-      ...flattenDeep(
-        urlMappings.map(([from, to]) => [
-          `--fromUrl='${from}'`,
-          `--toUrl='${to}'`,
-        ]),
-      ),
-    ],
-    {
-      stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
-    },
-  );
-
-  if (worker.stdout) {
-    worker.stdout.on('data', (data: Buffer) =>
-      console.log(`worker: ${data.toString()}`),
-    );
-  }
-  if (worker.stderr) {
-    worker.stderr.on('data', (data: Buffer) =>
-      console.error(`worker: ${data.toString()}`),
-    );
-  }
-
-  console.log('====> waiting for worker to be ready');
-  let timeout = await Promise.race([
-    new Promise<void>((r) => {
-      worker.on('message', (message) => {
-        if (message === 'ready') {
-          r();
-        }
-      });
-    }),
-    new Promise<true>((r) => setTimeout(() => r(true), 30_000)),
-  ]);
-  if (timeout) {
-    console.error(`timed-out waiting for worker to start. Stopping server`);
-    process.exit(-2);
-  }
-
   for (let realm of realms) {
     await realm.start();
   }
@@ -298,6 +253,54 @@ let dist: URL = new URL(distURL);
   );
   process.exit(1);
 });
+
+async function startWorker() {
+  let worker = spawn(
+    'ts-node',
+    [
+      '--transpileOnly',
+      'worker',
+      `--port=${port}`,
+      `--matrixURL='${matrixURL}'`,
+      `--distURL='${distURL}'`,
+      ...flattenDeep(
+        urlMappings.map(([from, to]) => [
+          `--fromUrl='${from}'`,
+          `--toUrl='${to}'`,
+        ]),
+      ),
+    ],
+    {
+      stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+    },
+  );
+
+  if (worker.stdout) {
+    worker.stdout.on('data', (data: Buffer) =>
+      log.info(`worker: ${data.toString()}`),
+    );
+  }
+  if (worker.stderr) {
+    worker.stderr.on('data', (data: Buffer) =>
+      console.error(`worker: ${data.toString()}`),
+    );
+  }
+
+  let timeout = await Promise.race([
+    new Promise<void>((r) => {
+      worker.on('message', (message) => {
+        if (message === 'ready') {
+          r();
+        }
+      });
+    }),
+    new Promise<true>((r) => setTimeout(() => r(true), 30_000)),
+  ]);
+  if (timeout) {
+    console.error(`timed-out waiting for worker to start. Stopping server`);
+    process.exit(-2);
+  }
+}
 
 // In case there are no permissions in the database, seed the realm with default permissions:
 // Base realm: read permissions for everyone

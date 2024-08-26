@@ -15,8 +15,6 @@ import PgAdapter from './pg-adapter';
 import PgQueue from './pg-queue';
 
 let log = logger('worker');
-console.log('====> worker started');
-log.info('starting worker');
 
 if (process.env.REALM_SENTRY_DSN) {
   Sentry.init({
@@ -76,6 +74,8 @@ let {
   })
   .parseSync();
 
+log.info(`starting worker for port ${port}`);
+
 if (fromUrls.length !== toUrls.length) {
   console.error(
     `Mismatched number of URLs, the --fromUrl params must be matched to the --toUrl params`,
@@ -116,7 +116,7 @@ let dist: URL = new URL(distURL);
 
   await worker.run();
   if (process.send) {
-    log.info('worker ready');
+    log.info(`worker on port ${port} is ready`);
     process.send('ready');
   }
 })().catch((e: any) => {
