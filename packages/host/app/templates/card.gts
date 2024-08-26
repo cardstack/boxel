@@ -56,7 +56,7 @@ interface CardRouteSignature {
     model: CardModel | null;
   };
 }
-const { ownRealmURL } = ENV;
+
 @keyResponder
 class CardRouteComponent extends Component<CardRouteSignature> {
   isolatedCardComponent: ComponentLike | undefined;
@@ -121,7 +121,7 @@ class CardRouteComponent extends Component<CardRouteSignature> {
     // Users are not allowed to open guest mode
     // if realm is not publicly readable
     let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
-      new URL(ownRealmURL),
+      new URL(this.cardService.defaultURL),
     );
     if (!isPublicReadableRealm && this.args.controller.operatorModeEnabled) {
       return;
@@ -162,7 +162,9 @@ class CardRouteComponent extends Component<CardRouteSignature> {
   private fetchIsPublicReadableStatus = trackedFunction(
     this,
     async () =>
-      await this.realmInfoService.isPublicReadable(new URL(ownRealmURL)),
+      await this.realmInfoService.isPublicReadable(
+        new URL(this.cardService.defaultURL),
+      ),
   );
 
   <template>

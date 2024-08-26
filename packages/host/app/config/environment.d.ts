@@ -11,17 +11,12 @@ declare const config: {
   locationType: 'history' | 'hash' | 'none' | 'auto';
   rootURL: string;
   APP: Record<string, unknown>;
-  ownRealmURL: string;
-  otherRealmURLs: string[];
-  initialRealmURLs: string[];
   matrixURL: string;
   matrixServerName: string;
   experimentalAIEnabled: boolean;
-  resolvedBaseRealmURL: string;
   hostsOwnAssets: boolean;
   realmsServed?: string[];
   logLevels: string;
-  resolvedOwnRealmURL: string;
   autoSaveDelayMs: number;
   monacoDebounceMs: number;
   monacoCursorDebounceMs: number;

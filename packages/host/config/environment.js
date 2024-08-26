@@ -41,26 +41,7 @@ module.exports = function (environment) {
     loginMessageTimeoutMs: 1000,
     minSaveTaskDurationMs: 1000,
 
-    // the fields below may be rewritten by the realm server
-    // FIXME remove outdated realm URL properiets
-    initialRealmURLs: [process.env.OWN_REALM_URL || 'http://localhost:4200/'],
-    ownRealmURL:
-      environment === 'test'
-        ? 'http://test-realm/test/'
-        : process.env.OWN_REALM_URL || 'http://localhost:4200/', // this should be provided as an *unresolved* URL
-    // This is temporary until we have a better way to discover realms besides
-    // our own
-    otherRealmURLs:
-      environment !== 'test' && process.env.OTHER_REALM_URLS
-        ? process.env.OTHER_REALM_URLS.split(',').map((u) => u.trim())
-        : [],
     hostsOwnAssets: true,
-    resolvedBaseRealmURL:
-      process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
-    resolvedOwnRealmURL:
-      environment === 'test'
-        ? 'http://test-realm/test/'
-        : process.env.OWN_REALM_URL || 'http://localhost:4200/',
     featureFlags: {},
   };
 

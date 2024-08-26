@@ -20,7 +20,7 @@ import { CardDef } from 'https://cardstack.com/base/card-api';
 
 import type CardService from '../services/card-service';
 
-const { ownRealmURL, loginMessageTimeoutMs } = ENV;
+const { loginMessageTimeoutMs } = ENV;
 
 export type Model = CardDef | null;
 
@@ -59,13 +59,13 @@ export default class RenderCard extends Route<Model | null> {
     let { path, operatorModeState, operatorModeEnabled } = params;
     path = path || '';
     let url = path
-      ? new URL(`/${path}`, ownRealmURL)
-      : new URL('./', ownRealmURL);
+      ? new URL(`/${path}`, this.cardService.defaultURL)
+      : new URL('./', this.cardService.defaultURL);
 
     try {
       await this.loadMatrix.perform();
       let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
-        new URL(ownRealmURL),
+        new URL(this.cardService.defaultURL),
       );
       let model = null;
       if (!isPublicReadableRealm && !this.matrixService.isLoggedIn) {
@@ -99,7 +99,7 @@ export default class RenderCard extends Route<Model | null> {
       console.error(e);
       (e as any).loadType = params.operatorModeEnabled
         ? 'stack'
-        : url.href === ownRealmURL
+        : url.href === this.cardService.defaultURL.href
         ? 'index'
         : 'card';
       (e as any).operatorModeState = params.operatorModeState;
@@ -112,7 +112,7 @@ export default class RenderCard extends Route<Model | null> {
     // so users will be redirected to operator mode.
     // We can update the codes below after we have a clear idea on how to implement authentication in guest mode.
     let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
-      new URL(ownRealmURL),
+      new URL(this.cardService.defaultURL),
     );
     if (
       !isPublicReadableRealm &&
@@ -120,8 +120,8 @@ export default class RenderCard extends Route<Model | null> {
     ) {
       let path = transition.to?.params?.path ?? '';
       let url = path
-        ? new URL(`/${path}`, ownRealmURL)
-        : new URL('./', ownRealmURL);
+        ? new URL(`/${path}`, this.cardService.defaultURL)
+        : new URL('./', this.cardService.defaultURL);
       await this.router.replaceWith(`card`, {
         queryParams: {
           operatorModeEnabled: 'true',

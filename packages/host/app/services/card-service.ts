@@ -42,7 +42,7 @@ export type CardSaveSubscriber = (
   content: SingleCardDocument | string,
 ) => void;
 
-const { ownRealmURL, environment, initialRealmURLs } = ENV;
+const { environment } = ENV;
 
 export default class CardService extends Service {
   @service private declare loaderService: LoaderService;
@@ -67,7 +67,7 @@ export default class CardService extends Service {
     return this.loaderToCardAPILoadingCache.get(loader)!;
   }
 
-  realmURLs = new TrackedArray(initialRealmURLs);
+  realmURLs = new TrackedArray<string>();
 
   // Note that this should be the unresolved URL and that we need to rely on our
   // fetch to do any URL resolution.
@@ -461,7 +461,7 @@ export default class CardService extends Service {
     // a new card instance that does not have a realm URL yet. For now let's
     // assume that the new card instance will reside in the realm that is hosting the app...
     // TODO change this after implementing CS-6381
-    return card[api.realmURL] ?? new URL(ownRealmURL);
+    return card[api.realmURL] ?? this.defaultURL;
   }
 
   async cardsSettled() {

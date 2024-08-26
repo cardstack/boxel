@@ -27,7 +27,6 @@ let date: typeof import('https://cardstack.com/base/date');
 let number: typeof import('https://cardstack.com/base/number');
 let boolean: typeof import('https://cardstack.com/base/boolean');
 let codeRef: typeof import('https://cardstack.com/base/code-ref');
-let { resolvedBaseRealmURL } = ENV;
 
 module('Unit | query', function (hooks) {
   let dbAdapter: SQLiteAdapter;
@@ -43,7 +42,7 @@ module('Unit | query', function (hooks) {
     let virtualNetwork = new VirtualNetwork();
     virtualNetwork.addURLMapping(
       new URL(baseRealm.url),
-      new URL(resolvedBaseRealmURL),
+      new URL('http://example.com/FIXME what should go here?'),
     );
     shimExternals(virtualNetwork);
     let fetch = fetcher(virtualNetwork.fetch, [

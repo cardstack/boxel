@@ -13,8 +13,7 @@ import {
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import config from '@cardstack/host/config/environment';
-
+import CardService from '@cardstack/host/services/card-service';
 import RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import { shimExternals } from '../lib/externals';
@@ -39,6 +38,7 @@ function getNativeFetch(): typeof fetch {
 }
 
 export default class LoaderService extends Service {
+  @service declare cardService: CardService;
   @service declare fastboot: { isFastBoot: boolean };
   @service declare realmInfoService: RealmInfoService;
   @service declare realm: RealmService;
@@ -66,7 +66,7 @@ export default class LoaderService extends Service {
     if (!this.fastboot.isFastBoot) {
       virtualNetwork.addURLMapping(
         new URL(baseRealm.url),
-        new URL(config.resolvedBaseRealmURL),
+        new this.cardService.defaultURL(),
       );
     }
     shimExternals(virtualNetwork);

@@ -11,8 +11,7 @@ import { TrackedObject } from 'tracked-built-ins';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { getPlural } from '@cardstack/runtime-common';
-
-import ENV from '@cardstack/host/config/environment';
+import { baseRealm } from '@cardstack/runtime-common/constants';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
@@ -24,13 +23,15 @@ import PillMenu from './index';
 
 import type { PillMenuItem } from './index';
 
-const { ownRealmURL } = ENV;
-const sampleCardURLs = [`${ownRealmURL}Author/1`, `${ownRealmURL}BlogPost/1`];
+const sampleCardURLs = [
+  baseRealm.fileURL('Author/1'),
+  baseRealm.fileURL('BlogPost/1'),
+];
 
 export default class PillMenuUsage extends Component {
   headerIconURL = headerIcon;
   resources = sampleCardURLs.map((url) =>
-    getCard(this, () => url, {
+    getCard(this, () => url.toString(), {
       isLive: () => false,
     }),
   );
