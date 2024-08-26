@@ -19,6 +19,5 @@ NODE_ENV=development \
   --path='../base' \
   --matrixURL='http://localhost:8008' \
   --username='base_realm' \
-  --password='password' \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl='/base/'
