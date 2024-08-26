@@ -249,7 +249,12 @@ let dist: URL = new URL(distURL);
 
   if (worker.stdout) {
     worker.stdout.on('data', (data: Buffer) =>
-      console.log(`====> worker: ${data.toString()}`),
+      console.log(`worker: ${data.toString()}`),
+    );
+  }
+  if (worker.stderr) {
+    worker.stderr.on('data', (data: Buffer) =>
+      console.error(`worker: ${data.toString()}`),
     );
   }
 
