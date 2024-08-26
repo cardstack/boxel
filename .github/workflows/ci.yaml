@@ -218,6 +218,9 @@ jobs:
       - name: Wait for ember-cli to be ready
         run: pnpm npx wait-for-localhost 4200
         working-directory: packages/realm-server
+      - name: Debug run realm server
+        run: pnpm start:all
+        working-directory: packages/realm-server
       - name: Start realm servers
         run: pnpm start:all &
         working-directory: packages/realm-server
