@@ -71,6 +71,7 @@ export interface IndexedInstance {
   lastModified: number;
   isolatedHtml: string | null;
   embeddedHtml: { [refURL: string]: string } | null;
+  fittedHtml: { [refURL: string]: string } | null;
   atomHtml: string | null;
   searchDoc: Record<string, any> | null;
   types: string[] | null;
@@ -91,7 +92,7 @@ type GetEntryOptions = WIPOptions;
 export type QueryOptions = WIPOptions & PrerenderedCardOptions;
 
 interface PrerenderedCardOptions {
-  htmlFormat?: 'embedded' | 'atom';
+  htmlFormat?: 'embedded' | 'fitted' | 'atom';
 }
 
 interface WIPOptions {
@@ -113,6 +114,14 @@ export interface QueryResultsMeta {
     total: number;
     realmVersion: number;
   };
+}
+
+export function isValidPrerenderedHtmlFormat(
+  format: string | undefined,
+): format is PrerenderedCardOptions['htmlFormat'] {
+  return (
+    format !== undefined && ['embedded', 'fitted', 'atom'].includes(format)
+  );
 }
 
 export class IndexQueryEngine {
@@ -187,7 +196,7 @@ export class IndexQueryEngine {
     opts?: GetEntryOptions,
   ): Promise<IndexedInstanceOrError | undefined> {
     let result = (await this.query([
-      `SELECT i.*, embedded_html`,
+      `SELECT i.*, embedded_html, fitted_html`,
       `FROM boxel_index as i
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
        WHERE`,
@@ -223,6 +232,7 @@ export class IndexQueryEngine {
       isolated_html: isolatedHtml,
       atom_html: atomHtml,
       embedded_html: embeddedHtml,
+      fitted_html: fittedHtml,
       search_doc: searchDoc,
       realm_version: realmVersion,
       realm_url: realmURL,
@@ -246,6 +256,7 @@ export class IndexQueryEngine {
       instance,
       isolatedHtml,
       embeddedHtml,
+      fittedHtml,
       atomHtml,
       searchDoc,
       types,
@@ -379,11 +390,10 @@ export class IndexQueryEngine {
     scopedCssUrls: string[];
     meta: QueryResultsMeta;
   }> {
-    if (
-      !opts.htmlFormat ||
-      (opts.htmlFormat !== 'embedded' && opts.htmlFormat !== 'atom')
-    ) {
-      throw new Error(`htmlFormat must be either 'embedded' or 'atom'`);
+    if (!isValidPrerenderedHtmlFormat(opts.htmlFormat)) {
+      throw new Error(
+        `htmlFormat must be either 'embedded', 'fitted', or 'atom'`,
+      );
     }
 
     let ref: ResolvedCodeRef;
@@ -394,10 +404,25 @@ export class IndexQueryEngine {
       ref = baseCardRef;
     }
 
-    let htmlColumnExpression =
-      opts.htmlFormat == 'embedded'
-        ? ['embedded_html ->> ', param(internalKeyFor(ref, undefined))]
-        : ['atom_html'];
+    let htmlColumnExpression;
+    switch (opts.htmlFormat) {
+      case 'embedded':
+        htmlColumnExpression = [
+          'embedded_html ->> ',
+          param(internalKeyFor(ref, undefined)),
+        ];
+        break;
+      case 'fitted':
+        htmlColumnExpression = [
+          'fitted_html ->> ',
+          param(internalKeyFor(ref, undefined)),
+        ];
+        break;
+      case 'atom':
+      default:
+        htmlColumnExpression = ['atom_html'];
+        break;
+    }
 
     let { results, meta } = (await this._search(
       realmURL,

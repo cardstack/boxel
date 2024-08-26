@@ -3,9 +3,9 @@ import {
   click,
   fillIn,
   triggerKeyEvent,
-  waitFor,
-  waitUntil,
 } from '@ember/test-helpers';
+
+import { triggerEvent } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
 
@@ -89,7 +89,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           return this.name;
         },
       });
-      static embedded = class Embedded extends Component<typeof this> {
+      static fitted = class Fitted extends Component<typeof this> {
         <template>
           <h3 data-test-pet={{@model.name}}>
             <@fields.name />
@@ -312,7 +312,6 @@ module('Acceptance | interact submode tests', function (hooks) {
     test('Clicking card in search panel opens card on a new stack', async function (assert) {
       await visitOperatorMode({});
 
-      await waitFor('[data-test-search-sheet="closed"]');
       assert.dom('[data-test-operator-mode-stack]').doesNotExist();
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
@@ -325,24 +324,12 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       assert.dom('[data-test-search-sheet]').hasClass('results'); // Search open
 
-      await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`, {
-        timeout: 2000,
-      });
-
       // Click on search result
       await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
 
-      await waitUntil(
-        () =>
-          !document
-            .querySelector('[data-test-search-sheet]')!
-            .classList.contains('results'),
-      ); // Search closed
+      // Search closed
 
       // The card appears on a new stack
-      await waitFor('[data-test-operator-mode-stack]');
-
-      await waitFor('[data-test-operator-mode-stack="0"]');
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
       assert
         .dom(
@@ -362,24 +349,18 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       assert.dom('[data-test-operator-mode-stack]').doesNotExist();
 
-      await waitFor('[data-test-add-card-button]');
       await click('[data-test-add-card-button]');
-      await waitFor('[data-test-card-catalog]');
       await fillIn(
         '[data-test-card-catalog-modal] [data-test-search-field]',
         `${testRealmURL}index`,
       );
 
-      await waitFor(`[data-test-card-catalog-item="${testRealmURL}index"]`, {
-        timeout: 2000,
-      });
       assert
         .dom(`[data-test-card-catalog-item="${testRealmURL}index"]`)
         .hasText('Test Workspace B');
 
       await click(`[data-test-select="${testRealmURL}index"]`);
       await click('[data-test-card-catalog-go-button]');
-      await waitFor('[data-test-card-catalog]', { count: 0 });
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
       assert.dom('[data-test-stack-card-index]').exists({ count: 1 });
       assert.dom('[data-test-stack-card-header]').hasText('Test Workspace B');
@@ -391,17 +372,12 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       assert.dom('[data-test-operator-mode-stack]').doesNotExist();
 
-      await waitFor('[data-test-add-card-button]');
       await click('[data-test-add-card-button]');
-      await waitFor('[data-test-card-catalog]');
       await fillIn(
         '[data-test-card-catalog-modal] [data-test-search-field]',
         wrongURL,
       );
 
-      await waitFor('[data-test-boxel-input-error-message]', {
-        timeout: 2000,
-      });
       assert
         .dom('[data-test-boxel-input-error-message]')
         .hasText(`Could not find card at ${wrongURL}`);
@@ -411,18 +387,12 @@ module('Acceptance | interact submode tests', function (hooks) {
         '[data-test-card-catalog-modal] [data-test-search-field]',
         baseRealm.url.slice(0, -1),
       );
-      await waitFor(`[data-test-card-catalog-item="${baseRealm.url}index"]`, {
-        timeout: 2000,
-      });
       assert.dom('[data-test-card-catalog-item]').hasText('Base Workspace');
 
       await fillIn(
         '[data-test-card-catalog-modal] [data-test-search-field]',
         testRealmURL,
       );
-      await waitFor(`[data-test-card-catalog-item="${testRealmURL}index"]`, {
-        timeout: 2000,
-      });
       assert.dom('[data-test-card-catalog-item]').hasText('Test Workspace B');
       assert.dom('[data-test-boxel-input-error-message]').doesNotExist();
       assert
@@ -431,7 +401,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       await click(`[data-test-select="${testRealmURL}index"]`);
       await click('[data-test-card-catalog-go-button]');
-      await waitFor('[data-test-card-catalog]', { count: 0 });
+
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
       assert.dom('[data-test-stack-card-index]').exists({ count: 1 });
       assert.dom('[data-test-stack-card-header]').hasText('Test Workspace B');
@@ -440,19 +410,10 @@ module('Acceptance | interact submode tests', function (hooks) {
     test('Can open a recent card in empty stack', async function (assert) {
       await visitOperatorMode({});
 
-      await waitFor('[data-test-add-card-button]');
       await click('[data-test-add-card-button]');
 
-      await waitFor('[data-test-search-field]');
       await click('[data-test-search-field]');
       await fillIn('[data-test-search-field]', `${testRealmURL}person-entry`);
-
-      await waitFor(
-        `[data-test-card-catalog-item="${testRealmURL}person-entry"]`,
-      );
-      await waitFor('[data-test-card-catalog-item]', {
-        count: 1,
-      });
 
       assert.dom('[data-test-realm-filter-button]').isDisabled();
 
@@ -463,11 +424,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-card-catalog-item]').exists({ count: 1 });
       await click('[data-test-select]');
 
-      await waitFor('[data-test-card-catalog-go-button][disabled]', {
-        count: 0,
-      });
       await click('[data-test-card-catalog-go-button]');
-      await waitFor(`[data-test-stack-card="${testRealmURL}person-entry"]`);
 
       assert
         .dom(`[data-test-stack-card="${testRealmURL}person-entry"]`)
@@ -477,18 +434,14 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click(
         `[data-test-stack-card="${testRealmURL}person-entry"] [data-test-close-button]`,
       );
-      await waitFor(`[data-test-stack-card="${testRealmURL}person-entry"]`, {
-        count: 0,
-      });
+
       assert.dom('[data-test-add-card-button]').exists('stack is empty');
 
       await click('[data-test-search-field]');
       assert.dom('[data-test-search-sheet]').hasClass('prompt');
 
-      await waitFor(`[data-test-search-result="${testRealmURL}person-entry"]`);
       await click(`[data-test-search-result="${testRealmURL}person-entry"]`);
 
-      await waitFor(`[data-test-stack-card="${testRealmURL}person-entry"]`);
       assert
         .dom(`[data-test-stack-card="${testRealmURL}person-entry"]`)
         .exists();
@@ -497,17 +450,13 @@ module('Acceptance | interact submode tests', function (hooks) {
     test('Handles a URL with no results', async function (assert) {
       await visitOperatorMode({});
 
-      await waitFor('[data-test-add-card-button]');
       await click('[data-test-add-card-button]');
 
-      await waitFor('[data-test-search-field]');
       await fillIn(
         '[data-test-search-field]',
         `${testRealmURL}xyz-does-not-exist`,
       );
 
-      await waitFor('[data-test-card-catalog]');
-      await waitFor('[data-test-card-catalog-item]', { count: 0 });
       assert.dom(`[data-test-card-catalog]`).hasText('No cards available');
     });
   });
@@ -553,7 +502,6 @@ module('Acceptance | interact submode tests', function (hooks) {
         ],
       });
 
-      await waitFor('[data-test-operator-mode-stack] [data-test-pet="Mango"]');
       await click('[data-test-operator-mode-stack] [data-test-pet="Mango"]');
       let expectedURL = `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
         stringify({
@@ -574,9 +522,6 @@ module('Acceptance | interact submode tests', function (hooks) {
           openDirs: {},
         })!,
       )}`;
-      // There is some additional thing we are waiting on here, probably the
-      // card to load in the card resource, but I'm not too sure so using waitUntil instead
-      await waitUntil(() => currentURL() === expectedURL);
       assert.strictEqual(currentURL(), expectedURL);
 
       // Click Edit on the top card
@@ -677,12 +622,6 @@ module('Acceptance | interact submode tests', function (hooks) {
         '[data-test-operator-mode-stack="0"] [data-test-close-button]',
       );
 
-      // There is now only 1 stack and the buttons to add a neighbor stack are back
-      await waitUntil(
-        () =>
-          document.querySelectorAll('[data-test-operator-mode-stack]')
-            .length === 1,
-      );
       assert
         .dom('[data-test-operator-mode-stack]')
         .exists({ count: 1 }, 'after close, expect 1 stack');
@@ -704,17 +643,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       // There are now 2 stacks
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
-      await waitUntil(() =>
-        document
-          .querySelector('[data-test-operator-mode-stack="0"]')
-          ?.textContent?.includes('Fadhlan'),
-      );
       assert.dom('[data-test-operator-mode-stack="0"]').includesText('Fadhlan');
-      await waitUntil(() =>
-        document
-          .querySelector('[data-test-operator-mode-stack="1"]')
-          ?.textContent?.includes('Mango'),
-      );
       assert.dom('[data-test-operator-mode-stack="1"]').includesText('Mango'); // Mango gets moved onto the right stack
 
       // Buttons to add a neighbor stack are gone
@@ -724,13 +653,6 @@ module('Acceptance | interact submode tests', function (hooks) {
       // Close the only card in the 1st stack
       await click(
         '[data-test-operator-mode-stack="0"] [data-test-close-button]',
-      );
-      // There is some additional thing we are waiting on here, probably the
-      // card to load in the card resource, but I'm not too sure so using waitUntil instead
-      await waitUntil(
-        () =>
-          document.querySelectorAll('[data-test-operator-mode-stack]')
-            .length === 1,
       );
 
       // There is now only 1 stack and the buttons to add a neighbor stack are back
@@ -791,14 +713,6 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       // Click on a recent search
       await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
-      // There is some additional thing we are waiting on here, probably the
-      // card to load in the card resource, but I'm not too sure so using waitUntil instead
-      await waitUntil(
-        () =>
-          document.querySelectorAll(
-            '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"]',
-          ).length === 0,
-      );
 
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
@@ -818,7 +732,6 @@ module('Acceptance | interact submode tests', function (hooks) {
 
     test('search can be dismissed with escape', async function (assert) {
       await visitOperatorMode({});
-      await waitFor('[data-test-search-sheet="closed"]');
       await click('[data-test-search-field]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt');
@@ -858,13 +771,9 @@ module('Acceptance | interact submode tests', function (hooks) {
         deferred.fulfill();
       });
       await click('[data-test-create-new-card-button]');
-      await waitFor(
-        `[data-test-card-catalog-item="${testRealmURL}person-entry"]`,
-      );
       await click(`[data-test-select="${testRealmURL}person-entry"]`);
       await click('[data-test-card-catalog-go-button]');
 
-      await waitFor('[data-test-stack-card-index="1"]');
       await fillIn(`[data-test-field="firstName"] input`, 'Hassan');
       await click('[data-test-stack-card-index="1"] [data-test-close-button]');
 
@@ -883,9 +792,6 @@ module('Acceptance | interact submode tests', function (hooks) {
         ],
       });
 
-      await waitFor(
-        `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`,
-      );
       // Simulate simultaneous clicks for spam-clicking
       await Promise.all([
         click(
@@ -896,7 +802,6 @@ module('Acceptance | interact submode tests', function (hooks) {
         ),
       ]);
 
-      await waitFor(`[data-stack-card="${testRealmURL}Person/fadhlan"]`);
       assert
         .dom(`[data-stack-card="${testRealmURL}Person/fadhlan"]`)
         .exists({ count: 1 });
@@ -915,13 +820,12 @@ module('Acceptance | interact submode tests', function (hooks) {
       });
       assert
         .dom(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-embedded-card-edit-button]`,
+          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-edit]`,
         )
         .exists();
       await click(
-        `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-embedded-card-edit-button]`,
+        `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-edit]`,
       );
-      await waitFor(`[data-test-stack-card="${testRealmURL}Pet/mango"]`);
       assert
         .dom(
           `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-card-format="edit"]`,
@@ -950,26 +854,15 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click(
         `[data-test-select="https://cardstack.com/base/fields/skill-card"]`,
       );
-      await waitUntil(
-        () =>
-          (
-            document.querySelector(`[data-test-card-catalog-go-button]`) as
-              | HTMLButtonElement
-              | undefined
-          )?.disabled === false,
-      );
+
       await click(`[data-test-card-catalog-go-button]`);
 
       // When edit view of new card opens, fill in a field and press the Pencil icon to finish editing
-      await waitFor('[data-test-field="instructions"] textarea');
       await fillIn(
         '[data-test-field="instructions"] textarea',
         'Do this and that and this and that',
       );
       await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
-      await waitFor(
-        '[data-test-card-format="isolated"] [data-test-field="instructions"] p',
-      );
     });
   });
 
@@ -1126,7 +1019,6 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
         ],
       });
-      await waitFor('[data-test-more-options-button]');
       await click('[data-test-more-options-button]');
       assert
         .dom('[data-test-boxel-menu-item-text="Delete"]')
@@ -1144,12 +1036,9 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
         ],
       });
-      await waitFor(
-        `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-      );
       assert
         .dom(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.more-actions`,
+          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
         )
         .doesNotExist('"..." menu does not exist');
     });
@@ -1170,13 +1059,12 @@ module('Acceptance | interact submode tests', function (hooks) {
         .exists();
       assert
         .dom(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-embedded-card-edit-button]`,
+          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-edit]`,
         )
         .doesNotExist('edit icon not displayed for linked card');
       await click(
         `[data-test-links-to-editor="pet"] [data-test-field-component-card]`,
       );
-      await waitFor(`[data-test-stack-card="${testRealmURL}Pet/mango"]`);
       assert
         .dom(
           `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-card-format="isolated"]`,
@@ -1265,9 +1153,6 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
         ],
       });
-      await waitFor(
-        '[data-test-operator-mode-stack="0"] [data-test-more-options-button]',
-      );
       await click(
         '[data-test-operator-mode-stack="0"] [data-test-more-options-button]',
       );
@@ -1275,9 +1160,6 @@ module('Acceptance | interact submode tests', function (hooks) {
         .dom('[data-test-boxel-menu-item-text="Delete"]')
         .doesNotExist('delete menu item is not rendered');
 
-      await waitFor(
-        '[data-test-operator-mode-stack="1"] [data-test-more-options-button]',
-      );
       await click(
         '[data-test-operator-mode-stack="1"] [data-test-more-options-button]',
       );
@@ -1303,21 +1185,19 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
         ],
       });
-      await waitFor(
-        `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-      );
       assert
         .dom(
-          `[data-test-operator-mode-stack="0"] [data-test-overlay-card="${testRealmURL}Pet/mango"] button.more-actions`,
+          `[data-test-operator-mode-stack="0"] [data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
         )
         .doesNotExist('"..." menu does not exist');
 
-      await waitFor(
+      await triggerEvent(
         `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/ringo"]`,
+        'mouseenter',
       );
       assert
         .dom(
-          `[data-test-operator-mode-stack="1"] [data-test-overlay-card="${testRealm2URL}Pet/ringo"] button.more-actions`,
+          `[data-test-operator-mode-stack="1"] [data-test-overlay-card="${testRealm2URL}Pet/ringo"] [data-test-overlay-more-options]`,
         )
         .exists('"..." menu exists');
     });
@@ -1442,15 +1322,6 @@ module('Acceptance | interact submode tests', function (hooks) {
       // Click on a recent search
       await click(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`);
 
-      // We have to wait untill there is only one stack item in rightmost stack,
-      // because that's the expected behaviour when we open a card from card search.
-      await waitUntil(
-        () =>
-          document.querySelectorAll(
-            '[data-test-operator-mode-stack="1"] [data-test-stack-card-index]',
-          )?.length === 1,
-      );
-
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
@@ -1527,13 +1398,6 @@ module('Acceptance | interact submode tests', function (hooks) {
         },
       });
 
-      await waitUntil(() =>
-        document
-          .querySelector(
-            '[data-test-operator-mode-stack="0"] [data-test-person]',
-          )
-          ?.textContent?.includes('FadhlanXXX'),
-      );
       assert
         .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
         .hasText('FadhlanXXX');

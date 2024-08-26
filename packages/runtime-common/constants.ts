@@ -26,7 +26,7 @@ export const primitive = Symbol('cardstack-primitive');
 export const aiBotUsername = 'aibot';
 
 export const CardContextName = 'card-context';
-export const DefaultFormatContextName = 'default-format-context';
+export const DefaultFormatsContextName = 'default-format-context';
 
 export const PermissionsContextName = 'permissions-context';
 

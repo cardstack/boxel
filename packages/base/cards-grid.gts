@@ -13,7 +13,9 @@ import {
 import {
   AddButton,
   CardContainer,
+  FilterList,
   Tooltip,
+  type Filter,
 } from '@cardstack/boxel-ui/components';
 import {
   chooseCard,
@@ -21,6 +23,7 @@ import {
   baseRealm,
   isCardInstance,
 } from '@cardstack/runtime-common';
+import { tracked } from '@glimmer/tracking';
 
 // @ts-ignore no types
 import cssUrl from 'ember-css-url';
@@ -30,55 +33,63 @@ import StringField from './string';
 class Isolated extends Component<typeof CardsGrid> {
   <template>
     <div class='cards-grid'>
-      <ul class='cards' data-test-cards-grid-cards>
-        {{#let
-          (component @context.prerenderedCardSearchComponent)
-          as |PrerenderedCardSearch|
-        }}
-          <PrerenderedCardSearch
-            @query={{this.query}}
-            @format='embedded'
-            @realms={{this.realms}}
-          >
+      <FilterList
+        @filters={{this.filters}}
+        @activeFilter={{this.activeFilter}}
+        @onChanged={{this.onFilterChanged}}
+      />
+      <div class='content'>
+        <span class='headline'>{{this.activeFilter.displayName}}</span>
+        <ul class='cards' data-test-cards-grid-cards>
+          {{#let
+            (component @context.prerenderedCardSearchComponent)
+            as |PrerenderedCardSearch|
+          }}
+            <PrerenderedCardSearch
+              @query={{this.query}}
+              @format='fitted'
+              @realms={{this.realms}}
+            >
 
-            <:loading>
-              Loading...
-            </:loading>
-            <:response as |cards|>
-              {{#each cards as |card|}}
-                <CardContainer class='card'>
-                  <li
-                    {{@context.cardComponentModifier
-                      cardId=card.url
-                      format='data'
-                      fieldType=undefined
-                      fieldName=undefined
-                    }}
-                    data-test-cards-grid-item={{removeFileExtension card.url}}
-                    {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
-                    data-cards-grid-item={{removeFileExtension card.url}}
-                  >
-                    {{card.component}}
-                  </li>
-                </CardContainer>
-              {{/each}}
-            </:response>
-          </PrerenderedCardSearch>
-        {{/let}}
-      </ul>
+              <:loading>
+                Loading...
+              </:loading>
+              <:response as |cards|>
+                {{#each cards as |card|}}
+                  <CardContainer class='card'>
+                    <li
+                      {{@context.cardComponentModifier
+                        cardId=card.url
+                        format='data'
+                        fieldType=undefined
+                        fieldName=undefined
+                      }}
+                      data-test-cards-grid-item={{removeFileExtension card.url}}
+                      {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
+                      data-cards-grid-item={{removeFileExtension card.url}}
+                    >
+                      {{card.component}}
+                    </li>
+                  </CardContainer>
+                {{/each}}
+              </:response>
+            </PrerenderedCardSearch>
+          {{/let}}
+        </ul>
 
-      {{#if @context.actions.createCard}}
-        <div class='add-button'>
-          <Tooltip @placement='left' @offset={{6}}>
-            <:trigger>
-              <AddButton {{on 'click' this.createNew}} />
-            </:trigger>
-            <:content>
-              Add a new card to this collection
-            </:content>
-          </Tooltip>
-        </div>
-      {{/if}}
+        {{#if @context.actions.createCard}}
+          <div class='add-button'>
+            <Tooltip @placement='left' @offset={{6}}>
+              <:trigger>
+                <AddButton {{on 'click' this.createNew}} />
+              </:trigger>
+              <:content>
+                Add a new card to this collection
+              </:content>
+            </Tooltip>
+          </div>
+        {{/if}}
+      </div>
     </div>
 
     <style>
@@ -86,10 +97,25 @@ class Isolated extends Component<typeof CardsGrid> {
         --grid-card-width: 11.125rem;
         --grid-card-height: 15.125rem;
 
-        max-width: 70rem;
-        margin: 0 auto;
-        padding: var(--boxel-sp-xl);
+        padding: var(--boxel-sp-lg) var(--boxel-sp-sm);
+
+        display: flex;
+        gap: var(--boxel-sp-xl);
+      }
+      :deep(.filter-list__button:first-child) {
+        margin-bottom: var(--boxel-sp-xl);
+      }
+      .content {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+        width: 100%;
         position: relative; /* Do not change this */
+      }
+      .headline {
+        font: bold var(--boxel-font-lg);
+        line-height: 1.58;
+        letter-spacing: 0.21px;
       }
       .cards {
         list-style-type: none;
@@ -109,13 +135,14 @@ class Isolated extends Component<typeof CardsGrid> {
         height: var(--grid-card-height);
         overflow: hidden;
         cursor: pointer;
-        container-name: embedded-card;
+        container-name: fitted-card;
         container-type: size;
       }
       .add-button {
         display: inline-block;
         position: sticky;
         left: 100%;
+        width: fit-content;
         bottom: var(--boxel-sp-xl);
         z-index: 1;
       }
@@ -125,6 +152,54 @@ class Isolated extends Component<typeof CardsGrid> {
       }
     </style>
   </template>
+
+  private filters: Filter[] = [
+    {
+      displayName: 'All Apps',
+      query: {
+        filter: {
+          eq: {
+            _cardType: 'Apps',
+          },
+        },
+      },
+    },
+    {
+      displayName: 'All Cards',
+      query: {
+        filter: {
+          eq: {
+            _cardType: 'Card',
+          },
+        },
+      },
+    },
+    {
+      displayName: 'Person',
+      query: {
+        filter: {
+          eq: {
+            _cardType: 'Person',
+          },
+        },
+      },
+    },
+    {
+      displayName: 'Pet',
+      query: {
+        filter: {
+          eq: {
+            _cardType: 'Pet',
+          },
+        },
+      },
+    },
+  ];
+  @tracked activeFilter = this.filters[0];
+
+  @action onFilterChanged(filter: Filter) {
+    this.activeFilter = filter;
+  }
 
   get realms(): string[] {
     return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
@@ -186,6 +261,7 @@ class Isolated extends Component<typeof CardsGrid> {
 export class CardsGrid extends CardDef {
   static displayName = 'Cards Grid';
   static isolated = Isolated;
+  static prefersWideFormat = true;
   @field realmName = contains(StringField, {
     computeVia: function (this: CardsGrid) {
       return this[realmInfo]?.name;

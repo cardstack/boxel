@@ -396,6 +396,7 @@ export function setupServerSentEvents(hooks: NestedHooks) {
       }
       clearTimeout(timeout);
       realm.unsubscribe();
+      await settled();
       return result;
     };
   });

@@ -1,4 +1,4 @@
-import { click, waitFor } from '@ember/test-helpers';
+import { click, waitFor, triggerEvent } from '@ember/test-helpers';
 
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
@@ -403,7 +403,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       @field currencyName = contains(StringField);
       @field icon = contains(StringField);
 
-      static embedded = class Embedded extends Component<typeof this> {
+      static fitted = class Fitted extends Component<typeof this> {
         <template>
           <div class='currency' data-test-currency-embedded>
             <@fields.icon />
@@ -487,18 +487,19 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
         'linked card content is correct',
       );
 
-    assert
-      .dom(`[data-test-overlay-card="${testRealmURL}usd"]`)
-      .containsText('Currency');
+    await triggerEvent(
+      `[data-test-overlay-card="${testRealmURL}usd"]`,
+      'mouseenter',
+    );
     assert
       .dom(
-        `[data-test-overlay-card="${testRealmURL}usd"] [data-test-embedded-card-edit-button]`,
+        `[data-test-overlay-card="${testRealmURL}usd"] [data-test-overlay-edit]`,
       )
       .exists()
       .isNotDisabled();
     assert
       .dom(
-        `[data-test-overlay-card="${testRealmURL}usd"] [data-test-embedded-card-options-button]`,
+        `[data-test-overlay-card="${testRealmURL}usd"] [data-test-overlay-more-options]`,
       )
       .exists()
       .isNotDisabled();

@@ -45,7 +45,7 @@ In order to run the ember-cli hosted app:
 1. `pnpm build` in the boxel-ui/addon workspace to build the boxel-ui addon.
 2. `pnpm build` in the boxel-motion/addon workspace to build the boxel-motion addon.
 3. `pnpm start` in the host/ workspace to serve the ember app. Note that this script includes the environment variable `OWN_REALM_URL=http://localhost:4201/experiments/` which configures the host to point to the experiments realm's cards realm by default.
-4. `pnpm start:all` in the realm-server/ to serve the base and experiments realms -- this will also allow you to switch between the app and the tests without having to restart servers)
+4. `pnpm start:all` in the realm-server/ to serve the base and experiments realms -- this will also allow you to switch between the app and the tests without having to restart servers). This expects the Ember application to be running at `http://localhost:4200`, if you’re running it elsewhere you can specify it with `HOST_URL=http://localhost:5200 pnpm start:all`.
 
 The app is available at http://localhost:4200. It will serve the experiments realm (configurable with OWN_REALM_URL, as mentioned above). You can open the base and experiments cards workspace directly by entering http://localhost:4201/base or http://localhost:4201/experiments in the browser.
 

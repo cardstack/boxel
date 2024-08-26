@@ -514,9 +514,19 @@ export class CurrentRun {
     }
     let embeddedHtml: Record<string, string> | undefined;
     if (card && typesMaybeError?.type === 'types') {
-      embeddedHtml = await this.buildEmbeddedHtml(
+      embeddedHtml = await this.buildCardHtml(
         card,
         typesMaybeError.types,
+        'embedded',
+        identityContext,
+      );
+    }
+    let fittedHtml: Record<string, string> | undefined;
+    if (card && typesMaybeError?.type === 'types') {
+      fittedHtml = await this.buildCardHtml(
+        card,
+        typesMaybeError.types,
+        'fitted',
         identityContext,
       );
     }
@@ -529,6 +539,7 @@ export class CurrentRun {
         isolatedHtml,
         atomHtml,
         embeddedHtml,
+        fittedHtml,
         lastModified,
         types: typesMaybeError.types.map(({ refURL }) => refURL),
         deps: new Set([
@@ -567,18 +578,19 @@ export class CurrentRun {
     deferred.fulfill();
   }
 
-  private async buildEmbeddedHtml(
+  private async buildCardHtml(
     card: CardDef,
     types: CardType[],
+    format: 'embedded' | 'fitted',
     identityContext: IdentityContextType,
   ): Promise<{ [refURL: string]: string }> {
     let result: { [refURL: string]: string } = {};
     for (let { codeRef: componentCodeRef, refURL } of types) {
-      let embeddedHtml = unwrap(
+      let html = unwrap(
         sanitizeHTML(
           await this.#renderCard({
             card,
-            format: 'embedded',
+            format,
             visit: this.visitFile.bind(this),
             identityContext,
             realmPath: this.#realmPaths,
@@ -586,7 +598,7 @@ export class CurrentRun {
           }),
         ),
       );
-      result[refURL] = embeddedHtml;
+      result[refURL] = html;
     }
     return result;
   }
