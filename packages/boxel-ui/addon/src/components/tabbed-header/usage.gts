@@ -5,6 +5,7 @@ import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
 import Icon from '../../icons/sparkle.gts';
 import TabbedHeader from './index.gts';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 export default class TabbedHeaderUsage extends Component {
   @tracked tabs = [
@@ -96,5 +97,80 @@ export default class TabbedHeaderUsage extends Component {
         />
       </:api>
     </FreestyleUsage>
+
+    <FreestyleUsage @name='Tab List with Content'>
+      <:example>
+        <TabbedHeader
+          @title={{''}}
+          @tabs={{this.tabs}}
+          @onSetActiveTab={{fn this.onSetActiveTab}}
+          @activeTabIndex={{this.activeTabIndex}}
+          @headerBackgroundColor={{'white'}}
+        />
+
+        {{#if (eq this.activeTabIndex 0)}}
+          <div class='tab-content' data-tabId={{this.activeTabIndex}}>
+            This is some placeholder content the Dashboard tab's associated
+            content. Clicking another tab will toggle the visibility of this one
+            for the next. The tab JavaScript swaps classes to control the
+            content visibility and styling. You can use it with tabs, pills, and
+            any other .nav-powered navigation.
+          </div>
+        {{/if}}
+
+        {{#if (eq this.activeTabIndex 1)}}
+          <div class='tab-content' data-tabId={{this.activeTabIndex}}>
+            This is some placeholder content the
+            <strong>Requirements tab's</strong>
+            associated content. Clicking another tab will toggle the visibility
+            of this one for the next. The tab JavaScript swaps classes to
+            control the content visibility and styling. You can use it with
+            tabs, pills, and any other .nav-powered navigation.
+          </div>
+        {{/if}}
+
+        {{#if (eq this.activeTabIndex 2)}}
+          <div class='tab-content' data-tabId={{this.activeTabIndex}}>
+            This is some placeholder content the
+            <strong>Your Apps</strong>
+            tab's associated content. Clicking another tab will toggle the
+            visibility of this one for the next. The tab JavaScript swaps
+            classes to control the content visibility and styling. You can use
+            it with tabs, pills, and any other .nav-powered navigation.
+          </div>
+        {{/if}}
+
+        {{#if (eq this.activeTabIndex 3)}}
+          <div class='tab-content' data-tabId={{this.activeTabIndex}}>
+            This is some placeholder content the
+            <strong>Sample Apps</strong>
+            tab's associated content. Clicking another tab will toggle the
+            visibility of this one for the next. The tab JavaScript swaps
+            classes to control the content visibility and styling. You can use
+            it with tabs, pills, and any other .nav-powered navigation.
+          </div>
+        {{/if}}
+
+        {{#if (eq this.activeTabIndex 4)}}
+          <div class='tab-content' data-tabId={{this.activeTabIndex}}>
+            This is some placeholder content the
+            <strong>Favorites</strong>
+            tab's associated content. Clicking another tab will toggle the
+            visibility of this one for the next. The tab JavaScript swaps
+            classes to control the content visibility and styling. You can use
+            it with tabs, pills, and any other .nav-powered navigation.
+          </div>
+        {{/if}}
+
+      </:example>
+    </FreestyleUsage>
+
+    <style>
+      .tab-content {
+        background-color: var(--boxel-100);
+        padding: var(--boxel-sp-xl) var(--boxel-sp);
+        font-size: var(--boxel-font-size-sm);
+      }
+    </style>
   </template>
 }
