@@ -35,7 +35,7 @@ import {
   isSingleCardDocument,
 } from '@cardstack/runtime-common';
 
-export class TabField extends FieldDef {
+export class Tab extends FieldDef {
   @field displayName = contains(StringField);
   @field tabId = contains(StringField);
   @field ref = contains(CodeRefField);
@@ -65,7 +65,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
     let tabs = [];
     for (let [name, _declaration] of exportedCards) {
       tabs.push(
-        new TabField({
+        new Tab({
           displayName: name,
           tabId: name,
           ref: {
@@ -258,7 +258,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
 
   setTab() {
     let index = this.tabs?.findIndex(
-      (tab: TabField) => tab.tabId === window.location?.hash?.slice(1),
+      (tab: Tab) => tab.tabId === window.location?.hash?.slice(1),
     );
     if (index && index !== -1) {
       this.activeTabIndex = index;
@@ -404,7 +404,7 @@ export class AppCard extends CardDef {
   static displayName = 'App Card';
   static prefersWideFormat = true;
   static headerColor = '#ffffff';
-  @field tabs = containsMany(TabField);
+  @field tabs = containsMany(Tab);
   @field headerIcon = contains(Base64ImageField);
   @field moduleId = contains(StringField);
   static isolated = AppCardIsolated;

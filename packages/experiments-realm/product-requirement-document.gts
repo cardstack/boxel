@@ -232,7 +232,6 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
   </template>
 
   @tracked errorMessage = '';
-  @tracked moduleName = '';
 
   get currentRealm() {
     return this.args.model[realmURL];
@@ -278,9 +277,6 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
       if (!this.args.model.moduleURL) {
         throw new Error('Module URL is not available');
       }
-      // if (!this.args.model.sampleData) {
-      //   throw new Error('Sample data is not available');
-      // }
       let { moduleURL } = this.args.model;
       let loader = (import.meta as any).loader;
       let url = `${moduleURL.replace('../', this.currentRealm.href)}`;
@@ -310,7 +306,6 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
               attributes: {
                 title: this.args.model.appTitle,
                 moduleId: url,
-                // ...JSON.parse(this.args.model.sampleData),
               },
               meta: { adoptsFrom: moduleRef },
             },
@@ -370,9 +365,6 @@ export class ProductRequirementDocument extends CardDef {
   @field layoutAndNavigation = contains(MarkdownField);
   @field moduleURL = contains(StringField);
   @field appCard = linksToMany(AppCard);
-  @field sampleData = contains(StringField, {
-    description: `Sample data to create an instance with. This should be a JSON string, and *must* be updated whenever the template *fields* are changed`,
-  });
   @field title = contains(StringField, {
     computeVia: function (this: ProductRequirementDocument) {
       return this.appTitle ?? 'Untitled App';

@@ -19,7 +19,7 @@ import {
   type CodeRef,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-import { AppCard, TabField, CardsGrid } from './app-card';
+import { AppCard, Tab, CardsGrid } from './app-card';
 
 class HowToSidebar extends GlimmerComponent {
   <template>
@@ -379,7 +379,7 @@ class Isolated extends AppCard.isolated {
   </template>
 
   @tracked tabs = [
-    new TabField({
+    new Tab({
       displayName: 'Dashboard',
       tabId: 'dashboard',
       ref: {
@@ -387,7 +387,7 @@ class Isolated extends AppCard.isolated {
         module: `${this.currentRealm?.href}app-card`,
       },
     }),
-    new TabField({
+    new Tab({
       displayName: 'Requirements',
       tabId: 'requirements',
       ref: {
@@ -395,7 +395,7 @@ class Isolated extends AppCard.isolated {
         module: `${this.currentRealm?.href}product-requirement-document`,
       },
     }),
-    new TabField({
+    new Tab({
       displayName: 'Your Apps',
       tabId: 'your-apps',
       ref: {
