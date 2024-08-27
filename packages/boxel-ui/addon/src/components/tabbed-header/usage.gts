@@ -4,7 +4,7 @@ import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
 import Icon from '../../icons/sparkle.gts';
-import TabbedHeader from './index.gts';
+import TabbedHeader, { type BoxelTabVariant } from './index.gts';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 export default class TabbedHeaderUsage extends Component {
@@ -34,6 +34,55 @@ export default class TabbedHeaderUsage extends Component {
   @tracked activeTabIndex = 0;
   @tracked headerColor = '#ffd800';
 
+  //example: Tab List with pill style
+  @tracked tabs1 = [
+    {
+      displayName: 'Home',
+      tabId: 'home',
+    },
+    {
+      displayName: 'About Us',
+      tabId: 'about-us',
+    },
+    {
+      displayName: 'Settings',
+      tabId: 'settings',
+    },
+  ];
+  @tracked variants1: Array<BoxelTabVariant> = ['default', 'pills'];
+  variant1: BoxelTabVariant = 'pills';
+
+  @tracked title1 = '';
+  @tracked activeTabIndex1 = 0;
+  @tracked headerColor1 = '#ffffff';
+
+  //example: Tab List with Content
+  @tracked tabs2 = [
+    {
+      displayName: 'Dashboard',
+      tabId: 'dashboard',
+    },
+    {
+      displayName: 'Requirements',
+      tabId: 'requirements',
+    },
+    {
+      displayName: 'Your Apps',
+      tabId: 'your-apps',
+    },
+    {
+      displayName: 'Sample Apps',
+      tabId: 'sample-apps',
+    },
+    {
+      displayName: 'Favorites',
+      tabId: 'favorites',
+    },
+  ];
+  @tracked title2 = 'AI App Generator';
+  @tracked activeTabIndex2 = 0;
+  @tracked headerColor2 = '#ffffff';
+
   constructor(owner: unknown, args: any) {
     super(owner, args);
     let index = this.tabs?.findIndex(
@@ -46,6 +95,14 @@ export default class TabbedHeaderUsage extends Component {
 
   onSetActiveTab = (index: number) => {
     this.activeTabIndex = index;
+  };
+
+  onSetActiveTab1 = (index: number) => {
+    this.activeTabIndex1 = index;
+  };
+
+  onSetActiveTab2 = (index: number) => {
+    this.activeTabIndex2 = index;
   };
 
   <template>
@@ -98,7 +155,31 @@ export default class TabbedHeaderUsage extends Component {
       </:api>
     </FreestyleUsage>
 
-    <FreestyleUsage @name='Tab List with Content'>
+    <FreestyleUsage @name='Pills'>
+      <:example>
+        <TabbedHeader
+          @variant={{this.variant1}}
+          @title={{this.title1}}
+          @tabs={{this.tabs1}}
+          @onSetActiveTab={{fn this.onSetActiveTab1}}
+          @activeTabIndex={{this.activeTabIndex1}}
+          @headerBackgroundColor={{this.headerColor1}}
+        />
+      </:example>
+      <:api as |Args|>
+        <Args.String
+          @name='variant'
+          @optional={{true}}
+          @description='Controls the colors of the button'
+          @defaultValue={{'pills'}}
+          @options={{this.variants1}}
+          @onInput={{fn (mut this.variant1)}}
+          @value={{this.variant1}}
+        />
+      </:api>
+    </FreestyleUsage>
+
+    <FreestyleUsage @name='Examples'>
       <:example>
         <TabbedHeader
           @title={{''}}
