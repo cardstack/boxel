@@ -124,6 +124,7 @@ test.describe('Skills', () => {
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
       '1 of 2 Skills Active',
     );
+
     await attachSkill(page, skillCard2);
     await expect(
       page.locator(`[data-test-pill-menu-item="${skillCard2}"]`),
@@ -248,8 +249,7 @@ test.describe('Skills', () => {
     expect(fragment3.content.data).toContain(skillCard2);
     expect(cardFragments).not.toContain(skillCard3);
 
-    let [defaultSkillCardEventId, skillEventId1, skillEventId2] =
-      attachedSkillEventIds;
+    let [defaultSkillCardEventId, skillEventId1, skillEventId2] = attachedSkillEventIds;
     expect(fragment1.event_id).toStrictEqual(defaultSkillCardEventId);
     expect(fragment2.event_id).toStrictEqual(skillEventId1);
     expect(fragment3.event_id).toStrictEqual(skillEventId2);
