@@ -85,7 +85,6 @@ export default class CardService extends Service {
   }
 
   setRealms(realms: string[]) {
-    console.log('setting realms', realms);
     realms.forEach((realm) => {
       if (!this.realmURLs.includes(realm)) {
         this.realmURLs.push(realm);
