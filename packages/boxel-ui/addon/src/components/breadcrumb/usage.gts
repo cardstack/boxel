@@ -7,11 +7,16 @@ import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import { on } from '@ember/modifier';
+import { tracked } from '@glimmer/tracking';
+import { eq } from '../../helpers/truth-helpers.ts';
 
 export default class BreadcrumbUsage extends Component {
+  @tracked selected = '';
   @action goTo(href: string) {
+    this.selected = href;
     console.log(`going to link ${href}`);
   }
+
   <template>
     <FreestyleUsage @name='Breadcrumb (actions)'>
       <:description>
@@ -19,16 +24,37 @@ export default class BreadcrumbUsage extends Component {
         hierarchy.
       </:description>
       <:example>
-        <Breadcrumb as |B|>
-          <B @size='extra-small' {{on 'click' (fn this.goTo '../../')}}>
+        <Breadcrumb @kind='primary' @size='small' as |B|>
+          <B
+            @kind={{if
+              (eq this.selected '../../')
+              'primary-dark'
+              'secondary-light'
+            }}
+            {{on 'click' (fn this.goTo '../../')}}
+          >
             Home
           </B>
           <BreadcrumbSeparator @variant='caretRight' />
-          <B @size='extra-small' {{on 'click' (fn this.goTo '../')}}>
+          <B
+            @kind={{if
+              (eq this.selected '../')
+              'primary-dark'
+              'secondary-light'
+            }}
+            {{on 'click' (fn this.goTo '../')}}
+          >
             Tasks
           </B>
           <BreadcrumbSeparator @variant='caretRight' />
-          <B @size='extra-small' {{on 'click' (fn this.goTo './')}}>
+          <B
+            @kind={{if
+              (eq this.selected './')
+              'primary-dark'
+              'secondary-light'
+            }}
+            {{on 'click' (fn this.goTo './')}}
+          >
             Active
           </B>
         </Breadcrumb>
@@ -37,9 +63,8 @@ export default class BreadcrumbUsage extends Component {
 
     <FreestyleUsage @name='Breadcrumb (anchor)'>
       <:example>
-        <Breadcrumb as |B|>
+        <Breadcrumb @kind='text-only' as |B|>
           <B
-            @size='small'
             @as='anchor'
             @href='http://localhost:4210/?s=Components&ss=%3CInputGroup%3E'
           >
@@ -47,7 +72,6 @@ export default class BreadcrumbUsage extends Component {
           </B>
           <BreadcrumbSeparator @variant='slash' />
           <B
-            @size='small'
             @as='anchor'
             @href='http://localhost:4210/?s=Components&ss=%3CInput%3E'
           >
@@ -59,9 +83,8 @@ export default class BreadcrumbUsage extends Component {
 
     <FreestyleUsage @name='Breadcrumb (with dropdown)'>
       <:example>
-        <Breadcrumb as |B|>
+        <Breadcrumb @size='tall' as |B|>
           <B
-            @size='tall'
             @as='anchor'
             @href='http://localhost:4210/?s=Components&ss=%3CInputGroup%3E'
           >
@@ -69,7 +92,6 @@ export default class BreadcrumbUsage extends Component {
           </B>
           <BreadcrumbSeparator @variant='slash' />
           <B
-            @size='tall'
             @as='anchor'
             @href='http://localhost:4210/?s=Components&ss=%3CInputGroup%3E'
           >
@@ -77,7 +99,6 @@ export default class BreadcrumbUsage extends Component {
           </B>
           <BreadcrumbSeparator @variant='slash' />
           <B
-            @size='tall'
             @as='anchor'
             @href='http://localhost:4210/?s=Components&ss=%3CInput%3E'
           >
