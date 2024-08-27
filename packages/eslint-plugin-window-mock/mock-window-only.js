@@ -2,7 +2,7 @@ module.exports = {
   meta: {
     type: 'problem',
     docs: {
-      description: 'Disallow direct use of localStorage',
+      description: 'Enforce use of window mock localStorage',
       category: 'Best Practices',
       recommended: true,
     },
@@ -35,7 +35,7 @@ module.exports = {
           context.report({
             node,
             message:
-              'Use window.localStorage instead of directly accessing localStorage',
+              'Use ember-window-mock window.localStorage instead of directly accessing localStorage',
             fix(fixer) {
               const fixes = [fixer.insertTextBefore(node, 'window.')];
 
