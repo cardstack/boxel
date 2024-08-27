@@ -161,11 +161,11 @@ export class Worker {
   }
 
   async run() {
-    await this.#queue.start();
     await Promise.all([
       this.#queue.register(`from-scratch-index`, this.fromScratch),
       this.#queue.register(`incremental-index`, this.incremental),
     ]);
+    await this.#queue.start();
   }
 
   private async prepareAndRunJob<T>(
