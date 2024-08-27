@@ -14,13 +14,21 @@ class FittedTemplate extends Component<typeof Pet> {
     <div class='fitted-template'>
       {{#if @model}}
         <h3 class='title'><@fields.firstName /></h3>
-        <div class='details'>
-          <span>Favorite Toy:
-            <@fields.favoriteToy /></span>
-          <span>Favorite Treat:
-            <@fields.favoriteTreat /></span>
-          <span>Sleeps On The Couch:
-            <@fields.sleepsOnTheCouch /></span>
+        <div class='content'>
+          <div class='info'>
+            <div class='info-item'>
+              <span class='label'>Favorite Toy</span>
+              <span><@fields.favoriteToy /></span>
+            </div>
+            <div class='info-item'>
+              <span class='label'>Favorite Treat</span>
+              <span><@fields.favoriteTreat /></span>
+            </div>
+            <div class='info-item'>
+              <span class='label'>Sleeps On The Couch</span>
+              <span><@fields.sleepsOnTheCouch /></span>
+            </div>
+          </div>
         </div>
       {{else}}
         {{! empty links-to field }}
@@ -36,34 +44,67 @@ class FittedTemplate extends Component<typeof Pet> {
         padding: var(--boxel-sp-xxs);
         gap: var(--boxel-sp-xxs);
         height: 100%;
+        padding: 5px;
       }
       .title {
         overflow: hidden;
         text-overflow: ellipsis;
+        display: -webkit-box;
         -webkit-box-orient: vertical;
         -webkit-line-clamp: 2;
         text-align: center;
         margin: 0;
         width: 100%;
       }
-      .details {
+      .content {
+        overflow: scroll;
+        width: 100%;
+        padding: var(--boxel-sp-xs);
+      }
+      .info {
         display: flex;
-        flex-wrap: wrap;
+        gap: var(--boxel-sp-xs);
+      }
+      .info-item {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-sm);
+      }
+      .info-item > span {
+        width: fit-content;
+        white-space: nowrap;
+      }
+      .label {
+        font: 500 var(--boxel-font-xs);
+        color: var(--boxel-450);
+        line-height: 1.27;
+        letter-spacing: 0.11px;
       }
 
       @container fitted-card (aspect-ratio <= 1.0) and ((width < 150px) and (height < 150px)) {
-        .details {
+        .content {
           display: none;
         }
       }
 
       @container fitted-card (1.0 < aspect-ratio <= 2.0) and (width < 200px) {
-        .details {
+        .content {
           display: none;
         }
       }
 
+      @container fitted-card (2.0 < aspect-ratio) {
+        .title {
+          font: 700 var(--boxel-font-sm);
+          line-height: 1.27;
+          letter-spacing: 0.11px;
+        }
+      }
+
       @container fitted-card (2.0 < aspect-ratio) and (height <= 58px) {
+        .fitted-template {
+          padding: 0;
+        }
         .title {
           font: 700 var(--boxel-font-xs);
           line-height: 1.27;
@@ -72,7 +113,7 @@ class FittedTemplate extends Component<typeof Pet> {
       }
 
       @container fitted-card (2.0 < aspect-ratio) and (height < 115px) {
-        .details {
+        .content {
           display: none;
         }
       }
