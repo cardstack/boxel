@@ -3,6 +3,7 @@ import {
   Kind,
   FileRef,
   createResponse,
+  unixTime,
   type ResponseWithNodeStream,
   type TokenClaims,
 } from '@cardstack/runtime-common';
@@ -103,7 +104,7 @@ export class NodeAdapter implements RealmAdapter {
       return undefined;
     }
 
-    return stat.mtime.getTime();
+    return unixTime(stat.mtime.getTime());
   }
 
   async openFile(path: string): Promise<FileRef | undefined> {
@@ -128,7 +129,7 @@ export class NodeAdapter implements RealmAdapter {
         }
         return lazyStream;
       },
-      lastModified: stat.mtime.getTime(),
+      lastModified: unixTime(stat.mtime.getTime()),
     };
   }
 
@@ -140,7 +141,7 @@ export class NodeAdapter implements RealmAdapter {
     ensureFileSync(absolutePath);
     writeFileSync(absolutePath, contents);
     let { mtime } = statSync(absolutePath);
-    return { lastModified: mtime.getTime() };
+    return { lastModified: unixTime(mtime.getTime()) };
   }
 
   async remove(path: LocalPath): Promise<void> {

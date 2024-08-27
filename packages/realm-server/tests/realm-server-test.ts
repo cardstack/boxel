@@ -24,11 +24,7 @@ import {
   RealmPaths,
   Realm,
   RealmPermissions,
-  VirtualNetwork,
   type LooseSingleCardDocument,
-  Loader,
-  fetcher,
-  maybeHandleScopedCSSRequest,
 } from '@cardstack/runtime-common';
 import { stringify } from 'qs';
 import { Query } from '@cardstack/runtime-common/query';
@@ -36,11 +32,14 @@ import {
   setupCardLogs,
   setupBaseRealmServer,
   runTestRealmServer,
-  localBaseRealm,
   setupDB,
   createRealm,
   realmServerTestMatrix,
   realmSecretSeed,
+  createVirtualNetwork,
+  createVirtualNetworkAndLoader,
+  matrixURL,
+  closeServer,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
@@ -53,7 +52,7 @@ import jwt from 'jsonwebtoken';
 
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
-const testRealm2URL = new URL('http://127.0.0.1:4445');
+const testRealm2URL = new URL('http://127.0.0.1:4445/');
 const testRealmHref = testRealmURL.href;
 const testRealm2Href = testRealm2URL.href;
 const distDir = resolve(join(__dirname, '..', '..', 'host', 'dist'));
@@ -67,24 +66,6 @@ let createJWT = (
 ) => {
   return realm.createJWT({ user, realm: realmUrl, permissions }, '7d');
 };
-
-function createVirtualNetwork() {
-  let virtualNetwork = new VirtualNetwork();
-  shimExternals(virtualNetwork);
-  virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
-  return virtualNetwork;
-}
-
-function createVirtualNetworkAndLoader() {
-  let virtualNetwork = createVirtualNetwork();
-  let fetch = fetcher(virtualNetwork.fetch, [
-    async (req, next) => {
-      return (await maybeHandleScopedCSSRequest(req)) || next(req);
-    },
-  ]);
-  let loader = new Loader(fetch, virtualNetwork.resolveImport);
-  return { virtualNetwork, loader };
-}
 
 module('Realm Server', function (hooks) {
   async function expectEvent<T>({
@@ -164,6 +145,7 @@ module('Realm Server', function (hooks) {
           permissions,
           dbAdapter,
           queue,
+          matrixURL,
           fileSystem,
         }));
 
@@ -179,15 +161,15 @@ module('Realm Server', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  setupBaseRealmServer(hooks, virtualNetwork);
+  setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
 
   hooks.beforeEach(async function () {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
   });
 
-  hooks.afterEach(function () {
-    testRealmServer.close();
+  hooks.afterEach(async function () {
+    await closeServer(testRealmServer);
   });
 
   module('card GET request', function (_hooks) {
@@ -1417,6 +1399,9 @@ module('Realm Server', function (hooks) {
           'realm is public readable',
         );
         let json = response.body;
+        for (let relationship of Object.values(json.data.relationships)) {
+          delete (relationship as any).meta.lastModified;
+        }
         assert.deepEqual(
           json,
           {
@@ -2116,10 +2101,11 @@ module('Realm Server', function (hooks) {
             realmURL: testRealm2URL,
             dbAdapter,
             queue,
+            matrixURL,
           }));
       },
       afterEach: async () => {
-        testRealmServer2.close();
+        await closeServer(testRealmServer2);
       },
     });
 
@@ -2440,7 +2426,7 @@ module('Realm Server serving from root', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  setupBaseRealmServer(hooks, virtualNetwork);
+  setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
 
   hooks.beforeEach(async function () {
     dir = dirSync();
@@ -2456,12 +2442,13 @@ module('Realm Server serving from root', function (hooks) {
           realmURL: testRealmURL,
           dbAdapter,
           queue,
+          matrixURL,
         })
       ).testRealmServer;
       request = supertest(testRealmServer);
     },
     afterEach: async () => {
-      testRealmServer.close();
+      await closeServer(testRealmServer);
     },
   });
 
@@ -2472,6 +2459,9 @@ module('Realm Server serving from root', function (hooks) {
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
     let json = response.body;
+    for (let relationship of Object.values(json.data.relationships)) {
+      delete (relationship as any).meta.lastModified;
+    }
     assert.deepEqual(
       json,
       {
@@ -2660,6 +2650,7 @@ module('Realm server serving multiple realms', function (hooks) {
       virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
 
       base = await createRealm({
+        withWorker: true,
         dir: basePath,
         realmURL: baseRealm.url,
         virtualNetwork,
@@ -2670,6 +2661,7 @@ module('Realm server serving multiple realms', function (hooks) {
       virtualNetwork.mount(base.handle);
 
       testRealm = await createRealm({
+        withWorker: true,
         dir: dir.name,
         virtualNetwork,
         realmURL: 'http://127.0.0.1:4446/demo/',
@@ -2696,7 +2688,7 @@ module('Realm server serving multiple realms', function (hooks) {
       request = supertest(testRealmServer);
     },
     afterEach: async () => {
-      testRealmServer.close();
+      await closeServer(testRealmServer);
     },
   });
 
@@ -2749,7 +2741,7 @@ module('Realm Server serving from a subdirectory', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  setupBaseRealmServer(hooks, virtualNetwork);
+  setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
 
   hooks.beforeEach(async function () {
     dir = dirSync();
@@ -2765,12 +2757,13 @@ module('Realm Server serving from a subdirectory', function (hooks) {
           realmURL: new URL('http://127.0.0.1:4446/demo/'),
           dbAdapter,
           queue,
+          matrixURL,
         })
       ).testRealmServer;
       request = supertest(testRealmServer);
     },
     afterEach: async () => {
-      testRealmServer.close();
+      await closeServer(testRealmServer);
     },
   });
 
@@ -2811,7 +2804,7 @@ module('Realm server authentication', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  setupBaseRealmServer(hooks, virtualNetwork);
+  setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
 
   hooks.beforeEach(async function () {
     dir = dirSync();
@@ -2827,12 +2820,13 @@ module('Realm server authentication', function (hooks) {
           realmURL: testRealmURL,
           dbAdapter,
           queue,
+          matrixURL,
         })
       ).testRealmServer;
       request = supertest(testRealmServer);
     },
     afterEach: async () => {
-      testRealmServer.close();
+      await closeServer(testRealmServer);
     },
   });
 

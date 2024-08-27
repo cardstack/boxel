@@ -8,16 +8,15 @@ NODE_NO_WARNINGS=1 \
   ts-node \
   --transpileOnly main \
   --port=3000 \
+  --matrixURL='https://matrix.boxel.ai' \
   \
   --path='/persistent/base' \
-  --matrixURL='https://matrix.boxel.ai' \
   --username='base_realm' \
   --distURL='https://boxel-host.boxel.ai' \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl='https://app.boxel.ai/base/' \
   \
   --path='/persistent/experiments' \
-  --matrixURL='https://matrix.boxel.ai' \
   --username='experiments_realm' \
   --fromUrl='https://app.boxel.ai/experiments/' \
   --toUrl='https://app.boxel.ai/experiments/'
