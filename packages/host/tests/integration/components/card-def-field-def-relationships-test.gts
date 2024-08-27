@@ -487,10 +487,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
         'linked card content is correct',
       );
 
-    await triggerEvent(
-      `[data-test-overlay-card="${testRealmURL}usd"]`,
-      'mouseenter',
-    );
+    await triggerEvent(`[data-test-card="${testRealmURL}usd"]`, 'mouseenter');
     assert
       .dom(
         `[data-test-overlay-card="${testRealmURL}usd"] [data-test-overlay-edit]`,

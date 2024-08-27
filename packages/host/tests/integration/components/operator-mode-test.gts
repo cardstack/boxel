@@ -1830,12 +1830,20 @@ module('Integration | operator-mode', function (hooks) {
     );
     assert.dom('[data-test-overlay-selected]').doesNotExist();
 
+    await triggerEvent(
+      `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`,
+      'mouseenter',
+    );
     await click(`[data-test-overlay-select="${testRealmURL}Person/fadhlan"]`);
     assert
       .dom(`[data-test-overlay-selected="${testRealmURL}Person/fadhlan"]`)
       .exists();
     assert.dom('[data-test-overlay-selected]').exists({ count: 1 });
 
+    await triggerEvent(
+      `[data-test-cards-grid-item="${testRealmURL}Pet/jackie"]`,
+      'mouseenter',
+    );
     await click(`[data-test-overlay-select="${testRealmURL}Pet/jackie"]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Author/1"]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}BlogPost/2"]`);
@@ -1903,8 +1911,6 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       },
     );
-
-    await waitFor(`[data-test-overlay-card="${testRealmURL}Author/1"]`);
 
     await click('[data-test-author]');
     await waitFor('[data-test-stack-card-index="1"]');
@@ -2520,9 +2526,10 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-item="1"]`).hasText('Buzz');
     assert.dom(`[data-test-item="2"]`).hasText('Jackie');
 
+    await triggerEvent(`[data-test-item="0"]`, 'mouseenter');
     let itemElement = document.querySelector('[data-test-item="0"]');
     let overlayButtonElements = document.querySelectorAll(
-      `[data-test-overlay-card="${testRealmURL}Pet/woody"]`,
+      `[data-test-card="${testRealmURL}Pet/woody"]`,
     );
     if (
       !itemElement ||
