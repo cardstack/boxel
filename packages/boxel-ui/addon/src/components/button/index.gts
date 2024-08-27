@@ -21,7 +21,7 @@ export type BoxelButtonSize =
   | 'tall'
   | 'touch';
 
-interface Signature {
+export interface Signature {
   Args: {
     as?: string;
     class?: string;

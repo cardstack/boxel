@@ -1,60 +1,70 @@
 import Component from '@glimmer/component';
-import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import type { ComponentLike } from '@glint/template';
-
-export type BoxelButtonKind =
-  | 'primary'
-  | 'secondary-dark'
-  | 'secondary-light'
-  | 'danger'
-  | 'primary-dark'
-  | 'text-only';
-
-export type BoxelButtonSize =
-  | 'extra-small'
-  | 'small'
-  | 'base'
-  | 'tall'
-  | 'touch';
+import { Signature as BoxelButtonSignature } from '../button/index.gts';
+import { BoxelButton } from '@cardstack/boxel-ui/components';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { eq } from '@cardstack/boxel-ui/helpers';
+import { CaretRight, Slash } from '@cardstack/boxel-ui/icons';
 
 interface Signature {
   Args: {};
   Blocks: {
-    default: [ComponentLike<BreadcrumbItemSignature>];
+    default: [ComponentLike<BoxelButtonSignature>];
   };
-  Element: HTMLButtonElement | HTMLAnchorElement;
+  Element: HTMLDivElement;
 }
 
 export default class Breadcrumb extends Component<Signature> {
   <template>
-    <div>
-      <ol class='breadcrumb-list'>
-        {{yield (component BreadcrumbItem)}}
-      </ol>
+    <div class='breadcrumb-list' data-test-breadcrumb-list>
+      {{yield (component BreadcrumbItem)}}
     </div>
     <style>
       .breadcrumb-list {
+        --boxel-button-border-color: transparent;
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 1rem;
         list-style: none;
       }
     </style>
   </template>
 }
 
-export interface BreadcrumbItemSignature {
+const BreadcrumbItem = BoxelButton;
+
+type SeparatorVariant = 'caretRight' | 'slash';
+
+interface SeparatorSignature {
   Args: {
-    className?: string;
-    isOpen?: boolean;
-    onClick?: (event: MouseEvent) => void;
+    variant: SeparatorVariant;
   };
   Blocks: {
-    content: [];
+    default: [];
   };
   Element: HTMLDivElement;
 }
 
-const BreadcrumbItem: TemplateOnlyComponent<BreadcrumbItemSignature> =
-  <template>{{yield to='content'}}</template>;
+export const BreadcrumbSeparator: TemplateOnlyComponent<SeparatorSignature> =
+  <template>
+    <div class='breadcrumb-separator'>
+      {{#if (eq @variant 'caretRight')}}
+        <CaretRight role='presentation' />
+      {{else if (eq @variant 'slash')}}
+        <Slash role='presentation' />
+      {{/if}}
+    </div>
+    <style>
+      .breadcrumb-separator {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+      }
+      .breadcrumb-separator svg {
+        width: 100%;
+        height: 100%;
+        max-height: 2em; /* Limits the height to the line height of the text */
+      }
+    </style>
+  </template>;

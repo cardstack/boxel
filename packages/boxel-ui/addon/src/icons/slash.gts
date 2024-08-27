@@ -14,10 +14,10 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
       stroke-linecap='round'
       stroke-linejoin='round'
       stroke-width='2'
-      d='m6 4 4 4-4 4'
+      d='m10 4-4 8'
     /></svg>
 </template>;
 
 // @ts-expect-error this is the only way to set a name on a Template Only Component currently
-IconComponent.name = 'CaretRight';
+IconComponent.name = 'Slash';
 export default IconComponent;
