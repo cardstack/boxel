@@ -8,8 +8,8 @@ import { Resource } from 'ember-resources';
 
 import {
   logger,
-  Relationship,
   SupportedMimeType,
+  type Relationship,
 } from '@cardstack/runtime-common';
 
 import type LoaderService from '../services/loader-service';
