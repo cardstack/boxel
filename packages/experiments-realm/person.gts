@@ -35,10 +35,12 @@ class FittedTemplate extends Component<typeof Person> {
         align-items: center;
         gap: var(--boxel-sp-xxs);
         height: 100%;
+        padding: 5px;
       }
       .title {
         overflow: hidden;
         text-overflow: ellipsis;
+        display: -webkit-box;
         -webkit-box-orient: vertical;
         -webkit-line-clamp: 2;
         text-align: center;
@@ -62,6 +64,9 @@ class FittedTemplate extends Component<typeof Person> {
       }
 
       @container fitted-card (aspect-ratio <= 1.0) and ((width < 150px) or (height < 150px)) {
+        .fitted-template {
+          gap: 5px;
+        }
         .details {
           display: none;
         }
@@ -89,6 +94,9 @@ class FittedTemplate extends Component<typeof Person> {
       }
 
       @container fitted-card (2.0 < aspect-ratio) and (height <= 58px) {
+        .fitted-template {
+          padding: 0;
+        }
         .title {
           font: 700 var(--boxel-font-xs);
           line-height: 1.27;
