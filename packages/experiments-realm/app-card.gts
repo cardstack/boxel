@@ -43,16 +43,16 @@ export class Tab extends FieldDef {
 }
 
 class AppCardIsolated extends Component<typeof AppCard> {
-  @action async setupInitialTabs(moduleId: string) {
+  async setupInitialTabs() {
     this.errorMessage = '';
-    if (!this.currentRealm) {
-      this.errorMessage = 'Realm url is not available.';
+    if (!this.args.model.moduleId) {
+      this.errorMessage = 'ModuleId is not available.';
       return;
     }
     let loader: Loader = (import.meta as any).loader;
     let module;
     try {
-      module = await loader.import(moduleId);
+      module = await loader.import(this.args.model.moduleId);
     } catch (e) {
       console.error(e);
       this.errorMessage =
@@ -74,9 +74,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
           tabId: name,
           ref: {
             name,
-            module: moduleId
-              .replace('../', this.currentRealm.href)
-              .replace('.gts', ''),
+            module: this.args.model.moduleId,
           },
           isTable: false,
         }),
@@ -251,11 +249,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
   constructor(owner: Owner, args: any) {
     super(owner, args);
     if (!this.tabs?.length) {
-      if (!this.args.model.moduleId) {
-        this.errorMessage = 'ModuleId is not available.';
-        return;
-      }
-      this.setupInitialTabs(this.args.model.moduleId);
+      this.setupInitialTabs();
       return;
     }
     this.setTab();

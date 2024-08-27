@@ -45,7 +45,15 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
             </div>
             <h1><@fields.title /></h1>
           </div>
-          {{#if @context.actions.runCommand}}
+          {{#if @model.moduleURL}}
+            <Button
+              {{on 'click' this.reset}}
+              class='generate-button'
+              @kind='primary-dark'
+            >
+              Reset
+            </Button>
+          {{else if @context.actions.runCommand}}
             <Button
               {{on 'click' this.generateApp}}
               class='generate-button'
@@ -56,7 +64,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
               {{#unless this._generateCode.isRunning}}
                 <span class='generate-button-logo' />
               {{/unless}}
-              {{if @model.moduleURL 'Regenerate App' 'Generate App Now'}}
+              Generate App Now
             </Button>
           {{/if}}
         </div>
@@ -83,10 +91,10 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
           </details>
         {{/if}}
         {{#if @model.moduleURL}}
-          <details open={{bool @model.appCard}}>
+          <details open={{bool @model.appInstances}}>
             <summary><span>App</span></summary>
             <div class='details-content'>
-              <@fields.appCard />
+              <@fields.appInstances />
               {{#if @context.actions.createCard}}
                 <Button
                   {{on 'click' this.createInstance}}
@@ -247,9 +255,6 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
   private _generateCode = restartableTask(async () => {
     this.errorMessage = '';
     try {
-      if (!this.currentRealm) {
-        throw new Error('Realm URL is not available');
-      }
       if (!this.args.context?.actions?.runCommand) {
         throw new Error('Context action "runCommand" is not available');
       }
@@ -279,8 +284,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
       }
       let { moduleURL } = this.args.model;
       let loader = (import.meta as any).loader;
-      let url = `${moduleURL.replace('../', this.currentRealm.href)}`;
-      let module = await loader.import(url);
+      let module = await loader.import(moduleURL);
       let appCard = Object.entries(module).find(
         ([_, declaration]) =>
           declaration &&
@@ -292,7 +296,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
         throw new Error('Could not find app card in module');
       }
       let moduleRef = {
-        module: url,
+        module: moduleURL,
         name: appCard[0],
       };
 
@@ -305,7 +309,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
             data: {
               attributes: {
                 title: this.args.model.appTitle,
-                moduleId: url,
+                moduleId: moduleURL,
               },
               meta: { adoptsFrom: moduleRef },
             },
@@ -316,10 +320,9 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
       if (!card) {
         throw new Error('Could not create card');
       }
-      this.args.model.appCard = [
-        ...(this.args.model.appCard ?? []),
-        card as AppCard,
-      ];
+      let { appInstances } = this.args.model;
+      let apps = [...(appInstances ?? []), card] as AppCard[];
+      this.args.model.appInstances = apps;
     } catch (e) {
       console.error(e);
       this.errorMessage =
@@ -329,10 +332,6 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
 
   @action viewModule() {
     this.errorMessage = '';
-    if (!this.currentRealm) {
-      this.errorMessage = 'Realm URL is not available';
-      return;
-    }
     if (!this.args.model.moduleURL) {
       this.errorMessage = 'Module url is not available';
       return;
@@ -343,14 +342,14 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
       return;
     }
     this.args.context.actions.changeSubmode(
-      new URL(
-        `${this.args.model.moduleURL.replace(
-          '../',
-          this.currentRealm.href,
-        )}.gts`,
-      ),
+      new URL(this.args.model.moduleURL),
       'code',
     );
+  }
+
+  @action reset() {
+    this.args.model.moduleURL = undefined;
+    this.args.model.appInstances = undefined;
   }
 }
 
@@ -364,7 +363,7 @@ export class ProductRequirementDocument extends CardDef {
   @field schema = contains(MarkdownField);
   @field layoutAndNavigation = contains(MarkdownField);
   @field moduleURL = contains(StringField);
-  @field appCard = linksToMany(AppCard);
+  @field appInstances = linksToMany(AppCard);
   @field title = contains(StringField, {
     computeVia: function (this: ProductRequirementDocument) {
       return this.appTitle ?? 'Untitled App';
