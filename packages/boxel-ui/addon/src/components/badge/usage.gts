@@ -21,7 +21,7 @@ export default class BadgeUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.String
-          @name='kind'
+          @name='variant'
           @optional={{true}}
           @description='Controls the style of the badge'
           @defaultValue={{'default'}}
