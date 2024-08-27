@@ -67,6 +67,7 @@ export default class CardService extends Service {
     return this.loaderToCardAPILoadingCache.get(loader)!;
   }
 
+  // TODO remove in a followup PR for CS-7036
   realmURLs = new TrackedArray<string>(testRealmURLs);
 
   // Note that this should be the unresolved URL and that we need to rely on our
