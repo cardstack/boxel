@@ -45,6 +45,10 @@ export class Tab extends FieldDef {
 class AppCardIsolated extends Component<typeof AppCard> {
   @action async setupInitialTabs(moduleId: string) {
     this.errorMessage = '';
+    if (!this.currentRealm) {
+      this.errorMessage = 'Realm url is not available.';
+      return;
+    }
     let loader: Loader = (import.meta as any).loader;
     let module;
     try {
@@ -70,7 +74,9 @@ class AppCardIsolated extends Component<typeof AppCard> {
           tabId: name,
           ref: {
             name,
-            module: moduleId.replace('.gts', ''),
+            module: moduleId
+              .replace('../', this.currentRealm.href)
+              .replace('.gts', ''),
           },
           isTable: false,
         }),
