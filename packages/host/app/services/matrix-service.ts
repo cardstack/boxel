@@ -6,6 +6,7 @@ import { cached, tracked } from '@glimmer/tracking';
 import format from 'date-fns/format';
 
 import { task } from 'ember-concurrency';
+import window from 'ember-window-mock';
 import {
   type LoginResponse,
   type MatrixEvent,
@@ -890,16 +891,16 @@ export default class MatrixService
 }
 
 function saveAuth(auth: LoginResponse) {
-  localStorage.setItem('auth', JSON.stringify(auth));
+  window.localStorage.setItem('auth', JSON.stringify(auth));
 }
 
 function clearAuth() {
-  localStorage.removeItem('auth');
-  localStorage.removeItem(currentRoomIdPersistenceKey);
+  window.localStorage.removeItem('auth');
+  window.localStorage.removeItem(currentRoomIdPersistenceKey);
 }
 
 function getAuth(): LoginResponse | undefined {
-  let auth = localStorage.getItem('auth');
+  let auth = window.localStorage.getItem('auth');
   if (!auth) {
     return;
   }

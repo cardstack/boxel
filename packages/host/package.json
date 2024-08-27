@@ -136,6 +136,7 @@
     "eslint-plugin-prettier": "^5.0.1",
     "eslint-plugin-qunit": "^8.0.1",
     "eslint-plugin-qunit-dom": "mainmatter/eslint-plugin-qunit-dom#d66c841",
+    "eslint-plugin-window-mock": "workspace:*",
     "ethers": "^6.6.2",
     "fast-json-stable-stringify": "^2.1.0",
     "filesize": "^10.0.12",

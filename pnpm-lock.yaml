@@ -999,6 +999,8 @@ importers:
         specifier: ^5.89.0
         version: 5.89.0
 
+  packages/eslint-plugin-window-mock: {}
+
   packages/experiments-realm:
     devDependencies:
       '@cardstack/boxel-ui':
@@ -1343,6 +1345,9 @@ importers:
       eslint-plugin-qunit-dom:
         specifier: mainmatter/eslint-plugin-qunit-dom#d66c841
         version: github.com/mainmatter/eslint-plugin-qunit-dom/d66c841(eslint@8.57.0)
+      eslint-plugin-window-mock:
+        specifier: workspace:*
+        version: link:../eslint-plugin-window-mock
       ethers:
         specifier: ^6.6.2
         version: 6.6.2
