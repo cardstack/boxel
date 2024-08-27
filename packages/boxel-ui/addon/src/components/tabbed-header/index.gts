@@ -6,12 +6,17 @@ import { tracked } from '@glimmer/tracking';
 
 import { getContrastColor } from '../../helpers/contrast-color.ts';
 import cssVar from '../../helpers/css-var.ts';
-import { eq } from '../../helpers/truth-helpers.ts';
+import { eq, not, or } from '../../helpers/truth-helpers.ts';
+import cn from '../../helpers/cn.ts';
+import { concat } from '@ember/helper';
+
+export type BoxelTabVariant = 'default' | 'pills';
 
 interface Signature {
   Args: {
     activeTabIndex?: number;
     headerBackgroundColor?: string;
+    variant?: BoxelTabVariant;
     onSetActiveTab?: (index: number) => void;
     tabs?: Array<{
       displayName: string;
@@ -27,6 +32,8 @@ interface Signature {
 }
 
 export default class TabbedHeader extends Component<Signature> {
+  defaultVariant: BoxelTabVariant = 'default';
+
   <template>
     <header
       class='app-header'
@@ -42,13 +49,24 @@ export default class TabbedHeader extends Component<Signature> {
         <h1 class='app-title'>{{@title}}</h1>
       </div>
       <nav class='app-nav'>
-        <ul class='app-tab-list'>
+        <ul
+          class={{cn
+            (if
+              (or (eq @variant 'default') (eq @variant '') (not @variant))
+              'app-tab-list'
+            )
+            (if (eq @variant 'pills') 'app-tab-list-pills')
+          }}
+        >
           {{#each @tabs as |tab index|}}
             <li>
               <a
                 href='#{{tab.tabId}}'
                 {{on 'click' (fn this.setActiveTab index)}}
-                class={{if (eq this.activeTabIndex index) 'active'}}
+                class={{cn
+                  (concat 'variant-' (if @variant @variant this.defaultVariant))
+                  (if (eq this.activeTabIndex index) 'active')
+                }}
                 data-tab-label={{tab.displayName}}
                 {{! do not remove data-tab-label attribute }}
               >
@@ -115,6 +133,38 @@ export default class TabbedHeader extends Component<Signature> {
         user-select: none;
         pointer-events: none;
         font-weight: 700;
+      }
+
+      .app-tab-list-pills {
+        list-style-type: none;
+        padding: var(--boxel-sp-4xs);
+        margin: 0;
+        display: flex;
+        flex-flow: row wrap;
+        gap: var(--boxel-sp-5xs);
+      }
+      a.variant-pills {
+        height: 100%;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
+        border-bottom: 0px;
+        background: var(--boxel-100);
+        border-radius: var(--boxel-border-radius-xs);
+        transition:
+          border-bottom-color 0.3s ease-in-out,
+          font-weight 0.3s ease-in-out;
+      }
+      a.variant-pills.active {
+        color: var(--boxel-light);
+        background: var(--boxel-teal);
+        font-weight: 700;
+      }
+      a.variant-pills:hover:not(:disabled) {
+        color: var(--header-text-color, var(--boxel-dark));
+        font-weight: 700;
+      }
+      /* this prevents layout shift when text turns bold on hover/active */
+      a.variant-pills::after {
+        content: '';
       }
     </style>
   </template>
