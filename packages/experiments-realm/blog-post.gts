@@ -8,6 +8,8 @@ import {
   Component,
 } from 'https://cardstack.com/base/card-api';
 import { Author } from './author';
+import { markdownToHtml } from '@cardstack/runtime-common';
+import { htmlSafe } from '@ember/template';
 
 class FittedTemplate extends Component<typeof BlogPost> {
   <template>
@@ -20,7 +22,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
             {{@model.authorBio.lastName}}</span>
         </div>
         <div class='content'>
-          <p class='body' data-test-blog-post-body>{{@model.body}}</p>
+          {{htmlSafe (markdownToHtml @model.body)}}
         </div>
       {{else}}
         {{! empty links-to field }}
@@ -61,21 +63,21 @@ class FittedTemplate extends Component<typeof BlogPost> {
         white-space: nowrap;
       }
       .content {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 6;
         width: 100%;
+        overflow: hidden;
+        -webkit-mask-image: linear-gradient(
+          to bottom,
+          black 90%,
+          transparent 100%
+        );
+        mask-image: linear-gradient(to bottom, black 90%, transparent 100%);
       }
 
       /* Aspect Ratio <= 1.0 */
-      @container fitted-card (aspect-ratio <= 1.0) and ((width < 180px) and (height < 200px)) {
-        .content {
-          -webkit-line-clamp: 4;
-        }
-      }
       @container fitted-card (aspect-ratio <= 1.0) and ((width < 150px) and (height < 150px)) {
+        .fitted-template {
+          justify-content: center;
+        }
         .title {
           font: 700 var(--boxel-font-xs);
           line-height: 1.27;
@@ -86,10 +88,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
           margin: 0;
         }
         .content {
-          -webkit-line-clamp: 3;
-        }
-        .body {
-          font: 500 var(--boxel-font-xs);
+          display: none;
         }
       }
 
