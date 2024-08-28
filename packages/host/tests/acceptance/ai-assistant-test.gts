@@ -7,8 +7,6 @@ import { module, test } from 'qunit';
 
 import { GridContainer } from '@cardstack/boxel-ui/components';
 
-import { baseRealm } from '@cardstack/runtime-common';
-
 import {
   setupLocalIndexing,
   setupServerSentEvents,
@@ -16,8 +14,20 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
-  lookupLoaderService,
 } from '../helpers';
+
+import {
+  CardDef,
+  Component,
+  CardsGrid,
+  contains,
+  linksTo,
+  linksToMany,
+  field,
+  setupBaseRealm,
+  StringField,
+} from '../helpers/base-realm';
+
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
 
 async function selectCardFromCatalog(cardId: string) {
@@ -87,6 +97,7 @@ async function assertMessages(
 
 module('Acceptance | AI Assistant tests', function (hooks) {
   setupApplicationTest(hooks);
+  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
@@ -94,18 +105,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
   setupMatrixServiceMock(hooks);
 
   hooks.beforeEach(async function () {
-    let loader = lookupLoaderService().loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
-
-    let { field, contains, linksTo, linksToMany, CardDef, Component } = cardApi;
-    let { default: StringField } = string;
-    let { CardsGrid } = cardsGrid;
-
     class Pet extends CardDef {
       static displayName = 'Pet';
       @field name = contains(StringField);
