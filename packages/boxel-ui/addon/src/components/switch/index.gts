@@ -5,12 +5,13 @@ import { on } from '@ember/modifier';
 interface SwitchArgs {
   isEnabled: boolean;
   onToggle: () => void;
+  disabled?: boolean;
 }
 
 export default class Switch extends Component<SwitchArgs> {
   <template>
     <label
-      class={{cn 'switch' checked=@isEnabled}}
+      class={{cn 'switch' checked=@isEnabled disabled=@disabled}}
       data-test-switch-checked={{if @isEnabled 'on' 'off'}}
     >
       <input
@@ -19,6 +20,7 @@ export default class Switch extends Component<SwitchArgs> {
         class='switch-input'
         type='checkbox'
         checked={{@isEnabled}}
+        disabled={{@disabled}}
       />
     </label>
 
@@ -59,6 +61,12 @@ export default class Switch extends Component<SwitchArgs> {
       .switch:hover,
       .switch-input:hover {
         cursor: pointer;
+      }
+      .switch.disabled {
+        opacity: 0.5;
+      }
+      .switch.disabled .switch-input {
+        cursor: not-allowed;
       }
     </style>
   </template>

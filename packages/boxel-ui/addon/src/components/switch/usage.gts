@@ -12,7 +12,7 @@ import { cssVar } from '@cardstack/boxel-ui/helpers';
 
 export default class SwitchUsage extends Component {
   @tracked isEnabled = false;
-  @tracked isNotifications = true;
+  @tracked isDisabled = false;
 
   @action
   toggleEnabled() {
@@ -36,6 +36,7 @@ export default class SwitchUsage extends Component {
           <Switch
             @isEnabled={{this.isEnabled}}
             @onToggle={{this.toggleEnabled}}
+            @disabled={{this.isDisabled}}
           />
         </:example>
         <:api as |Args|>
@@ -44,6 +45,12 @@ export default class SwitchUsage extends Component {
             @defaultValue={{false}}
             @value={{this.isEnabled}}
             @onInput={{fn (mut this.isEnabled)}}
+          />
+          <Args.Bool
+            @name='disabled'
+            @defaultValue={{false}}
+            @value={{this.isDisabled}}
+            @onInput={{fn (mut this.isDisabled)}}
           />
         </:api>
         <:cssVars as |Css|>
