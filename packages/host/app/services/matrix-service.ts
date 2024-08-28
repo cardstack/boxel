@@ -71,6 +71,9 @@ import RealmService from './realm';
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
 
+import type MatrixSDKLoader from './matrix-sdk-loader';
+import type { ExtendedMatrixSDK } from './matrix-sdk-loader';
+
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
@@ -91,6 +94,7 @@ export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare realm: RealmService;
+  @service private declare matrixSdkLoader: MatrixSDKLoader;
 
   @service declare router: RouterService;
   @tracked private _client: MatrixClient | undefined;
@@ -108,7 +112,7 @@ export default class MatrixService extends Service {
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[] = [];
   timelineQueue: { event: MatrixEvent; oldEventId?: string }[] = [];
   #ready: Promise<void>;
-  #matrixSDK: typeof MatrixSDK | undefined;
+  #matrixSDK: ExtendedMatrixSDK | undefined;
   #eventBindings: [EmittedEvents, (...arg: any[]) => void][] | undefined;
   currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
     new TrackedMap();
@@ -146,8 +150,11 @@ export default class MatrixService extends Service {
   private async loadSDK() {
     await this.cardAPIModule.loaded;
     // The matrix SDK is VERY big so we only load it when we need it
-    this.#matrixSDK = await import('matrix-js-sdk');
-    this._client = this.matrixSDK.createClient({ baseUrl: matrixURL });
+    this.#matrixSDK = await this.matrixSdkLoader.load();
+    this._client = await this.matrixSDK.createClient({
+      baseUrl: matrixURL,
+    });
+
     // building the event bindings like this so that we can consistently bind
     // and unbind these events programmatically--this way if we add a new event
     // we won't forget to unbind it.
@@ -194,7 +201,7 @@ export default class MatrixService extends Service {
     return this.cardAPIModule.module as typeof CardAPI;
   }
 
-  get matrixSDK() {
+  private get matrixSDK() {
     if (!this.#matrixSDK) {
       throw new Error(`cannot use matrix SDK before it has loaded`);
     }
