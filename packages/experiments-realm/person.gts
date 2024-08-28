@@ -21,7 +21,7 @@ class FittedTemplate extends Component<typeof Person> {
           <@fields.isCool />
           Is Human:
           <@fields.isHuman /></span>
-        <div class='pet'><@fields.pet /></div>
+        <div class='pet'><@fields.pet @format='fitted' /></div>
       {{else}}
         {{! empty links-to field }}
         <div data-test-empty-field class='empty-field'></div>
@@ -60,6 +60,7 @@ class FittedTemplate extends Component<typeof Person> {
       }
       .pet {
         width: 100%;
+        height: 80px;
         padding: var(--boxel-sp-xxs);
       }
 
