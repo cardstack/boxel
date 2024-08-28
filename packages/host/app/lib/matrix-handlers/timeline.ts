@@ -106,7 +106,7 @@ async function processDecryptedEvent(
     return;
   }
 
-  let roomState = await context.getRoom(roomId);
+  let roomState = context.getRoom(roomId);
   // patch in any missing room events--this will support dealing with local
   // echoes, migrating older histories as well as handle any matrix syncing gaps
   // that might occur

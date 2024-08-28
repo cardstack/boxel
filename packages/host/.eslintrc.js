@@ -1,13 +1,19 @@
 'use strict';
 
+const { resolve } = require('path');
+
 module.exports = {
   root: true,
+  parserOptions: {
+    ecmaVersion: 'latest',
+    sourceType: 'module',
+  },
   env: {
     browser: true,
   },
   overrides: [
     {
-      files: ['**/*.{js,ts}'],
+      files: ['**/*.ts'],
       parser: '@typescript-eslint/parser',
       parserOptions: {
         ecmaVersion: 'latest',
@@ -21,6 +27,7 @@ module.exports = {
             ],
           ],
         },
+        project: [resolve(__dirname, './tsconfig.json')],
       },
       plugins: ['ember', '@typescript-eslint', 'window-mock'],
       extends: [
@@ -43,6 +50,7 @@ module.exports = {
         '@typescript-eslint/explicit-module-boundary-types': 'off',
         '@typescript-eslint/no-this-alias': 'off',
         '@typescript-eslint/no-non-null-assertion': 'off',
+        '@typescript-eslint/await-thenable': 'error',
         'no-undef': 'off',
         'ember/no-runloop': 'off',
         'window-mock/mock-window-only': 'error',

@@ -344,7 +344,7 @@ export class CurrentRun {
       log.warn(
         `encountered error loading module "${url.href}": ${err.message}`,
       );
-      let deps = await (
+      let deps = (
         await this.loaderService.loader.getConsumedModules(url.href)
       ).filter((u) => u !== url.href);
       await this.batch.updateEntry(url, {

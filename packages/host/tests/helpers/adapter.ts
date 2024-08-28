@@ -171,7 +171,7 @@ export class TestRealmAdapter implements RealmAdapter {
       // a quirk of our test file system's traverse is that it creates
       // directories as it goes--so do our best to determine if we are checking for
       // a file that exists (because of this behavior directories always exist)
-      await this.#traverse(
+      this.#traverse(
         path.split('/'),
         maybeFilename.includes('.') ? 'file' : 'directory',
       );
@@ -182,7 +182,7 @@ export class TestRealmAdapter implements RealmAdapter {
       }
       if (err.name === 'TypeMismatchError') {
         try {
-          await this.#traverse(path.split('/'), 'file');
+          this.#traverse(path.split('/'), 'file');
           return true;
         } catch (err: any) {
           if (err.name === 'NotFoundError') {

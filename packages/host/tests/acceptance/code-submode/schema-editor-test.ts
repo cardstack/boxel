@@ -582,10 +582,8 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
           ?.textContent?.includes('BigInteger'),
     );
 
-    await assert.dom('[data-test-selected-field-realm-icon] img').exists();
-    await assert
-      .dom('[data-test-selected-field-display-name]')
-      .hasText('BigInteger');
+    assert.dom('[data-test-selected-field-realm-icon] img').exists();
+    assert.dom('[data-test-selected-field-display-name]').hasText('BigInteger');
 
     await click('[data-test-choose-card-button]');
 
@@ -606,7 +604,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
           ?.textContent?.includes('Date'),
     );
 
-    await assert.dom('[data-test-selected-field-display-name]').hasText('Date');
+    assert.dom('[data-test-selected-field-display-name]').hasText('Date');
     assert.dom('[data-test-save-field-button]').hasAttribute('disabled');
 
     await fillIn('[data-test-field-name-input]', ' birth date');

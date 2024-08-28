@@ -27,7 +27,7 @@ async function selectCardFromCatalog(cardId: string) {
   await click('[data-test-card-catalog-go-button]');
 }
 
-async function assertMessages(
+function assertMessages(
   assert: Assert,
   messages: {
     from: string;
@@ -51,7 +51,7 @@ async function assertMessages(
       assert
         .dom(`[data-test-message-idx="${index}"] [data-test-message-cards]`)
         .exists({ count: 1 });
-      await assert
+      assert
         .dom(`[data-test-message-idx="${index}"] [data-test-attached-card]`)
         .exists({ count: cards.length });
       cards.map(async (card) => {
@@ -70,7 +70,7 @@ async function assertMessages(
         }
 
         if (card.realmIconUrl) {
-          await assert
+          assert
             .dom(
               `[data-test-message-idx="${index}"] [data-test-attached-card="${card.id}"] [data-test-realm-icon-url="${card.realmIconUrl}"]`,
             )
@@ -78,7 +78,7 @@ async function assertMessages(
         }
       });
     } else {
-      await assert
+      assert
         .dom(`[data-test-message-idx="${index}"] [data-test-message-cards]`)
         .doesNotExist();
     }
