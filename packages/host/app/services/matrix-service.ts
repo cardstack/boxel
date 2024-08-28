@@ -60,12 +60,7 @@ import type {
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import { Skill } from '../components/ai-assistant/skill-menu';
-import {
-  Timeline,
-  Membership,
-  addRoomEvent,
-  Context,
-} from '../lib/matrix-handlers';
+import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
 import { getCard } from '../resources/card-resource';
 import { importResource } from '../resources/import';
 
@@ -92,14 +87,7 @@ export type OperatorModeContext = {
   openCardIds: string[];
 };
 
-export interface ContextualService<C> {
-  get context(): C;
-}
-
-export default class MatrixService
-  extends Service
-  implements ContextualService<Context>
-{
+export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare realm: RealmService;
@@ -131,21 +119,6 @@ export default class MatrixService
   constructor(owner: Owner) {
     super(owner);
     this.#ready = this.loadState.perform();
-  }
-
-  get context(): Context {
-    return {
-      cardAPI: this.cardAPI,
-      flushTimeline: this.flushTimeline,
-      flushMembership: this.flushMembership,
-      roomMembershipQueue: this.roomMembershipQueue,
-      timelineQueue: this.timelineQueue,
-      client: this._client,
-      matrixSDK: this.#matrixSDK,
-      addEventReadReceipt: this.addEventReadReceipt,
-      setRoom: this.setRoom,
-      getRoom: this.getRoom,
-    };
   }
 
   addEventReadReceipt(eventId: string, receipt: { readAt: Date }) {

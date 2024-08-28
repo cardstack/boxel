@@ -277,7 +277,7 @@ function generateMockMatrixService(
           transaction_id: '1',
         },
       };
-      await addRoomEvent(this, roomEvent);
+      await addRoomEvent(this as unknown as MatrixService, roomEvent);
       return roomEvent;
     }
 
@@ -392,7 +392,7 @@ function generateMockMatrixService(
     }
 
     async createAndJoinRoom(roomId: string, name?: string) {
-      await addRoomEvent(this, {
+      await addRoomEvent(this as unknown as MatrixService, {
         event_id: 'eventname',
         room_id: roomId,
         type: 'm.room.name',
@@ -400,7 +400,7 @@ function generateMockMatrixService(
         status: null,
       });
 
-      await addRoomEvent(this, {
+      await addRoomEvent(this as unknown as MatrixService, {
         event_id: 'eventcreate',
         room_id: roomId,
         type: 'm.room.create',
@@ -412,7 +412,7 @@ function generateMockMatrixService(
         status: null,
       });
 
-      await addRoomEvent(this, {
+      await addRoomEvent(this as unknown as MatrixService, {
         event_id: 'eventjoin',
         room_id: roomId,
         type: 'm.room.member',
@@ -428,7 +428,7 @@ function generateMockMatrixService(
         status: null,
       });
 
-      await addRoomEvent(this, {
+      await addRoomEvent(this as unknown as MatrixService, {
         event_id: 'eventinvite',
         room_id: roomId,
         type: 'm.room.member',
