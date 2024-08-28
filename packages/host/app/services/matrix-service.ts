@@ -13,7 +13,6 @@ import {
   type RoomMember,
   type EmittedEvents,
   type IEvent,
-  type MatrixClient,
   type ISendEventResponse,
 } from 'matrix-js-sdk';
 import { md5 } from 'super-fast-md5';
@@ -50,7 +49,6 @@ import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack
 import { BaseDef, type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type {
-  MatrixEvent as DiscreteMatrixEvent,
   CardMessageContent,
   CardFragmentContent,
   ReactionEventContent,
@@ -72,13 +70,12 @@ import type CardService from './card-service';
 import type LoaderService from './loader-service';
 
 import type MatrixSDKLoader from './matrix-sdk-loader';
-import type { ExtendedMatrixSDK } from './matrix-sdk-loader';
+import type { ExtendedClient, ExtendedMatrixSDK } from './matrix-sdk-loader';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
 const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
-const DEFAULT_PAGE_SIZE = 50;
 const MAX_CARD_SIZE_KB = 60;
 
 const DefaultSkillCards = [`${baseRealm.url}SkillCard/card-editing`];
@@ -97,7 +94,7 @@ export default class MatrixService extends Service {
   @service private declare matrixSdkLoader: MatrixSDKLoader;
 
   @service declare router: RouterService;
-  @tracked private _client: MatrixClient | undefined;
+  @tracked private _client: ExtendedClient | undefined;
   private realmSessionTasks: Map<string, Promise<string>> = new Map(); // key: realmURL, value: promise for JWT
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
@@ -615,41 +612,13 @@ export default class MatrixService extends Service {
           addRoomEvent(this, { ...event, status: null });
         }),
       );
-      let messages = await this.allRoomMessages(roomId);
+      let messages = await this.client.allRoomMessages(roomId);
       await Promise.all(
         messages.map((event) => {
           addRoomEvent(this, { ...event, status: null });
         }),
       );
     }
-  }
-
-  async allRoomMessages(roomId: string, opts?: MessageOptions) {
-    let messages: DiscreteMatrixEvent[] = [];
-    let from: string | undefined;
-
-    do {
-      let response = await fetch(
-        `${matrixURL}/_matrix/client/v3/rooms/${roomId}/messages?dir=${
-          opts?.direction ? opts.direction.slice(0, 1) : 'f'
-        }&limit=${opts?.pageSize ?? DEFAULT_PAGE_SIZE}${
-          from ? '&from=' + from : ''
-        }`,
-        {
-          headers: {
-            Authorization: `Bearer ${this.client.getAccessToken()}`,
-          },
-        },
-      );
-      let { chunk, end } = await response.json();
-      from = end;
-      let events: DiscreteMatrixEvent[] = chunk;
-      if (opts?.onMessages) {
-        await opts.onMessages(events);
-      }
-      messages.push(...events);
-    } while (from);
-    return messages;
   }
 
   private async requestEmailToken(
@@ -885,10 +854,4 @@ function getAuth(): LoginResponse | undefined {
     return;
   }
   return JSON.parse(auth) as LoginResponse;
-}
-
-interface MessageOptions {
-  direction?: 'forward' | 'backward';
-  onMessages?: (messages: DiscreteMatrixEvent[]) => Promise<void>;
-  pageSize: number;
 }
