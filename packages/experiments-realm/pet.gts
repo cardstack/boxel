@@ -17,16 +17,16 @@ class FittedTemplate extends Component<typeof Pet> {
         <div class='content'>
           <div class='info'>
             <div class='info-item'>
+              <span class='label'>Sleeps On The Couch</span>
+              <span><@fields.sleepsOnTheCouch /></span>
+            </div>
+            <div class='info-item'>
               <span class='label'>Favorite Toy</span>
               <span><@fields.favoriteToy /></span>
             </div>
             <div class='info-item'>
               <span class='label'>Favorite Treat</span>
               <span><@fields.favoriteTreat /></span>
-            </div>
-            <div class='info-item'>
-              <span class='label'>Sleeps On The Couch</span>
-              <span><@fields.sleepsOnTheCouch /></span>
             </div>
           </div>
         </div>
@@ -57,12 +57,12 @@ class FittedTemplate extends Component<typeof Pet> {
         width: 100%;
       }
       .content {
-        overflow: scroll;
         width: 100%;
         padding: var(--boxel-sp-xs);
       }
       .info {
         display: flex;
+        justify-content: center;
         gap: var(--boxel-sp-xs);
       }
       .info-item {
@@ -79,6 +79,20 @@ class FittedTemplate extends Component<typeof Pet> {
         color: var(--boxel-450);
         line-height: 1.27;
         letter-spacing: 0.11px;
+      }
+
+      @container fitted-card (aspect-ratio <= 1.0) {
+        .info-item:not(:first-child) {
+          display: none;
+        }
+
+        .info-item {
+          width: 100%;
+        }
+
+        .info-item > span {
+          white-space: wrap;
+        }
       }
 
       @container fitted-card (aspect-ratio <= 1.0) and ((width < 150px) and (height < 150px)) {
