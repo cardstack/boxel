@@ -256,7 +256,7 @@ export class Batch {
   }
 
   private async updateRealmMeta() {
-    let results = (await this.query([
+    let results = await this.query([
       `SELECT count(i.url) as total, i.display_names->>0 as display_name, i.types->>0 as code_ref
        FROM boxel_index as i
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
@@ -268,30 +268,30 @@ export class Batch {
         realmVersionExpression({ useWorkInProgressIndex: true }),
       ]),
       `GROUP BY i.display_names->>0, i.types->>0`,
-    ] as Expression));
-    
+    ] as Expression);
+
     let { nameExpressions, valueExpressions } = asExpressions(
       {
         key: RealmMetaKey.CardTypeSummary,
         realm_url: this.realmURL.href,
         realm_version: this.realmVersion,
         value: results,
-        indexed_at: Date.now()
+        indexed_at: Date.now(),
       } as Omit<RealmMetaTable, 'indexed_at'> & {
         indexed_at: number;
       },
       {
-        jsonFields: ['value']
-      }
-    )
+        jsonFields: ['value'],
+      },
+    );
 
     await this.query([
       ...upsert(
         'realm_meta',
         'realm_meta_pkey',
         nameExpressions,
-        valueExpressions        
-      )
+        valueExpressions,
+      ),
     ]);
 
     await this.query([

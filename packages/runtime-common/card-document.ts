@@ -341,7 +341,9 @@ export function transformResultsToPrerenderedCardsDoc(results: {
   };
 }
 
-export function transformResultsToCardTypeSummaryDoc(results: CardTypeSummary[]) {
+export function transformResultsToCardTypeSummaryDoc(
+  results: CardTypeSummary[],
+) {
   let data = results.map((result) => ({
     type: RealmMetaKey.CardTypeSummary,
     id: result.code_ref,
@@ -351,5 +353,5 @@ export function transformResultsToCardTypeSummaryDoc(results: CardTypeSummary[])
     },
   }));
 
-  return { data }
+  return { data };
 }

@@ -103,7 +103,7 @@ export class RealmIndexQueryEngine {
 
   async fetchCardTypeSummary() {
     let results = await this.#indexQueryEngine.fetchCardTypeSummary(
-      new URL(this.#realm.url)
+      new URL(this.#realm.url),
     );
 
     return results;

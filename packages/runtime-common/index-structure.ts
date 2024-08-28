@@ -36,13 +36,13 @@ export interface RealmVersionsTable {
 }
 
 export interface CardTypeSummary {
-  code_ref: string,
-  display_name: string,
-  total: number,
+  code_ref: string;
+  display_name: string;
+  total: number;
 }
 
 export enum RealmMetaKey {
-  CardTypeSummary = 'card-type-summary'
+  CardTypeSummary = 'card-type-summary',
 }
 
 export interface RealmMetaTable {

@@ -359,7 +359,11 @@ export class Realm {
         SupportedMimeType.CardJson,
         this.searchPrerendered.bind(this),
       )
-      .get('/_types', SupportedMimeType.CardTypeSummary, this.fetchCardTypeSummary.bind(this))
+      .get(
+        '/_types',
+        SupportedMimeType.CardTypeSummary,
+        this.fetchCardTypeSummary.bind(this),
+      )
       .post(
         '/_session',
         SupportedMimeType.Session,

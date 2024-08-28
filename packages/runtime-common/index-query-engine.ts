@@ -475,7 +475,7 @@ export class IndexQueryEngine {
       ]),
       `ORDER BY indexed_at`,
       `LIMIT 1`,
-    ] as Expression)) as unknown  as { value: CardTypeSummary[] }[];
+    ] as Expression)) as unknown as { value: CardTypeSummary[] }[];
     return results[0].value;
   }
 
