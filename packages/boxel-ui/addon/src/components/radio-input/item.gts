@@ -119,7 +119,6 @@ const RadioInputItem: TemplateOnlyComponent<Signature> = <template>
   that seems ok, since you probably shouldn't make a form work as document hierarchy.
   aria-labelledby seems friendlier to safari than the for element, but unsure about other browsers.
   }}
-  {{!i remove boxel-radio-option--has-radio class when hideRadio is selected}}
   <label
     class={{cn
       'boxel-radio-option'
