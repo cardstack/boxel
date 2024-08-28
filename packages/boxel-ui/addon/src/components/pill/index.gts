@@ -1,6 +1,5 @@
+import { cn, element, eq } from '@cardstack/boxel-ui/helpers';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-
-import { element, cn, eq } from '@cardstack/boxel-ui/helpers';
 
 export type BoxelPillKind = 'button' | 'default';
 

@@ -1,15 +1,16 @@
 /* eslint-disable no-console */
+import { cssVar } from '@cardstack/boxel-ui/helpers';
+import { IconPlus } from '@cardstack/boxel-ui/icons';
+import { fn } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-import Pill, { type BoxelPillKind } from './index.gts';
-import { fn } from '@ember/helper';
-import { cssVar } from '@cardstack/boxel-ui/helpers';
 import {
   type CSSVariableInfo,
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
-import { IconPlus } from '@cardstack/boxel-ui/icons';
+
+import Pill, { type BoxelPillKind } from './index.gts';
 
 export default class PillUsage extends Component {
   pillKinds = ['button', 'default'];
