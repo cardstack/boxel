@@ -1,14 +1,15 @@
+import { cssVar } from '@cardstack/boxel-ui/helpers';
+import { fn } from '@ember/helper';
+import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
-import Switch from './index.gts';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-import { fn } from '@ember/helper';
 import {
   type CSSVariableInfo,
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
-import { cssVar } from '@cardstack/boxel-ui/helpers';
+
+import Switch from './index.gts';
 
 export default class SwitchUsage extends Component {
   @tracked isEnabled = false;

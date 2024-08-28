@@ -1,11 +1,11 @@
-import Component from '@glimmer/component';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
+import Component from '@glimmer/component';
 
 interface SwitchArgs {
+  disabled?: boolean;
   isEnabled: boolean;
   onChange: () => void;
-  disabled?: boolean;
 }
 
 export default class Switch extends Component<SwitchArgs> {
