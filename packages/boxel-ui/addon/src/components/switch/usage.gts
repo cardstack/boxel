@@ -19,17 +19,17 @@ export default class SwitchUsage extends Component {
     this.isEnabled = !this.isEnabled;
   }
 
-  @cssVariable({ cssClassName: 'toggle-freestyle-container' })
-  declare boxelToggleColor: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'switch-freestyle-container' })
+  declare boxelSwitchColor: CSSVariableInfo;
 
   <template>
     <div
       class='header-freestyle-container'
-      style={{cssVar boxel-toggle-color=this.boxelToggleColor.value}}
+      style={{cssVar boxel-switch-color=this.boxelSwitchColor.value}}
     >
       <FreestyleUsage @name='Switch'>
         <:description>
-          A switch is a component that allows the user to toggle a setting on or
+          A switch is a component that allows the user to switch a setting on or
           off.
         </:description>
         <:example>
@@ -48,11 +48,11 @@ export default class SwitchUsage extends Component {
         </:api>
         <:cssVars as |Css|>
           <Css.Basic
-            @name='boxel-toggle-color'
+            @name='boxel-switch-color'
             @type='color'
-            @description='Color of the toggle background'
-            @value={{this.boxelToggleColor.value}}
-            @onInput={{this.boxelToggleColor.update}}
+            @description='Color of the switch background (Only viewable when isEnabled=true)'
+            @value={{this.boxelSwitchColor.value}}
+            @onInput={{this.boxelSwitchColor.update}}
           />
         </:cssVars>
       </FreestyleUsage>

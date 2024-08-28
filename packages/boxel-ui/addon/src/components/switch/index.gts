@@ -10,20 +10,20 @@ interface SwitchArgs {
 export default class Switch extends Component<SwitchArgs> {
   <template>
     <label
-      class={{cn 'toggle' checked=@isEnabled}}
-      data-test-toggle-checked={{if @isEnabled 'on' 'off'}}
+      class={{cn 'switch' checked=@isEnabled}}
+      data-test-switch-checked={{if @isEnabled 'on' 'off'}}
     >
       <input
         {{on 'click' @onToggle}}
         {{on 'keypress' @onToggle}}
-        class='toggle-switch'
+        class='switch-input'
         type='checkbox'
         checked={{@isEnabled}}
       />
     </label>
 
     <style>
-      .toggle {
+      .switch {
         width: 22px;
         height: 12px;
         background-color: var(--boxel-450);
@@ -33,12 +33,12 @@ export default class Switch extends Component<SwitchArgs> {
         align-items: center;
         transition: background-color 0.1s ease-in;
         position: relative;
-        --default-toggle-color: var(--boxel-dark-green);
+        --default-switch-color: var(--boxel-dark-green);
       }
       input[type='checkbox'] {
         appearance: none;
       }
-      .toggle-switch {
+      .switch-input {
         margin: 0;
         width: 6px;
         height: 6px;
@@ -47,17 +47,17 @@ export default class Switch extends Component<SwitchArgs> {
         transform: translateX(0);
         transition: transform 0.1s ease-in;
       }
-      .toggle.checked {
+      .switch.checked {
         background-color: var(
-          --boxel-toggle-color,
-          var(--default-toggle-color)
+          --boxel-switch-color,
+          var(--default-switch-color)
         );
       }
-      .toggle.checked .toggle-switch {
+      .switch.checked .switch-input {
         transform: translateX(10px);
       }
-      .toggle:hover,
-      .toggle-switch:hover {
+      .switch:hover,
+      .switch-input:hover {
         cursor: pointer;
       }
     </style>
