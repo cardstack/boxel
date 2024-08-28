@@ -15,7 +15,7 @@ export default class SwitchUsage extends Component {
   @tracked isDisabled = false;
 
   @action
-  toggleEnabled() {
+  handleChange() {
     this.isEnabled = !this.isEnabled;
   }
 
@@ -35,7 +35,7 @@ export default class SwitchUsage extends Component {
         <:example>
           <Switch
             @isEnabled={{this.isEnabled}}
-            @onToggle={{this.toggleEnabled}}
+            @onChange={{this.handleChange}}
             @disabled={{this.isDisabled}}
           />
         </:example>

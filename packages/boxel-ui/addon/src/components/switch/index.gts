@@ -4,7 +4,7 @@ import { on } from '@ember/modifier';
 
 interface SwitchArgs {
   isEnabled: boolean;
-  onToggle: () => void;
+  onChange: () => void;
   disabled?: boolean;
 }
 
@@ -15,8 +15,8 @@ export default class Switch extends Component<SwitchArgs> {
       data-test-switch-checked={{if @isEnabled 'on' 'off'}}
     >
       <input
-        {{on 'click' @onToggle}}
-        {{on 'keypress' @onToggle}}
+        {{on 'click' @onChange}}
+        {{on 'keypress' @onChange}}
         class='switch-input'
         type='checkbox'
         checked={{@isEnabled}}
