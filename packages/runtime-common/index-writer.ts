@@ -23,6 +23,8 @@ import { type SerializedError } from './error';
 import { type DBAdapter } from './db';
 import {
   coerceTypes,
+  RealmMetaKey,
+  RealmMetaTable,
   type BoxelIndexTable,
   type RealmVersionsTable,
 } from './index-structure';
@@ -66,6 +68,7 @@ export interface InstanceEntry {
   fittedHtml?: Record<string, string>;
   atomHtml?: string;
   types: string[];
+  displayNames: string[];
   deps: Set<string>;
 }
 
@@ -158,6 +161,7 @@ export class Batch {
               atom_html: entry.atomHtml,
               deps: [...entry.deps],
               types: entry.types,
+              display_names: entry.displayNames,
               source: entry.source,
               last_modified: entry.lastModified,
             }
@@ -227,6 +231,7 @@ export class Batch {
         ]),
       ] as Expression);
     }
+    await this.updateRealmMeta();
     let totalIndexEntries = await this.numberOfIndexEntries();
     return { totalIndexEntries };
   }
@@ -248,6 +253,56 @@ export class Batch {
       ]),
     ] as Expression)) as { total: string }[];
     return parseInt(total);
+  }
+
+  private async updateRealmMeta() {
+    let results = (await this.query([
+      `SELECT count(i.url) as total, i.display_names->>0 as display_name, i.types->>0 as code_ref
+       FROM boxel_index as i
+       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
+          WHERE`,
+      ...every([
+        ['i.realm_url =', param(this.realmURL.href)],
+        ['i.type = ', param('instance')],
+        ['i.types IS NOT NULL'],
+        realmVersionExpression({ useWorkInProgressIndex: true }),
+      ]),
+      `GROUP BY i.display_names->>0, i.types->>0`,
+    ] as Expression));
+    
+    let { nameExpressions, valueExpressions } = asExpressions(
+      {
+        key: RealmMetaKey.CardTypeSummary,
+        realm_url: this.realmURL.href,
+        realm_version: this.realmVersion,
+        value: results,
+        indexed_at: Date.now()
+      } as Omit<RealmMetaTable, 'indexed_at'> & {
+        indexed_at: number;
+      },
+      {
+        jsonFields: ['value']
+      }
+    )
+
+    await this.query([
+      ...upsert(
+        'realm_meta',
+        'realm_meta_pkey',
+        nameExpressions,
+        valueExpressions        
+      )
+    ]);
+
+    await this.query([
+      `DELETE FROM realm_meta`,
+      'WHERE',
+      ...every([
+        ['key =', param(RealmMetaKey.CardTypeSummary)],
+        ['realm_version <', param(this.realmVersion)],
+        ['realm_url =', param(this.realmURL.href)],
+      ]),
+    ] as Expression);
   }
 
   private async setNextRealmVersion() {

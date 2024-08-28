@@ -333,6 +333,7 @@ const tests = Object.freeze({
       lastModified: Date.now(),
       searchData: { name: 'Van Gogh' },
       deps: new Set([`${testRealmURL}fancy-person`]),
+      displayNames: ['Fancy Person', 'Person', 'Card'],
       types: [
         { module: `./fancy-person`, name: 'FancyPerson' },
         { module: `./person`, name: 'Person' },
@@ -547,6 +548,7 @@ const tests = Object.freeze({
       lastModified: Date.now(),
       searchData: { name: 'Van Gogh' },
       deps: new Set(),
+      displayNames: [],
       types: [],
     });
 
@@ -637,6 +639,7 @@ const tests = Object.freeze({
       lastModified: now,
       searchData: { name: 'Van Gogh' },
       deps: new Set(),
+      displayNames: [],
       types: [],
     });
 

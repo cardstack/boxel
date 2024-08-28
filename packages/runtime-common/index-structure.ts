@@ -18,6 +18,7 @@ export interface BoxelIndexTable {
   // `types` is the adoption chain for card where each code ref is serialized
   // using `internalKeyFor()`
   types: string[] | null;
+  display_names: string[] | null;
   transpiled_code: string | null;
   source: string | null;
   embedded_html: Record<string, string> | null;
@@ -34,6 +35,24 @@ export interface RealmVersionsTable {
   current_version: number;
 }
 
+export interface CardTypeSummary {
+  code_ref: string,
+  display_name: string,
+  total: number,
+}
+
+export enum RealmMetaKey {
+  CardTypeSummary = 'card-type-summary'
+}
+
+export interface RealmMetaTable {
+  key: string;
+  realm_version: number;
+  realm_url: string;
+  value: Record<string, string>[];
+  indexed_at: string | null;
+}
+
 export const coerceTypes = Object.freeze({
   deps: 'JSON',
   types: 'JSON',
@@ -42,6 +61,7 @@ export const coerceTypes = Object.freeze({
   search_doc: 'JSON',
   embedded_html: 'JSON',
   fitted_html: 'JSON',
+  display_names: 'JSON',
   is_deleted: 'BOOLEAN',
   last_modified: 'VARCHAR',
   indexed_at: 'VARCHAR',

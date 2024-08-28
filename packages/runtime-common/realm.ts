@@ -1,5 +1,6 @@
 import { Deferred } from './deferred';
 import {
+  transformResultsToCardTypeSummaryDoc,
   transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
 } from './card-document';
@@ -358,6 +359,7 @@ export class Realm {
         SupportedMimeType.CardJson,
         this.searchPrerendered.bind(this),
       )
+      .get('/_types', SupportedMimeType.CardTypeSummary, this.fetchCardTypeSummary.bind(this))
       .post(
         '/_session',
         SupportedMimeType.Session,
@@ -1643,6 +1645,23 @@ export class Realm {
     );
 
     let doc = transformResultsToPrerenderedCardsDoc(results);
+
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: { 'content-type': SupportedMimeType.CardJson },
+      },
+      requestContext,
+    });
+  }
+
+  private async fetchCardTypeSummary(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let results = await this.#realmIndexQueryEngine.fetchCardTypeSummary();
+
+    let doc = transformResultsToCardTypeSummaryDoc(results);
 
     return createResponse({
       body: JSON.stringify(doc, null, 2),

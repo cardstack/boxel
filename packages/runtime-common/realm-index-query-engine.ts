@@ -101,6 +101,14 @@ export class RealmIndexQueryEngine {
     return doc;
   }
 
+  async fetchCardTypeSummary() {
+    let results = await this.#indexQueryEngine.fetchCardTypeSummary(
+      new URL(this.#realm.url)
+    );
+
+    return results;
+  }
+
   async searchPrerendered(query: Query, opts?: Options) {
     let results = await this.#indexQueryEngine.searchPrerendered(
       new URL(this.#realm.url),
