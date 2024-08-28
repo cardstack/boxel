@@ -427,6 +427,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         window.localStorage.setItem(newSessionIdPersistenceKey, newRoomId);
         this.enterRoom(newRoomId);
       } catch (e) {
+        console.error(e);
         this.displayRoomError = true;
         this.currentRoomId = undefined;
       }

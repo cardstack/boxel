@@ -28,7 +28,7 @@ import {
   StringField,
 } from '../helpers/base-realm';
 
-import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../helpers/mock-matrix';
 
 async function selectCardFromCatalog(cardId: string) {
   await click('[data-test-choose-card-btn]');
@@ -102,7 +102,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMockMatrix(hooks, { loggedInAs: '@testuser:staging' });
 
   hooks.beforeEach(async function () {
     class Pet extends CardDef {
