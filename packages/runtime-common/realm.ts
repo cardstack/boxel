@@ -1618,6 +1618,8 @@ export class Realm {
 
     let parsedQueryString = qs.parse(new URL(request.url).search.slice(1));
     let htmlFormat = parsedQueryString.prerenderedHtmlFormat as string;
+    let cardUrls = parsedQueryString.cardUrls as string[];
+
     if (!isValidPrerenderedHtmlFormat(htmlFormat)) {
       return badRequest(
         JSON.stringify({
@@ -1628,8 +1630,9 @@ export class Realm {
         requestContext,
       );
     }
-    // prerenederedHtmlFormat is a special parameter only for this endpoint so don't include it in our Query for card search
+    // prerenderedHtmlFormat and cardUrls are special parameters only for this endpoint so don't include it in our Query for standard card search
     delete parsedQueryString.prerenderedHtmlFormat;
+    delete parsedQueryString.cardUrls;
 
     let cardsQuery = parsedQueryString;
     assertQuery(parsedQueryString);
@@ -1639,6 +1642,7 @@ export class Realm {
       {
         useWorkInProgressIndex,
         htmlFormat,
+        cardUrls,
       },
     );
 
