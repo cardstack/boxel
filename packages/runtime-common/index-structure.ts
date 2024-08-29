@@ -41,10 +41,6 @@ export interface CardTypeSummary {
   total: number;
 }
 
-export enum RealmMetaKey {
-  CardTypeSummary = 'card-type-summary',
-}
-
 export interface RealmMetaTable {
   key: string;
   realm_version: number;

@@ -26,12 +26,11 @@
 );
 
  CREATE TABLE IF NOT EXISTS realm_meta (
-   key TEXT NOT NULL,
-   realm_version INTEGER NOT NULL,
    realm_url TEXT NOT NULL,
+   realm_version INTEGER NOT NULL,
    value BLOB NOT NULL,
    indexed_at,
-   PRIMARY KEY ( key, realm_version, realm_url ) 
+   PRIMARY KEY ( realm_url, realm_version ) 
 );
 
  CREATE TABLE IF NOT EXISTS realm_user_permissions (

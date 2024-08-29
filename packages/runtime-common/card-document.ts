@@ -1,7 +1,7 @@
 import { type CodeRef, isCodeRef } from './code-ref';
 import { RealmInfo } from './realm';
 import { QueryResultsMeta, PrerenderedCard } from './index-query-engine';
-import { RealmMetaKey, type CardTypeSummary } from './index-structure';
+import { type CardTypeSummary } from './index-structure';
 
 export type Saved = string;
 export type Unsaved = string | undefined;
@@ -345,7 +345,7 @@ export function transformResultsToCardTypeSummaryDoc(
   results: CardTypeSummary[],
 ) {
   let data = results.map((result) => ({
-    type: RealmMetaKey.CardTypeSummary,
+    type: 'card-type-summary',
     id: result.code_ref,
     attributes: {
       displayName: result.display_name,

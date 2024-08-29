@@ -6,6 +6,7 @@ import {
   hasExecutableExtension,
   trimExecutableExtension,
   RealmPaths,
+  unixTime,
 } from './index';
 import { transpileJS } from './transpile';
 import {
@@ -23,7 +24,6 @@ import { type SerializedError } from './error';
 import { type DBAdapter } from './db';
 import {
   coerceTypes,
-  RealmMetaKey,
   RealmMetaTable,
   type BoxelIndexTable,
   type RealmVersionsTable,
@@ -210,6 +210,7 @@ export class Batch {
       realm_url: this.realmURL.href,
       current_version: this.realmVersion,
     } as RealmVersionsTable);
+    await this.updateRealmMeta();
     // Make the batch updates live
     await this.query([
       ...upsert(
@@ -231,7 +232,7 @@ export class Batch {
         ]),
       ] as Expression);
     }
-    await this.updateRealmMeta();
+
     let totalIndexEntries = await this.numberOfIndexEntries();
     return { totalIndexEntries };
   }
@@ -265,18 +266,17 @@ export class Batch {
         ['i.realm_url =', param(this.realmURL.href)],
         ['i.type = ', param('instance')],
         ['i.types IS NOT NULL'],
-        realmVersionExpression({ useWorkInProgressIndex: true }),
+        realmVersionExpression({ useWorkInProgressIndex: true, withMaxVersion: this.realmVersion }),
       ]),
       `GROUP BY i.display_names->>0, i.types->>0`,
     ] as Expression);
 
     let { nameExpressions, valueExpressions } = asExpressions(
       {
-        key: RealmMetaKey.CardTypeSummary,
         realm_url: this.realmURL.href,
         realm_version: this.realmVersion,
         value: results,
-        indexed_at: Date.now(),
+        indexed_at: unixTime(new Date().getTime()),
       } as Omit<RealmMetaTable, 'indexed_at'> & {
         indexed_at: number;
       },
@@ -298,7 +298,6 @@ export class Batch {
       `DELETE FROM realm_meta`,
       'WHERE',
       ...every([
-        ['key =', param(RealmMetaKey.CardTypeSummary)],
         ['realm_version <', param(this.realmVersion)],
         ['realm_url =', param(this.realmURL.href)],
       ]),
