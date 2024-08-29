@@ -25,6 +25,7 @@ import ResizablePanelGroupUsage from './components/resizable-panel-group/usage.g
 import SelectUsage from './components/select/usage.gts';
 import TabbedHeaderUsage from './components/tabbed-header/usage.gts';
 import TooltipUsage from './components/tooltip/usage.gts';
+import TableUsage from './components/table/usage.gts';
 
 export const ALL_USAGE_COMPONENTS = [
   ['Accordion', AccordionUsage],
@@ -49,6 +50,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['RadioInput', RadioInputUsage],
   ['ResizablePanelGroup', ResizablePanelGroupUsage],
   ['Select', SelectUsage],
+  ['Table', TableUsage],
   ['TabbedHeader', TabbedHeaderUsage],
   ['Tooltip', TooltipUsage],
 ];
