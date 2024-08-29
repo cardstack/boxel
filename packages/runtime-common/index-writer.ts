@@ -258,7 +258,7 @@ export class Batch {
 
   private async updateRealmMeta() {
     let results = await this.query([
-      `SELECT count(i.url)::integer as total, i.display_names->>0 as display_name, i.types->>0 as code_ref
+      `SELECT CAST(count(i.url) AS INTEGER) as total, i.display_names->>0 as display_name, i.types->>0 as code_ref
        FROM boxel_index as i
        INNER JOIN realm_versions r ON i.realm_url = r.realm_url
           WHERE`,
