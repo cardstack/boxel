@@ -1,3 +1,4 @@
+import { eq } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -5,7 +6,6 @@ import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
 import Icon from '../../icons/sparkle.gts';
 import TabbedHeader, { type BoxelTabVariant } from './index.gts';
-import { eq } from '@cardstack/boxel-ui/helpers';
 
 export default class TabbedHeaderUsage extends Component {
   @tracked tabs = [
