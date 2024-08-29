@@ -470,9 +470,7 @@ export class IndexQueryEngine {
        FROM realm_meta r
        INNER JOIN realm_versions rv ON r.realm_url = rv.realm_url
        WHERE`,
-      ...every([
-        ['r.realm_url =', param(realmURL.href)],
-      ]),
+      ...every([['r.realm_url =', param(realmURL.href)]]),
     ] as Expression)) as Pick<RealmMetaTable, 'value'>[];
     return value as unknown as CardTypeSummary[];
   }

@@ -266,7 +266,10 @@ export class Batch {
         ['i.realm_url =', param(this.realmURL.href)],
         ['i.type = ', param('instance')],
         ['i.types IS NOT NULL'],
-        realmVersionExpression({ useWorkInProgressIndex: true, withMaxVersion: this.realmVersion }),
+        realmVersionExpression({
+          useWorkInProgressIndex: true,
+          withMaxVersion: this.realmVersion,
+        }),
       ]),
       `GROUP BY i.display_names->>0, i.types->>0`,
     ] as Expression);
