@@ -49,7 +49,11 @@ let nonce = 0;
 export type MockMatrixService = MatrixService & {
   sendReactionDeferred: Deferred<void>; // used to assert applying state in apply button
   cardAPI: typeof cardApi;
-  createAndJoinRoom(roomId: string, roomName?: string): Promise<string>;
+  createAndJoinRoom(
+    roomId: string,
+    roomName: string,
+    timestamp?: number,
+  ): Promise<string>;
 };
 
 class MockClient {
@@ -199,7 +203,7 @@ function generateMockMatrixService(
       if (document.querySelector('[data-test-throw-room-error]')) {
         throw new Error('Intentional error thrown');
       }
-      return await this.createAndJoinRoom(name);
+      return await this.createAndJoinRoom(name, name);
     }
 
     async sendReactionEvent(roomId: string, eventId: string, status: string) {
@@ -391,7 +395,11 @@ function generateMockMatrixService(
       await this.profile.load.perform();
     }
 
-    async createAndJoinRoom(roomId: string, name?: string) {
+    async createAndJoinRoom(
+      roomId: string,
+      name: string,
+      timestamp = Date.now(),
+    ) {
       await addRoomEvent(this, {
         event_id: 'eventname',
         room_id: roomId,
@@ -404,7 +412,7 @@ function generateMockMatrixService(
         event_id: 'eventcreate',
         room_id: roomId,
         type: 'm.room.create',
-        origin_server_ts: Date.now(),
+        origin_server_ts: timestamp,
         content: {
           creator: '@testuser:staging',
           room_version: '0',
@@ -418,11 +426,11 @@ function generateMockMatrixService(
         type: 'm.room.member',
         sender: '@testuser:staging',
         state_key: '@testuser:staging',
-        origin_server_ts: Date.now(),
+        origin_server_ts: timestamp,
         content: {
           displayname: 'testuser',
           membership: 'join',
-          membershipTs: Date.now(),
+          membershipTs: timestamp,
           membershipInitiator: '@testuser:staging',
         },
         status: null,
