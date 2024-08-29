@@ -55,6 +55,7 @@ class Isolated extends Component<typeof CardsGrid> {
                 Loading...
               </:loading>
               <:response as |cards|>
+                {{measureLoadTime}}
                 {{#each cards as |card|}}
                   <CardContainer class='card'>
                     <li
@@ -282,4 +283,16 @@ export class CardsGrid extends CardDef {
 }
 function removeFileExtension(cardUrl: string) {
   return cardUrl.replace(/\.[^/.]+$/, '');
+}
+
+function measureLoadTime() {
+  // we consider rendering the cards grid part of the app
+  // boot, so this is where we'll measure the app boot time.
+  if ((globalThis as any).__bootStart) {
+    console.log(
+      `time since app boot: ${
+        performance.now() - (globalThis as any).__bootStart
+      } ms`,
+    );
+  }
 }
