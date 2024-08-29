@@ -21,6 +21,9 @@ export default class Switch extends Component<SwitchArgs> {
         type='checkbox'
         checked={{@isEnabled}}
         disabled={{@disabled}}
+        aria-checked={{@isEnabled}}
+        role='switch'
+        aria-label='Switch'
       />
     </label>
 
