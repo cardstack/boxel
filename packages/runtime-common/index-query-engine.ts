@@ -465,14 +465,16 @@ export class IndexQueryEngine {
   }
 
   async fetchCardTypeSummary(realmURL: URL): Promise<CardTypeSummary[]> {
-    let [{ value }] = (await this.query([
+    let results = (await this.query([
       `SELECT value
        FROM realm_meta r
        INNER JOIN realm_versions rv ON r.realm_url = rv.realm_url
        WHERE`,
       ...every([['r.realm_url =', param(realmURL.href)]]),
     ] as Expression)) as Pick<RealmMetaTable, 'value'>[];
-    return value as unknown as CardTypeSummary[];
+    return (results.length > 0
+      ? results[0].value
+      : []) as unknown as CardTypeSummary[];
   }
 
   private async fetchCurrentRealmVersion(realmURL: URL) {
