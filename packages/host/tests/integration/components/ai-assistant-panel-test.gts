@@ -1093,14 +1093,18 @@ module('Integration | ai-assistant-panel', function (hooks) {
         },
       );
 
-      await matrixService.createAndJoinRoom('test1', 'test room 1');
+      let now = Date.now();
+
+      await matrixService.createAndJoinRoom('test1', 'test room 1', now - 2);
       const room2Id = await matrixService.createAndJoinRoom(
         'test2',
         'test room 2',
+        now - 1,
       );
       const room3Id = await matrixService.createAndJoinRoom(
         'test3',
         'test room 3',
+        now,
       );
 
       await openAiAssistant();
