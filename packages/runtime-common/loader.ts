@@ -449,6 +449,19 @@ export class Loader {
         urlOrRequest instanceof Request
           ? urlOrRequest.url
           : String(urlOrRequest);
+      console.log(
+        `debugging ci failure: ${JSON.stringify(
+          {
+            keys: Object.keys(err),
+            constructor: err?.constructor,
+            constructorName: err?.consturctor?.name,
+            toString: String(err),
+            json: JSON.stringify(err),
+          },
+          null,
+          2,
+        )}`,
+      );
       this.log.error(`fetch failed for ${url}`, err);
 
       return new Response(`fetch failed for ${url}`, {
