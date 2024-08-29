@@ -188,6 +188,7 @@ export default class Room extends Component<Signature> {
   }
 
   private get room() {
+    console.log(this.roomResource, this.roomResource.room);
     let room = this.roomResource.room;
     return room;
   }
