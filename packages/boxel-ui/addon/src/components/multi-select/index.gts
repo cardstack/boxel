@@ -38,9 +38,9 @@ const BoxelMultiSelect: TemplateOnlyComponent<Signature> = <template>
     @searchEnabled={{@searchEnabled}}
     @beforeOptionsComponent={{component BeforeOptions autofocus=false}}
     ...attributes
-    as |item|
+    as |option|
   >
-    {{yield item}}
+    {{yield option}}
   </PowerSelectMultiple>
 
   <style>

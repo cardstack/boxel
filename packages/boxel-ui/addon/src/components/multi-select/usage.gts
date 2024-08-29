@@ -66,6 +66,7 @@ export default class BoxelMultiSelectUsage extends Component {
           @disabled={{this.disabled}}
           @dropdownClass='boxel-multi-select-usage'
           @matchTriggerWidth={{this.matchTriggerWidth}}
+          @selectedItemComponent={{component CustomPill}}
           aria-label={{this.placeholder}}
           as |item|
         >
@@ -159,5 +160,37 @@ export default class BoxelMultiSelectUsage extends Component {
         />
       </:cssVars>
     </FreestyleUsage>
+  </template>
+}
+
+interface CustomPillArgs {
+  Element: Element;
+  Args: {
+    option: Country;
+  };
+}
+
+class CustomPill extends Component<CustomPillArgs> {
+  <template>
+    <span class='custom-pill'>
+      {{@option.name}}
+    </span>
+    <style>
+      .custom-pill {
+        background-color: #e0e0e0;
+        border-radius: 16px;
+        padding: 4px 8px;
+        margin-right: 4px;
+        display: inline-flex;
+        align-items: center;
+      }
+      .custom-pill button {
+        background: none;
+        border: none;
+        cursor: pointer;
+        margin-left: 4px;
+        font-weight: bold;
+      }
+    </style>
   </template>
 }
