@@ -40,6 +40,10 @@ export default class Table extends Component<TableArgs> {
         margin-bottom: 1rem;
         --table-th-bg: var(--boxel-table-th-bg, #f7fafc);
         --table-th-font-weight: var(--boxel-table-th-font-weight, 500);
+        --table-th-font-color: var(--boxel-table-th-font-color, inherit);
+        --table-td-bg: var(--boxel-table-td-bg, transparent);
+        --table-td-font-weight: var(--boxel-table-td-font-weight, 500);
+        --table-td-font-color: var(--boxel-table-td-font-color, inherit);
         --table-border-color: var(--boxel-table-border-color, #e2e8f0);
         --table-padding: var(--boxel-table-padding, 0.75rem);
       }
@@ -52,12 +56,18 @@ export default class Table extends Component<TableArgs> {
       }
 
       .boxel-table thead th {
+        color: var(--table-th-font-color);
         background-color: var(--table-th-bg);
         font-weight: var(--table-th-font-weight);
       }
 
+      .boxel-table td {
+        color: var(--table-td-font-color);
+        background-color: var(--table-td-bg);
+        font-weight: var(--table-td-font-weight);
+      }
+
       .boxel-table tbody tr:hover {
-        background-color: var(--table-th-bg);
         filter: brightness(0.95);
       }
     </style>

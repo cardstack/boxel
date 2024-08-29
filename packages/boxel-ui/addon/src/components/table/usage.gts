@@ -28,9 +28,17 @@ export default class TableUsage extends Component {
   @cssVariable({ cssClassName: 'table-freestyle-container' })
   declare boxelTableThFontWeight: CSSVariableInfo;
   @cssVariable({ cssClassName: 'table-freestyle-container' })
+  declare boxelTableThFontColor: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'table-freestyle-container' })
   declare boxelTableBorderColor: CSSVariableInfo;
   @cssVariable({ cssClassName: 'table-freestyle-container' })
   declare boxelTablePadding: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'table-freestyle-container' })
+  declare boxelTableTdBg: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'table-freestyle-container' })
+  declare boxelTableTdFontWeight: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'table-freestyle-container' })
+  declare boxelTableTdFontColor: CSSVariableInfo;
 
   <template>
     <FreestyleUsage @name='Table'>
@@ -40,8 +48,12 @@ export default class TableUsage extends Component {
           style={{cssVar
             boxel-table-th-bg=this.boxelTableThBg.value
             boxel-table-th-font-weight=this.boxelTableThFontWeight.value
+            boxel-table-th-font-color=this.boxelTableThFontColor.value
             boxel-table-border-color=this.boxelTableBorderColor.value
             boxel-table-padding=this.boxelTablePadding.value
+            boxel-table-td-bg=this.boxelTableTdBg.value
+            boxel-table-td-font-weight=this.boxelTableTdFontWeight.value
+            boxel-table-td-font-color=this.boxelTableTdFontColor.value
           }}
         >
           <Table @columns={{this.columns}} @rows={{this.rows}} />
@@ -71,6 +83,14 @@ export default class TableUsage extends Component {
           @onInput={{this.boxelTableThBg.update}}
         />
         <Css.Basic
+          @name='boxel-table-th-font-color'
+          @type='color'
+          @description='Table header font color'
+          @defaultValue={{this.boxelTableThFontColor.defaults}}
+          @value={{this.boxelTableThFontColor.value}}
+          @onInput={{this.boxelTableThFontColor.update}}
+        />
+        <Css.Basic
           @name='boxel-table-th-font-weight'
           @type='font-weight'
           @description='Table header font weight'
@@ -93,6 +113,30 @@ export default class TableUsage extends Component {
           @defaultValue={{this.boxelTablePadding.defaults}}
           @value={{this.boxelTablePadding.value}}
           @onInput={{this.boxelTablePadding.update}}
+        />
+        <Css.Basic
+          @name='boxel-table-td-bg'
+          @type='color'
+          @description='Table cell background color'
+          @defaultValue={{this.boxelTableTdBg.defaults}}
+          @value={{this.boxelTableTdBg.value}}
+          @onInput={{this.boxelTableTdBg.update}}
+        />
+        <Css.Basic
+          @name='boxel-table-td-font-color'
+          @type='color'
+          @description='Table cell font color'
+          @defaultValue={{this.boxelTableTdFontColor.defaults}}
+          @value={{this.boxelTableTdFontColor.value}}
+          @onInput={{this.boxelTableTdFontColor.update}}
+        />
+        <Css.Basic
+          @name='boxel-table-td-font-weight'
+          @type='font-weight'
+          @description='Table cell font weight'
+          @defaultValue={{this.boxelTableTdFontWeight.defaults}}
+          @value={{this.boxelTableTdFontWeight.value}}
+          @onInput={{this.boxelTableTdFontWeight.update}}
         />
       </:cssVars>
     </FreestyleUsage>
