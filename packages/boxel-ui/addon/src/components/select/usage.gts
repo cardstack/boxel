@@ -46,7 +46,6 @@ export default class BoxelSelectUsage extends Component {
 
   <template>
     <style
-      unscoped
     >
           .boxel-select-usage {
             --boxel-select-current-color: {{this.boxelSelectCurrentColor.value}};
