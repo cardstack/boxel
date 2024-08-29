@@ -42,7 +42,7 @@ export class ExtendedMatrixSDK {
   }
 
   createClient(opts: MatrixSDK.ICreateClientOpts): ExtendedClient {
-    return extendedClient(this.#sdk.createClient(opts), opts.baseUrl);
+    return extendedClient(this.#sdk.createClient(opts));
   }
 }
 
@@ -65,7 +65,6 @@ export type ExtendedClient = MatrixSDK.MatrixClient & {
 
 async function allRoomMessages(
   this: MatrixSDK.MatrixClient,
-  matrixURL: string,
   roomId: string,
   opts?: MessageOptions,
 ): Promise<DiscreteMatrixEvent[]> {
@@ -74,7 +73,7 @@ async function allRoomMessages(
 
   do {
     let response = await fetch(
-      `${matrixURL}/_matrix/client/v3/rooms/${roomId}/messages?dir=${
+      `${this.baseUrl}/_matrix/client/v3/rooms/${roomId}/messages?dir=${
         opts?.direction ? opts.direction.slice(0, 1) : 'f'
       }&limit=${opts?.pageSize ?? DEFAULT_PAGE_SIZE}${
         from ? '&from=' + from : ''
@@ -98,7 +97,6 @@ async function allRoomMessages(
 
 async function requestEmailToken(
   this: MatrixSDK.MatrixClient,
-  matrixURL: string,
   type: 'registration' | 'threepid',
   email: string,
   clientSecret: string,
@@ -106,8 +104,8 @@ async function requestEmailToken(
 ) {
   let url =
     type === 'registration'
-      ? `${matrixURL}/_matrix/client/v3/register/email/requestToken`
-      : `${matrixURL}/_matrix/client/v3/account/3pid/email/requestToken`;
+      ? `${this.baseUrl}/_matrix/client/v3/register/email/requestToken`
+      : `${this.baseUrl}/_matrix/client/v3/account/3pid/email/requestToken`;
 
   let response = await fetch(url, {
     method: 'POST',
@@ -135,11 +133,10 @@ async function requestEmailToken(
 // doesn't provide login using email, so we use the API directly
 async function loginWithEmail(
   this: MatrixSDK.MatrixClient,
-  matrixURL: string,
   email: string,
   password: string,
 ) {
-  let response = await fetch(`${matrixURL}/_matrix/client/v3/login`, {
+  let response = await fetch(`${this.baseUrl}/_matrix/client/v3/login`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -165,19 +162,16 @@ async function loginWithEmail(
   }
 }
 
-function extendedClient(
-  client: MatrixSDK.MatrixClient,
-  baseURL: string,
-): ExtendedClient {
+function extendedClient(client: MatrixSDK.MatrixClient): ExtendedClient {
   return new Proxy(client, {
     get(target, key, receiver) {
       switch (key) {
         case 'allRoomMessages':
-          return allRoomMessages.bind(client, baseURL);
+          return allRoomMessages;
         case 'requestEmailToken':
-          return requestEmailToken.bind(client, baseURL);
+          return requestEmailToken;
         case 'loginWithEmail':
-          return loginWithEmail.bind(client, baseURL);
+          return loginWithEmail;
         default:
           return Reflect.get(target, key, receiver);
       }
