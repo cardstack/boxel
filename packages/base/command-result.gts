@@ -19,6 +19,7 @@ import {
 } from '@cardstack/boxel-ui/icons';
 import { Button, Header, IconButton } from '@cardstack/boxel-ui/components';
 import { on } from '@ember/modifier';
+import helper from '@ember/component/helper';
 
 type AttachedCardResource = {
   card: CardDef | undefined;
@@ -129,17 +130,20 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
               {{cardResource.cardError.error.message}}
             </div>
           {{else if cardResource.card}}
-            <div
-              class='card-item'
-              data-test-result-card={{cardResource.card.id}}
-              data-test-result-card-idx={{i}}
-            >
-              {{#let (getComponent cardResource.card) as |Component|}}
-                {{i}}.
-                <Component @format='atom' @displayContainer={{false}} />
-              {{/let}}
-            </div>
+            {{#let (add i 1) as |idx|}}
+              <div
+                class='card-item'
+                data-test-result-card={{cardResource.card.id}}
+                data-test-result-card-idx={{idx}}
+              >
+                {{#let (getComponent cardResource.card) as |Component|}}
+                  {{idx}}.
+                  <Component @format='atom' @displayContainer={{false}} />
+                {{/let}}
+              </div>
+            {{/let}}
           {{/if}}
+
         {{/each}}
         <div class='footer'>
           {{#if this.numberOfCardsGreaterThanPaginateSize}}
@@ -220,6 +224,10 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
       }
     </style>
   </template>
+}
+
+export function add(value1: number, value2: number) {
+  return value1 + value2;
 }
 
 type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
