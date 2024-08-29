@@ -621,39 +621,6 @@ export default class MatrixService extends Service {
     }
   }
 
-  private async requestEmailToken(
-    type: 'registration' | 'threepid',
-    email: string,
-    clientSecret: string,
-    sendAttempt: number,
-  ) {
-    let url =
-      type === 'registration'
-        ? `${matrixURL}/_matrix/client/v3/register/email/requestToken`
-        : `${matrixURL}/_matrix/client/v3/account/3pid/email/requestToken`;
-
-    let response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        email,
-        client_secret: clientSecret,
-        send_attempt: sendAttempt,
-      }),
-    });
-    if (response.ok) {
-      return (await response.json()) as MatrixSDK.IRequestTokenResponse;
-    } else {
-      let data = (await response.json()) as { errcode: string; error: string };
-      let error = new Error(data.error) as any;
-      error.data = data;
-      error.status = response.status;
-      throw error;
-    }
-  }
-
   getLastActiveTimestamp(roomId: string, defaultTimestamp: number) {
     let matrixRoom = this.client.getRoom(roomId);
     let lastMatrixEvent = matrixRoom?.getLastActiveTimestamp();
@@ -665,7 +632,7 @@ export default class MatrixService extends Service {
     clientSecret: string,
     sendAttempt: number,
   ) {
-    return await this.requestEmailToken(
+    return await this.client.requestEmailToken(
       'registration',
       email,
       clientSecret,
@@ -678,54 +645,12 @@ export default class MatrixService extends Service {
     clientSecret: string,
     sendAttempt: number,
   ) {
-    return await this.requestEmailToken(
+    return await this.client.requestEmailToken(
       'threepid',
       email,
       clientSecret,
       sendAttempt,
     );
-  }
-
-  async getPowerLevels(roomId: string): Promise<{ [userId: string]: number }> {
-    let response = await fetch(
-      `${matrixURL}/_matrix/client/v3/rooms/${roomId}/state/m.room.power_levels/`,
-      {
-        headers: {
-          Authorization: `Bearer ${this.client.getAccessToken()}`,
-        },
-      },
-    );
-    let { users } = await response.json();
-    return users;
-  }
-
-  // the matrix SDK is using an old version of this API and
-  // doesn't provide login using email, so we use the API directly
-  async loginWithEmail(email: string, password: string) {
-    let response = await fetch(`${matrixURL}/_matrix/client/v3/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        identifier: {
-          type: 'm.id.thirdparty',
-          medium: 'email',
-          address: email,
-        },
-        password,
-        type: 'm.login.password',
-      }),
-    });
-    if (response.ok) {
-      return (await response.json()) as MatrixSDK.LoginResponse;
-    } else {
-      let data = (await response.json()) as { errcode: string; error: string };
-      let error = new Error(data.error) as any;
-      error.data = data;
-      error.status = response.status;
-      throw error;
-    }
   }
 
   async login(usernameOrEmail: string, password: string) {
@@ -737,7 +662,10 @@ export default class MatrixService extends Service {
       return cred;
     } catch (error) {
       try {
-        const cred = await this.loginWithEmail(usernameOrEmail, password);
+        const cred = await this.client.loginWithEmail(
+          usernameOrEmail,
+          password,
+        );
         return cred;
       } catch (error2) {
         throw error;

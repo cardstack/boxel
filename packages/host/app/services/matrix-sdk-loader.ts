@@ -51,6 +51,16 @@ export type ExtendedClient = MatrixSDK.MatrixClient & {
     roomId: string,
     opts?: MessageOptions,
   ): Promise<DiscreteMatrixEvent[]>;
+  requestEmailToken(
+    type: 'registration' | 'threepid',
+    email: string,
+    clientSecret: string,
+    sendAttempt: number,
+  ): Promise<MatrixSDK.IRequestTokenResponse>;
+  loginWithEmail(
+    email: string,
+    password: string,
+  ): Promise<MatrixSDK.LoginResponse>;
 };
 
 async function allRoomMessages(
@@ -86,6 +96,75 @@ async function allRoomMessages(
   return messages;
 }
 
+async function requestEmailToken(
+  this: MatrixSDK.MatrixClient,
+  matrixURL: string,
+  type: 'registration' | 'threepid',
+  email: string,
+  clientSecret: string,
+  sendAttempt: number,
+) {
+  let url =
+    type === 'registration'
+      ? `${matrixURL}/_matrix/client/v3/register/email/requestToken`
+      : `${matrixURL}/_matrix/client/v3/account/3pid/email/requestToken`;
+
+  let response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      email,
+      client_secret: clientSecret,
+      send_attempt: sendAttempt,
+    }),
+  });
+  if (response.ok) {
+    return (await response.json()) as MatrixSDK.IRequestTokenResponse;
+  } else {
+    let data = (await response.json()) as { errcode: string; error: string };
+    let error = new Error(data.error) as any;
+    error.data = data;
+    error.status = response.status;
+    throw error;
+  }
+}
+
+// the matrix SDK is using an old version of this API and
+// doesn't provide login using email, so we use the API directly
+async function loginWithEmail(
+  this: MatrixSDK.MatrixClient,
+  matrixURL: string,
+  email: string,
+  password: string,
+) {
+  let response = await fetch(`${matrixURL}/_matrix/client/v3/login`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      identifier: {
+        type: 'm.id.thirdparty',
+        medium: 'email',
+        address: email,
+      },
+      password,
+      type: 'm.login.password',
+    }),
+  });
+  if (response.ok) {
+    return (await response.json()) as MatrixSDK.LoginResponse;
+  } else {
+    let data = (await response.json()) as { errcode: string; error: string };
+    let error = new Error(data.error) as any;
+    error.data = data;
+    error.status = response.status;
+    throw error;
+  }
+}
+
 function extendedClient(
   client: MatrixSDK.MatrixClient,
   baseURL: string,
@@ -95,6 +174,10 @@ function extendedClient(
       switch (key) {
         case 'allRoomMessages':
           return allRoomMessages.bind(client, baseURL);
+        case 'requestEmailToken':
+          return requestEmailToken.bind(client, baseURL);
+        case 'loginWithEmail':
+          return loginWithEmail.bind(client, baseURL);
         default:
           return Reflect.get(target, key, receiver);
       }
