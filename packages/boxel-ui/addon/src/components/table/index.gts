@@ -12,6 +12,7 @@ export interface TableArgs {
   columns: Array<BoxelTableColumn>;
   rows: Array<BoxelTableRow>;
 }
+
 export default class Table extends Component<TableArgs> {
   <template>
     <table class='boxel-table'>
@@ -45,14 +46,22 @@ export default class Table extends Component<TableArgs> {
         --table-td-font-weight: var(--boxel-table-td-font-weight, 500);
         --table-td-font-color: var(--boxel-table-td-font-color, inherit);
         --table-border-color: var(--boxel-table-border-color, #e2e8f0);
-        --table-padding: var(--boxel-table-padding, 0.75rem);
+        --table-th-padding: var(--boxel-table-th-padding, 0.75rem);
+        --table-td-padding: var(--boxel-table-td-padding, 0.75rem);
       }
 
       .boxel-table th,
       .boxel-table td {
-        padding: var(--table-padding);
         border-bottom: 1px solid var(--table-border-color);
         text-align: left;
+      }
+
+      .boxel-table th {
+        padding: var(--table-th-padding);
+      }
+
+      .boxel-table td {
+        padding: var(--table-td-padding);
       }
 
       .boxel-table thead th {
@@ -72,12 +81,4 @@ export default class Table extends Component<TableArgs> {
       }
     </style>
   </template>
-
-  sampleColumns = [
-    { header: 'Name', key: 'name' },
-    { header: 'Age', key: 'age' },
-    { header: 'Email', key: 'email' },
-    { header: 'Occupation', key: 'occupation' },
-    { header: 'City', key: 'city' },
-  ];
 }
