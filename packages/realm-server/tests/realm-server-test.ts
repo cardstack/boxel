@@ -1962,6 +1962,46 @@ module('Realm Server', function (hooks) {
         assert.strictEqual(json.data[0].id, 'http://127.0.0.1:4444/jimmy.json');
       });
 
+      test('can use cardUrls to filter prerendered instances', async function (assert) {
+        let query: Query & {
+          prerenderedHtmlFormat: string;
+          cardUrls: string[];
+        } = {
+          prerenderedHtmlFormat: 'embedded',
+          cardUrls: [`${testRealmHref}jimmy.json`],
+        };
+        let response = await request
+          .get(`/_search-prerendered?${stringify(query)}`)
+          .set('Accept', 'application/vnd.card+json');
+
+        let json = response.body;
+
+        assert.strictEqual(
+          json.data.length,
+          1,
+          'one prerendered card instance is returned in the filtered search results',
+        );
+        assert.strictEqual(json.data[0].id, 'http://127.0.0.1:4444/jimmy.json');
+
+        query = {
+          prerenderedHtmlFormat: 'embedded',
+          cardUrls: [`${testRealmHref}jimmy.json`, `${testRealmHref}jane.json`],
+        };
+        response = await request
+          .get(`/_search-prerendered?${stringify(query)}`)
+          .set('Accept', 'application/vnd.card+json');
+
+        json = response.body;
+
+        assert.strictEqual(
+          json.data.length,
+          2,
+          '2 prerendered card instances are returned in the filtered search results',
+        );
+        assert.strictEqual(json.data[0].id, 'http://127.0.0.1:4444/jane.json');
+        assert.strictEqual(json.data[1].id, 'http://127.0.0.1:4444/jimmy.json');
+      });
+
       test('can sort prerendered instances', async function (assert) {
         let query: Query & { prerenderedHtmlFormat: string } = {
           sort: [

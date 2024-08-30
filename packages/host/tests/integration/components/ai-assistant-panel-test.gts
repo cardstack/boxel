@@ -1497,7 +1497,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     // Create a new room with some activity (this could happen when we will have a feature that interacts with AI outside of the AI pannel, i.e. "commands")
 
-    let anotherRoomId = await matrixService.createAndJoinRoom('Another Room');
+    let anotherRoomId = await matrixService.createAndJoinRoom(
+      'Another Room',
+      'Another Room',
+    );
 
     await addRoomEvent(matrixService, {
       event_id: 'event2',
@@ -1635,7 +1638,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       )
       .doesNotExist();
 
-    let anotherRoomId = await matrixService.createAndJoinRoom('Another Room');
+    let anotherRoomId = await matrixService.createAndJoinRoom(
+      'Another Room',
+      'Another Room',
+    );
 
     await addRoomEvent(matrixService, {
       event_id: 'botevent2',
@@ -2049,7 +2055,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await click('[data-test-close-ai-assistant]');
 
     // Create a new room with some activity
-    let anotherRoomId = await matrixService.createAndJoinRoom('Another Room');
+    let anotherRoomId = await matrixService.createAndJoinRoom(
+      'Another Room',
+      'Another Room',
+    );
 
     // A message that hasn't been seen and was sent more than fifteen minutes ago must not be shown in the toast.
     let sixteenMinutesAgo = subMinutes(new Date(), 16);
