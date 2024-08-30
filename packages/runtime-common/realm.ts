@@ -156,6 +156,7 @@ export interface RealmAdapter {
 interface Options {
   useTestingDomain?: true;
   disableModuleCaching?: true;
+  disableSSE?: true;
 }
 
 interface IndexHTMLOptions {
@@ -239,6 +240,7 @@ export class Realm {
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
   #disableModuleCaching = false;
+  #disableSSE = false;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -306,6 +308,10 @@ export class Realm {
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
     this.#assetsURL = assetsURL;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
+    this.#disableSSE = Boolean(opts?.disableSSE);
+    if (this.#disableSSE) {
+      this.#log.info(`disabling SSE for realm ${this.url}`);
+    }
 
     let fetch = fetcher(virtualNetwork.fetch, [
       async (req, next) => {
@@ -1725,6 +1731,14 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    if (this.#disableSSE) {
+      return createResponse({
+        body: null,
+        init: { status: 204 },
+        requestContext,
+      });
+    }
+
     let headers = {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',

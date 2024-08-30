@@ -6,6 +6,7 @@ import {
   RunnerOptionsManager,
   permissionsExist,
   insertPermissions,
+  baseRealm,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
@@ -201,6 +202,7 @@ let dist: URL = new URL(distURL);
               useTestingDomain,
             }
           : {}),
+        ...(url === baseRealm.url ? { disableSSE: true } : {}),
       },
     );
     realms.push(realm);
