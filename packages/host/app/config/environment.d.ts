@@ -12,7 +12,6 @@ declare const config: {
   rootURL: string;
   APP: Record<string, unknown>;
   ownRealmURL: string;
-  otherRealmURLs: string[];
   testRealmURLs: string[];
   matrixURL: string;
   matrixServerName: string;
