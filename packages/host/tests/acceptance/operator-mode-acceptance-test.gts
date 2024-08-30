@@ -379,17 +379,8 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
   });
 
-  test('visiting index card and entering operator mode', async function (assert) {
+  test('visiting operator mode', async function (assert) {
     await visit('/');
-
-    assert.strictEqual(currentURL(), '/');
-
-    // Enter operator mode
-    await triggerEvent(document.body, 'keydown', {
-      code: 'Key.',
-      key: '.',
-      ctrlKey: true,
-    });
 
     await waitFor('[data-test-operator-mode-stack]');
     assert.dom('[data-test-operator-mode-stack]').exists();
@@ -630,13 +621,6 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     test('realm session refreshes within 5 minute window of expiration', async function (assert) {
       await visit('/');
-
-      // Enter operator mode
-      await triggerEvent(document.body, 'keydown', {
-        code: 'Key.',
-        key: '.',
-        ctrlKey: true,
-      });
 
       await waitFor('[data-test-operator-mode-stack]');
       let originalToken = window.localStorage.getItem(sessionLocalStorageKey);
