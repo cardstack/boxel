@@ -43,7 +43,7 @@ export default class DefaultFittedTemplate extends GlimmerComponent<{
         <div data-test-empty-field class='empty-field'></div>
       {{/if}}
     </div>
-    <style>
+    <style scoped>
       .fitted-template {
         width: 100%;
         height: 100%;

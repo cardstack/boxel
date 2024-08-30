@@ -1445,7 +1445,7 @@ module('Integration | card-basics', function (hooks) {
               <@fields.firstName />
               <@fields.age />
             </div>
-            <style>
+            <style scoped>
               .name {
                 color: red;
                 font-weight: bold;
@@ -2759,7 +2759,7 @@ function fittedViewDriver() {
           </div>
         </div>
 
-        <style>
+        <style scoped>
           .card {
             /* this is how a border would appear around a card.
              note that a card is not supposed to draw its own border

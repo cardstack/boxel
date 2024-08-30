@@ -79,7 +79,7 @@ export default class CardPill extends Component<CardPillSignature> {
         {{/if}}
       </:default>
     </Pill>
-    <style>
+    <style scoped>
       .card-pill {
         --pill-icon-size: 18px;
         border: 1px solid var(--boxel-400);

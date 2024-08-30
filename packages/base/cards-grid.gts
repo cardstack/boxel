@@ -93,7 +93,7 @@ class Isolated extends Component<typeof CardsGrid> {
       </div>
     </div>
 
-    <style>
+    <style scoped>
       .cards-grid {
         --grid-card-width: 11.125rem;
         --grid-card-height: 15.125rem;

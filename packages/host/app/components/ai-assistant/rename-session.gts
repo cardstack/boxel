@@ -72,7 +72,7 @@ export default class RenameSession extends Component<Signature> {
       </:body>
     </AiAssistantPanelPopover>
 
-    <style>
+    <style scoped>
       .rename-field {
         padding: 0 var(--boxel-sp);
       }

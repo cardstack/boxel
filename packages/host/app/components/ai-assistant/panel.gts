@@ -206,7 +206,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       {{/let}}
     {{/if}}
 
-    <style>
+    <style scoped>
       .ai-assistant-panel {
         display: grid;
         grid-template-rows: auto 1fr;

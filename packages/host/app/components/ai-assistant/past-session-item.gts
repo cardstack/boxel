@@ -110,7 +110,7 @@ export default class PastSessionItem extends Component<Signature> {
       </BoxelDropdown>
     </li>
 
-    <style>
+    <style scoped>
       :global(:root) {
         --color-streaming: #01c6bf;
         --color-new-messages: #00ad4a;

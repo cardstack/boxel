@@ -267,7 +267,7 @@ export default class BoxelInputGroupUsage extends Component {
         />
       </:cssVars>
     </FreestyleUsage>
-    <style>
+    <style scoped>
       .boxel-input-usage-examples .boxel-input-group {
         margin-bottom: var(--boxel-sp-xl);
       }

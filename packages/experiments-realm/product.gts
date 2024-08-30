@@ -65,7 +65,7 @@ export class EmbeddedProductComponent extends GlimmerComponent<EmbeddedProductCo
         {{@model.seller.title}}
       </div>
     </div>
-    <style>
+    <style scoped>
       .product {
         max-width: 300px;
       }
@@ -126,7 +126,7 @@ export class ProductImages extends GlimmerComponent<ProductImagesSignature> {
         {{/each}}
       </div>
     </div>
-    <style>
+    <style scoped>
       .main {
         min-width: 0;
         max-width: 100%;
@@ -219,7 +219,7 @@ export class ProductDetail extends GlimmerComponent<ProductDetailSignature> {
         </div>
       </div>
     </div>
-    <style>
+    <style scoped>
       h2 {
         margin-top: 0;
         font-size: 1.1em;
@@ -269,7 +269,7 @@ class Isolated extends Component<typeof Product> {
         </button>
       </div>
     </div>
-    <style>
+    <style scoped>
       .product {
         display: grid;
         grid-template-columns: 50% 50%;

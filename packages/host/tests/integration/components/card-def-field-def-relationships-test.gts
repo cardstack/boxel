@@ -411,7 +411,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
             -
             <@fields.currencyName />
           </div>
-          <style>
+          <style scoped>
             .currency {
               display: flex;
               font-weight: bold;

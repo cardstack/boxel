@@ -48,7 +48,7 @@ export class Post extends CardDef {
         <h3>by <@fields.author.firstName /> <@fields.author.lastName /></h3>
         <p><@fields.body /></p>
       </div>
-      <style>
+      <style scoped>
         .container {
           padding: var(--boxel-sp-xl);
         }

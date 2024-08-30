@@ -61,7 +61,7 @@ module('Acceptance | permissioned realm tests', function (hooks) {
             <p>Last name: <@fields.lastName /></p>
             <p>Title: <@fields.title /></p>
           </div>
-          <style>
+          <style scoped>
             div {
               color: green;
               content: '';

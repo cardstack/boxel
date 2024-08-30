@@ -94,7 +94,7 @@ export class ProductRequirementDocument extends CardDef {
           </details>
         </div>
       </section>
-      <style>
+      <style scoped>
         .prd {
           padding: var(--boxel-sp) var(--boxel-sp-xxl);
         }

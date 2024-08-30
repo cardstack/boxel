@@ -41,7 +41,7 @@ class FeaturedProductComponent extends GlimmerComponent<FeaturedProductComponent
         <button {{on 'click' (fn @viewProduct @model)}}>Shop this item</button>
       </div>
     </div>
-    <style>
+    <style scoped>
       .product {
         display: grid;
         grid-template-columns: 1.5fr 2.5fr;
@@ -156,7 +156,7 @@ class Isolated extends Component<typeof ProductList> {
         </div>
       </div>
     </div>
-    <style>
+    <style scoped>
       .search-container {
         background-image: url(https://i.imgur.com/PQuDAEo.jpg);
         padding: var(--boxel-sp);
@@ -216,6 +216,7 @@ export class ProductList extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
 
 
 

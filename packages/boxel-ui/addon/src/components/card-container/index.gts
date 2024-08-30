@@ -40,7 +40,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       {{yield}}
     </Tag>
   {{/let}}
-  <style>
+  <style scoped>
     .boxel-card-container {
       position: relative;
       background-color: var(--boxel-light);

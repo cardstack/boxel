@@ -297,7 +297,7 @@ export default class EditFieldModal extends Component<Signature> {
   });
 
   <template>
-    <style>
+    <style scoped>
       .edit-field-modal > :deep(.boxel-modal__inner) {
         display: flex;
       }

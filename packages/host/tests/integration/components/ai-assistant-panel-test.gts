@@ -1052,7 +1052,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
           <OperatorMode @onClose={{noop}} />
           <CardPrerender />
           <div class='invisible' data-test-throw-room-error />
-          <style>
+          <style scoped>
             .invisible {
               display: none;
             }

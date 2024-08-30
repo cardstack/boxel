@@ -30,7 +30,7 @@ export default class RecentFiles extends Component<Args> {
         <File @recentFile={{file}} />
       {{/each}}
     </ul>
-    <style>
+    <style scoped>
       .recent-files {
         list-style-type: none;
         margin: 0;
@@ -87,7 +87,7 @@ class File extends Component<FileArgs> {
         </li>
       </WithLoadedRealm>
     {{/unless}}
-    <style>
+    <style scoped>
       .recent-file {
         background: var(--boxel-light);
         padding: var(--boxel-sp-xs);

@@ -43,7 +43,7 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
     {{yield item}}
   </PowerSelect>
 
-  <style>
+  <style scoped>
     .boxel-select {
       border: 1px solid var(--boxel-form-control-border-color);
       border-radius: var(--boxel-form-control-border-radius);
@@ -56,13 +56,13 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
       display: none;
     }
   </style>
-  {{! Note: When editing dropdown of the PowerSelect component we target 
-  the styles using :global -- this is not a mistake. The reason we do this is because 
-  content is teleported to an element #ember-basic-dropdown-wormhole at the top of the dom 
-  Therefore, our out-of-the-box scoped css solution do not work and we must use an escape hatch (ie :global) to 
+  {{! Note: When editing dropdown of the PowerSelect component we target
+  the styles using :global -- this is not a mistake. The reason we do this is because
+  content is teleported to an element #ember-basic-dropdown-wormhole at the top of the dom
+  Therefore, our out-of-the-box scoped css solution do not work and we must use an escape hatch (ie :global) to
   ensure styles are being applied correctly.
    }}
-  <style>
+  <style scoped>
     :global(.boxel-select__dropdown) {
       --boxel-select-current-color: var(--boxel-highlight);
       --boxel-select-selected-color: var(--boxel-light-100);

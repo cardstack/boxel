@@ -45,7 +45,7 @@ export default class BinaryFileInfo extends Component<Signature> {
         {{this.lastModified}}</div>
     </div>
 
-    <style>
+    <style scoped>
       .binary-info {
         display: flex;
         flex-wrap: wrap;
