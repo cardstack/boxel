@@ -1,47 +1,34 @@
-import {
-  waitFor,
-  waitUntil,
-  click,
-  fillIn,
-  triggerEvent,
-} from '@ember/test-helpers';
+import { waitFor, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
-import { format, subMinutes } from 'date-fns';
 import { setupRenderingTest } from 'ember-qunit';
-import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
-import { EventStatus } from 'matrix-js-sdk';
+// import { EventStatus } from 'matrix-js-sdk';
 import { module, test } from 'qunit';
 
-import { Deferred, baseRealm } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
+import { baseRealm, Loader, type Realm } from '@cardstack/runtime-common';
 
-import { currentRoomIdPersistenceKey } from '@cardstack/host/components/ai-assistant/panel';
+import type {
+  CardMessageContent,
+  CardFragmentContent,
+} from 'https://cardstack.com/base/matrix-event';
+
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import {
   addRoomEvent,
-  getCommandReactionEvents,
-  getCommandResultEvents,
-  updateRoomEvent,
+  getRoomEvents,
 } from '@cardstack/host/lib/matrix-handlers';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import { CardDef } from '../../../../experiments-realm/re-export';
 import {
-  percySnapshot,
   testRealmURL,
   setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupServerSentEvents,
-  setupOnSave,
-  type TestContextWithSave,
-  getMonacoContent,
-  waitForCodeEditor,
   lookupLoaderService,
 } from '../../helpers';
 import {
@@ -50,8 +37,9 @@ import {
 } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
 
-module('Integration | ai-assistant-panel', function (hooks) {
-  const realmName = 'Operator Mode Workspace';
+module('Integration | create app module via ai-assistant', function (hooks) {
+  const noop = () => {};
+  const testCardsRealm = 'http://localhost:4202/test/';
   let loader: Loader;
   let matrixService: MockMatrixService;
   let operatorModeStateService: OperatorModeStateService;
@@ -64,16 +52,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
   });
 
   setupLocalIndexing(hooks);
-  setupOnSave(hooks);
   setupCardLogs(
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
+
   setupServerSentEvents(hooks);
   setupMatrixServiceMock(hooks, { autostart: true });
-
   setupWindowMock(hooks);
-  let noop = () => {};
 
   hooks.beforeEach(async function () {
     cardApi = await loader.import(`${baseRealm.url}card-api`);
@@ -84,48 +70,9 @@ module('Integration | ai-assistant-panel', function (hooks) {
     operatorModeStateService = this.owner.lookup(
       'service:operator-mode-state-service',
     ) as OperatorModeStateService;
-
-    let {
-      field,
-      contains,
-      linksTo,
-      linksToMany,
-      CardDef,
-      Component,
-      FieldDef,
-    } = cardApi;
-    let string: typeof import('https://cardstack.com/base/string');
-    string = await loader.import(`${baseRealm.url}string`);
-    let { default: StringField } = string;
-
-    class Pet extends CardDef {
-      static displayName = 'Pet';
-      @field name = contains(StringField);
-      @field title = contains(StringField, {
-        computeVia: function (this: Pet) {
-          return this.name;
-        },
-      });
-      static fitted = class Fitted extends Component<typeof this> {
-        <template>
-          <h3 data-test-pet={{@model.name}}>
-            <@fields.name />
-          </h3>
-        </template>
-      };
-    }
-
-    let petMango = new Pet({ name: 'Mango' });
-
-    await setupIntegrationTestRealm({
-      loader,
-      contents: {
-
-        '.realm.json': `{ "name": "${realmName}" }`,
-      },
-    });
   });
 
+  // TODO: extract test helper
   async function setCardInOperatorModeState(
     cardURL?: string,
     format: 'isolated' | 'edit' = 'isolated',
@@ -162,290 +109,134 @@ module('Integration | ai-assistant-panel', function (hooks) {
     return roomId;
   }
 
+  async function getModule(realm: Realm, url: URL) {
+    let maybeInstance = await realm.realmIndexQueryEngine.module(url);
+    if (maybeInstance?.type === 'error') {
+      return undefined;
+    }
+    return maybeInstance;
+  }
+
   test('it can create a module using a tool call', async function (assert) {
-    let id = `${testRealmURL}Person/fadhlan`;
-    let roomId = await renderAiAssistantPanel(id);
-    await waitFor('[data-test-person="Fadhlan"]');
-
-    await addRoomEvent(matrixService, {
-      event_id: 'event0',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        msgtype: 'org.boxel.command',
-        formatted_body: 'Removing pet and changing preferred carrier',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: id,
-              attributes: {
-                address: { shippingInfo: { preferredCarrier: 'Fedex' } },
+    let { realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'PRD/1.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              appTitle: 'Preschool CRM',
+              shortDescription:
+                'A CRM tailored specifically for preschools to manage tours and other administrative tasks efficiently.',
+              thumbnail: {
+                altText: null,
+                size: 'actual',
+                height: null,
+                width: null,
+                base64: null,
               },
-              relationships: {
-                pet: { links: { self: null } },
+              prompt:
+                'I want to create a CRM tailored for a preschool that includes features such as tracking tours.',
+              overview:
+                'The Preschool CRM is designed to streamline the administrative tasks of preschools, with a particular emphasis on tracking tours. This system will facilitate better communication with parents, streamline the scheduling of tours, and allow for efficient record-keeping and follow-up. It aims to enhance the overall management of the preschool, ensuring that all interactions with potential and current enrollees are handled smoothly and professionally.\n\nIn addition to tour tracking, the Preschool CRM can be expanded to include features such as attendance management, student performance tracking, and parent-teacher communications. This comprehensive approach will help preschools focus on their primary mission of providing quality education while efficiently managing their administrative tasks.',
+              schema:
+                'The schema for the Preschool CRM app might include the following entities:\n1. **Tours**: Tour ID, Date, Time, Parent(s) Name(s), Contact Information, Notes.\n2. **Students**: Student ID, Name, Age, Enrollment Date, Parent(s) Information, Allergies/Medical Notes, Attendance Records.\n3. **Parents**: Parent ID, Name, Contact Information, Student(s) Linked.\n4. **Staff**: Staff ID, Name, Role, Contact Information, Schedule.\n5. **Classes**: Class ID, Name, Instructor, Schedule, Enrolled Students.\n6. **Communications**: Communication ID, Date, Type (Email/Phone/In-Person), Content, Follow-Up Date.',
+              layoutAndNavigation:
+                "The layout of the Preschool CRM will have a clean and intuitive interface, with the following primary sections accessible from a navigation bar:\n1. **Dashboard**: Overview of the day's tours, tasks, and alerts.\n2. **Tours**: A section to schedule, view, and manage tours.\n3. **Students**: A comprehensive database of all students, with options for adding, editing, and viewing student profiles.\n4. **Parents**: A database of parents linked to their respective students, with contact information and interaction history.\n5. **Staff**: A section to manage staff information and schedules.\n6. **Classes**: Manage class schedules and rosters.\n7. **Communications**: Log and review communications with parents and staff.",
+              moduleURL: null,
+              thumbnailURL: null,
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testCardsRealm}product-requirement-document`,
+                name: 'ProductRequirementDocument',
               },
             },
           },
-          eventId: 'patch0',
+        },
+      },
+    });
+
+    const prdCardId = `${testRealmURL}PRD/1`;
+    await renderAiAssistantPanel(prdCardId);
+    const stackCard = `[data-test-stack-card="${prdCardId}"]`;
+    const roomId = 'New AI chat';
+
+    assert.dom(stackCard).exists();
+    await click('[data-test-create-module]');
+    await click('[data-test-past-sessions-button]');
+    await click(`[data-test-enter-room="${roomId}"]`);
+
+    assert
+      .dom(`[data-test-room-name="New AI chat"] [data-test-message-idx="0"]`)
+      .containsText('Generate code');
+    let events = await getRoomEvents(matrixService, roomId);
+    let lastEvContent = events[events.length - 1].content as CardMessageContent;
+    assert.strictEqual(lastEvContent.body, 'Generate code');
+    assert.strictEqual(lastEvContent.data.attachedSkillEventIds?.length, 1);
+    let skillEventId = lastEvContent.data.attachedSkillEventIds?.[0];
+    let skillEventData = JSON.parse(
+      (
+        events.find((e) => e.event_id === skillEventId)
+          ?.content as CardFragmentContent
+      ).data.cardFragment,
+    );
+    assert.strictEqual(
+      skillEventData.data.id,
+      'https://cardstack.com/base/SkillCard/app-generator',
+      'skill card is attached',
+    );
+    assert.ok(
+      skillEventData.data.attributes.instructions,
+      'skill card has instructions',
+    );
+
+    const moduleCode = `import { Component, CardDef, FieldDef, linksTo, linksToMany, field, contains, containsMany } from 'https://cardstack.com/base/card-api';\nimport StringField from 'https://cardstack.com/base/string';\nimport BooleanField from 'https://cardstack.com/base/boolean';\nimport DateField from 'https://cardstack.com/base/date';\nimport DateTimeField from 'https://cardstack.com/base/datetime';\nimport NumberField from 'https://cardstack.com/base/number';\nimport MarkdownField from 'https://cardstack.com/base/markdown';\nimport { AppCard } from '${testCardsRealm}app-card';\n\nexport class Tour extends CardDef {\n  static displayName = 'Tour';\n\n  @field tourID = contains(StringField);\n  @field date = contains(DateField);\n  @field time = contains(DateTimeField);\n  @field parentNames = contains(StringField);\n  @field contactInformation = contains(StringField);\n  @field notes = contains(MarkdownField);\n\n  @field parents = linksToMany(() => Parent);\n}\n\nexport class Student extends CardDef {\n  static displayName = 'Student';\n\n  @field studentID = contains(StringField);\n  @field name = contains(StringField);\n  @field age = contains(NumberField);\n  @field enrollmentDate = contains(DateField);\n  @field parentInformation = contains(MarkdownField);\n  @field allergiesMedicalNotes = contains(MarkdownField);\n  @field attendanceRecords = containsMany(MarkdownField);\n  \n  @field parents = linksToMany(() => Parent);\n  @field classes = linksToMany(() => Class);\n}\n\nexport class Parent extends CardDef {\n  static displayName = 'Parent';\n\n  @field parentID = contains(StringField);\n  @field name = contains(StringField);\n  @field contactInformation = contains(StringField);\n  \n  @field students = linksToMany(Student);\n  @field tours = linksToMany(Tour);\n}\n\nexport class Staff extends CardDef {\n  static displayName = 'Staff';\n\n  @field staffID = contains(StringField);\n  @field name = contains(StringField);\n  @field role = contains(StringField);\n  @field contactInformation = contains(StringField);\n  @field schedule = contains(MarkdownField);\n}\n\nexport class Class extends CardDef {\n  static displayName = 'Class';\n\n  @field classID = contains(StringField);\n  @field name = contains(StringField);\n  @field schedule = contains(MarkdownField);\n  \n  @field instructor = linksTo(Staff);\n  @field enrolledStudents = linksToMany(Student);\n}\n\nexport class Communication extends CardDef {\n  static displayName = 'Communication';\n\n  @field communicationID = contains(StringField);\n  @field date = contains(DateField);\n  @field type = contains(StringField);\n  @field content = contains(MarkdownField);\n  @field followUpDate = contains(DateField);\n}\n\nexport class PreschoolCRMApp extends AppCard {\n  static displayName = 'Preschool CRM';\n\n  @field tours = containsMany(Tour);\n  @field students = containsMany(Student);\n  @field parents = containsMany(Parent);\n  @field staff = containsMany(Staff);\n  @field classes = containsMany(Class);\n  @field communications = containsMany(Communication);\n}\n`;
+    await addRoomEvent(matrixService, {
+      event_id: 'event1',
+      room_id: roomId,
+      state_key: 'state',
+      type: 'm.room.message',
+      origin_server_ts: 1725046545971,
+      sender: '@aibot:localhost',
+      content: {
+        msgtype: 'org.boxel.command',
+        formatted_body:
+          'Generate code for Preschool CRM based on product requirement document.',
+        format: 'org.matrix.custom.html',
+        data: JSON.stringify({
+          toolCall: {
+            name: 'generateAppModule',
+            arguments: {
+              attached_card_id: prdCardId,
+              description:
+                'Generate code for Preschool CRM based on product requirement document.',
+              appTitle: 'Preschool CRM',
+              moduleCode,
+            },
+          },
+          eventId: 'event1',
         }),
         'm.relates_to': {
           rel_type: 'm.replace',
-          event_id: 'patch0',
+          event_id: 'event0',
         },
       },
       status: null,
     });
-
-    const stackCard = `[data-test-stack-card="${id}"]`;
 
     await waitFor('[data-test-command-apply="ready"]');
-    assert.dom(`${stackCard} [data-test-preferredcarrier="DHL"]`).exists();
-    assert.dom(`${stackCard} [data-test-pet="Mango"]`).exists();
+    await click('[data-test-command-apply="ready"]');
+    assert.dom('[data-test-view-module]').exists();
+    let moduleURL = (
+      document.querySelector('[data-test-view-module]') as HTMLElement
+    )?.innerText;
+    let module = await getModule(realm, new URL(moduleURL));
+    assert.strictEqual(module?.source, moduleCode);
 
-    await click('[data-test-command-apply]');
-    await waitFor('[data-test-command-card-idle]');
-    assert.dom('[data-test-apply-state="applied"]').exists();
-    assert.dom(`${stackCard} [data-test-preferredcarrier="Fedex"]`).exists();
-    assert.dom(`${stackCard} [data-test-pet="Mango"]`).doesNotExist();
-
-    await addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        msgtype: 'org.boxel.command',
-        formatted_body: 'Link to pet and change preferred carrier',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: id,
-              attributes: {
-                address: { shippingInfo: { preferredCarrier: 'UPS' } },
-              },
-              relationships: {
-                pet: {
-                  links: { self: `${testRealmURL}Pet/mango` },
-                },
-              },
-            },
-          },
-          eventId: 'patch1',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'patch1',
-        },
-      },
-      status: null,
-    });
-    await waitFor('[data-test-command-apply="ready"]');
-    assert.dom(`${stackCard} [data-test-preferredcarrier="Fedex"]`).exists();
-    assert.dom(`${stackCard} [data-test-pet]`).doesNotExist();
-
-    await click('[data-test-command-apply]');
-    await waitFor('[data-test-message-idx="1"] [data-test-command-card-idle]');
-    assert
-      .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
-      .exists();
-    assert.dom(`${stackCard} [data-test-preferredcarrier="UPS"]`).exists();
-    assert.dom(`${stackCard} [data-test-pet="Mango"]`).exists();
-    assert.dom(`${stackCard} [data-test-city="Bandung"]`).exists();
-    assert.dom(`${stackCard} [data-test-country="Indonesia"]`).exists();
-  });
-
-  test<TestContextWithSave>('it allows chat commands to change cards in the stack', async function (assert) {
-    assert.expect(4);
-
-    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
-
-    await waitFor('[data-test-person]');
-    assert.dom('[data-test-boxel-header-title]').hasText('Person');
-    assert.dom('[data-test-person]').hasText('Fadhlan');
-
-    await addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        body: 'i am the body',
-        msgtype: 'org.boxel.command',
-        formatted_body: 'A patch',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: `${testRealmURL}Person/fadhlan`,
-              attributes: { firstName: 'Dave' },
-            },
-          },
-          eventId: 'patch1',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'patch1',
-        },
-      },
-      status: null,
-    });
-
-    await waitFor('[data-test-command-apply]');
-    this.onSave((_, json) => {
-      if (typeof json === 'string') {
-        throw new Error('expected JSON save data');
-      }
-      assert.strictEqual(json.data.attributes?.firstName, 'Dave');
-    });
-    await click('[data-test-command-apply]');
-    await waitFor('[data-test-command-card-idle]');
-
-    assert.dom('[data-test-person]').hasText('Dave');
-  });
-
-  test('after search command is issued, a command result event is dispatched', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-    await waitFor('[data-test-person="Fadhlan"]');
-    await matrixService.createAndJoinRoom('room1', 'test room 1');
-    await addRoomEvent(matrixService, {
-      event_id: 'room1-event1',
-      room_id: 'room1',
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        msgtype: 'org.boxel.command',
-        formatted_body: 'Changing first name to Evie',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'searchCard',
-            arguments: {
-              description: 'Searching for card',
-              filter: {
-                type: {
-                  module: `${testRealmURL}pet`,
-                  name: 'Pet',
-                },
-              },
-            },
-          },
-          eventId: 'room1-event1',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'room1-event1',
-        },
-      },
-      status: null,
-    });
-    let commandResultEvents = await getCommandResultEvents(
-      matrixService,
-      'room1',
-    );
-    assert.equal(
-      commandResultEvents.length,
-      0,
-      'command result event is not dispatched',
-    );
-    await click('[data-test-open-ai-assistant]');
-    await waitFor('[data-test-room-name="test room 1"]');
-    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
-    await waitFor('[data-test-command-card-idle]');
-
-    assert
-      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
-      .exists();
-
-    commandResultEvents = await getCommandResultEvents(matrixService, 'room1');
-    assert.equal(
-      commandResultEvents.length,
-      1,
-      'command result event is dispatched',
-    );
-  });
-
-  test('it can search for card instances that is of the same card type as the card shared', async function (assert) {
-    let id = `${testRealmURL}Pet/mango.json`;
-    let roomId = await renderAiAssistantPanel(id);
-
-    await addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        msgtype: 'org.boxel.command',
-        formatted_body: 'Search for the following card',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'searchCard',
-            arguments: {
-              description: 'Searching for card',
-              filter: {
-                type: {
-                  module: `${testRealmURL}pet`,
-                  name: 'Pet',
-                },
-              },
-            },
-          },
-          eventId: 'search1',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'search1',
-        },
-      },
-      status: null,
-    });
-    await waitFor('[data-test-command-apply]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
-    await waitFor('[data-test-command-result]');
-    await waitFor('[data-test-result-card-idx="1"]');
-    let commandResultEvents = await getCommandResultEvents(
-      matrixService,
-      roomId,
-    );
-    assert.equal(
-      commandResultEvents[0].content.result.length,
-      2,
-      'number of search results',
-    );
-    assert
-      .dom('[data-test-command-message]')
-      .containsText('Search for the following card');
-    assert
-      .dom('[data-test-comand-result-header]')
-      .containsText('Search Results 2 results');
-
-    assert.dom('[data-test-result-card-idx="0"]').containsText('0. Jackie');
-    assert.dom('[data-test-result-card-idx="1"]').containsText('1. Mango');
-    assert.dom('[data-test-toggle-show-button]').doesNotExist();
+    await click('[data-test-view-module]');
+    assert.dom('[data-test-code-mode]').exists();
+    assert.dom('[data-test-editor]').hasAnyText();
+    assert.dom('[data-test-syntax-error]').doesNotExist();
   });
 });
