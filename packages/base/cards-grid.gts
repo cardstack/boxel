@@ -97,13 +97,13 @@ class Isolated extends Component<typeof CardsGrid> {
 
     <style>
       :global(:root) {
-        --cards-grid-pading-top: var(--boxel-sp-lg);
+        --cards-grid-padding-top: var(--boxel-sp-lg);
       }
       .cards-grid {
         --grid-card-width: 11.125rem;
         --grid-card-height: 15.125rem;
 
-        padding: var(--cards-grid-pading-top) var(--boxel-sp-sm);
+        padding: var(--cards-grid-padding-top) var(--boxel-sp-sm);
 
         display: flex;
         gap: var(--boxel-sp-xl);
@@ -113,7 +113,7 @@ class Isolated extends Component<typeof CardsGrid> {
       }
       :deep(.filter-list) {
         position: sticky;
-        top: var(--cards-grid-pading-top);
+        top: var(--cards-grid-padding-top);
       }
       :deep(.filter-list__button:first-child) {
         margin-bottom: var(--boxel-sp-xl);
