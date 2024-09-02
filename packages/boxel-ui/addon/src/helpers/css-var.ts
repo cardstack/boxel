@@ -24,7 +24,9 @@ export function cssVar(
   let vars: string[] = [];
   Object.keys(values).forEach((name) => {
     let formattedValue = formatValue(values[name]);
-    if (!formattedValue) return;
+    if (!formattedValue) {
+      return;
+    }
     vars.push(`--${name}: ${formattedValue}`);
   });
 
