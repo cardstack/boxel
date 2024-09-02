@@ -220,6 +220,14 @@ export class Batch {
         valueExpressions,
       ),
     ]);
+    await this.query([
+      `DELETE FROM realm_meta`,
+      'WHERE',
+      ...every([
+        ['realm_version <', param(this.realmVersion)],
+        ['realm_url =', param(this.realmURL.href)],
+      ]),
+    ] as Expression);
 
     // prune obsolete generation index entries
     if (this.isNewGeneration) {
@@ -296,15 +304,6 @@ export class Batch {
         valueExpressions,
       ),
     ]);
-
-    await this.query([
-      `DELETE FROM realm_meta`,
-      'WHERE',
-      ...every([
-        ['realm_version <', param(this.realmVersion)],
-        ['realm_url =', param(this.realmURL.href)],
-      ]),
-    ] as Expression);
   }
 
   private async setNextRealmVersion() {

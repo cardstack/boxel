@@ -13,8 +13,6 @@ exports.up = pgm => {
   pgm.addConstraint(table, 'realm_meta_pkey', {
     primaryKey: ['realm_url', 'realm_version'],
   });
-  pgm.createIndex(table, ['realm_url']);
-  pgm.createIndex(table, ['realm_version']);
 };
 
 exports.down = pgm => {
