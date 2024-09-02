@@ -1,6 +1,6 @@
 import { Deferred } from './deferred';
 import {
-  transformResultsToCardTypeSummaryDoc,
+  makeCardTypeSummaryDoc,
   transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
 } from './card-document';
@@ -1665,7 +1665,7 @@ export class Realm {
   ): Promise<Response> {
     let results = await this.#realmIndexQueryEngine.fetchCardTypeSummary();
 
-    let doc = transformResultsToCardTypeSummaryDoc(results);
+    let doc = makeCardTypeSummaryDoc(results);
 
     return createResponse({
       body: JSON.stringify(doc, null, 2),
