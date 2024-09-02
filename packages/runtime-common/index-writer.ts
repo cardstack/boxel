@@ -206,28 +206,8 @@ export class Batch {
   }
 
   async done(): Promise<{ totalIndexEntries: number }> {
-    let { nameExpressions, valueExpressions } = asExpressions({
-      realm_url: this.realmURL.href,
-      current_version: this.realmVersion,
-    } as RealmVersionsTable);
     await this.updateRealmMeta();
-    // Make the batch updates live
-    await this.query([
-      ...upsert(
-        'realm_versions',
-        'realm_versions_pkey',
-        nameExpressions,
-        valueExpressions,
-      ),
-    ]);
-    await this.query([
-      `DELETE FROM realm_meta`,
-      'WHERE',
-      ...every([
-        ['realm_version <', param(this.realmVersion)],
-        ['realm_url =', param(this.realmURL.href)],
-      ]),
-    ] as Expression);
+    await this.applyBatchUpdates();
 
     // prune obsolete generation index entries
     if (this.isNewGeneration) {
@@ -304,6 +284,29 @@ export class Batch {
         valueExpressions,
       ),
     ]);
+  }
+
+  private async applyBatchUpdates() {
+    let { nameExpressions, valueExpressions } = asExpressions({
+      realm_url: this.realmURL.href,
+      current_version: this.realmVersion,
+    } as RealmVersionsTable);
+    await this.query([
+      ...upsert(
+        'realm_versions',
+        'realm_versions_pkey',
+        nameExpressions,
+        valueExpressions,
+      ),
+    ]);
+    await this.query([
+      `DELETE FROM realm_meta`,
+      'WHERE',
+      ...every([
+        ['realm_version <', param(this.realmVersion)],
+        ['realm_url =', param(this.realmURL.href)],
+      ]),
+    ] as Expression);
   }
 
   private async setNextRealmVersion() {
