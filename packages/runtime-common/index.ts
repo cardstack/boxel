@@ -52,7 +52,7 @@ export interface RealmPrerenderedCards {
 }
 
 import { RealmPaths, type LocalPath } from './paths';
-import { Query } from './query';
+import { CardTypeFilter, EveryFilter, Query } from './query';
 import { Loader } from './loader';
 export * from './constants';
 export * from './queue';
@@ -166,7 +166,7 @@ export type CreateNewCard = (
 
 export interface CardChooser {
   chooseCard<T extends BaseDef>(
-    query: Query,
+    query: CardChooserQuery,
     opts?: {
       offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
       multiSelect?: boolean;
@@ -176,7 +176,7 @@ export interface CardChooser {
 }
 
 export async function chooseCard<T extends BaseDef>(
-  query: Query,
+  query: CardChooserQuery,
   opts?: {
     offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
     multiSelect?: boolean;
@@ -220,6 +220,10 @@ export interface CardSearch {
     instances: CardDef[];
     isLoading: boolean;
   };
+}
+
+export interface CardChooserQuery extends Query {
+  filter?: CardTypeFilter | EveryFilter;
 }
 
 export function getCards(query: Query, realms?: string[]) {

@@ -1601,6 +1601,8 @@ export class Realm {
 
     let parsedQueryString = qs.parse(new URL(request.url).search.slice(1));
     let htmlFormat = parsedQueryString.prerenderedHtmlFormat as string;
+    let cardUrls = parsedQueryString.cardUrls as string[];
+
     if (!isValidPrerenderedHtmlFormat(htmlFormat)) {
       return badRequest(
         JSON.stringify({
@@ -1611,8 +1613,9 @@ export class Realm {
         requestContext,
       );
     }
-    // prerenederedHtmlFormat is a special parameter only for this endpoint so don't include it in our Query for card search
+    // prerenderedHtmlFormat and cardUrls are special parameters only for this endpoint so don't include it in our Query for standard card search
     delete parsedQueryString.prerenderedHtmlFormat;
+    delete parsedQueryString.cardUrls;
 
     let cardsQuery = parsedQueryString;
     assertQuery(parsedQueryString);
@@ -1622,10 +1625,12 @@ export class Realm {
       {
         useWorkInProgressIndex,
         htmlFormat,
+        cardUrls,
       },
     );
 
     let doc = transformResultsToPrerenderedCardsDoc(results);
+    doc.meta.realmInfo = await this.parseRealmInfo();
 
     return createResponse({
       body: JSON.stringify(doc, null, 2),
@@ -1636,10 +1641,7 @@ export class Realm {
     });
   }
 
-  private async realmInfo(
-    _request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
+  private async parseRealmInfo() {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
     let realmConfig = await this.readFileAsText(localPath, undefined);
@@ -1648,6 +1650,9 @@ export class Realm {
       backgroundURL: null,
       iconURL: null,
     };
+    if (!realmConfig) {
+      return realmInfo;
+    }
 
     if (realmConfig) {
       try {
@@ -1660,6 +1665,15 @@ export class Realm {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }
     }
+    return realmInfo;
+  }
+
+  private async realmInfo(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let realmInfo = await this.parseRealmInfo();
+
     let doc = {
       data: {
         id: this.url,

@@ -193,9 +193,12 @@ module('Integration | card-catalog', function (hooks) {
     test('can filter cards by selecting a realm', async function (assert) {
       await click('[data-test-realm-filter-button]');
       assert.dom('[data-test-boxel-menu-item]').exists({ count: 2 });
-      assert.dom('[data-test-boxel-menu-item-selected]').doesNotExist(); // no realms selected
+      assert.dom('[data-test-boxel-menu-item-selected]').exists({ count: 2 }); // All realms are selected by default
+      assert
+        .dom('[data-test-realm-filter-button]')
+        .includesText('Workspace: All');
 
-      await click(`[data-test-boxel-menu-item-text="Base Workspace"]`); // base realm is selected
+      await click(`[data-test-boxel-menu-item-text="Local Workspace"]`); // Unselect Local Workspace
       assert
         .dom('[data-test-realm-filter-button]')
         .hasText(`Workspace: Base Workspace`, 'Only base realm is selected');
@@ -210,84 +213,6 @@ module('Integration | card-catalog', function (hooks) {
       assert
         .dom('[data-test-boxel-menu-item-selected]')
         .hasText('Base Workspace');
-    });
-
-    test('can filter cards by selecting all realms', async function (assert) {
-      await click('[data-test-realm-filter-button]');
-      await click(`[data-test-boxel-menu-item-text="${realmName}"]`);
-      await click('[data-test-realm-filter-button]');
-      await click(`[data-test-boxel-menu-item-text="Base Workspace"]`); // all realms selected
-
-      assert
-        .dom('[data-test-realm-filter-button]')
-        .hasText(`Workspace: ${realmName}, Base Workspace`);
-      assert
-        .dom('[data-test-realm]')
-        .exists({ count: 2 }, 'Both realms are selected');
-      assert
-        .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
-        .exists({ count: 3 });
-      assert
-        .dom('[data-test-realm="Base Workspace"] [data-test-card-catalog-item]')
-        .exists({ count: baseRealmCardCount });
-
-      await click('[data-test-realm-filter-button]');
-      assert.dom('[data-test-boxel-menu-item-selected]').exists({ count: 2 });
-    });
-
-    test('can filter cards by unselecting a realm', async function (assert) {
-      await click('[data-test-realm-filter-button]');
-      await click(`[data-test-boxel-menu-item-text="Base Workspace"]`);
-      await click('[data-test-realm-filter-button]');
-      await click(`[data-test-boxel-menu-item-text="${realmName}"]`); // all realms selected
-      await click('[data-test-realm-filter-button]');
-      await click(`[data-test-boxel-menu-item-text="${realmName}"]`); // local realm unselected
-
-      assert
-        .dom('[data-test-realm-filter-button]')
-        .hasText(`Workspace: Base Workspace`);
-      assert.dom(`[data-test-realm="${realmName}"]`).doesNotExist();
-      assert
-        .dom('[data-test-realm="Base Workspace"] [data-test-card-catalog-item]')
-        .exists({ count: baseRealmCardCount });
-
-      await click('[data-test-realm-filter-button]');
-      assert
-        .dom('[data-test-boxel-menu-item-selected]')
-        .hasText('Base Workspace');
-    });
-
-    test('unselecting all realm filters displays all realms', async function (assert) {
-      await click('[data-test-realm-filter-button]');
-      await click(`[data-test-boxel-menu-item-text="${realmName}"]`);
-      await click('[data-test-realm-filter-button]');
-      await click(`[data-test-boxel-menu-item-text="Base Workspace"]`);
-      assert
-        .dom('[data-test-realm-filter-button]')
-        .hasText(`Workspace: ${realmName}, Base Workspace`); // all realms selected
-      await click('[data-test-realm-filter-button]');
-      await click(`[data-test-boxel-menu-item-text="Base Workspace"]`);
-      await click('[data-test-realm-filter-button]');
-      await click(`[data-test-boxel-menu-item-text="${realmName}"]`); // all realms unselected
-
-      assert.dom('[data-test-realm-filter-button]').hasText('Workspace: All');
-      assert
-        .dom('[data-test-realm]')
-        .exists(
-          { count: 2 },
-          'All realms are shown when filters are unselected',
-        );
-      assert
-        .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
-        .exists({ count: 3 });
-      assert
-        .dom('[data-test-realm="Base Workspace"] [data-test-card-catalog-item]')
-        .exists({ count: baseRealmCardCount });
-
-      await click('[data-test-realm-filter-button]');
-      assert
-        .dom('[data-test-boxel-menu-item-selected]')
-        .doesNotExist('No realms are selected');
     });
   });
 

@@ -245,7 +245,7 @@ class Isolated extends Component<typeof CardsGrid> {
     let card = await chooseCard<CatalogEntry>({
       filter: {
         on: catalogEntryRef,
-        eq: { isField: false },
+        every: [{ eq: { isField: false } }],
       },
     });
     if (!card) {
