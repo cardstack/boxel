@@ -6,7 +6,7 @@ import Component from '@glimmer/component';
 
 import { Button } from '@cardstack/boxel-ui/components';
 
-import { cn, eq, gt, lt } from '@cardstack/boxel-ui/helpers';
+import { add, cn, eq, gt, lt, subtract } from '@cardstack/boxel-ui/helpers';
 
 import type { RealmInfo } from '@cardstack/runtime-common';
 
@@ -80,7 +80,7 @@ export default class CardCatalog extends Component<Signature> {
                   'click'
                   (fn
                     (mut realmData.displayedCardsCount)
-                    (this.add realmData.displayedCardsCount this.pageSize)
+                    (add realmData.displayedCardsCount this.pageSize)
                   )
                 }}
                 @kind='secondary-light'
@@ -89,7 +89,7 @@ export default class CardCatalog extends Component<Signature> {
               >
                 Show
                 {{this.pageSize}}
-                more cards ({{this.subtract
+                more cards ({{subtract
                   realmData.cardsTotal
                   realmData.displayedCardsCount
                 }}
@@ -161,14 +161,6 @@ export default class CardCatalog extends Component<Signature> {
       }
     </style>
   </template>
-
-  @action add(number1: number, number2: number) {
-    return number1 + number2;
-  }
-
-  @action subtract(number1: number, number2: number) {
-    return number1 - number2;
-  }
 
   @action
   groupByRealmUrl(
