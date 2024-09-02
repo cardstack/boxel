@@ -341,9 +341,7 @@ export function transformResultsToPrerenderedCardsDoc(results: {
   };
 }
 
-export function makeCardTypeSummaryDoc(
-  summaries: CardTypeSummary[],
-) {
+export function makeCardTypeSummaryDoc(summaries: CardTypeSummary[]) {
   let data = summaries.map((summary) => ({
     type: 'card-type-summary',
     id: summary.code_ref,
