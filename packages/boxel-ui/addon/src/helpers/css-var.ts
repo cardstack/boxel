@@ -23,9 +23,9 @@ export function cssVar(
 ): string {
   let vars: string[] = [];
   Object.keys(values).forEach((name) => {
-    if (values[name] !== undefined) {
-      vars.push(`--${name}: ${formatValue(values[name])}`);
-    }
+    let formattedValue = formatValue(values[name]);
+    if (!formattedValue) return;
+    vars.push(`--${name}: ${formattedValue}`);
   });
 
   return vars.join('; ');
