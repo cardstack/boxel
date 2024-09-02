@@ -95,6 +95,7 @@ export type QueryOptions = WIPOptions & PrerenderedCardOptions;
 
 interface PrerenderedCardOptions {
   htmlFormat?: 'embedded' | 'fitted' | 'atom';
+  cardUrls?: string[];
 }
 
 interface WIPOptions {
@@ -299,6 +300,16 @@ export class IndexQueryEngine {
       ['is_deleted = FALSE OR is_deleted IS NULL'],
       realmVersionExpression({ withMaxVersion: version }),
     ];
+
+    if (opts.cardUrls && opts.cardUrls.length > 0) {
+      conditions.push([
+        'i.url IN',
+        ...addExplicitParens(
+          separatedByCommas(opts.cardUrls.map((url) => [param(url)])),
+        ),
+      ]);
+    }
+
     if (filter) {
       conditions.push(this.filterCondition(filter, baseCardRef));
     }
