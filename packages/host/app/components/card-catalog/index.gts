@@ -200,7 +200,6 @@ export default class CardCatalog extends Component<Signature> {
       >,
     );
 
-    // Set cardsTotal and displayedCardsCount after the reduce
     Object.keys(groupedCards).forEach((realmUrl) => {
       const totalCards = groupedCards[realmUrl].cards.length;
       groupedCards[realmUrl] = {

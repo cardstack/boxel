@@ -166,7 +166,7 @@ export type CreateNewCard = (
 
 export interface CardChooser {
   chooseCard<T extends BaseDef>(
-    query: CardChooserQuery,
+    query: CardCatalogQuery,
     opts?: {
       offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
       multiSelect?: boolean;
@@ -176,7 +176,7 @@ export interface CardChooser {
 }
 
 export async function chooseCard<T extends BaseDef>(
-  query: CardChooserQuery,
+  query: CardCatalogQuery,
   opts?: {
     offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
     multiSelect?: boolean;
@@ -222,7 +222,7 @@ export interface CardSearch {
   };
 }
 
-export interface CardChooserQuery extends Query {
+export interface CardCatalogQuery extends Query {
   filter?: CardTypeFilter | EveryFilter;
 }
 

@@ -24,7 +24,7 @@ import {
   Deferred,
   Loader,
   RealmInfo,
-  CardChooserQuery,
+  CardCatalogQuery,
 } from '@cardstack/runtime-common';
 
 import type {
@@ -331,7 +331,7 @@ export default class CardCatalogModal extends Component<Signature> {
 
   // This is part of our public API for runtime-common to invoke the card chooser
   async chooseCard<T extends CardDef>(
-    query: CardChooserQuery,
+    query: CardCatalogQuery,
     opts?: {
       offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
       multiSelect?: boolean;
@@ -361,7 +361,7 @@ export default class CardCatalogModal extends Component<Signature> {
 
   private _chooseCard = task(
     async <T extends CardDef>(
-      query: CardChooserQuery,
+      query: CardCatalogQuery,
       opts: {
         offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
         multiSelect?: boolean;
@@ -512,9 +512,7 @@ export default class CardCatalogModal extends Component<Signature> {
       return;
     }
 
-    // this.state.cardURL = '';
     this.state.selectedCardUrl = cardUrl;
-    debugger;
 
     if (
       (event instanceof KeyboardEvent && event?.key === 'Enter') ||

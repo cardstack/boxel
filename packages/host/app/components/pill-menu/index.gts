@@ -13,7 +13,7 @@ import { cn, gt, not, or } from '@cardstack/boxel-ui/helpers';
 import {
   chooseCard,
   baseCardRef,
-  type CardChooserQuery,
+  type CardCatalogQuery,
 } from '@cardstack/runtime-common';
 
 import CardPill from '@cardstack/host/components/card-pill';
@@ -34,7 +34,7 @@ interface Signature {
     isExpandableHeader?: boolean;
     headerAction?: () => void;
     canAttachCard?: boolean;
-    query?: CardChooserQuery;
+    query?: CardCatalogQuery;
     onChooseCard?: (card: CardDef) => void;
   };
   Blocks: {
