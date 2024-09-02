@@ -960,6 +960,7 @@ const tests = Object.freeze({
             },
           } as LooseCardResource,
           search_doc: { name: 'Mango' },
+          display_names: [`Person`],
           deps: [`${testRealmURL}person`],
           types: [{ module: `./person`, name: 'Person' }, baseCardRef].map(
             (i) => internalKeyFor(i, new URL(testRealmURL)),
@@ -982,8 +983,8 @@ const tests = Object.freeze({
       },
     };
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
-    await batch.invalidate(new URL(`${testRealmURL}1.json`));
-    await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
+    await batch.invalidate(new URL(`${testRealmURL}2.json`));
+    await batch.updateEntry(new URL(`${testRealmURL}2.json`), {
       type: 'instance',
       resource,
       source: JSON.stringify(resource),
@@ -1035,7 +1036,7 @@ const tests = Object.freeze({
     ];
     assert.strictEqual(
       value.length,
-      1,
+      2,
       'correct length of card type summary after indexing is done',
     );
     assert.deepEqual(
@@ -1046,13 +1047,18 @@ const tests = Object.freeze({
           code_ref: `${testRealmURL}fancy-person/FancyPerson`,
           display_name: 'Fancy Person',
         },
+        {
+          total: 1,
+          code_ref: `${testRealmURL}person/Person`,
+          display_name: 'Person',
+        },
       ],
       'correct card type summary after indexing is done',
     );
 
     batch = await indexWriter.createBatch(new URL(testRealmURL));
-    await batch.invalidate(new URL(`${testRealmURL}2.json`));
-    await batch.updateEntry(new URL(`${testRealmURL}2.json`), {
+    await batch.invalidate(new URL(`${testRealmURL}3.json`));
+    await batch.updateEntry(new URL(`${testRealmURL}3.json`), {
       type: 'instance',
       resource,
       source: JSON.stringify(resource),
@@ -1066,8 +1072,8 @@ const tests = Object.freeze({
         baseCardRef,
       ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
     });
-    await batch.invalidate(new URL(`${testRealmURL}3.json`));
-    await batch.updateEntry(new URL(`${testRealmURL}3.json`), {
+    await batch.invalidate(new URL(`${testRealmURL}4.json`));
+    await batch.updateEntry(new URL(`${testRealmURL}4.json`), {
       type: 'instance',
       resource,
       source: JSON.stringify(resource),
@@ -1102,7 +1108,7 @@ const tests = Object.freeze({
     ];
     assert.strictEqual(
       value.length,
-      2,
+      3,
       'correct length of card type summary after indexing is done',
     );
     assert.deepEqual(
@@ -1112,6 +1118,11 @@ const tests = Object.freeze({
           total: 2,
           code_ref: `${testRealmURL}fancy-person/FancyPerson`,
           display_name: 'Fancy Person',
+        },
+        {
+          total: 1,
+          code_ref: `${testRealmURL}person/Person`,
+          display_name: 'Person',
         },
         {
           total: 1,
