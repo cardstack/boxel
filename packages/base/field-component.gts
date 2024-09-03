@@ -218,39 +218,36 @@ export function getBoxComponent(
               as |c displayContainer|
             }}
               {{#if (isCard model.value)}}
-                {{#let model.value as |card|}}
-                  <DefaultFormatsProvider
-                    @value={{defaultFieldFormats effectiveFormats.cardDef}}
+                <DefaultFormatsProvider
+                  @value={{defaultFieldFormats effectiveFormats.cardDef}}
+                >
+                  <CardContainer
+                    @displayBoundaries={{displayContainer}}
+                    class='field-component-card
+                      {{effectiveFormats.cardDef}}-format display-container-{{displayContainer}}'
+                    {{context.cardComponentModifier
+                      card=model.value
+                      format=effectiveFormats.cardDef
+                      fieldType=field.fieldType
+                      fieldName=field.name
+                    }}
+                    data-test-card-format={{effectiveFormats.cardDef}}
+                    data-test-field-component-card
+                    {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
+                    ...attributes
                   >
-                    <CardContainer
-                      @displayBoundaries={{displayContainer}}
-                      class='field-component-card
-                        {{effectiveFormats.cardDef}}-format display-container-{{displayContainer}}'
-                      {{context.cardComponentModifier
-                        card=card
-                        format=effectiveFormats.cardDef
-                        fieldType=field.fieldType
-                        fieldName=field.name
-                      }}
-                      data-test-card={{card.id}}
-                      data-test-card-format={{effectiveFormats.cardDef}}
-                      data-test-field-component-card
-                      {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
-                      ...attributes
-                    >
-                      <c.CardOrFieldFormatComponent
-                        @cardOrField={{cardOrField}}
-                        @model={{card}}
-                        @fields={{c.fields}}
-                        @format={{effectiveFormats.cardDef}}
-                        @set={{model.set}}
-                        @fieldName={{model.name}}
-                        @context={{context}}
-                        @canEdit={{permissions.canWrite}}
-                      />
-                    </CardContainer>
-                  </DefaultFormatsProvider>
-                {{/let}}
+                    <c.CardOrFieldFormatComponent
+                      @cardOrField={{cardOrField}}
+                      @model={{model.value}}
+                      @fields={{c.fields}}
+                      @format={{effectiveFormats.cardDef}}
+                      @set={{model.set}}
+                      @fieldName={{model.name}}
+                      @context={{context}}
+                      @canEdit={{permissions.canWrite}}
+                    />
+                  </CardContainer>
+                </DefaultFormatsProvider>
               {{else if (isCompoundField model.value)}}
                 <DefaultFormatsProvider
                   @value={{defaultFieldFormats effectiveFormats.fieldDef}}

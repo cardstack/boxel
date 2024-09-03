@@ -33,13 +33,11 @@ import StringField from './string';
 class Isolated extends Component<typeof CardsGrid> {
   <template>
     <div class='cards-grid'>
-      <div class='sidebar'>
-        <FilterList
-          @filters={{this.filters}}
-          @activeFilter={{this.activeFilter}}
-          @onChanged={{this.onFilterChanged}}
-        />
-      </div>
+      <FilterList
+        @filters={{this.filters}}
+        @activeFilter={{this.activeFilter}}
+        @onChanged={{this.onFilterChanged}}
+      />
       <div class='content'>
         <span class='headline'>{{this.activeFilter.displayName}}</span>
         <ul class='cards' data-test-cards-grid-cards>
@@ -57,7 +55,6 @@ class Isolated extends Component<typeof CardsGrid> {
                 Loading...
               </:loading>
               <:response as |cards|>
-                {{measureLoadTime}}
                 {{#each cards as |card|}}
                   <CardContainer class='card'>
                     <li
@@ -96,24 +93,14 @@ class Isolated extends Component<typeof CardsGrid> {
     </div>
 
     <style>
-      :global(:root) {
-        --cards-grid-padding-top: var(--boxel-sp-lg);
-      }
       .cards-grid {
         --grid-card-width: 11.125rem;
         --grid-card-height: 15.125rem;
 
-        padding: var(--cards-grid-padding-top) var(--boxel-sp-sm);
+        padding: var(--boxel-sp-lg) var(--boxel-sp-sm);
 
         display: flex;
         gap: var(--boxel-sp-xl);
-      }
-      .sidebar {
-        position: relative;
-      }
-      :deep(.filter-list) {
-        position: sticky;
-        top: var(--cards-grid-padding-top);
       }
       :deep(.filter-list__button:first-child) {
         margin-bottom: var(--boxel-sp-xl);
@@ -295,16 +282,4 @@ export class CardsGrid extends CardDef {
 }
 function removeFileExtension(cardUrl: string) {
   return cardUrl.replace(/\.[^/.]+$/, '');
-}
-
-function measureLoadTime() {
-  // we consider rendering the cards grid part of the app
-  // boot, so this is where we'll measure the app boot time.
-  if ((globalThis as any).__bootStart) {
-    console.log(
-      `time since app boot: ${
-        performance.now() - (globalThis as any).__bootStart
-      } ms`,
-    );
-  }
 }

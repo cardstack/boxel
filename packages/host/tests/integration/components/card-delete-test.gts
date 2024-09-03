@@ -1,10 +1,4 @@
-import {
-  waitUntil,
-  waitFor,
-  click,
-  focus,
-  triggerEvent,
-} from '@ember/test-helpers';
+import { waitUntil, waitFor, click, focus } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { setupRenderingTest } from 'ember-qunit';
@@ -207,11 +201,11 @@ module('Integration | card-delete', function (hooks) {
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
     assert.ok(fileRef, 'card instance exists in file system');
-    assert.dom('[data-test-delete-modal-container]').doesNotExist();
-    await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-      'mouseenter',
+    await waitFor(
+      `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
     );
+    assert.dom('[data-test-delete-modal-container]').doesNotExist();
+
     await click(
       `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
     );
@@ -253,9 +247,8 @@ module('Integration | card-delete', function (hooks) {
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
     assert.ok(fileRef, 'card instance exists in file system');
-    await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-      'mouseenter',
+    await waitFor(
+      `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
     );
     await click(
       `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
@@ -507,9 +500,11 @@ module('Integration | card-delete', function (hooks) {
       realm,
       expectedEvents,
       callback: async () => {
-        await triggerEvent(
+        await waitFor(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-          'mouseenter',
+        );
+        await waitFor(
+          `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
         );
         await click(
           `[data-test-operator-mode-stack="0"] [data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
@@ -577,10 +572,6 @@ module('Integration | card-delete', function (hooks) {
             `[data-test-operator-mode-stack="1"] [data-test-stack-card="${testRealmURL}Pet/mango"]`,
           )
           .exists();
-        await triggerEvent(
-          `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-          'mouseenter',
-        );
         await click(
           `[data-test-operator-mode-stack="0"] [data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
         );
@@ -656,10 +647,6 @@ module('Integration | card-delete', function (hooks) {
           .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
           .exists();
         await click('[data-test-search-sheet-cancel-button]');
-        await triggerEvent(
-          `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-          'mouseenter',
-        );
         await click(
           `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
         );
@@ -715,16 +702,14 @@ module('Integration | card-delete', function (hooks) {
       realm,
       expectedEvents,
       callback: async () => {
-        await triggerEvent(
-          `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-          'mouseenter',
+        await waitFor(
+          `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]`,
+        );
+        await waitFor(
+          `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
         );
         await click(
           `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-select]`,
-        );
-        await triggerEvent(
-          `[data-test-cards-grid-item="${testRealmURL}Pet/vangogh"]`,
-          'mouseenter',
         );
         await click(
           `[data-test-overlay-card="${testRealmURL}Pet/vangogh"] [data-test-overlay-select]`,

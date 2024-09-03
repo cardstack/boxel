@@ -556,10 +556,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-command-apply]').doesNotExist();
     assert.dom('[data-test-person]').hasText('Fadhlan');
 
-    await triggerEvent(
-      `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-field-component-card][data-test-card-format="fitted"]`,
-      'mouseenter',
-    );
     await waitFor('[data-test-overlay-card] [data-test-overlay-more-options]');
     await percySnapshot(
       'Integration | ai-assistant-panel | it only applies changes from the chat if the stack contains a card with that ID | error',
@@ -578,13 +574,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-command-apply]').doesNotExist();
     assert.dom('[data-test-ai-bot-retry-button]').doesNotExist();
 
-    await triggerEvent(
-      `[data-test-stack-card="${testRealmURL}Person/burcu"] [data-test-plural-view="linksToMany"] [data-test-plural-view-item="0"]`,
-      'mouseenter',
+    await waitUntil(
+      () =>
+        document.querySelectorAll(
+          '[data-test-overlay-card] [data-test-overlay-more-options]',
+        ).length === 2,
     );
-    assert
-      .dom('[data-test-overlay-card] [data-test-overlay-more-options]')
-      .exists();
     await percySnapshot(
       'Integration | ai-assistant-panel | it only applies changes from the chat if the stack contains a card with that ID | error fixed',
     );
@@ -1093,18 +1088,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
         },
       );
 
-      let now = Date.now();
-
-      await matrixService.createAndJoinRoom('test1', 'test room 1', now - 2);
+      await matrixService.createAndJoinRoom('test1', 'test room 1');
       const room2Id = await matrixService.createAndJoinRoom(
         'test2',
         'test room 2',
-        now - 1,
       );
       const room3Id = await matrixService.createAndJoinRoom(
         'test3',
         'test room 3',
-        now,
       );
 
       await openAiAssistant();
@@ -1497,10 +1488,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     // Create a new room with some activity (this could happen when we will have a feature that interacts with AI outside of the AI pannel, i.e. "commands")
 
-    let anotherRoomId = await matrixService.createAndJoinRoom(
-      'Another Room',
-      'Another Room',
-    );
+    let anotherRoomId = await matrixService.createAndJoinRoom('Another Room');
 
     await addRoomEvent(matrixService, {
       event_id: 'event2',
@@ -1638,10 +1626,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       )
       .doesNotExist();
 
-    let anotherRoomId = await matrixService.createAndJoinRoom(
-      'Another Room',
-      'Another Room',
-    );
+    let anotherRoomId = await matrixService.createAndJoinRoom('Another Room');
 
     await addRoomEvent(matrixService, {
       event_id: 'botevent2',
@@ -2055,10 +2040,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await click('[data-test-close-ai-assistant]');
 
     // Create a new room with some activity
-    let anotherRoomId = await matrixService.createAndJoinRoom(
-      'Another Room',
-      'Another Room',
-    );
+    let anotherRoomId = await matrixService.createAndJoinRoom('Another Room');
 
     // A message that hasn't been seen and was sent more than fifteen minutes ago must not be shown in the toast.
     let sixteenMinutesAgo = subMinutes(new Date(), 16);

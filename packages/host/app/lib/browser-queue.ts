@@ -42,6 +42,9 @@ export class BrowserQueue implements Queue {
   }
 
   register<A, T>(category: string, handler: (arg: A) => Promise<T>) {
+    if (!this.#hasStarted) {
+      throw new Error(`Cannot register category on unstarted Queue`);
+    }
     if (this.isDestroyed) {
       throw new Error(`Cannot register category on a destroyed Queue`);
     }
@@ -50,6 +53,9 @@ export class BrowserQueue implements Queue {
   }
 
   async publish<T>(category: string, arg: PgPrimitive): Promise<Job<T>> {
+    if (!this.#hasStarted) {
+      throw new Error(`Cannot publish job on unstarted Queue`);
+    }
     if (this.isDestroyed) {
       throw new Error(`Cannot publish job on a destroyed Queue`);
     }

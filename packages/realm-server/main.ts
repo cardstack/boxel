@@ -243,7 +243,7 @@ let dist: URL = new URL(distURL);
     `Unexpected error encountered starting realm, stopping server`,
     e,
   );
-  process.exit(-3);
+  process.exit(1);
 });
 
 async function startWorker() {

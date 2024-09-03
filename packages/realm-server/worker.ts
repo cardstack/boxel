@@ -122,7 +122,7 @@ let dist: URL = new URL(distURL);
 })().catch((e: any) => {
   Sentry.captureException(e);
   console.error(
-    `worker on port ${port}: Unexpected error encountered starting realm, stopping server`,
+    `Unexpected error encountered starting realm, stopping server`,
     e,
   );
   process.exit(1);
