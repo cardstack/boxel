@@ -208,18 +208,7 @@ export class Batch {
   async done(): Promise<{ totalIndexEntries: number }> {
     await this.updateRealmMeta();
     await this.applyBatchUpdates();
-
-    // prune obsolete generation index entries
-    if (this.isNewGeneration) {
-      await this.query([
-        `DELETE FROM boxel_index`,
-        'WHERE',
-        ...every([
-          ['realm_version <', param(this.realmVersion)],
-          ['realm_url =', param(this.realmURL.href)],
-        ]),
-      ] as Expression);
-    }
+    await this.pruneObsoleteEntries();
 
     let totalIndexEntries = await this.numberOfIndexEntries();
     return { totalIndexEntries };
@@ -299,6 +288,9 @@ export class Batch {
         valueExpressions,
       ),
     ]);
+  }
+
+  private async pruneObsoleteEntries() {
     await this.query([
       `DELETE FROM realm_meta`,
       'WHERE',
@@ -307,6 +299,17 @@ export class Batch {
         ['realm_url =', param(this.realmURL.href)],
       ]),
     ] as Expression);
+
+    if (this.isNewGeneration) {
+      await this.query([
+        `DELETE FROM boxel_index`,
+        'WHERE',
+        ...every([
+          ['realm_version <', param(this.realmVersion)],
+          ['realm_url =', param(this.realmURL.href)],
+        ]),
+      ] as Expression);
+    }
   }
 
   private async setNextRealmVersion() {
