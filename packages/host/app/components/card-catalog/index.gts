@@ -153,11 +153,15 @@ export default class CardCatalog extends Component<Signature> {
       }
 
       .catalog-item {
-        padding: var(--boxel-sp-xs) var(--boxel-sp);
         border: 1px solid var(--boxel-200);
         border-radius: var(--boxel-border-radius);
         background-color: var(--boxel-light);
         width: 100%;
+        height: 63px;
+        overflow: hidden;
+        cursor: pointer;
+        container-name: fitted-card;
+        container-type: size;
       }
     </style>
   </template>
