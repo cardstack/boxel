@@ -163,21 +163,29 @@ export default class PrerenderedCardSearch extends Component<Signature> {
       for (let realmNeedingRefresh of realmsNeedingRefresh) {
         results = results.filter((r) => !r.url.startsWith(realmNeedingRefresh));
       }
-      results.push(
-        ...flatMap(
-          await Promise.all(
-            Array.from(realmsNeedingRefresh).map(
-              async (realm) =>
-                await this.searchPrerendered(
-                  query,
-                  format,
-                  cardUrls ?? [],
-                  realm,
-                ),
-            ),
-          ),
-        ),
+
+      let searchPromises = Array.from(realmsNeedingRefresh).map(
+        async (realm) => {
+          try {
+            return await this.searchPrerendered(
+              query,
+              format,
+              cardUrls ?? [],
+              realm,
+            );
+          } catch (error) {
+            console.error(
+              `Failed to search prerendered for realm ${realm}:`,
+              error,
+            );
+            return [];
+          }
+        },
       );
+
+      const searchResults = await Promise.all(searchPromises);
+      results.push(...flatMap(searchResults));
+
       this._lastSearchResults = results;
       return { instances: results, isLoading: false };
     } finally {
