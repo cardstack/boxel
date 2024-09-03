@@ -121,16 +121,7 @@ export class VirtualNetwork {
       return next(await this.mapRequest(request, 'virtual-to-real'));
     });
 
-    try {
-      return await fetcher(this.nativeFetch, handlers)(request, init);
-    } catch (e: any) {
-      console.error(
-        `error performing fetch: ${e.message}. url mappings=${this.urlMappings
-          .map((i) => i.join('='))
-          .join()}`,
-      );
-      throw e;
-    }
+    return await fetcher(this.nativeFetch, handlers)(request, init);
   }
 
   // This method is used to handle the boundary between the real and virtual network,
