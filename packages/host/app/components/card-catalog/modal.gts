@@ -481,8 +481,6 @@ export default class CardCatalogModal extends Component<Signature> {
         newFilter = {
           on: (this.state.originalQuery.filter as CardTypeFilter).type,
           every: [{ contains: { title: this.state.searchKey } }],
-          // ...this.state.originalQuery.filter,
-          // ...{ contains: { title: this.state.searchKey } },
         };
       } else if (_isEveryFilter) {
         newFilter = {
@@ -493,9 +491,9 @@ export default class CardCatalogModal extends Component<Signature> {
           ],
         };
       } else {
-        // We demand this so it's straightforward to add the "contains" filter (in addition to the existing filter)
+        // We demand either CardTypeFilter or EveryFilter so it's straightforward to add the "contains" filter (in addition to the existing filters)
         throw new Error(
-          'Unsupported card chooser filter type: needs to be either card type filter or every filter',
+          'Unsupported card chooser filter type: needs to be either card type filter or "every" filter',
         );
       }
     }
