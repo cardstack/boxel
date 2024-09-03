@@ -947,7 +947,7 @@ const tests = Object.freeze({
           realm_version: 1,
           realm_url: testRealmURL,
           pristine_doc: {
-            id: `${testRealmURL}1.json`,
+            id: `${testRealmURL}1`,
             type: 'card',
             attributes: {
               name: 'Mango',
@@ -970,7 +970,7 @@ const tests = Object.freeze({
     );
 
     let resource2: CardResource = {
-      id: `${testRealmURL}2.json`,
+      id: `${testRealmURL}2`,
       type: 'card',
       attributes: {
         name: 'Van Gogh',
@@ -1058,7 +1058,7 @@ const tests = Object.freeze({
 
     batch = await indexWriter.createBatch(new URL(testRealmURL));
     let resource3: CardResource = {
-      id: `${testRealmURL}3.json`,
+      id: `${testRealmURL}3`,
       type: 'card',
       attributes: {
         name: 'Van Gogh2',
@@ -1086,7 +1086,7 @@ const tests = Object.freeze({
       ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
     });
     let resource4: CardResource = {
-      id: `${testRealmURL}4.json`,
+      id: `${testRealmURL}4`,
       type: 'card',
       attributes: {
         name: 'Mango',
