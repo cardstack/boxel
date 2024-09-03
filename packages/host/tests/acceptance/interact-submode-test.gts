@@ -817,6 +817,10 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
         ],
       });
+      await triggerEvent(
+        `[data-test-stack-card="${testRealm2URL}Person/hassan"] [data-test-links-to-editor="pet"] [data-test-field-component-card]`,
+        'mouseenter',
+      );
       assert
         .dom(
           `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-edit]`,
@@ -1053,6 +1057,10 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
         ],
       });
+      await triggerEvent(
+        `[data-test-stack-card="${testRealm2URL}Person/hassan"] [data-test-links-to-editor="pet"] [data-test-field-component-card]`,
+        'mouseenter',
+      );
       assert
         .dom(`[data-test-overlay-card="${testRealmURL}Pet/mango"]`)
         .exists();

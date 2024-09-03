@@ -77,7 +77,7 @@ export default class LoaderService extends Service {
     let middlewareStack: FetcherMiddlewareHandler[] = [];
     middlewareStack.push(async (req, next) => {
       if (this.isIndexing) {
-        req.headers.set('X-Boxel-Use-WIP-Index', 'true');
+        req.headers.set('X-Boxel-Building-Index', 'true');
       }
       return next(req);
     });
