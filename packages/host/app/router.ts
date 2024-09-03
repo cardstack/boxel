@@ -1,6 +1,6 @@
 import EmberRouter from '@ember/routing/router';
 import config from '@cardstack/host/config/environment';
-const { ownRealmURL, resolvedOwnRealmURL, hostsOwnAssets } = config;
+const { hostsOwnAssets } = config;
 
 export default class Router extends EmberRouter {
   location = config.locationType;
@@ -11,10 +11,16 @@ export default class Router extends EmberRouter {
 // It will not be available when running in fastboot.
 // When paths of resolvedOwnRealmURL and ownRealmURL are not symmetrical,
 // that means that means the resolvedOwnRealmURL should be used instead of ownRealmURL.
+
+// FIXME what to replace this with? Or it just goes away?
+/*
 let path = new URL(resolvedOwnRealmURL ?? ownRealmURL).pathname.replace(
   /\/$/,
   '',
 );
+*/
+
+let path = false;
 
 Router.map(function () {
   this.route('host-freestyle', { path: '/_freestyle' });

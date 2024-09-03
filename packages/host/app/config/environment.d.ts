@@ -20,7 +20,6 @@ declare const config: {
   hostsOwnAssets: boolean;
   realmsServed?: string[];
   logLevels: string;
-  resolvedOwnRealmURL: string;
   autoSaveDelayMs: number;
   monacoDebounceMs: number;
   monacoCursorDebounceMs: number;
