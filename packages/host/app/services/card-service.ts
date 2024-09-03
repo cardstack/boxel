@@ -43,7 +43,7 @@ export type CardSaveSubscriber = (
   content: SingleCardDocument | string,
 ) => void;
 
-const { ownRealmURL, environment } = ENV;
+const { ownRealmURL, environment, resolvedBaseRealmURL } = ENV;
 
 export default class CardService extends Service {
   @service private declare loaderService: LoaderService;
