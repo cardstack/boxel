@@ -3,15 +3,9 @@ import GlimmerComponent from '@glimmer/component';
 
 import { setupRenderingTest } from 'ember-qunit';
 import { setupWindowMock } from 'ember-window-mock/test-support';
-// import { EventStatus } from 'matrix-js-sdk';
 import { module, test } from 'qunit';
 
 import { baseRealm, Loader, type Realm } from '@cardstack/runtime-common';
-
-import type {
-  CardMessageContent,
-  CardFragmentContent,
-} from 'https://cardstack.com/base/matrix-event';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -23,6 +17,11 @@ import {
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+import type {
+  CardMessageContent,
+  CardFragmentContent,
+} from 'https://cardstack.com/base/matrix-event';
+
 import {
   testRealmURL,
   setupCardLogs,
@@ -31,6 +30,7 @@ import {
   setupServerSentEvents,
   lookupLoaderService,
 } from '../../helpers';
+import { setupBaseRealm } from '../../helpers/base-realm';
 import {
   setupMatrixServiceMock,
   MockMatrixService,
@@ -46,7 +46,7 @@ module('Integration | create app module via ai-assistant', function (hooks) {
   let cardApi: typeof import('https://cardstack.com/base/card-api');
 
   setupRenderingTest(hooks);
-
+  setupBaseRealm(hooks);
   hooks.beforeEach(function () {
     loader = lookupLoaderService().loader;
   });
