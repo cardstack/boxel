@@ -2597,11 +2597,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
   return instance;
 }
 
-export function setCardAsSavedForTest(instance: CardDef, id?: string): void {
-  if (id != null) {
-    let deserialized = getDataBucket(instance);
-    deserialized.set('id', id);
-  }
+export function setCardAsSavedForTest(instance: CardDef): void {
   instance[isSavedInstance] = true;
 }
 

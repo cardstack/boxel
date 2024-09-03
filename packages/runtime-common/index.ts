@@ -34,16 +34,9 @@ export interface DirectoryEntryRelationship {
   links: {
     related: string;
   };
-  meta: FileMeta | DirectoryMeta;
-}
-
-export interface FileMeta {
-  kind: 'file';
-  lastModified: number | null;
-}
-
-export interface DirectoryMeta {
-  kind: 'directory';
+  meta: {
+    kind: 'directory' | 'file';
+  };
 }
 
 export interface RealmCards {
@@ -453,8 +446,4 @@ export function uint8ArrayToHex(uint8: Uint8Array) {
   return Array.from(uint8)
     .map((i) => i.toString(16).padStart(2, '0'))
     .join('');
-}
-
-export function unixTime(epochTimeMs: number) {
-  return Math.floor(epochTimeMs / 1000);
 }

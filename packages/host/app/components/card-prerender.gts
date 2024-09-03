@@ -5,10 +5,10 @@ import Component from '@glimmer/component';
 
 import { didCancel, enqueueTask, restartableTask } from 'ember-concurrency';
 
-import { type IndexWriter } from '@cardstack/runtime-common';
+import { type IndexWriter, type TextFileRef } from '@cardstack/runtime-common';
+import type { LocalPath } from '@cardstack/runtime-common/paths';
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
 import {
-  getReader,
   type IndexResults,
   type Reader,
   type RunnerOpts,
@@ -98,7 +98,7 @@ export default class CardPrerender extends Component {
   });
 
   private doFromScratch = enqueueTask(async (realmURL: URL) => {
-    let { reader, indexWriter } = this.getRunnerParams(realmURL);
+    let { reader, indexWriter } = this.getRunnerParams();
     await this.resetLoaderInFastboot.perform();
     let currentRun = new CurrentRun({
       realmURL,
@@ -120,7 +120,7 @@ export default class CardPrerender extends Component {
       operation: 'delete' | 'update',
       ignoreData: Record<string, string>,
     ) => {
-      let { reader, indexWriter } = this.getRunnerParams(realmURL);
+      let { reader, indexWriter } = this.getRunnerParams();
       await this.resetLoaderInFastboot.perform();
       let currentRun = new CurrentRun({
         realmURL,
@@ -147,10 +147,22 @@ export default class CardPrerender extends Component {
     }
   });
 
-  private getRunnerParams(realmURL: URL): {
+  private getRunnerParams(): {
     reader: Reader;
     indexWriter: IndexWriter;
   } {
+    let self = this;
+    function readFileAsText(
+      path: LocalPath,
+      opts?: { withFallbacks?: true },
+    ): Promise<TextFileRef | undefined> {
+      return _readFileAsText(
+        path,
+        self.localIndexer.adapter.openFile.bind(self.localIndexer.adapter),
+        opts,
+      );
+    }
+
     if (this.fastboot.isFastBoot) {
       let optsId = (globalThis as any).runnerOptsId;
       if (optsId == null) {
@@ -162,10 +174,15 @@ export default class CardPrerender extends Component {
       };
     } else {
       return {
-        reader: getReader(
-          this.loaderService.loader.fetch.bind(this.loaderService.loader),
-          realmURL,
-        ),
+        reader: {
+          lastModified: this.localIndexer.adapter.lastModified.bind(
+            this.localIndexer.adapter,
+          ),
+          readdir: this.localIndexer.adapter.readdir.bind(
+            this.localIndexer.adapter,
+          ),
+          readFileAsText,
+        },
         indexWriter: this.localIndexer.indexWriter,
       };
     }

@@ -10,8 +10,6 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { not } from '@cardstack/boxel-ui/helpers';
 
-import { unixTime } from '@cardstack/runtime-common';
-
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
@@ -165,11 +163,7 @@ export default class Room extends Component<Signature> {
     return (
       !message.isStreamingFinished &&
       this.isLastMessage(messageIndex) &&
-      // Older events do not come with isStreamingFinished property so we have
-      // no other way to determine if the message is done streaming other than
-      // checking if they are old messages (older than 60 seconds as an arbitrary
-      // threshold)
-      unixTime(new Date().getTime() - message.created.getTime()) < 60
+      (new Date().getTime() - message.created.getTime()) / 1000 < 60 // Older events do not come with isStreamingFinished property so we have no other way to determine if the message is done streaming other than checking if they are old messages (older than 60 seconds as an arbitrary threshold)
     );
   }
 

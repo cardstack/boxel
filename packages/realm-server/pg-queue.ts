@@ -278,7 +278,7 @@ export default class PgQueue implements Queue {
   }
 
   private async drainQueues(workLoop: WorkLoop) {
-    await this.pgClient.withConnection(async (query) => {
+    await this.pgClient.withConnection(async ({ query }) => {
       while (!workLoop.shuttingDown) {
         log.debug(`draining queues`);
         await query(['BEGIN']);

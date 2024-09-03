@@ -22,9 +22,7 @@ export async function webStreamToText(
   return pieces.join('');
 }
 
-export async function fileContentToText({
-  content,
-}: Pick<FileRef, 'content'>): Promise<string> {
+export async function fileContentToText({ content }: FileRef): Promise<string> {
   if (typeof content === 'string') {
     return content;
   }

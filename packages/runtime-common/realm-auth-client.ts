@@ -1,4 +1,3 @@
-import { unixTime } from './index';
 import { TokenClaims } from './realm';
 
 // iat - issued at (seconds since epoch)
@@ -39,7 +38,7 @@ export class RealmAuthClient {
     } else {
       let jwtData = JSON.parse(atob(this._jwt.split('.')[1])) as JWTPayload;
       // If the token is about to expire (in tokenRefreshLeadTimeSeconds), create a new one just to make sure we reduce the risk of the token getting outdated during things happening in createRealmSession
-      if (jwtData.exp - tokenRefreshLeadTimeSeconds < unixTime(Date.now())) {
+      if (jwtData.exp - tokenRefreshLeadTimeSeconds < Date.now() / 1000) {
         jwt = await this.createRealmSession();
         this._jwt = jwt;
         return jwt;
