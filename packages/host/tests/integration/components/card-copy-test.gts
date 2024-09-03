@@ -308,7 +308,7 @@ module('Integration | card-copy', function (hooks) {
     );
 
     await click(
-      `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.actions-item__button`,
+      `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.select`,
     );
     assert
       .dom('[data-test-copy-button]')
@@ -359,10 +359,10 @@ module('Integration | card-copy', function (hooks) {
       '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
     );
     await click(
-      `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.actions-item__button`,
+      `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.select`,
     );
     await click(
-      `[data-test-overlay-card="${testRealm2URL}Pet/paper"] button.actions-item__button`,
+      `[data-test-overlay-card="${testRealm2URL}Pet/paper"] button.select`,
     );
     assert
       .dom('[data-test-copy-button]')
@@ -389,7 +389,7 @@ module('Integration | card-copy', function (hooks) {
       '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
     );
     await click(
-      `[data-test-operator-mode-stack="0"] [data-test-overlay-card="${testRealmURL}Person/hassan"] button.actions-item__button`,
+      `[data-test-operator-mode-stack="0"] [data-test-overlay-card="${testRealmURL}Person/hassan"] button.select`,
     );
     assert
       .dom('[data-test-copy-button]')
@@ -436,7 +436,7 @@ module('Integration | card-copy', function (hooks) {
       '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
     );
     await click(
-      `[data-test-operator-mode-stack="0"] [data-test-overlay-card="${testRealmURL}Person/hassan"] button.actions-item__button`,
+      `[data-test-operator-mode-stack="0"] [data-test-overlay-card="${testRealmURL}Person/hassan"] button.select`,
     );
     assert
       .dom('[data-test-copy-button]')
@@ -463,7 +463,7 @@ module('Integration | card-copy', function (hooks) {
       '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
     );
     await click(
-      `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.actions-item__button`,
+      `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.select`,
     );
     assert
       .dom('[data-test-copy-button="right"]')
@@ -493,7 +493,7 @@ module('Integration | card-copy', function (hooks) {
       '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
     );
     await click(
-      ` [data-test-overlay-card="${testRealm2URL}Pet/paper"] button.actions-item__button`,
+      ` [data-test-overlay-card="${testRealm2URL}Pet/paper"] button.select`,
     );
     assert
       .dom('[data-test-copy-button="left"]')
@@ -523,13 +523,13 @@ module('Integration | card-copy', function (hooks) {
       '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
     );
     await click(
-      `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.actions-item__button`,
+      `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.select`,
     );
     await click(
-      `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.actions-item__button`,
+      `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.select`,
     );
     await click(
-      `[data-test-overlay-card="${testRealmURL}Pet/vangogh"] button.actions-item__button`,
+      `[data-test-overlay-card="${testRealmURL}Pet/vangogh"] button.select`,
     );
     await percySnapshot(assert);
     assert
@@ -645,7 +645,7 @@ module('Integration | card-copy', function (hooks) {
           '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
         );
         await click(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.actions-item__button`,
+          `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.select`,
         );
         assert
           .dom(`.selected[data-test-overlay-card="${testRealmURL}Pet/mango"]`)
@@ -689,7 +689,7 @@ module('Integration | card-copy', function (hooks) {
       .doesNotExist('souce card is not selected');
 
     await click(
-      `[data-test-overlay-card="${testRealm2URL}Pet/paper"] button.actions-item__button`,
+      `[data-test-overlay-card="${testRealm2URL}Pet/paper"] button.select`,
     );
     assert
       .dom('[data-test-copy-button="left"]')
@@ -741,10 +741,10 @@ module('Integration | card-copy', function (hooks) {
           '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
         );
         await click(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.actions-item__button`,
+          `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.select`,
         );
         await click(
-          `[data-test-overlay-card="${testRealmURL}Pet/vangogh"] button.actions-item__button`,
+          `[data-test-overlay-card="${testRealmURL}Pet/vangogh"] button.select`,
         );
 
         assert.strictEqual(
@@ -874,7 +874,7 @@ module('Integration | card-copy', function (hooks) {
           '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
         );
         await click(
-          `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.actions-item__button`,
+          `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.select`,
         );
 
         assert.strictEqual(
@@ -1002,7 +1002,7 @@ module('Integration | card-copy', function (hooks) {
           '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
         );
         await click(
-          `[data-test-overlay-card="${testRealmURL}Person/sakura"] button.actions-item__button`,
+          `[data-test-overlay-card="${testRealmURL}Person/sakura"] button.select`,
         );
 
         assert.strictEqual(
