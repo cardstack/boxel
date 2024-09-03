@@ -116,8 +116,6 @@ export default class PrerenderedCardSearch extends Component<Signature> {
   private runSearch = trackedFunction(this, async () => {
     let { query, format, cardUrls, realms } = this.args;
 
-    console.log('runSearch', { query, format, cardUrls, realms });
-
     let realmsChanged = !isEqual(realms, this._lastRealms);
     if (realmsChanged) {
       this._lastSearchResults = this._lastSearchResults?.filter((r) =>
@@ -133,7 +131,7 @@ export default class PrerenderedCardSearch extends Component<Signature> {
       (realmsChanged || this.realmsNeedingRefresh.size > 0)
     ) {
       try {
-        await this.runSearchTask.perform();
+        await this.runSearchTask.perform(query, format, cardUrls);
       } catch (e) {
         if (!didCancel(e)) {
           // re-throw the non-cancelation error
@@ -150,8 +148,7 @@ export default class PrerenderedCardSearch extends Component<Signature> {
     );
   });
 
-  runSearchTask = restartableTask(async () => {
-    let { query, format, cardUrls } = this.args;
+  runSearchTask = restartableTask(async (query, format, cardUrls) => {
     if (!isEqual(query, this._lastSearchQuery)) {
       this._lastSearchResults = undefined;
       this._lastSearchQuery = query;
