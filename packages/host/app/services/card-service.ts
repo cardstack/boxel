@@ -24,6 +24,7 @@ import type { Query } from '@cardstack/runtime-common/query';
 import ENV from '@cardstack/host/config/environment';
 
 import type MessageService from '@cardstack/host/services/message-service';
+import type Realm from '@cardstack/host/services/realm';
 
 import type {
   BaseDef,
@@ -48,6 +49,7 @@ const { ownRealmURL, environment } = ENV;
 export default class CardService extends Service {
   @service private declare loaderService: LoaderService;
   @service private declare messageService: MessageService;
+  @service private declare realm: Realm;
 
   private subscriber: CardSaveSubscriber | undefined;
   // For tracking requests during the duration of this service. Used for being able to tell when to ignore an incremental indexing SSE event.
@@ -70,12 +72,6 @@ export default class CardService extends Service {
 
   // TODO remove in a followup PR for CS-7036
   unresolvedRealmURLs = new TrackedArray<string>([baseRealm.url]);
-
-  // Note that this should be the unresolved URL and that we need to rely on our
-  // fetch to do any URL resolution.
-  get defaultURL(): URL {
-    return new URL(ownRealmURL);
-  }
 
   onSave(subscriber: CardSaveSubscriber) {
     this.subscriber = subscriber;
@@ -364,7 +360,7 @@ export default class CardService extends Service {
   ): Promise<SingleCardDocument> {
     let isSaved = !!doc.data.id;
     let json = await this.fetchJSON(
-      doc.data.id ?? realmUrl ?? this.defaultURL,
+      doc.data.id ?? realmUrl ?? this.realm.userDefaultRealm.path,
       {
         method: isSaved ? 'PATCH' : 'POST',
         body: JSON.stringify(doc, null, 2),

@@ -9,6 +9,7 @@ import { RealmPaths } from '@cardstack/runtime-common/paths';
 
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
+import type Realm from '../../services/realm';
 
 interface Signature {
   Args: {
@@ -87,13 +88,14 @@ export default class CardCatalogItem extends Component<Signature> {
 
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
+  @service declare realm: Realm;
 
   get thumbnailURL() {
     let path = this.args.thumbnailURL;
     if (!path) {
       return undefined;
     }
-    let realmPath = new RealmPaths(this.cardService.defaultURL);
+    let realmPath = new RealmPaths(new URL(this.realm.userDefaultRealm.path));
 
     if (/^(\.\.\/)+/.test(path)) {
       let localPath = new URL(path, realmPath.url).pathname.replace(/^\//, '');

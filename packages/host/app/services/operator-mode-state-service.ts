@@ -25,6 +25,7 @@ import { file, isReady, FileResource } from '@cardstack/host/resources/file';
 import { maybe } from '@cardstack/host/resources/maybe';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
+import type Realm from '@cardstack/host/services/realm';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
@@ -83,6 +84,7 @@ export default class OperatorModeStateService extends Service {
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
   @service declare messageService: MessageService;
+  @service declare realm: Realm;
   @service declare recentCardsService: RecentCardsService;
   @service declare recentFilesService: RecentFilesService;
   @service declare router: RouterService;
@@ -506,7 +508,7 @@ export default class OperatorModeStateService extends Service {
       return this.cachedRealmURL;
     }
 
-    return this.cardService.defaultURL;
+    return new URL(this.realm.userDefaultRealm.path);
   }
 
   subscribeToOpenFileStateChanges(subscriber: OpenFileSubscriber) {
