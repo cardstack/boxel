@@ -8,7 +8,7 @@ import { not } from '@cardstack/boxel-ui/helpers';
 import {
   getBoxComponent,
   type BoxComponent,
-  DefaultFormatsConsumer,
+  DefaultFormatConsumer,
 } from './field-component';
 import { getContainsManyComponent } from './contains-many-component';
 import { LinksToEditor } from './links-to-editor';
@@ -97,10 +97,7 @@ export const formats: Format[] = [
 ];
 export type Format = 'isolated' | 'embedded' | 'fitted' | 'edit' | 'atom';
 export type FieldType = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
-export type FieldFormats = {
-  ['fieldDef']: Format;
-  ['cardDef']: Format;
-};
+
 type Setter = (value: any) => void;
 
 interface Options {
@@ -1084,28 +1081,22 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       return (format ?? defaultFormat) === 'edit' && !isComputed;
     }
     return class LinksToComponent extends GlimmerComponent<{
-      Element: HTMLElement;
       Args: { Named: { format?: Format; displayContainer?: boolean } };
       Blocks: {};
     }> {
       <template>
-        <DefaultFormatsConsumer as |defaultFormats|>
-          {{#if (shouldRenderEditor @format defaultFormats.cardDef isComputed)}}
-            <LinksToEditor
-              @model={{(getInnerModel)}}
-              @field={{linksToField}}
-              ...attributes
-            />
+        <DefaultFormatConsumer as |defaultFormat|>
+          {{#if (shouldRenderEditor @format defaultFormat isComputed)}}
+            <LinksToEditor @model={{(getInnerModel)}} @field={{linksToField}} />
           {{else}}
             {{#let (fieldComponent linksToField model) as |FieldComponent|}}
               <FieldComponent
                 @format={{@format}}
                 @displayContainer={{@displayContainer}}
-                ...attributes
               />
             {{/let}}
           {{/if}}
-        </DefaultFormatsConsumer>
+        </DefaultFormatConsumer>
       </template>
     };
   }

@@ -4,12 +4,12 @@ import {
   PACKAGES_FAKE_ORIGIN,
 } from './package-shim-handler';
 import type { Readable } from 'stream';
-import { fetcher, type FetcherMiddlewareHandler } from './fetcher';
+import { simulateNetworkBehaviors } from './fetcher';
 export interface ResponseWithNodeStream extends Response {
   nodeStream?: Readable;
 }
 
-export type Handler = (req: Request) => Promise<Response | null>;
+export type Handler = (req: Request) => Promise<ResponseWithNodeStream | null>;
 
 export class VirtualNetwork {
   private handlers: Handler[] = [];
@@ -106,24 +106,6 @@ export class VirtualNetwork {
     return response;
   };
 
-  private async runFetch(request: Request, init?: RequestInit) {
-    let handlers: FetcherMiddlewareHandler[] = this.handlers.map((h) => {
-      return async (request, next) => {
-        let response = await h(request);
-        if (response) {
-          return response;
-        }
-        return next(request);
-      };
-    });
-
-    handlers.push(async (request, next) => {
-      return next(await this.mapRequest(request, 'virtual-to-real'));
-    });
-
-    return await fetcher(this.nativeFetch, handlers)(request, init);
-  }
-
   // This method is used to handle the boundary between the real and virtual network,
   // when a request is made to the realm from the realm server - it maps requests
   // by changing their URL from real to virtual, as defined in the url mapping config
@@ -181,6 +163,18 @@ export class VirtualNetwork {
       }
       response.headers.set('Location', finalRedirectionURL);
     }
+  }
+
+  private async runFetch(request: Request, init?: RequestInit) {
+    for (let handler of this.handlers) {
+      let response = await handler(request);
+      if (response) {
+        return await simulateNetworkBehaviors(request, response, this.fetch);
+      }
+    }
+
+    let internalRequest = await this.mapRequest(request, 'virtual-to-real');
+    return await this.nativeFetch(internalRequest, init);
   }
 
   createEventSource(url: string) {

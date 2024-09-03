@@ -109,7 +109,7 @@ export default class Room extends Component<Signature> {
       }
       .skills {
         position: sticky;
-        bottom: 0;
+        bottom: var(--boxel-sp-5xs);
         margin-left: auto;
       }
       .room-actions {
@@ -123,9 +123,6 @@ export default class Room extends Component<Signature> {
       }
       :deep(.ai-assistant-conversation > *:first-child) {
         margin-top: auto;
-      }
-      :deep(.ai-assistant-conversation > *:nth-last-of-type(2)) {
-        padding-bottom: var(--boxel-sp-xl);
       }
     </style>
   </template>

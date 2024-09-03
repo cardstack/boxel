@@ -988,7 +988,7 @@ export default class CodeSubmode extends Component<Signature> {
 
       .code-mode-top-bar {
         --code-mode-top-bar-left-offset: calc(
-          var(--operator-mode-left-column) - var(--boxel-sp)
+          var(--submode-switcher-width) + var(--boxel-sp)
         );
 
         position: absolute;

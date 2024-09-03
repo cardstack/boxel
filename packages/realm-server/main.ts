@@ -76,7 +76,7 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
 
 let {
   port,
-  distURL = process.env.HOST_URL ?? 'http://localhost:4200',
+  distURL = 'http://localhost:4200',
   path: paths,
   fromUrl: fromUrls,
   toUrl: toUrls,

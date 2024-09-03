@@ -154,10 +154,6 @@ export default class CardPreviewPanel extends Component<Signature> {
         <FittedFormatGallery @card={{@card}} />
       {{else if (eq this.format 'embedded')}}
         <EmbeddedPreview @card={{@card}} />
-      {{else if (eq this.format 'atom')}}
-        <div class='atom-wrapper'>
-          <Preview @card={{@card}} @format={{this.format}} />
-        </div>
       {{else}}
         <Preview @card={{@card}} @format={{this.format}} />
       {{/if}}
@@ -226,6 +222,11 @@ export default class CardPreviewPanel extends Component<Signature> {
 
       .header-actions {
         margin-left: auto;
+      }
+
+      .preview-body > :deep(.boxel-card-container) {
+        border-radius: 0;
+        box-shadow: none;
       }
 
       .header-title {
@@ -315,9 +316,6 @@ export default class CardPreviewPanel extends Component<Signature> {
       .icon-button:hover {
         --icon-color: var(--boxel-light);
         background-color: var(--boxel-highlight);
-      }
-      .atom-wrapper {
-        padding: var(--boxel-sp);
       }
     </style>
   </template>
