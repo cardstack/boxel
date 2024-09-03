@@ -969,8 +969,8 @@ const tests = Object.freeze({
       ],
     );
 
-    let resource: CardResource = {
-      id: `${testRealmURL}1.json`,
+    let resource2: CardResource = {
+      id: `${testRealmURL}2.json`,
       type: 'card',
       attributes: {
         name: 'Van Gogh',
@@ -986,8 +986,8 @@ const tests = Object.freeze({
     await batch.invalidate(new URL(`${testRealmURL}2.json`));
     await batch.updateEntry(new URL(`${testRealmURL}2.json`), {
       type: 'instance',
-      resource,
-      source: JSON.stringify(resource),
+      resource: resource2,
+      source: JSON.stringify(resource2),
       lastModified: Date.now(),
       searchData: { name: 'Van Gogh' },
       deps: new Set([`${testRealmURL}fancy-person`]),
@@ -1057,11 +1057,24 @@ const tests = Object.freeze({
     );
 
     batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let resource3: CardResource = {
+      id: `${testRealmURL}3.json`,
+      type: 'card',
+      attributes: {
+        name: 'Van Gogh2',
+      },
+      meta: {
+        adoptsFrom: {
+          module: `./fancy-person`,
+          name: 'FancyPerson',
+        },
+      },
+    };
     await batch.invalidate(new URL(`${testRealmURL}3.json`));
     await batch.updateEntry(new URL(`${testRealmURL}3.json`), {
       type: 'instance',
-      resource,
-      source: JSON.stringify(resource),
+      resource: resource3,
+      source: JSON.stringify(resource3),
       lastModified: Date.now(),
       searchData: { name: 'Van Gogh2' },
       deps: new Set([`${testRealmURL}fancy-person`]),
@@ -1072,11 +1085,24 @@ const tests = Object.freeze({
         baseCardRef,
       ].map((i) => internalKeyFor(i, new URL(testRealmURL))),
     });
+    let resource4: CardResource = {
+      id: `${testRealmURL}4.json`,
+      type: 'card',
+      attributes: {
+        name: 'Mango',
+      },
+      meta: {
+        adoptsFrom: {
+          module: `./pet`,
+          name: 'Pet',
+        },
+      },
+    };
     await batch.invalidate(new URL(`${testRealmURL}4.json`));
     await batch.updateEntry(new URL(`${testRealmURL}4.json`), {
       type: 'instance',
-      resource,
-      source: JSON.stringify(resource),
+      resource: resource4,
+      source: JSON.stringify(resource4),
       lastModified: Date.now(),
       searchData: { name: 'Mango' },
       deps: new Set([`${testRealmURL}pet`]),
