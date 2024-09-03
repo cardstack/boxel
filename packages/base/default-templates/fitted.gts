@@ -56,7 +56,7 @@ export default class DefaultFittedTemplate extends GlimmerComponent<{
         .fitted-template {
           align-content: flex-start;
           justify-content: center;
-          padding: var(--boxel-sp-xs);
+          padding: 10px;
           flex-wrap: wrap;
         }
         .card-title {
@@ -65,7 +65,7 @@ export default class DefaultFittedTemplate extends GlimmerComponent<{
           -webkit-box-orient: vertical;
           overflow: hidden;
           text-align: center;
-          margin: var(--boxel-sp-xs) 0 0 0;
+          margin: 10px 0 0 0;
         }
         .card-display-name {
           text-align: center;
@@ -146,7 +146,7 @@ export default class DefaultFittedTemplate extends GlimmerComponent<{
       }
       @container fitted-card (1.0 < aspect-ratio) and (200px <= width) {
         .card-title {
-          margin: var(--boxel-sp-xs) 0 0 0;
+          margin: 10px 0 0 0;
         }
       }
 
@@ -156,8 +156,8 @@ export default class DefaultFittedTemplate extends GlimmerComponent<{
         .fitted-template {
           align-content: flex-start;
           justify-content: center;
-          padding: var(--boxel-sp-xs);
-          column-gap: var(--boxel-sp-xs);
+          padding: 10px;
+          column-gap: 10px;
         }
         .card-title {
           display: -webkit-box;
@@ -181,7 +181,7 @@ export default class DefaultFittedTemplate extends GlimmerComponent<{
       }
       @container fitted-card (1.0 < aspect-ratio <= 2.0) and (200px <= width) {
         .card-title {
-          margin: var(--boxel-sp-xs) 0 0 0;
+          margin: 10px 0 0 0;
           font: 500 var(--boxel-font-size-med);
         }
       }
@@ -232,13 +232,13 @@ export default class DefaultFittedTemplate extends GlimmerComponent<{
         }
       }
 
-      /* Aspect Ratio > 2.0 */
+      /* Aspect Ratio < 2.0 */
 
       @container fitted-card (2.0 < aspect-ratio) {
         .fitted-template {
           justify-content: center;
-          padding: var(--boxel-sp-xs);
-          column-gap: var(--boxel-sp-xs);
+          padding: 10px;
+          column-gap: 10px;
           flex-wrap: nowrap;
         }
         .card-title {
@@ -251,9 +251,11 @@ export default class DefaultFittedTemplate extends GlimmerComponent<{
           font: 500 var(--boxel-font-size-med);
           margin: 0;
         }
+        .card-display-name {
+          margin: var(--boxel-sp-4xs) 0 0 0;
+        }
         .thumbnail-section {
           flex: 1;
-          max-width: calc(100cqmin - (2 * var(--boxel-sp-xs)));
         }
         .info-section {
           flex: 4;
@@ -264,7 +266,7 @@ export default class DefaultFittedTemplate extends GlimmerComponent<{
       }
       @container fitted-card (2.0 < aspect-ratio) and (height <= 57px) {
         .fitted-template {
-          padding: var(--boxel-sp-xxxs);
+          padding: 6px;
         }
         .thumbnail-section {
           display: none;
@@ -293,7 +295,7 @@ export default class DefaultFittedTemplate extends GlimmerComponent<{
         background-size: cover;
         background-repeat: no-repeat;
         color: var(--boxel-light);
-        border-radius: var(--boxel-border-radius-sm);
+        border-radius: 6px;
       }
       .card-title {
         text-overflow: ellipsis;
@@ -304,7 +306,6 @@ export default class DefaultFittedTemplate extends GlimmerComponent<{
         line-height: 1.27;
         letter-spacing: 0.11px;
         text-overflow: ellipsis;
-        margin: var(--boxel-sp-4xs) 0 0 0;
       }
       .card-description {
         margin: var(--boxel-sp-xxs) 0 0 0;

@@ -14,7 +14,7 @@ import {
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
 import { IconButton } from '@cardstack/boxel-ui/components';
-import { and, cn, not } from '@cardstack/boxel-ui/helpers';
+import { and, not } from '@cardstack/boxel-ui/helpers';
 
 import { BoxelIcon } from '@cardstack/boxel-ui/icons';
 
@@ -221,10 +221,7 @@ export default class SubmodeLayout extends Component<Signature> {
               @icon={{BoxelIcon}}
               @width='40px'
               @height='40px'
-              class={{cn
-                'workspace-button'
-                dark-icon=(not this.workspaceChooserOpened)
-              }}
+              class={{if (not this.workspaceChooserOpened) 'dark-icon' ''}}
               {{on 'click' this.toggleWorkspaceChooser}}
               data-test-submode-layout-boxel-icon-button
             />
@@ -361,7 +358,6 @@ export default class SubmodeLayout extends Component<Signature> {
       }
 
       .top-left-menu {
-        width: var(--operator-mode-left-column);
         position: absolute;
         top: 0;
         left: 0;
@@ -370,6 +366,7 @@ export default class SubmodeLayout extends Component<Signature> {
 
         display: flex;
         align-items: center;
+        gap: var(--boxel-sp-sm);
       }
 
       .boxel-title {
@@ -394,10 +391,6 @@ export default class SubmodeLayout extends Component<Signature> {
         background: transparent;
       }
 
-      .workspace-button {
-        border: none;
-        margin-right: var(--boxel-sp-xs);
-      }
       .dark-icon {
         --icon-bg-opacity: 1;
         --icon-color: black;
