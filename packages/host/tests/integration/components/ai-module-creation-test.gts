@@ -30,7 +30,6 @@ import {
   setupServerSentEvents,
   lookupLoaderService,
 } from '../../helpers';
-import { setupBaseRealm } from '../../helpers/base-realm';
 import {
   setupMatrixServiceMock,
   MockMatrixService,
@@ -46,7 +45,6 @@ module('Integration | create app module via ai-assistant', function (hooks) {
   let cardApi: typeof import('https://cardstack.com/base/card-api');
 
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   hooks.beforeEach(function () {
     loader = lookupLoaderService().loader;
   });
