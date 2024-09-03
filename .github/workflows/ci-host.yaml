@@ -15,12 +15,12 @@ permissions:
 jobs:
   host-test:
     name: Host Tests
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shardIndex: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-        shardTotal: [10]
+        shardIndex: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        shardTotal: [12]
     concurrency:
       group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
       cancel-in-progress: true
