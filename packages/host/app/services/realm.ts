@@ -21,12 +21,8 @@ import {
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 
-import ENV from '@cardstack/host/config/environment';
-
 import type LoaderService from './loader-service';
 import type MatrixService from './matrix-service';
-
-const { ownRealmURL } = ENV;
 
 interface Meta {
   info: RealmInfo;
@@ -286,13 +282,8 @@ export default class RealmService extends Service {
       .filter(([, i]) => i.canWrite)
       .sort(([, i], [, j]) => i.info.name.localeCompare(j.info.name));
 
-    let ownRealm = writeableRealms.find(([url]) => url === ownRealmURL);
-    if (ownRealm) {
-      return { path: ownRealm[0], info: ownRealm[1].info };
-    } else {
-      let first = writeableRealms[0];
-      return { path: first[0], info: first[1].info };
-    }
+    let first = writeableRealms[0];
+    return { path: first[0], info: first[1].info };
   }
 
   token = (url: string): string | undefined => {

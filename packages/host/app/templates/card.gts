@@ -25,7 +25,6 @@ import OperatorModeContainer from '@cardstack/host/components/operator-mode/cont
 
 import Preview from '@cardstack/host/components/preview';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
-import ENV from '@cardstack/host/config/environment';
 
 import CardController from '@cardstack/host/controllers/card';
 
@@ -39,6 +38,7 @@ import MessageService from '@cardstack/host/services/message-service';
 import OperatorModeStateService, {
   SerializedState as OperatorModeSerializedState,
 } from '@cardstack/host/services/operator-mode-state-service';
+import Realm from '@cardstack/host/services/realm';
 import RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -56,7 +56,7 @@ interface CardRouteSignature {
     model: CardModel | null;
   };
 }
-const { ownRealmURL } = ENV;
+
 @keyResponder
 class CardRouteComponent extends Component<CardRouteSignature> {
   isolatedCardComponent: ComponentLike | undefined;
@@ -66,6 +66,7 @@ class CardRouteComponent extends Component<CardRouteSignature> {
   @service declare router: RouterService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare messageService: MessageService;
+  @service declare realm: Realm;
   @service declare realmInfoService: RealmInfoService;
 
   constructor(owner: Owner, args: CardRouteSignature['Args']) {
@@ -128,7 +129,7 @@ class CardRouteComponent extends Component<CardRouteSignature> {
     // Users are not allowed to open guest mode
     // if realm is not publicly readable
     let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
-      new URL(ownRealmURL),
+      new URL(this.realm.userDefaultRealm.path),
     );
     if (!isPublicReadableRealm && this.args.controller.operatorModeEnabled) {
       return;
@@ -169,7 +170,9 @@ class CardRouteComponent extends Component<CardRouteSignature> {
   private fetchIsPublicReadableStatus = trackedFunction(
     this,
     async () =>
-      await this.realmInfoService.isPublicReadable(new URL(ownRealmURL)),
+      await this.realmInfoService.isPublicReadable(
+        new URL(this.realm.userDefaultRealm.path),
+      ),
   );
 
   <template>

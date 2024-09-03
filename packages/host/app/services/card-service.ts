@@ -44,7 +44,7 @@ export type CardSaveSubscriber = (
   content: SingleCardDocument | string,
 ) => void;
 
-const { ownRealmURL, environment } = ENV;
+const { environment } = ENV;
 
 export default class CardService extends Service {
   @service private declare loaderService: LoaderService;
@@ -464,10 +464,8 @@ export default class CardService extends Service {
   async getRealmURL(card: CardDef) {
     let api = await this.getAPI();
     // in the case where we get no realm URL from the card, we are dealing with
-    // a new card instance that does not have a realm URL yet. For now let's
-    // assume that the new card instance will reside in the realm that is hosting the app...
-    // TODO change this after implementing CS-6381
-    return card[api.realmURL] ?? new URL(ownRealmURL);
+    // a new card instance that does not have a realm URL yet.
+    return card[api.realmURL] ?? new URL(this.realm.userDefaultRealm.path);
   }
 
   async cardsSettled() {
