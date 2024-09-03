@@ -781,7 +781,7 @@ module('Acceptance | code submode tests', function (hooks) {
 
   test('code submode handles binary files', async function (assert) {
     let cardService = this.owner.lookup('service:card-service') as CardService;
-    cardService.realmURLs.push('http://localhost:4202/test/');
+    cardService.unresolvedRealmURLs.push('http://localhost:4202/test/');
     await visitOperatorMode({
       submode: 'code',
       codePath: `http://localhost:4202/test/mango.png`,

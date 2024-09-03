@@ -62,7 +62,7 @@ export default class CommandService extends Service {
           );
         }
         let query = { filter: payload.filter };
-        let realmUrls = this.cardService.realmURLs;
+        let realmUrls = this.cardService.unresolvedRealmURLs;
         let instances: CardDef[] = flatMap(
           await Promise.all(
             realmUrls.map(

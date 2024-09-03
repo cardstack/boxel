@@ -69,7 +69,7 @@ export default class CardService extends Service {
   }
 
   // TODO remove in a followup PR for CS-7036
-  realmURLs = new TrackedArray<string>([baseRealm.url]);
+  unresolvedRealmURLs = new TrackedArray<string>([baseRealm.url]);
 
   // Note that this should be the unresolved URL and that we need to rely on our
   // fetch to do any URL resolution.
@@ -87,21 +87,24 @@ export default class CardService extends Service {
 
   setRealms(realms: string[]) {
     realms.forEach((realm) => {
-      if (!this.realmURLs.includes(realm)) {
-        this.realmURLs.push(realm);
+      if (!this.unresolvedRealmURLs.includes(realm)) {
+        this.unresolvedRealmURLs.push(realm);
       }
     });
 
-    this.realmURLs.forEach((realm) => {
+    this.unresolvedRealmURLs.forEach((realm) => {
       if (!realms.includes(realm)) {
-        this.realmURLs.splice(this.realmURLs.indexOf(realm), 1);
+        this.unresolvedRealmURLs.splice(
+          this.unresolvedRealmURLs.indexOf(realm),
+          1,
+        );
       }
     });
 
     let baseRealmUrl = baseRealm.url;
     // FIXME isn’t this all v clunky
-    if (!this.realmURLs.includes(baseRealmUrl)) {
-      this.realmURLs.unshift(baseRealmUrl);
+    if (!this.unresolvedRealmURLs.includes(baseRealmUrl)) {
+      this.unresolvedRealmURLs.unshift(baseRealmUrl);
     }
   }
 

@@ -139,7 +139,7 @@ function generateMockMatrixService(
     private async loginToRealms() {
       // This is where we would actually load user-specific choices out of the
       // user's profile based on this.client.getUserId();
-      let activeRealms = this.cardService.realmURLs;
+      let activeRealms = this.cardService.unresolvedRealmURLs;
 
       await Promise.all(
         activeRealms.map(async (realmURL) => {
