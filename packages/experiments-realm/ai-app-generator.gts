@@ -1,4 +1,4 @@
-import type { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
+import type { CardContext } from 'https://cardstack.com/base/card-api';
 import {
   CardContainer,
   FieldContainer,
@@ -18,6 +18,7 @@ import {
   baseRealm,
   type CodeRef,
   type LooseSingleCardDocument,
+  type Query,
 } from '@cardstack/runtime-common';
 import { AppCard, Tab, CardsGrid } from './app-card';
 
@@ -104,7 +105,8 @@ class HowToSidebar extends GlimmerComponent {
 
 class CardListSidebar extends GlimmerComponent<{
   title: string;
-  instances: CardDef[];
+  query: Query;
+  realms: string[];
   context?: CardContext;
 }> {
   <template>
@@ -113,9 +115,10 @@ class CardListSidebar extends GlimmerComponent<{
         <h3 class='sidebar-title'>{{@title}}</h3>
       </header>
       <CardsGrid
-        @isListFormat={{true}}
-        @instances={{@instances}}
+        @query={{@query}}
+        @realms={{@realms}}
         @context={{@context}}
+        @isListFormat={{true}}
       />
     </aside>
     <style scoped>
@@ -280,11 +283,14 @@ class Isolated extends AppCard.isolated {
                 <p class='error'>{{this.errorMessage}}</p>
               {{/if}}
             </section>
-            <CardListSidebar
-              @title='Browse Sample Apps'
-              @instances={{this.instances}}
-              @context={{@context}}
-            />
+            {{#if this.query}}
+              <CardListSidebar
+                @title='Browse Sample Apps'
+                @query={{this.query}}
+                @realms={{this.realms}}
+                @context={{@context}}
+              />
+            {{/if}}
           </div>
         {{else}}
           {{#if
@@ -308,11 +314,14 @@ class Isolated extends AppCard.isolated {
               Create new requirement
             </Button>
           {{/if}}
-          <CardsGrid
-            class='grid-cards'
-            @instances={{this.instances}}
-            @context={{@context}}
-          />
+          {{#if this.query}}
+            <CardsGrid
+              class='grid-cards'
+              @query={{this.query}}
+              @realms={{this.realms}}
+              @context={{@context}}
+            />
+          {{/if}}
         {{/if}}
       </div>
     </section>
