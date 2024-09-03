@@ -6,6 +6,7 @@ import { TrackedArray } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
+  baseRealm,
   SupportedMimeType,
   type LooseCardResource,
   isSingleCardDocument,
@@ -42,7 +43,7 @@ export type CardSaveSubscriber = (
   content: SingleCardDocument | string,
 ) => void;
 
-const { ownRealmURL, testRealmURLs, environment } = ENV;
+const { ownRealmURL, environment } = ENV;
 
 export default class CardService extends Service {
   @service private declare loaderService: LoaderService;
@@ -68,7 +69,7 @@ export default class CardService extends Service {
   }
 
   // TODO remove in a followup PR for CS-7036
-  realmURLs = new TrackedArray<string>(testRealmURLs);
+  realmURLs = new TrackedArray<string>([resolvedBaseRealmURL]);
 
   // Note that this should be the unresolved URL and that we need to rely on our
   // fetch to do any URL resolution.
@@ -96,6 +97,12 @@ export default class CardService extends Service {
         this.realmURLs.splice(this.realmURLs.indexOf(realm), 1);
       }
     });
+
+    let baseRealmUrl = baseRealm.url;
+    // FIXME isn’t this all v clunky
+    if (!this.realmURLs.includes(baseRealmUrl)) {
+      this.realmURLs.unshift(baseRealmUrl);
+    }
   }
 
   async fetchJSON(
