@@ -162,6 +162,9 @@ export default class CardCatalog extends Component<Signature> {
         cursor: pointer;
         container-name: fitted-card;
         container-type: size;
+        display: flex;
+        text-align: left;
+        margin: auto;
       }
     </style>
   </template>
