@@ -1736,7 +1736,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await typeIn(`[data-test-search-field]`, `bob`);
     assert.dom(`[data-test-search-field]`).hasValue('bob');
-    // await this.pauseTest();
+
     await waitFor('[data-test-card-catalog-item]', { count: 1 });
 
     await click(`[data-test-select="${testRealmURL}Author/1"]`);
