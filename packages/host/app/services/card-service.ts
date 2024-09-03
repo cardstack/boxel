@@ -43,7 +43,7 @@ export type CardSaveSubscriber = (
   content: SingleCardDocument | string,
 ) => void;
 
-const { ownRealmURL, environment, resolvedBaseRealmURL } = ENV;
+const { ownRealmURL, environment } = ENV;
 
 export default class CardService extends Service {
   @service private declare loaderService: LoaderService;
@@ -69,7 +69,7 @@ export default class CardService extends Service {
   }
 
   // TODO remove in a followup PR for CS-7036
-  realmURLs = new TrackedArray<string>([resolvedBaseRealmURL]);
+  realmURLs = new TrackedArray<string>([baseRealm.url]);
 
   // Note that this should be the unresolved URL and that we need to rely on our
   // fetch to do any URL resolution.
