@@ -81,7 +81,7 @@ type State = {
   request: Request;
   selectedCardUrl?: string;
   searchKey: string;
-  cardURL: string;
+  cardUrlFromSearchKey: string;
   chooseCardTitle: string;
   dismissModal: boolean;
   errorMessage?: string;
@@ -258,8 +258,8 @@ export default class CardCatalogModal extends Component<Signature> {
       return [];
     }
 
-    if (this.state.cardURL) {
-      return [this.state.cardURL];
+    if (this.state.cardUrlFromSearchKey) {
+      return [this.state.cardUrlFromSearchKey];
     }
     return [];
   }
@@ -323,7 +323,7 @@ export default class CardCatalogModal extends Component<Signature> {
       return;
     }
     this.state.searchKey = '';
-    this.state.cardURL = '';
+    this.state.cardUrlFromSearchKey = '';
     this.state.selectedCardUrl = undefined;
     this.state.dismissModal = false;
     this.state.query = this.state.originalQuery;
@@ -383,7 +383,7 @@ export default class CardCatalogModal extends Component<Signature> {
         request,
         chooseCardTitle: title,
         searchKey: '',
-        cardURL: '',
+        cardUrlFromSearchKey: '',
         dismissModal: false,
         query,
         originalQuery: query,
@@ -456,18 +456,21 @@ export default class CardCatalogModal extends Component<Signature> {
       // 1. if .json is missing, add it
       // 2. if the URL points to a realm, add /index.json for convenience of  getting the index card
       this.state.query = this.state.originalQuery;
-      let cardURL = this.state.searchKey;
+      let cardUrlFromSearchKey = this.state.searchKey;
 
       if (
         this.state.availableRealmUrls.some(
-          (url) => url === cardURL || url === cardURL + '/',
+          (url) =>
+            url === cardUrlFromSearchKey || url === cardUrlFromSearchKey + '/',
         )
       ) {
-        cardURL = cardURL.endsWith('/')
-          ? cardURL + 'index'
-          : cardURL + '/index';
+        cardUrlFromSearchKey = cardUrlFromSearchKey.endsWith('/')
+          ? cardUrlFromSearchKey + 'index'
+          : cardUrlFromSearchKey + '/index';
       }
-      this.state.cardURL = cardURL + (cardURL.endsWith('.json') ? '' : '.json');
+      this.state.cardUrlFromSearchKey =
+        cardUrlFromSearchKey +
+        (cardUrlFromSearchKey.endsWith('.json') ? '' : '.json');
       return;
     }
 
