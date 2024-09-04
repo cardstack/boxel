@@ -817,7 +817,6 @@ export class Realm {
       (_match, g1, g2, g3) => {
         let config = JSON.parse(decodeURIComponent(g2));
         config = merge({}, config, {
-          ownRealmURL: this.url, // unresolved url
           hostsOwnAssets: !isNode,
           realmsServed: opts?.realmsServed,
           assetsURL: this.#assetsURL.href,
