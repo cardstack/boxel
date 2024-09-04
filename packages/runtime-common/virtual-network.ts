@@ -122,31 +122,9 @@ export class VirtualNetwork {
       return next(await this.mapRequest(request, 'virtual-to-real'));
     });
 
-    // This is to handle a very mysterious situation in our CI environment where
-    // fetches for base realm artifacts seem to vanish and we see "TypeError:
-    // Fetch failed" exceptions.
-    const maxAttempts = 5;
-    const backOffMs = 100;
-    let attempt = 0;
-    for (;;) {
-      try {
-        return await fetcher(this.nativeFetch, handlers)(request, init);
-      } catch (err: any) {
-        if (
-          (globalThis as any).__environment !== 'test' ||
-          !baseRealm.inRealm(new URL(request.url)) ||
-          ++attempt > maxAttempts
-        ) {
-          throw err;
-        }
-        console.error(
-          `Encountered fetch failed for ${
-            request.url
-          } retry attempt #${attempt} in ${attempt * backOffMs}ms`,
-        );
-        await new Promise((r) => setTimeout(r, attempt * backOffMs));
-      }
-    }
+    return fetchWithRetries(new URL(request.url), () =>
+      fetcher(this.nativeFetch, handlers)(request, init),
+    );
   }
 
   // This method is used to handle the boundary between the real and virtual network,
@@ -221,6 +199,37 @@ function isUrlLike(moduleIdentifier: string): boolean {
     moduleIdentifier.startsWith('http://') ||
     moduleIdentifier.startsWith('https://')
   );
+}
+
+// This is to handle a very mysterious situation in our CI environment where
+// fetches for base realm artifacts seem to vanish and we see "TypeError:
+// Fetch failed" exceptions.
+const maxAttempts = 5;
+const backOffMs = 100;
+async function fetchWithRetries(
+  url: URL,
+  fetchFn: () => ReturnType<typeof globalThis.fetch>,
+) {
+  let attempt = 0;
+  for (;;) {
+    try {
+      return await fetchFn();
+    } catch (err: any) {
+      if (
+        (globalThis as any).__environment !== 'test' ||
+        !baseRealm.inRealm(url) ||
+        ++attempt > maxAttempts
+      ) {
+        throw err;
+      }
+      console.error(
+        `Encountered fetch failed for ${
+          url.href
+        } retry attempt #${attempt} in ${attempt * backOffMs}ms`,
+      );
+      await new Promise((r) => setTimeout(r, attempt * backOffMs));
+    }
+  }
 }
 
 async function buildRequest(url: string, originalRequest: Request) {
