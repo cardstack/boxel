@@ -1,4 +1,4 @@
-import type { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
+import { type CardDef } from 'https://cardstack.com/base/card-api';
 import {
   CardContainer,
   FieldContainer,
@@ -6,61 +6,235 @@ import {
   Button,
   TabbedHeader,
 } from '@cardstack/boxel-ui/components';
-import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
-import { IconPlus } from '@cardstack/boxel-ui/icons';
+import { eq } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { restartableTask } from 'ember-concurrency';
-import {
-  baseRealm,
-  type CodeRef,
-  type LooseSingleCardDocument,
-} from '@cardstack/runtime-common';
-import { AppCard, Tab, CardsGrid } from './app-card';
+import { AppCard, Tab } from './app-card';
 
-class HowToSidebar extends GlimmerComponent {
+const getComponent = (card: CardDef) => {
+  if (!card) {
+    return;
+  }
+  return card.constructor.getComponent(card);
+};
+
+class Requirements extends GlimmerComponent<{
+  instances: CardDef[] | [];
+}> {
   <template>
-    <aside class='intro'>
-      <header>
-        <div class='logo' />
-        <h3 class='intro-title'>
-          How to create your own app with AI in seconds
-        </h3>
-      </header>
-      <div class='intro-content'>
-        <p>
-          Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
-          eiusmod tempor.
-        </p>
-        <p>
-          <ul class='intro-list'>
-            <li>Website</li>
-            <li>CRM</li>
-            <li>Scheduler</li>
-            <li>Chess Game</li>
-            <li>Music Instrument</li>
-            <li>Generative Art</li>
-          </ul>
-        </p>
-        <p>
-          Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
-          dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non
-          proident, sunt in culpa qui officia deserunt mollit anim id est
-          laborum.
-        </p>
-      </div>
-    </aside>
+    <div class='requirements'>
+      <aside class='recent-reqs-sidebar'>
+        <h3 class='recent-reqs-title'>Recent Requirements</h3>
+        <ul>
+          {{#each @instances as |doc|}}
+            <li>
+              <button {{on 'click' (fn this.openDoc doc)}}>
+                {{doc.title}}
+              </button>
+            </li>
+          {{/each}}
+        </ul>
+      </aside>
+      {{#let (getComponent this.currentDoc) as |Card|}}
+        <div class='requirements-doc'>
+          <Card />
+        </div>
+      {{/let}}
+    </div>
     <style>
+      .requirements {
+        height: 100%;
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: var(--boxel-sp);
+      }
+      .recent-reqs-sidebar {
+        max-width: 235px;
+      }
+      .recent-reqs-title {
+        margin: 0;
+        font: 700 var(--boxel-font);
+      }
+      .requirements-doc > :deep(.field-component-card.embedded-format) {
+        --overlay-embedded-card-header-height: 0;
+      }
+    </style>
+  </template>
+
+  @tracked _doc?: CardDef;
+
+  @action openDoc(doc: CardDef) {
+    this._doc = doc;
+  }
+
+  get currentDoc() {
+    return this._doc ?? this.args.instances?.[0];
+  }
+}
+
+class Isolated extends AppCard.isolated {
+  <template>
+    <section class='app'>
+      <TabbedHeader
+        @title={{@model.title}}
+        @tabs={{this.tabs}}
+        @onSetActiveTab={{this.setActiveTab}}
+        @activeTabIndex={{this.activeTabIndex}}
+        @headerBackgroundColor={{this.headerColor}}
+      >
+        <:headerIcon>
+          {{#if @model.headerIcon.base64}}
+            <@fields.headerIcon />
+          {{/if}}
+        </:headerIcon>
+      </TabbedHeader>
+      <div class='app-content'>
+        {{#if (eq this.activeTabIndex 1)}}
+          <Requirements @instances={{this.instances}} />
+        {{else}}
+          <div class='dashboard'>
+            <aside class='intro'>
+              <header>
+                <div class='logo' />
+                <h3 class='intro-title'>
+                  How to create your own app with AI in seconds
+                </h3>
+              </header>
+              <div class='intro-content'>
+                <p>
+                  Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed
+                  do eiusmod tempor.
+                </p>
+                <p>
+                  <ul class='intro-list'>
+                    <li>Website</li>
+                    <li>CRM</li>
+                    <li>Scheduler</li>
+                    <li>Chess Game</li>
+                    <li>Music Instrument</li>
+                    <li>Generative Art</li>
+                  </ul>
+                </p>
+                <p>
+                  Duis aute irure dolor in reprehenderit in voluptate velit esse
+                  cillum dolore eu fugiat nulla pariatur. Excepteur sint
+                  occaecat cupidatat non proident, sunt in culpa qui officia
+                  deserunt mollit anim id est laborum.
+                </p>
+              </div>
+            </aside>
+            <section>
+              <header class='db-content-header'>
+                <h2 class='prompt-title'>Generate an App</h2>
+              </header>
+              <CardContainer @displayBoundaries={{true}} class='prompt'>
+                <div class='prompt-options'>
+                  <button class='prompt-option active'>Start From Scratch</button>
+                  <button disabled class='prompt-option'>Remix an Existing App</button>
+                </div>
+                <section class='prd-editor'>
+                  <FieldContainer @label='I want to make a'>
+                    <BoxelInput
+                      @value={{this.prompt.appType}}
+                      @onInput={{fn this.setPrompt 'appType'}}
+                    />
+                  </FieldContainer>
+                  <FieldContainer @label='Tailored for'>
+                    <BoxelInput
+                      @value={{this.prompt.domain}}
+                      @onInput={{fn this.setPrompt 'domain'}}
+                    />
+                  </FieldContainer>
+                  <FieldContainer
+                    class='features'
+                    @label='That has these features'
+                  >
+                    <BoxelInput
+                      @value={{this.prompt.customRequirements}}
+                      @onInput={{fn this.setPrompt 'customRequirements'}}
+                    />
+                  </FieldContainer>
+                  <Button
+                    class='generate-button'
+                    @kind='primary-dark'
+                    {{on 'click' this.generatePrd}}
+                  >
+                    <span class='button-logo' />
+                    Let's Get Started
+                  </Button>
+                </section>
+              </CardContainer>
+            </section>
+            <aside>
+              <header class='db-content-header'>
+                <h3 class='sample-apps-title'>Browse Sample Apps</h3>
+              </header>
+              <ul class='sample-apps-list'>
+                {{#each this.instances key='id' as |card|}}
+                  <li
+                    class='sample-apps-list-item'
+                    {{@context.cardComponentModifier
+                      card=card
+                      format='data'
+                      fieldType=undefined
+                      fieldName=undefined
+                    }}
+                  >
+                    {{#let (getComponent card) as |Card|}}
+                      <Card />
+                    {{/let}}
+                  </li>
+                {{/each}}
+              </ul>
+            </aside>
+          </div>
+        {{/if}}
+      </div>
+    </section>
+
+    <style>
+      h1,
+      h2,
       h3,
+      h4,
+      h5,
+      h6,
       p {
         margin-top: 0;
         margin-bottom: var(--boxel-sp);
       }
+
+      .app {
+        position: relative;
+        min-height: 100%;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        background-color: var(--boxel-light);
+        color: var(--boxel-dark);
+        font: var(--boxel-font);
+        letter-spacing: var(--boxel-lsp);
+      }
+      .app-content {
+        padding: var(--boxel-sp);
+        background-color: #f7f7f7;
+      }
+
+      /* Dashboard */
+      .db-content-header {
+        display: flex;
+        align-items: center;
+      }
+
+      .dashboard {
+        display: grid;
+        grid-template-columns: 256px minmax(400px, 1fr) 300px;
+        gap: var(--boxel-sp-xxl);
+      }
+
       .intro {
-        width: 256px;
         height: max-content;
         min-height: 60%;
         display: flex;
@@ -85,11 +259,6 @@ class HowToSidebar extends GlimmerComponent {
         background-size: contain;
         margin-bottom: var(--boxel-sp);
       }
-      .intro-content {
-        color: #ddd;
-        line-height: 1.5;
-        letter-spacing: var(--boxel-lsp-xs);
-      }
       .intro-list {
         list-style-type: disc;
         padding-left: var(--boxel-sp);
@@ -98,101 +267,21 @@ class HowToSidebar extends GlimmerComponent {
       .intro-list > li + li {
         margin-top: var(--boxel-sp-xxs);
       }
-    </style>
-  </template>
-}
-
-class CardListSidebar extends GlimmerComponent<{
-  title: string;
-  instances: CardDef[];
-  context?: CardContext;
-}> {
-  <template>
-    <aside class='sidebar'>
-      <header class='sidebar-header'>
-        <h3 class='sidebar-title'>{{@title}}</h3>
-      </header>
-      <CardsGrid
-        @isListFormat={{true}}
-        @instances={{@instances}}
-        @context={{@context}}
-      />
-    </aside>
-    <style>
-      .sidebar {
-        width: 300px;
-      }
-      .sidebar-header {
-        display: flex;
-        align-items: center;
-      }
-      .sidebar-title {
-        margin-top: 0;
-        margin-bottom: var(--boxel-sp);
-        font: 700 var(--boxel-font);
-        line-height: 2;
+      .intro-content {
+        color: #ddd;
+        line-height: 1.5;
         letter-spacing: var(--boxel-lsp-xs);
       }
-    </style>
-  </template>
-}
 
-type Prompt = {
-  appType: string;
-  domain: string;
-  customRequirements: string;
-};
-
-class PromptContainer extends GlimmerComponent<{
-  prompt: Prompt;
-  setPrompt: (key: string, value: string) => void;
-  generateProductRequirementsDoc: () => void;
-  isLoading: boolean;
-}> {
-  <template>
-    <CardContainer @displayBoundaries={{true}} class='prompt-container'>
-      <div class='prompt-container-options'>
-        <button class='prompt-option active'>Start From Scratch</button>
-        <button disabled class='prompt-option'>Remix an Existing App</button>
-      </div>
-      <section class='prompt-editor'>
-        <FieldContainer @label='I want to make a'>
-          <BoxelInput
-            @value={{@prompt.appType}}
-            @onInput={{fn @setPrompt 'appType'}}
-          />
-        </FieldContainer>
-        <FieldContainer @label='Tailored for'>
-          <BoxelInput
-            @value={{@prompt.domain}}
-            @onInput={{fn @setPrompt 'domain'}}
-          />
-        </FieldContainer>
-        <FieldContainer class='features-field' @label='That has these features'>
-          <BoxelInput
-            @value={{@prompt.customRequirements}}
-            @onInput={{fn @setPrompt 'customRequirements'}}
-          />
-        </FieldContainer>
-        <Button
-          class='generate-button'
-          @kind='primary-dark'
-          @loading={{@isLoading}}
-          @disabled={{@isLoading}}
-          {{on 'click' @generateProductRequirementsDoc}}
-        >
-          {{#unless @isLoading}}
-            <span class='generate-button-logo' />
-          {{/unless}}
-          Let's Get Started
-        </Button>
-      </section>
-    </CardContainer>
-    <style>
-      .prompt-container {
+      .prompt-title {
+        font-weight: 700;
+        font-size: 1.5rem;
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      .prompt {
         padding: var(--boxel-sp-lg) var(--boxel-sp-xl) var(--boxel-sp-xl);
       }
-      .prompt-container-options {
+      .prompt-options {
         max-width: 650px;
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -213,167 +302,44 @@ class PromptContainer extends GlimmerComponent<{
         border-bottom: 4px solid var(--boxel-dark);
         font-weight: 700;
       }
-      .prompt-editor {
+      .prd-editor {
         display: grid;
         gap: var(--boxel-sp);
       }
-      .features-field {
+      .generate-button {
+        margin-top: var(--boxel-sp);
+        justify-self: end;
+      }
+      .features {
         --boxel-input-height: 4rem;
       }
-      .generate-button {
-        --icon-size: 20px;
-        --boxel-button-loading-icon-size: var(--icon-size);
-        margin-top: var(--boxel-sp);
-        padding: var(--boxel-sp-xxs) var(--boxel-sp);
-        justify-self: end;
-        gap: var(--boxel-sp-sm);
-      }
-      .generate-button :deep(svg) {
-        width: var(--icon-size);
-        height: var(--icon-size);
-      }
-      .generate-button :deep(.loading-indicator) {
-        margin-right: 0;
-      }
-      .generate-button-logo {
+      .button-logo {
         display: inline-block;
-        width: var(--icon-size);
-        height: var(--icon-size);
+        width: 20px;
+        height: 20px;
         background: url('./ai-assist-icon@2x.webp') no-repeat center;
         background-size: contain;
-      }
-    </style>
-  </template>
-}
-
-class Isolated extends AppCard.isolated {
-  <template>
-    <section class='app'>
-      <TabbedHeader
-        @title={{@model.title}}
-        @tabs={{this.tabs}}
-        @onSetActiveTab={{this.setActiveTab}}
-        @activeTabIndex={{this.activeTabIndex}}
-        @headerBackgroundColor={{this.headerColor}}
-      >
-        <:headerIcon>
-          {{#if @model.headerIcon.base64}}
-            <@fields.headerIcon />
-          {{/if}}
-        </:headerIcon>
-      </TabbedHeader>
-      <div class='app-content'>
-        {{#if (eq this.activeTabIndex 0)}}
-          <div class='dashboard'>
-            <HowToSidebar />
-            <section>
-              <header class='section-header'>
-                <h2 class='section-title'>Generate an App</h2>
-              </header>
-              <PromptContainer
-                @prompt={{this.prompt}}
-                @setPrompt={{this.setPrompt}}
-                @generateProductRequirementsDoc={{this.generateProductRequirementsDoc}}
-                @isLoading={{this.generateRequirements.isRunning}}
-              />
-              {{#if this.errorMessage}}
-                <p class='error'>{{this.errorMessage}}</p>
-              {{/if}}
-            </section>
-            <CardListSidebar
-              @title='Browse Sample Apps'
-              @instances={{this.instances}}
-              @context={{@context}}
-            />
-          </div>
-        {{else}}
-          {{#if
-            (and (bool @context.actions.createCard) (eq this.activeTabIndex 1))
-          }}
-            <Button
-              @kind='text-only'
-              @loading={{this.isCreateCardRunning}}
-              @disabled={{this.isCreateCardRunning}}
-              class='create-new-button'
-              {{on 'click' this.createNew}}
-            >
-              {{#unless this.isCreateCardRunning}}
-                <IconPlus
-                  class='plus-icon'
-                  width='15'
-                  height='15'
-                  role='presentation'
-                />
-              {{/unless}}
-              Create new requirement
-            </Button>
-          {{/if}}
-          <CardsGrid
-            class='grid-cards'
-            @instances={{this.instances}}
-            @context={{@context}}
-          />
-        {{/if}}
-      </div>
-    </section>
-    <style>
-      .app {
-        position: relative;
-        min-height: 100%;
-        display: grid;
-        grid-template-rows: auto 1fr;
-        background-color: var(--boxel-light);
-        color: var(--boxel-dark);
-        font: var(--boxel-font);
-        letter-spacing: var(--boxel-lsp);
-      }
-      .app-content {
-        padding: var(--boxel-sp);
-        background-color: #f7f7f7;
-      }
-      .grid-cards {
-        padding: var(--boxel-sp);
+        margin-right: var(--boxel-sp-sm);
       }
 
-      /* Dashboard */
-      .dashboard {
-        display: grid;
-        grid-template-columns: auto minmax(400px, 1fr) auto;
-        gap: var(--boxel-sp-xxl);
-      }
-      .section-header {
-        display: flex;
-        align-items: center;
-      }
-      .section-title {
-        margin-top: 0;
-        margin-bottom: var(--boxel-sp);
-        font-weight: 700;
-        font-size: 1.5rem;
+      .sample-apps-title {
+        font: 700 var(--boxel-font);
+        line-height: 2;
         letter-spacing: var(--boxel-lsp-xs);
       }
-
-      /* Create New button */
-      .create-new-button {
-        --boxel-button-loading-icon-size: 15px;
-        --boxel-button-text-color: var(--boxel-dark);
-        margin-left: var(--boxel-sp-sm);
-        color: var(--boxel-dark);
-        font-weight: 500;
-        padding: var(--boxel-sp-xxs);
-        gap: var(--boxel-sp-xxs);
+      .sample-apps-list {
+        list-style-type: none;
+        margin: 0;
+        padding: 0;
       }
-      .create-new-button :deep(.loading-indicator) {
-        width: 15px;
-        height: 15px;
-        margin-right: 0;
+      .sample-apps-list-item {
+        height: 260px;
       }
-      .create-new-button:hover:not(:disabled) {
-        --icon-color: var(--boxel-highlight);
-        color: var(--boxel-highlight);
+      .sample-apps-list-item + .sample-apps-list-item {
+        margin-top: var(--boxel-sp-xs);
       }
-      .plus-icon {
-        stroke-width: 0;
+      .sample-apps-list-item > :deep(.field-component-card.embedded-format) {
+        --overlay-embedded-card-header-height: 0;
       }
     </style>
   </template>
@@ -395,70 +361,36 @@ class Isolated extends AppCard.isolated {
         module: `${this.currentRealm?.href}product-requirement-document`,
       },
     }),
-    new Tab({
-      displayName: 'Your Apps',
-      tabId: 'your-apps',
-      ref: {
-        name: 'AppCard',
-        module: `${this.currentRealm?.href}app-card`,
-      },
-    }),
   ];
-  promptReset: Prompt = {
-    appType: '',
-    domain: '',
-    customRequirements: '',
-  };
-  @tracked prompt: Prompt = this.promptReset;
+  @tracked prompt?: {
+    appType: string;
+    domain: string;
+    customRequirements: string;
+  } = undefined;
+
   @action setPrompt(key: string, value: string) {
-    this.prompt = { ...this.prompt, [key]: value };
+    let prompt = this.prompt ?? {
+      appType: '',
+      domain: '',
+      customRequirements: '',
+    };
+    this.prompt = { ...prompt, [key]: value };
   }
-  @action generateProductRequirementsDoc() {
-    let ref = this.tabs[1].ref;
-    let appTitle = `${this.prompt.domain} ${this.prompt.appType}`;
-    let requirements = this.prompt.customRequirements
-      ? `that has these features: ${this.prompt.customRequirements}`
-      : '';
-    let prompt = `I want to make a ${this.prompt.appType} tailored for a ${this.prompt.domain} ${requirements}`;
-    this.generateRequirements.perform(ref, {
+
+  @action generatePrd() {
+    if (!this.activeTabRef) {
+      console.error('No active tab ref');
+      return;
+    }
+    this.setActiveTab(1);
+    this.createNew?.({
       data: {
-        attributes: { appTitle, prompt },
-        meta: { adoptsFrom: ref },
+        attributes: { prompt: this.prompt },
+        meta: { adoptsFrom: this.activeTabRef },
       },
     });
+    this.prompt = undefined;
   }
-  private generateRequirements = restartableTask(
-    async (ref: CodeRef, doc: LooseSingleCardDocument) => {
-      try {
-        this.errorMessage = '';
-        let { createCard, viewCard, runCommand } =
-          this.args.context?.actions ?? {};
-        if (!createCard || !viewCard || !runCommand) {
-          this.errorMessage = 'Error: Missing required card actions';
-          return;
-        }
-        let card = await createCard(ref, this.currentRealm, {
-          doc,
-          cardModeAfterCreation: 'isolated',
-        });
-        if (!card) {
-          this.errorMessage = 'Error: Failed to create card';
-          return;
-        }
-        await runCommand(
-          card,
-          `${baseRealm.url}SkillCard/generate-product-requirements`,
-          'Generate product requirements document',
-        );
-        this.prompt = this.promptReset;
-        this.setActiveTab(1);
-      } catch (e) {
-        console.error(e);
-        this.errorMessage =
-          e instanceof Error ? `Error: ${e.message}` : 'An error occurred';
-      }
-    },
-  );
 }
 
 export class AiAppGenerator extends AppCard {

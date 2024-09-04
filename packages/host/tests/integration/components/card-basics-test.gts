@@ -69,7 +69,6 @@ import {
   subscribeToChanges,
   TextAreaField,
   unsubscribeFromChanges,
-  ReadOnlyField,
 } from '../../helpers/base-realm';
 import { mango } from '../../helpers/image-fixture';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
@@ -553,7 +552,7 @@ module('Integration | card-basics', function (hooks) {
         .dom('[data-test-driver] [data-test-card-display-name]')
         .containsText('Person');
       assert
-        .dom('[data-test-driver] [data-test-card-thumbnail-placeholder]')
+        .dom('[data-test-driver] [data-test-card-thumbnail-text]')
         .doesNotExist();
       assert
         .dom('[data-test-driver] [data-test-card-title]')
@@ -600,8 +599,8 @@ module('Integration | card-basics', function (hooks) {
         .dom('[data-test-driver] [data-test-card-display-name]')
         .containsText('Person');
       assert
-        .dom('[data-test-driver] [data-test-card-thumbnail-placeholder]')
-        .exists();
+        .dom('[data-test-driver] [data-test-card-thumbnail-text]')
+        .containsText('Person');
 
       await percySnapshot(assert);
     });
@@ -2475,27 +2474,6 @@ module('Integration | card-basics', function (hooks) {
         getFieldDescription(Person, 'hometown'),
       );
     });
-
-    test('ReadOnlyField wont display input field', async function (assert) {
-      class Person extends CardDef {
-        @field readOnlyField = contains(ReadOnlyField);
-        @field name = contains(StringField);
-
-        static isolated = class Isolated extends Component<typeof this> {
-          <template>
-            {{@model.readOnlyField}}
-            {{@model.name}}
-          </template>
-        };
-      }
-
-      let person = new Person({ readOnlyField: 'Test', name: 'Mango' });
-      await renderCard(loader, person, 'edit');
-      assert.dom('[data-test-field="name"] input').exists({ count: 1 });
-      assert
-        .dom('[data-test-field="readOnlyField"] input')
-        .exists({ count: 0 });
-    });
   });
 });
 
@@ -2670,7 +2648,7 @@ function embeddedViewDriver() {
         <style>
           .card {
             /* this is how a border would appear around a card.
-             note that a card is not supposed to draw its own border
+             note that a card is not supposed to draw its own border 
           */
             box-shadow: 0 0 0 1px var(--boxel-light-500);
             overflow: hidden;

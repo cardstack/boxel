@@ -2472,7 +2472,7 @@ const tests = Object.freeze({
       `'null' is not a permitted value in a 'range' filter`,
     );
   },
-  'can get prerendered cards from the indexer': async (
+  'can get prerendered cards (html + css) from the indexer': async (
     assert,
     { indexQueryEngine, dbAdapter, loader },
   ) => {
@@ -2551,6 +2551,15 @@ const tests = Object.freeze({
         deps: [`${testRealmURL}person`, 'https://cardstack.com/base/card-api'],
       },
       {
+        url: `${testRealmURL}fancy-person.gts`,
+        file_alias: `${testRealmURL}fancy-person`,
+        type: 'css',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        source: '.fancy-person { color: pink; }',
+        deps: [],
+      },
+      {
         url: `${testRealmURL}person.gts`,
         type: 'module',
         file_alias: `${testRealmURL}person`,
@@ -2560,12 +2569,30 @@ const tests = Object.freeze({
         deps: ['https://cardstack.com/base/card-api'],
       },
       {
+        url: `${testRealmURL}person.gts`,
+        file_alias: `${testRealmURL}person`,
+        type: 'css',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        source: '.person { color: red; }',
+        deps: [],
+      },
+      {
         url: `https://cardstack.com/base/card-api`,
         type: 'module',
         file_alias: `${testRealmURL}card-api`,
         realm_version: 1,
         realm_url: testRealmURL,
         source: '',
+        deps: [],
+      },
+      {
+        url: `https://cardstack.com/base/card-api`,
+        type: 'css',
+        file_alias: `${testRealmURL}card-api`,
+        realm_version: 1,
+        realm_url: testRealmURL,
+        source: '.default-card-template { color: blue; }',
         deps: [],
       },
     ]);

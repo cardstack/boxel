@@ -8,6 +8,7 @@ import {
   SupportedMimeType,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
+import { webStreamToText } from '@cardstack/runtime-common/stream';
 import { setupCloseHandler } from './node-realm';
 import {
   livenessCheck,
@@ -15,20 +16,15 @@ import {
   httpLogging,
   httpBasicAuth,
   ecsMetadata,
-  setContextResponse,
-  fetchRequestFromContext,
+  fullRequestURL,
 } from './middleware';
 import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp';
 
 import './lib/externals';
+import { nodeStreamToText } from './stream';
+import mime from 'mime-types';
 import { extractSupportedMimeType } from '@cardstack/runtime-common/router';
 import * as Sentry from '@sentry/node';
-import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import {
-  MatrixBackendAuthentication,
-  Utils,
-} from '@cardstack/runtime-common/matrix-backend-authentication';
-import jwt from 'jsonwebtoken';
 
 export class RealmServer {
   private log = logger('realm:requests');
@@ -36,8 +32,6 @@ export class RealmServer {
   constructor(
     private realms: Realm[],
     private virtualNetwork: VirtualNetwork,
-    private matrixClient: MatrixClient,
-    private secretSeed: string,
   ) {
     detectRealmCollision(realms);
     this.realms = realms;
@@ -48,7 +42,6 @@ export class RealmServer {
     let router = new Router();
     router.head('/', livenessCheck);
     router.get('/', healthCheck, this.serveIndex(), this.serveFromRealm);
-    router.post('/_server-session', this.createSession());
 
     let app = new Koa<Koa.DefaultState, Koa.Context>()
       .use(httpLogging)
@@ -98,39 +91,6 @@ export class RealmServer {
     return instance;
   }
 
-  private createSession(): (
-    ctxt: Koa.Context,
-    next: Koa.Next,
-  ) => Promise<void> {
-    let matrixBackendAuthentication = new MatrixBackendAuthentication(
-      this.matrixClient,
-      this.secretSeed,
-      {
-        badRequest: function (message: string) {
-          return new Response(JSON.stringify({ errors: message }), {
-            status: 400,
-            statusText: 'Bad Request',
-          });
-        },
-        createResponse: function (
-          body: BodyInit | null | undefined,
-          init: ResponseInit | undefined,
-        ) {
-          return new Response(body, init);
-        },
-        createJWT: async (user: string) => {
-          return jwt.sign({ user }, this.secretSeed, { expiresIn: '7d' });
-        },
-      } as Utils,
-    );
-
-    return async (ctxt: Koa.Context, _next: Koa.Next) => {
-      let request = await fetchRequestFromContext(ctxt);
-      let response = await matrixBackendAuthentication.createSession(request);
-      await setContextResponse(ctxt, response);
-    };
-  }
-
   private serveIndex(): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
     return async (ctxt: Koa.Context, next: Koa.Next) => {
       if (ctxt.header.accept?.includes('text/html') && this.realms.length > 0) {
@@ -148,7 +108,18 @@ export class RealmServer {
     if (ctxt.request.path === '/_boom') {
       throw new Error('boom');
     }
-    let request = await fetchRequestFromContext(ctxt);
+    let reqBody: string | undefined;
+    if (['POST', 'PATCH'].includes(ctxt.method)) {
+      reqBody = await nodeStreamToText(ctxt.req);
+    }
+
+    let url = fullRequestURL(ctxt).href;
+    let request = new Request(url, {
+      method: ctxt.method,
+      headers: ctxt.req.headers as { [name: string]: string },
+      ...(reqBody ? { body: reqBody } : {}),
+    });
+
     let realmResponse = await this.virtualNetwork.handle(
       request,
       (mappedRequest) => {
@@ -158,7 +129,32 @@ export class RealmServer {
       },
     );
 
-    await setContextResponse(ctxt, realmResponse);
+    let { status, statusText, headers, body, nodeStream } = realmResponse;
+    ctxt.status = status;
+    ctxt.message = statusText;
+    for (let [header, value] of headers.entries()) {
+      ctxt.set(header, value);
+    }
+    if (!headers.get('content-type')) {
+      let fileName = url.split('/').pop()!;
+      ctxt.type = mime.lookup(fileName) || 'application/octet-stream';
+    }
+
+    if (nodeStream) {
+      ctxt.body = nodeStream;
+    } else if (body instanceof ReadableStream) {
+      // A quirk with native fetch Response in node is that it will be clever
+      // and convert strings or buffers in the response.body into web-streams
+      // automatically. This is not to be confused with actual file streams
+      // that the Realm is creating. The node HTTP server does not play nice
+      // with web-streams, so we will read these streams back into strings and
+      // then include in our node ServerResponse. Actual node file streams
+      // (i.e streams that we are intentionally creating in the Realm) will
+      // not be handled here--those will be taken care of above.
+      ctxt.body = await webStreamToText(body);
+    } else if (body != null) {
+      ctxt.body = body;
+    }
   };
 }
 

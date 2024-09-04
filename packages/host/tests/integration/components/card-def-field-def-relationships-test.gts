@@ -23,24 +23,14 @@ import {
   provideConsumeContext,
   lookupLoaderService,
 } from '../../helpers';
-import {
-  CardDef,
-  Component,
-  contains,
-  containsMany,
-  field,
-  FieldDef,
-  linksTo,
-  linksToMany,
-  NumberField,
-  setupBaseRealm,
-  StringField,
-} from '../../helpers/base-realm';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent, renderCard } from '../../helpers/render-component';
 
 module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   let loader: Loader;
+  let cardApi: typeof import('https://cardstack.com/base/card-api');
+  let string: typeof import('https://cardstack.com/base/string');
+  let number: typeof import('https://cardstack.com/base/number');
 
   let setCardInOperatorModeState: (
     card: string,
@@ -55,7 +45,6 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
 
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
-  setupBaseRealm(hooks);
   setupCardLogs(
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
@@ -69,6 +58,9 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     };
     provideConsumeContext(PermissionsContextName, permissions);
     loader = lookupLoaderService().loader;
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    string = await loader.import(`${baseRealm.url}string`);
+    number = await loader.import(`${baseRealm.url}number`);
 
     setCardInOperatorModeState = async (
       cardURL?: string,
@@ -85,6 +77,9 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   });
 
   test('render a primitive field (singular) contained in a FieldDef', async function (assert) {
+    let { field, contains, FieldDef, CardDef } = cardApi;
+    let { default: StringField } = string;
+
     class EmergencyContactField extends FieldDef {
       @field name = contains(StringField);
       @field email = contains(StringField);
@@ -151,6 +146,10 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   });
 
   test('render a compound field (singular) contained in a FieldDef', async function (assert) {
+    let { field, contains, FieldDef, CardDef } = cardApi;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
+
     class PhoneField extends FieldDef {
       @field country = contains(NumberField);
       @field area = contains(NumberField);
@@ -220,6 +219,9 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   });
 
   test('primitive field (plural) contained in a FieldDef is read-only', async function (assert) {
+    let { field, contains, containsMany, CardDef, FieldDef } = cardApi;
+    let { default: StringField } = string;
+
     class Guest extends FieldDef {
       @field name = contains(StringField);
       @field additionalNames = containsMany(StringField);
@@ -295,6 +297,10 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   });
 
   test('compound field (plural) contained in a FieldDef renders in atom format (read-only)', async function (assert) {
+    let { field, contains, containsMany, CardDef, FieldDef } = cardApi;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
+
     class PersonField extends FieldDef {
       @field fullName = contains(StringField);
       @field guestCount = contains(NumberField);
@@ -397,6 +403,10 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   });
 
   test('render a CardDef field (singular) linked to from a FieldDef', async function (assert) {
+    let { field, contains, linksTo, CardDef, FieldDef, Component } = cardApi;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
+
     class CurrencyCard extends CardDef {
       static displayName = 'Currency';
       @field denomination = contains(StringField);
@@ -515,6 +525,9 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   });
 
   test('CardDef field (plural) linked to from a FieldDef renders in atom format', async function (assert) {
+    let { field, contains, linksToMany, CardDef, FieldDef } = cardApi;
+    let { default: StringField } = string;
+
     class Country extends CardDef {
       static displayName = 'Country';
       @field name = contains(StringField);

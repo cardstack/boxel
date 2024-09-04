@@ -71,7 +71,6 @@ let unsubscribeFromChanges: (typeof CardAPIModule)['unsubscribeFromChanges'];
 let flushLogs: (typeof CardAPIModule)['flushLogs'];
 let queryableValue: (typeof CardAPIModule)['queryableValue'];
 let getFieldDescription: (typeof CardAPIModule)['getFieldDescription'];
-let ReadOnlyField: (typeof CardAPIModule)['ReadOnlyField'];
 
 async function initialize() {
   let owner = (getContext() as TestContext).owner;
@@ -151,7 +150,6 @@ async function initialize() {
     queryableValue,
     MaybeBase64Field,
     getFieldDescription,
-    ReadOnlyField,
   } = cardAPI);
 }
 
@@ -192,5 +190,4 @@ export {
   flushLogs,
   queryableValue,
   getFieldDescription,
-  ReadOnlyField,
 };

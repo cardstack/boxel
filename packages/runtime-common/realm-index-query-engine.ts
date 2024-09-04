@@ -9,6 +9,7 @@ import {
   type QueryOptions,
   type IndexedModuleOrError,
   IndexedInstanceOrError,
+  IndexedCSSOrError,
 } from '.';
 import { Realm } from './realm';
 import { RealmPaths } from './paths';
@@ -146,6 +147,12 @@ export class RealmIndexQueryEngine {
       }
     }
     return { type: 'doc', doc };
+  }
+
+  // this is for tests--it's unlikely we'd actually want to access CSS directly
+  // this way
+  async css(url: URL, opts?: Options): Promise<IndexedCSSOrError | undefined> {
+    return await this.#indexQueryEngine.getCSS(url, opts);
   }
 
   async module(

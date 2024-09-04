@@ -61,7 +61,8 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
-import { MatrixClient } from './matrix-client';
+import { MatrixClient, waitForMatrixMessage } from './matrix-client';
+import { Sha256 } from '@aws-crypto/sha256-js';
 
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import RealmPermissionChecker from './realm-permission-checker';
@@ -73,10 +74,6 @@ import { RealmIndexQueryEngine } from './realm-index-query-engine';
 import { RealmIndexUpdater } from './realm-index-updater';
 
 import qs from 'qs';
-import {
-  MatrixBackendAuthentication,
-  Utils,
-} from './matrix-backend-authentication';
 
 export interface RealmSession {
   canRead: boolean;
@@ -174,6 +171,7 @@ interface UpdateEvent {
 export interface MatrixConfig {
   url: URL;
   username: string;
+  password: string;
 }
 
 export type UpdateEventData =
@@ -293,13 +291,9 @@ export class Realm {
     opts?: Options,
   ) {
     this.paths = new RealmPaths(new URL(url));
-    let { username, url: matrixURL } = matrix;
+    let { username, password, url: matrixURL } = matrix;
+    this.#matrixClient = new MatrixClient(matrixURL, username, password);
     this.#realmSecretSeed = realmSecretSeed;
-    this.#matrixClient = new MatrixClient({
-      matrixURL,
-      username,
-      seed: realmSecretSeed,
-    });
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
     this.#assetsURL = assetsURL;
@@ -591,45 +585,198 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ) {
-    let matrixBackendAuthentication = new MatrixBackendAuthentication(
+    if (!(await this.#matrixClient.isTokenValid())) {
+      await this.#matrixClient.login();
+    }
+    let body = await request.text();
+    let json;
+    try {
+      json = JSON.parse(body);
+    } catch (e) {
+      return badRequest(
+        JSON.stringify({ errors: [`Request body is not valid JSON`] }),
+        requestContext,
+      );
+    }
+    let { user, challenge } = json as { user?: string; challenge?: string };
+    if (!user) {
+      return badRequest(
+        JSON.stringify({ errors: [`Request body missing 'user' property`] }),
+        requestContext,
+      );
+    }
+
+    if (challenge) {
+      return await this.verifyChallenge(user, requestContext);
+    } else {
+      return await this.createChallenge(user, requestContext);
+    }
+  }
+
+  private async createChallenge(user: string, requestContext: RequestContext) {
+    let dmRooms =
+      (await this.#matrixClient.getAccountData<Record<string, string>>(
+        'boxel.session-rooms',
+      )) ?? {};
+    let roomId = dmRooms[user];
+    if (!roomId) {
+      roomId = await this.#matrixClient.createDM(user);
+      dmRooms[user] = roomId;
+      await this.#matrixClient.setAccountData('boxel.session-rooms', dmRooms);
+    }
+
+    let challenge = uuidV4();
+    let hash = new Sha256();
+    hash.update(challenge);
+    hash.update(this.#realmSecretSeed);
+    let hashedChallenge = uint8ArrayToHex(await hash.digest());
+    await this.#matrixClient.sendEvent(roomId, 'm.room.message', {
+      body: `auth-challenge: ${hashedChallenge}`,
+      msgtype: 'm.text',
+    });
+
+    return createResponse({
+      body: JSON.stringify({
+        room: roomId,
+        challenge,
+      }),
+      init: {
+        status: 401,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+      requestContext,
+    });
+  }
+
+  private async verifyChallenge(user: string, requestContext: RequestContext) {
+    let dmRooms =
+      (await this.#matrixClient.getAccountData<Record<string, string>>(
+        'boxel.session-rooms',
+      )) ?? {};
+    let roomId = dmRooms[user];
+    if (!roomId) {
+      return badRequest(
+        JSON.stringify({
+          errors: [`No challenge previously issued for user ${user}`],
+        }),
+        requestContext,
+      );
+    }
+
+    // The messages look like this:
+    // --- Matrix Room Messages ---:
+    // realm1
+    // auth-challenge: 7cb8f904a2a53d256687c2aeb374a686a26cfd66af5fcc09a366d49644a3e2ba
+    // realm2
+    // auth-response: 342c5854-e716-4bda-9b31-eba83d24e25d
+    // ----------------------------
+
+    // This is a best-effort type of implementation - we don't know when the messages will appear in the room so we just wait for a bit.
+    // This is not a problem when the realms are on the same matrix server but when they are on different (federated) servers the latencies and
+    // race conditions can cause delays in the messages appearing in the room.
+    let oneMinuteAgo = Date.now() - 60000;
+
+    let latestAuthChallengeMessage = await waitForMatrixMessage(
       this.#matrixClient,
-      this.#realmSecretSeed,
-      {
-        badRequest: function (message: string) {
-          return badRequest(message, requestContext);
-        },
-        createResponse: function (
-          body: BodyInit | null,
-          init: ResponseInit | undefined,
-        ) {
-          return createResponse({
-            body,
-            init,
-            requestContext,
-          });
-        },
-        createJWT: async (user: string) => {
-          let permissions = requestContext.permissions;
-
-          let userPermissions = await new RealmPermissionChecker(
-            permissions,
-            this.#matrixClient,
-          ).for(user);
-
-          return this.#adapter.createJWT(
-            {
-              user,
-              realm: this.url,
-              permissions: userPermissions,
-            },
-            '7d',
-            this.#realmSecretSeed,
-          );
-        },
-      } as Utils,
+      roomId,
+      (m) => {
+        return (
+          m.type === 'm.room.message' &&
+          m.sender === this.#matrixClient.getUserId() &&
+          m.content.body.startsWith('auth-challenge:') &&
+          m.origin_server_ts > oneMinuteAgo
+        );
+      },
     );
 
-    return await matrixBackendAuthentication.createSession(request);
+    let latestAuthResponseMessage = await waitForMatrixMessage(
+      this.#matrixClient,
+      roomId,
+      (m) => {
+        return (
+          m.type === 'm.room.message' &&
+          m.sender === user &&
+          m.content.body.startsWith('auth-response:') &&
+          m.origin_server_ts > oneMinuteAgo
+        );
+      },
+    );
+
+    if (!latestAuthChallengeMessage) {
+      return badRequest(
+        JSON.stringify({ errors: [`No challenge found for user ${user}`] }),
+        requestContext,
+      );
+    }
+
+    if (!latestAuthResponseMessage) {
+      return badRequest(
+        JSON.stringify({
+          errors: [`No challenge response response found for user ${user}`],
+        }),
+        requestContext,
+      );
+    }
+
+    let challenge = latestAuthChallengeMessage.content.body.replace(
+      'auth-challenge: ',
+      '',
+    );
+    let response = latestAuthResponseMessage.content.body.replace(
+      'auth-response: ',
+      '',
+    );
+    let hash = new Sha256();
+    hash.update(response);
+    hash.update(this.#realmSecretSeed);
+    let hashedResponse = uint8ArrayToHex(await hash.digest());
+    if (hashedResponse === challenge) {
+      let permissions = requestContext.permissions;
+
+      let userPermissions = await new RealmPermissionChecker(
+        permissions,
+        this.#matrixClient,
+      ).for(user);
+
+      let jwt = this.#adapter.createJWT(
+        {
+          user,
+          realm: this.url,
+          permissions: userPermissions,
+        },
+        '7d',
+        this.#realmSecretSeed,
+      );
+      return createResponse({
+        body: null,
+        init: {
+          status: 201,
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: jwt,
+          },
+        },
+        requestContext,
+      });
+    } else {
+      return createResponse({
+        body: JSON.stringify({
+          errors: [
+            `user ${user} failed auth challenge: latest challenge message: "${JSON.stringify(
+              latestAuthChallengeMessage,
+            )}", latest response message: "${JSON.stringify(
+              latestAuthResponseMessage,
+            )}"`,
+          ],
+        }),
+        init: {
+          status: 401,
+        },
+        requestContext,
+      });
+    }
   }
 
   private async internalHandle(
@@ -1895,4 +2042,10 @@ function sseToChunkData(type: string, data: string, id?: string): string {
     info.push(`id: ${id}`);
   }
   return info.join('\n') + '\n\n';
+}
+
+function uint8ArrayToHex(uint8: Uint8Array) {
+  return Array.from(uint8)
+    .map((i) => i.toString(16).padStart(2, '0'))
+    .join('');
 }

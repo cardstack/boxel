@@ -53,6 +53,8 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import LoaderService from '../services/loader-service';
 import { type RenderCard } from '../services/render-service';
 
+import { getScopedCss } from './scoped-css';
+
 const log = logger('current-run');
 
 interface CardType {
@@ -273,18 +275,7 @@ export class CurrentRun {
     }
     let start = Date.now();
     log.debug(`begin visiting file ${url.href}`);
-    let localPath: string;
-    try {
-      localPath = this.#realmPaths.local(url);
-    } catch (e) {
-      // until we have cross realm invalidation, if our invalidation
-      // graph cross a realm just skip over the file. it will be out
-      // of date, but such is life...
-      log.debug(
-        `Visit of ${url.href} cannot be performed as it is in a different realm than the realm whose contents are being invalidated (${this.realmURL.href})`,
-      );
-      return;
-    }
+    let localPath = this.#realmPaths.local(url);
 
     let fileRef = await this.#reader.readFileAsText(localPath);
     if (!fileRef) {
@@ -343,7 +334,7 @@ export class CurrentRun {
       let deps = await (
         await this.loaderService.loader.getConsumedModules(url.href)
       ).filter((u) => u !== url.href);
-      await this.batch.updateEntry(url, {
+      await this.batch.updateEntry(new URL(url), {
         type: 'error',
         error: {
           status: 500,
@@ -375,6 +366,18 @@ export class CurrentRun {
       deps: new Set(deps),
     });
     this.stats.modulesIndexed++;
+
+    let request = await this.loaderService.loader.fetch(url.href);
+    let transpiledSrc = await request.text();
+    let css = getScopedCss(transpiledSrc);
+    if (css) {
+      await this.batch.updateEntry(url, {
+        type: 'css',
+        source: css,
+        lastModified: ref.lastModified,
+        deps: new Set(deps),
+      });
+    }
   }
 
   private async indexCard({

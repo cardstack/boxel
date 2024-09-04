@@ -34,10 +34,9 @@ import { type RenderedCardForOverlayActions } from './stack-item';
 
 interface Signature {
   item: RenderedCardForOverlayActions;
-  card: CardDef;
   canWrite: boolean;
   openOrSelectCard: (
-    cardId: string,
+    card: CardDef,
     format?: Format,
     fieldType?: FieldType,
     fieldName?: string,
@@ -49,7 +48,7 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
 
   fetchRealmInfo = trackedFunction(
     this,
-    async () => await this.cardService.getRealmInfo(this.args.card),
+    async () => await this.cardService.getRealmInfo(this.args.item.card),
   );
 
   get iconURL() {
@@ -65,7 +64,7 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
           <img src={{this.iconURL}} width='20' height='20' alt='' />
         {{/if}}
         <span class='header-title__text'>
-          {{cardTypeDisplayName @card}}
+          {{cardTypeDisplayName @item.card}}
         </span>
       </div>
 
@@ -84,7 +83,7 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
               'click'
               (fn
                 @openOrSelectCard
-                @card.id
+                @item.card
                 'edit'
                 @item.fieldType
                 @item.fieldName
@@ -116,7 +115,7 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
             <Menu
               @closeMenu={{dd.close}}
               @items={{array
-                (menuItem 'View card' (fn @openOrSelectCard @card.id))
+                (menuItem 'View card' (fn @openOrSelectCard @item.card))
               }}
             />
           </:content>

@@ -414,7 +414,11 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert
       .dom(`[data-test-cards-grid-item="${testRealmURL}grid"]`)
       .doesNotExist('grid cards do not show other grid cards');
-
+    // this asserts that cards that throw errors during search
+    // query deserialization (boom.json) are handled gracefully
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}boom"]`)
+      .doesNotExist('card with deserialization errors is skipped');
     await percySnapshot(assert);
 
     assert.operatorModeParametersMatch(currentURL(), {

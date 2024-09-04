@@ -63,6 +63,13 @@ interface IndexedModule {
   deps: string[] | null;
 }
 
+interface IndexedCSS {
+  type: 'css';
+  source: string;
+  canonicalURL: string;
+  lastModified: number;
+}
+
 export interface IndexedInstance {
   type: 'instance';
   instance: CardResource;
@@ -86,6 +93,7 @@ interface IndexedError {
 
 export type IndexedInstanceOrError = IndexedInstance | IndexedError;
 export type IndexedModuleOrError = IndexedModule | IndexedError;
+export type IndexedCSSOrError = IndexedCSS | IndexedError;
 
 type GetEntryOptions = WIPOptions;
 export type QueryOptions = WIPOptions & PrerenderedCardOptions;
@@ -130,31 +138,10 @@ export class IndexQueryEngine {
     url: URL,
     opts?: GetEntryOptions,
   ): Promise<IndexedModuleOrError | undefined> {
-    let rows = (await this.query([
-      `SELECT i.*
-       FROM boxel_index as i
-       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
-       WHERE`,
-      ...every([
-        any([
-          [`i.url =`, param(url.href)],
-          [`i.file_alias =`, param(url.href)],
-        ]),
-        realmVersionExpression(opts),
-        any([
-          ['i.type =', param('module')],
-          ['i.type =', param('error')],
-        ]),
-      ]),
-    ] as Expression)) as unknown as BoxelIndexTable[];
-    let maybeResult: BoxelIndexTable | undefined = rows[0];
-    if (!maybeResult) {
+    let result = await this.getModuleOrCSS(url, 'module', opts);
+    if (!result) {
       return undefined;
     }
-    if (maybeResult.is_deleted) {
-      return undefined;
-    }
-    let result = maybeResult;
     if (result.type === 'error') {
       return { type: 'error', error: result.error_doc! };
     }
@@ -180,6 +167,63 @@ export class IndexQueryEngine {
       lastModified: parseInt(lastModified),
       deps: moduleEntry.deps,
     };
+  }
+
+  async getCSS(
+    url: URL,
+    opts?: GetEntryOptions,
+  ): Promise<IndexedCSSOrError | undefined> {
+    let result = await this.getModuleOrCSS(url, 'css', opts);
+    if (!result) {
+      return undefined;
+    }
+    if (result.type === 'error') {
+      return { type: 'error', error: result.error_doc! };
+    }
+    let moduleEntry = assertIndexEntrySource(result);
+    let {
+      source,
+      url: canonicalURL,
+      last_modified: lastModified,
+    } = moduleEntry;
+    return {
+      type: 'css',
+      canonicalURL,
+      source,
+      lastModified: parseInt(lastModified),
+    };
+  }
+
+  private async getModuleOrCSS(
+    url: URL,
+    type: 'module' | 'css',
+    opts?: GetEntryOptions,
+  ): Promise<BoxelIndexTable | undefined> {
+    let result = (await this.query([
+      `SELECT i.*
+       FROM boxel_index as i
+       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
+       WHERE`,
+      ...every([
+        any([
+          [`i.url =`, param(url.href)],
+          [`i.file_alias =`, param(url.href)],
+        ]),
+        realmVersionExpression(opts),
+        any([
+          ['i.type =', param(type)],
+          ['i.type =', param('error')],
+        ]),
+      ]),
+    ] as Expression)) as unknown as BoxelIndexTable[];
+    let maybeResult: BoxelIndexTable | undefined = result[0];
+    if (!maybeResult) {
+      return undefined;
+    }
+    if (maybeResult.is_deleted) {
+      return undefined;
+    }
+    return maybeResult;
   }
 
   async getInstance(

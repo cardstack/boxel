@@ -11,11 +11,11 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     viewBox='0 0 20.414 20.414'
     ...attributes
   ><g
-      fill='var(--icon-bg,none)'
+      fill='none'
       stroke='var(--icon-color, #000)'
       stroke-linecap='round'
       stroke-linejoin='round'
-      stroke-width='var(--icon-stroke-width,2)'
+      stroke-width='2'
       transform='translate(-2 -2)'
     ><circle cx='11' cy='11' r='8' /><path d='m21 21-4.35-4.35' /></g></svg>
 </template>;

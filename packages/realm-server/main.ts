@@ -18,7 +18,6 @@ import * as Sentry from '@sentry/node';
 import { setErrorReporter } from '@cardstack/runtime-common/realm';
 import PgAdapter from './pg-adapter';
 import PgQueue from './pg-queue';
-import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
 let log = logger('main');
 
@@ -44,30 +43,6 @@ if (!REALM_SECRET_SEED) {
   process.exit(-1);
 }
 
-const MATRIX_URL = process.env.MATRIX_URL;
-if (!MATRIX_URL) {
-  console.error(
-    `The MATRIX_URL environment variable is not set. Please make sure this env var has a value`,
-  );
-  process.exit(-1);
-}
-
-const REALM_SERVER_MATRIX_USERNAME = process.env.REALM_SERVER_MATRIX_USERNAME;
-if (!REALM_SERVER_MATRIX_USERNAME) {
-  console.error(
-    `The REALM_SERVER_MATRIX_USERNAME environment variable is not set. Please make sure this env var has a value`,
-  );
-  process.exit(-1);
-}
-
-const REALM_SERVER_MATRIX_PASSWORD = process.env.REALM_SERVER_MATRIX_PASSWORD;
-if (!REALM_SERVER_MATRIX_PASSWORD) {
-  console.error(
-    `The REALM_SERVER_MATRIX_PASSWORD environment variable is not set. Please make sure this env var has a value`,
-  );
-  process.exit(-1);
-}
-
 if (process.env.DISABLE_MODULE_CACHING === 'true') {
   console.warn(
     `module caching has been disabled, module executables will be served directly from the filesystem`,
@@ -82,6 +57,7 @@ let {
   toUrl: toUrls,
   useTestingDomain,
   username: usernames,
+  password: passwords,
   matrixURL: matrixURLs,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
@@ -126,6 +102,11 @@ let {
       demandOption: true,
       type: 'array',
     },
+    password: {
+      description: 'The matrix password for the realm user',
+      demandOption: true,
+      type: 'array',
+    },
   })
   .parseSync();
 
@@ -142,9 +123,13 @@ if (fromUrls.length < paths.length) {
   process.exit(-1);
 }
 
-if (paths.length !== usernames.length || paths.length !== matrixURLs.length) {
+if (
+  paths.length !== usernames.length ||
+  usernames.length !== passwords.length ||
+  paths.length !== matrixURLs.length
+) {
   console.error(
-    `not enough usernames were provided to satisfy the paths provided. There must be at least one --username/--matrixURL set for each --path parameter`,
+    `not enough username/password pairs were provided to satisfy the paths provided. There must be at least one --username/--password/--matrixURL set for each --path parameter`,
   );
   process.exit(-1);
 }
@@ -185,6 +170,11 @@ let dist: URL = new URL(distURL);
       console.error(`missing username for realm ${url}`);
       process.exit(-1);
     }
+    let password = String(passwords[i]);
+    if (password.length === 0) {
+      console.error(`missing password for realm ${url}`);
+      process.exit(-1);
+    }
     let { getRunner, getIndexHTML } = await makeFastBootIndexRunner(
       dist,
       manager.getOptions.bind(manager),
@@ -196,7 +186,7 @@ let dist: URL = new URL(distURL);
         url,
         adapter: realmAdapter,
         getIndexHTML,
-        matrix: { url: new URL(matrixURL), username },
+        matrix: { url: new URL(matrixURL), username, password },
         realmSecretSeed: REALM_SECRET_SEED,
         virtualNetwork,
         dbAdapter,
@@ -236,17 +226,7 @@ let dist: URL = new URL(distURL);
     virtualNetwork.mount(realm.handle);
   }
 
-  let matrixClient = new MatrixClient({
-    matrixURL: new URL(MATRIX_URL),
-    username: REALM_SERVER_MATRIX_USERNAME,
-    seed: REALM_SECRET_SEED,
-  });
-  let server = new RealmServer(
-    realms,
-    virtualNetwork,
-    matrixClient,
-    REALM_SECRET_SEED,
-  );
+  let server = new RealmServer(realms, virtualNetwork);
 
   server.listen(port);
 

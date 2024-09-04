@@ -501,12 +501,6 @@ export default class RegisterUser extends Component<Signature> {
   }
 
   private checkUsernameAvailability = restartableTask(async () => {
-    // Block usernames that may collide with realm or realm server API
-    if (this.username.startsWith('_')) {
-      this.usernameError = 'User Name cannot start with an underscore';
-      return;
-    }
-
     this.isUsernameAvailable =
       await this.matrixService.client.isUsernameAvailable(this.username);
     if (!this.isUsernameAvailable) {

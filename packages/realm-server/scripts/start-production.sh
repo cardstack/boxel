@@ -1,10 +1,9 @@
 #! /bin/sh
 pnpm setup:base-in-deployment
 pnpm setup:experiments-in-deployment
+pnpm setup:published-in-deployment
 NODE_NO_WARNINGS=1 \
   LOG_LEVELS='*=info' \
-  MATRIX_URL=https://matrix.boxel.ai \
-  REALM_SERVER_MATRIX_USERNAME=realm_server \
   ts-node \
   --transpileOnly main \
   --port=3000 \
@@ -23,3 +22,14 @@ NODE_NO_WARNINGS=1 \
   --password=${EXPERIMENTS_REALM_PASSWORD} \
   --fromUrl='https://app.boxel.ai/experiments/' \
   --toUrl='https://app.boxel.ai/experiments/' \
+  \
+  --path='/persistent/published' \
+  --matrixURL='https://matrix.boxel.ai' \
+  --username='published_realm' \
+  --password=${PUBLISHED_REALM_PASSWORD} \
+  --fromUrl='https://app.boxel.ai/published/' \
+  --toUrl='https://app.boxel.ai/published/' \
+  --fromUrl='https://cardstack.com/base/' \
+  --toUrl='https://app.boxel.ai/base/' \
+  --fromUrl='https://app.boxel.ai/base/' \
+  --toUrl='https://app.boxel.ai/base/'

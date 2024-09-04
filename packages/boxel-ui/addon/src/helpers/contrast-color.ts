@@ -5,11 +5,7 @@
   Inspired by https://stackoverflow.com/a/35970186
   More info: https://www.w3.org/TR/WCAG20-TECHS/G18.html
 */
-export function getContrastColor(
-  value: string | undefined,
-  darkColor = 'var(--boxel-dark, #000000)',
-  lightColor = 'var(--boxel-light, #ffffff)',
-) {
+export function getContrastColor(value: string | undefined) {
   if (!value) {
     return;
   }
@@ -47,5 +43,7 @@ export function getContrastColor(
   let ratio = (lum + 0.05) / 0.05; // luminocity of black is 0
 
   // contrast ratio should be at least 4.5 for regular sized text based on WCAG guidelines
-  return ratio >= 4.5 ? darkColor : lightColor;
+  return ratio >= 4.5
+    ? 'var(--boxel-dark, #000000)'
+    : 'var(--boxel-light, #ffffff)';
 }

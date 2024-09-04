@@ -1,13 +1,7 @@
 import proxy from 'koa-proxies';
-import {
-  logger as getLogger,
-  ResponseWithNodeStream,
-  webStreamToText,
-} from '@cardstack/runtime-common';
+import { logger as getLogger } from '@cardstack/runtime-common';
 import type Koa from 'koa';
 import basicAuth from 'basic-auth';
-import mime from 'mime-types';
-import { nodeStreamToText } from '../stream';
 
 interface ProxyOptions {
   responseHeaders?: Record<string, string>;
@@ -99,54 +93,4 @@ export function fullRequestURL(ctxt: Koa.Context): URL {
   let protocol =
     ctxt.req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
   return new URL(`${protocol}://${ctxt.req.headers.host}${ctxt.req.url}`);
-}
-
-export async function fetchRequestFromContext(
-  ctxt: Koa.Context,
-): Promise<Request> {
-  let reqBody: string | undefined;
-  if (['POST', 'PATCH'].includes(ctxt.method)) {
-    reqBody = await nodeStreamToText(ctxt.req);
-  }
-
-  let url = fullRequestURL(ctxt).href;
-  return new Request(url, {
-    method: ctxt.method,
-    headers: ctxt.req.headers as { [name: string]: string },
-    ...(reqBody ? { body: reqBody } : {}),
-  });
-}
-
-export async function setContextResponse(
-  ctxt: Koa.Context,
-  response: ResponseWithNodeStream,
-) {
-  let url = fullRequestURL(ctxt).href;
-
-  let { status, statusText, headers, body, nodeStream } = response;
-  ctxt.status = status;
-  ctxt.message = statusText;
-  for (let [header, value] of headers.entries()) {
-    ctxt.set(header, value);
-  }
-  if (!headers.get('content-type')) {
-    let fileName = url.split('/').pop()!;
-    ctxt.type = mime.lookup(fileName) || 'application/octet-stream';
-  }
-
-  if (nodeStream) {
-    ctxt.body = nodeStream;
-  } else if (body instanceof ReadableStream) {
-    // A quirk with native fetch Response in node is that it will be clever
-    // and convert strings or buffers in the response.body into web-streams
-    // automatically. This is not to be confused with actual file streams
-    // that the Realm is creating. The node HTTP server does not play nice
-    // with web-streams, so we will read these streams back into strings and
-    // then include in our node ServerResponse. Actual node file streams
-    // (i.e streams that we are intentionally creating in the Realm) will
-    // not be handled here--those will be taken care of above.
-    ctxt.body = await webStreamToText(body);
-  } else if (body != null) {
-    ctxt.body = body;
-  }
 }
