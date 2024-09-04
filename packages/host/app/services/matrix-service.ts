@@ -17,6 +17,7 @@ import {
 } from 'matrix-js-sdk';
 import { md5 } from 'super-fast-md5';
 import { TrackedMap, TrackedObject } from 'tracked-built-ins';
+import { v4 as uuidv4 } from 'uuid';
 
 import {
   type LooseSingleCardDocument,
@@ -530,7 +531,7 @@ export default class MatrixService
     body: string | undefined,
     attachedCards: CardDef[] = [],
     skillCards: CardDef[] = [],
-    clientGeneratedId: string,
+    clientGeneratedId = uuidv4(),
     context?: OperatorModeContext,
   ): Promise<void> {
     let html = markdownToHtml(body);

@@ -562,21 +562,14 @@ module('Integration | operator-mode', function (hooks) {
 
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
     assert.dom(`[data-test-cards-grid-item]`).exists();
+
     assert
-      .dom(
-        `[data-test-cards-grid-item="${testRealmURL}BlogPost/1"] [data-test-cards-grid-item-thumbnail-text]`,
-      )
-      .hasText('Blog Post');
+      .dom(`[data-test-cards-grid-item="${testRealmURL}BlogPost/1"]`)
+      .includesText('Blog Post');
     assert
-      .dom(
-        `[data-test-cards-grid-item="${testRealmURL}BlogPost/1"] [data-test-cards-grid-item-title]`,
-      )
-      .hasText('Outer Space Journey');
-    assert
-      .dom(
-        `[data-test-cards-grid-item="${testRealmURL}BlogPost/1"] [data-test-cards-grid-item-display-name]`,
-      )
-      .hasText('Blog Post');
+      .dom(`[data-test-cards-grid-item="${testRealmURL}BlogPost/1"] `)
+      .includesText('Outer Space Journey');
+
     assert
       .dom(
         `[data-test-cards-grid-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
@@ -1920,9 +1913,11 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     // Linked cards have the realm's icon in the overlaid header title
-    await waitFor('[data-test-overlay-card-display-name="Author"]');
+    await waitFor(`[data-test-overlay-card="${testRealmURL}Author/1"]`);
     assert
-      .dom('[data-test-overlay-card-display-name="Author"] .header-title img')
+      .dom(
+        `[data-test-overlay-card="${testRealmURL}Author/1"] .header-title img`,
+      )
       .hasAttribute('src', 'https://example-icon.test');
 
     await click('[data-test-author]');
@@ -2573,5 +2568,33 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-plural-view-item="0"]`).hasText('Woody');
     assert.dom(`[data-test-plural-view-item="1"]`).hasText('Buzz');
     assert.dom(`[data-test-plural-view-item="2"]`).hasText('Jackie');
+  });
+
+  test('open workspace chooser when boxel icon is clicked', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+
+    assert.dom(`[data-test-stack-card-index="0"]`).exists();
+    assert.dom(`[data-test-cards-grid-item]`).exists();
+
+    assert.dom('[data-test-submode-layout-title]').doesNotExist();
+    assert.dom('[data-test-workspace-chooser]').doesNotExist();
+    await click('[data-test-submode-layout-boxel-icon-button]');
+
+    assert.dom('[data-test-submode-layout-title]').exists();
+    assert.dom('[data-test-workspace-chooser]').exists();
+    assert.dom(`[data-test-stack-card-index="0"]`).doesNotExist();
+    assert.dom(`[data-test-cards-grid-item]`).doesNotExist();
   });
 });
