@@ -20,12 +20,10 @@ import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { IconPlus, Download } from '@cardstack/boxel-ui/icons';
 
 import {
-  aiBotUsername,
   Deferred,
   baseCardRef,
   chooseCard,
   codeRefWithAbsoluteURL,
-  getCard,
   moduleFrom,
   RealmPaths,
   type Actions,
@@ -37,9 +35,7 @@ import { StackItem } from '@cardstack/host/lib/stack-item';
 
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
-import type MatrixService from '@cardstack/host/services/matrix-service';
-
-import { type CardDef, type Format } from 'https://cardstack.com/base/card-api';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
@@ -121,7 +117,6 @@ interface Signature {
 
 export default class InteractSubmode extends Component<Signature> {
   @service private declare cardService: CardService;
-  @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare recentFilesService: RecentFilesService;
 
@@ -148,7 +143,6 @@ export default class InteractSubmode extends Component<Signature> {
           realmURL?: URL;
           isLinkedCard?: boolean;
           doc?: LooseSingleCardDocument; // fill in card data with values
-          cardModeAfterCreation?: Format;
         },
       ): Promise<CardDef | undefined> => {
         let cardModule = new URL(moduleFrom(ref), relativeTo);
@@ -178,7 +172,7 @@ export default class InteractSubmode extends Component<Signature> {
         let newItem = new StackItem({
           owner: here,
           card: newCard,
-          format: opts?.cardModeAfterCreation ?? 'edit',
+          format: 'edit',
           request: new Deferred(),
           isLinkedCard: opts?.isLinkedCard,
           stackIndex,
@@ -192,7 +186,7 @@ export default class InteractSubmode extends Component<Signature> {
 
         await newItem.ready();
         here.addToStack(newItem);
-        return newCard;
+        return await newItem.request?.promise;
       },
       viewCard: async (
         card: CardDef,
@@ -261,17 +255,6 @@ export default class InteractSubmode extends Component<Signature> {
       changeSubmode: (url: URL, submode: Submode = 'code'): void => {
         here.operatorModeStateService.updateCodePath(url);
         here.operatorModeStateService.updateSubmode(submode);
-      },
-      runCommand: async (
-        card: CardDef,
-        skillCardId: string,
-        message?: string,
-      ): Promise<void> => {
-        await here.runCommand.perform(
-          card,
-          skillCardId,
-          message ?? 'Run command',
-        );
       },
     };
   }
@@ -346,26 +329,6 @@ export default class InteractSubmode extends Component<Signature> {
       );
     }
   });
-
-  private runCommand = restartableTask(
-    async (card: CardDef, skillCardId: string, message: string) => {
-      let resource = getCard(new URL(skillCardId));
-      await resource.loaded;
-      let commandCard = resource.card;
-      if (!commandCard) {
-        throw new Error(`Could not find card "${skillCardId}"`);
-      }
-      let newRoomId = await this.matrixService.createRoom(`New AI chat`, [
-        aiBotUsername,
-      ]);
-      await this.matrixService.sendMessage(
-        newRoomId,
-        message,
-        [card],
-        [commandCard],
-      );
-    },
-  );
 
   @action private onCancelDelete() {
     this.itemToDelete = undefined;

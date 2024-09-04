@@ -2569,32 +2569,4 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-plural-view-item="1"]`).hasText('Buzz');
     assert.dom(`[data-test-plural-view-item="2"]`).hasText('Jackie');
   });
-
-  test('open workspace chooser when boxel icon is clicked', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
-
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-
-    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    await waitFor(`[data-test-cards-grid-item]`);
-
-    assert.dom(`[data-test-stack-card-index="0"]`).exists();
-    assert.dom(`[data-test-cards-grid-item]`).exists();
-
-    assert.dom('[data-test-submode-layout-title]').doesNotExist();
-    assert.dom('[data-test-workspace-chooser]').doesNotExist();
-    await click('[data-test-submode-layout-boxel-icon-button]');
-
-    assert.dom('[data-test-submode-layout-title]').exists();
-    assert.dom('[data-test-workspace-chooser]').exists();
-    assert.dom(`[data-test-stack-card-index="0"]`).doesNotExist();
-    assert.dom(`[data-test-cards-grid-item]`).doesNotExist();
-  });
 });
