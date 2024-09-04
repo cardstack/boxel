@@ -122,7 +122,6 @@ const RadioInputItem: TemplateOnlyComponent<Signature> = <template>
   <label
     class={{cn
       'boxel-radio-option'
-      'boxel-radio-option--has-radio'
       boxel-radio-option--checked=@checked
       boxel-radio-option--disabled=@disabled
       boxel-radio-option--hidden-border=@hideBorder

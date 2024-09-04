@@ -291,7 +291,7 @@ test.describe('Room messages', () => {
     expect(serializeCard.data.attributes.picture).toBeUndefined();
   });
 
-  test(`it does include command tools (patch, search) in message event when top-most card is writable and context is shared`, async ({
+  test(`it does include command tools (patch, search, generateAppModule) in message event when top-most card is writable and context is shared`, async ({
     page,
   }) => {
     await login(page, 'user1', 'pass');
@@ -384,6 +384,37 @@ test.describe('Room messages', () => {
           },
         },
         type: 'function',
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'generateAppModule',
+          description: `Propose a post request to generate a new app module. Insert the module code in the 'moduleCode' property of the payload and the title for the module in the 'appTitle' property. Ensure the description explains what change you are making.`,
+          parameters: {
+            type: 'object',
+            properties: {
+              attached_card_id: {
+                type: 'string',
+                const: `${testHost}/mango`,
+              },
+              description: {
+                type: 'string',
+              },
+              appTitle: {
+                type: 'string',
+              },
+              moduleCode: {
+                type: 'string',
+              },
+            },
+            required: [
+              'attached_card_id',
+              'description',
+              'appTitle',
+              'moduleCode',
+            ],
+          },
+        },
       },
     ]);
   });

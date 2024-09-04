@@ -1,6 +1,29 @@
-import BooleanField from 'https://cardstack.com/base/boolean';
-import CodeRefField from 'https://cardstack.com/base/code-ref';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import type Owner from '@ember/owner';
+import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+
+import { restartableTask } from 'ember-concurrency';
+
+import {
+  AddButton,
+  Tooltip,
+  TabbedHeader,
+} from '@cardstack/boxel-ui/components';
+import { cn } from '@cardstack/boxel-ui/helpers';
+
+import {
+  getLiveCards,
+  codeRefWithAbsoluteURL,
+  type Query,
+  type Loader,
+  LooseSingleCardDocument,
+  isSingleCardDocument,
+} from '@cardstack/runtime-common';
+
 import { Base64ImageField } from 'https://cardstack.com/base/base64-image';
+import BooleanField from 'https://cardstack.com/base/boolean';
 import {
   CardDef,
   field,
@@ -12,28 +35,7 @@ import {
   StringField,
   type CardContext,
 } from 'https://cardstack.com/base/card-api';
-import { cn } from '@cardstack/boxel-ui/helpers';
-import { on } from '@ember/modifier';
-import { action } from '@ember/object';
-import type Owner from '@ember/owner';
-import GlimmerComponent from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
-import { restartableTask } from 'ember-concurrency';
-
-import {
-  AddButton,
-  Tooltip,
-  TabbedHeader,
-} from '@cardstack/boxel-ui/components';
-
-import {
-  getLiveCards,
-  codeRefWithAbsoluteURL,
-  type Query,
-  type Loader,
-  LooseSingleCardDocument,
-  isSingleCardDocument,
-} from '@cardstack/runtime-common';
+import CodeRefField from 'https://cardstack.com/base/code-ref';
 
 export class Tab extends FieldDef {
   @field displayName = contains(StringField);
@@ -64,7 +66,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
         declaration &&
         typeof declaration === 'function' &&
         'isCardDef' in declaration &&
-        !AppCard.isPrototypeOf(declaration),
+        !Object.prototype.isPrototypeOf.call(AppCard, declaration),
     );
     let tabs = [];
     for (let [name, _declaration] of exportedCards) {
@@ -271,22 +273,22 @@ class AppCardIsolated extends Component<typeof AppCard> {
 
   get activeTab() {
     if (!this.tabs?.length) {
-      return;
+      return undefined;
     }
     let tab = this.tabs[this.activeTabIndex];
     if (!tab) {
-      return;
+      return undefined;
     }
     let { name, module } = tab.ref;
     if (!name || !module) {
-      return;
+      return undefined;
     }
     return tab;
   }
 
   get activeTabRef() {
     if (!this.activeTab || !this.currentRealm) {
-      return;
+      return undefined;
     }
     return codeRefWithAbsoluteURL(this.activeTab.ref, this.currentRealm);
   }
@@ -300,7 +302,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
 
   get tableData() {
     if (!this.instances) {
-      return;
+      return undefined;
     }
     let exampleCard = this.instances[0];
     let headers: string[] = [];
