@@ -22,6 +22,8 @@ import {
   catalogEntryRef,
   baseRealm,
   isCardInstance,
+  loaderFor,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
 
@@ -29,6 +31,7 @@ import { tracked } from '@glimmer/tracking';
 import cssUrl from 'ember-css-url';
 import { type CatalogEntry } from './catalog-entry';
 import StringField from './string';
+import { TrackedArray } from 'tracked-built-ins';
 
 class Isolated extends Component<typeof CardsGrid> {
   <template>
@@ -48,7 +51,7 @@ class Isolated extends Component<typeof CardsGrid> {
             as |PrerenderedCardSearch|
           }}
             <PrerenderedCardSearch
-              @query={{this.query}}
+              @query={{this.activeFilter.query}}
               @format='fitted'
               @realms={{this.realms}}
             >
@@ -166,48 +169,71 @@ class Isolated extends Component<typeof CardsGrid> {
     </style>
   </template>
 
-  private filters: Filter[] = [
+  constructor(owner: any, args: any) {
+    super(owner, args);
+    this.loadFilterList.perform();
+  }
+
+  filters = new TrackedArray([
     {
       displayName: 'All Apps',
       query: {
         filter: {
-          eq: {
-            _cardType: 'Apps',
+          type: {
+            module: 'http://localhost:4201/experiments/app-card',
+            name: 'AppCard',
           },
         },
+        sort: [
+          {
+            on: {
+              module: `${baseRealm.url}card-api`,
+              name: 'CardDef',
+            },
+            by: '_cardType',
+          },
+          {
+            on: {
+              module: `${baseRealm.url}card-api`,
+              name: 'CardDef',
+            },
+            by: 'title',
+          },
+        ],
       },
     },
     {
       displayName: 'All Cards',
       query: {
         filter: {
-          eq: {
-            _cardType: 'Card',
+          not: {
+            eq: {
+              _cardType: 'Cards Grid',
+            },
           },
         },
-      },
-    },
-    {
-      displayName: 'Person',
-      query: {
-        filter: {
-          eq: {
-            _cardType: 'Person',
+        // sorting by title so that we can maintain stability in
+        // the ordering of the search results (server sorts results
+        // by order indexed by default)
+        sort: [
+          {
+            on: {
+              module: `${baseRealm.url}card-api`,
+              name: 'CardDef',
+            },
+            by: '_cardType',
           },
-        },
-      },
-    },
-    {
-      displayName: 'Pet',
-      query: {
-        filter: {
-          eq: {
-            _cardType: 'Pet',
+          {
+            on: {
+              module: `${baseRealm.url}card-api`,
+              name: 'CardDef',
+            },
+            by: 'title',
           },
-        },
+        ],
       },
     },
-  ];
+  ]);
   @tracked activeFilter = this.filters[0];
 
   @action onFilterChanged(filter: Filter) {
@@ -216,37 +242,6 @@ class Isolated extends Component<typeof CardsGrid> {
 
   get realms(): string[] {
     return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
-  }
-
-  get query() {
-    return {
-      filter: {
-        not: {
-          eq: {
-            _cardType: 'Cards Grid',
-          },
-        },
-      },
-      // sorting by title so that we can maintain stability in
-      // the ordering of the search results (server sorts results
-      // by order indexed by default)
-      sort: [
-        {
-          on: {
-            module: `${baseRealm.url}card-api`,
-            name: 'CardDef',
-          },
-          by: '_cardType',
-        },
-        {
-          on: {
-            module: `${baseRealm.url}card-api`,
-            name: 'CardDef',
-          },
-          by: 'title',
-        },
-      ],
-    };
   }
 
   @action
@@ -267,6 +262,64 @@ class Isolated extends Component<typeof CardsGrid> {
 
     await this.args.context?.actions?.createCard?.(card.ref, new URL(card.id), {
       realmURL: this.args.model[realmURL],
+    });
+  });
+
+  private loadFilterList = restartableTask(async () => {
+    let loader = loaderFor(this.args.model);
+    let response = await loader.fetch(`${this.realms[0]}_types`, {
+      headers: {
+        Accept: SupportedMimeType.CardTypeSummary,
+      },
+    });
+    if (!response.ok) {
+      let responseText = await response.text();
+      let err = new Error(
+        `status: ${response.status} -
+          ${response.statusText}. ${responseText}`,
+      ) as any;
+
+      err.status = response.status;
+      err.responseText = responseText;
+
+      throw err;
+    }
+    let cardTypeSummaries = (await response.json()).data as {
+      id: string;
+      attributes: { displayName: string; total: number };
+    }[];
+    cardTypeSummaries.forEach((summary) => {
+      if (summary.attributes.displayName === 'Cards Grid') {
+        return;
+      }
+      const lastIndex = summary.id.lastIndexOf('/');
+      this.filters.push({
+        displayName: summary.attributes.displayName,
+        query: {
+          filter: {
+            type: {
+              module: summary.id.substring(0, lastIndex),
+              name: summary.id.substring(lastIndex + 1),
+            },
+          },
+          sort: [
+            {
+              on: {
+                module: `${baseRealm.url}card-api`,
+                name: 'CardDef',
+              },
+              by: '_cardType',
+            },
+            {
+              on: {
+                module: `${baseRealm.url}card-api`,
+                name: 'CardDef',
+              },
+              by: 'title',
+            },
+          ],
+        },
+      });
     });
   });
 }
