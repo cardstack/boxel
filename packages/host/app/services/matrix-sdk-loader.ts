@@ -37,6 +37,10 @@ export class ExtendedMatrixSDK {
     return this.#sdk.RoomEvent;
   }
 
+  get ClientEvent() {
+    return this.#sdk.ClientEvent;
+  }
+
   get Preset() {
     return this.#sdk.Preset;
   }
