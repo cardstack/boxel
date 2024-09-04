@@ -35,6 +35,7 @@ import {
   basicMappings,
   generateCardPatchCallSpecification,
   getSearchTool,
+  getGenerateAppModuleTool,
 } from '@cardstack/runtime-common/helpers/ai';
 
 import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
@@ -570,6 +571,7 @@ export default class MatrixService
         if (this.realm.canWrite(attachedOpenCard.id)) {
           tools.push(getPatchTool(attachedOpenCard, patchSpec));
           tools.push(getSearchTool());
+          tools.push(getGenerateAppModuleTool(attachedOpenCard.id));
         }
       }
     }

@@ -129,6 +129,7 @@ function generateMockMatrixService(
     cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
     failedCommandState: TrackedMap<string, Error> = new TrackedMap();
     cardHashes: Map<string, string> = new Map(); // hashes <> event id
+    skillCardHashes: Map<string, string> = new Map(); // hashes <> event id
     currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
       new TrackedMap();
 
@@ -325,6 +326,7 @@ function generateMockMatrixService(
       roomId: string,
       body: string | undefined,
       attachedCards: CardDef[],
+      skillCards: CardDef[] = [],
       clientGeneratedId: string,
       _context?: OperatorModeContext,
     ) {
@@ -334,6 +336,12 @@ function generateMockMatrixService(
         roomId,
         this.cardHashes,
       );
+      let attachedSkillEventIds = await this.getCardEventIds(
+        skillCards,
+        roomId,
+        this.skillCardHashes,
+        { includeComputeds: true, maybeRelativeURL: null },
+      );
       let content = {
         body,
         msgtype: 'org.boxel.message',
@@ -342,6 +350,7 @@ function generateMockMatrixService(
         clientGeneratedId,
         data: {
           attachedCardsEventIds,
+          attachedSkillEventIds,
         },
       };
       await this.sendEvent(roomId, 'm.room.message', content);

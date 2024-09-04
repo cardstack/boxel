@@ -1,6 +1,16 @@
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import { tracked } from '@glimmer/tracking';
+
+import { restartableTask } from 'ember-concurrency';
+
+import { Button } from '@cardstack/boxel-ui/components';
+import { bool, cn, not } from '@cardstack/boxel-ui/helpers';
+import { ImagePlaceholder } from '@cardstack/boxel-ui/icons';
+
+import { baseRealm } from '@cardstack/runtime-common';
+
 import { Base64ImageField } from 'https://cardstack.com/base/base64-image';
-import TextAreaField from 'https://cardstack.com/base/text-area';
-import MarkdownField from 'https://cardstack.com/base/markdown';
 import {
   CardDef,
   field,
@@ -10,14 +20,9 @@ import {
   realmURL,
   linksToMany,
 } from 'https://cardstack.com/base/card-api';
-import { Button } from '@cardstack/boxel-ui/components';
-import { ImagePlaceholder } from '@cardstack/boxel-ui/icons';
-import { bool, cn, not } from '@cardstack/boxel-ui/helpers';
-import { on } from '@ember/modifier';
-import { action } from '@ember/object';
-import { tracked } from '@glimmer/tracking';
-import { restartableTask } from 'ember-concurrency';
-import { baseRealm } from '@cardstack/runtime-common';
+import MarkdownField from 'https://cardstack.com/base/markdown';
+import TextAreaField from 'https://cardstack.com/base/text-area';
+
 import { AppCard } from './app-card';
 
 class Isolated extends Component<typeof ProductRequirementDocument> {
@@ -60,6 +65,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
               @kind='primary-dark'
               @disabled={{this._generateCode.isRunning}}
               @loading={{this._generateCode.isRunning}}
+              data-test-create-module
             >
               {{#unless this._generateCode.isRunning}}
                 <span class='generate-button-logo' />
@@ -83,6 +89,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
                   {{on 'click' this.viewModule}}
                   class='view-module-button'
                   @kind='text-only'
+                  data-test-view-module
                 >
                   <@fields.moduleURL />
                 </Button>
@@ -176,8 +183,6 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
         display: inline-block;
         width: var(--icon-size);
         height: var(--icon-size);
-        background: url('./ai-assist-icon@2x.webp') no-repeat center;
-        background-size: contain;
       }
       .new-instance-button {
         margin-top: var(--boxel-sp);
@@ -290,7 +295,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
           declaration &&
           typeof declaration === 'function' &&
           'isCardDef' in declaration &&
-          AppCard.isPrototypeOf(declaration),
+          !Object.prototype.isPrototypeOf.call(AppCard, declaration),
       );
       if (!appCard) {
         throw new Error('Could not find app card in module');
@@ -342,7 +347,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
       return;
     }
     this.args.context.actions.changeSubmode(
-      new URL(this.args.model.moduleURL),
+      new URL(`${this.args.model.moduleURL}.gts`),
       'code',
     );
   }
