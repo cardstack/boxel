@@ -1,5 +1,6 @@
 import { Deferred } from './deferred';
 import {
+  makeCardTypeSummaryDoc,
   transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
 } from './card-document';
@@ -357,6 +358,11 @@ export class Realm {
         '/_search-prerendered',
         SupportedMimeType.CardJson,
         this.searchPrerendered.bind(this),
+      )
+      .get(
+        '/_types',
+        SupportedMimeType.CardTypeSummary,
+        this.fetchCardTypeSummary.bind(this),
       )
       .post(
         '/_session',
@@ -1657,7 +1663,24 @@ export class Realm {
     });
   }
 
-  private async parseRealmInfo() {
+  private async fetchCardTypeSummary(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let results = await this.#realmIndexQueryEngine.fetchCardTypeSummary();
+
+    let doc = makeCardTypeSummaryDoc(results);
+
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: { 'content-type': SupportedMimeType.CardJson },
+      },
+      requestContext,
+    });
+  }
+
+  private async parseRealmInfo(): Promise<RealmInfo> {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
     let realmConfig = await this.readFileAsText(localPath, undefined);

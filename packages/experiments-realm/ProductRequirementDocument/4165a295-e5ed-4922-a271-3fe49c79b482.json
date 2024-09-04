@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "appTitle": "Store CRM",
+      "shortDescription": "A tailored CRM for retail stores to manage and track marketing and sales activities efficiently.",
+      "thumbnail": {
+        "altText": null,
+        "size": "actual",
+        "height": null,
+        "width": null,
+        "base64": null
+      },
+      "prompt": "I want to create a CRM tailored for a store that has features to track marketing and sales.",
+      "overview": "The store CRM is designed to help retail businesses manage their customer relationships by tracking both marketing campaigns and sales transactions. The application will provide tools for customer data management, sales pipeline tracking, and marketing campaign monitoring. It will also include analytics and reporting features to make data-driven decisions. Such a system will streamline store operations, enhance customer satisfaction, and ultimately drive sales growth.",
+      "schema": "- Users: customer details\n- Products: product details, stock levels\n- Sales: transactions, invoices, payment methods\n- Marketing: campaigns, leads, promotions\n- Reports: sales reports, marketing effectiveness, customer analytics",
+      "layoutAndNavigation": "The application will have a clean and intuitive interface with a main navigation menu that includes the following sections:\n- Dashboard: An overview of key metrics and recent activities\n- Customers: Customer profiles and contact information\n- Products: Inventory management\n- Sales: Order processing and transaction history\n- Marketing: Campaign creation and tracking\n- Reports: Analytical reports and insights\nEach section will have sub-menus for more detailed tasks and features. The navigation should be intuitive to ensure ease of use for users of all tech-savviness levels.",
+      "moduleURL": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "appInstances": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product-requirement-document",
+        "name": "ProductRequirementDocument"
+      }
+    }
+  }
+}

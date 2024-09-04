@@ -21,6 +21,7 @@ import { TrackedMap, TrackedObject } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
+  Deferred,
   type LooseSingleCardDocument,
   markdownToHtml,
   aiBotUsername,
@@ -34,6 +35,7 @@ import {
   basicMappings,
   generateCardPatchCallSpecification,
   getSearchTool,
+  getGenerateAppModuleTool,
 } from '@cardstack/runtime-common/helpers/ai';
 
 import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
@@ -110,6 +112,7 @@ export default class MatrixService
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
+  accountDataProcessed = new Deferred<void>();
   rooms: TrackedMap<string, RoomState> = new TrackedMap();
   roomResourcesCache: TrackedMap<string, RoomResource> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
@@ -189,6 +192,16 @@ export default class MatrixService
         Timeline.onUpdateEventStatus(this),
       ],
       [this.matrixSDK.RoomEvent.Receipt, Timeline.onReceipt(this)],
+      [
+        this.matrixSDK.ClientEvent.AccountData,
+        async (e) => {
+          if (e.event.type == 'com.cardstack.boxel.realms') {
+            this.cardService.setRealms(e.event.content.realms);
+            this.accountDataProcessed.fulfill();
+            await this.loginToRealms();
+          }
+        },
+      ],
     ];
   }
 
@@ -310,6 +323,7 @@ export default class MatrixService
 
       try {
         await this._client.startClient();
+        await this.accountDataProcessed.promise;
         await this.loginToRealms();
         await this.initializeRooms();
       } catch (e) {
@@ -557,6 +571,7 @@ export default class MatrixService
         if (this.realm.canWrite(attachedOpenCard.id)) {
           tools.push(getPatchTool(attachedOpenCard, patchSpec));
           tools.push(getSearchTool());
+          tools.push(getGenerateAppModuleTool(attachedOpenCard.id));
         }
       }
     }

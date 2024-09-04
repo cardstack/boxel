@@ -226,6 +226,20 @@ export async function registerUser(
       },
     })
   ).json();
+
+  await updateAccountData(
+    response.user_id,
+    response.access_token,
+    'com.cardstack.boxel.realms',
+    JSON.stringify({
+      realms: [
+        'http://localhost:4202/test/',
+        'http://localhost:4201/experiments/',
+        'https://cardstack.com/base/',
+      ],
+    }),
+  );
+
   return {
     homeServer: response.home_server,
     accessToken: response.access_token,
@@ -356,6 +370,30 @@ export async function updateUser(
       `could not update user: ${res.status} - ${await res.text()}`,
     );
   }
+}
+
+export async function updateAccountData(
+  userId: string,
+  accessToken: string,
+  type: string,
+  data: string,
+): Promise<void> {
+  let response = await fetch(
+    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/user/${userId}/account_data/${type}`,
+    {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: data,
+    },
+  );
+
+  console.log(
+    `updateAccountData result for ${type}: ${response.status}, ${
+      response.statusText
+    }, ${JSON.stringify(await response.json())}`,
+  );
 }
 
 export async function getJoinedRooms(accessToken: string) {
