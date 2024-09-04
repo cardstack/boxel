@@ -5,7 +5,7 @@ import { cached, tracked } from '@glimmer/tracking';
 
 import format from 'date-fns/format';
 
-import { restartableTask, task } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 import window from 'ember-window-mock';
 import {
   type LoginResponse,
