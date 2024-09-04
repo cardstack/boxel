@@ -9,7 +9,7 @@ import { stringify } from 'qs';
 
 import { TrackedSet } from 'tracked-built-ins';
 
-import { Query, RealmInfo } from '@cardstack/runtime-common';
+import { Query } from '@cardstack/runtime-common';
 import {
   PrerenderedCardCollectionDocument,
   isPrerenderedCardCollectionDocument,
@@ -28,7 +28,6 @@ const waiter = buildWaiter('prerendered-card-search:waiter');
 export interface PrerenderedCardData {
   url: string;
   realmUrl: string;
-  realmInfo: RealmInfo;
   html: string;
 }
 
@@ -42,9 +41,6 @@ class PrerenderedCard {
   }
   get realmUrl(): string {
     return this.data.realmUrl;
-  }
-  get realmInfo(): RealmInfo {
-    return this.data.realmInfo;
   }
 }
 
@@ -107,7 +103,6 @@ export default class PrerenderedCardSearch extends Component<Signature> {
       return new PrerenderedCard({
         url: r.id,
         realmUrl: realmURL,
-        realmInfo: json.meta.realmInfo!,
         html: r.attributes?.html,
       });
     });

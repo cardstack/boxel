@@ -1647,7 +1647,6 @@ export class Realm {
     );
 
     let doc = transformResultsToPrerenderedCardsDoc(results);
-    doc.meta.realmInfo = await this.parseRealmInfo();
 
     return createResponse({
       body: JSON.stringify(doc, null, 2),

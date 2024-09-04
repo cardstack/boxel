@@ -20,7 +20,7 @@ interface PrerenderedCard {
   component: HTMLComponent;
   url: string;
   realmUrl: string;
-  realmInfo: RealmInfo;
+  realmInfo?: RealmInfo;
 }
 
 interface Signature {
@@ -28,79 +28,82 @@ interface Signature {
     cards: PrerenderedCard[];
     select: (cardUrl?: string, ev?: KeyboardEvent | MouseEvent) => void;
     selectedCardUrl?: string;
+    realmInfos?: Record<string, RealmInfo>;
   };
 }
 
 export default class CardCatalog extends Component<Signature> {
   <template>
     <div class='card-catalog' data-test-card-catalog>
+      {{#if @realmInfos}}
+        {{#let
+          (this.groupByRealmUrl @cards this.pageSize)
+          as |groupedCardsByRealm|
+        }}
+          {{#each-in groupedCardsByRealm as |_realmUrl realmData|}}
+            <section
+              class='card-catalog__realm'
+              data-test-realm={{realmData.realmInfo.name}}
+            >
+              <CardCatalogResultsHeader
+                @realm={{realmData.realmInfo}}
+                @resultsCount={{realmData.cardsTotal}}
+              />
 
-      {{#let
-        (this.groupByRealmUrl @cards this.pageSize)
-        as |groupedCardsByRealm|
-      }}
-        {{#each-in groupedCardsByRealm as |_realmUrl realmData|}}
-          <section
-            class='card-catalog__realm'
-            data-test-realm={{realmData.realmInfo.name}}
-          >
-            <CardCatalogResultsHeader
-              @realm={{realmData.realmInfo}}
-              @resultsCount={{realmData.cardsTotal}}
-            />
+              <ul class='card-catalog__group'>
+                {{#each realmData.cards as |card index|}}
+                  {{#if (lt index realmData.displayedCardsCount)}}
+                    {{#let (eq @selectedCardUrl card.url) as |isSelected|}}
+                      <li class={{cn 'item' selected=isSelected}}>
+                        <button
+                          class='catalog-item {{if isSelected "selected"}}'
+                          {{on 'click' (fn @select card.url)}}
+                          {{on 'dblclick' (fn @select card.url)}}
+                          {{on 'keydown' (fn this.handleEnterKey card.url)}}
+                          data-test-select={{removeFileExtension card.url}}
+                          aria-label='Select'
+                          data-test-card-catalog-item={{removeFileExtension
+                            card.url
+                          }}
+                          data-test-card-catalog-item-selected={{isSelected}}
+                        >
+                          {{card.component}}
+                        </button>
+                      </li>
+                    {{/let}}
+                  {{/if}}
+                {{/each}}
+              </ul>
 
-            <ul class='card-catalog__group'>
-              {{#each realmData.cards as |card index|}}
-                {{#if (lt index realmData.displayedCardsCount)}}
-                  {{#let (eq @selectedCardUrl card.url) as |isSelected|}}
-                    <li class={{cn 'item' selected=isSelected}}>
-                      <button
-                        class='catalog-item {{if isSelected "selected"}}'
-                        {{on 'click' (fn @select card.url)}}
-                        {{on 'dblclick' (fn @select card.url)}}
-                        {{on 'keydown' (fn this.handleEnterKey card.url)}}
-                        data-test-select={{removeFileExtension card.url}}
-                        aria-label='Select'
-                        data-test-card-catalog-item={{removeFileExtension
-                          card.url
-                        }}
-                        data-test-card-catalog-item-selected={{isSelected}}
-                      >
-                        {{card.component}}
-                      </button>
-                    </li>
-                  {{/let}}
-                {{/if}}
-              {{/each}}
-            </ul>
+              {{#if (gt realmData.cardsTotal realmData.displayedCardsCount)}}
+                <Button
+                  {{on
+                    'click'
+                    (fn
+                      (mut realmData.displayedCardsCount)
+                      (add realmData.displayedCardsCount this.pageSize)
+                    )
+                  }}
+                  @kind='secondary-light'
+                  @size='small'
+                  data-test-show-more-cards
+                >
+                  Show
+                  {{this.pageSize}}
+                  more cards ({{subtract
+                    realmData.cardsTotal
+                    realmData.displayedCardsCount
+                  }}
+                  not shown)
+                </Button>
+              {{/if}}
+            </section>
 
-            {{#if (gt realmData.cardsTotal realmData.displayedCardsCount)}}
-              <Button
-                {{on
-                  'click'
-                  (fn
-                    (mut realmData.displayedCardsCount)
-                    (add realmData.displayedCardsCount this.pageSize)
-                  )
-                }}
-                @kind='secondary-light'
-                @size='small'
-                data-test-show-more-cards
-              >
-                Show
-                {{this.pageSize}}
-                more cards ({{subtract
-                  realmData.cardsTotal
-                  realmData.displayedCardsCount
-                }}
-                not shown)
-              </Button>
-            {{/if}}
-          </section>
-        {{else}}
-          <p>No cards available</p>
-        {{/each-in}}
-      {{/let}}
+          {{else}}
+            <p>No cards available</p>
+          {{/each-in}}
+        {{/let}}
+      {{/if}}
     </div>
 
     <style>
@@ -170,6 +173,11 @@ export default class CardCatalog extends Component<Signature> {
   </template>
 
   @action
+  stringify(realmInfos: Record<string, RealmInfo>) {
+    return JSON.stringify(realmInfos);
+  }
+
+  @action
   groupByRealmUrl(
     cards: PrerenderedCard[],
     displayLimit: number,
@@ -188,7 +196,7 @@ export default class CardCatalog extends Component<Signature> {
         if (!acc[realmUrl]) {
           acc[realmUrl] = {
             cards: [],
-            realmInfo: card.realmInfo,
+            realmInfo: this.args.realmInfos![realmUrl],
             cardsTotal: 0,
             displayedCardsCount: 0,
           };

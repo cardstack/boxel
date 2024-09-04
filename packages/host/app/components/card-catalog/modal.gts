@@ -143,6 +143,7 @@ export default class CardCatalogModal extends Component<Signature> {
               <:response as |cards|>
                 <CardCatalog
                   @cards={{cards}}
+                  @realmInfos={{this.availableRealms}}
                   @select={{this.selectCard}}
                   @selectedCardUrl={{this.state.selectedCardUrl}}
                 />
@@ -265,7 +266,12 @@ export default class CardCatalogModal extends Component<Signature> {
   }
 
   fetchAvailableRealms = trackedFunction(this, async () => {
-    let realmInfos: Record<string, RealmInfo> = {};
+    let realmInfos: Record<string, RealmInfo> = Object.fromEntries(
+      this.state?.availableRealmUrls.map((url) => [
+        url,
+        { name: '', backgroundURL: '', iconURL: '' },
+      ]) ?? [],
+    );
     let promises = this.state?.availableRealmUrls.map(async (url) => {
       let info = await this.cardService.getRealmInfoByRealmURL(new URL(url));
       realmInfos[url] = info;
