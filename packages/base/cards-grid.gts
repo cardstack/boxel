@@ -266,7 +266,7 @@ class Isolated extends Component<typeof CardsGrid> {
   });
 
   private loadFilterList = restartableTask(async () => {
-    let loader = loaderFor(this.args.model);
+    let loader = loaderFor(this.args.model as CardDef);
     let response = await loader.fetch(`${this.realms[0]}_types`, {
       headers: {
         Accept: SupportedMimeType.CardTypeSummary,
