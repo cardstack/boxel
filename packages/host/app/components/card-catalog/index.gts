@@ -173,11 +173,6 @@ export default class CardCatalog extends Component<Signature> {
   </template>
 
   @action
-  stringify(realmInfos: Record<string, RealmInfo>) {
-    return JSON.stringify(realmInfos);
-  }
-
-  @action
   groupByRealmUrl(
     cards: PrerenderedCard[],
     displayLimit: number,
