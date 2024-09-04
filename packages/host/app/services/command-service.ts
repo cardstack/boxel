@@ -82,7 +82,7 @@ export default class CommandService extends Service {
         let fileName =
           (payload.appTitle as string)?.replace(/ /g, '-').toLowerCase() ??
           `untitled-app-${timestamp}`;
-        let moduleId = `${realmURL.href}AppModules/${fileName}-${timestamp}`;
+        let moduleId = `${realmURL}AppModules/${fileName}-${timestamp}`;
         let content = (payload.moduleCode as string) ?? '';
         res = await this.cardService.saveSource(
           new URL(`${moduleId}.gts`),
