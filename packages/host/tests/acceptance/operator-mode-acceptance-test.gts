@@ -2,7 +2,6 @@ import {
   visit,
   currentURL,
   click,
-  triggerEvent,
   waitFor,
   fillIn,
   waitUntil,
