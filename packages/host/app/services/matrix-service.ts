@@ -6,6 +6,7 @@ import { cached, tracked } from '@glimmer/tracking';
 import format from 'date-fns/format';
 
 import { task } from 'ember-concurrency';
+import window from 'ember-window-mock';
 import {
   type LoginResponse,
   type MatrixEvent,
@@ -20,6 +21,7 @@ import { TrackedMap, TrackedObject } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
+  Deferred,
   type LooseSingleCardDocument,
   markdownToHtml,
   aiBotUsername,
@@ -33,6 +35,7 @@ import {
   basicMappings,
   generateCardPatchCallSpecification,
   getSearchTool,
+  getGenerateAppModuleTool,
 } from '@cardstack/runtime-common/helpers/ai';
 
 import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
@@ -109,6 +112,7 @@ export default class MatrixService
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
+  accountDataProcessed = new Deferred<void>();
   rooms: TrackedMap<string, RoomState> = new TrackedMap();
   roomResourcesCache: TrackedMap<string, RoomResource> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
@@ -188,6 +192,16 @@ export default class MatrixService
         Timeline.onUpdateEventStatus(this),
       ],
       [this.matrixSDK.RoomEvent.Receipt, Timeline.onReceipt(this)],
+      [
+        this.matrixSDK.ClientEvent.AccountData,
+        async (e) => {
+          if (e.event.type == 'com.cardstack.boxel.realms') {
+            this.cardService.setRealms(e.event.content.realms);
+            this.accountDataProcessed.fulfill();
+            await this.loginToRealms();
+          }
+        },
+      ],
     ];
   }
 
@@ -309,6 +323,7 @@ export default class MatrixService
 
       try {
         await this._client.startClient();
+        await this.accountDataProcessed.promise;
         await this.loginToRealms();
         await this.initializeRooms();
       } catch (e) {
@@ -556,6 +571,7 @@ export default class MatrixService
         if (this.realm.canWrite(attachedOpenCard.id)) {
           tools.push(getPatchTool(attachedOpenCard, patchSpec));
           tools.push(getSearchTool());
+          tools.push(getGenerateAppModuleTool(attachedOpenCard.id));
         }
       }
     }
@@ -890,16 +906,16 @@ export default class MatrixService
 }
 
 function saveAuth(auth: LoginResponse) {
-  localStorage.setItem('auth', JSON.stringify(auth));
+  window.localStorage.setItem('auth', JSON.stringify(auth));
 }
 
 function clearAuth() {
-  localStorage.removeItem('auth');
-  localStorage.removeItem(currentRoomIdPersistenceKey);
+  window.localStorage.removeItem('auth');
+  window.localStorage.removeItem(currentRoomIdPersistenceKey);
 }
 
 function getAuth(): LoginResponse | undefined {
-  let auth = localStorage.getItem('auth');
+  let auth = window.localStorage.getItem('auth');
   if (!auth) {
     return;
   }

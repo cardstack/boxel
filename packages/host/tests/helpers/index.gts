@@ -20,11 +20,12 @@ import {
   RunnerOptionsManager,
   type RealmInfo,
   type TokenClaims,
-  type IndexWriter,
+  IndexWriter,
   type RunnerRegistration,
   type IndexRunner,
   type IndexResults,
   insertPermissions,
+  unixTime,
 } from '@cardstack/runtime-common';
 
 import {
@@ -506,7 +507,15 @@ async function setupTestRealm({
 
   let dbAdapter = await getDbAdapter();
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
-  let worker: Worker | undefined;
+  let worker = new Worker({
+    indexWriter: new IndexWriter(dbAdapter),
+    queue,
+    runnerOptsManager: runnerOptsMgr,
+    indexRunner,
+    virtualNetwork,
+    matrixURL: testMatrix.url,
+    secretSeed: testRealmSecretSeed,
+  });
   realm = new Realm({
     url: realmURL,
     adapter,
@@ -517,24 +526,10 @@ async function setupTestRealm({
     virtualNetwork,
     dbAdapter,
     queue,
-    withIndexWriter: async (indexWriter, loader) => {
-      worker = new Worker({
-        realmURL: new URL(realmURL!),
-        indexWriter,
-        queue,
-        realmAdapter: adapter,
-        runnerOptsManager: runnerOptsMgr,
-        loader,
-        indexRunner,
-      });
-      await worker.run();
-    },
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
   });
   virtualNetwork.mount(realm.maybeHandle);
-  if (!worker) {
-    throw new Error(`worker for realm ${realmURL} was not created`);
-  }
+  await adapter.ready;
   await worker.run();
   await realm.start();
 
@@ -564,8 +559,8 @@ export function createJWT(
   expiration: string,
   secret: string,
 ) {
-  let nowInSeconds = Math.floor(Date.now() / 1000);
-  let expires = nowInSeconds + ms(expiration) / 1000;
+  let nowInSeconds = unixTime(Date.now());
+  let expires = nowInSeconds + unixTime(ms(expiration));
   let header = { alg: 'none', typ: 'JWT' };
   let payload = {
     iat: nowInSeconds,

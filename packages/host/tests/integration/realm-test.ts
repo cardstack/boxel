@@ -6,7 +6,7 @@ import { module, test } from 'qunit';
 
 import { validate as uuidValidate } from 'uuid';
 
-import { baseRealm, CodeRef, Realm } from '@cardstack/runtime-common';
+import { baseRealm, Realm } from '@cardstack/runtime-common';
 import { isSingleCardDocument } from '@cardstack/runtime-common/card-document';
 import {
   cardSrc,
@@ -2977,7 +2977,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve directory requests', async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
+    let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
       contents: {
         'dir/empty.json': {
@@ -3025,6 +3025,9 @@ module('Integration | realm', function (hooks) {
               },
               meta: {
                 kind: 'file',
+                lastModified: adapter.lastModifiedMap.get(
+                  `${testRealmURL}dir/empty.json`,
+                ),
               },
             },
           },
@@ -3058,25 +3061,6 @@ posts/ignore-me.gts
       },
     });
 
-    {
-      let response = await handle(
-        realm,
-        new Request(
-          `${testRealmURL}_typeOf?${stringify({
-            type: 'exportedCard',
-            module: 'posts/ignore-me.gts',
-            name: 'Post',
-          } as CodeRef)}`,
-          {
-            headers: {
-              Accept: 'application/vnd.api+json',
-            },
-          },
-        ),
-      );
-
-      assert.strictEqual(response.status, 404, 'HTTP 404 response');
-    }
     {
       let response = await handle(
         realm,

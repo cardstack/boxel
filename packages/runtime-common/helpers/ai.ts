@@ -432,6 +432,35 @@ export function getSearchTool() {
   };
 }
 
+export function getGenerateAppModuleTool(attachedOpenCardId: string) {
+  return {
+    type: 'function',
+    function: {
+      name: 'generateAppModule',
+      description: `Propose a post request to generate a new app module. Insert the module code in the 'moduleCode' property of the payload and the title for the module in the 'appTitle' property. Ensure the description explains what change you are making.`,
+      parameters: {
+        type: 'object',
+        properties: {
+          attached_card_id: {
+            type: 'string',
+            const: attachedOpenCardId,
+          },
+          description: {
+            type: 'string',
+          },
+          appTitle: {
+            type: 'string',
+          },
+          moduleCode: {
+            type: 'string',
+          },
+        },
+        required: ['attached_card_id', 'description', 'appTitle', 'moduleCode'],
+      },
+    },
+  };
+}
+
 export interface FunctionToolCall {
   id: string;
   name: string;

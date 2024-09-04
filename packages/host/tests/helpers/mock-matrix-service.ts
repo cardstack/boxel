@@ -14,6 +14,7 @@ import {
   LooseSingleCardDocument,
   splitStringIntoChunks,
   baseRealm,
+  unixTime,
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
@@ -48,7 +49,11 @@ let nonce = 0;
 export type MockMatrixService = MatrixService & {
   sendReactionDeferred: Deferred<void>; // used to assert applying state in apply button
   cardAPI: typeof cardApi;
-  createAndJoinRoom(roomId: string, roomName?: string): Promise<string>;
+  createAndJoinRoom(
+    roomId: string,
+    roomName: string,
+    timestamp?: number,
+  ): Promise<string>;
 };
 
 class MockClient {
@@ -124,6 +129,7 @@ function generateMockMatrixService(
     cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
     failedCommandState: TrackedMap<string, Error> = new TrackedMap();
     cardHashes: Map<string, string> = new Map(); // hashes <> event id
+    skillCardHashes: Map<string, string> = new Map(); // hashes <> event id
     currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
       new TrackedMap();
 
@@ -163,7 +169,7 @@ function generateMockMatrixService(
 
     async createRealmSession(realmURL: URL) {
       let secret = "shhh! it's a secret";
-      let nowInSeconds = Math.floor(Date.now() / 1000);
+      let nowInSeconds = unixTime(Date.now());
       let expires = nowInSeconds + (expiresInSec?.() ?? 60 * 60);
       let header = { alg: 'none', typ: 'JWT' };
       let payload = {
@@ -198,7 +204,7 @@ function generateMockMatrixService(
       if (document.querySelector('[data-test-throw-room-error]')) {
         throw new Error('Intentional error thrown');
       }
-      return await this.createAndJoinRoom(name);
+      return await this.createAndJoinRoom(name, name);
     }
 
     async sendReactionEvent(roomId: string, eventId: string, status: string) {
@@ -320,6 +326,7 @@ function generateMockMatrixService(
       roomId: string,
       body: string | undefined,
       attachedCards: CardDef[],
+      skillCards: CardDef[] = [],
       clientGeneratedId: string,
       _context?: OperatorModeContext,
     ) {
@@ -329,6 +336,12 @@ function generateMockMatrixService(
         roomId,
         this.cardHashes,
       );
+      let attachedSkillEventIds = await this.getCardEventIds(
+        skillCards,
+        roomId,
+        this.skillCardHashes,
+        { includeComputeds: true, maybeRelativeURL: null },
+      );
       let content = {
         body,
         msgtype: 'org.boxel.message',
@@ -337,6 +350,7 @@ function generateMockMatrixService(
         clientGeneratedId,
         data: {
           attachedCardsEventIds,
+          attachedSkillEventIds,
         },
       };
       await this.sendEvent(roomId, 'm.room.message', content);
@@ -390,7 +404,11 @@ function generateMockMatrixService(
       await this.profile.load.perform();
     }
 
-    async createAndJoinRoom(roomId: string, name?: string) {
+    async createAndJoinRoom(
+      roomId: string,
+      name: string,
+      timestamp = Date.now(),
+    ) {
       await addRoomEvent(this, {
         event_id: 'eventname',
         room_id: roomId,
@@ -403,7 +421,7 @@ function generateMockMatrixService(
         event_id: 'eventcreate',
         room_id: roomId,
         type: 'm.room.create',
-        origin_server_ts: Date.now(),
+        origin_server_ts: timestamp,
         content: {
           creator: '@testuser:staging',
           room_version: '0',
@@ -417,11 +435,11 @@ function generateMockMatrixService(
         type: 'm.room.member',
         sender: '@testuser:staging',
         state_key: '@testuser:staging',
-        origin_server_ts: Date.now(),
+        origin_server_ts: timestamp,
         content: {
           displayname: 'testuser',
           membership: 'join',
-          membershipTs: Date.now(),
+          membershipTs: timestamp,
           membershipInitiator: '@testuser:staging',
         },
         status: null,

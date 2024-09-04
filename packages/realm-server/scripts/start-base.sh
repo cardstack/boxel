@@ -15,9 +15,9 @@ NODE_ENV=development \
   ts-node \
   --transpileOnly main \
   --port=4201 \
+  --matrixURL='http://localhost:8008' \
   \
   --path='../base' \
-  --matrixURL='http://localhost:8008' \
   --username='base_realm' \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl='/base/'
