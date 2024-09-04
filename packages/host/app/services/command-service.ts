@@ -13,6 +13,7 @@ import { CardTypeFilter, assertQuery } from '@cardstack/runtime-common/query';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type Realm from '@cardstack/host/services/realm';
 
 import { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
 import { CommandField } from 'https://cardstack.com/base/command';
@@ -26,8 +27,6 @@ import {
 import { Message } from '../lib/matrix-classes/message';
 
 import CardService from './card-service';
-
-import type Realm from '@cardstack/realm/services/realm';
 
 function getComponent(cardOrField: BaseDef) {
   return cardOrField.constructor.getComponent(cardOrField);
