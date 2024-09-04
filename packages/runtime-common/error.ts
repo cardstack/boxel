@@ -1,10 +1,8 @@
 import { getReasonPhrase } from 'http-status-codes';
 import { createResponse } from './create-response';
-import { Realm } from './realm';
 export interface ErrorDetails {
   status?: number;
   title?: string;
-  responseText?: string;
   source?: {
     pointer?: string;
     header?: string;
@@ -28,20 +26,15 @@ export class CardError extends Error implements SerializedError {
   status: number;
   title?: string;
   source?: ErrorDetails['source'];
-  responseText?: string;
   isCardError: true = true;
   additionalErrors: (CardError | Error)[] | null = null;
   deps?: string[];
 
-  constructor(
-    detail: string,
-    { status, title, source, responseText }: ErrorDetails = {},
-  ) {
+  constructor(detail: string, { status, title, source }: ErrorDetails = {}) {
     super(detail);
     this.detail = detail;
     this.status = status || 500;
     this.title = title || getReasonPhrase(this.status);
-    this.responseText = responseText;
     this.source = source;
   }
   toJSON() {
@@ -98,7 +91,6 @@ export class CardError extends Error implements SerializedError {
         {
           title: response.statusText,
           status: response.status,
-          responseText: text,
         },
       );
     }
@@ -140,11 +132,11 @@ export function serializableError(err: any): any {
 }
 
 export function responseWithError(
-  realm: Realm,
+  unresolvedRealmURL: string,
   error: CardError,
 ): Response {
   return createResponse(
-    realm,
+    unresolvedRealmURL,
     JSON.stringify({ errors: [serializableError(error)] }),
     {
       status: error.status,
@@ -155,11 +147,11 @@ export function responseWithError(
 }
 
 export function methodNotAllowed(
-  realm: Realm,
+  unresolvedRealmURL: string,
   request: Request,
 ): Response {
   return responseWithError(
-    realm,
+    unresolvedRealmURL,
     new CardError(`${request.method} not allowed for ${request.url}`, {
       status: 405,
     }),
@@ -167,38 +159,38 @@ export function methodNotAllowed(
 }
 
 export function notFound(
-  realm: Realm,
+  unresolvedRealmURL: string,
   request: Request,
   message = `Could not find ${request.url}`,
 ): Response {
   return responseWithError(
-    realm,
+    unresolvedRealmURL,
     new CardError(message, { status: 404 }),
   );
 }
 
 export function badRequest(
-  realm: Realm,
+  unresolvedRealmURL: string,
   message: string,
 ): Response {
   return responseWithError(
-    realm,
+    unresolvedRealmURL,
     new CardError(message, { status: 400 }),
   );
 }
 
 export function systemUnavailable(
-  realm: Realm,
+  unresolvedRealmURL: string,
   message: string,
 ): Response {
   return responseWithError(
-    realm,
+    unresolvedRealmURL,
     new CardError(message, { status: 503 }),
   );
 }
 
 export function systemError(
-  realm: Realm,
+  unresolvedRealmURL: string,
   message: string,
   additionalError?: CardError | Error,
 ): Response {
@@ -206,5 +198,5 @@ export function systemError(
   if (additionalError) {
     err.additionalErrors = [additionalError];
   }
-  return responseWithError(realm, err);
+  return responseWithError(unresolvedRealmURL, err);
 }

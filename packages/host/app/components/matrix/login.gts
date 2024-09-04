@@ -1,139 +1,68 @@
-import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
-import { action } from '@ember/object';
-import type RouterService from '@ember/routing/router-service';
-import { service } from '@ember/service';
 import Component from '@glimmer/component';
+import { service } from '@ember/service';
+import { action } from '@ember/object';
+import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
-
 import { restartableTask } from 'ember-concurrency';
-
-import { type LoginResponse } from 'matrix-js-sdk';
-import moment from 'moment';
-
 import {
+  BoxelHeader,
+  BoxelInput,
   Button,
   FieldContainer,
-  BoxelInput,
-} from '@cardstack/boxel-ui/components';
-
-import {
-  isMatrixError,
-  type MatrixError,
-} from '@cardstack/host/lib/matrix-utils';
+  LoadingIndicator,
+} from '@cardstack/boxel-ui';
+import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import { type IAuthData } from 'matrix-js-sdk';
 
-import { AuthMode } from './auth';
-
-interface Signature {
-  Args: {
-    setMode: (mode: AuthMode) => void;
-  };
-}
-
-export default class Login extends Component<Signature> {
+export default class Login extends Component {
   <template>
-    <span class='title'>Sign in to your Boxel Account</span>
-    <FieldContainer
-      @label='Email Address or Username'
-      @tag='label'
-      @vertical={{true}}
-      class='field'
-    >
-      <BoxelInput
-        data-test-username-field
-        type='text'
-        @value={{this.username}}
-        @onInput={{this.setUsername}}
-        @onKeyPress={{this.handleEnter}}
-      />
-    </FieldContainer>
-    <FieldContainer
-      @label='Password'
-      @tag='label'
-      @vertical={{true}}
-      class='field'
-    >
-      <BoxelInput
-        data-test-password-field
-        type='password'
-        @value={{this.password}}
-        @onInput={{this.setPassword}}
-        @onKeyPress={{this.handleEnter}}
-      />
-    </FieldContainer>
-    <Button
-      @kind='text-only'
-      class='forgot-password'
-      data-test-forgot-password
-      {{on 'click' (fn @setMode 'forgot-password')}}
-    >Forgot password?</Button>
-    <Button
-      class='button'
-      data-test-login-btn
-      @kind='primary'
-      @disabled={{this.isLoginButtonDisabled}}
-      @loading={{this.doLogin.isRunning}}
-      {{on 'click' this.login}}
-    >
-      Sign in</Button>
+    <BoxelHeader @title='Login' @hasBackground={{true}} />
     {{#if this.error}}
       <div class='error' data-test-login-error>{{this.error}}</div>
     {{/if}}
-    <span class='or'>or</span>
-    <Button
-      class='button'
-      data-test-register-user
-      {{on 'click' (fn @setMode 'register')}}
-    >Create a new Boxel account</Button>
+    {{#if this.doLogin.isRunning}}
+      <LoadingIndicator />
+    {{else}}
+      <div class='login'>
+        <FieldContainer @label='Username:' @tag='label' class='login__field'>
+          <BoxelInput
+            data-test-username-field
+            type='text'
+            @value={{this.username}}
+            @onInput={{this.setUsername}}
+          />
+        </FieldContainer>
+        <FieldContainer @label='Password:' @tag='label' class='login__field'>
+          <BoxelInput
+            data-test-password-field
+            type='password'
+            @value={{this.password}}
+            @onInput={{this.setPassword}}
+          />
+        </FieldContainer>
+        <Button
+          class='login__button'
+          data-test-login-btn
+          @kind='primary'
+          @disabled={{this.isLoginButtonDisabled}}
+          {{on 'click' this.login}}
+        >Login</Button>
+      </div>
+    {{/if}}
 
     <style>
-      form {
-        display: flex;
-        flex-direction: column;
+      .login {
+        padding: var(--boxel-sp);
       }
-      .title {
-        font: 700 var(--boxel-font-med);
-        margin-bottom: var(--boxel-sp-sm);
-        padding: 0;
+      .login__field {
+        margin-top: var(--boxel-sp-sm);
       }
-      .field {
-        margin-top: var(--boxel-sp);
-      }
-      .field :deep(input:autofill) {
-        transition:
-          background-color 0s 600000s,
-          color 0s 600000s;
-      }
-      .forgot-password {
-        border: none;
-        padding: 0;
-        margin-bottom: var(--boxel-sp-lg);
-        margin-left: auto;
-        color: var(--boxel-dark);
-        font: 500 var(--boxel-font-xs);
-      }
-      .forgot-password:hover {
-        color: var(--boxel-highlight);
-      }
-      .button {
-        --boxel-button-padding: var(--boxel-sp-sm);
-        width: 100%;
-      }
-      .button :deep(.boxel-loading-indicator) {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-      }
-      .or {
-        margin: var(--boxel-sp-sm) auto;
-        font: 500 var(--boxel-font-sm);
-      }
-      .error {
-        color: var(--boxel-error-100);
-        padding: 0;
-        font: 500 var(--boxel-font-xs);
-        margin: var(--boxel-sp-xxs) auto 0 auto;
+      .login__button {
+        margin-top: var(--boxel-sp-sm);
+        margin-right: var(--boxel-sp);
+        position: absolute;
+        right: var(--boxel-sp);
       }
     </style>
   </template>
@@ -142,18 +71,9 @@ export default class Login extends Component<Signature> {
   @tracked private username: string | undefined;
   @tracked private password: string | undefined;
   @service private declare matrixService: MatrixService;
-  @service declare router: RouterService;
 
   private get isLoginButtonDisabled() {
-    return (
-      !this.username || !this.password || this.error || this.doLogin.isRunning
-    );
-  }
-
-  @action handleEnter(event: KeyboardEvent) {
-    if (event.key === 'Enter') {
-      !this.isLoginButtonDisabled && this.login();
-    }
+    return !this.username || !this.password;
   }
 
   @action
@@ -183,20 +103,20 @@ export default class Login extends Component<Signature> {
         `bug: should never get here: login button disabled when no password`,
       );
     }
-    let auth: LoginResponse;
+    let auth: IAuthData | undefined;
     try {
-      auth = await this.matrixService.login(this.username, this.password);
+      auth = await this.matrixService.client.loginWithPassword(
+        this.username,
+        this.password,
+      );
     } catch (e: any) {
       if (isMatrixError(e)) {
-        this.error = `Sign in failed. ${extractMatrixErrorMessage(e)}`;
+        this.error = e.data.error;
       } else {
-        this.error = `Sign in failed: ${e.message}`;
+        throw e;
       }
-
-      throw e;
     }
     if (auth) {
-      await this.router.refresh();
       await this.matrixService.start(auth);
     } else {
       throw new Error(
@@ -204,22 +124,6 @@ export default class Login extends Component<Signature> {
       );
     }
   });
-}
-
-export function extractMatrixErrorMessage(e: MatrixError) {
-  if (e.httpStatus === 403) {
-    return 'Please check your credentials and try again.';
-  } else if (e.httpStatus === 429) {
-    if (e.data.retry_after_ms) {
-      moment.relativeTimeRounding(Math.ceil);
-      return `Too many failed attempts, try again ${moment
-        .duration(e.data.retry_after_ms)
-        .humanize(true)}.`;
-    }
-    return 'Too many failed attempts, try again later.';
-  } else {
-    return `Unknown error ${e.httpStatus}: ${e.data.error}`;
-  }
 }
 
 declare module '@glint/environment-ember-loose/registry' {

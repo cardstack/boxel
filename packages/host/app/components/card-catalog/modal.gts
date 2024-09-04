@@ -1,55 +1,37 @@
-import { registerDestructor } from '@ember/destroyable';
-import { fn, hash } from '@ember/helper';
-import { on } from '@ember/modifier';
-import { action } from '@ember/object';
-import type Owner from '@ember/owner';
-import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-
-import { restartableTask, task } from 'ember-concurrency';
-import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
+import { on } from '@ember/modifier';
+import { fn } from '@ember/helper';
+import { action } from '@ember/object';
+import { service } from '@ember/service';
+import { registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
+import { task } from 'ember-concurrency';
 import debounce from 'lodash/debounce';
-
-import { TrackedArray, TrackedObject } from 'tracked-built-ins';
-
-import { Button, BoxelInput } from '@cardstack/boxel-ui/components';
-import { and, eq, gt, not } from '@cardstack/boxel-ui/helpers';
-import { IconPlus } from '@cardstack/boxel-ui/icons';
-
+import type { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
 import {
   createNewCard,
-  baseRealm,
   type CodeRef,
   type CreateNewCard,
   Deferred,
-  type RealmInfo,
-  Loader,
 } from '@cardstack/runtime-common';
-
 import type { Query, Filter } from '@cardstack/runtime-common/query';
-
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
-import type { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
-
-import { getCard } from '../../resources/card-resource';
+import { Button, SearchInput } from '@cardstack/boxel-ui';
+import { and, eq, gt, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import type CardService from '../../services/card-service';
+import type LoaderService from '../../services/loader-service';
 import { getSearchResults, Search } from '../../resources/search';
-
 import {
   suggestCardChooserTitle,
   getSuggestionWithLowestDepth,
 } from '../../utils/text-suggestion';
-
 import ModalContainer from '../modal-container';
-import { Submodes } from '../submode-switcher';
-
-import CardCatalogFilters from './filters';
-
 import CardCatalog from './index';
-
-import type CardService from '../../services/card-service';
-import type LoaderService from '../../services/loader-service';
+import CardCatalogFilters from './filters';
+import UrlSearch from '../url-search';
+import { type RealmInfo } from '@cardstack/runtime-common';
+import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
 interface Signature {
   Args: {
@@ -67,7 +49,7 @@ type Request = {
   search: Search;
   deferred: Deferred<CardDef | undefined>;
   opts?: {
-    offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
+    offerToCreate?: CodeRef;
     createNewCard?: CreateNewCard;
   };
 };
@@ -82,7 +64,6 @@ type State = {
   cardURL: string;
   chooseCardTitle: string;
   dismissModal: boolean;
-  errorMessage?: string;
 };
 
 const DEFAULT_CHOOOSE_CARD_TITLE = 'Choose a Card';
@@ -94,25 +75,15 @@ export default class CardCatalogModal extends Component<Signature> {
         @title={{this.state.chooseCardTitle}}
         @onClose={{fn this.pick undefined}}
         @zIndex={{this.zIndex}}
-        {{focusTrap
-          isActive=(not this.state.dismissModal)
-          focusTrapOptions=(hash
-            initialFocus='[data-test-search-field]' allowOutsideClick=true
-          )
-        }}
-        {{on 'keydown' this.handleKeydown}}
         data-test-card-catalog-modal
       >
         <:header>
-          <BoxelInput
-            @type='search'
+          <SearchInput
             @variant='large'
             @value={{this.state.searchKey}}
             @onInput={{this.setSearchKey}}
             @onKeyPress={{this.onSearchFieldKeypress}}
-            @placeholder='Search for a card or enter card URL'
-            @state={{if this.isInvalid 'invalid'}}
-            @errorMessage={{this.state.errorMessage}}
+            @placeholder='Search for a card'
             data-test-search-field
           />
           <CardCatalogFilters
@@ -120,7 +91,6 @@ export default class CardCatalogModal extends Component<Signature> {
             @selectedRealms={{this.state.selectedRealms}}
             @onSelectRealm={{this.onSelectRealm}}
             @onDeselectRealm={{this.onDeselectRealm}}
-            @disableRealmFilter={{this.searchKeyIsURL}}
           />
         </:header>
         <:content>
@@ -128,14 +98,14 @@ export default class CardCatalogModal extends Component<Signature> {
             Loading...
           {{else}}
             {{! The getter for availableRealms is necessary because
-              it's a resource that needs to load the search results }}
+                it's a resource that needs to load the search results }}
             <CardCatalog
               @results={{if
                 this.availableRealms.length
                 this.state.searchResults
                 this.availableRealms
               }}
-              @select={{this.selectCard}}
+              @toggleSelect={{this.toggleSelect}}
               @selectedCard={{this.state.selectedCard}}
               @context={{@context}}
             />
@@ -145,29 +115,31 @@ export default class CardCatalogModal extends Component<Signature> {
           <div class='footer'>
             <div class='footer__actions-left'>
               {{#if this.state.request.opts.offerToCreate}}
-                {{#unless
-                  (eq this.operatorModeStateService.state.submode Submodes.Code)
-                }}
-                  <Button
-                    @kind='secondary-light'
-                    @size='tall'
-                    class='create-new-button'
-                    {{on
-                      'click'
-                      (fn
-                        this.createNew
-                        this.state.request.opts.offerToCreate.ref
-                        this.state.request.opts.offerToCreate.relativeTo
-                      )
-                    }}
-                    data-test-card-catalog-create-new-button
-                  >
-                    <IconPlus width='20' height='20' role='presentation' />
-                    Create New
-                    {{this.cardRefName}}
-                  </Button>
-                {{/unless}}
+                <Button
+                  @kind='secondary-light'
+                  @size='tall'
+                  class='create-new-button'
+                  {{on
+                    'click'
+                    (fn this.createNew this.state.request.opts.offerToCreate)
+                  }}
+                  data-test-card-catalog-create-new-button
+                >
+                  {{svgJar
+                    'icon-plus'
+                    width='20'
+                    height='20'
+                    role='presentation'
+                  }}
+                  Create New
+                  {{this.cardRefName}}
+                </Button>
               {{/if}}
+              <UrlSearch
+                @cardURL={{this.state.cardURL}}
+                @setCardURL={{this.setCardURL}}
+                @setSelectedCard={{this.setSelectedCard}}
+              />
             </div>
             <div>
               <Button
@@ -199,7 +171,6 @@ export default class CardCatalogModal extends Component<Signature> {
         display: flex;
         justify-content: space-between;
         gap: var(--boxel-sp);
-        margin-left: auto;
       }
       .footer__actions-left {
         display: flex;
@@ -224,7 +195,6 @@ export default class CardCatalogModal extends Component<Signature> {
   @tracked zIndex = 20;
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
-  @service declare operatorModeStateService: OperatorModeStateService;
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);
@@ -237,7 +207,7 @@ export default class CardCatalogModal extends Component<Signature> {
   get cardRefName() {
     return (
       (
-        this.state.request.opts?.offerToCreate?.ref as {
+        this.state.request.opts?.offerToCreate as {
           module: string;
           name: string;
         }
@@ -250,7 +220,6 @@ export default class CardCatalogModal extends Component<Signature> {
     // realm filters and search key filter these groups of cards
     // filters dropdown menu will always display all available realms
     if (this.state.request.search.instancesByRealm.length) {
-      // eslint-disable-next-line ember/no-side-effects
       this.state.searchResults = this.state.request.search.instancesByRealm;
     }
     return this.state.request.search.instancesByRealm ?? [];
@@ -285,7 +254,6 @@ export default class CardCatalogModal extends Component<Signature> {
     this.state.searchResults = this.availableRealms;
     this.state.cardURL = '';
     this.state.selectedCard = undefined;
-    this.state.errorMessage = '';
     this.state.dismissModal = false;
   }
 
@@ -293,46 +261,22 @@ export default class CardCatalogModal extends Component<Signature> {
   async chooseCard<T extends CardDef>(
     query: Query,
     opts?: {
-      offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
+      offerToCreate?: CodeRef;
       multiSelect?: boolean;
       createNewCard?: CreateNewCard;
     },
   ): Promise<undefined | T> {
     this.zIndex++;
-    return (await this._chooseCard.perform(
-      {
-        // default to title sort so that we can maintain stability in
-        // the ordering of the search results (server sorts results
-        // by order indexed by default)
-        sort: [
-          {
-            on: {
-              module: `${baseRealm.url}card-api`,
-              name: 'CardDef',
-            },
-            by: 'title',
-          },
-        ],
-        ...query,
-      },
-      opts,
-    )) as T | undefined;
+    return (await this._chooseCard.perform(query, opts)) as T | undefined;
   }
 
   private _chooseCard = task(
     async <T extends CardDef>(
       query: Query,
-      opts: {
-        offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
-        multiSelect?: boolean;
-      } = {},
+      opts: { offerToCreate?: CodeRef; multiSelect?: boolean } = {},
     ) => {
       this.stateId++;
-      let title = await chooseCardTitle(
-        query.filter,
-        this.loaderService.loader,
-        opts?.multiSelect,
-      );
+      let title = chooseCardTitle(query.filter, opts?.multiSelect);
       let request = new TrackedObject<Request>({
         search: getSearchResults(this, () => query),
         deferred: new Deferred(),
@@ -369,20 +313,15 @@ export default class CardCatalogModal extends Component<Signature> {
     }
   }
 
-  get searchKeyIsURL() {
-    try {
-      new URL(this.state.searchKey);
-      return true;
-    } catch (_e) {
-      return false;
-    }
-  }
-
   debouncedSearchFieldUpdate = debounce(() => this.onSearchFieldUpdated(), 500);
 
   @action setCardURL(cardURL: string) {
     this.state.selectedCard = undefined;
     this.state.cardURL = cardURL;
+  }
+
+  @action setSelectedCard(card: CardDef | undefined) {
+    this.state.selectedCard = card;
   }
 
   @action
@@ -392,68 +331,19 @@ export default class CardCatalogModal extends Component<Signature> {
     }
   }
 
-  get isInvalid() {
-    if (!this.state.searchKey) {
-      return false;
-    }
-    return this.state.errorMessage || this.state.searchResults?.length === 0;
-  }
-
-  setErrorState(message: string) {
-    this.state.errorMessage = message;
-    this.state.searchResults = [];
-  }
-
-  private getCard = restartableTask(async (cardURL: string) => {
-    let maybeIndexCardURL = this.cardService.realmURLs.find(
-      (u) => u === cardURL + '/',
-    );
-    const cardResource = getCard(this, () => maybeIndexCardURL ?? cardURL, {
-      isLive: () => false,
-    });
-    await cardResource.loaded;
-    let { card } = cardResource;
-    if (!card) {
-      this.setErrorState(`Could not find card at ${this.state.searchKey}`);
-      return;
-    }
-    let realmInfo = await this.cardService.getRealmInfo(card);
-    if (!realmInfo) {
-      this.setErrorState(`Encountered error getting realm info for ${cardURL}`);
-      return;
-    }
-    this.state.searchResults = [
-      {
-        url: card.id,
-        realmInfo,
-        cards: [card],
-      },
-    ];
-  });
-
   @action
   onSearchFieldUpdated() {
-    this.state.errorMessage = '';
-
     if (!this.state.searchKey && !this.state.selectedRealms.length) {
       return this.resetState();
     }
-
-    if (this.searchKeyIsURL) {
-      this.getCard.perform(this.state.searchKey);
-      return;
-    }
-
     let results: RealmCards[] = [];
-    let cardFilter = (c: CardDef) => {
-      return c.title
-        ?.trim()
-        .toLowerCase()
-        .includes(this.state.searchKey.trim().toLowerCase());
-    };
-
     for (let { url, realmInfo, cards } of this.displayedRealms) {
-      let filteredCards = cards.filter(cardFilter);
+      let filteredCards = cards.filter((c) =>
+        c.title
+          .trim()
+          .toLowerCase()
+          .includes(this.state.searchKey.trim().toLowerCase()),
+      );
       if (filteredCards.length) {
         results.push({
           url,
@@ -465,22 +355,13 @@ export default class CardCatalogModal extends Component<Signature> {
     this.state.searchResults = results;
   }
 
-  @action selectCard(card?: CardDef, event?: MouseEvent | KeyboardEvent): void {
+  @action toggleSelect(card?: CardDef): void {
     this.state.cardURL = '';
+    if (this.state.selectedCard?.id === card?.id) {
+      this.state.selectedCard = undefined;
+      return;
+    }
     this.state.selectedCard = card;
-
-    if (
-      (event instanceof KeyboardEvent && event?.key === 'Enter') ||
-      (event instanceof MouseEvent && event?.type === 'dblclick')
-    ) {
-      this.pick(card);
-    }
-  }
-
-  @action handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
-      this.pick(undefined);
-    }
   }
 
   @action pick(card?: CardDef, state?: State) {
@@ -500,51 +381,44 @@ export default class CardCatalogModal extends Component<Signature> {
     }
   }
 
-  @action createNew(ref: CodeRef, relativeTo: URL | undefined) {
-    this.createNewTask.perform(ref, relativeTo);
+  @action createNew(ref: CodeRef) {
+    this.createNewTask.perform(ref);
   }
 
-  createNewTask = task(
-    async (
-      ref: CodeRef,
-      relativeTo: URL | undefined /* this should be the catalog entry ID */,
-    ) => {
-      let newCard;
-      this.state.dismissModal = true;
+  createNewTask = task(async (ref: CodeRef) => {
+    let newCard;
+    this.state.dismissModal = true;
 
-      // We need to store the current state in a variable
-      // because there is a possibility that in createNewCard,
-      // users will open the card catalog modal and insert a new state into the stack.
-      let currentState = this.state;
-      if (this.state.request.opts?.createNewCard) {
-        newCard = await this.state.request.opts?.createNewCard(
-          ref,
-          relativeTo,
-          {
-            isLinkedCard: true,
-          },
-        );
-      } else {
-        newCard = await createNewCard(ref, relativeTo);
-      }
-      this.pick(newCard, currentState);
-    },
-  );
+    // We need to store the current state in a variable
+    // because there is a possibility that in createNewCard,
+    // users will open the card catalog modal and insert a new state into the stack.
+    let currentState = this.state;
+    if (this.state.request.opts?.createNewCard) {
+      newCard = await this.state.request.opts?.createNewCard(ref, undefined, {
+        isLinkedCard: true,
+      });
+    } else {
+      newCard = await createNewCard(ref, undefined);
+    }
+    this.pick(newCard, currentState);
+  });
 }
 
-async function chooseCardTitle(
+function chooseCardTitle(
   filter: Filter | undefined,
-  loader: Loader,
   multiSelect?: boolean,
-): Promise<string> {
+): string {
   if (!filter) {
     return DEFAULT_CHOOOSE_CARD_TITLE;
   }
-  let suggestions = await suggestCardChooserTitle(filter, 0, {
-    loader,
-    multiSelect,
-  });
+  let suggestions = suggestCardChooserTitle(filter, 0, { multiSelect });
   return (
     getSuggestionWithLowestDepth(suggestions) ?? DEFAULT_CHOOOSE_CARD_TITLE
   );
+}
+
+declare module '@glint/environment-ember-loose/registry' {
+  export default interface Registry {
+    'CardCatalog::Modal': typeof CardCatalogModal;
+  }
 }

@@ -2,21 +2,16 @@ import {
   type BaseDefConstructor,
   type Field,
   type BaseDef,
-  type CardDef,
-  type FieldDef,
 } from 'https://cardstack.com/base/card-api';
 import { Loader } from './loader';
 import { isField } from './constants';
 import { CardError } from './error';
-import { trimExecutableExtension } from './index';
-
-export type ResolvedCodeRef = {
-  module: string;
-  name: string;
-};
 
 export type CodeRef =
-  | ResolvedCodeRef
+  | {
+      module: string;
+      name: string;
+    }
   | {
       type: 'ancestorOf';
       card: CodeRef; //TODO: consider changing this key to ref, this will break serializations
@@ -33,14 +28,6 @@ let localIdentities = new WeakMap<
   | { type: 'ancestorOf'; card: typeof BaseDef }
   | { type: 'fieldOf'; card: typeof BaseDef; field: string }
 >();
-
-export function isResolvedCodeRef(ref: CodeRef): ref is ResolvedCodeRef {
-  if ('module' in ref && 'name' in ref) {
-    return true;
-  } else {
-    return false;
-  }
-}
 
 export function isCodeRef(ref: any): ref is CodeRef {
   if (typeof ref !== 'object') {
@@ -68,35 +55,8 @@ export function isCodeRef(ref: any): ref is CodeRef {
   return false;
 }
 
-export function isBaseDef(cardOrField: any): cardOrField is typeof BaseDef {
-  return typeof cardOrField === 'function' && 'baseDef' in cardOrField;
-}
-
-export function isCardDef(card: any): card is typeof CardDef {
-  return isBaseDef(card) && 'isCardDef' in card;
-}
-
-export function isCardInstance(card: any): card is CardDef {
-  return isCardDef(card?.constructor);
-}
-
-export function isFieldDef(field: any): field is typeof FieldDef {
-  return isBaseDef(field) && 'isFieldDef' in field;
-}
-
-export function codeRefWithAbsoluteURL(
-  ref: CodeRef,
-  relativeTo?: URL | undefined,
-  opts?: { trimExecutableExtension?: true },
-): CodeRef {
-  if (!('type' in ref)) {
-    let moduleURL = new URL(ref.module, relativeTo);
-    if (opts?.trimExecutableExtension) {
-      moduleURL = trimExecutableExtension(moduleURL);
-    }
-    return { ...ref, module: moduleURL.href };
-  }
-  return { ...ref, card: codeRefWithAbsoluteURL(ref.card, relativeTo) };
+export function isCard(card: any): card is typeof BaseDef {
+  return typeof card === 'function' && 'baseDef' in card;
 }
 
 export async function loadCard(
@@ -121,7 +81,7 @@ export async function loadCard(
     throw assertNever(ref);
   }
 
-  if (isBaseDef(maybeCard)) {
+  if (isCard(maybeCard)) {
     return maybeCard;
   }
 
@@ -136,7 +96,7 @@ export function identifyCard(
   card: unknown,
   maybeRelativeURL?: ((possibleURL: string) => string) | null,
 ): CodeRef | undefined {
-  if (!isBaseDef(card)) {
+  if (!isCard(card)) {
     return undefined;
   }
 
@@ -179,7 +139,7 @@ export function getField<CardT extends BaseDefConstructor>(
     let result: Field<BaseDefConstructor> | undefined = (desc?.get as any)?.[
       isField
     ];
-    if (result !== undefined && isBaseDef(result.card)) {
+    if (result !== undefined && isCard(result.card)) {
       localIdentities.set(result.card, {
         type: 'fieldOf',
         field: fieldName,
@@ -196,7 +156,7 @@ export function getAncestor(
   card: BaseDefConstructor,
 ): BaseDefConstructor | undefined {
   let superCard = Reflect.getPrototypeOf(card);
-  if (isBaseDef(superCard)) {
+  if (isCard(superCard)) {
     localIdentities.set(superCard, {
       type: 'ancestorOf',
       card,

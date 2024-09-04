@@ -1,15 +1,7 @@
+import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
-import Component from '@glimmer/component';
-
-import {
-  CardContainer,
-  Header,
-  IconButton,
-  Modal,
-} from '@cardstack/boxel-ui/components';
-
-import { IconX } from '@cardstack/boxel-ui/icons';
+import { Modal, CardContainer, Header, IconButton } from '@cardstack/boxel-ui';
 
 interface Signature {
   Element: HTMLElement;
@@ -17,52 +9,27 @@ interface Signature {
     title: string;
     onClose: () => void;
     zIndex?: number;
-    size?: 'small' | 'medium' | 'large';
-    centered?: boolean;
-    cardContainerClass?: string;
-    isOpen?: boolean;
   };
   Blocks: {
     content: [];
     header: [];
     footer: [];
-    sidebar: [];
   };
 }
 
 export default class ModalContainer extends Component<Signature> {
-  get size() {
-    return this.args.size ?? 'large';
-  }
-  get isOpen() {
-    return this.args.isOpen ?? true;
-  }
-
   <template>
     <Modal
-      @size={{this.size}}
-      @isOpen={{this.isOpen}}
+      @size='large'
+      @isOpen={{true}}
       @onClose={{@onClose}}
-      @centered={{@centered}}
-      @zIndex={{@zIndex}}
       style={{this.styleString}}
       ...attributes
     >
-      <CardContainer
-        class='dialog-box
-          {{@cardContainerClass}}
-          {{if (has-block "sidebar") "dialog-box--with-sidebar"}}'
-        @displayBoundaries={{true}}
-      >
-        {{#if (has-block 'sidebar')}}
-          <section class='dialog-box__sidebar-header'></section>
-          <aside class='dialog-box__sidebar'>
-            {{yield to='sidebar'}}
-          </aside>
-        {{/if}}
+      <CardContainer class='dialog-box' @displayBoundaries={{true}}>
         <Header @title={{@title}} class='dialog-box__header'>
           <IconButton
-            @icon={{IconX}}
+            @icon='icon-x'
             @width='20'
             @height='20'
             {{on 'click' @onClose}}
@@ -85,44 +52,17 @@ export default class ModalContainer extends Component<Signature> {
       .dialog-box {
         height: 100%;
         display: grid;
-        grid-template-areas:
-          'header'
-          'content'
-          'footer';
         grid-template-rows: auto 1fr auto;
         box-shadow: var(--boxel-deep-box-shadow);
       }
 
-      .dialog-box--with-sidebar {
-        grid-template-areas:
-          'sidebar-header header'
-          'sidebar content'
-          'sidebar footer';
-        grid-template-columns: 300px 1fr;
-      }
-
-      .dialog-box__sidebar-header {
-        grid-area: sidebar-header;
-        background-color: var(--boxel-100);
-        border-top-left-radius: var(--boxel-border-radius);
-      }
-
-      .dialog-box__sidebar {
-        grid-area: sidebar;
-        background-color: var(--boxel-100);
-
-        border-bottom-left-radius: var(--boxel-border-radius);
-      }
-
       .dialog-box__header {
         display: grid;
-        grid-area: header;
         gap: var(--boxel-sp-sm);
       }
 
       .dialog-box__content {
-        grid-area: content;
-        padding: var(--boxel-sp-5xs) var(--boxel-sp-xl) var(--boxel-sp-xl);
+        padding: 0 var(--boxel-sp-xl) var(--boxel-sp-xl);
         height: 100%;
         overflow: auto;
       }
@@ -137,12 +77,11 @@ export default class ModalContainer extends Component<Signature> {
         background: none;
         font: var(--boxel-font-lg);
         position: absolute;
-        top: 1px;
-        right: 1px;
+        top: 0;
+        right: 0;
         width: 50px;
         height: 50px;
-        padding: var(--boxel-sp-xs);
-        border-top-right-radius: calc(var(--boxel-border-radius) - 1px);
+        padding: 0;
       }
 
       .dialog-box__close:hover {
@@ -150,7 +89,6 @@ export default class ModalContainer extends Component<Signature> {
       }
 
       .dialog-box__footer {
-        grid-area: footer;
         width: 100%;
         height: var(--stack-card-footer-height);
         padding: var(--boxel-sp);
@@ -158,7 +96,6 @@ export default class ModalContainer extends Component<Signature> {
         border-top: 1px solid var(--boxel-300);
         border-bottom-left-radius: var(--boxel-border-radius);
         border-bottom-right-radius: var(--boxel-border-radius);
-        display: flex;
       }
     </style>
   </template>

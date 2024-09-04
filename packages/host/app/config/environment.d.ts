@@ -14,7 +14,6 @@ declare const config: {
   ownRealmURL: string;
   otherRealmURLs: string[];
   matrixURL: string;
-  matrixServerName: string;
   experimentalAIEnabled: boolean;
   resolvedBaseRealmURL: string;
   hostsOwnAssets: boolean;
@@ -22,10 +21,4 @@ declare const config: {
   logLevels: string;
   resolvedOwnRealmURL: string;
   autoSaveDelayMs: number;
-  monacoDebounceMs: number;
-  monacoCursorDebounceMs: number;
-  serverEchoDebounceMs: number;
-  loginMessageTimeoutMs: number;
-  minSaveTaskDurationMs: number;
-  sqlSchema: string;
 };

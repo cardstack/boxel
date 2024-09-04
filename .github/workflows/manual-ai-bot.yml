@@ -7,30 +7,28 @@ on:
         description: Deployment environment
         required: false
         default: staging
-  workflow_call:
-    inputs:
-      environment:
-        required: true
-        type: string
+
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
   build:
-    name: Build Docker image
-    uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
+    name: Build
+    uses: cardstack/gh-actions/.github/workflows/waypoint-build.yml@main
     secrets: inherit
     with:
-      repository: "boxel-ai-bot-${{ inputs.environment }}"
+      app: "boxel-ai-bot"
       environment: ${{ inputs.environment }}
-      dockerfile: "packages/ai-bot/Dockerfile"
+      working-directory: "packages/ai-bot"
 
   deploy:
+    name: Deploy
     needs: [build]
-    name: Deploy to AWS ECS
-    uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
+    uses: cardstack/gh-actions/.github/workflows/waypoint-deploy.yml@main
     secrets: inherit
     with:
-      container-name: "boxel-ai-bot"
+      app: "boxel-ai-bot"
       environment: ${{ inputs.environment }}
-      cluster: ${{ inputs.environment }}
-      service-name: "boxel-ai-bot-${{ inputs.environment }}"
-      image: ${{ needs.build.outputs.image }}
+      working-directory: "packages/ai-bot"
+      retain: "0"

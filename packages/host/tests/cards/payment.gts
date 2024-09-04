@@ -5,7 +5,6 @@ import {
   linksTo,
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
-
 import { Chain } from './chain';
 
 export class Payment extends FieldDef {

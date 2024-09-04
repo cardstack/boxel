@@ -1,30 +1,17 @@
-import { on } from '@ember/modifier';
-import { action } from '@ember/object';
-import { capitalize } from '@ember/string';
 import Component from '@glimmer/component';
-
+import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import { menuItemFunc, MenuItem } from '@cardstack/boxel-ui/helpers/menu-item';
+import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
-
+import { on } from '@ember/modifier';
+import { capitalize } from '@ember/string';
 import get from 'lodash/get';
 
-import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui/components';
-
-import { menuItemFunc, MenuItem } from '@cardstack/boxel-ui/helpers';
-import {
-  DropdownArrowUp,
-  DropdownArrowDown,
-  Eye,
-  IconCode,
-} from '@cardstack/boxel-ui/icons';
-
-import config from '@cardstack/host/config/environment';
-
-export const Submodes = {
-  Interact: 'interact',
-  Code: 'code',
-} as const;
-type Values<T> = T[keyof T];
-export type Submode = Values<typeof Submodes>;
+export enum Submode {
+  Interact = 'interact',
+  Code = 'code',
+}
 
 interface Signature {
   Element: HTMLElement;
@@ -42,13 +29,14 @@ export default class SubmodeSwitcher extends Component<Signature> {
           <Button
             class='submode-switcher-dropdown-trigger'
             aria-label='Options'
-            title={{this.appVersion}}
             {{on 'click' this.toggleDropdown}}
             {{bindings}}
           >
-            {{#let (get this.submodeIcons @submode) as |SubmodeIcon|}}
-              <SubmodeIcon width='18px' height='18px' />
-            {{/let}}
+            {{svgJar
+              (get this.submodeIcons @submode)
+              width='18px'
+              height='18px'
+            }}
             {{capitalize @submode}}
             <div
               class='arrow-icon'
@@ -58,11 +46,11 @@ export default class SubmodeSwitcher extends Component<Signature> {
                 'down'
               }}
             >
-              {{#if this.isExpanded}}
-                <DropdownArrowUp width='22px' height='22px' />
-              {{else}}
-                <DropdownArrowDown width='22px' height='22px' />
-              {{/if}}
+              {{svgJar
+                (if this.isExpanded 'dropdown-arrow-up' 'dropdown-arrow-down')
+                width='22px'
+                height='22px'
+              }}
             </div>
           </Button>
         </:trigger>
@@ -102,21 +90,10 @@ export default class SubmodeSwitcher extends Component<Signature> {
         width: var(--submode-switcher-width);
         height: var(--submode-switcher-height);
         gap: var(--boxel-sp-sm);
-
-        transition:
-          border-bottom-right-radius var(--boxel-transition),
-          border-bottom-left-radius var(--boxel-transition);
       }
-
       .submode-switcher-dropdown-trigger[aria-expanded='true'] {
         border-bottom-right-radius: 0;
         border-bottom-left-radius: 0;
-
-        transition:
-          border-bottom-right-radius var(--boxel-transition)
-            var(--boxel-transition),
-          border-bottom-left-radius var(--boxel-transition)
-            var(--boxel-transition);
       }
       .arrow-icon {
         margin-left: auto;
@@ -147,8 +124,8 @@ export default class SubmodeSwitcher extends Component<Signature> {
   </template>
 
   submodeIcons = {
-    [Submodes.Interact]: Eye,
-    [Submodes.Code]: IconCode,
+    [Submode.Interact]: 'eye',
+    [Submode.Code]: 'icon-code',
   };
   @tracked isExpanded = false;
 
@@ -162,12 +139,8 @@ export default class SubmodeSwitcher extends Component<Signature> {
     this.args.onSubmodeSelect(submode);
   }
 
-  get appVersion() {
-    return `Version ${config.APP.version}`;
-  }
-
   get buildMenuItems(): MenuItem[] {
-    return Object.values(Submodes)
+    return Object.values(Submode)
       .filter((submode) => submode !== this.args.submode)
       .map((submode) =>
         menuItemFunc(

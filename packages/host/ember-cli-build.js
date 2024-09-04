@@ -12,9 +12,7 @@ const withSideWatch = require('./lib/with-side-watch');
 module.exports = function (defaults) {
   const app = new EmberApp(defaults, {
     trees: {
-      app: withSideWatch('app', {
-        watching: ['../runtime-common', '../boxel-ui/addon'],
-      }),
+      app: withSideWatch('app', { watching: ['../runtime-common'] }),
     },
     'ember-cli-babel': {
       enableTypeScriptTransform: true,
@@ -40,18 +38,6 @@ module.exports = function (defaults) {
                 test: /\.ttf$/,
                 type: 'asset',
               },
-              {
-                test: /\.woff2$/,
-                type: 'asset',
-              },
-              {
-                test: /\.png$/,
-                type: 'asset',
-              },
-              {
-                test: /\.webp$/,
-                type: 'asset',
-              },
             ],
           },
           plugins: [
@@ -59,6 +45,10 @@ module.exports = function (defaults) {
             new MonacoWebpackPlugin(),
             new webpack.ProvidePlugin({
               process: 'process',
+            }),
+            new webpack.IgnorePlugin({
+              // workaround for https://github.com/embroider-build/ember-auto-import/issues/578
+              resourceRegExp: /moment-timezone/,
             }),
             new webpack.IgnorePlugin({
               resourceRegExp: /^https:\/\/cardstack\.com\/base/,
@@ -71,7 +61,6 @@ module.exports = function (defaults) {
           resolve: {
             fallback: {
               fs: false,
-              os: false,
               path: require.resolve('path-browserify'),
               crypto: require.resolve('crypto-browserify'),
               stream: require.resolve('stream-browserify'),

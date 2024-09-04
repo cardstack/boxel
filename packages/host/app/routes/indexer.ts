@@ -1,8 +1,6 @@
 import Route from '@ember/routing/route';
 import { service } from '@ember/service';
-
 import { Deferred } from '@cardstack/runtime-common/deferred';
-
 import type RenderService from '../services/render-service';
 
 export default class Indexer extends Route {

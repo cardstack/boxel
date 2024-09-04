@@ -1,5 +1,4 @@
 import Service from '@ember/service';
-
 import { type RealmAdapter } from '@cardstack/runtime-common';
 import {
   SearchEntryWithErrors,

@@ -1,30 +1,23 @@
 import Component from '@glimmer/component';
 
-import { eq } from '@cardstack/boxel-ui/helpers';
-
 interface Signature {
   Args: {
-    type: 'index' | 'stack' | 'card';
+    isIndexCard: boolean;
     message: any;
-    operatorModeState?: string;
   };
 }
 
 export default class CardError extends Component<Signature> {
   <template>
     <div data-card-error class='container'>
-      {{#if (eq @type 'index')}}
+      {{#if @isIndexCard}}
         <b>Cannot load index card.</b>
-      {{else if (eq @type 'stack')}}
-        <b>Cannot load stack.</b>
       {{else}}
         <b>Cannot load card.</b>
       {{/if}}
-      <pre class='error'>{{@message}}</pre>
-
-      {{#if @operatorModeState}}
-        <pre class='error'>Operator mode state: {{@operatorModeState}}</pre>
-      {{/if}}
+      <pre class='error'>
+        {{@message}}
+      </pre>
     </div>
     <style>
       .container {
@@ -38,4 +31,10 @@ export default class CardError extends Component<Signature> {
       }
     </style>
   </template>
+}
+
+declare module '@glint/environment-ember-loose/registry' {
+  export default interface Registry {
+    CardError: typeof CardError;
+  }
 }

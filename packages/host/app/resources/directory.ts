@@ -1,16 +1,13 @@
-import { registerDestructor } from '@ember/destroyable';
-import { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
-
-import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
-
+import { tracked } from '@glimmer/tracking';
+import { service } from '@ember/service';
+import { restartableTask } from 'ember-concurrency';
 import {
   logger,
   Relationship,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
-
+import { registerDestructor } from '@ember/destroyable';
 import type LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
 
@@ -19,7 +16,7 @@ const log = logger('resource:directory');
 interface Args {
   named: {
     relativePath: string;
-    realmURL: URL;
+    realmURL: string;
   };
 }
 
@@ -31,7 +28,7 @@ export interface Entry {
 
 export class DirectoryResource extends Resource<Args> {
   @tracked entries: Entry[] = [];
-  private directoryURL: URL | undefined;
+  private directoryURL: string | undefined;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
 
   @service declare loaderService: LoaderService;
@@ -48,7 +45,7 @@ export class DirectoryResource extends Resource<Args> {
   }
 
   modify(_positional: never[], named: Args['named']) {
-    this.directoryURL = new URL(named.relativePath, named.realmURL);
+    this.directoryURL = new URL(named.relativePath, named.realmURL).href;
     this.readdir.perform();
 
     let path = `${named.realmURL}_message`;
@@ -86,7 +83,7 @@ export class DirectoryResource extends Resource<Args> {
     this.entries = entries;
   });
 
-  private async getEntries(url: URL): Promise<Entry[]> {
+  private async getEntries(url: string): Promise<Entry[]> {
     let response: Response | undefined;
     response = await this.loaderService.loader.fetch(url, {
       headers: { Accept: SupportedMimeType.DirectoryListing },
@@ -116,7 +113,7 @@ export class DirectoryResource extends Resource<Args> {
 export function directory(
   parent: object,
   relativePath: () => string,
-  realmURL: () => URL,
+  realmURL: () => string,
 ) {
   return DirectoryResource.from(parent, () => ({
     relativePath: relativePath(),

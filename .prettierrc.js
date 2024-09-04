@@ -1,14 +1,14 @@
 'use strict';
 
 module.exports = {
-  singleQuote: true,
-  plugins: ['prettier-plugin-ember-template-tag'],
   overrides: [
     {
-      files: ['*.yaml', '*.yml'],
+      files: '*.gts',
       options: {
-        singleQuote: false,
+        parser: 'ember-template-tag',
       },
     },
   ],
+  plugins: ['prettier-plugin-ember-template-tag'],
+  singleQuote: true,
 };

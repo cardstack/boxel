@@ -4,16 +4,15 @@ import { fn } from '@ember/helper';
 import {
   primitive,
   type Box,
-  type BoxComponent,
   type Format,
   type Field,
   type FieldDef,
   type BaseDef,
 } from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
-import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
+import type { ComponentLike } from '@glint/template';
+import { AddButton, IconButton } from '@cardstack/boxel-ui';
 import { getPlural } from '@cardstack/runtime-common';
-import { IconTrash } from '@cardstack/boxel-ui/icons';
 
 interface Signature {
   Args: {
@@ -30,22 +29,25 @@ interface Signature {
 
 class ContainsManyEditor extends GlimmerComponent<Signature> {
   <template>
-    <div data-test-contains-many={{@field.name}}>
+    <div data-test-contains-many={{this.args.field.name}}>
       {{#if @arrayField.children.length}}
         <ul class='list'>
           {{#each @arrayField.children as |boxedElement i|}}
             <li class='editor' data-test-item={{i}}>
               {{#let
                 (getBoxComponent
-                  (@cardTypeFor @field boxedElement) @format boxedElement @field
+                  (this.args.cardTypeFor @field boxedElement)
+                  @format
+                  boxedElement
+                  @field
                 )
                 as |Item|
               }}
-                <Item @format={{@format}} />
+                <Item />
               {{/let}}
               <div class='remove-button-container'>
                 <IconButton
-                  @icon={{IconTrash}}
+                  @icon='icon-trash'
                   @width='20px'
                   @height='20px'
                   class='remove'
@@ -78,30 +80,24 @@ class ContainsManyEditor extends GlimmerComponent<Signature> {
         position: relative;
         cursor: pointer;
         padding: var(--boxel-sp);
-        background-color: var(--boxel-100);
         border-radius: var(--boxel-form-control-border-radius);
       }
       .editor:hover {
-        background-color: var(--boxel-200);
-      }
-      .editor :deep(.boxel-input:hover) {
-        border-color: var(--boxel-form-control-border-color);
-      }
-      .editor + .editor {
-        margin-top: var(--boxel-sp-xs);
+        background-color: var(--boxel-light-100);
       }
       .remove-button-container {
         position: absolute;
         top: 0;
         left: 100%;
         height: 100%;
+        display: flex;
+        align-items: center;
       }
       .remove {
-        --icon-color: var(--boxel-dark);
-      }
-      .editor:hover .remove,
-      .remove:hover {
         --icon-color: var(--boxel-red);
+      }
+      .remove:hover {
+        --icon-color: var(--boxel-error-200);
       }
     </style>
   </template>
@@ -133,17 +129,19 @@ export function getContainsManyComponent({
     field: Field<typeof BaseDef>,
     boxedElement: Box<BaseDef>,
   ): typeof BaseDef;
-}): BoxComponent {
+}): ComponentLike<{ Args: {}; Blocks: {} }> {
   if (format === 'edit') {
-    return <template>
-      <ContainsManyEditor
-        @model={{model}}
-        @arrayField={{arrayField}}
-        @field={{field}}
-        @format={{format}}
-        @cardTypeFor={{cardTypeFor}}
-      />
-    </template>;
+    return class ContainsManyEditorTemplate extends GlimmerComponent {
+      <template>
+        <ContainsManyEditor
+          @model={{model}}
+          @arrayField={{arrayField}}
+          @field={{field}}
+          @format={{format}}
+          @cardTypeFor={{cardTypeFor}}
+        />
+      </template>
+    };
   } else {
     return getPluralViewComponent(arrayField, field, format, cardTypeFor);
   }

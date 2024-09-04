@@ -1,153 +1,20 @@
-import { concat } from '@ember/helper';
-import type Owner from '@ember/owner';
-import type RouterService from '@ember/routing/router-service';
-import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
-
-import { restartableTask, timeout } from 'ember-concurrency';
-
-import { Tooltip } from '@cardstack/boxel-ui/components';
-import { IconPencil, IconPencilCrossedOut } from '@cardstack/boxel-ui/icons';
-
-import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
-import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
-import {
-  type RealmSessionResource,
-  getRealmSession,
-} from '@cardstack/host/resources/realm-session';
-
+import { service } from '@ember/service';
+import type RouterService from '@ember/routing/router-service';
 import Directory from './directory';
 
-interface Signature {
+interface Args {
   Args: {
-    realmURL: URL;
+    url: string;
   };
 }
 
-export default class FileTree extends Component<Signature> {
+export default class FileTree extends Component<Args> {
   <template>
-    <div class='realm-info'>
-      <RealmInfoProvider @realmURL={{@realmURL}}>
-        <:ready as |realmInfo|>
-          <RealmIcon
-            @realmIconURL={{realmInfo.iconURL}}
-            @realmName={{realmInfo.name}}
-            class='icon'
-          />
-          {{#let (concat 'In ' realmInfo.name) as |realmTitle|}}
-            <span
-              class='realm-title'
-              data-test-realm-name={{realmInfo.name}}
-              title={{realmTitle}}
-            >{{realmTitle}}</span>
-          {{/let}}
-          {{#if this.canWrite}}
-            <Tooltip @placement='top' class='editability-icon'>
-              <:trigger>
-                <IconPencil
-                  width='18px'
-                  height='18px'
-                  aria-label='Can edit files in this workspace'
-                  data-test-realm-writable
-                />
-              </:trigger>
-              <:content>
-                Can edit files in this workspace
-              </:content>
-            </Tooltip>
-          {{else}}
-            <Tooltip @placement='top' class='editability-icon'>
-              <:trigger>
-                <IconPencilCrossedOut
-                  width='18px'
-                  height='18px'
-                  aria-label='Cannot edit files in this workspace'
-                  data-test-realm-not-writable
-                />
-              </:trigger>
-              <:content>
-                Cannot edit files in this workspace
-              </:content>
-            </Tooltip>
-
-          {{/if}}
-        </:ready>
-      </RealmInfoProvider>
-    </div>
     <nav>
-      <Directory @relativePath='' @realmURL={{@realmURL}} />
-      {{#if this.showMask}}
-        <div class='mask' data-test-file-tree-mask></div>
-      {{/if}}
+      <Directory @relativePath='' @realmURL={{@url}} />
     </nav>
-
-    <style>
-      .mask {
-        position: absolute;
-        top: 0;
-        left: 0;
-        background-color: white;
-        height: 100%;
-        width: 100%;
-      }
-      nav {
-        position: relative;
-      }
-      .realm-info {
-        position: sticky;
-        top: calc(var(--boxel-sp-xxs) * -1);
-        left: calc(var(--boxel-sp-xs) * -1);
-        margin: calc(var(--boxel-sp-xxs) * -1) calc(var(--boxel-sp-xs) * -1) 0
-          calc(var(--boxel-sp-xs) * -1);
-        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
-        background-color: var(--boxel-light);
-        box-shadow: var(--boxel-box-shadow);
-        z-index: 1;
-
-        display: grid;
-        grid-template-columns: auto 1fr auto;
-        align-items: center;
-        gap: var(--boxel-sp-xxxs);
-        font: 700 var(--boxel-font-sm);
-      }
-
-      .realm-info img {
-        width: 18px;
-      }
-
-      .realm-title {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .editability-icon {
-        display: flex;
-      }
-    </style>
   </template>
 
-  @service private declare router: RouterService;
-  @tracked private showMask = true;
-
-  private realmSession: RealmSessionResource | undefined;
-
-  constructor(owner: Owner, args: Signature['Args']) {
-    super(owner, args);
-    this.hideMask.perform();
-    this.realmSession = getRealmSession(this, {
-      realmURL: () => this.args.realmURL,
-    });
-  }
-
-  private hideMask = restartableTask(async () => {
-    // fine tuned to coincide with debounce in RestoreScrollPosition modifier
-    await timeout(300);
-    this.showMask = false;
-  });
-
-  get canWrite() {
-    return this.realmSession?.canWrite;
-  }
+  @service declare router: RouterService;
 }

@@ -1,6 +1,6 @@
 import { Component } from './card-api';
 import StringField from './string';
-import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { BoxelInput } from '@cardstack/boxel-ui';
 
 export default class TextAreaCard extends StringField {
   static displayName = 'TextArea';
@@ -10,7 +10,7 @@ export default class TextAreaCard extends StringField {
         class='boxel-text-area'
         @value={{@model}}
         @onInput={{@set}}
-        @type='textarea'
+        @multiline={{true}}
       />
     </template>
   };

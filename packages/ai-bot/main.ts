@@ -4,295 +4,267 @@ import {
   RoomMemberEvent,
   RoomEvent,
   createClient,
+  ISendEventResponse,
   Room,
   MatrixClient,
+  IRoomEvent,
 } from 'matrix-js-sdk';
 import OpenAI from 'openai';
+import { ChatCompletionChunk } from 'openai/resources/chat';
 import { logger, aiBotUsername } from '@cardstack/runtime-common';
 import {
   constructHistory,
-  getModifyPrompt,
-  cleanContent,
-  getFunctions,
-  getStartOfConversation,
-  shouldSetRoomTitle,
-  type OpenAIPromptMessage,
+  extractContentFromStream,
+  processStream,
+  ParsingMode,
 } from './helpers';
-import { OpenAIError } from 'openai/error';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
-import * as Sentry from '@sentry/node';
-
-if (process.env.SENTRY_DSN) {
-  Sentry.init({
-    dsn: process.env.SENTRY_DSN,
-    environment: process.env.SENTRY_ENVIRONMENT || 'development',
-  });
-}
 
 let log = logger('ai-bot');
+
+/***
+ * TODO:
+ * When constructing the historical cards, also get the card ones so we have that context
+ * Which model to use & system prompts
+ * interactions?
+ */
 
 const openai = new OpenAI();
 
 let startTime = Date.now();
 
-async function sendEvent(
-  client: MatrixClient,
-  room: Room,
-  eventType: string,
-  content: IContent,
-  eventToUpdate: string | undefined,
-) {
-  if (content.data) {
-    content.data = JSON.stringify(content.data);
+interface Message {
+  /**
+   * The contents of the message. `content` is required for all messages, and may be
+   * null for assistant messages with function calls.
+   */
+  content: string | null;
+  /**
+   * The role of the messages author. One of `system`, `user`, `assistant`, or
+   * `function`.
+   */
+  role: 'system' | 'user' | 'assistant' | 'function';
+}
+
+const MODIFY_SYSTEM_MESSAGE =
+  '\
+You are able to modify content according to user requests as well as answer questions for them. You may ask any followup questions you may need.\
+If a user may be requesting a change, respond politely but not ingratiatingly to the user. The more complex the request, the more you can explain what you\'re about to do.\
+\
+Along with the changes you want to make, you must include the card ID of the card being changed. The original card. \
+Return up to 3 options for the user to select from, exploring a range of things the user may want. If the request has only one sensible option or they ask for something very directly you don\'t need to return more than one. The format of your response should be\
+```\
+Explanatory text\
+Option 1: Description\
+{\
+  "id": "originalCardID",\
+  "patch": {\
+    ...\
+  }\
+}\
+\
+Option 2: Description\
+{\
+  "id": "originalCardID",\
+  "patch": {\
+    ...\
+  }\
+}\
+\
+Option 3: Description\
+\
+{\
+  "id": "originalCardID",\
+  "patch": {\
+    ...\
+  }\
+}\
+```\
+The data in the option block will be used to update things for the user behind a button so they will not see the content directly - you must give a short text summary before the option block.\
+Return only JSON inside each option block, in a compatible format with the one you receive. The contents of any field will be automatically replaced with your changes, and must follow a subset of the same format - you may miss out fields but cannot add new ones. Do not add new nested components, it will fail validation.\
+Modify only the parts you are asked to. Only return modified fields.\
+You must not return any fields that you do not see in the input data.\
+If the user hasn\'t shared any cards with you or what they\'re asking for doesn\'t make sense for the card type, you can ask them to "send their open cards" to you.';
+
+function getUserMessage(event: IRoomEvent) {
+  const content = event.content;
+  if (content.msgtype === 'org.boxel.card') {
+    let card = content.instance.data;
+    let request = content.body;
+    return `
+    User request: ${request}
+    Full data: ${JSON.stringify(card)}
+    You may only patch the following fields: ${JSON.stringify(card.attributes)}
+    `;
+  } else {
+    return content.body;
   }
-  if (eventToUpdate) {
-    content['m.relates_to'] = {
-      rel_type: 'm.replace',
-      event_id: eventToUpdate,
-    };
-  }
-  log.info('Sending', content);
-  return await client.sendEvent(room.roomId, eventType, content);
 }
 
 async function sendMessage(
   client: MatrixClient,
   room: Room,
   content: string,
-  eventToUpdate: string | undefined,
-  data: any = {},
+  previous: string | undefined,
 ) {
+  content = content.replace('```', '');
   log.info('Sending', content);
   let messageObject: IContent = {
-    ...{
+    body: content,
+    msgtype: 'm.text',
+    formatted_body: content,
+    format: 'org.matrix.custom.html',
+    'm.new_content': {
       body: content,
       msgtype: 'm.text',
       formatted_body: content,
       format: 'org.matrix.custom.html',
-      'm.new_content': {
-        body: content,
-        msgtype: 'm.text',
-        formatted_body: content,
-        format: 'org.matrix.custom.html',
-      },
     },
-    ...data,
   };
-  return await sendEvent(
-    client,
-    room,
-    'm.room.message',
-    messageObject,
-    eventToUpdate,
-  );
+  if (previous) {
+    messageObject['m.relates_to'] = {
+      rel_type: 'm.replace',
+      event_id: previous,
+    };
+  }
+  return await client.sendEvent(room.roomId, 'm.room.message', messageObject);
 }
 
-// TODO we might want to think about how to handle patches that are larger than
-// 65KB (the maximum matrix event size), such that we split them into fragments
-// like we split cards into fragments
-async function sendOption(
-  client: MatrixClient,
-  room: Room,
-  patch: any,
-  eventToUpdate: string | undefined,
-) {
-  log.info('sending option', patch);
-  const id = patch['card_id'];
-  const body = patch['description'];
+async function sendOption(client: MatrixClient, room: Room, content: any) {
+  log.info('sending option', content);
+  let patch = content['patch'];
+  if (patch['attributes']) {
+    patch = patch['attributes'];
+  }
+  let id = content['id'];
+
   let messageObject = {
-    body: body,
+    body: 'patch',
     msgtype: 'org.boxel.command',
-    formatted_body: body,
+    formatted_body: 'A patch',
     format: 'org.matrix.custom.html',
-    isStreamingFinished: true,
-    data: {
-      command: {
-        type: 'patch',
-        id: id,
-        patch: {
-          attributes: patch['attributes'],
-        },
+    command: {
+      type: 'patch',
+      id: id,
+      patch: {
+        attributes: patch,
       },
     },
   };
   log.info(JSON.stringify(messageObject, null, 2));
-  return await sendEvent(
-    client,
-    room,
-    'm.room.message',
-    messageObject,
-    eventToUpdate,
-  );
+  log.info('Sending', messageObject);
+  return await client.sendEvent(room.roomId, 'm.room.message', messageObject);
 }
 
-function getResponse(history: DiscreteMatrixEvent[], aiBotUsername: string) {
-  let functions = getFunctions(history, aiBotUsername);
-  let messages = getModifyPrompt(history, aiBotUsername, functions);
-  if (functions.length === 0) {
-    return openai.beta.chat.completions.stream({
-      model: 'gpt-4-1106-preview',
-      messages: messages,
-    });
-  } else {
-    return openai.beta.chat.completions.stream({
-      model: 'gpt-4-1106-preview',
-      messages: messages,
-      functions: functions,
-      function_call: 'auto',
-    });
-  }
-}
-
-async function sendError(
+async function sendStream(
+  stream: AsyncIterable<ChatCompletionChunk>,
   client: MatrixClient,
   room: Room,
-  error: any,
-  eventToUpdate: string | undefined,
+  append_to?: string,
 ) {
-  if (error instanceof OpenAIError) {
-    log.error(`OpenAI error: ${error.name} - ${error.message}`);
-  } else {
-    log.error(`Unknown error: ${error}`);
+  let unsent = 0;
+  let lastUnsentMessage = undefined;
+  for await (const message of processStream(extractContentFromStream(stream))) {
+    // If we've not got a current message to edit and we're processing text
+    // rather than structured data, start a new message to update.
+    if (message.type == ParsingMode.Text) {
+      // If there's no message to append to, just send the message
+      // If there's more than 20 pending messages, send the message
+      if (!append_to) {
+        let initialMessage = await sendMessage(
+          client,
+          room,
+          message.content,
+          append_to,
+        );
+        unsent = 0;
+        lastUnsentMessage = undefined;
+        append_to = initialMessage.event_id;
+      }
+
+      if (unsent > 20) {
+        await sendMessage(client, room, message.content, append_to);
+        unsent = 0;
+      } else {
+        lastUnsentMessage = message;
+        unsent += 1;
+      }
+    }
+
+    if (message.type == ParsingMode.Command) {
+      if (lastUnsentMessage) {
+        await sendMessage(client, room, lastUnsentMessage.content, append_to);
+        lastUnsentMessage = undefined;
+      }
+      await sendOption(client, room, message.content);
+      unsent = 0;
+      append_to = undefined;
+    }
   }
-  try {
-    await sendMessage(
-      client,
-      room,
-      'There was an error processing your request, please try again later',
-      eventToUpdate,
-      {
-        isStreamingFinished: true,
-      },
-    );
-  } catch (e) {
-    // We've had a problem sending the error message back to the user
-    // Log and continue
-    log.error(`Error sending error message back to user: ${e}`);
-    Sentry.captureException(e);
+
+  // Make sure we send any remaining content at the end of the stream
+  if (lastUnsentMessage) {
+    await sendMessage(client, room, lastUnsentMessage.content, append_to);
   }
 }
 
-async function setTitle(
-  client: MatrixClient,
-  room: Room,
-  history: DiscreteMatrixEvent[],
-  userId: string,
-) {
-  let startOfConversation = [
+function getLastUploadedCardID(history: IRoomEvent[]): String | undefined {
+  for (let event of history.slice().reverse()) {
+    const content = event.content;
+    if (content.msgtype === 'org.boxel.card') {
+      let card = content.instance.data;
+      return card.id;
+    }
+  }
+  return undefined;
+}
+
+async function getResponse(history: IRoomEvent[]) {
+  let historical_messages: Message[] = [];
+  log.info(history);
+  for (let event of history) {
+    let body = event.content.body;
+    log.info(event.sender, body);
+    if (body) {
+      if (event.sender === aiBotUsername) {
+        historical_messages.push({
+          role: 'assistant',
+          content: body,
+        });
+      } else {
+        historical_messages.push({
+          role: 'user',
+          content: getUserMessage(event),
+        });
+      }
+    }
+  }
+  let messages: Message[] = [
     {
       role: 'system',
-      content: `You are a chat titling system, you must read the conversation and return a suggested title of no more than six words.
-              Do NOT say talk or discussion or discussing or chat or chatting, this is implied by the context.
-              Explain the general actions and user intent.`,
-    } as OpenAIPromptMessage,
-    ...getStartOfConversation(history, userId),
+      content: MODIFY_SYSTEM_MESSAGE,
+    },
   ];
-  startOfConversation.push({
-    role: 'user',
-    content: 'Create a short title for this chat, limited to 6 words.',
-  });
-  try {
-    let result = await openai.chat.completions.create(
-      {
-        model: 'gpt-3.5-turbo-1106',
-        messages: startOfConversation,
-        stream: false,
-      },
-      {
-        maxRetries: 5,
-      },
-    );
-    let title = result.choices[0].message.content || 'no title';
-    // strip leading and trailing quotes
-    title = title.replace(/^"(.*)"$/, '$1');
-    log.info('Setting room title to', title);
-    return await client.setRoomName(room.roomId, title);
-  } catch (error) {
-    Sentry.captureException(error);
-    return await sendError(client, room, error, undefined);
-  }
-}
 
-async function handleDebugCommands(
-  eventBody: string,
-  client: MatrixClient,
-  room: Room,
-  history: DiscreteMatrixEvent[],
-  userId: string,
-) {
-  // Explicitly set the room name
-  if (eventBody.startsWith('debug:title:set:')) {
-    return await client.setRoomName(
-      room.roomId,
-      eventBody.split('debug:title:set:')[1],
-    );
-  } else if (eventBody.startsWith('debug:boom')) {
-    await sendMessage(client, room, `Throwing an unhandled error`, undefined);
-    throw new Error('Boom');
-  }
-  // Use GPT to set the room title
-  else if (eventBody.startsWith('debug:title:create')) {
-    return await setTitle(client, room, history, userId);
-  } else if (eventBody.startsWith('debug:patch:')) {
-    let patchMessage = eventBody.split('debug:patch:')[1];
-    // If there's a card attached, we need to split it off to parse the json
-    patchMessage = patchMessage.split('(Card')[0];
-    let command: {
-      card_id?: string;
-      description?: string;
-      attributes?: any;
-    } = {};
-    try {
-      command = JSON.parse(patchMessage);
-      if (!command.card_id || !command.description || !command.attributes) {
-        throw new Error(
-          'Invalid debug patch: card_id, description, or attributes is missing.',
-        );
-      }
-    } catch (error) {
-      Sentry.captureException(error);
-      return await sendMessage(
-        client,
-        room,
-        `Error parsing your debug patch, ${error} ${patchMessage}`,
-        undefined,
-      );
-    }
-    return await sendOption(client, room, command, undefined);
-  }
+  messages = messages.concat(historical_messages);
+  log.info(messages);
+  return await openai.chat.completions.create({
+    model: 'gpt-4',
+    messages: messages,
+    stream: true,
+  });
 }
 
 (async () => {
-  const matrixUrl = process.env.MATRIX_URL || 'http://localhost:8008';
   let client = createClient({
-    baseUrl: matrixUrl,
+    baseUrl: process.env.MATRIX_URL || 'http://localhost:8008',
   });
-  let auth = await client
-    .loginWithPassword(
-      aiBotUsername,
-      process.env.BOXEL_AIBOT_PASSWORD || 'pass',
-    )
-    .catch((e) => {
-      log.error(e);
-      log.info(`The matrix bot could not login to the server.
-Common issues are:
-- The server is not running (configured to use ${matrixUrl})
-   - Check it is reachable at ${matrixUrl}/_matrix/client/versions
-   - If running in development, check the docker container is running (see the boxel README)
-- The bot is not registered on the matrix server
-  - The bot uses the username ${aiBotUsername}
-- The bot is registered but the password is incorrect
-   - The bot password ${
-     process.env.BOXEL_AIBOT_PASSWORD
-       ? 'is set in the env var, check it is correct'
-       : 'is not set in the env var so defaults to "pass"'
-   }
-      `);
-      process.exit(1);
-    });
-  let { user_id: aiBotUserId } = auth;
+  let auth = await client.loginWithPassword(
+    aiBotUsername,
+    process.env.BOXEL_AIBOT_PASSWORD || 'pass',
+  );
+  let { user_id } = auth;
   client.on(RoomMemberEvent.Membership, function (_event, member) {
-    if (member.membership === 'invite' && member.userId === aiBotUserId) {
+    if (member.membership === 'invite' && member.userId === user_id) {
       client
         .joinRoom(member.roomId)
         .then(function () {
@@ -311,11 +283,15 @@ Common issues are:
   client.on(
     RoomEvent.Timeline,
     async function (event, room, toStartOfTimeline) {
-      let eventBody = event.getContent().body;
       if (!room) {
         return;
       }
-      log.info('(%s) %s :: %s', room?.name, event.getSender(), eventBody);
+      log.info(
+        '(%s) %s :: %s',
+        room?.name,
+        event.getSender(),
+        event.getContent().body,
+      );
 
       if (event.event.origin_server_ts! < startTime) {
         return;
@@ -326,99 +302,62 @@ Common issues are:
       if (event.getType() !== 'm.room.message') {
         return; // only print messages
       }
-      if (event.getContent().msgtype === 'org.boxel.cardFragment') {
-        return; // don't respond to card fragments, we just gather these in our history
-      }
-      if (event.getSender() === aiBotUserId) {
+      if (event.getSender() === user_id) {
         return;
       }
-
-      let initialMessage = await sendMessage(
-        client,
-        room,
+      let initialMessage: ISendEventResponse = await client.sendHtmlMessage(
+        room!.roomId,
         'Thinking...',
-        undefined,
+        'Thinking...',
       );
 
       let initial = await client.roomInitialSync(room!.roomId, 1000);
-      let eventList = (initial!.messages?.chunk || []) as DiscreteMatrixEvent[];
+      let eventList = initial!.messages?.chunk || [];
       log.info(eventList);
 
       log.info('Total event list', eventList.length);
-      let history: DiscreteMatrixEvent[] = constructHistory(eventList);
+      let history: IRoomEvent[] = constructHistory(eventList);
       log.info("Compressed into just the history that's ", history.length);
 
-      // To assist debugging, handle explicit commands
-      if (eventBody.startsWith('debug:')) {
-        return await handleDebugCommands(
-          eventBody,
-          client,
-          room,
-          history,
-          aiBotUserId,
+      // While developing the frontend it can be handy to skip GPT and just return some data
+      if (event.getContent().body.startsWith('debugpatch:')) {
+        let body = event.getContent().body;
+        let patchMessage = body.split('debugpatch:')[1];
+        // If there's a card attached, we need to split it off to parse the json
+        patchMessage = patchMessage.split('(Card')[0];
+        let attributes = {};
+        try {
+          attributes = JSON.parse(patchMessage);
+        } catch (error) {
+          await sendMessage(
+            client,
+            room,
+            'Error parsing your debug patch as JSON: ' + patchMessage,
+            initialMessage.event_id,
+          );
+        }
+        let messageObject = {
+          body: 'some response, a patch',
+          msgtype: 'org.boxel.command',
+          formatted_body: 'some response, a patch',
+          format: 'org.matrix.custom.html',
+          command: {
+            type: 'patch',
+            id: getLastUploadedCardID(history),
+            patch: {
+              attributes: attributes,
+            },
+          },
+        };
+        return await client.sendEvent(
+          room.roomId,
+          'm.room.message',
+          messageObject,
         );
       }
 
-      let unsent = 0;
-      let sentCommands = 0;
-      const runner = getResponse(history, aiBotUserId)
-        .on('content', async (_delta, snapshot) => {
-          unsent += 1;
-          if (unsent > 5) {
-            unsent = 0;
-            await sendMessage(
-              client,
-              room,
-              cleanContent(snapshot),
-              initialMessage.event_id,
-            );
-          }
-        })
-        .on('functionCall', async (functionCall) => {
-          console.log('Function call', functionCall);
-          let args;
-          try {
-            args = JSON.parse(functionCall.arguments);
-          } catch (error) {
-            Sentry.captureException(error);
-            return await sendError(
-              client,
-              room,
-              error,
-              initialMessage.event_id,
-            );
-          }
-          if (functionCall.name === 'patchCard') {
-            sentCommands += 1;
-            return await sendOption(
-              client,
-              room,
-              args,
-              initialMessage.event_id,
-            );
-          }
-          return;
-        })
-        .on('error', async (error: OpenAIError) => {
-          Sentry.captureException(error);
-          return await sendError(client, room, error, initialMessage.event_id);
-        });
-
-      // We also need to catch the error when getting the final content
-      let finalContent = await runner.finalContent().catch(async (error) => {
-        return await sendError(client, room, error, initialMessage.event_id);
-      });
-      if (finalContent) {
-        finalContent = cleanContent(finalContent);
-        await sendMessage(client, room, finalContent, initialMessage.event_id, {
-          isStreamingFinished: true,
-        });
-      }
-
-      if (shouldSetRoomTitle(eventList, aiBotUserId, sentCommands)) {
-        return await setTitle(client, room, history, aiBotUserId);
-      }
-      return;
+      const stream = await getResponse(history);
+      return await sendStream(stream, client, room, initialMessage.event_id);
     },
   );
 

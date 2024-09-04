@@ -11,22 +11,17 @@ import {
 } from './card-api';
 import StringField from './string';
 import BooleanField from './boolean';
-import CodeRef from './code-ref';
-import {
-  baseCardRef,
-  isFieldDef,
-  loadCard,
-  Loader,
-} from '@cardstack/runtime-common';
+import CardRefCard from './code-ref';
+import { baseCardRef, loadCard, Loader } from '@cardstack/runtime-common';
 import { isEqual } from 'lodash';
-import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { FieldContainer } from '@cardstack/boxel-ui';
 import GlimmerComponent from '@glimmer/component';
 
 export class CatalogEntry extends CardDef {
   static displayName = 'Catalog Entry';
   @field title = contains(StringField);
   @field description = contains(StringField);
-  @field ref = contains(CodeRef);
+  @field ref = contains(CardRefCard);
   @field isPrimitive = contains(BooleanField, {
     computeVia: async function (this: CatalogEntry) {
       let loader = Loader.getLoaderFor(Object.getPrototypeOf(this).constructor);
@@ -49,27 +44,6 @@ export class CatalogEntry extends CardDef {
       return primitive in card || isEqual(baseCardRef, this.ref);
     },
   });
-  // If it's not a field, then it's a card
-  @field isField = contains(BooleanField, {
-    computeVia: async function (this: CatalogEntry) {
-      let loader = Loader.getLoaderFor(Object.getPrototypeOf(this).constructor);
-
-      if (!loader) {
-        throw new Error(
-          'Could not find a loader for this instance’s class’s module',
-        );
-      }
-
-      let card: typeof BaseDef | undefined = await loadCard(this.ref, {
-        loader,
-        relativeTo: this[relativeTo],
-      });
-      if (!card) {
-        throw new Error(`Could not load card '${this.ref.name}'`);
-      }
-      return isFieldDef(card);
-    },
-  });
   @field moduleHref = contains(StringField, {
     computeVia: function (this: CatalogEntry) {
       return new URL(this.ref.module, this[relativeTo]).href;
@@ -84,7 +58,7 @@ export class CatalogEntry extends CardDef {
   @field thumbnailURL = contains(StringField, { computeVia: () => null }); // remove this if we want card type entries to have images
 
   get showDemo() {
-    return !this.isField;
+    return !this.isPrimitive;
   }
 
   // An explicit edit template is provided since computed isPrimitive bool
@@ -106,7 +80,7 @@ export class CatalogEntry extends CardDef {
         <FieldContainer @label='Ref' data-test-field='ref'>
           <@fields.ref />
         </FieldContainer>
-        <FieldContainer @label='Workspace Name' data-test-field='realmName'>
+        <FieldContainer @label='Realm Name' data-test-field='realmName'>
           <@fields.realmName />
         </FieldContainer>
         <FieldContainer @vertical={{true}} @label='Demo' data-test-field='demo'>
@@ -148,7 +122,7 @@ export class CatalogEntry extends CardDef {
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <CatalogEntryContainer class='container'>
+      <CatalogEntryContainer>
         <h1 data-test-title><@fields.title /></h1>
         <em data-test-description><@fields.description /></em>
         <div data-test-ref>
@@ -164,15 +138,8 @@ export class CatalogEntry extends CardDef {
         {{#if @model.showDemo}}
           <div data-test-demo><@fields.demo /></div>
         {{/if}}
-        {{! field needs to be used in order to be indexed }}
-        {{#if @model.isPrimitive}}
-          <div>Field is primitive</div>
-        {{/if}}
       </CatalogEntryContainer>
       <style>
-        .container {
-          padding: var(--boxel-sp);
-        }
         .realm-name {
           color: var(--boxel-teal);
           font-size: var(--boxel-font-size-xs);

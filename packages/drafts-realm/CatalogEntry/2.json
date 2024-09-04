@@ -7,9 +7,16 @@
         "module": "../pet",
         "name": "Pet"
       },
-      "demo": {}
+      "demo": {
+        "firstName": "Jackie",
+        "sleepsOnTheCouch": true
+      }
     },
     "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      },
       "fields": {
         "demo": {
           "adoptsFrom": {
@@ -17,10 +24,6 @@
             "name": "Pet"
           }
         }
-      },
-      "adoptsFrom": {
-        "module": "https://cardstack.com/base/catalog-entry",
-        "name": "CatalogEntry"
       }
     },
     "type": "card"

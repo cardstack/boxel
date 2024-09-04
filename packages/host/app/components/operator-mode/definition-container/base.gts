@@ -1,29 +1,22 @@
-import { on } from '@ember/modifier';
+import Label from '@cardstack/boxel-ui/components/label';
 import Component from '@glimmer/component';
-
-import {
-  Button,
-  CardContainer,
-  Header,
-  Label,
-} from '@cardstack/boxel-ui/components';
-
-import type { Icon } from '@cardstack/boxel-ui/icons';
-
-import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
-import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import { on } from '@ember/modifier';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import { Button } from '@cardstack/boxel-ui';
+import { type RealmInfo } from '@cardstack/runtime-common';
 
 interface Action {
   label: string;
-  handler: (args: any) => void | Promise<void>; // TODO: narrow this for each type of module
-  icon: Icon;
+  handler: () => void;
+  icon: string;
 }
 export interface BaseArgs {
   title: string | undefined;
   name: string | undefined;
-  fileExtension: string | undefined;
+  fileExtension: string;
+  realmInfo: RealmInfo | null;
+  realmIconURL: string | null | undefined;
   isActive: boolean;
-  fileURL?: string;
 }
 
 interface BaseSignature {
@@ -35,65 +28,71 @@ interface BaseSignature {
 }
 
 export class BaseDefinitionContainer extends Component<BaseSignature> {
+  get realmName(): string | undefined {
+    return this.args.realmInfo?.name;
+  }
+
   <template>
-    <CardContainer class='card-container' ...attributes>
-      <Header
-        @title={{@title}}
-        @hasBackground={{true}}
-        class='header {{if @isActive "active"}}'
-        data-test-definition-header
-      >
-        <:detail>
-          <div data-test-definition-file-extension>
-            {{@fileExtension}}
-          </div>
-        </:detail>
-      </Header>
+    <div class='container {{if @isActive "active"}}' ...attributes>
+      <div class='banner'>
+        <Label class='banner-title'>
+          {{@title}}</Label>
+        <span
+          class='banner-title'
+          data-test-definition-file-extension
+        >{{@fileExtension}}</span>
+      </div>
       <div class='content'>
         <div class='definition-info'>
-          {{#if @fileURL}}
-            <RealmInfoProvider @fileURL={{@fileURL}}>
-              <:ready as |realmInfo|>
-                <div class='realm-info'>
-                  <RealmIcon
-                    @realmIconURL={{realmInfo.iconURL}}
-                    @realmName={{realmInfo.name}}
-                  />
-                  <Label class='realm-name' data-test-definition-realm-name>in
-                    {{realmInfo.name}}</Label>
-                </div>
-              </:ready>
-            </RealmInfoProvider>
-          {{/if}}
+          <div class='realm-info'>
+            <img src={{@realmIconURL}} alt='realm-icon' />
+            <Label class='realm-name' data-test-definition-realm-name>in
+              {{this.realmName}}</Label>
+          </div>
           <div data-test-definition-name class='definition-name'>{{@name}}</div>
-
         </div>
         {{#if @isActive}}
           {{yield to='activeContent'}}
         {{/if}}
       </div>
-    </CardContainer>
+
+    </div>
 
     <style>
-      .card-container {
-        overflow: hidden;
-        overflow-wrap: anywhere;
+      .container {
+        background-color: var(--boxel-light);
+        border-radius: var(--boxel-border-radius);
+        gap: var(--boxel-sp-xxs);
       }
-      .header {
-        --boxel-header-text-size: var(--boxel-font-size-sm);
-        --boxel-header-padding: var(--boxel-sp-xs);
-        --boxel-header-text-size: var(--boxel-font-size-sm);
-        --boxel-header-text-transform: uppercase;
-        --boxel-header-letter-spacing: var(--boxel-lsp-xxl);
-        --boxel-header-detail-margin-left: auto;
-        --boxel-header-detail-max-width: none;
-        --boxel-header-background-color: var(--boxel-100);
-        --boxel-header-text-color: var(--boxel-450);
+      .banner {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-sm) var(--boxel-sp-xxs);
+        border-top-left-radius: var(--boxel-border-radius);
+        border-top-right-radius: var(--boxel-border-radius);
+        background-color: var(--boxel-100);
+      }
+      .banner-title {
+        color: #919191;
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 200;
+        letter-spacing: var(--boxel-lsp-xxl);
+        text-transform: uppercase;
+      }
+      .active {
+        box-shadow: var(--boxel-box-shadow-hover);
       }
 
-      .header.active {
-        --boxel-header-background-color: var(--boxel-highlight);
-        --boxel-header-text-color: var(--boxel-light);
+      .active .banner {
+        background-color: var(--boxel-highlight);
+      }
+
+      .active .banner-title {
+        color: var(--boxel-light);
+      }
+      .active .file-extension {
+        color: var(--boxel-light);
       }
       .content {
         display: flex;
@@ -145,37 +144,30 @@ export class Active extends Component<ActiveSignature> {
         <Button
           data-test-action-button='{{actionButton.label}}'
           class='action-button'
-          @size='small'
-          @kind='text-only'
           {{on 'click' actionButton.handler}}
         >
-          <actionButton.icon width='20px' height='20px' />
+          {{svgJar actionButton.icon width='24px' height='24px'}}
           {{actionButton.label}}
         </Button>
       {{/each}}
-      <div
-        class='info-footer'
-        data-test-definition-info-text
-        data-test-percy-hide
-      >
+      <div class='info-footer' data-test-definition-info-text>
         <div class='message'>{{@infoText}}</div>
       </div>
     </div>
     <style>
       .action-buttons {
-        display: grid;
-        grid-auto-columns: max-content;
-        gap: var(--boxel-sp-4xs);
+        display: flex;
+        flex-direction: column;
       }
       .action-button {
-        --boxel-button-padding: 0 var(--boxel-sp-4xs);
+        --boxel-button-text-color: var(--boxel-highlight);
+        --boxel-button-padding: 0px;
         --icon-color: var(--boxel-highlight);
+        color: var(--boxel-highlight);
+        border: none;
         justify-content: flex-start;
-        gap: var(--boxel-sp-xxs);
+        gap: var(--boxel-sp-xs);
         align-self: flex-start;
-      }
-      .action-button:hover:not(:disabled) {
-        --icon-color: var(--boxel-highlight-hover);
       }
       .info-footer {
         margin-top: var(--boxel-sp-sm);

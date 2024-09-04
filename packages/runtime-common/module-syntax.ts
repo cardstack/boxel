@@ -1,36 +1,22 @@
+import generate from '@babel/generator';
 import * as Babel from '@babel/core';
-import { parse as babelParse } from '@babel/parser';
-import { parse, print } from 'recast';
 import {
   schemaAnalysisPlugin,
-  type Options,
-  type PossibleCardOrFieldDeclaration,
-  type Declaration,
-  type BaseDeclaration,
-  type ClassReference,
-  type FunctionDeclaration,
-  type ClassDeclaration,
-  type Reexport,
-  isInternalReference,
+  Options,
+  PossibleCardClass,
+  ClassReference,
+  ExternalReference,
 } from './schema-analysis-plugin';
 import {
   removeFieldPlugin,
   Options as RemoveOptions,
 } from './remove-field-plugin';
 import { ImportUtil } from 'babel-import-util';
+import startCase from 'lodash/startCase';
 import camelCase from 'lodash/camelCase';
 import upperFirst from 'lodash/upperFirst';
-import isEqual from 'lodash/isEqual';
 import { parseTemplates } from '@cardstack/ember-template-imports/lib/parse-templates';
-import {
-  baseRealm,
-  maybeRelativeURL,
-  trimExecutableExtension,
-  codeRefWithAbsoluteURL,
-  baseCardRef,
-  baseFieldRef,
-  type CodeRef,
-} from './index';
+import { baseRealm } from './index';
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from '@babel/plugin-syntax-decorators';
 //@ts-ignore unsure where these types live
@@ -38,98 +24,56 @@ import classPropertiesPlugin from '@babel/plugin-syntax-class-properties';
 //@ts-ignore unsure where these types live
 import typescriptPlugin from '@babel/plugin-syntax-typescript';
 
-import { getBabelOptions } from './babel-options';
-
 import type { types as t } from '@babel/core';
 import type { NodePath } from '@babel/traverse';
 import type { FieldType } from 'https://cardstack.com/base/card-api';
 
-export type {
-  PossibleCardOrFieldDeclaration,
-  Declaration,
-  BaseDeclaration,
-  FunctionDeclaration,
-  ClassDeclaration,
-  Reexport,
-};
-export { isInternalReference };
+export type { ClassReference, ExternalReference };
 
 export class ModuleSyntax {
-  declare possibleCardsOrFields: PossibleCardOrFieldDeclaration[];
-  declare declarations: Declaration[];
+  declare possibleCards: PossibleCardClass[];
   private declare ast: t.File;
-  private url: URL;
 
-  constructor(src: string, url: URL) {
-    this.url = trimExecutableExtension(url);
+  constructor(src: string) {
     this.analyze(src);
   }
 
   private analyze(src: string) {
     let moduleAnalysis: Options = {
-      possibleCardsOrFields: [],
-      declarations: [],
+      possibleCards: [],
     };
     let preprocessedSrc = preprocessTemplateTags(src);
 
-    let ast: Babel.types.Node = parse(preprocessedSrc, {
-      parser: {
-        parse(source: string) {
-          const options =
-            getBabelOptions(/*optionally pass in option overrides*/);
-          return babelParse(source, options);
-        },
-      },
-    });
-
-    let r = Babel.transformFromAstSync(ast, preprocessedSrc, {
+    this.ast = Babel.transformSync(preprocessedSrc, {
       code: false,
       ast: true,
-      cloneInputAst: false,
       plugins: [
         typescriptPlugin,
         [decoratorsPlugin, { legacy: true }],
         classPropertiesPlugin,
         [schemaAnalysisPlugin, moduleAnalysis],
       ],
-    });
-    this.ast = r!.ast!;
-    this.possibleCardsOrFields = moduleAnalysis.possibleCardsOrFields;
-    this.declarations = moduleAnalysis.declarations;
+    })!.ast!;
+    this.possibleCards = moduleAnalysis.possibleCards;
   }
 
   code(): string {
-    let preprocessedSrc: string = print(this.ast).code;
+    let preprocessedSrc = generate(this.ast).code;
     return preprocessedSrc.replace(
-      /\[templte\(`([^`].*?)`\)\]/gs,
+      /\[templte\(`([^`].*?)`\)\];/gs,
       `<template>$1</template>`,
     );
   }
 
-  // A note about incomingRelativeTo and outgoingRelativeTo - path parameters in input (e.g. field module path) and output (e.g. field import path) are
-  // relative to some path, and we use these parameters to determine what that path is so that the emitted code has correct relative paths.
-  addField({
-    cardBeingModified,
-    fieldName,
-    fieldRef,
-    fieldType,
-    fieldDefinitionType,
-    incomingRelativeTo,
-    outgoingRelativeTo,
-    outgoingRealmURL,
-    addFieldAtIndex,
-  }: {
-    cardBeingModified: CodeRef;
-    fieldName: string;
-    fieldRef: { name: string; module: string }; // module could be a relative path
-    fieldType: FieldType;
-    fieldDefinitionType: 'card' | 'field';
-    incomingRelativeTo: URL | undefined; // can be undefined when you know the url is not going to be relative
-    outgoingRelativeTo: URL | undefined; // can be undefined when you know url is not going to be relative
-    outgoingRealmURL: URL | undefined; // should be provided when the other 2 params are provided
-    addFieldAtIndex?: number; // if provided, the field will be added at the specified index in the card's possibleFields map
-  }) {
-    let card = this.getCard(cardBeingModified);
+  addField(
+    cardName:
+      | { type: 'exportedName'; name: string }
+      | { type: 'localName'; name: string },
+    fieldName: string,
+    fieldRef: { name: string; module: string },
+    fieldType: FieldType,
+  ) {
+    let card = this.getCard(cardName);
     if (card.possibleFields.has(fieldName)) {
       // At this level, we can only see this specific module. we'll need the
       // upstream caller to perform a field existence check on the card
@@ -137,88 +81,43 @@ export class ModuleSyntax {
       throw new Error(`the field "${fieldName}" already exists`);
     }
 
-    let newField = makeNewField({
-      target: card.path,
+    let newField = makeNewField(
+      card.path,
       fieldRef,
       fieldType,
       fieldName,
-      fieldDefinitionType,
-      cardBeingModified,
-      incomingRelativeTo,
-      outgoingRelativeTo,
-      outgoingRealmURL,
-      moduleURL: this.url,
-    });
-
+      cardName.name,
+    );
     let src = this.code();
     this.analyze(src); // reanalyze to update node start/end positions based on AST mutation
-    card = this.getCard(cardBeingModified); // re-get the card to get the updated node positions
 
     let insertPosition: number;
-    if (
-      addFieldAtIndex !== undefined &&
-      addFieldAtIndex < card.possibleFields.size
-    ) {
-      let field = Array.from(card.possibleFields.entries())[addFieldAtIndex][1];
-      ({ insertPosition, indentedField: newField } = insertFieldBeforePath(
-        newField,
-        field.path,
-        src,
-      ));
-    } else {
-      let lastField = [...card.possibleFields.values()].pop();
-      if (lastField) {
-        lastField = [...card.possibleFields.values()].pop()!;
-        ({ insertPosition, indentedField: newField } = insertFieldAfterPath(
-          newField,
-          lastField.path,
-          src,
-        ));
-      } else {
-        // calculate the position and indent based on an existing class member
-        // and barring that use the class body with an indentation of 2 spaces
-        let body = card.path.get('body');
-        let [classMember] = body.get('body');
-        if (classMember) {
-          ({ insertPosition, indentedField: newField } = insertFieldBeforePath(
-            newField,
-            classMember,
-            src,
-          ));
-        } else {
-          if (typeof body.node.start !== 'number') {
-            throw new Error(
-              `bug: could not determine the string start position of the class body to insert the new field`,
-            );
-          }
-          if (typeof body.node.end !== 'number') {
-            throw new Error(
-              `bug: could not determine the string start position of the class body to insert the new field`,
-            );
-          }
-          let startOfLine =
-            src.substring(0, body.node.start).lastIndexOf('\n') + 1;
-          let indent = src.substring(startOfLine).search(/\S/); // location of first non-whitespace char
-          insertPosition =
-            src.substring(0, body.node.end).lastIndexOf('\n') + 1;
-          if (insertPosition < body.node.start + 1) {
-            // need to manufacture new lines
-            insertPosition = body.node.end - 1;
-            newField = `\n${' '.repeat(indent + 2)}${newField}\n${' '.repeat(
-              indent,
-            )}`;
-          } else {
-            newField = `${' '.repeat(indent + 2)}${newField}\n`;
-          }
-        }
+    let lastField = [...card.possibleFields.values()].pop();
+    if (lastField) {
+      lastField = [...this.getCard(cardName).possibleFields.values()].pop()!;
+      if (typeof lastField.path.node.end !== 'number') {
+        throw new Error(
+          `bug: could not determine the string end position to insert the new field`,
+        );
       }
+      insertPosition = lastField.path.node.end;
+    } else {
+      let bodyStart = this.getCard(cardName).path.get('body').node.start;
+      if (typeof bodyStart !== 'number') {
+        throw new Error(
+          `bug: could not determine the string end position to insert the new field`,
+        );
+      }
+      insertPosition = bodyStart + 1;
     }
 
     // we use string manipulation to add the field into the src so that we
     // don't have to suffer babel's decorator transpilation
-    src = `${src.substring(0, insertPosition)}${newField}${src.substring(
-      insertPosition,
-    )}`;
+    src = `
+      ${src.substring(0, insertPosition)}
+      ${newField}
+      ${src.substring(insertPosition)}
+    `;
     // analyze one more time to incorporate the new field
     this.analyze(src);
   }
@@ -228,36 +127,21 @@ export class ModuleSyntax {
   // child cards. Removing a field that is consumed by this card or cards that
   // adopt from this card will cause runtime errors. We'd probably need to rely
   // on card compilation to be able to guard for this scenario
-  removeField(cardBeingModified: CodeRef, fieldName: string) {
-    let card = this.getCard(cardBeingModified);
+  removeField(
+    cardName:
+      | { type: 'exportedName'; name: string }
+      | { type: 'localName'; name: string },
+    fieldName: string,
+  ) {
+    let card = this.getCard(cardName);
     let field = card.possibleFields.get(fieldName);
     if (!field) {
       throw new Error(`field "${fieldName}" does not exist`);
     }
 
-    let fieldIndex = Array.from(card.possibleFields.entries())
-      .map((f) => f[0])
-      .indexOf(fieldName);
-
-    // we need to re-parse the AST with recast before we transform it again so
-    // that we don't lose the decorations that recast performs on the AST in
-    // order to track Node provenance. basically every babel transform needs to
-    // be fed an AST from a recast parse
-    let preprocessedSrc = preprocessTemplateTags(this.code());
-    let ast: Babel.types.Node = parse(preprocessedSrc, {
-      parser: {
-        parse(source: string) {
-          const options =
-            getBabelOptions(/*optionally pass in option overrides*/);
-          return babelParse(source, options);
-        },
-      },
-    });
-
-    this.ast = Babel.transformFromAstSync(ast, undefined, {
+    this.ast = Babel.transformFromAstSync(this.ast, undefined, {
       code: false,
       ast: true,
-      cloneInputAst: false,
       plugins: [
         typescriptPlugin,
         [decoratorsPlugin, { legacy: true }],
@@ -267,77 +151,28 @@ export class ModuleSyntax {
     })!.ast!;
 
     this.analyze(this.code());
-
-    return fieldIndex; // Useful for re-adding a new field in the same position (i.e editing a field, which is composed of removeField and addField)
   }
 
-  // This function performs the same job as
-  // @cardstack/runtime-common/code-ref.ts#loadCard() but using syntax instead
-  // of running code
-  private getCard(codeRef: CodeRef): PossibleCardOrFieldDeclaration {
-    let cardOrFieldClass: PossibleCardOrFieldDeclaration | undefined;
-    if (!('type' in codeRef)) {
-      cardOrFieldClass = this.possibleCardsOrFields.find(
-        (c) => c.exportName === codeRef.name,
-      );
-    } else if (codeRef.type === 'ancestorOf') {
-      let classRef = this.getCard(codeRef.card).super;
-      if (!classRef) {
-        throw new Error(
-          `Could not determine the ancestor of ${JSON.stringify(
-            codeRef,
-          )} in module ${this.url.href}`,
-        );
-      }
-      cardOrFieldClass = this.getPossibleCardForClassReference(classRef);
-    } else if (codeRef.type === 'fieldOf') {
-      let parentCard = this.getCard(codeRef.card);
-      let field = parentCard.possibleFields.get(codeRef.field);
-      if (!field) {
-        throw new Error(
-          `interior card ${JSON.stringify(codeRef)} has no field '${
-            codeRef.field
-          }' in module ${this.url.href}`,
-        );
-      }
-      cardOrFieldClass = this.getPossibleCardForClassReference(field.card);
-    }
-    if (!cardOrFieldClass) {
-      throw new Error(
-        `cannot find card ${JSON.stringify(codeRef)} in module ${
-          this.url.href
-        }`,
-      );
-    }
-    return cardOrFieldClass;
-  }
-
-  private getPossibleCardForClassReference(
-    classRef: ClassReference,
-  ): PossibleCardOrFieldDeclaration | undefined {
-    if (classRef.type === 'external') {
-      if (
-        trimExecutableExtension(new URL(classRef.module, this.url)) === this.url
-      ) {
-        return this.possibleCardsOrFields.find(
-          (c) => c.exportName === classRef.name,
-        );
-      }
-      throw new Error(
-        `Don't know how to resolve external class reference ${JSON.stringify(
-          classRef,
-        )} into a card/field. Module syntax only has knowledge of this particular module ${
-          this.url.href
-        }.`,
-      );
+  private getCard(
+    card:
+      | { type: 'exportedName'; name: string }
+      | { type: 'localName'; name: string },
+  ): PossibleCardClass {
+    let cardName = card.name;
+    let cardClass: PossibleCardClass | undefined;
+    if (card.type === 'exportedName') {
+      cardClass = this.possibleCards.find((c) => c.exportedAs === cardName);
     } else {
-      if (classRef.classIndex == null) {
-        throw new Error(
-          `Cannot resolve class reference with undefined 'classIndex' when looking up interior card/field in module ${this.url.href}`,
-        );
-      }
-      return this.possibleCardsOrFields[classRef.classIndex];
+      cardClass = this.possibleCards.find((c) => c.localName === cardName);
     }
+    if (!cardClass) {
+      throw new Error(
+        `cannot find card with ${startCase(
+          card.type,
+        ).toLowerCase()} of "${cardName}" in module`,
+      );
+    }
+    return cardClass;
   }
 }
 
@@ -362,29 +197,13 @@ function preprocessTemplateTags(src: string): string {
   return output.join('');
 }
 
-function makeNewField({
-  target,
-  fieldRef,
-  fieldType,
-  fieldName,
-  fieldDefinitionType,
-  cardBeingModified,
-  incomingRelativeTo,
-  outgoingRelativeTo,
-  outgoingRealmURL,
-  moduleURL,
-}: {
-  target: NodePath<t.Node>;
-  fieldRef: { name: string; module: string };
-  fieldDefinitionType: 'card' | 'field';
-  fieldType: FieldType;
-  fieldName: string;
-  cardBeingModified: CodeRef;
-  incomingRelativeTo: URL | undefined;
-  outgoingRelativeTo: URL | undefined;
-  outgoingRealmURL: URL | undefined;
-  moduleURL: URL;
-}): string {
+function makeNewField(
+  target: NodePath<t.Node>,
+  fieldRef: { name: string; module: string },
+  fieldType: FieldType,
+  fieldName: string,
+  cardName: string,
+): string {
   let programPath = getProgramPath(target);
   //@ts-ignore ImportUtil doesn't seem to believe our Babel.types is a
   //typeof Babel.types
@@ -404,35 +223,17 @@ function makeNewField({
 
   if (
     (fieldType === 'linksTo' || fieldType === 'linksToMany') &&
-    isEqual(
-      codeRefWithAbsoluteURL(fieldRef, moduleURL, {
-        trimExecutableExtension: true,
-      }),
-      codeRefWithAbsoluteURL(cardBeingModified, moduleURL, {
-        trimExecutableExtension: true,
-      }),
-    )
+    cardName === fieldRef.name
   ) {
     // syntax for when a card has a linksTo or linksToMany field to a card with the same type as itself
-    return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(() => ${fieldRef.name});`;
-  }
-
-  let relativeFieldModuleRef;
-  if (incomingRelativeTo && outgoingRelativeTo) {
-    relativeFieldModuleRef = maybeRelativeURL(
-      new URL(fieldRef.module, incomingRelativeTo),
-      outgoingRelativeTo,
-      outgoingRealmURL,
-    );
-  } else {
-    relativeFieldModuleRef = fieldRef.module;
+    return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(() => ${cardName});`;
   }
 
   let fieldCardIdentifier = importUtil.import(
     target as NodePath<any>,
-    relativeFieldModuleRef,
+    fieldRef.module,
     fieldRef.name,
-    suggestedCardName(fieldRef, fieldDefinitionType),
+    suggestedCardName(fieldRef),
   );
 
   if (
@@ -443,7 +244,7 @@ function makeNewField({
     return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(${fieldCardIdentifier.name});`;
   }
 
-  return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(${fieldCardIdentifier.name});`;
+  return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(() => ${fieldCardIdentifier.name});`;
 }
 
 function getProgramPath(path: NodePath<any>): NodePath<t.Program> {
@@ -457,60 +258,13 @@ function getProgramPath(path: NodePath<any>): NodePath<t.Program> {
   return currentPath as NodePath<t.Program>;
 }
 
-function suggestedCardName(
-  ref: { name: string; module: string },
-  type: 'card' | 'field',
-): string {
-  if (
-    ref.name.toLowerCase().endsWith(type) ||
-    isEqual(ref, baseCardRef) ||
-    isEqual(ref, baseFieldRef)
-  ) {
+function suggestedCardName(ref: { name: string; module: string }): string {
+  if (ref.name.toLowerCase().endsWith('card')) {
     return ref.name;
   }
-
   let name = ref.name;
   if (name === 'default') {
     name = ref.module.split('/').pop()!;
   }
-  return upperFirst(camelCase(`${name} ${type}`));
-}
-
-function insertFieldBeforePath(
-  field: string,
-  path: NodePath,
-  src: string,
-): { insertPosition: number; indentedField: string } {
-  if (typeof path.node.start !== 'number') {
-    throw new Error(
-      `bug: could not determine the string start position of the class member prior to the new field`,
-    );
-  }
-  let startOfLine = src.substring(0, path.node.start).lastIndexOf('\n');
-  let insertPosition = startOfLine + 1; // add new field before the existing field
-  let indent = path.node.start - startOfLine - 1;
-  let indentedField = `${' '.repeat(indent)}${field}\n`;
-  return { insertPosition, indentedField };
-}
-
-function insertFieldAfterPath(
-  field: string,
-  path: NodePath,
-  src: string,
-): { insertPosition: number; indentedField: string } {
-  if (typeof path.node.start !== 'number') {
-    throw new Error(
-      `bug: could not determine the string start position of the field prior to the new field`,
-    );
-  }
-  if (typeof path.node.end !== 'number') {
-    throw new Error(
-      `bug: could not determine the string end position to the field prior to the new field`,
-    );
-  }
-  let insertPosition = src.indexOf('\n', path.node.end);
-  let indent =
-    path.node.start - src.substring(0, path.node.start).lastIndexOf('\n') - 1;
-  let indentedField = `\n${' '.repeat(indent)}${field}`;
-  return { insertPosition, indentedField };
+  return upperFirst(camelCase(`${name} card`));
 }

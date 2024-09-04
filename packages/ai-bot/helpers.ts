@@ -1,35 +1,30 @@
-import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
-import type {
-  MatrixEvent as DiscreteMatrixEvent,
-  CardFragmentContent,
-} from 'https://cardstack.com/base/room';
-import { type IRoomEvent } from 'matrix-js-sdk';
+import { IRoomEvent } from 'matrix-js-sdk';
+import { chain } from 'stream-chain';
+import { parser } from 'stream-json';
+import { streamValues } from 'stream-json/streamers/StreamValues';
+import { Readable } from 'node:stream';
 
-const MODIFY_SYSTEM_MESSAGE =
-  '\
-The user is using an application called Boxel, where they are working on editing "Cards" which are data models representable as JSON. \
-The user may be non-technical and should not need to understand the inner workings of Boxel. \
-The user may be asking questions about the contents of the cards rather than help editing them. Use your world knowledge to help them. \
-If the user wants the data they see edited, AND the patchCard function is available, you MUST use the "patchCard" function to make the change. \
-If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you \
-If you do not call patchCard, the user will not see the change. \
-You can ONLY modify cards shared with you, if there is no patchCard function or tool then the user hasn\'t given you access \
-NEVER tell the user to use patchCard, you should always do it for them. \
-If the user request is unclear, you may ask clarifying questions. \
-You may make multiple function calls, all calls are gated by the user so multiple options can be explored.\
-If a user asks you about things in the world, use your existing knowledge to help them. Only if necessary, add a *small* caveat at the end of your message to explain that you do not have live external data. \
-\
-If you need access to the cards the user can see, you can ask them to attach the cards.';
+type ChatCompletion = {
+  choices: Array<{
+    delta?: {
+      content?: string | null | undefined;
+    };
+  }>;
+};
+
+export enum ParsingMode {
+  Text,
+  Command,
+}
 
 type CommandMessage = {
-  type: 'command';
+  type: ParsingMode.Command;
   content: any;
 };
 
 type TextMessage = {
-  type: 'text';
+  type: ParsingMode.Text;
   content: string;
-  complete: boolean;
 };
 
 export type Message = CommandMessage | TextMessage;
@@ -45,47 +40,22 @@ export function constructHistory(history: IRoomEvent[]) {
    * would see it - with only the latest event for each
    * message.
    */
-  const fragments = new Map<string, CardFragmentContent>(); // eventId => fragment
-  const latestEventsMap = new Map<string, DiscreteMatrixEvent>();
-  for (let rawEvent of history) {
-    if (rawEvent.content.data) {
-      rawEvent.content.data = JSON.parse(rawEvent.content.data);
-    }
-    let event = { ...rawEvent } as DiscreteMatrixEvent;
-    if (event.type !== 'm.room.message') {
-      continue;
-    }
-    let eventId = event.event_id!;
-    if (event.content.msgtype === 'org.boxel.cardFragment') {
-      fragments.set(eventId, event.content);
-      continue;
-    } else if (event.content.msgtype === 'org.boxel.message') {
-      if (
-        event.content.data.attachedCardsEventIds &&
-        event.content.data.attachedCardsEventIds.length > 0
-      ) {
-        event.content.data.attachedCards =
-          event.content.data.attachedCardsEventIds!.map((id) =>
-            serializedCardFromFragments(id, fragments),
-          );
+  const latestEventsMap = new Map<string, IRoomEvent>();
+  for (let event of history) {
+    let content = event.content;
+    if (event.type == 'm.room.message') {
+      let eventId = event.event_id!;
+      if (content['m.relates_to']?.rel_type === 'm.replace') {
+        eventId = content['m.relates_to']!.event_id!;
+        event.event_id = eventId;
       }
-    }
-
-    if (event.content['m.relates_to']?.rel_type === 'm.replace') {
-      eventId = event.content['m.relates_to']!.event_id!;
-      event.event_id = eventId;
-    }
-    const existingEvent = latestEventsMap.get(eventId);
-    if (
-      !existingEvent ||
-      // we check the timestamps of the events because the existing event may
-      // itself be an already replaced event. The idea is that you can perform
-      // multiple replacements on an event. In order to prevent backing out a
-      // subsequent replacement we also assert that the replacement timestamp is
-      // after the event that it is replacing
-      existingEvent.origin_server_ts < event.origin_server_ts
-    ) {
-      latestEventsMap.set(eventId, event);
+      const existingEvent = latestEventsMap.get(eventId);
+      if (
+        !existingEvent ||
+        existingEvent.origin_server_ts < event.origin_server_ts
+      ) {
+        latestEventsMap.set(eventId, event);
+      }
     }
   }
   let latestEvents = Array.from(latestEventsMap.values());
@@ -93,239 +63,163 @@ export function constructHistory(history: IRoomEvent[]) {
   return latestEvents;
 }
 
-function serializedCardFromFragments(
-  eventId: string,
-  fragments: Map<string, CardFragmentContent>,
-): LooseSingleCardDocument {
-  let fragment = fragments.get(eventId);
-  if (!fragment) {
-    throw new Error(
-      `No card fragment found in fragments cache for event id ${eventId}`,
-    );
-  }
-  let cardFragments: CardFragmentContent[] = [];
-  let currentFragment: string | undefined = eventId;
-  do {
-    let fragment = fragments.get(currentFragment);
-    if (!fragment) {
-      throw new Error(
-        `No card fragment found in cache for event id ${eventId}`,
-      );
-    }
-    cardFragments.push(fragment);
-    currentFragment = fragment.data.nextFragment;
-  } while (currentFragment);
-
-  cardFragments.sort((a, b) => (a.data.index = b.data.index));
-  if (cardFragments.length !== cardFragments[0].data.totalParts) {
-    throw new Error(
-      `Expected to find ${cardFragments[0].data.totalParts} fragments for fragment of event id ${eventId} but found ${cardFragments.length} fragments`,
-    );
-  }
-  return JSON.parse(
-    cardFragments.map((f) => f.data.cardFragment).join(''),
-  ) as LooseSingleCardDocument;
-}
-
-export interface OpenAIPromptMessage {
-  /**
-   * The contents of the message. `content` is required for all messages, and may be
-   * null for assistant messages with function calls.
-   */
-  content: string | null;
-  /**
-   * The role of the messages author. One of `system`, `user`, `assistant`, or
-   * `function`.
-   */
-  role: 'system' | 'user' | 'assistant';
-}
-
-export function getRelevantCards(
-  history: DiscreteMatrixEvent[],
-  aiBotUserId: string,
+export async function* extractContentFromStream(
+  iterable: AsyncIterable<ChatCompletion>,
 ) {
-  let relevantCards: Map<string, any> = new Map();
-  for (let event of history) {
-    if (event.type !== 'm.room.message') {
-      continue;
-    }
-    if (event.sender !== aiBotUserId) {
-      let { content } = event;
-      if (content.msgtype === 'org.boxel.message') {
-        const attachedCards = content.data?.attachedCards || [];
-        for (let card of attachedCards) {
-          if (card.data.id) {
-            relevantCards.set(card.data.id, card.data);
-          } else {
-            throw new Error(`bug: don't know how to handle card without ID`);
-          }
+  /**
+   * The OpenAI API returns a stream of updates, which
+   * have extra details that we don't need, this function
+   * extracts out just the content from the stream.
+   *
+   * It also splits the content around { and } so that
+   * we can parse JSON more cleanly
+   */
+  for await (const part of iterable) {
+    let content = part.choices[0]?.delta?.content;
+    if (content) {
+      // Regex splits keep the delimiters
+      for (let token of content.split(/([{}])/)) {
+        if (token) {
+          yield token;
         }
       }
     }
   }
-
-  // Return the cards in a consistent manner
-  let sortedCards = Array.from(relevantCards.values()).sort((a, b) => {
-    return a.id.localeCompare(b.id);
-  });
-  return sortedCards;
 }
 
-export function getFunctions(
-  history: DiscreteMatrixEvent[],
-  aiBotUserId: string,
-) {
-  // Just get the users messages
-  const userMessages = history.filter((event) => event.sender !== aiBotUserId);
-  // Get the last message
-  if (userMessages.length === 0) {
-    // If the user has sent no messages, there are no relevant functions to return
-    return [];
-  }
-  const lastMessage = userMessages[userMessages.length - 1];
-  if (
-    lastMessage.type === 'm.room.message' &&
-    lastMessage.content.msgtype === 'org.boxel.message' &&
-    lastMessage.content.data?.context?.functions
-  ) {
-    return lastMessage.content.data.context.functions;
-  } else {
-    // If it's a different message type, or there are no functions, return an empty array
-    return [];
-  }
-}
+export class CheckpointedAsyncGenerator<T> {
+  private generator: AsyncGenerator<T>;
+  private buffer: T[] = [];
+  private bufferIndex = 0;
 
-export function shouldSetRoomTitle(
-  rawEventLog: DiscreteMatrixEvent[],
-  aiBotUserId: string,
-  additionalCommands = 0, // These are any that have been sent since the event log was retrieved
-) {
-  // If the room title has been set already, we don't want to set it again
-  let nameEvents = rawEventLog.filter((event) => event.type === 'm.room.name');
-  if (nameEvents.length > 1) {
-    return false;
+  constructor(generator: AsyncGenerator<T>) {
+    this.generator = generator;
   }
 
-  // If there has been a command sent,
-  // we should be at a stage where we can set the room title
-  let commandsSent = rawEventLog.filter(
-    (event) =>
-      event.type === 'm.room.message' &&
-      event.content.msgtype === 'org.boxel.command',
-  );
-
-  if (commandsSent.length + additionalCommands > 0) {
-    return true;
-  }
-
-  // If there has been a 5 user messages we should still set the room title
-  let userEvents = rawEventLog.filter(
-    (event) => event.sender !== aiBotUserId && event.type === 'm.room.message',
-  );
-  if (userEvents.length >= 5) {
-    return true;
-  }
-
-  return false;
-}
-
-export function getStartOfConversation(
-  history: DiscreteMatrixEvent[],
-  aiBotUserId: string,
-  maxLength = 2000,
-) {
-  /**
-   * Get just the start of the conversation
-   * useful for summarizing while limiting the context
-   */
-  let messages: OpenAIPromptMessage[] = [];
-  let totalLength = 0;
-  for (let event of history) {
-    if (event.type !== 'm.room.message') {
-      continue;
-    }
-    let body = event.content.body;
-    if (body && totalLength + body.length <= maxLength) {
-      if (event.sender === aiBotUserId) {
-        messages.push({
-          role: 'assistant',
-          content: body,
-        });
-      } else {
-        messages.push({
-          role: 'user',
-          content: body,
-        });
+  async *[Symbol.asyncIterator]() {
+    while (true) {
+      const next = await this.next();
+      if (next.done) {
+        return;
       }
-      totalLength += body.length;
+      yield next.value;
     }
   }
-  return messages;
+
+  async next(): Promise<IteratorResult<T>> {
+    // If we're in the past and haven't exhausted the buffer, return the next buffered item.
+    if (this.bufferIndex < this.buffer.length) {
+      return { value: this.buffer[this.bufferIndex++], done: false };
+    }
+
+    // Otherwise, get the next item from the generator.
+    const result = await this.generator.next();
+
+    // If we're checkpointed, add the item to the buffer.
+    if (!result.done) {
+      this.buffer.push(result.value);
+      this.bufferIndex++;
+    }
+
+    return result;
+  }
+
+  async return(value?: any): Promise<IteratorResult<T>> {
+    if (this.generator.return) {
+      return await this.generator.return(value);
+    }
+    return { value, done: true };
+  }
+
+  async throw(error?: any): Promise<IteratorResult<T>> {
+    if (this.generator.throw) {
+      return await this.generator.throw(error);
+    }
+    throw error;
+  }
+
+  checkpoint(): void {
+    // Cut the buffer to hold from buffer index to the end
+    if (this.bufferIndex < this.buffer.length) {
+      this.buffer = this.buffer.slice(this.bufferIndex);
+    } else {
+      this.buffer = [];
+    }
+
+    this.bufferIndex = 0;
+  }
+
+  restore(): void {
+    this.bufferIndex = 0;
+  }
 }
 
-export function getModifyPrompt(
-  history: DiscreteMatrixEvent[],
-  aiBotUserId: string,
-  functions: any[] = [],
-) {
-  // Need to make sure the passed in username is a full id
-  if (
-    aiBotUserId.indexOf(':') === -1 ||
-    aiBotUserId.startsWith('@') === false
-  ) {
-    throw new Error("Username must be a full id, e.g. '@ai-bot:localhost'");
+async function* prependedStream<T>(prepend: T, stream: AsyncIterable<T>) {
+  yield prepend;
+  for await (const part of stream) {
+    yield part;
   }
-  let historicalMessages: OpenAIPromptMessage[] = [];
-  for (let event of history) {
-    if (event.type !== 'm.room.message') {
-      continue;
-    }
-    let body = event.content.body;
-    if (body) {
-      if (event.sender === aiBotUserId) {
-        historicalMessages.push({
-          role: 'assistant',
-          content: body,
-        });
-      } else {
-        historicalMessages.push({
-          role: 'user',
-          content: body,
-        });
+}
+
+export async function* processStream(stream: AsyncGenerator<string>) {
+  let tokenStream = new CheckpointedAsyncGenerator(stream);
+  let currentMessage = '';
+  for await (const part of tokenStream) {
+    // If we see an opening brace, we *might* be looking at JSON
+    // Optimistically start parsing it, and if we hit an error
+    // then roll back to the last checkpoint
+    if (part == '{') {
+      let commands: string[] = [];
+      const pipeline = chain([
+        Readable.from(prependedStream(part, tokenStream)), // We need to prepend the { back on
+        parser({ jsonStreaming: true }),
+        streamValues(),
+      ]);
+
+      // Setup this promise so we can await the json parsing to complete
+      const endOfStream = new Promise((resolve, reject) => {
+        pipeline.on('end', resolve);
+        pipeline.on('error', reject);
+      });
+
+      pipeline.on('data', (x) => {
+        commands.push(x.value);
+        // We've found some JSON so we don't want to
+        // keep building up the text
+        currentMessage = '';
+        // If we've seen a command, bump the checkpoint
+        // of the stream to the current position
+        tokenStream.checkpoint();
+      });
+
+      try {
+        await endOfStream;
+      } catch (error) {
+        // We've hit an error parsing something, so let's roll
+        // back to the last checkpoint so we don't lose the
+        // processed tokens
+        tokenStream.restore();
+      } finally {
+        // We've either finished parsing the stream and have
+        // one or more JSON objects, or we've hit an error.
+        // The error may occur after successfully parsing a
+        // JSON object, so we need to yield any commands
+        // we've found.
+        for (let command of commands) {
+          yield {
+            type: ParsingMode.Command,
+            content: command,
+          };
+        }
       }
+    } else {
+      currentMessage += part;
+      yield {
+        type: ParsingMode.Text,
+        content: currentMessage,
+      };
     }
+    // Checkpoint before we start processing the next token
+    tokenStream.checkpoint();
   }
-
-  let systemMessage =
-    MODIFY_SYSTEM_MESSAGE +
-    `
-  The user currently has given you the following data to work with:
-  Cards:\n`;
-  for (let card of getRelevantCards(history, aiBotUserId)) {
-    systemMessage += `Full data: ${JSON.stringify(card)}`;
-  }
-  if (functions.length == 0) {
-    systemMessage +=
-      'You are unable to edit any cards, the user has not given you access, they need to open the card on the stack and let it be auto-attached';
-  }
-
-  let messages: OpenAIPromptMessage[] = [
-    {
-      role: 'system',
-      content: systemMessage,
-    },
-  ];
-
-  messages = messages.concat(historicalMessages);
-  return messages;
-}
-
-export function cleanContent(content: string) {
-  content = content.trim();
-  content = content.replace(/```json/g, '');
-  content = content.replace(/`/g, '');
-  if (content.endsWith('json')) {
-    content = content.slice(0, -4);
-  }
-  return content.trim();
 }

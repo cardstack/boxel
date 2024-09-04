@@ -1,40 +1,32 @@
-import { waitUntil, waitFor, click } from '@ember/test-helpers';
-
-import GlimmerComponent from '@glimmer/component';
-
-import { setupRenderingTest } from 'ember-qunit';
-import flatMap from 'lodash/flatMap';
 import { module, test } from 'qunit';
-import { validate as uuidValidate } from 'uuid';
-
+import GlimmerComponent from '@glimmer/component';
+import { setupRenderingTest } from 'ember-qunit';
 import {
   baseRealm,
   type SingleCardDocument,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
-
-import CardPrerender from '@cardstack/host/components/card-prerender';
+import { Loader } from '@cardstack/runtime-common/loader';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
-
-import type LoaderService from '@cardstack/host/services/loader-service';
-
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
+import CardPrerender from '@cardstack/host/components/card-prerender';
+import { renderComponent } from '../../helpers/render-component';
 import {
-  percySnapshot,
   testRealmURL,
   setupCardLogs,
   setupLocalIndexing,
   setupOnSave,
   setupServerSentEvents,
+  TestRealmAdapter,
+  TestRealm,
   type TestContextWithSave,
   type TestContextWithSSE,
-  setupIntegrationTestRealm,
 } from '../../helpers';
-import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
-import { renderComponent } from '../../helpers/render-component';
+import { waitUntil, waitFor, click } from '@ember/test-helpers';
+import type LoaderService from '@cardstack/host/services/loader-service';
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type CardService from '@cardstack/host/services/card-service';
+import percySnapshot from '@percy/ember';
 
 const testRealm2URL = `http://test-realm/test2/`;
 let loader: Loader;
@@ -47,26 +39,25 @@ type TestContextForCopy = TestContextWithSave & TestContextWithSSE;
 
 module('Integration | card-copy', function (hooks) {
   let onFetch: ((req: Request, body: string) => void) | undefined;
+  let adapter1: TestRealmAdapter;
+  let adapter2: TestRealmAdapter;
   let realm1: Realm;
   let realm2: Realm;
   let noop = () => {};
   function wrappedOnFetch() {
     return async (req: Request) => {
       if (!onFetch) {
-        return Promise.resolve({ req, res: null });
+        return Promise.resolve(req);
       }
       let { headers, method } = req;
       let body = await req.text();
       onFetch(req, body);
       // need to return a new request since we just read the body
-      return {
-        req: new Request(req.url, {
-          method,
-          headers,
-          ...(body ? { body } : {}),
-        }),
-        res: null,
-      };
+      return new Request(req.url, {
+        method,
+        headers,
+        ...(body ? { body } : {}),
+      });
     };
   }
 
@@ -82,7 +73,6 @@ module('Integration | card-copy', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
-  setupMatrixServiceMock(hooks);
   hooks.afterEach(async function () {
     localStorage.removeItem('recent-cards');
   });
@@ -112,163 +102,164 @@ module('Integration | card-copy', function (hooks) {
       ].filter((a) => a.length > 0);
       await operatorModeStateService.restore({ stacks });
     };
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
+    adapter1 = new TestRealmAdapter({
+      'person.gts': `
+        import { contains, linksTo, field, Component, CardDef, linksToMany } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        import { Pet } from "./pet";
 
-    let { field, contains, linksTo, CardDef, Component } = cardApi;
-    let { default: StringField } = string;
+        export class Person extends CardDef {
+          static displayName = 'Person';
+          @field firstName = contains(StringCard);
+          @field pet = linksTo(Pet);
+          @field title = contains(StringCard, {
+            computeVia: function (this: Person) { return this.firstName; }
+          });
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <h2 data-test-person={{@model.firstName}}><@fields.firstName/></h2>
+              <@fields.pet/>
+            </template>
+          }
+        }
+      `,
+      'pet.gts': `
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
 
-    class Pet extends CardDef {
-      static displayName = 'Pet';
-      @field firstName = contains(StringField);
-      @field title = contains(StringField, {
-        computeVia: function (this: Pet) {
-          return this.firstName;
+        export class Pet extends CardDef {
+          static displayName = 'Pet';
+          @field firstName = contains(StringCard);
+          @field title = contains(StringCard, {
+            computeVia: function (this: Pet) {
+              return this.firstName;
+            },
+          });
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <h2 data-test-pet={{@model.firstName}}><@fields.firstName/></h2>
+              <@fields.pet/>
+            </template>
+          }
+          static embedded = class Embedded extends Component<typeof this> {
+            <template>
+              <h3 data-test-pet={{@model.firstName}}><@fields.name/></h3>
+            </template>
+          }
+        }
+      `,
+      'index.json': {
+        data: {
+          type: 'card',
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/cards-grid',
+              name: 'CardsGrid',
+            },
+          },
         },
-      });
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <h2 data-test-pet={{@model.firstName}}><@fields.firstName /></h2>
-        </template>
-      };
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <h3 data-test-pet={{@model.firstName}}><@fields.firstName /></h3>
-        </template>
-      };
-    }
-
-    class Person extends CardDef {
-      static displayName = 'Person';
-      @field firstName = contains(StringField);
-      @field pet = linksTo(Pet);
-      @field title = contains(StringField, {
-        computeVia: function (this: Person) {
-          return this.firstName;
+      },
+      'Person/hassan.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Hassan',
+          },
+          relationships: {
+            pet: {
+              links: {
+                self: '../Pet/mango',
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `../person`,
+              name: 'Person',
+            },
+          },
         },
-      });
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <h2 data-test-person={{@model.firstName}}><@fields.firstName /></h2>
-          <@fields.pet />
-        </template>
-      };
-    }
+      },
+      'Pet/mango.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Mango',
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../pet',
+              name: 'Pet',
+            },
+          },
+        },
+      },
+      'Pet/vangogh.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Van Gogh',
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../pet',
+              name: 'Pet',
+            },
+          },
+        },
+      },
+      '.realm.json': {
+        name: 'Test Workspace 1',
+        backgroundURL:
+          'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+        iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+      },
+    });
 
-    ({ realm: realm1 } = await setupIntegrationTestRealm({
-      loader,
+    adapter2 = new TestRealmAdapter({
+      'index.json': {
+        data: {
+          type: 'card',
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/cards-grid',
+              name: 'CardsGrid',
+            },
+          },
+        },
+      },
+      'Pet/paper.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Paper',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}pet`,
+              name: 'Pet',
+            },
+          },
+        },
+      },
+      '.realm.json': {
+        name: 'Test Workspace 2',
+        backgroundURL:
+          'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
+        iconURL: 'https://i.postimg.cc/d0B9qMvy/icon.png',
+      },
+    });
+
+    realm1 = await TestRealm.createWithAdapter(adapter1, loader, this.owner, {
+      realmURL: testRealmURL,
       onFetch: wrappedOnFetch(),
-      contents: {
-        'person.gts': { Person },
-        'pet.gts': { Pet },
-        'index.json': {
-          data: {
-            type: 'card',
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
-                name: 'CardsGrid',
-              },
-            },
-          },
-        },
-        'Person/hassan.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Hassan',
-            },
-            relationships: {
-              pet: {
-                links: {
-                  self: '../Pet/mango',
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `../person`,
-                name: 'Person',
-              },
-            },
-          },
-        },
-        'Pet/mango.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Mango',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Pet/vangogh.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Van Gogh',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        '.realm.json': {
-          name: 'Test Workspace 1',
-          backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
-      },
-    }));
+    });
+    await realm1.ready;
 
-    ({ realm: realm2 } = await setupIntegrationTestRealm({
-      loader,
+    realm2 = await TestRealm.createWithAdapter(adapter2, loader, this.owner, {
       realmURL: testRealm2URL,
-      contents: {
-        'index.json': {
-          data: {
-            type: 'card',
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
-                name: 'CardsGrid',
-              },
-            },
-          },
-        },
-        'Pet/paper.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Paper',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        '.realm.json': {
-          name: 'Test Workspace 2',
-          backgroundURL:
-            'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/d0B9qMvy/icon.png',
-        },
-      },
-    }));
+    });
+    await realm2.ready;
 
     // write in the new record last because it's link didn't exist until realm2 was created
     await realm1.write(
@@ -295,6 +286,11 @@ module('Integration | card-copy', function (hooks) {
         },
       } as LooseSingleCardDocument),
     );
+
+    let cardService = this.owner.lookup('service:card-service') as CardService;
+    // the copy button only appears after this service has loaded,
+    // so let's just wait for it here
+    await cardService.ready;
   });
 
   test('copy button does not appear when there is 1 stack for single card item', async function (assert) {
@@ -393,33 +389,6 @@ module('Integration | card-copy', function (hooks) {
       .doesNotExist('copy button does not exist');
   });
 
-  test('copy button does not appear when right and left stacks are both the same index card', async function (assert) {
-    await setCardInOperatorModeState(
-      [`${testRealmURL}index`],
-      [`${testRealmURL}index`],
-    );
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-    await waitFor(
-      '[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]',
-    );
-    await waitFor(
-      '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
-    );
-    await click(
-      `[data-test-operator-mode-stack="0"] [data-test-overlay-card="${testRealmURL}Person/hassan"] button.select`,
-    );
-    assert
-      .dom('[data-test-copy-button]')
-      .doesNotExist('copy button does not exist');
-  });
-
   test('copy button does not appear when right and left stacks are both single cards items', async function (assert) {
     await setCardInOperatorModeState(
       [`${testRealmURL}index`, `${testRealmURL}Person/hassan`],
@@ -489,6 +458,7 @@ module('Integration | card-copy', function (hooks) {
     await click(
       `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.select`,
     );
+    await percySnapshot(assert);
     assert
       .dom('[data-test-copy-button="right"]')
       .exists('copy button with right arrow exists');
@@ -519,6 +489,7 @@ module('Integration | card-copy', function (hooks) {
     await click(
       ` [data-test-overlay-card="${testRealm2URL}Pet/paper"] button.select`,
     );
+    await percySnapshot(assert);
     assert
       .dom('[data-test-copy-button="left"]')
       .exists('copy button with left arrow exists');
@@ -617,7 +588,16 @@ module('Integration | card-copy', function (hooks) {
   });
 
   test<TestContextForCopy>('can copy a card', async function (assert) {
-    assert.expect(12);
+    assert.expect(11);
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealm2URL}Pet/1`],
+        },
+      },
+    ];
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
       [`${testRealm2URL}index`],
@@ -630,14 +610,11 @@ module('Integration | card-copy', function (hooks) {
         </template>
       },
     );
-    let id: string | undefined;
-    this.onSave((url, json) => {
+    this.onSave((json) => {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
-      id = url.href.split('/').pop()!;
-      assert.true(uuidValidate(id), 'card identifier is UUID');
-      assert.strictEqual(json.data.id, `${testRealm2URL}Pet/${id}`);
+      assert.strictEqual(json.data.id, `${testRealm2URL}Pet/1`);
       assert.strictEqual(json.data.attributes?.firstName, 'Mango');
       assert.deepEqual(json.data.meta.adoptsFrom, {
         module: `${testRealmURL}pet`,
@@ -645,23 +622,12 @@ module('Integration | card-copy', function (hooks) {
       });
       assert.strictEqual(json.data.meta.realmURL, testRealm2URL);
     });
-    await this.expectEvents({
+    await this.expectEvents(
       assert,
-      realm: realm2,
-      expectedNumberOfEvents: 1,
-      onEvents: ([event]) => {
-        if (event.type === 'index') {
-          assert.deepEqual(event.data.invalidations, [
-            `${testRealm2URL}Pet/${id}`,
-          ]);
-        } else {
-          assert.ok(
-            false,
-            `expected 'index' event, but received ${JSON.stringify(event)}`,
-          );
-        }
-      },
-      callback: async () => {
+      realm2,
+      adapter2,
+      expectedEvents,
+      async () => {
         await waitFor(
           '[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]',
         );
@@ -674,33 +640,28 @@ module('Integration | card-copy', function (hooks) {
         assert
           .dom(`.selected[data-test-overlay-card="${testRealmURL}Pet/mango"]`)
           .exists('souce card is selected');
-        assert.strictEqual(
-          document.querySelectorAll(
-            '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
-          ).length,
-          1,
-          '1 card exists in destination realm',
-        );
+        assert
+          .dom(
+            `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/1"]`,
+          )
+          .doesNotExist('card does not initially exist in destiation realm');
         await click('[data-test-copy-button]');
       },
-    });
+    );
     await waitUntil(
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
         ).length === 2,
     );
-    if (!id) {
-      assert.ok(false, 'new card identifier was undefined');
-    }
     assert
       .dom(
-        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/${id}"]`,
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/1"]`,
       )
       .exists('copied card appears in destination realm');
     assert
       .dom(
-        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/${id}"]`,
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/1"]`,
       )
       .containsText('Mango');
 
@@ -721,7 +682,23 @@ module('Integration | card-copy', function (hooks) {
   });
 
   test<TestContextForCopy>('can copy mulitple cards', async function (assert) {
-    assert.expect(7);
+    assert.expect(8);
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealm2URL}Pet/1`],
+        },
+      },
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealm2URL}Pet/2`],
+        },
+      },
+    ];
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
       [`${testRealm2URL}index`],
@@ -735,29 +712,18 @@ module('Integration | card-copy', function (hooks) {
       },
     );
     let savedCards: SingleCardDocument[] = [];
-    this.onSave((_, json) => {
+    this.onSave((json) => {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
       savedCards.push(json);
     });
-    await this.expectEvents({
+    await this.expectEvents(
       assert,
-      realm: realm2,
-      expectedNumberOfEvents: 2,
-      onEvents: (events) => {
-        assert.deepEqual(
-          events.map((e) => e.type),
-          ['index', 'index'],
-          'event types are correct',
-        );
-        assert.deepEqual(
-          flatMap(events, (e) => e.data.invalidations),
-          [savedCards[0].data.id, savedCards[1].data.id],
-          'event invalidations are correct',
-        );
-      },
-      callback: async () => {
+      realm2,
+      adapter2,
+      expectedEvents,
+      async () => {
         await waitFor(
           '[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]',
         );
@@ -771,34 +737,40 @@ module('Integration | card-copy', function (hooks) {
           `[data-test-overlay-card="${testRealmURL}Pet/vangogh"] button.select`,
         );
 
-        assert.strictEqual(
-          document.querySelectorAll(
-            '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
-          ).length,
-          1,
-          '1 card exists in destination realm',
-        );
+        assert
+          .dom(
+            `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/1"]`,
+          )
+          .doesNotExist('card does not initially exist in destiation realm');
+        assert
+          .dom(
+            `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/2"]`,
+          )
+          .doesNotExist('card does not initially exist in destiation realm');
         await click('[data-test-copy-button]');
       },
-    });
+    );
     await waitUntil(
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
         ).length === 3,
     );
+    assert
+      .dom(
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/1"]`,
+      )
+      .exists('copied card appears in destination realm');
+    assert
+      .dom(
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/2"]`,
+      )
+      .exists('copied card appears in destination realm');
     assert.strictEqual(savedCards.length, 2, 'correct number of cards saved');
-    let cardIds = savedCards.map((c) => c.data.id.split('/').pop()!);
-    assert
-      .dom(
-        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/${cardIds[0]}"]`,
-      )
-      .exists('copied card appears in destination realm');
-    assert
-      .dom(
-        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/${cardIds[1]}"]`,
-      )
-      .exists('copied card appears in destination realm');
+    assert.deepEqual(savedCards.map((c) => c.data.id).sort(), [
+      `${testRealm2URL}Pet/1`,
+      `${testRealm2URL}Pet/2`,
+    ]);
     assert.deepEqual(
       savedCards.map((c) => c.data.attributes?.firstName).sort(),
       ['Mango', 'Van Gogh'],
@@ -807,6 +779,15 @@ module('Integration | card-copy', function (hooks) {
 
   test<TestContextForCopy>('can copy a card that has a relative link to card in source realm', async function (assert) {
     assert.expect(15);
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealm2URL}Person/1`],
+        },
+      },
+    ];
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
       [`${testRealm2URL}index`],
@@ -820,7 +801,7 @@ module('Integration | card-copy', function (hooks) {
       },
     );
     onFetch = (req, body) => {
-      if (req.method !== 'GET' && req.method !== 'HEAD') {
+      if (req.method !== 'GET') {
         let json = JSON.parse(body);
         assert.strictEqual(json.data.attributes.firstName, 'Hassan');
         assert.strictEqual(
@@ -831,13 +812,11 @@ module('Integration | card-copy', function (hooks) {
       }
     };
 
-    let id: string | undefined;
-    this.onSave((url, json) => {
+    this.onSave((json) => {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
-      id = url.href.split('/').pop()!;
-      assert.strictEqual(json.data.id, `${testRealm2URL}Person/${id}`);
+      assert.strictEqual(json.data.id, `${testRealm2URL}Person/1`);
       assert.strictEqual(json.data.attributes?.firstName, 'Hassan');
       assert.deepEqual(json.data.meta.adoptsFrom, {
         module: `${testRealmURL}person`,
@@ -856,7 +835,6 @@ module('Integration | card-copy', function (hooks) {
         },
       });
       assert.strictEqual(json.included?.length, 1);
-      // eslint-disable-next-line @typescript-eslint/no-non-null-asserted-optional-chain
       let included = json.included?.[0]!;
       assert.strictEqual(included.id, `${testRealmURL}Pet/mango`);
       assert.deepEqual(included.meta.adoptsFrom, {
@@ -865,23 +843,12 @@ module('Integration | card-copy', function (hooks) {
       });
       assert.deepEqual(included.meta.realmURL, testRealmURL);
     });
-    await this.expectEvents({
+    await this.expectEvents(
       assert,
-      realm: realm2,
-      expectedNumberOfEvents: 1,
-      onEvents: ([event]) => {
-        if (event.type === 'index') {
-          assert.deepEqual(event.data.invalidations, [
-            `${testRealm2URL}Person/${id}`,
-          ]);
-        } else {
-          assert.ok(
-            false,
-            `expected 'index' event, but received ${JSON.stringify(event)}`,
-          );
-        }
-      },
-      callback: async () => {
+      realm2,
+      adapter2,
+      expectedEvents,
+      async () => {
         await waitFor(
           '[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]',
         );
@@ -892,40 +859,44 @@ module('Integration | card-copy', function (hooks) {
           `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.select`,
         );
 
-        assert.strictEqual(
-          document.querySelectorAll(
-            '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
-          ).length,
-          1,
-          '1 card exists in destination realm',
-        );
+        assert
+          .dom(
+            `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Person/1"]`,
+          )
+          .doesNotExist('card does not initially exist in destiation realm');
         await click('[data-test-copy-button]');
       },
-    });
+    );
     await waitUntil(
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
         ).length === 2,
     );
-    if (!id) {
-      assert.ok(false, 'new card identifier was undefined');
-    }
     assert
       .dom(
-        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Person/${id}"]`,
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Person/1"]`,
       )
       .exists('copied card appears in destination realm');
 
     assert
       .dom(
-        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Person/${id}"]`,
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Person/1"]`,
       )
       .containsText('Hassan');
   });
 
   test<TestContextForCopy>('can copy a card that has a link to card in destination realm', async function (assert) {
     assert.expect(15);
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealm2URL}Person/1`],
+        },
+      },
+    ];
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
       [`${testRealm2URL}index`],
@@ -939,7 +910,7 @@ module('Integration | card-copy', function (hooks) {
       },
     );
     onFetch = (req, body) => {
-      if (req.method !== 'GET' && req.method !== 'HEAD') {
+      if (req.method !== 'GET') {
         let json = JSON.parse(body);
         assert.strictEqual(json.data.attributes.firstName, 'Sakura');
         assert.strictEqual(
@@ -949,13 +920,11 @@ module('Integration | card-copy', function (hooks) {
         );
       }
     };
-    let id: string | undefined;
-    this.onSave((url, json) => {
+    this.onSave((json) => {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
-      id = url.href.split('/').pop()!;
-      assert.strictEqual(json.data.id, `${testRealm2URL}Person/${id}`);
+      assert.strictEqual(json.data.id, `${testRealm2URL}Person/1`);
       assert.strictEqual(json.data.attributes?.firstName, 'Sakura');
       assert.deepEqual(json.data.meta.adoptsFrom, {
         module: `${testRealmURL}person`,
@@ -974,7 +943,6 @@ module('Integration | card-copy', function (hooks) {
         },
       });
       assert.strictEqual(json.included?.length, 1);
-      // eslint-disable-next-line @typescript-eslint/no-non-null-asserted-optional-chain
       let included = json.included?.[0]!;
       assert.strictEqual(included.id, `${testRealm2URL}Pet/paper`);
       assert.deepEqual(included.meta.adoptsFrom, {
@@ -983,23 +951,12 @@ module('Integration | card-copy', function (hooks) {
       });
       assert.deepEqual(included.meta.realmURL, testRealm2URL);
     });
-    await this.expectEvents({
+    await this.expectEvents(
       assert,
-      realm: realm2,
-      expectedNumberOfEvents: 1,
-      onEvents: ([event]) => {
-        if (event.type === 'index') {
-          assert.deepEqual(event.data.invalidations, [
-            `${testRealm2URL}Person/${id}`,
-          ]);
-        } else {
-          assert.ok(
-            false,
-            `expected 'index' event, but received ${JSON.stringify(event)}`,
-          );
-        }
-      },
-      callback: async () => {
+      realm2,
+      adapter2,
+      expectedEvents,
+      async () => {
         await waitFor(
           '[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]',
         );
@@ -1010,34 +967,29 @@ module('Integration | card-copy', function (hooks) {
           `[data-test-overlay-card="${testRealmURL}Person/sakura"] button.select`,
         );
 
-        assert.strictEqual(
-          document.querySelectorAll(
-            '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
-          ).length,
-          1,
-          '1 card exists in destination realm',
-        );
+        assert
+          .dom(
+            `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Person/1"]`,
+          )
+          .doesNotExist('card does not initially exist in destiation realm');
         await click('[data-test-copy-button]');
       },
-    });
+    );
     await waitUntil(
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
         ).length === 2,
     );
-    if (!id) {
-      assert.ok(false, 'new card identifier was undefined');
-    }
     assert
       .dom(
-        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Person/${id}"]`,
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Person/1"]`,
       )
       .exists('copied card appears in destination realm');
 
     assert
       .dom(
-        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Person/${id}"]`,
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Person/1"]`,
       )
       .containsText('Sakura');
   });

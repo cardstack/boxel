@@ -1,5 +1,4 @@
 import Component from '@glimmer/component';
-
 import type {
   BaseDef,
   CardContext,
@@ -28,5 +27,11 @@ export default class Preview extends Component<Signature> {
       this.args.field,
       this.args.context,
     );
+  }
+}
+
+declare module '@glint/environment-ember-loose/registry' {
+  export default interface Registry {
+    Preview: typeof Preview;
   }
 }

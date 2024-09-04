@@ -1,40 +1,23 @@
+import Component from '@glimmer/component';
 import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
-
-import { service } from '@ember/service';
-import Component from '@glimmer/component';
-
 import { trackedFunction } from 'ember-resources/util/function';
-
-import {
-  BoxelDropdown,
-  IconButton,
-  Menu,
-  Tooltip,
-} from '@cardstack/boxel-ui/components';
-import { eq, menuItem, and } from '@cardstack/boxel-ui/helpers';
-
-import {
-  IconPencil,
-  IconTurnDownRight,
-  ThreeDotsHorizontal,
-} from '@cardstack/boxel-ui/icons';
-
-import { cardTypeDisplayName } from '@cardstack/runtime-common';
-
+import { service } from '@ember/service';
 import CardService from '@cardstack/host/services/card-service';
-
 import type {
   CardDef,
   Format,
   FieldType,
 } from 'https://cardstack.com/base/card-api';
-
+import { cardTypeDisplayName } from '@cardstack/runtime-common';
+import { BoxelDropdown, IconButton, Menu } from '@cardstack/boxel-ui';
+import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { type RenderedCardForOverlayActions } from './stack-item';
 
 interface Signature {
   item: RenderedCardForOverlayActions;
-  canWrite: boolean;
   openOrSelectCard: (
     card: CardDef,
     format?: Format,
@@ -59,9 +42,15 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
     <header class='overlay-item-header' data-test-overlay-header>
       <div class='header-title'>
         {{#if (eq @item.fieldType 'contains')}}
-          <IconTurnDownRight width='22px' height='18px' />
+          {{svgJar 'icon-turn-down-right' width='22px' height='18px'}}
         {{else}}
-          <img src={{this.iconURL}} width='20' height='20' alt='' />
+          <img
+            src={{this.iconURL}}
+            width='20'
+            height='20'
+            alt=''
+            role='presentation'
+          />
         {{/if}}
         <span class='header-title__text'>
           {{cardTypeDisplayName @item.card}}
@@ -69,11 +58,10 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
       </div>
 
       <div class='header-actions'>
-        {{! Offer to edit embedded card only when the stack item is in edit 
-            mode and you can write to the card in question }}
-        {{#if (and @canWrite (eq @item.stackItem.format 'edit'))}}
+        {{! Offer to edit embedded card only when the stack item is in edit mode  }}
+        {{#if (eq @item.stackItem.format 'edit')}}
           <IconButton
-            @icon={{IconPencil}}
+            @icon='icon-pencil'
             @width='24px'
             @height='24px'
             class='header-actions__button'
@@ -94,22 +82,15 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
 
         <BoxelDropdown>
           <:trigger as |bindings|>
-            <Tooltip @placement='top'>
-              <:trigger>
-                <IconButton
-                  @icon={{ThreeDotsHorizontal}}
-                  @width='20px'
-                  @height='20px'
-                  class='header-actions__button'
-                  aria-label='Options'
-                  data-test-embedded-card-options-button
-                  {{bindings}}
-                />
-              </:trigger>
-              <:content>
-                More Options
-              </:content>
-            </Tooltip>
+            <IconButton
+              @icon='three-dots-horizontal'
+              @width='20px'
+              @height='20px'
+              class='header-actions__button'
+              aria-label='Options'
+              data-test-embedded-card-options-button
+              {{bindings}}
+            />
           </:trigger>
           <:content as |dd|>
             <Menu
@@ -125,7 +106,7 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
 
     <style>
       .overlay-item-header {
-        border-bottom: 1px solid var(--boxel-200);
+        background-color: var(--boxel-light-100);
         height: var(--overlay-embedded-card-header-height);
         display: flex;
         justify-content: space-between;
@@ -156,12 +137,12 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
         margin-left: var(--boxel-sp-xxxs);
         pointer-events: auto; /* pointer events are disabled in the overlay, we re-enable it here for header actions */
         display: flex;
-        border-radius: 5px;
+        border-radius: 4px;
         height: calc(
-          var(--overlay-embedded-card-header-height) - 2 * var(--boxel-sp-xxxs)
+          var(--overlay-embedded-card-header-height) - 2 * var(--boxel-sp-xxs)
         );
         width: calc(
-          var(--overlay-embedded-card-header-height) - 2 * var(--boxel-sp-xxxs)
+          var(--overlay-embedded-card-header-height) - 2 * var(--boxel-sp-xxs)
         );
       }
       .header-actions__button:hover {

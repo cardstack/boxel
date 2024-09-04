@@ -2,70 +2,50 @@ import {
   primitive,
   Component,
   useIndexBasedKey,
-  FieldDef,
   deserialize,
-  BaseInstanceType,
   BaseDefConstructor,
+  BaseInstanceType,
+  FieldDef,
 } from './card-api';
-import { BoxelInput } from '@cardstack/boxel-ui/components';
-import { TextInputValidator } from './text-input-validator';
+import { BoxelInput } from '@cardstack/boxel-ui';
+import { TextInputFilter, DeserializedResult } from './text-input-filter';
 
-function serialize(val: number | null): string | undefined {
-  if (val != null && val === 0) {
-    return val.toString();
+function _deserialize(
+  numberString: string | null | undefined,
+  //TODO: It turns out at runtime, number value is being passed down.
+  //Particularly, value 0 which is falsy can cause issues if not handled correctly
+  //Work has to be done to sync [deserialize] in card-api with _deserialize
+): DeserializedResult<number> {
+  if (numberString == null || numberString == undefined) {
+    return { value: null };
   }
-  return val ? val.toString() : undefined;
+  let maybeNumber = Number(numberString);
+  if (Number.isNaN(maybeNumber) || !Number.isFinite(maybeNumber)) {
+    return {
+      value: null,
+      errorMessage:
+        'Input cannot be converted to a number. Please enter a valid number',
+    };
+  }
+  if (maybeNumber > Number.MAX_SAFE_INTEGER) {
+    return {
+      value: null,
+      errorMessage:
+        'Input number is too large. Please enter a smaller number or consider using BigInteger base card.',
+    };
+  }
+  if (maybeNumber < Number.MIN_SAFE_INTEGER) {
+    return {
+      value: null,
+      errorMessage:
+        'Input number is too small. Please enter a more positive number or consider using BigInteger base card.',
+    };
+  }
+  return { value: maybeNumber };
 }
 
-function _deserialize(number: number | string | null): number | null {
-  if (number == null || number === '') {
-    return null;
-  }
-
-  let errorMessage = validate(number);
-
-  if (errorMessage) {
-    return null;
-  } else {
-    return Number(number);
-  }
-}
-
-function validate(value: string | number | null): string | null {
-  if (value == null || value === '') {
-    return null;
-  }
-
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) {
-      return 'Input must be a finite number.';
-    }
-  } else {
-    if (value.endsWith('.')) {
-      return 'Input cannot end with a decimal point.';
-    }
-
-    const number = Number(value);
-
-    if (Number.isNaN(number)) {
-      return 'Input must be a valid number.';
-    }
-
-    let minSafe = Number.MIN_SAFE_INTEGER;
-    let maxSafe = Number.MAX_SAFE_INTEGER;
-
-    if (number > maxSafe || number < minSafe) {
-      return `Input number is out of safe range. Please enter a number between ${minSafe} and ${maxSafe}.`;
-    }
-  }
-
-  return null;
-}
-
-class View extends Component<typeof NumberField> {
-  <template>
-    {{@model}}
-  </template>
+function _serialize(val: number): string {
+  return val.toString();
 }
 
 export default class NumberField extends FieldDef {
@@ -76,27 +56,30 @@ export default class NumberField extends FieldDef {
     this: T,
     number: any,
   ): Promise<BaseInstanceType<T>> {
-    return _deserialize(number) as BaseInstanceType<T>;
+    return _deserialize(number).value as BaseInstanceType<T>;
   }
-  static embedded = View;
-  static atom = View;
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      {{@model}}
+    </template>
+  };
 
   static edit = class Edit extends Component<typeof this> {
     <template>
       <BoxelInput
-        @value={{this.textInputValidator.asString}}
-        @onInput={{this.textInputValidator.onInput}}
-        @errorMessage={{this.textInputValidator.errorMessage}}
-        @state={{if this.textInputValidator.isInvalid 'invalid' 'none'}}
+        @value={{this.textInputFilter.asString}}
+        @onInput={{this.textInputFilter.onInput}}
+        @errorMessage={{this.textInputFilter.errorMessage}}
+        @invalid={{this.textInputFilter.isInvalid}}
       />
     </template>
 
-    textInputValidator: TextInputValidator<number> = new TextInputValidator(
+    textInputFilter: TextInputFilter<number> = new TextInputFilter(
       () => this.args.model,
       (inputVal) => this.args.set(inputVal),
       _deserialize,
-      serialize,
-      validate,
+      _serialize,
     );
   };
 }

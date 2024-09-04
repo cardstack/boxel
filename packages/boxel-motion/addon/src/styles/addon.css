@@ -1,9 +1,0 @@
-.animation-context {
-  position: relative;
-}
-.animation-context.debugging {
-  border: 1px dashed blue;
-}
-.animation-context.debugging .sprite {
-  border: 1px dotted green;
-}

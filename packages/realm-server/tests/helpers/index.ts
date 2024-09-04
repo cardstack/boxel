@@ -6,7 +6,6 @@ import {
   LooseSingleCardDocument,
   Loader,
   baseRealm,
-  RealmPermissions,
 } from '@cardstack/runtime-common';
 import { makeFastBootIndexRunner } from '../../fastboot';
 import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
@@ -17,11 +16,6 @@ import { Server } from 'http';
 
 export const testRealm = 'http://test-realm/';
 export const localBaseRealm = 'http://localhost:4441/';
-const testMatrix = {
-  url: new URL(`http://localhost:8008`),
-  username: 'node-test_realm',
-  password: 'password',
-};
 let distPath = resolve(__dirname, '..', '..', '..', 'host', 'dist');
 let basePath = resolve(join(__dirname, '..', '..', '..', 'base'));
 
@@ -33,7 +27,6 @@ export async function createRealm(
   dir: string,
   flatFiles: Record<string, string | LooseSingleCardDocument> = {},
   realmURL = testRealm,
-  permissions: RealmPermissions = { '*': ['read', 'write'] },
 ): Promise<Realm> {
   if (!getRunner) {
     ({ getRunner } = await makeFastBootIndexRunner(
@@ -48,18 +41,14 @@ export async function createRealm(
       writeJSONSync(join(dir, filename), contents);
     }
   }
-  return new Realm({
-    url: realmURL,
-    adapter: new NodeAdapter(dir),
+  return new Realm(
+    realmURL,
+    new NodeAdapter(dir),
     loader,
-    indexRunner: getRunner,
-    runnerOptsMgr: manager,
-    getIndexHTML: async () =>
-      readFileSync(join(distPath, 'index.html')).toString(),
-    matrix: testMatrix,
-    permissions,
-    realmSecretSeed: "shhh! it's a secret",
-  });
+    getRunner,
+    manager,
+    async () => readFileSync(join(distPath, 'index.html')).toString(),
+  );
 }
 
 export function setupBaseRealmServer(hooks: NestedHooks, loader: Loader) {
@@ -93,23 +82,11 @@ export async function runTestRealmServer(
   dir: string,
   flatFiles: Record<string, string | LooseSingleCardDocument> = {},
   testRealmURL: URL,
-  permissions?: RealmPermissions,
 ) {
-  let testRealm = await createRealm(
-    loader,
-    dir,
-    flatFiles,
-    testRealmURL.href,
-    permissions,
-  );
+  let testRealm = await createRealm(loader, dir, flatFiles, testRealmURL.href);
   await testRealm.ready;
-  let testRealmServer = await new RealmServer([testRealm]).listen(
-    parseInt(testRealmURL.port),
-  );
-  return {
-    testRealm,
-    testRealmServer,
-  };
+  let testRealmServer = new RealmServer([testRealm]);
+  return testRealmServer.listen(parseInt(testRealmURL.port));
 }
 
 export function setupCardLogs(

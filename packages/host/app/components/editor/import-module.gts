@@ -1,7 +1,6 @@
-import { service } from '@ember/service';
 import Component from '@glimmer/component';
-
 import { importResource } from '@cardstack/host/resources/import';
+import { service } from '@ember/service';
 import LoaderService from '@cardstack/host/services/loader-service';
 
 export interface Signature {

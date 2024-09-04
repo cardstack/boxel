@@ -1,13 +1,12 @@
-import { tracked } from '@glimmer/tracking';
-
 import { Resource } from 'ember-resources';
+import { tracked } from '@glimmer/tracking';
 
 interface Args {
   named: {
     getValue: () => string | null;
-    setValue: (val: string) => void;
-    setValueError: string | null;
-    resetValueError: () => void;
+    setValue?: (val: string) => void;
+    setValueError?: string | null;
+    resetValueError?: () => void;
   };
 }
 
@@ -37,16 +36,22 @@ export default class URLBarResource extends Resource<Args> {
     }
   }
 
-  get errorMessage() {
+  get showErrorMessage() {
     if (!this.url) {
-      return;
+      // do not show error message before user has typed anything
+      return false;
     }
-    if (this.setValueError) {
-      return this.setValueError;
-    } else if (!this.validate(this.url)) {
+    return !this.validate(this.url) || !!this.setValueError;
+  }
+
+  get errorMessage() {
+    if (!this.validate(this.url)) {
       return 'Not a valid URL';
+    } else {
+      return (
+        this.setValueError || 'An unknown error occured when setting the URL'
+      );
     }
-    return;
   }
 
   onKeyPress(event: KeyboardEvent) {

@@ -40,14 +40,9 @@ app "boxel-realm-server" {
         certificate       = "arn:aws:acm:us-east-1:680542703984:certificate/739f0700-d97e-495d-9947-6b497eb578c6"
       }
 
-      # parameter store
       secrets = {
+        # parameter store
         BOXEL_HTTP_BASIC_PW = "arn:aws:ssm:us-east-1:680542703984:parameter/staging/boxel/BOXEL_HTTP_BASIC_PW"
-        REALM_USER_PERMISSIONS = "arn:aws:ssm:us-east-1:680542703984:parameter/staging/boxel/REALM_USER_PERMISSIONS"
-        REALM_SECRET_SEED = "arn:aws:ssm:us-east-1:680542703984:parameter/staging/boxel/REALM_SECRET_SEED"
-        BASE_REALM_PASSWORD = "arn:aws:ssm:us-east-1:680542703984:parameter/staging/boxel/BASE_REALM_PASSWORD"
-        DRAFTS_REALM_PASSWORD = "arn:aws:ssm:us-east-1:680542703984:parameter/staging/boxel/DRAFTS_REALM_PASSWORD"
-        PUBLISHED_REALM_PASSWORD = "arn:aws:ssm:us-east-1:680542703984:parameter/staging/boxel/PUBLISHED_REALM_PASSWORD"
       }
     }
   }

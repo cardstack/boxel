@@ -1,13 +1,4 @@
-import Service from '@ember/service';
-import { type TestContext, getContext, visit } from '@ember/test-helpers';
-import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
-import { buildWaiter } from '@ember/test-waiters';
-import GlimmerComponent from '@glimmer/component';
-
 import { parse } from 'date-fns';
-
-import ms from 'ms';
-
 import {
   Kind,
   RealmAdapter,
@@ -15,17 +6,18 @@ import {
   LooseSingleCardDocument,
   baseRealm,
   createResponse,
-  RealmPermissions,
+  RealmInfo,
   Deferred,
-  type RealmInfo,
-  type TokenClaims,
 } from '@cardstack/runtime-common';
-
+import GlimmerComponent from '@glimmer/component';
+import { type TestContext, visit } from '@ember/test-helpers';
+import { LocalPath } from '@cardstack/runtime-common/paths';
 import { Loader } from '@cardstack/runtime-common/loader';
-import { LocalPath, RealmPaths } from '@cardstack/runtime-common/paths';
 import { Realm } from '@cardstack/runtime-common/realm';
-
-import type { UpdateEventData } from '@cardstack/runtime-common/realm';
+import { renderComponent } from './render-component';
+import Service from '@ember/service';
+import CardPrerender from '@cardstack/host/components/card-prerender';
+import { type CardDef } from 'https://cardstack.com/base/card-api';
 import {
   RunnerOptionsManager,
   type RunState,
@@ -33,42 +25,22 @@ import {
   type EntrySetter,
   type SearchEntryWithErrors,
 } from '@cardstack/runtime-common/search-index';
-
-import CardPrerender from '@cardstack/host/components/card-prerender';
-
+import { WebMessageStream, messageCloseHandler } from './stream';
 import type CardService from '@cardstack/host/services/card-service';
 import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
-
+import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type MessageService from '@cardstack/host/services/message-service';
-
-import {
-  type CardDef,
-  type FieldDef,
-} from 'https://cardstack.com/base/card-api';
-
-import { testRealmInfo, testRealmURL } from './const';
-import percySnapshot from './percy-snapshot';
-
-import { renderComponent } from './render-component';
-import { WebMessageStream, messageCloseHandler } from './stream';
-import visitOperatorMode from './visit-operator-mode';
-
-export { visitOperatorMode, testRealmURL, testRealmInfo, percySnapshot };
-export * from './indexer';
-
+import Owner from '@ember/owner';
+import { buildWaiter } from '@ember/test-waiters';
+import { findAll, waitUntil } from '@ember/test-helpers';
+import type { UpdateEventData } from '@cardstack/runtime-common/realm';
 const waiter = buildWaiter('@cardstack/host/test/helpers/index:onFetch-waiter');
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
-const testMatrix = {
-  url: new URL(`http://localhost:8008`),
-  username: 'test_realm',
-  password: 'password',
-};
 
 export function cleanWhiteSpace(text: string) {
   // this also normalizes non-breaking space characters which seem
   // to be appearing in date/time serialization in some envs
-  // eslint-disable-next-line no-irregular-whitespace
   return text.replace(/[\s ]+/g, ' ').trim();
 }
 
@@ -89,11 +61,6 @@ export function getMonacoContent(): string {
 
 export function setMonacoContent(content: string): string {
   return (window as any).monaco.editor.getModels()[0].setValue(content);
-}
-
-export async function waitForCodeEditor() {
-  // need a moment for the monaco SDK to load
-  return await waitFor('[data-test-editor]', { timeout: 3000 });
 }
 
 export async function waitForSyntaxHighlighting(
@@ -121,28 +88,19 @@ export async function waitForSyntaxHighlighting(
     () =>
       finalHighlightedToken?.computedStyleMap()?.get('color')?.toString() ===
       color,
-    {
-      timeout: 2000,
-      timeoutMessage: 'timed out waiting for syntax highlighting',
-    },
+    { timeoutMessage: 'timed out waiting for syntax highlighting' },
   );
-}
-export async function showSearchResult(realmName: string, id: string) {
-  await waitFor(`[data-test-realm="${realmName}"] [data-test-select]`);
-  while (
-    document.querySelector(
-      `[data-test-realm="${realmName}"] [data-test-show-more-cards]`,
-    ) &&
-    !document.querySelector(
-      `[data-test-realm="${realmName}"] [data-test-select="${id}"]`,
-    )
-  ) {
-    await click(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`);
-  }
 }
 export interface Dir {
   [name: string]: string | Dir;
 }
+
+export const testRealmURL = `http://test-realm/test/`;
+export const testRealmInfo: RealmInfo = {
+  name: 'Unnamed Workspace',
+  backgroundURL: null,
+  iconURL: null,
+};
 
 export interface CardDocFiles {
   [filename: string]: LooseSingleCardDocument;
@@ -154,17 +112,60 @@ export interface TestContextWithSave extends TestContext {
 }
 
 export interface TestContextWithSSE extends TestContext {
-  expectEvents: (args: {
-    assert: Assert;
-    realm: Realm;
-    expectedEvents?: { type: string; data: Record<string, any> }[];
-    expectedNumberOfEvents?: number;
-    onEvents?: (events: { type: string; data: Record<string, any> }[]) => void;
-    callback: () => Promise<any>;
-    opts?: { timeout?: number };
-  }) => Promise<any>;
+  expectEvents: (
+    assert: Assert,
+    realm: Realm,
+    adapter: TestRealmAdapter,
+    expectedContents: { type: string; data: Record<string, any> }[],
+    callback: () => Promise<any>,
+  ) => Promise<any>;
   subscribers: ((e: { type: string; data: string }) => void)[];
 }
+
+interface Options {
+  realmURL?: string;
+  isAcceptanceTest?: true;
+  onFetch?: (req: Request) => Promise<Request>;
+}
+
+// We use a rendered component to facilitate our indexing (this emulates
+// the work that the Fastboot renderer is doing), which means that the
+// `setupRenderingTest(hooks)` from ember-qunit must be used in your tests.
+export const TestRealm = {
+  async create(
+    loader: Loader,
+    flatFiles: Record<string, string | LooseSingleCardDocument | CardDocFiles>,
+    owner: Owner,
+    opts?: Options,
+  ): Promise<Realm> {
+    if (opts?.isAcceptanceTest) {
+      await visit('/');
+    } else {
+      await makeRenderer();
+    }
+    return makeRealm(
+      new TestRealmAdapter(flatFiles),
+      loader,
+      owner,
+      opts?.realmURL,
+      opts?.onFetch,
+    );
+  },
+
+  async createWithAdapter(
+    adapter: RealmAdapter,
+    loader: Loader,
+    owner: Owner,
+    opts?: Options,
+  ): Promise<Realm> {
+    if (opts?.isAcceptanceTest) {
+      await visit('/acceptance-test-setup');
+    } else {
+      await makeRenderer();
+    }
+    return makeRealm(adapter, loader, owner, opts?.realmURL, opts?.onFetch);
+  },
+};
 
 async function makeRenderer() {
   // This emulates the application.hbs
@@ -279,33 +280,15 @@ export function setupServerSentEvents(hooks: NestedHooks) {
     ) as MessageService;
     messageService.register();
 
-    this.expectEvents = async <T,>({
-      assert,
-      realm,
-      expectedEvents,
-      expectedNumberOfEvents,
-      onEvents,
-      callback,
-      opts,
-    }: {
-      assert: Assert;
-      realm: Realm;
-      expectedEvents?: { type: string; data: Record<string, any> }[];
-      expectedNumberOfEvents?: number;
-      onEvents?: (
-        events: { type: string; data: Record<string, any> }[],
-      ) => void;
-      callback: () => Promise<T>;
-      opts?: { timeout?: number };
-    }): Promise<T> => {
+    this.expectEvents = async <T,>(
+      assert: Assert,
+      realm: Realm,
+      adapter: TestRealmAdapter,
+      expectedContents: { type: string; data: Record<string, any> }[],
+      callback: () => Promise<T>,
+    ): Promise<T> => {
       let defer = new Deferred();
       let events: { type: string; data: Record<string, any> }[] = [];
-      let numOfEvents = expectedEvents?.length ?? expectedNumberOfEvents;
-      if (numOfEvents == null) {
-        throw new Error(
-          `expectEvents() must specify either 'expectedEvents' or 'expectedNumberOfEvents'`,
-        );
-      }
       let response = await realm.handle(
         new Request(`${realm.url}_message`, {
           method: 'GET',
@@ -325,19 +308,17 @@ export function setupServerSentEvents(hooks: NestedHooks) {
               `expectEvent timed out, saw events ${JSON.stringify(events)}`,
             ),
           ),
-        opts?.timeout ?? 3000,
+        3000,
       );
       let result = await callback();
       let decoder = new TextDecoder();
-      while (events.length < numOfEvents) {
+      while (events.length < expectedContents.length) {
         let { done, value } = await Promise.race([
           reader.read(),
           defer.promise as any, // this one always throws so type is not important
         ]);
         if (done) {
-          throw new Error(
-            `expected ${numOfEvents} events, saw ${events.length} events`,
-          );
+          throw new Error('expected more events');
         }
         if (value) {
           let ev = getEventData(decoder.decode(value, { stream: true }));
@@ -353,22 +334,9 @@ export function setupServerSentEvents(hooks: NestedHooks) {
           }
         }
       }
-      if (expectedEvents) {
-        let eventsWithoutClientRequestId = events.map((e) => {
-          delete e.data.clientRequestId;
-          return e;
-        });
-        assert.deepEqual(
-          eventsWithoutClientRequestId,
-          expectedEvents,
-          'sse response is correct',
-        );
-      }
-      if (onEvents) {
-        onEvents(events);
-      }
+      assert.deepEqual(events, expectedContents, 'sse response is correct');
       clearTimeout(timeout);
-      realm.unsubscribe();
+      adapter.unsubscribe();
       return result;
     };
   });
@@ -387,128 +355,13 @@ function getEventData(message: string) {
 }
 
 let runnerOptsMgr = new RunnerOptionsManager();
-
-interface RealmContents {
-  [key: string]:
-    | CardDef
-    | FieldDef
-    | LooseSingleCardDocument
-    | RealmInfo
-    | Record<string, unknown>
-    | string;
-}
-export async function setupAcceptanceTestRealm({
-  loader,
-  contents,
-  realmURL,
-  onFetch,
-  permissions,
-}: {
-  loader: Loader;
-  contents: RealmContents;
-  realmURL?: string;
-  onFetch?: (req: Request) => Promise<{
-    req: Request;
-    res: Response | null;
-  }>;
-  permissions?: RealmPermissions;
-}) {
-  return await setupTestRealm({
-    loader,
-    contents,
-    realmURL,
-    onFetch,
-    isAcceptanceTest: true,
-    permissions,
-  });
-}
-
-export async function setupIntegrationTestRealm({
-  loader,
-  contents,
-  realmURL,
-  onFetch,
-}: {
-  loader: Loader;
-  contents: RealmContents;
-  realmURL?: string;
-  onFetch?: (req: Request) => Promise<{
-    req: Request;
-    res: Response | null;
-  }>;
-}) {
-  return await setupTestRealm({
-    loader,
-    contents,
-    realmURL,
-    onFetch,
-    isAcceptanceTest: false,
-  });
-}
-
-export const testRealmSecretSeed = "shhh! it's a secret";
-async function setupTestRealm({
-  loader,
-  contents,
-  realmURL,
-  onFetch,
-  isAcceptanceTest,
-  permissions = { '*': ['read', 'write'] },
-}: {
-  loader: Loader;
-  contents: RealmContents;
-  realmURL?: string;
-  onFetch?: (req: Request) => Promise<{
-    req: Request;
-    res: Response | null;
-  }>;
-  isAcceptanceTest?: boolean;
-  permissions?: RealmPermissions;
-}) {
-  let owner = (getContext() as TestContext).owner;
-
-  realmURL = realmURL ?? testRealmURL;
-
-  for (const [path, mod] of Object.entries(contents)) {
-    if (path.endsWith('.gts') && typeof mod !== 'string') {
-      let moduleURLString = `${realmURL}${path.replace(/\.gts$/, '')}`;
-      loader.shimModule(moduleURLString, mod as object);
-    }
-  }
-  let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
-  for (const [path, value] of Object.entries(contents)) {
-    if (path.endsWith('.json') && api.isCard(value)) {
-      value.id = `${realmURL}${path.replace(/\.json$/, '')}`;
-      api.setCardAsSavedForTest(value);
-    }
-  }
-  for (const [path, value] of Object.entries(contents)) {
-    if (path.endsWith('.json') && api.isCard(value)) {
-      let doc = api.serializeCard(value);
-      contents[path] = doc;
-    }
-  }
-
-  let flatFiles: Record<string, string> = {};
-  for (const [path, value] of Object.entries(contents)) {
-    if (path.endsWith('.gts') && typeof value !== 'string') {
-      flatFiles[path] = '// this file is shimmed';
-    } else if (typeof value === 'string') {
-      flatFiles[path] = value;
-    } else {
-      flatFiles[path] = JSON.stringify(value);
-    }
-  }
-  let adapter = new TestRealmAdapter(flatFiles, new URL(realmURL));
-  if (isAcceptanceTest) {
-    await visit('/acceptance-test-setup');
-  } else {
-    // We use a rendered component to facilitate our indexing (this emulates
-    // the work that the Fastboot renderer is doing), which means that the
-    // `setupRenderingTest(hooks)` from ember-qunit must be used in your tests.
-    await makeRenderer();
-  }
-
+function makeRealm(
+  adapter: RealmAdapter,
+  loader: Loader,
+  owner: Owner,
+  realmURL = testRealmURL,
+  onFetch?: (req: Request) => Promise<Request>,
+) {
   let localIndexer = owner.lookup(
     'service:local-indexer',
   ) as unknown as MockLocalIndexer;
@@ -519,37 +372,26 @@ async function setupTestRealm({
     loader.registerURLHandler(async (req: Request) => {
       let token = waiter.beginAsync();
       try {
-        let { req: newReq, res } = await onFetch(req);
-        if (res) {
-          return res;
-        }
-        req = newReq;
+        req = await onFetch(req);
       } finally {
         waiter.endAsync(token);
       }
-
       return realm.maybeHandle(req);
     });
   }
-
-  realm = new Realm({
-    url: realmURL,
+  realm = new Realm(
+    realmURL,
     adapter,
     loader,
-    indexRunner: async (optsId) => {
+    async (optsId) => {
       let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
       await localIndexer.configureRunner(registerRunner, entrySetter, adapter);
     },
     runnerOptsMgr,
-    getIndexHTML: async () =>
+    async () =>
       `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
-    matrix: testMatrix,
-    permissions,
-    realmSecretSeed: testRealmSecretSeed,
-  });
-
-  await realm.ready;
-  return { realm, adapter };
+  );
+  return realm;
 }
 
 export async function saveCard(instance: CardDef, id: string, loader: Loader) {
@@ -557,7 +399,22 @@ export async function saveCard(instance: CardDef, id: string, loader: Loader) {
   let doc = api.serializeCard(instance);
   doc.data.id = id;
   await api.updateFromSerialized(instance, doc);
-  return doc;
+}
+
+export async function shimModule(
+  moduleURL: string,
+  module: Record<string, any>,
+  loader: Loader,
+) {
+  if (loader) {
+    loader.shimModule(moduleURL, module);
+  }
+  await Promise.all(
+    Object.keys(module).map(async (name) => {
+      let m = await loader.import<any>(moduleURL);
+      m[name];
+    }),
+  );
 }
 
 export function setupCardLogs(
@@ -569,36 +426,6 @@ export function setupCardLogs(
     await api.flushLogs();
   });
 }
-type FilesForTestAdapter = Record<
-  string,
-  string | LooseSingleCardDocument | CardDocFiles | RealmInfo
->;
-
-export function createJWT(
-  claims: TokenClaims,
-  expiration: string,
-  secret: string,
-) {
-  let nowInSeconds = Math.floor(Date.now() / 1000);
-  let expires = nowInSeconds + ms(expiration) / 1000;
-  let header = { alg: 'none', typ: 'JWT' };
-  let payload = {
-    iat: nowInSeconds,
-    exp: expires,
-    ...claims,
-  };
-  let stringifiedHeader = JSON.stringify(header);
-  let stringifiedPayload = JSON.stringify(payload);
-  let headerAndPayload = `${btoa(stringifiedHeader)}.${btoa(
-    stringifiedPayload,
-  )}`;
-  // this is our silly JWT--we don't sign with crypto since we are running in the
-  // browser so the secret is the signature
-  return `${headerAndPayload}.${secret}`;
-}
-
-class TokenExpiredError extends Error {}
-class JsonWebTokenError extends Error {}
 
 export class TestRealmAdapter implements RealmAdapter {
   #files: Dir = {};
@@ -607,7 +434,10 @@ export class TestRealmAdapter implements RealmAdapter {
   #subscriber: ((message: UpdateEventData) => void) | undefined;
 
   constructor(
-    flatFiles: FilesForTestAdapter,
+    flatFiles: Record<
+      string,
+      string | LooseSingleCardDocument | CardDocFiles | RealmInfo
+    >,
     realmURL = new URL(testRealmURL),
   ) {
     this.#paths = new RealmPaths(realmURL);
@@ -626,29 +456,6 @@ export class TestRealmAdapter implements RealmAdapter {
         dir[last] = JSON.stringify(content);
       }
     }
-  }
-
-  createJWT(claims: TokenClaims, expiration: string, secret: string) {
-    return createJWT(claims, expiration, secret);
-  }
-
-  verifyJWT(
-    token: string,
-    secret: string,
-  ): TokenClaims & { iat: number; exp: number } {
-    let [_header, payload, signature] = token.split('.');
-    if (signature === secret) {
-      let claims = JSON.parse(atob(payload)) as {
-        iat: number;
-        exp: number;
-      } & TokenClaims;
-      let expiration = claims.exp;
-      if (expiration > Date.now() / 1000) {
-        throw new TokenExpiredError(`JWT token expired at ${expiration}`);
-      }
-      return claims;
-    }
-    throw new JsonWebTokenError(`unable to verify JWT: ${token}`);
   }
 
   get lastModified() {
@@ -715,7 +522,7 @@ export class TestRealmAdapter implements RealmAdapter {
       throw err;
     }
     if (typeof content !== 'string') {
-      return undefined;
+      throw new Error('treated directory as a file');
     }
     return {
       path,
@@ -802,13 +609,13 @@ export class TestRealmAdapter implements RealmAdapter {
   }
 
   createStreamingResponse(
-    realm: Realm,
+    unresolvedRealmURL: string,
     _request: Request,
     responseInit: ResponseInit,
     cleanup: () => void,
   ) {
     let s = new WebMessageStream();
-    let response = createResponse(realm, s.readable, responseInit);
+    let response = createResponse(unresolvedRealmURL, s.readable, responseInit);
     messageCloseHandler(s.readable, cleanup);
     return { response, writable: s.writable };
   }
@@ -860,14 +667,19 @@ export function diff(
   };
 }
 
-export async function elementIsVisible(element: Element) {
-  return new Promise((resolve) => {
-    let intersectionObserver = new IntersectionObserver(function (entries) {
-      intersectionObserver.unobserve(element);
+export class MockResponse extends Response {
+  private _mockUrl: string;
 
-      resolve(entries[0].isIntersecting);
-    });
+  constructor(
+    body?: BodyInit | null | undefined,
+    init?: ResponseInit,
+    url?: string,
+  ) {
+    super(body, init);
+    this._mockUrl = url || '';
+  }
 
-    intersectionObserver.observe(element);
-  });
+  get url() {
+    return this._mockUrl;
+  }
 }

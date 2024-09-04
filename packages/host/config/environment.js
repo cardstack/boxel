@@ -1,10 +1,5 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-
-let sqlSchema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
-
 module.exports = function (environment) {
   const ENV = {
     modulePrefix: '@cardstack/host',
@@ -30,13 +25,7 @@ module.exports = function (environment) {
     },
     logLevels: process.env.LOG_LEVELS || '*=info,current-run=error',
     matrixURL: process.env.MATRIX_URL || 'http://localhost:8008',
-    matrixServerName: process.env.MATRIX_SERVER_NAME || 'localhost',
     autoSaveDelayMs: 500,
-    monacoDebounceMs: 500,
-    monacoCursorDebounceMs: 200,
-    serverEchoDebounceMs: 5000,
-    loginMessageTimeoutMs: 1000,
-    minSaveTaskDurationMs: 1000,
 
     // the fields below may be rewritten by the realm server
     ownRealmURL:
@@ -45,10 +34,9 @@ module.exports = function (environment) {
         : process.env.OWN_REALM_URL || 'http://localhost:4200/', // this should be provided as an *unresolved* URL
     // This is temporary until we have a better way to discover realms besides
     // our own
-    otherRealmURLs:
-      environment !== 'test' && process.env.OTHER_REALM_URLS
-        ? process.env.OTHER_REALM_URLS.split(',').map((u) => u.trim())
-        : [],
+    otherRealmURLs: process.env.OTHER_REALM_URLS
+      ? process.env.OTHER_REALM_URLS.split(',').map((u) => u.trim())
+      : [],
     hostsOwnAssets: true,
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
@@ -56,7 +44,6 @@ module.exports = function (environment) {
       environment === 'test'
         ? 'http://test-realm/test/'
         : process.env.OWN_REALM_URL || 'http://localhost:4200/',
-    sqlSchema,
   };
 
   if (environment === 'development') {
@@ -80,11 +67,6 @@ module.exports = function (environment) {
     ENV.APP.autoboot = false;
     ENV.APP.experimentalAIEnabled = true;
     ENV.autoSaveDelayMs = 0;
-    ENV.monacoDebounceMs = 0;
-    ENV.monacoCursorDebounceMs = 0;
-    ENV.serverEchoDebounceMs = 0;
-    ENV.loginMessageTimeoutMs = 0;
-    ENV.minSaveTaskDurationMs = 0;
   }
 
   if (environment === 'production') {

@@ -5,22 +5,18 @@
     "url": "https://github.com/cardstack/boxel"
   },
   "scripts": {
-    "build:boxel-host": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && NODE_OPTIONS='--max_old_space_size=8192' pnpm build:production",
+    "build:boxel-host": "cd packages/host && pnpm build:production",
     "clear-caches": "find . -name 'node_modules' -type d -prune -exec rm -rf {} \\; && rm -rf $TMPDIR/embroider",
-    "deploy:boxel-host": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=8192' pnpm exec ember deploy",
-    "deploy:boxel-host:preview-staging": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=8192' pnpm exec ember deploy s3-preview-staging --verbose",
-    "deploy:boxel-host:preview-production": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=8192' pnpm exec ember deploy s3-preview-production --verbose",
-    "deploy:boxel-motion": "cd packages/boxel-motion/addon && pnpm build && cd ../test-app && pnpm exec ember deploy",
-    "deploy:boxel-motion:preview-staging": "cd packages/boxel-motion/addon && pnpm build && cd ../test-app && pnpm exec ember deploy s3-preview-staging --verbose",
-    "deploy:boxel-ui": "cd packages/boxel-ui/addon && pnpm build && cd ../test-app && pnpm exec ember deploy",
-    "deploy:boxel-ui:preview-staging": "cd packages/boxel-ui/addon && pnpm build && cd ../test-app && pnpm exec ember deploy s3-preview-staging --verbose",
+    "deploy:boxel-host": "cd packages/host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy",
+    "deploy:boxel-host:preview-staging": "cd packages/host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy s3-preview-staging --verbose",
+    "deploy:boxel-host:preview-production": "cd packages/host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy s3-preview-production --verbose",
     "lint": "pnpm run --filter './packages/**' --if-present -r lint",
     "lint:fix": "pnpm run --filter './packages/**' --if-present -r lint:fix"
   },
   "pnpm": {
     "overrides": {
       "@types/eslint": "8.4.1",
-      "@embroider/util": "1.12.0",
+      "@embroider/util": "1.11.1",
       "jsesc": "^3.0.0",
       "ember-modifier": "^4.1.0",
       "prettier": "github:cardstack/prettier#glimmer-style-tag-in-template-support"
@@ -34,42 +30,39 @@
       "magic-string@0.25.9": "patches/magic-string@0.25.9.patch",
       "fastboot@4.1.0": "patches/fastboot@4.1.0.patch",
       "@types/eventsource@1.1.11": "patches/@types__eventsource@1.1.11.patch",
-      "style-loader@2.0.0": "patches/style-loader@2.0.0.patch",
-      "ember-css-url@1.0.0": "patches/ember-css-url@1.0.0.patch",
-      "matrix-js-sdk@31.0.0": "patches/matrix-js-sdk@31.0.0.patch",
-      "ember-basic-dropdown@8.0.4": "patches/ember-basic-dropdown@8.0.4.patch"
+      "matrix-js-sdk@25.0.0": "patches/matrix-js-sdk@25.0.0.patch",
+      "style-loader@2.0.0": "patches/style-loader@2.0.0.patch"
     }
   },
   "devDependencies": {
     "@actions/core": "^1.2.6",
     "@actions/github": "^4.0.0",
-    "@babel/core": "^7.24.3",
+    "@babel/core": "^7.17.8",
     "@glimmer/component": "^1.1.2",
     "@glimmer/tracking": "^1.0.4",
-    "@glint/core": "1.3.0",
-    "@glint/environment-ember-loose": "1.3.0",
-    "@glint/environment-ember-template-imports": "1.3.0",
+    "@glint/core": "^1.0.0",
+    "@glint/environment-ember-loose": "^1.0.0",
+    "@glint/environment-ember-template-imports": "^1.0.0",
     "@typescript-eslint/eslint-plugin": "^5.17.0",
     "@typescript-eslint/parser": "^5.17.0",
-    "ember-cli-htmlbars": "^6.3.0",
+    "ember-cli-htmlbars": "^6.2.0",
     "ember-resources": "^6.3.1",
     "ember-source": "~4.12.0",
     "ember-template-imports": "^3.0.1",
     "eslint": "^7.32.0",
     "eslint-config-prettier": "^8.4.0",
     "eslint-plugin-import": "^2.26.0",
-    "eslint-plugin-prefer-let": "^3.0.1",
     "eslint-plugin-prettier": "^5.0.0",
     "hcl2-parser": "^1.0.3",
     "prettier": "^2.7.1",
-    "prettier-plugin-ember-template-tag": "^1.1.0",
-    "typescript": "~5.1.6"
+    "prettier-plugin-ember-template-tag": "^1.0.0",
+    "typescript": "^5.1.6"
   },
   "engines": {
     "pnpm": "^8"
   },
   "volta": {
-    "node": "20.11.1",
-    "pnpm": "8.15.5"
+    "node": "18.6.0",
+    "pnpm": "8.5.1"
   }
 }

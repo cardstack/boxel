@@ -1,36 +1,28 @@
-import { waitUntil, waitFor, click, focus } from '@ember/test-helpers';
-import GlimmerComponent from '@glimmer/component';
-
-import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
-
+import GlimmerComponent from '@glimmer/component';
+import { setupRenderingTest } from 'ember-qunit';
 import { baseRealm } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
-
-import CardPrerender from '@cardstack/host/components/card-prerender';
+import { Loader } from '@cardstack/runtime-common/loader';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
-
-import type LoaderService from '@cardstack/host/services/loader-service';
-
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import RecentCardsService from '@cardstack/host/services/recent-cards-service';
-
-import { CardDef } from 'https://cardstack.com/base/card-api';
-
+import CardPrerender from '@cardstack/host/components/card-prerender';
+import { renderComponent } from '../../helpers/render-component';
 import {
-  percySnapshot,
   testRealmURL,
   setupCardLogs,
   setupLocalIndexing,
   setupOnSave,
   setupServerSentEvents,
   TestRealmAdapter,
+  TestRealm,
   type TestContextWithSSE,
-  setupIntegrationTestRealm,
 } from '../../helpers';
-import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
-import { renderComponent } from '../../helpers/render-component';
+import { waitUntil, waitFor, click, focus } from '@ember/test-helpers';
+import type LoaderService from '@cardstack/host/services/loader-service';
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type CardService from '@cardstack/host/services/card-service';
+import percySnapshot from '@percy/ember';
+import { CardDef } from 'https://cardstack.com/base/card-api';
 
 let loader: Loader;
 let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -75,7 +67,6 @@ module('Integration | card-delete', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
-  setupMatrixServiceMock(hooks);
   hooks.afterEach(async function () {
     localStorage.removeItem('recent-cards');
   });
@@ -105,88 +96,92 @@ module('Integration | card-delete', function (hooks) {
       ].filter((a) => a.length > 0);
       await operatorModeStateService.restore({ stacks });
     };
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
+    adapter = new TestRealmAdapter({
+      'pet.gts': `
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
 
-    let { field, contains, CardDef, Component } = cardApi;
-    let { default: StringField } = string;
-
-    class Pet extends CardDef {
-      static displayName = 'Pet';
-      @field firstName = contains(StringField);
-      @field title = contains(StringField, {
-        computeVia: function (this: Pet) {
-          return this.firstName;
-        },
-      });
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <h2 data-test-pet={{@model.firstName}}><@fields.firstName /></h2>
-        </template>
-      };
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <h3 data-test-pet={{@model.firstName}}><@fields.firstName /></h3>
-        </template>
-      };
-    }
-    ({ realm, adapter } = await setupIntegrationTestRealm({
-      loader,
-      contents: {
-        'pet.gts': { Pet },
-        'index.json': {
-          data: {
-            type: 'card',
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
-                name: 'CardsGrid',
-              },
+        export class Pet extends CardDef {
+          static displayName = 'Pet';
+          @field firstName = contains(StringCard);
+          @field title = contains(StringCard, {
+            computeVia: function (this: Pet) {
+              return this.firstName;
+            },
+          });
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <h2 data-test-pet={{@model.firstName}}><@fields.firstName/></h2>
+              <@fields.pet/>
+            </template>
+          }
+          static embedded = class Embedded extends Component<typeof this> {
+            <template>
+              <h3 data-test-pet={{@model.firstName}}><@fields.name/></h3>
+            </template>
+          }
+        }
+      `,
+      'index.json': {
+        data: {
+          type: 'card',
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/cards-grid',
+              name: 'CardsGrid',
             },
           },
-        },
-        'Pet/mango.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Mango',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Pet/vangogh.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Van Gogh',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        '.realm.json': {
-          name: 'Test Workspace 1',
-          backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
         },
       },
-    }));
+      'Pet/mango.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Mango',
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../pet',
+              name: 'Pet',
+            },
+          },
+        },
+      },
+      'Pet/vangogh.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Van Gogh',
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../pet',
+              name: 'Pet',
+            },
+          },
+        },
+      },
+      '.realm.json': {
+        name: 'Test Workspace 1',
+        backgroundURL:
+          'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+        iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+      },
+    });
+
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
+      realmURL: testRealmURL,
+    });
+    await realm.ready;
+
+    let cardService = this.owner.lookup('service:card-service') as CardService;
+    // the copy button only appears after this service has loaded,
+    // so let's just wait for it here
+    await cardService.ready;
   });
 
   test<TestContextWithSSE>('can delete a card from the index card stack item', async function (assert) {
-    assert.expect(6);
+    assert.expect(4);
     let expectedEvents = [
       {
         type: 'index',
@@ -210,8 +205,6 @@ module('Integration | card-delete', function (hooks) {
     await waitFor(
       `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
     );
-    assert.dom('[data-test-delete-modal-container]').doesNotExist();
-
     await click(
       `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.more-actions`,
     );
@@ -221,15 +214,19 @@ module('Integration | card-delete', function (hooks) {
     assert
       .dom(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`)
       .containsText('Delete the card Mango?');
+    await percySnapshot(
+      'Integration | card-delete | can delete a card from the index card stack item, modal',
+    );
 
-    await this.expectEvents({
+    await this.expectEvents(
       assert,
       realm,
+      adapter,
       expectedEvents,
-      callback: async () => {
+      async () => {
         await click('[data-test-confirm-delete-button]');
       },
-    });
+    );
     await waitUntil(
       () =>
         document.querySelectorAll(
@@ -238,7 +235,6 @@ module('Integration | card-delete', function (hooks) {
     );
     let notFound = await adapter.openFile('Pet/mango.json');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
-    assert.dom('[data-test-delete-modal-container]').doesNotExist();
   });
 
   test('can cancel delete', async function (assert) {
@@ -273,7 +269,6 @@ module('Integration | card-delete', function (hooks) {
     );
     fileRef = await adapter.openFile('Pet/mango.json');
     assert.ok(fileRef, 'card instance exists in file system');
-    assert.dom('[data-test-delete-modal-container]').doesNotExist();
   });
 
   test<TestContextWithSSE>('can delete a card stack item in non-edit mode', async function (assert) {
@@ -301,11 +296,12 @@ module('Integration | card-delete', function (hooks) {
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
     assert.ok(fileRef, 'card instance exists in file system');
-    await this.expectEvents({
+    await this.expectEvents(
       assert,
       realm,
+      adapter,
       expectedEvents,
-      callback: async () => {
+      async () => {
         await waitFor(`[data-test-operator-mode-stack="0"] [data-test-pet]`);
         assert
           .dom(
@@ -322,7 +318,7 @@ module('Integration | card-delete', function (hooks) {
           .containsText('Delete the card Mango?');
         await click('[data-test-confirm-delete-button]');
       },
-    });
+    );
     await waitUntil(
       () =>
         !document.querySelector(
@@ -363,11 +359,12 @@ module('Integration | card-delete', function (hooks) {
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
     assert.ok(fileRef, 'card instance exists in file system');
-    await this.expectEvents({
+    await this.expectEvents(
       assert,
       realm,
+      adapter,
       expectedEvents,
-      callback: async () => {
+      async () => {
         await waitFor(`[data-test-operator-mode-stack="0"] [data-test-pet]`);
         assert
           .dom(
@@ -387,7 +384,7 @@ module('Integration | card-delete', function (hooks) {
           .containsText('Delete the card Mango?');
         await click('[data-test-confirm-delete-button]');
       },
-    });
+    );
     await waitUntil(
       () =>
         !document.querySelector(
@@ -428,11 +425,12 @@ module('Integration | card-delete', function (hooks) {
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
     assert.ok(fileRef, 'card instance exists in file system');
-    await this.expectEvents({
+    await this.expectEvents(
       assert,
       realm,
+      adapter,
       expectedEvents,
-      callback: async () => {
+      async () => {
         await waitFor(`[data-test-operator-mode-stack="0"] [data-test-pet]`);
         await waitFor(`[data-test-operator-mode-stack="1"] [data-test-pet]`);
         assert
@@ -455,7 +453,7 @@ module('Integration | card-delete', function (hooks) {
           .containsText('Delete the card Mango?');
         await click('[data-test-confirm-delete-button]');
       },
-    });
+    );
     await waitUntil(
       () =>
         !document.querySelector(
@@ -501,11 +499,12 @@ module('Integration | card-delete', function (hooks) {
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
     assert.ok(fileRef, 'card instance exists in file system');
-    await this.expectEvents({
+    await this.expectEvents(
       assert,
       realm,
+      adapter,
       expectedEvents,
-      callback: async () => {
+      async () => {
         await waitFor(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
         );
@@ -522,7 +521,7 @@ module('Integration | card-delete', function (hooks) {
           .containsText('Delete the card Mango?');
         await click('[data-test-confirm-delete-button]');
       },
-    });
+    );
     await waitUntil(
       () =>
         document.querySelectorAll(
@@ -564,11 +563,12 @@ module('Integration | card-delete', function (hooks) {
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
     assert.ok(fileRef, 'card instance exists in file system');
-    await this.expectEvents({
+    await this.expectEvents(
       assert,
       realm,
+      adapter,
       expectedEvents,
-      callback: async () => {
+      async () => {
         await waitFor(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
         );
@@ -588,7 +588,7 @@ module('Integration | card-delete', function (hooks) {
           .containsText('Delete the card Mango?');
         await click('[data-test-confirm-delete-button]');
       },
-    });
+    );
     await waitUntil(
       () =>
         !document.querySelector(
@@ -623,11 +623,11 @@ module('Integration | card-delete', function (hooks) {
     ];
 
     // creates a recent item
-    let recentCardsService = this.owner.lookup(
-      'service:recent-cards-service',
-    ) as RecentCardsService;
+    let operatorModeStateService = this.owner.lookup(
+      'service:operator-mode-state-service',
+    ) as OperatorModeStateService;
     let mango = await loadCard(`${testRealmURL}Pet/mango`);
-    recentCardsService.add(mango);
+    operatorModeStateService.addRecentCard(mango);
 
     await setCardInOperatorModeState([`${testRealmURL}index`]);
     await renderComponent(
@@ -640,15 +640,16 @@ module('Integration | card-delete', function (hooks) {
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
     assert.ok(fileRef, 'card instance exists in file system');
-    await this.expectEvents({
+    await this.expectEvents(
       assert,
       realm,
+      adapter,
       expectedEvents,
-      callback: async () => {
+      async () => {
         await waitFor(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
         );
-        await focus(`[data-test-search-field]`);
+        await focus(`[data-test-search-input] input`);
         assert
           .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
           .exists();
@@ -663,7 +664,7 @@ module('Integration | card-delete', function (hooks) {
           .containsText('Delete the card Mango?');
         await click('[data-test-confirm-delete-button]');
       },
-    });
+    );
     await waitUntil(
       () =>
         document.querySelectorAll(
@@ -672,7 +673,7 @@ module('Integration | card-delete', function (hooks) {
     );
     let notFound = await adapter.openFile('Pet/mango.json');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
-    await focus(`[data-test-search-field]`);
+    await focus(`[data-test-search-input] input`);
     assert
       .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
       .doesNotExist('recent item removed');
@@ -703,11 +704,12 @@ module('Integration | card-delete', function (hooks) {
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
     assert.ok(fileRef, 'card instance exists in file system');
-    await this.expectEvents({
+    await this.expectEvents(
       assert,
       realm,
+      adapter,
       expectedEvents,
-      callback: async () => {
+      async () => {
         await waitFor(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]`,
         );
@@ -733,7 +735,7 @@ module('Integration | card-delete', function (hooks) {
           .containsText('Delete the card Mango?');
         await click('[data-test-confirm-delete-button]');
       },
-    });
+    );
     await waitUntil(
       () =>
         document.querySelectorAll(

@@ -1,5 +1,5 @@
 import { module, test } from 'qunit';
-import { Loader, VirtualNetwork } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common';
 import { dirSync, setGracefulCleanup, DirResult } from 'tmp';
 import {
   createRealm,
@@ -22,14 +22,12 @@ module('loader', function (hooks) {
   let dir: DirResult;
   let testRealmServer: Server;
 
-  let virtualNetwork = new VirtualNetwork();
-  let loader = virtualNetwork.createLoader();
-
+  let loader = new Loader();
   loader.addURLMapping(
     new URL(baseRealm.url),
     new URL('http://localhost:4201/base/'),
   );
-  shimExternals(virtualNetwork);
+  shimExternals(loader);
 
   setupBaseRealmServer(hooks, loader);
 
@@ -37,9 +35,12 @@ module('loader', function (hooks) {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
 
-    testRealmServer = (
-      await runTestRealmServer(loader, dir.name, undefined, testRealmURL)
-    ).testRealmServer;
+    testRealmServer = await runTestRealmServer(
+      loader,
+      dir.name,
+      undefined,
+      testRealmURL,
+    );
   });
 
   hooks.afterEach(function () {
@@ -47,7 +48,7 @@ module('loader', function (hooks) {
   });
 
   test('can dynamically load modules with cycles', async function (assert) {
-    let loader = virtualNetwork.createLoader();
+    let loader = new Loader();
     loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
     let module = await loader.import<{ three(): number }>(
       `${testRealmHref}cycle-two`,
@@ -56,7 +57,7 @@ module('loader', function (hooks) {
   });
 
   test('can resolve multiple import load races against a common dep', async function (assert) {
-    let loader = virtualNetwork.createLoader();
+    let loader = new Loader();
     loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
     let a = loader.import<{ a(): string }>(`${testRealmHref}a`);
     let b = loader.import<{ b(): string }>(`${testRealmHref}b`);
@@ -66,7 +67,7 @@ module('loader', function (hooks) {
   });
 
   test('can resolve a import deadlock', async function (assert) {
-    let loader = virtualNetwork.createLoader();
+    let loader = new Loader();
     loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
     let a = loader.import<{ a(): string }>(`${testRealmHref}deadlock/a`);
     let b = loader.import<{ b(): string }>(`${testRealmHref}deadlock/b`);
@@ -78,7 +79,7 @@ module('loader', function (hooks) {
   });
 
   test('supports import.meta', async function (assert) {
-    let loader = virtualNetwork.createLoader();
+    let loader = new Loader();
     let realm = await createRealm(
       loader,
       dir.name,
@@ -103,7 +104,7 @@ module('loader', function (hooks) {
   });
 
   test('can determine consumed modules', async function (assert) {
-    let loader = virtualNetwork.createLoader();
+    let loader = new Loader();
     await loader.import<{ a(): string }>(`${testRealmHref}a`);
     assert.deepEqual(await loader.getConsumedModules(`${testRealmHref}a`), [
       `${testRealmHref}a`,
@@ -113,7 +114,7 @@ module('loader', function (hooks) {
   });
 
   test('can determine consumed modules when an error is encountered during loading', async function (assert) {
-    let loader = virtualNetwork.createLoader();
+    let loader = new Loader();
     loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
     try {
       await loader.import<{ d(): string }>(`${testRealmHref}d`);
@@ -131,7 +132,7 @@ module('loader', function (hooks) {
   });
 
   test('can get consumed modules within a cycle', async function (assert) {
-    let loader = virtualNetwork.createLoader();
+    let loader = new Loader();
     loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
     await loader.import<{ three(): number }>(`${testRealmHref}cycle-two`);
     let modules = await loader.getConsumedModules(`${testRealmHref}cycle-two`);
@@ -142,8 +143,8 @@ module('loader', function (hooks) {
   });
 
   test('supports identify API', async function (assert) {
-    let loader = virtualNetwork.createLoader();
-    shimExternals(virtualNetwork);
+    let loader = new Loader();
+    shimExternals(loader);
     loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
     let { Person } = await loader.import<{ Person: unknown }>(
       `${testRealmHref}person`,
@@ -160,8 +161,8 @@ module('loader', function (hooks) {
   });
 
   test('exports cannot be mutated', async function (assert) {
-    let loader = virtualNetwork.createLoader();
-    shimExternals(virtualNetwork);
+    let loader = new Loader();
+    shimExternals(loader);
     loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
     let module = await loader.import<{ Person: unknown }>(
       `${testRealmHref}person`,
@@ -172,36 +173,12 @@ module('loader', function (hooks) {
   });
 
   test('can get a loader used to import a specific card', async function (assert) {
-    let loader = virtualNetwork.createLoader();
-    shimExternals(virtualNetwork);
+    let loader = new Loader();
+    shimExternals(loader);
     loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
     let module = await loader.import<any>(`${testRealmHref}person`);
     let card = module.Person;
     let testingLoader = Loader.getLoaderFor(card);
     assert.strictEqual(testingLoader, loader, 'the loaders are the same');
-  });
-
-  test('is able to follow redirects', async function (assert) {
-    loader.prependURLHandlers([
-      async (request) => {
-        if (request.url.includes('node-b.abc')) {
-          return new Response('final redirection url');
-        }
-        return null;
-      },
-      async (request) => {
-        if (!request.url.includes('node-a.abc')) {
-          return null;
-        }
-        return new Response('redirected', {
-          status: 301,
-          headers: new Headers({ Location: `http://node-b.abc` }),
-        });
-      },
-    ]);
-
-    let response = await loader.fetch(`http://node-a.abc`);
-    assert.strictEqual(response.url, 'http://node-b.abc/');
-    assert.true(response.redirected);
   });
 });

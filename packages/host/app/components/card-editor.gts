@@ -1,19 +1,14 @@
-import { on } from '@ember/modifier';
-import { action } from '@ember/object';
-import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import { restartableTask } from 'ember-concurrency';
-
-import { Button } from '@cardstack/boxel-ui/components';
-
+import { service } from '@ember/service';
+import type CardService from '../services/card-service';
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
-
 import FormatPicker from './format-picker';
 import Preview from './preview';
-
-import type CardService from '../services/card-service';
+import Button from '@cardstack/boxel-ui/components/button';
 
 interface Signature {
   Args: {
@@ -77,8 +72,8 @@ export default class CardEditor extends Component<Signature> {
   }
 
   private write = restartableTask(async () => {
-    await this.cardService.saveModel(this, this.args.card);
-    this.args.onSave?.(this.args.card);
+    let card = await this.cardService.saveModel(this.args.card);
+    this.args.onSave?.(card);
     this.format = 'isolated';
   });
 }

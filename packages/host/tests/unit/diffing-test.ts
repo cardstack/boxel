@@ -1,5 +1,4 @@
 import { module, test } from 'qunit';
-
 import { diff } from '../helpers';
 
 module('Unit | diffing', function () {

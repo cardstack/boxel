@@ -1,92 +1,49 @@
-import type RouterService from '@ember/routing/router-service';
 import Service, { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
-
-import format from 'date-fns/format';
-
-import { task } from 'ember-concurrency';
-import { marked } from 'marked';
 import {
-  type LoginResponse,
+  type IAuthData,
   type MatrixEvent,
   type RoomMember,
   type EmittedEvents,
   type IEvent,
   type MatrixClient,
-  type ISendEventResponse,
 } from 'matrix-js-sdk';
+import type * as MatrixSDK from 'matrix-js-sdk';
+import { task } from 'ember-concurrency';
+import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
-
-import { v4 as uuidv4 } from 'uuid';
-
+import { importResource } from '../resources/import';
+import { marked } from 'marked';
+import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
+import type CardService from '../services/card-service';
+import ENV from '@cardstack/host/config/environment';
 import {
   type LooseSingleCardDocument,
+  type CodeRef,
+  type MatrixCardError,
   sanitizeHtml,
-  aiBotUsername,
-  splitStringIntoChunks,
-  baseRealm,
-  Loader,
-  loaderFor,
 } from '@cardstack/runtime-common';
-import {
-  basicMappings,
-  generateCardPatchCallSpecification,
-} from '@cardstack/runtime-common/helpers/ai';
-
-import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
-
-import { Submode } from '@cardstack/host/components/submode-switcher';
-import ENV from '@cardstack/host/config/environment';
-
-import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
-import { getRealmSession } from '@cardstack/host/resources/realm-session';
-
-import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
+import type LoaderService from './loader-service';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import * as RoomModule from 'https://cardstack.com/base/room';
 import type {
   RoomField,
   MatrixEvent as DiscreteMatrixEvent,
-  MessageField,
-  CardMessageContent,
-  CardFragmentContent,
 } from 'https://cardstack.com/base/room';
-
-import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
-import { importResource } from '../resources/import';
-
-import { clearAllRealmSessions } from '../resources/realm-session';
-
-import type CardService from './card-service';
-import type LoaderService from './loader-service';
-
-import type * as MatrixSDK from 'matrix-js-sdk';
+import type { RoomObjectiveField } from 'https://cardstack.com/base/room-objective';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 const { matrixURL } = ENV;
-const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
+const SET_OBJECTIVE_POWER_LEVEL = 50;
 const DEFAULT_PAGE_SIZE = 50;
-const MAX_CARD_SIZE_KB = 60;
 
 export type Event = Partial<IEvent>;
 
-export type OperatorModeContext = {
-  submode: Submode;
-  openCardIds: string[];
-};
 export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
-  @service declare router: RouterService;
   @tracked private _client: MatrixClient | undefined;
-  private realmSessionTasks: Map<string, Promise<string>> = new Map(); // key: realmURL, value: promise for JWT
-
-  profile = getMatrixProfile(this, () => this.client.getUserId());
 
   rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
-  messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
-  cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
-  pendingMessages: TrackedMap<string, MessageField | undefined> =
+  roomObjectives: TrackedMap<string, RoomObjectiveField | MatrixCardError> =
     new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
@@ -114,11 +71,6 @@ export default class MatrixService extends Service {
     () => 'https://cardstack.com/base/card-api',
   );
 
-  loaderToRoomModuleLoadingCache = new WeakMap<
-    Loader,
-    Promise<typeof RoomModule>
-  >();
-
   private loadSDK = task(async () => {
     await this.cardAPIModule.loaded;
     // The matrix SDK is VERY big so we only load it when we need it
@@ -135,18 +87,6 @@ export default class MatrixService extends Service {
       [this.matrixSDK.RoomEvent.Timeline, Timeline.onTimeline(this)],
     ];
   });
-
-  async getRoomModule(loader?: Loader): Promise<typeof RoomModule> {
-    loader = loader ?? this.loaderService.loader;
-    if (!this.loaderToRoomModuleLoadingCache.has(loader)) {
-      let apiPromise = loader.import<typeof RoomModule>(
-        'https://cardstack.com/base/room',
-      );
-      this.loaderToRoomModuleLoadingCache.set(loader, apiPromise);
-      return apiPromise;
-    }
-    return this.loaderToRoomModuleLoadingCache.get(loader)!;
-  }
 
   get isLoggedIn() {
     return this.client.isLoggedIn();
@@ -185,35 +125,16 @@ export default class MatrixService extends Service {
   }
 
   async logout() {
-    try {
-      await this.flushMembership;
-      await this.flushTimeline;
-      clearAuth();
-      clearAllRealmSessions();
-      this.unbindEventListeners();
-      await this.client.logout(true);
-    } catch (e) {
-      console.log('Error logging out of Matrix', e);
-    } finally {
-      this.resetState();
-    }
+    await this.flushMembership;
+    await this.flushTimeline;
+    clearAuth();
+    this.unbindEventListeners();
+    await this.client.stopClient();
+    await this.client.logout();
+    this.resetState();
   }
 
-  async startAndSetDisplayName(auth: LoginResponse, displayName: string) {
-    this.start(auth);
-    this.setDisplayName(displayName);
-    await this.router.refresh();
-  }
-
-  async setDisplayName(displayName: string) {
-    await this.client.setDisplayName(displayName);
-  }
-
-  async reloadProfile() {
-    await this.profile.load.perform();
-  }
-
-  async start(auth?: MatrixSDK.LoginResponse) {
+  async start(auth?: IAuthData) {
     if (!auth) {
       auth = getAuth();
       if (!auth) {
@@ -226,7 +147,6 @@ export default class MatrixService extends Service {
       user_id: userId,
       device_id: deviceId,
     } = auth;
-
     if (!accessToken) {
       throw new Error(
         `Cannot create matrix client from auth that has no access token: ${JSON.stringify(
@@ -264,44 +184,9 @@ export default class MatrixService extends Service {
       saveAuth(auth);
       this.bindEventListeners();
 
-      try {
-        await this._client.startClient();
-        await this.initializeRooms();
-      } catch (e) {
-        console.log('Error starting Matrix client', e);
-        await this.logout();
-      }
+      await this._client.startClient();
+      await this.initializeRooms();
     }
-  }
-
-  public async createRealmSession(realmURL: URL) {
-    await this.ready;
-
-    let inflightAuth = this.realmSessionTasks.get(realmURL.href);
-
-    if (inflightAuth) {
-      return inflightAuth;
-    }
-
-    let realmAuthClient = new RealmAuthClient(
-      realmURL,
-      this.client,
-      this.loaderService.loader,
-    );
-
-    let jwtPromise = realmAuthClient.getJWT();
-
-    this.realmSessionTasks.set(realmURL.href, jwtPromise);
-
-    jwtPromise
-      .then(() => {
-        this.realmSessionTasks.delete(realmURL.href);
-      })
-      .catch(() => {
-        this.realmSessionTasks.delete(realmURL.href);
-      });
-
-    return jwtPromise;
   }
 
   async createRoom(
@@ -323,17 +208,7 @@ export default class MatrixService extends Service {
       invite,
       name,
       topic,
-      room_alias_name: encodeURIComponent(
-        `${name} - ${format(new Date(), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx")} - ${
-          this.userId
-        }`,
-      ),
-    });
-    invites.map((i) => {
-      let fullId = i.startsWith('@') ? i : `@${i}:${userId!.split(':')[1]}`;
-      if (i === aiBotUsername) {
-        this.client.setPowerLevel(roomId, fullId, AI_BOT_POWER_LEVEL, null);
-      }
+      room_alias_name: encodeURIComponent(name),
     });
     return roomId;
   }
@@ -356,170 +231,52 @@ export default class MatrixService extends Service {
     );
   }
 
-  private async sendEvent(
-    roomId: string,
-    eventType: string,
-    content: CardMessageContent | CardFragmentContent,
-  ) {
-    if (content.data) {
-      const encodedContent = {
-        ...content,
-        data: JSON.stringify(content.data),
-      };
-      return await this.client.sendEvent(roomId, eventType, encodedContent);
-    } else {
-      return await this.client.sendEvent(roomId, eventType, content);
-    }
-  }
-
   async sendMessage(
     roomId: string,
     body: string | undefined,
-    attachedCards: CardDef[] = [],
-    context?: OperatorModeContext,
+    card?: CardDef,
   ): Promise<void> {
-    this.messagesToSend.set(roomId, undefined);
-    this.cardsToSend.set(roomId, undefined);
-    await this.setPendingMessage(roomId, body, attachedCards);
-
     let html = body != null ? sanitizeHtml(marked(body)) : '';
-    let functions = [];
-    let serializedAttachedCards: LooseSingleCardDocument[] = [];
-    let attachedOpenCards: CardDef[] = [];
-    let submode = context?.submode;
-    if (submode === 'interact') {
-      let mappings = await basicMappings(this.loaderService.loader);
-      // Open cards are attached automatically
-      // If they are not attached, the user is not allowing us to
-      // modify them
-      attachedOpenCards = attachedCards.filter((c) =>
-        (context?.openCardIds ?? []).includes(c.id),
-      );
-      // Generate function calls for patching currently open cards permitted for modification
-      for (let attachedOpenCard of attachedOpenCards) {
-        let patchSpec = generateCardPatchCallSpecification(
-          attachedOpenCard.constructor as typeof CardDef,
-          this.cardAPI,
-          mappings,
-        );
-        let realmSession = getRealmSession(this, {
-          card: () => attachedOpenCard,
-        });
-        await realmSession.loaded;
-        if (realmSession.canWrite) {
-          functions.push({
-            name: 'patchCard',
-            description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
-            parameters: {
-              type: 'object',
-              properties: {
-                description: {
-                  type: 'string',
-                },
-                card_id: {
-                  type: 'string',
-                  const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
-                },
-                attributes: patchSpec,
-              },
-              required: ['card_id', 'attributes', 'description'],
-            },
-          });
-        }
-      }
+    let serializedCard: LooseSingleCardDocument | undefined;
+    if (card) {
+      serializedCard = await this.cardService.serializeCard(card);
+      body = `${body ?? ''} (Card: ${card.title ?? 'Untitled'}, ${
+        card.id
+      })`.trim();
     }
-
-    if (attachedCards?.length) {
-      serializedAttachedCards = await Promise.all(
-        attachedCards.map(async (card) => {
-          let { Base64ImageField } = await loaderFor(card).import<{
-            Base64ImageField: typeof Base64ImageFieldType;
-          }>(`${baseRealm.url}base64-image`);
-          return await this.cardService.serializeCard(card, {
-            omitFields: [Base64ImageField],
-          });
-        }),
-      );
+    if (card) {
+      await this.client.sendEvent(roomId, 'm.room.message', {
+        msgtype: 'org.boxel.card',
+        body,
+        formatted_body: html,
+        instance: serializedCard,
+      });
+    } else {
+      await this.client.sendHtmlMessage(roomId, body ?? '', html);
     }
-    let attachedCardsEventIds: string[] = [];
-    if (serializedAttachedCards.length > 0) {
-      for (let attachedCard of serializedAttachedCards) {
-        let eventIds = await this.sendCardFragments(roomId, attachedCard);
-        attachedCardsEventIds.push(eventIds[0].event_id); // we only care about the first fragment
-      }
-    }
-
-    await this.sendEvent(roomId, 'm.room.message', {
-      msgtype: 'org.boxel.message',
-      body: body || '',
-      format: 'org.matrix.custom.html',
-      formatted_body: html,
-      clientGeneratedId: this.pendingMessages.get(roomId)?.clientGeneratedId,
-      data: {
-        attachedCardsEventIds,
-        context: {
-          openCardIds: attachedOpenCards.map((c) => c.id),
-          functions,
-          submode,
-        },
-      },
-    } as CardMessageContent);
   }
 
-  private async setPendingMessage(
-    roomId: string,
-    body: string | undefined,
-    attachedCards: CardDef[] = [],
-  ) {
-    let roomModule = await this.getRoomModule();
-    let roomMember = new roomModule.RoomMemberField({
-      id: this.userId,
-      userId: this.userId,
-      roomId: roomId,
+  async allowedToSetObjective(roomId: string): Promise<boolean> {
+    let powerLevels = await this.getPowerLevels(roomId);
+    let myUserId = this.client.getUserId();
+    if (!myUserId) {
+      throw new Error(`bug: cannot get user ID for current matrix client`);
+    }
+
+    return (powerLevels[myUserId] ?? 0) >= SET_OBJECTIVE_POWER_LEVEL;
+  }
+
+  async setObjective(roomId: string, ref: CodeRef): Promise<void> {
+    if (!this.allowedToSetObjective(roomId)) {
+      throw new Error(
+        `The user '${this.client.getUserId()}' is not permitted to set an objective in room '${roomId}'`,
+      );
+    }
+    await this.client.sendEvent(roomId, 'm.room.message', {
+      msgtype: 'org.boxel.objective',
+      body: `Objective has been set by ${this.client.getUserId()}`,
+      ref,
     });
-    let clientGeneratedId = uuidv4();
-    this.pendingMessages.set(
-      roomId,
-      new roomModule.MessageField({
-        author: roomMember,
-        message: body,
-        formattedMessage: body ? sanitizeHtml(marked(body)) : '',
-        created: new Date().getTime(),
-        clientGeneratedId,
-        transactionId: null,
-        attachedCardIds: attachedCards?.map((c) => c.id) || [],
-      }),
-    );
-  }
-
-  private async sendCardFragments(
-    roomId: string,
-    card: LooseSingleCardDocument,
-  ): Promise<ISendEventResponse[]> {
-    let fragments = splitStringIntoChunks(
-      JSON.stringify(card),
-      MAX_CARD_SIZE_KB,
-    );
-    let responses: ISendEventResponse[] = [];
-    for (let index = fragments.length - 1; index >= 0; index--) {
-      let cardFragment = fragments[index];
-      let response = await this.sendEvent(roomId, 'm.room.message', {
-        msgtype: 'org.boxel.cardFragment' as const,
-        format: 'org.boxel.card' as const,
-        body: `card fragment ${index + 1} of ${fragments.length}`,
-        formatted_body: `card fragment ${index + 1} of ${fragments.length}`,
-        data: {
-          ...(index < fragments.length - 1
-            ? { nextFragment: responses[0].event_id }
-            : {}),
-          cardFragment,
-          index,
-          totalParts: fragments.length,
-        },
-      } as CardFragmentContent);
-      responses.unshift(response);
-    }
-    return responses;
   }
 
   async initializeRooms() {
@@ -560,78 +317,6 @@ export default class MatrixService extends Service {
     return messages;
   }
 
-  private async requestEmailToken(
-    type: 'registration' | 'threepid',
-    email: string,
-    clientSecret: string,
-    sendAttempt: number,
-  ) {
-    let url =
-      type === 'registration'
-        ? `${matrixURL}/_matrix/client/v3/register/email/requestToken`
-        : `${matrixURL}/_matrix/client/v3/account/3pid/email/requestToken`;
-
-    let response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        email,
-        client_secret: clientSecret,
-        send_attempt: sendAttempt,
-      }),
-    });
-    if (response.ok) {
-      return (await response.json()) as MatrixSDK.IRequestTokenResponse;
-    } else {
-      let data = (await response.json()) as { errcode: string; error: string };
-      let error = new Error(data.error) as any;
-      error.data = data;
-      error.status = response.status;
-      throw error;
-    }
-  }
-
-  getLastActiveTimestamp(room: RoomField) {
-    let maybeLastActive = room.events[room.events.length - 1]?.origin_server_ts;
-
-    let matrixRoom = this.client.getRoom(room.roomId);
-    let lastMatrixEvent = matrixRoom?.getLastActiveTimestamp();
-
-    if (lastMatrixEvent && maybeLastActive) {
-      return Math.max(lastMatrixEvent, maybeLastActive);
-    }
-
-    return lastMatrixEvent ?? maybeLastActive ?? room.created?.getTime();
-  }
-
-  async requestRegisterEmailToken(
-    email: string,
-    clientSecret: string,
-    sendAttempt: number,
-  ) {
-    return await this.requestEmailToken(
-      'registration',
-      email,
-      clientSecret,
-      sendAttempt,
-    );
-  }
-
-  async requestChangeEmailToken(
-    email: string,
-    clientSecret: string,
-    sendAttempt: number,
-  ) {
-    return await this.requestEmailToken(
-      'threepid',
-      email,
-      clientSecret,
-      sendAttempt,
-    );
-  }
-
   async getPowerLevels(roomId: string): Promise<{ [userId: string]: number }> {
     let response = await fetch(
       `${matrixURL}/_matrix/client/v3/rooms/${roomId}/state/m.room.power_levels/`,
@@ -643,52 +328,6 @@ export default class MatrixService extends Service {
     );
     let { users } = await response.json();
     return users;
-  }
-
-  // the matrix SDK is using an old version of this API and
-  // doesn't provide login using email, so we use the API directly
-  async loginWithEmail(email: string, password: string) {
-    let response = await fetch(`${matrixURL}/_matrix/client/v3/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        identifier: {
-          type: 'm.id.thirdparty',
-          medium: 'email',
-          address: email,
-        },
-        password,
-        type: 'm.login.password',
-      }),
-    });
-    if (response.ok) {
-      return (await response.json()) as MatrixSDK.LoginResponse;
-    } else {
-      let data = (await response.json()) as { errcode: string; error: string };
-      let error = new Error(data.error) as any;
-      error.data = data;
-      error.status = response.status;
-      throw error;
-    }
-  }
-
-  async login(usernameOrEmail: string, password: string) {
-    try {
-      const cred = await this.client.loginWithPassword(
-        usernameOrEmail,
-        password,
-      );
-      return cred;
-    } catch (error) {
-      try {
-        const cred = await this.loginWithEmail(usernameOrEmail, password);
-        return cred;
-      } catch (error2) {
-        throw error;
-      }
-    }
   }
 
   private resetState() {
@@ -723,7 +362,7 @@ export default class MatrixService extends Service {
   }
 }
 
-function saveAuth(auth: LoginResponse) {
+function saveAuth(auth: IAuthData) {
   localStorage.setItem('auth', JSON.stringify(auth));
 }
 
@@ -731,12 +370,12 @@ function clearAuth() {
   localStorage.removeItem('auth');
 }
 
-function getAuth(): LoginResponse | undefined {
+function getAuth(): IAuthData | undefined {
   let auth = localStorage.getItem('auth');
   if (!auth) {
     return;
   }
-  return JSON.parse(auth) as LoginResponse;
+  return JSON.parse(auth) as IAuthData;
 }
 
 interface MessageOptions {

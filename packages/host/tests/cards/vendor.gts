@@ -5,7 +5,6 @@ import {
   containsMany,
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
-
 import { PaymentMethod } from './payment-method';
 
 export class Vendor extends CardDef {

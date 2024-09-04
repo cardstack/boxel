@@ -5,8 +5,11 @@ import { trimExecutableExtension, logger } from './index';
 import { RealmPaths } from './paths';
 import { CardError } from './error';
 import flatMap from 'lodash/flatMap';
+import { type RunnerOpts } from './search-index';
 import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
 import jsEscapeString from 'js-string-escape';
+
+const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
 // this represents a URL that has already been resolved to aid in documenting
 // when resolution has already been performed
@@ -18,7 +21,7 @@ function isResolvedURL(url: URL | ResolvedURL): url is ResolvedURL {
   return '_isResolved' in url;
 }
 
-export function makeResolvedURL(unresolvedURL: URL | string): ResolvedURL {
+function makeResolvedURL(unresolvedURL: URL | string): ResolvedURL {
   let resolvedURL = new URL(unresolvedURL) as ResolvedURL;
   resolvedURL._isResolved = undefined;
   return resolvedURL;
@@ -89,6 +92,7 @@ type EvaluatableModule =
 
 type UnregisteredDep =
   | { type: 'dep'; moduleURL: ResolvedURL }
+  | { type: 'shim-dep'; moduleId: string }
   | { type: '__import_meta__' }
   | { type: 'exports' };
 
@@ -101,16 +105,16 @@ type EvaluatableDep =
       type: 'completing-dep';
       moduleURL: ResolvedURL;
     }
+  | {
+      type: 'shim-dep';
+      moduleId: string;
+    }
   | { type: '__import_meta__' }
   | { type: 'exports' };
 
 export type RequestHandler = (req: Request) => Promise<Response | null>;
 
-type Fetch = typeof fetch;
-
-let nonce = 0;
 export class Loader {
-  nonce = nonce++; // the nonce is a useful debugging tool that let's us compare loaders
   private log = logger('loader');
   private modules = new Map<string, Module>();
   private urlHandlers: RequestHandler[] = [maybeHandleScopedCSSRequest];
@@ -130,20 +134,8 @@ export class Loader {
   private consumptionCache = new WeakMap<object, string[]>();
   private static loaders = new WeakMap<Function, Loader>();
 
-  private fetchImplementation: Fetch;
-  private resolveImport: (moduleIdentifier: string) => string;
-
-  constructor(
-    fetch: Fetch,
-    resolveImport?: (moduleIdentifier: string) => string,
-  ) {
-    this.fetchImplementation = fetch;
-    this.resolveImport =
-      resolveImport ?? ((moduleIdentifier) => moduleIdentifier);
-  }
-
   static cloneLoader(loader: Loader): Loader {
-    let clone = new Loader(loader.fetchImplementation, loader.resolveImport);
+    let clone = new Loader();
     clone.urlHandlers = loader.urlHandlers;
     clone.urlMappings = loader.urlMappings;
     for (let [moduleIdentifier, module] of loader.moduleShims) {
@@ -160,26 +152,18 @@ export class Loader {
     this.urlHandlers.push(handler);
   }
 
-  prependURLHandlers(handlers: RequestHandler[]) {
-    this.urlHandlers = [...handlers, ...this.urlHandlers];
+  setURLHandlers(handlers: RequestHandler[]) {
+    this.urlHandlers = handlers;
   }
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
-    moduleIdentifier = this.resolveImport(moduleIdentifier);
-    let proxiedModule = this.createModuleProxy(module, moduleIdentifier);
-
-    for (let propName of Object.keys(module)) {
-      // Normal modules always end up in our identity map because the only way for other code to gain access to the module's exports is by getting it through the
-      // proxy our loader has wrapped around it. But shimmed modules may be used directly by our caller before we've had a chance to put them in the dientity map.
-      // So this eagerly puts them into the identity map.
-      proxiedModule[propName]; // Makes sure the shimmed modules get into the identity map.
-    }
-
-    this.moduleShims.set(moduleIdentifier, proxiedModule);
-
+    this.moduleShims.set(
+      moduleIdentifier,
+      this.createModuleProxy(module, moduleIdentifier),
+    );
     this.setModule(moduleIdentifier, {
       state: 'evaluated',
-      moduleInstance: proxiedModule,
+      moduleInstance: module,
       consumedModules: new Set(),
     });
   }
@@ -193,9 +177,13 @@ export class Loader {
     }
     consumed.add(moduleIdentifier);
 
-    let resolvedModuleIdentifier = this.resolve(new URL(moduleIdentifier));
-    let module = this.getModule(resolvedModuleIdentifier.href);
-
+    let module: Module | undefined;
+    if (isUrlLike(moduleIdentifier)) {
+      let resolvedModuleIdentifier = this.resolve(new URL(moduleIdentifier));
+      module = this.getModule(resolvedModuleIdentifier.href);
+    } else {
+      module = this.getModule(moduleIdentifier);
+    }
     if (!module || module.state === 'fetching') {
       // we haven't yet tried importing the module or we are still in the process of importing the module
       try {
@@ -256,11 +244,12 @@ export class Loader {
   }
 
   async import<T extends object>(moduleIdentifier: string): Promise<T> {
-    moduleIdentifier = this.resolveImport(moduleIdentifier);
-
     let resolvedModule = this.resolve(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
-
+    let shimmed = this.moduleShims.get(moduleIdentifier);
+    if (shimmed) {
+      return shimmed as T;
+    }
     await this.advanceToState(resolvedModule, 'evaluated');
     let module = this.getModule(resolvedModuleIdentifier);
     switch (module?.state) {
@@ -310,7 +299,16 @@ export class Loader {
               maybeReadyDeps.push(entry);
               continue;
             }
-            let depModule = this.getModule(entry.moduleURL.href);
+            let depModule = this.getModule(
+              entry.type === 'dep' ? entry.moduleURL.href : entry.moduleId,
+            );
+            if (entry.type === 'shim-dep') {
+              maybeReadyDeps.push({
+                type: 'shim-dep',
+                moduleId: entry.moduleId,
+              });
+              continue;
+            }
             if (!isEvaluatable(depModule)) {
               // we always only await the first dep that actually needs work and
               // then break back to the top-level state machine, so that we'll
@@ -372,7 +370,18 @@ export class Loader {
               readyDeps.push(entry);
               continue;
             }
-            let depModule = this.getModule(entry.moduleURL.href);
+            let depModuleId =
+              entry.type === 'dep' || entry.type === 'completing-dep'
+                ? entry.moduleURL.href
+                : entry.moduleId;
+            let depModule = this.getModule(depModuleId);
+            if (entry.type === 'shim-dep') {
+              readyDeps.push({
+                type: 'shim-dep',
+                moduleId: entry.moduleId,
+              });
+              continue;
+            }
             if (entry.type === 'dep') {
               readyDeps.push({
                 type: 'dep',
@@ -484,79 +493,17 @@ export class Loader {
     }
   }
 
-  // For following redirects of responses returned by loader's urlHandlers
-  private async simulateFetch(
-    request: Request,
-    result: Response,
-  ): Promise<Response> {
-    const urlString = request.url;
-    let redirectedHeaderKey = 'simulated-fetch-redirected'; // Temporary header to track if the request was redirected in the redirection chain
-
-    if (result.status >= 300 && result.status < 400) {
-      const location = result.headers.get('location');
-      if (location) {
-        request.headers.set(redirectedHeaderKey, 'true');
-        return await this.fetch(new URL(location, urlString), request);
-      }
-    }
-
-    // We are using Object.defineProperty because `url` and `redirected`
-    // response properties are read-only. We are overriding these properties to
-    // conform to the Fetch API specification where the `url` property is set to
-    // the final URL and the `redirected` property is set to true if the request
-    // was redirected. Normally, when using a native fetch, these properties are
-    // set automatically by the client, but in this case, we are simulating the
-    // fetch and need to set these properties manually.
-
-    if (request.url && !result.url) {
-      Object.defineProperty(result, 'url', { value: urlString });
-
-      if (request.headers.get(redirectedHeaderKey) === 'true') {
-        Object.defineProperty(result, 'redirected', { value: true });
-        request.headers.delete(redirectedHeaderKey);
-      }
-    }
-
-    return result;
-  }
-
   async fetch(
     urlOrRequest: string | URL | Request,
     init?: RequestInit,
   ): Promise<Response> {
-    try {
-      for (let handler of this.urlHandlers) {
-        let request = this.asUnresolvedRequest(urlOrRequest, init);
-
-        let result = await handler(request);
-        if (result) {
-          return await this.simulateFetch(request, result);
-        }
+    for (let handler of this.urlHandlers) {
+      let result = await handler(this.asUnresolvedRequest(urlOrRequest, init));
+      if (result) {
+        return result;
       }
-
-      let shimmedModule = this.moduleShims.get(
-        this.asUnresolvedRequest(urlOrRequest, init).url,
-      );
-      if (shimmedModule) {
-        let response = new Response();
-        (response as any)[Symbol.for('shimmed-module')] = shimmedModule;
-        return response;
-      }
-
-      return await this.fetchImplementation(
-        this.asResolvedRequest(urlOrRequest, init),
-      );
-    } catch (err: any) {
-      let url =
-        urlOrRequest instanceof Request
-          ? urlOrRequest.url
-          : String(urlOrRequest);
-      this.log.error(`fetch failed for ${url}`, err);
-      return new Response(`fetch failed for ${url}`, {
-        status: 500,
-        statusText: err.message,
-      });
     }
+    return await getNativeFetch()(this.asResolvedRequest(urlOrRequest, init));
   }
 
   resolve(moduleIdentifier: string | URL, relativeTo?: URL): ResolvedURL {
@@ -611,20 +558,19 @@ export class Loader {
   }
 
   private createModuleProxy(module: any, moduleIdentifier: string) {
-    let moduleId = trimExecutableExtension(
-      this.reverseResolution(moduleIdentifier),
-    ).href;
     return new Proxy(module, {
       get: (target, property, received) => {
         let value = Reflect.get(target, property, received);
         if (typeof value === 'function' && typeof property === 'string') {
-          if (!this.identities.has(value)) {
-            this.identities.set(value, {
-              module: moduleId,
-              name: property,
-            });
-            Loader.loaders.set(value, this);
-          }
+          this.identities.set(value, {
+            module: isUrlLike(moduleIdentifier)
+              ? trimExecutableExtension(
+                  this.reverseResolution(moduleIdentifier),
+                ).href
+              : moduleIdentifier,
+            name: property,
+          });
+          Loader.loaders.set(value, this);
         }
         return value;
       },
@@ -647,12 +593,9 @@ export class Loader {
     };
     this.setModule(moduleIdentifier, module);
 
-    let loaded:
-      | { type: 'source'; source: string }
-      | { type: 'shimmed'; module: Record<string, unknown> };
-
+    let src: string | null | undefined;
     try {
-      loaded = await this.load(moduleURL);
+      src = await this.load(moduleURL);
     } catch (exception) {
       this.setModule(moduleIdentifier, {
         state: 'broken',
@@ -661,19 +604,6 @@ export class Loader {
       });
       throw exception;
     }
-
-    if (loaded.type === 'shimmed') {
-      this.setModule(moduleIdentifier, {
-        state: 'evaluated',
-        moduleInstance: loaded.module,
-        consumedModules: new Set(),
-      });
-      module.deferred.fulfill();
-      return;
-    }
-
-    let src: string | null | undefined = loaded.source;
-
     src = transformSync(src, {
       plugins: [
         [
@@ -700,14 +630,13 @@ export class Loader {
           return { type: 'exports' };
         } else if (depId === '__import_meta__') {
           return { type: '__import_meta__' };
-        } else {
+        } else if (isUrlLike(depId)) {
           return {
             type: 'dep',
-            moduleURL: this.resolve(
-              this.resolveImport(depId),
-              new URL(moduleIdentifier),
-            ),
+            moduleURL: this.resolve(depId, new URL(moduleIdentifier)),
           };
+        } else {
+          return { type: 'shim-dep', moduleId: depId }; // for npm imports
         }
       });
       implementation = impl;
@@ -749,7 +678,11 @@ export class Loader {
     );
     let consumedModules = new Set(
       flatMap(module.dependencies, (dep) =>
-        dep.type === 'dep' ? [dep.moduleURL.href] : [],
+        dep.type === 'dep'
+          ? [dep.moduleURL.href]
+          : dep.type === 'shim-dep'
+          ? [dep.moduleId]
+          : [],
       ),
     );
 
@@ -777,6 +710,15 @@ export class Loader {
             }
             return this.evaluate(entry.moduleURL.href, depModule!);
           }
+          case 'shim-dep': {
+            let shimModule = this.getModule(entry.moduleId);
+            if (shimModule?.state !== 'evaluated') {
+              throw new Error(
+                `bug: shimmed modules should always be in an 'evaluated' state, but ${entry.moduleId} was in '${module.state}' state`,
+              );
+            }
+            return shimModule.moduleInstance;
+          }
           default:
             throw assertNever(entry);
         }
@@ -799,12 +741,7 @@ export class Loader {
     }
   }
 
-  private async load(
-    moduleURL: ResolvedURL,
-  ): Promise<
-    | { type: 'source'; source: string }
-    | { type: 'shimmed'; module: Record<string, unknown> }
-  > {
+  private async load(moduleURL: ResolvedURL): Promise<string> {
     let response: Response;
     try {
       response = await this.fetch(moduleURL);
@@ -819,15 +756,22 @@ export class Loader {
       let error = await CardError.fromFetchResponse(moduleURL.href, response);
       throw error;
     }
+    return await response.text();
+  }
+}
 
-    if (Symbol.for('shimmed-module') in response) {
-      return {
-        type: 'shimmed',
-        module: (response as any)[Symbol.for('shimmed-module')],
-      };
+function getNativeFetch(): typeof fetch {
+  if (isFastBoot) {
+    let optsId = (globalThis as any).runnerOptsId;
+    if (optsId == null) {
+      throw new Error(`Runner Options Identifier was not set`);
     }
-
-    return { type: 'source', source: await response.text() };
+    let getRunnerOpts = (globalThis as any).getRunnerOpts as (
+      optsId: number,
+    ) => RunnerOpts;
+    return getRunnerOpts(optsId)._fetch;
+  } else {
+    return fetch;
   }
 }
 
@@ -835,8 +779,19 @@ function assertNever(value: never) {
   throw new Error(`should never happen ${value}`);
 }
 
+function isUrlLike(moduleIdentifier: string): boolean {
+  return (
+    moduleIdentifier.startsWith('.') ||
+    moduleIdentifier.startsWith('/') ||
+    moduleIdentifier.startsWith('http://') ||
+    moduleIdentifier.startsWith('https://')
+  );
+}
+
 function trimModuleIdentifier(moduleIdentifier: string): string {
-  return trimExecutableExtension(new URL(moduleIdentifier)).href;
+  return isUrlLike(moduleIdentifier)
+    ? trimExecutableExtension(new URL(moduleIdentifier)).href
+    : moduleIdentifier;
 }
 
 type ModuleState = Module['state'];

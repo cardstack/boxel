@@ -1,10 +1,3 @@
-// TODO make sure to remove this from @cardstack/runtime-common deps
-import ignore, { Ignore } from 'ignore';
-
-import flatMap from 'lodash/flatMap';
-import isEqual from 'lodash/isEqual';
-import merge from 'lodash/merge';
-
 import {
   Loader,
   baseRealm,
@@ -20,23 +13,27 @@ import {
   type RealmInfo,
 } from '@cardstack/runtime-common';
 import {
-  type SingleCardDocument,
-  type Relationship,
-} from '@cardstack/runtime-common/card-document';
-import {
   loadCard,
   identifyCard,
-  isBaseDef,
+  isCard,
   moduleFrom,
 } from '@cardstack/runtime-common/code-ref';
+import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
+// TODO make sure to remove this from @cardstack/runtime-common deps
+import ignore, { Ignore } from 'ignore';
+import isEqual from 'lodash/isEqual';
 import { Deferred } from '@cardstack/runtime-common/deferred';
+import flatMap from 'lodash/flatMap';
+import merge from 'lodash/merge';
 import {
   CardError,
   serializableError,
   type SerializedError,
 } from '@cardstack/runtime-common/error';
-import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
-import { reportError } from '@cardstack/runtime-common/realm';
+import {
+  type SingleCardDocument,
+  type Relationship,
+} from '@cardstack/runtime-common/card-document';
 import {
   isIgnored,
   type Reader,
@@ -48,14 +45,12 @@ import {
   type ModuleWithErrors,
 } from '@cardstack/runtime-common/search-index';
 import { URLMap } from '@cardstack/runtime-common/url-map';
-
 import {
   CardDef,
   type IdentityContext as IdentityContextType,
-  LoaderType,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-
+import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import { type RenderCard } from '../services/render-service';
 
 const log = logger('current-run');
@@ -279,16 +274,8 @@ export class CurrentRun {
 
       let { content, lastModified } = fileRef;
       if (url.href.endsWith('.json')) {
-        let resource;
-
-        try {
-          let { data } = JSON.parse(content);
-          resource = data;
-        } catch (e) {
-          log.warn(`unable to parse ${url.href} as card JSON`);
-        }
-
-        if (resource && isCardResource(resource)) {
+        let { data: resource } = JSON.parse(content);
+        if (isCardResource(resource)) {
           await this.indexCard(
             localPath,
             lastModified,
@@ -327,7 +314,7 @@ export class CurrentRun {
     }
 
     let refs = Object.values(module)
-      .filter((maybeCard) => isBaseDef(maybeCard))
+      .filter((maybeCard) => isCard(maybeCard))
       .map((card) => identifyCard(card))
       .filter(Boolean) as CodeRef[];
     for (let ref of refs) {
@@ -420,17 +407,10 @@ export class CurrentRun {
         },
       }) as SingleCardDocument;
       searchData = await api.searchDoc(card);
-
       if (!searchData) {
         throw new Error(
           `bug: could not derive search doc for instance ${instanceURL.href}`,
         );
-      }
-
-      if (cardType.displayName === 'Card') {
-        searchData.cardType = cardType.name;
-      } else {
-        searchData.cardType = cardType.displayName;
       }
     } catch (err: any) {
       uncaughtError = err;
@@ -476,9 +456,9 @@ export class CurrentRun {
         deferred.reject(err);
         throw err;
       }
-      let warning = `encountered error indexing card instance ${path}: ${error.error.detail}`;
-      log.warn(warning);
-      reportError(new Error(warning));
+      log.warn(
+        `encountered error indexing card instance ${path}: ${error.error.detail}`,
+      );
       this.setInstance(instanceURL, error);
       deferred.fulfill();
     }
@@ -548,17 +528,11 @@ export class CurrentRun {
     let types: string[] = [];
     let fullRef: CodeRef = ref;
     while (fullRef) {
-      let loadedCard, loadedCardRef;
-      try {
-        loadedCard = await loadCard(fullRef, { loader: this.loader });
-        loadedCardRef = identifyCard(loadedCard);
-        if (!loadedCardRef) {
-          throw new Error(`could not identify card ${loadedCard.name}`);
-        }
-      } catch (error) {
-        return { type: 'error', error: serializableError(error) };
+      let loadedCard = await loadCard(fullRef, { loader: this.loader });
+      let loadedCardRef = identifyCard(loadedCard);
+      if (!loadedCardRef) {
+        throw new Error(`could not identify card ${loadedCard.name}`);
       }
-
       types.push(internalKeyFor(loadedCardRef, undefined));
       if (!isEqual(loadedCardRef, baseCardRef)) {
         fullRef = {

@@ -8,8 +8,8 @@ import {
 import StringCard from 'https://cardstack.com/base/string';
 import { Chain } from './chain';
 import { Token, Currency } from './asset';
-import { eq } from '@cardstack/boxel-ui/helpers';
-import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { FieldContainer } from '@cardstack/boxel-ui';
 
 class CryptoPayment extends FieldDef {
   static displayName = 'Payment Method';
@@ -45,11 +45,15 @@ class CryptoPayment extends FieldDef {
 }
 
 class WireTransfer extends FieldDef {
-  static displayName = 'Payment Method';
   @field currency = linksTo(Currency); // dropdown
   @field iban = contains(StringCard); // IBAN format
   @field bic = contains(StringCard); // BIC format
-
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <div><@fields.iban /></div>
+      <div><@fields.bic /></div>
+    </template>
+  };
   static edit = class Edit extends Component<typeof this> {
     <template>
       <div class='payment-method-card'>
@@ -81,18 +85,13 @@ class EditPaymentMethod extends Component<typeof PaymentMethod> {
         {{! <@fields.wireTransfer/> }}
       {{/if}}
     </div>
-    <style>
-      .payment-method-card {
-        padding: var(--boxel-sp-xl);
-      }
-    </style>
   </template>
 }
 export class PaymentMethod extends FieldDef {
-  static displayName = 'PaymentMethod';
   @field type = contains(StringCard); // dropdown
   @field cryptoPayment = contains(CryptoPayment);
   @field wireTransfer = contains(WireTransfer);
   static edit = EditPaymentMethod;
   static embedded = EditPaymentMethod;
+  static isolated = EditPaymentMethod;
 }

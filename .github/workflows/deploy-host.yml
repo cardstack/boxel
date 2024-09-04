@@ -7,15 +7,10 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: read
-  id-token: write
-
 jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
-    concurrency: deploy-host-${{ inputs.environment }}
     steps:
       - uses: actions/checkout@v3
 

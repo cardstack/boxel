@@ -6,7 +6,6 @@ import {
   CardDef,
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
-
 import { Person } from './person';
 
 export class Pet extends CardDef {

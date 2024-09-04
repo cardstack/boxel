@@ -16,18 +16,11 @@ export class Employee extends Person {
   };
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <div class='container'>
-        <h1><@fields.title /></h1>
-        <h1><@fields.firstName /> <@fields.lastName /></h1>
-        <div><@fields.isCool /></div>
-        <div><@fields.isHuman /></div>
-        <div>Department: <@fields.department /></div>
-      </div>
-      <style>
-        .container {
-          padding: var(--boxel-sp-xl);
-        }
-      </style>
+      <h1><@fields.title /></h1>
+      <h1><@fields.firstName /> <@fields.lastName /></h1>
+      <div><@fields.isCool /></div>
+      <div><@fields.isHuman /></div>
+      <div>Department: <@fields.department /></div>
     </template>
   };
 }

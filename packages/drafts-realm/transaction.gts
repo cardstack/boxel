@@ -7,8 +7,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import StringCard from 'https://cardstack.com/base/string';
-import { FieldContainer } from '@cardstack/boxel-ui/components';
-import { GridContainer } from '@cardstack/boxel-ui/components';
+import { FieldContainer, GridContainer } from '@cardstack/boxel-ui';
 import BigIntegerCard from 'https://cardstack.com/base/big-integer';
 import NumberCard from 'https://cardstack.com/base/number';
 import { Chain } from './chain';
@@ -28,17 +27,11 @@ export class Transaction extends CardDef {
   @field effectiveGasPrice = contains(BigIntegerCard);
   @field blockExplorerLink = contains(StringCard, {
     computeVia: function (this: Transaction) {
-      if (!this.chain) {
-        return;
-      }
       return `${this.chain.blockExplorer}/tx/${this.transactionHash}`;
     },
   });
   @field title = contains(StringCard, {
     computeVia: function (this: Transaction) {
-      if (!this.transactionHash) {
-        return;
-      }
       return `Txn ${this.transactionHash}`;
     },
   });
@@ -62,7 +55,7 @@ export class Transaction extends CardDef {
 
   static isolated = class Isolated extends Component<typeof Transaction> {
     <template>
-      <GridContainer class='container'>
+      <GridContainer>
         <FieldContainer @label='Title'><@fields.title /></FieldContainer>
         <FieldContainer @label='Status'><@fields.status /></FieldContainer>
         <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
@@ -81,11 +74,6 @@ export class Transaction extends CardDef {
 
         <FieldContainer @label='Memo'><@fields.memo /></FieldContainer>
       </GridContainer>
-      <style>
-        .container {
-          padding: var(--boxel-sp-xl);
-        }
-      </style>
     </template>
   };
 }

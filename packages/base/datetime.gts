@@ -10,7 +10,7 @@ import {
 } from './card-api';
 import { format, parseISO } from 'date-fns';
 import { fn } from '@ember/helper';
-import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { BoxelInput } from '@cardstack/boxel-ui';
 
 // The Intl API is supported in all modern browsers. In older ones, we polyfill
 // it in the application route at app startup.
@@ -24,18 +24,6 @@ const Format = new Intl.DateTimeFormat('en-US', {
 });
 
 const datetimeFormat = `yyyy-MM-dd'T'HH:mm`;
-
-class View extends Component<typeof DatetimeField> {
-  <template>
-    {{this.formatted}}
-  </template>
-  get formatted() {
-    if (this.args.model == null) {
-      return '[no date-time]';
-    }
-    return this.args.model ? Format.format(this.args.model) : undefined;
-  }
-}
 
 export default class DatetimeField extends FieldDef {
   static displayName = 'DateTime';
@@ -61,8 +49,17 @@ export default class DatetimeField extends FieldDef {
     return undefined;
   }
 
-  static embedded = View;
-  static atom = View;
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      {{this.formatted}}
+    </template>
+    get formatted() {
+      if (this.args.model == null) {
+        return '[no date-time]';
+      }
+      return this.args.model ? Format.format(this.args.model) : undefined;
+    }
+  };
 
   static edit = class Edit extends Component<typeof this> {
     <template>
@@ -70,7 +67,6 @@ export default class DatetimeField extends FieldDef {
         type='datetime-local'
         @value={{this.formatted}}
         @onInput={{fn this.parseInput @set}}
-        @max='9999-12-31T23:59:59'
       />
     </template>
 

@@ -6,7 +6,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import NumberCard from 'https://cardstack.com/base/number';
-import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { FieldContainer } from '@cardstack/boxel-ui';
 
 let CHAIN_IDS: Record<string, number> = {
   'Ethereum Mainnet': 1,
@@ -24,17 +24,11 @@ export class Chain extends CardDef {
   @field name = contains(StringCard); // dropdown
   @field chainId = contains(NumberCard, {
     computeVia: function (this: Chain) {
-      if (!this.name) {
-        return;
-      }
       return CHAIN_IDS[this.name];
     },
   });
   @field blockExplorer = contains(StringCard, {
     computeVia: function (this: Chain) {
-      if (!this.name) {
-        return;
-      }
       return BLOCK_EXPLORER_URLS[CHAIN_IDS[this.name]];
     },
   });
@@ -58,20 +52,13 @@ export class Chain extends CardDef {
 
   static isolated = class Isolated extends Component<typeof Chain> {
     <template>
-      <div class='container'>
-        <FieldContainer @label='Title'><@fields.title />
-          (<@fields.title />)</FieldContainer>
-        <FieldContainer @label='Chain'><@fields.title />
-          (<@fields.chainId />)</FieldContainer>
-        <FieldContainer @label='BlockExplorer'>
-          <a href={{@model.blockExplorer}}>{{@model.blockExplorer}}</a>
-        </FieldContainer>
-      </div>
-      <style>
-        .container {
-          padding: var(--boxel-sp-xl);
-        }
-      </style>
+      <FieldContainer @label='Title'><@fields.title />
+        (<@fields.title />)</FieldContainer>
+      <FieldContainer @label='Chain'><@fields.title />
+        (<@fields.chainId />)</FieldContainer>
+      <FieldContainer @label='BlockExplorer'>
+        <a href={{@model.blockExplorer}}>{{@model.blockExplorer}}</a>
+      </FieldContainer>
     </template>
   };
   static embedded = class Embedded extends Component<typeof Chain> {

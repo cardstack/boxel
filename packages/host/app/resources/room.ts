@@ -1,12 +1,9 @@
+import { Resource } from 'ember-resources';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
-
 import { restartableTask } from 'ember-concurrency';
-import { Resource } from 'ember-resources';
-
-import type { RoomField } from 'https://cardstack.com/base/room';
-
 import type MatrixService from '../services/matrix-service';
+import type { RoomField } from 'https://cardstack.com/base/room';
 
 interface Args {
   named: {

@@ -1,31 +1,28 @@
+import Component from '@glimmer/component';
+import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
+import SearchSheet, { SearchSheetMode } from './index';
+import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
-import Component from '@glimmer/component';
 
-import { tracked } from '@glimmer/tracking';
-
-import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-
-import SearchSheet, { SearchSheetMode, SearchSheetModes } from './index';
-
-const validModes = Object.values(SearchSheetModes);
+const validModes = Object.values(SearchSheetMode);
 
 export default class SearchSheetUsage extends Component {
-  defaultMode: SearchSheetMode = SearchSheetModes.Closed;
-  @tracked mode: SearchSheetMode = SearchSheetModes.Closed;
+  defaultMode: SearchSheetMode = SearchSheetMode.Closed;
+  @tracked mode: SearchSheetMode = SearchSheetMode.Closed;
 
   @action onFocus() {
-    if (this.mode == SearchSheetModes.Closed) {
-      this.mode = SearchSheetModes.SearchPrompt;
+    if (this.mode == SearchSheetMode.Closed) {
+      this.mode = SearchSheetMode.SearchPrompt;
     }
   }
 
   @action onBlur() {
-    this.mode = SearchSheetModes.Closed;
+    this.mode = SearchSheetMode.Closed;
   }
 
   @action onCancel() {
-    this.mode = SearchSheetModes.Closed;
+    this.mode = SearchSheetMode.Closed;
   }
 
   @action onSearch(_term: string) {

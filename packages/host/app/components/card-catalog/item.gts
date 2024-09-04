@@ -1,14 +1,9 @@
-import { service } from '@ember/service';
 import Component from '@glimmer/component';
-
+import { service } from '@ember/service';
+import cn from '@cardstack/boxel-ui/helpers/cn';
 import cssUrl from 'ember-css-url';
-
-import { cn } from '@cardstack/boxel-ui/helpers';
-
 import { RealmPaths } from '@cardstack/runtime-common/paths';
-
 import type { CardContext } from 'https://cardstack.com/base/card-api';
-
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
 
@@ -94,7 +89,7 @@ export default class CardCatalogItem extends Component<Signature> {
   get thumbnailURL() {
     let path = this.args.thumbnailURL;
     if (!path) {
-      return undefined;
+      return;
     }
     let realmPath = new RealmPaths(this.cardService.defaultURL.href);
 

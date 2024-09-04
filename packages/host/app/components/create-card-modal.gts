@@ -1,31 +1,20 @@
-import { registerDestructor } from '@ember/destroyable';
+import Component from '@glimmer/component';
+import type {
+  CodeRef,
+  LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
-
-import type Owner from '@ember/owner';
-import { service } from '@ember/service';
-import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-
+import { registerDestructor } from '@ember/destroyable';
+import { Deferred } from '@cardstack/runtime-common/deferred';
 import { enqueueTask } from 'ember-concurrency';
-
-import {
-  Deferred,
-  RealmPaths,
-  type CodeRef,
-  type LooseSingleCardDocument,
-} from '@cardstack/runtime-common';
-import {
-  moduleFrom,
-  codeRefWithAbsoluteURL,
-} from '@cardstack/runtime-common/code-ref';
-
+import { service } from '@ember/service';
+import type Owner from '@ember/owner';
+import type CardService from '../services/card-service';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import CardEditor from './card-editor';
 import ModalContainer from './modal-container';
-
-import type CardService from '../services/card-service';
 
 export default class CreateCardModal extends Component {
   <template>
@@ -65,10 +54,7 @@ export default class CreateCardModal extends Component {
   async create<T extends CardDef>(
     ref: CodeRef,
     relativeTo: URL | undefined,
-    opts?: {
-      realmURL?: URL;
-      doc?: LooseSingleCardDocument;
-    },
+    opts?: { doc?: LooseSingleCardDocument },
   ): Promise<undefined | T> {
     this.zIndex++;
     return (await this._create.perform(ref, relativeTo, opts)) as T | undefined;
@@ -77,35 +63,17 @@ export default class CreateCardModal extends Component {
   private _create = enqueueTask(
     async <T extends CardDef>(
       ref: CodeRef,
-      relativeTo: URL | undefined, // this relativeTo should be the catalog entry ID that the CodeRef comes from
-      opts?: {
-        doc?: LooseSingleCardDocument;
-        realmURL?: URL;
-      },
+      relativeTo: URL | undefined,
+      opts?: { doc?: LooseSingleCardDocument },
     ) => {
-      let cardModule = new URL(moduleFrom(ref), relativeTo);
-      // we make the code ref use an absolute URL for safety in
-      // the case it's being created in a different realm than where the card
-      // definition comes from
-      if (
-        opts?.realmURL &&
-        !new RealmPaths(opts.realmURL).inRealm(cardModule)
-      ) {
-        ref = codeRefWithAbsoluteURL(ref, relativeTo);
-      }
       let doc: LooseSingleCardDocument = opts?.doc ?? {
-        data: {
-          meta: {
-            adoptsFrom: ref,
-            ...(opts?.realmURL ? { realmURL: opts.realmURL.href } : {}),
-          },
-        },
+        data: { meta: { adoptsFrom: ref } },
       };
       this.currentRequest = {
         card: await this.cardService.createFromSerialized(
           doc.data,
           doc,
-          relativeTo,
+          relativeTo ?? this.cardService.defaultURL,
         ),
         deferred: new Deferred(),
       };
@@ -123,5 +91,11 @@ export default class CreateCardModal extends Component {
       this.currentRequest.deferred.fulfill(card);
       this.currentRequest = undefined;
     }
+  }
+}
+
+declare module '@glint/environment-ember-loose/registry' {
+  export default interface Registry {
+    CreateCardModal: typeof CreateCardModal;
   }
 }

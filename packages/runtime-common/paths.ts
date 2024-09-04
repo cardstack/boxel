@@ -18,9 +18,7 @@ export class RealmPaths {
     }
 
     if (!url.href.startsWith(this.url)) {
-      let error = new Error(`realm ${this.url} does not contain ${url.href}`);
-      (error as any).status = 404;
-      throw error;
+      throw new Error(`bug: realm ${this.url} does not contain ${url.href}`);
     }
 
     if (opts.preserveQuerystring !== true) {

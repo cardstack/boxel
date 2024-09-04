@@ -9,6 +9,7 @@ import {
   dockerLogs,
   dockerRun,
   dockerStop,
+  getHostPort,
 } from '../index';
 
 export const SYNAPSE_IP_ADDRESS = '172.20.0.5';
@@ -25,6 +26,7 @@ interface SynapseConfig {
 
 export interface SynapseInstance extends SynapseConfig {
   synapseId: string;
+  mappedPort: number;
 }
 
 const synapses = new Map<string, SynapseInstance>();
@@ -33,7 +35,7 @@ function randB64Bytes(numBytes: number): string {
   return crypto.randomBytes(numBytes).toString('base64').replace(/=*$/, '');
 }
 
-export async function cfgDirFromTemplate(
+async function cfgDirFromTemplate(
   template: string,
   dataDir?: string,
 ): Promise<SynapseConfig> {
@@ -97,20 +99,11 @@ interface StartOptions {
   template?: string;
   dataDir?: string;
   containerName?: string;
+  hostPort?: number;
 }
 export async function synapseStart(
   opts?: StartOptions,
-  stopExisting = true,
 ): Promise<SynapseInstance> {
-  if (stopExisting) {
-    // Stop the main server if it's running
-    let stopPromises = [dockerStop({ containerId: 'boxel-synapse' })];
-    for (const [id, _synapse] of synapses) {
-      // Stop any other synapses that are running
-      stopPromises.push(synapseStop(id));
-    }
-    await Promise.allSettled(stopPromises);
-  }
   const synCfg = await cfgDirFromTemplate(
     opts?.template ?? 'test',
     opts?.dataDir,
@@ -120,28 +113,28 @@ export async function synapseStart(
     `Starting synapse with config dir ${synCfg.configDir} in container ${containerName}...`,
   );
   await dockerCreateNetwork({ networkName: 'boxel' });
+  const portMapping = opts?.hostPort
+    ? `${opts.hostPort}:${synCfg.port}/tcp`
+    : `${synCfg.port}/tcp`;
   const synapseId = await dockerRun({
     image: 'matrixdotorg/synapse:develop',
-    containerName: 'boxel-synapse',
+    containerName: containerName,
     dockerParams: [
       '--rm',
       '-v',
       `${synCfg.configDir}:/data`,
-      '-v',
-      `${path.join(__dirname, 'templates')}:/custom/templates/`,
-      `--ip=${synCfg.host}`,
-      /**
-       * When using -p flag with --ip, the docker internal port must be used to access from the host
-       */
       '-p',
-      `${synCfg.port}:8008/tcp`,
+      portMapping,
       '--network=boxel',
     ],
     applicationParams: ['run'],
-    runAsUser: true,
   });
 
-  console.log(`Started synapse with id ${synapseId} on port ${synCfg.port}`);
+  const port = await getHostPort(synapseId, synCfg.port);
+
+  console.log(
+    `Started synapse with id ${synapseId} on port ${synCfg.port} mapped to ${port}.`,
+  );
 
   // Await Synapse healthcheck
   await dockerExec({
@@ -160,7 +153,7 @@ export async function synapseStart(
     ],
   });
 
-  const synapse: SynapseInstance = { synapseId, ...synCfg };
+  const synapse: SynapseInstance = { synapseId, mappedPort: port, ...synCfg };
   synapses.set(synapseId, synapse);
   return synapse;
 }
@@ -202,7 +195,7 @@ export async function registerUser(
   admin = false,
   displayName?: string,
 ): Promise<Credentials> {
-  const url = `http://localhost:${SYNAPSE_PORT}/_synapse/admin/v1/register`;
+  const url = `http://localhost:${synapse.mappedPort}/_synapse/admin/v1/register`;
   const context = await request.newContext({ baseURL: url });
   const { nonce } = await (await context.get(url)).json();
   const mac = admin
@@ -234,60 +227,14 @@ export async function registerUser(
   };
 }
 
-export async function loginUser(
-  username: string,
-  password: string,
-): Promise<Credentials> {
-  let response = await (
-    await fetch(`http://localhost:${SYNAPSE_PORT}/_matrix/client/r0/login`, {
-      method: 'POST',
-      body: JSON.stringify({
-        type: 'm.login.password',
-        user: username,
-        password,
-      }),
-    })
-  ).json();
-  return {
-    homeServer: response.home_server,
-    accessToken: response.access_token,
-    userId: response.user_id,
-    deviceId: response.device_id,
-  };
-}
-
-export async function updateDisplayName(
-  userId: string,
-  accessToken: string,
-  newDisplayName: string,
-): Promise<void> {
-  let response = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/profile/${userId}/displayname`,
-    {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({ displayname: newDisplayName }),
-    },
-  );
-
-  console.log(
-    `Received: ${response.status}, ${response.statusText}, ${JSON.stringify(
-      await response.json(),
-    )}`,
-  );
-
-  return;
-}
-
 export async function createRegistrationToken(
+  synapse: SynapseInstance,
   adminAccessToken: string,
   registrationToken: string,
   usesAllowed = 1000,
 ) {
   let res = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_synapse/admin/v1/registration_tokens/new`,
+    `http://localhost:${synapse.mappedPort}/_synapse/admin/v1/registration_tokens/new`,
     {
       method: 'POST',
       headers: {
@@ -306,133 +253,4 @@ export async function createRegistrationToken(
       } - ${await res.text()}`,
     );
   }
-}
-
-export async function updateUser(
-  adminAccessToken: string,
-  userId: string,
-  {
-    password,
-    displayname,
-    avatar_url,
-    emailAddresses,
-  }: {
-    password?: string;
-    displayname?: string;
-    avatar_url?: string;
-    emailAddresses?: string[];
-  },
-) {
-  let res = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_synapse/admin/v2/users/${userId}`,
-    {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${adminAccessToken}`,
-      },
-      body: JSON.stringify({
-        ...(password ? { password } : {}),
-        ...(displayname ? { displayname } : {}),
-        ...(avatar_url ? { avatar_url } : {}),
-        ...(emailAddresses
-          ? {
-              threepids: emailAddresses.map((address) => ({
-                medium: 'email',
-                address,
-              })),
-            }
-          : {}),
-      }),
-    },
-  );
-  if (!res.ok) {
-    throw new Error(
-      `could not update user: ${res.status} - ${await res.text()}`,
-    );
-  }
-}
-
-export async function getJoinedRooms(accessToken: string) {
-  let response = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/joined_rooms`,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    },
-  );
-  let { joined_rooms } = (await response.json()) as { joined_rooms: string[] };
-  return joined_rooms;
-}
-
-export async function sync(accessToken: string) {
-  let response = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/sync`,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    },
-  );
-  return await response.json();
-}
-
-interface MessageOptions {
-  direction?: 'forward' | 'backward';
-  pageSize: number;
-}
-const DEFAULT_PAGE_SIZE = 50;
-
-export async function getAllRoomEvents(
-  roomId: string,
-  accessToken: string,
-  opts?: MessageOptions,
-) {
-  let messages: MessageEvent[] = [];
-  let from: string | undefined;
-
-  do {
-    let response = await fetch(
-      `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/rooms/${roomId}/messages?dir=${
-        opts?.direction ? opts.direction.slice(0, 1) : 'f'
-      }&limit=${opts?.pageSize ?? DEFAULT_PAGE_SIZE}${
-        from ? '&from=' + from : ''
-      }`,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      },
-    );
-    let { chunk, end } = await response.json();
-    from = end;
-    let events: MessageEvent[] = chunk;
-    messages.push(...events);
-  } while (!from);
-  return messages;
-}
-
-interface MessageEvent {
-  type: 'm.room.message';
-  content: {
-    'm.relates_to'?: {
-      rel_type: string;
-      event_id: string;
-    };
-    msgtype: string;
-    format: string;
-    body: string;
-    formatted_body?: string;
-    data?: any;
-  };
-  unsigned: {
-    age: number;
-    transaction_id: string;
-    prev_content?: any;
-    prev_sender?: string;
-  };
-  sender: string;
-  origin_server_ts: number;
-  event_id: string;
-  room_id: string;
 }

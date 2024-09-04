@@ -1,31 +1,17 @@
-import { registerDestructor } from '@ember/destroyable';
-import { service } from '@ember/service';
-
-import { tracked } from '@glimmer/tracking';
-
-import { parse } from 'date-fns';
-import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
-
+import { service } from '@ember/service';
+import { tracked } from '@glimmer/tracking';
+import { restartableTask } from 'ember-concurrency';
+import { registerDestructor } from '@ember/destroyable';
 import { SupportedMimeType, logger } from '@cardstack/runtime-common';
-
-import { stripFileExtension } from '@cardstack/host/lib/utils';
-import {
-  getRealmSession,
-  type RealmSessionResource,
-} from '@cardstack/host/resources/realm-session';
-import type CardService from '@cardstack/host/services/card-service';
-
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type RecentFilesService from '@cardstack/host/services/recent-files-service';
-
-import type LoaderService from '../services/loader-service';
-
+import LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
+import type CardService from '@cardstack/host/services/card-service';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import config from '@cardstack/host/config/environment';
 
 const log = logger('resource:file');
-const utf8 = new TextDecoder();
-const encoder = new TextEncoder();
 
 interface Args {
   named: {
@@ -56,11 +42,7 @@ export interface Ready {
   url: string;
   lastModified: string | undefined;
   realmURL: string;
-  size: number; // size in bytes
-  write(content: string, flushLoader?: boolean): Promise<void>;
-  realmSession: RealmSessionResource;
-  lastModifiedAsDate?: Date;
-  isBinary?: boolean;
+  write(content: string, flushLoader?: boolean): void;
   writing?: Promise<void>;
 }
 
@@ -95,7 +77,7 @@ class _FileResource extends Resource<Args> {
 
   private setSubscription(
     realmURL: string,
-    callback: (ev: { type: string; data: string }) => void,
+    callback: (ev: { type: string }) => void,
   ) {
     let messageServiceUrl = `${realmURL}_message`;
     if (this.subscription && this.subscription.url !== messageServiceUrl) {
@@ -127,7 +109,7 @@ class _FileResource extends Resource<Args> {
       this.onStateChange(this.innerState.state);
     }
     if (this.innerState.state === 'ready') {
-      this.recentFilesService.addRecentFileUrl(this.innerState.url);
+      this.recentFilesService.addRecentFile(this.innerState.url);
       if (this.onRedirect && this._url != this.innerState.url) {
         // code below handles redirect returned by the realm server
         // this updates code path to be in-sync with the file.url
@@ -172,62 +154,32 @@ class _FileResource extends Resource<Args> {
       throw new Error('Missing x-boxel-realm-url header in response.');
     }
 
-    let buffer = await response.arrayBuffer();
-    let size = buffer.byteLength;
-    let content = utf8.decode(buffer);
-    let realmSession = getRealmSession(this, {
-      realmURL: () => new URL(realmURL!),
-    });
-    await realmSession.loaded;
-
+    let content = await response.text();
     let self = this;
+    // Inside test, The loader occasionally doesn't do a network request and creates Response object manually
+    // This means that reading response.url will give url = '' and we cannot manually alter the url in Response
+    // The below condition is a workaround
+    // TODO: CS-5982
+    let url: string;
+    if (config.environment === 'test') {
+      url = response.url === '' ? this._url : response.url;
+    } else {
+      url = response.url;
+    }
 
     this.updateState({
       state: 'ready',
       lastModified,
       realmURL,
       content,
-      realmSession,
-      name: response.url.split('/').pop()!,
-      size,
-      url: response.url,
+      name: url.split('/').pop()!,
+      url: url,
       write(content: string, flushLoader?: true) {
-        self.writing = self.writeTask
-          .unlinked() // If the component which performs this task from within another task is destroyed, for example the "add field" modal, we want this task to continue running
-          .perform(this, content, flushLoader);
-        return self.writing;
+        self.writing = self.writeTask.perform(this, content, flushLoader);
       },
     });
 
-    this.setSubscription(realmURL, (event: { data: string }) => {
-      let eventData = JSON.parse(event.data);
-
-      if (!eventData.invalidations) {
-        return;
-      }
-
-      let isInvalidated = eventData.invalidations.some(
-        (invalidationUrl: string) => {
-          let invalidationUrlHasExtension = invalidationUrl
-            .split('/')
-            .pop()!
-            .includes('.');
-
-          // This conditional is here because changes to card instance json files, for example `drafts/Authors/1.json`,
-          // will be in invalidations in the following form: `drafts/Authors/1` (without the .json extension)
-          if (invalidationUrlHasExtension) {
-            return this.url === invalidationUrl;
-          } else {
-            return stripFileExtension(this.url) === invalidationUrl;
-          }
-        },
-      );
-
-      // Do not reload this file if some other client else made changes to some other file
-      if (isInvalidated) {
-        this.read.perform();
-      }
-    });
+    this.setSubscription(realmURL, () => this.read.perform());
   });
 
   writeTask = restartableTask(
@@ -242,7 +194,6 @@ class _FileResource extends Resource<Args> {
           'this should be impossible--we are creating the specified path',
         );
       }
-      let size = encoder.encode(content).byteLength;
 
       this.updateState({
         state: 'ready',
@@ -250,8 +201,6 @@ class _FileResource extends Resource<Args> {
         lastModified: response.headers.get('last-modified') || undefined,
         url: state.url,
         name: state.name,
-        realmSession: state.realmSession,
-        size,
         write: state.write,
         realmURL: state.realmURL,
       });
@@ -278,33 +227,8 @@ class _FileResource extends Resource<Args> {
     return (this.innerState as Ready).url;
   }
 
-  get size() {
-    return (this.innerState as Ready).size;
-  }
-
-  get isBinary() {
-    return isBinary(this.content);
-  }
-
   get lastModified() {
     return (this.innerState as Ready).lastModified;
-  }
-
-  get realmSession() {
-    return (this.innerState as Ready).realmSession;
-  }
-
-  get lastModifiedAsDate() {
-    let rfc7321Date = (this.innerState as Ready).lastModified;
-    if (!rfc7321Date) {
-      return;
-    }
-    // This is RFC-7321 format which is the last modified date format used in HTTP headers
-    return parse(
-      rfc7321Date.replace(/ GMT$/, 'Z'),
-      'EEE, dd MMM yyyy HH:mm:ssX',
-      new Date(),
-    );
   }
 
   get realmURL() {
@@ -324,12 +248,4 @@ export function file(parent: object, args: () => Args['named']): FileResource {
 
 export function isReady(f: FileResource | undefined): f is Ready {
   return f?.state === 'ready';
-}
-
-// This is a neat trick to test if a binary file was decoded as a string that
-// works pretty well: https://stackoverflow.com/a/49773659. \ufffd is a special
-// character called a "replacement character" that will appear when you try to
-// decode a binary file as a string in javascript.
-function isBinary(content: string) {
-  return /\ufffd/.test(content);
 }

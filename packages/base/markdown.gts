@@ -1,5 +1,5 @@
 import { primitive, Component, useIndexBasedKey, FieldDef } from './card-api';
-import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { BoxelInput } from '@cardstack/boxel-ui';
 import { marked } from 'marked';
 import { sanitizeHtml } from '@cardstack/runtime-common';
 
@@ -12,27 +12,32 @@ function toHtml(markdown: string | null) {
   return markdown ? sanitizeHtml(marked(markdown, markdownOpts)) : '';
 }
 
-class View extends Component<typeof MarkdownField> {
-  <template>
-    <div>
-      {{{toHtml @model}}}
-    </div>
-  </template>
-}
-
 export default class MarkdownField extends FieldDef {
   static displayName = 'Markdown';
   static [primitive]: string;
   static [useIndexBasedKey]: never;
 
-  static embedded = View;
-  static atom = View;
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <div>
+        {{{toHtml @model}}}
+      </div>
+    </template>
+  };
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <div>
+        {{{toHtml @model}}}
+      </div>
+    </template>
+  };
 
   static edit = class Edit extends Component<typeof this> {
     <template>
       <BoxelInput
         class='boxel-text-area'
-        @type='textarea'
+        @multiline={{true}}
         @value={{@model}}
         @onInput={{@set}}
       />

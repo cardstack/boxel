@@ -1,8 +1,6 @@
 import Component from '@glimmer/component';
-
-import { BoxelDropdown, Menu } from '@cardstack/boxel-ui/components';
-import { MenuItem } from '@cardstack/boxel-ui/helpers';
-
+import { BoxelDropdown, Menu } from '@cardstack/boxel-ui';
+import { MenuItem } from '@cardstack/boxel-ui/helpers/menu-item';
 import { type RealmCards } from './modal';
 
 interface Signature {
@@ -10,7 +8,6 @@ interface Signature {
   selectedRealms: RealmCards[];
   onSelectRealm: (realm: RealmCards) => void;
   onDeselectRealm: (realm: RealmCards) => void;
-  disableRealmFilter: boolean;
 }
 
 export default class CardCatalogFilters extends Component<Signature> {
@@ -53,12 +50,8 @@ export default class CardCatalogFilters extends Component<Signature> {
       <div class='filter'>
         <BoxelDropdown>
           <:trigger as |bindings|>
-            <button
-              {{bindings}}
-              disabled={{@disableRealmFilter}}
-              data-test-realm-filter-button
-            >
-              Workspace:
+            <button {{bindings}} data-test-realm-filter-button>
+              Realm:
               {{this.realmFilterSummary}}
             </button>
           </:trigger>

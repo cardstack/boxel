@@ -33,16 +33,18 @@ export interface DirectoryEntryRelationship {
     kind: 'directory' | 'file';
   };
 }
-import { RealmPaths, type LocalPath } from './paths';
+import { RealmPaths } from './paths';
 import { Query } from './query';
-import { Loader } from './loader';
-export * from './constants';
-export * from './queue';
-export * from './indexer/expression';
-export * from './indexer/client';
-export * from './db';
+export {
+  aiBotUsername,
+  baseRealm,
+  catalogEntryRef,
+  baseCardRef,
+  isField,
+  primitive,
+} from './constants';
 export { makeLogDefinitions, logger } from './log';
-export { RealmPaths, Loader, type LocalPath, type Query };
+export { RealmPaths };
 export { NotLoaded, isNotLoadedError } from './not-loaded';
 export { NotReady, isNotReadyError } from './not-ready';
 export { cardTypeDisplayName } from './helpers/card-type-display-name';
@@ -58,16 +60,13 @@ export const isNode =
 
 export { Realm } from './realm';
 export { SupportedMimeType } from './router';
-export { VirtualNetwork } from './virtual-network';
-
+export { Loader } from './loader';
 export type {
   Kind,
   RealmAdapter,
   FileRef,
   ResponseWithNodeStream,
   RealmInfo,
-  TokenClaims,
-  RealmPermissions,
 } from './realm';
 
 import type { Saved } from './card-document';
@@ -85,7 +84,6 @@ export type {
   Relationship,
   Meta,
 } from './card-document';
-export type { JWTPayload } from './realm-auth-client';
 export {
   isMeta,
   isCardResource,
@@ -93,18 +91,15 @@ export {
   isRelationship,
   isCardCollectionDocument,
   isSingleCardDocument,
-  isCardDocumentString,
 } from './card-document';
 export { sanitizeHtml } from './dompurify';
 export { getPlural } from './pluralize';
 
 import type {
   CardDef,
-  FieldDef,
   BaseDef,
   Format,
 } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 export const maxLinkDepth = 5;
 export const assetsDir = '__boxel/';
@@ -128,18 +123,14 @@ export function isMatrixCardError(
 export type CreateNewCard = (
   ref: CodeRef,
   relativeTo: URL | undefined,
-  opts?: {
-    isLinkedCard?: boolean;
-    doc?: LooseSingleCardDocument;
-    realmURL?: URL;
-  },
+  opts?: { isLinkedCard?: boolean; doc?: LooseSingleCardDocument },
 ) => Promise<CardDef | undefined>;
 
 export interface CardChooser {
   chooseCard<T extends BaseDef>(
     query: Query,
     opts?: {
-      offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
+      offerToCreate?: CodeRef;
       multiSelect?: boolean;
       createNewCard?: CreateNewCard;
     },
@@ -149,7 +140,7 @@ export interface CardChooser {
 export async function chooseCard<T extends BaseDef>(
   query: Query,
   opts?: {
-    offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
+    offerToCreate?: CodeRef;
     multiSelect?: boolean;
     createNewCard?: CreateNewCard;
   },
@@ -174,23 +165,6 @@ export interface CardSearch {
     ready: Promise<void>;
     isLoading: boolean;
   };
-  getCard(
-    url: URL,
-    opts?: { cachedOnly?: true; loader?: Loader; isLive?: boolean },
-  ): {
-    card: CardDef | undefined;
-    loaded: Promise<void> | undefined;
-    cardError?: undefined | { id: string; error: Error };
-  };
-  trackCard<T extends object>(owner: T, card: CardDef, realmURL: URL): CardDef;
-  getLiveCards(
-    query: Query,
-    realms?: string[],
-    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
-  ): {
-    instances: CardDef[];
-    isLoading: boolean;
-  };
 }
 
 export function getCards(query: Query, realms?: string[]) {
@@ -199,61 +173,18 @@ export function getCards(query: Query, realms?: string[]) {
   return finder?.getCards(query, realms);
 }
 
-export function getCard(
-  url: URL,
-  opts?: { cachedOnly?: true; loader?: Loader; isLive?: boolean },
-) {
-  let here = globalThis as any;
-  if (!here._CARDSTACK_CARD_SEARCH) {
-    // on the server we don't need this
-    return { card: undefined, loaded: undefined };
-  }
-  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.getCard(url, opts);
-}
-
-export function trackCard<T extends object>(
-  owner: T,
-  card: CardDef,
-  realmURL: URL,
-) {
-  let here = globalThis as any;
-  if (!here._CARDSTACK_CARD_SEARCH) {
-    // on the server we don't need this
-    return card;
-  }
-  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.trackCard(owner, card, realmURL);
-}
-
-export function getLiveCards(
-  query: Query,
-  realms?: string[],
-  doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
-) {
-  let here = globalThis as any;
-  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.getLiveCards(query, realms, doWhileRefreshing);
-}
-
 export interface CardCreator {
   create<T extends CardDef>(
     ref: CodeRef,
     relativeTo: URL | undefined,
-    opts?: {
-      realmURL?: URL;
-      doc?: LooseSingleCardDocument;
-    },
+    opts?: { doc?: LooseSingleCardDocument },
   ): Promise<undefined | T>;
 }
 
 export async function createNewCard<T extends CardDef>(
   ref: CodeRef,
   relativeTo: URL | undefined,
-  opts?: {
-    realmURL?: URL;
-    doc?: LooseSingleCardDocument;
-  },
+  opts?: { doc?: LooseSingleCardDocument },
 ): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CREATE_NEW_CARD) {
@@ -291,32 +222,28 @@ export interface Actions {
   createCard: (
     ref: CodeRef,
     relativeTo: URL | undefined,
-    opts?: {
-      // TODO: consider renaming isLinkedCard to be more semantic
-      isLinkedCard?: boolean;
-      realmURL?: URL;
-      doc?: LooseSingleCardDocument;
-    },
+    opts?: { isLinkedCard?: boolean; doc?: LooseSingleCardDocument }, //TODO: consider renaming isLinkedCard to be more semantic
   ) => Promise<CardDef | undefined>;
   viewCard: (
     card: CardDef,
     format?: Format,
     fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
     fieldName?: string,
+  ) => void;
+  createCardDirectly: (
+    doc: LooseSingleCardDocument,
+    relativeTo: URL | undefined,
   ) => Promise<void>;
-  editCard: (card: CardDef) => void;
-  saveCard(card: CardDef, dismissItem: boolean): void;
-  delete: (item: CardDef | URL | string) => void;
   doWithStableScroll: (
     card: CardDef,
     changeSizeCallback: () => Promise<void>,
   ) => Promise<void>;
-  changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
+  // more CRUD ops to come...
 }
 
 export function hasExecutableExtension(path: string): boolean {
   for (let extension of executableExtensions) {
-    if (path.endsWith(extension) && !path.endsWith('.d.ts')) {
+    if (path.endsWith(extension)) {
       return true;
     }
   }
@@ -346,63 +273,4 @@ export function internalKeyFor(
     case 'fieldOf':
       return `${internalKeyFor(ref.card, relativeTo)}/fields/${ref.field}`;
   }
-}
-
-export function loaderFor(cardOrField: CardDef | FieldDef) {
-  let clazz = Reflect.getPrototypeOf(cardOrField)!.constructor;
-  let loader = Loader.getLoaderFor(clazz);
-  if (!loader) {
-    throw new Error(`bug: could not determine loader for card or field`);
-  }
-  return loader;
-}
-
-export async function apiFor(
-  cardOrFieldType: typeof CardDef | typeof FieldDef | typeof BaseDef,
-): Promise<typeof CardAPI>;
-export async function apiFor(
-  cardOrField: CardDef | FieldDef | BaseDef,
-): Promise<typeof CardAPI>;
-export async function apiFor(
-  cardOrFieldOrClass:
-    | CardDef
-    | FieldDef
-    | BaseDef
-    | typeof CardDef
-    | typeof FieldDef
-    | typeof BaseDef,
-) {
-  let loader =
-    Loader.getLoaderFor(cardOrFieldOrClass) ??
-    loaderFor(cardOrFieldOrClass as CardDef | FieldDef | BaseDef);
-  let api = await loader.import<typeof CardAPI>(
-    'https://cardstack.com/base/card-api',
-  );
-  if (!api) {
-    throw new Error(`could not load card API`);
-  }
-  return api;
-}
-
-export function splitStringIntoChunks(str: string, maxSizeKB: number) {
-  const maxSizeBytes = maxSizeKB * 1024;
-  let chunks = [];
-  let startIndex = 0;
-  while (startIndex < str.length) {
-    // Calculate the end index of the chunk based on byte length
-    let endIndex = startIndex;
-    let byteLength = 0;
-    while (endIndex < str.length && byteLength < maxSizeBytes) {
-      let charCode = str.charCodeAt(endIndex);
-      // we use this approach so that we can have an isomorphic means of
-      // determining the byte size for strings, as well as, using Blob (in the
-      // browser) to calculate string byte size is pretty expensive
-      byteLength += charCode < 0x0080 ? 1 : charCode < 0x0800 ? 2 : 3;
-      endIndex++;
-    }
-    let chunk = str.substring(startIndex, endIndex);
-    chunks.push(chunk);
-    startIndex = endIndex;
-  }
-  return chunks;
 }

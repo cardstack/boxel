@@ -7,11 +7,10 @@ on:
         description: Deployment environment
         required: false
         default: staging
-  workflow_call:
-    inputs:
-      environment:
-        required: true
-        type: string
+
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
   build-host:
@@ -21,47 +20,41 @@ jobs:
     with:
       environment: ${{ inputs.environment }}
 
+  build-realm-server:
+    name: Build realm-server
+    uses: cardstack/gh-actions/.github/workflows/waypoint-build.yml@main
+    secrets: inherit
+    with:
+      app: "boxel-realm-server"
+      environment: ${{ inputs.environment }}
+      restore-mtime: true
+      working-directory: "packages/realm-server"
+
   deploy-host:
     name: Deploy host
-    needs: [build-host]
+    needs: [build-host, build-realm-server]
     uses: ./.github/workflows/deploy-host.yml
     secrets: inherit
     with:
       environment: ${{ inputs.environment }}
 
-  deploy-motion:
-    name: Deploy boxel-motion
-    uses: ./.github/workflows/deploy-motion.yml
-    secrets: inherit
+  realm-server-efs-config:
+    name: EFS Config
+    needs: [build-realm-server]
+    uses: ./.github/workflows/realm-server-efs-config.yml
     with:
-      environment: staging
-
-  deploy-ui:
-    name: Deploy boxel-ui
-    uses: ./.github/workflows/deploy-ui.yml
-    secrets: inherit
-    with:
-      environment: staging
-
-  build-realm-server:
-    name: Build Docker image
-    uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
-    secrets: inherit
-    with:
-      repository: "boxel-realm-server-${{ inputs.environment }}"
       environment: ${{ inputs.environment }}
-      dockerfile: "packages/realm-server/Dockerfile"
-      build-args: |
-        "realm_server_script=start:${{ inputs.environment }}"
 
   deploy-realm-server:
     name: Deploy realm server
-    needs: [build-realm-server, deploy-host]
-    uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
+    needs:
+      - build-host
+      - realm-server-efs-config
+    uses: cardstack/gh-actions/.github/workflows/waypoint-deploy.yml@main
     secrets: inherit
     with:
-      container-name: "boxel-realm-server"
+      app: "boxel-realm-server"
       environment: ${{ inputs.environment }}
-      cluster: ${{ inputs.environment }}
-      service-name: "boxel-realm-server-${{ inputs.environment }}"
-      image: ${{ needs.build-realm-server.outputs.image }}
+      working-directory: "packages/realm-server"
+      efs-config: ${{ needs.realm-server-efs-config.outputs.config }}
+      retain: "0"

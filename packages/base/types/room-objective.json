@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Room Objective",
+      "description": "A room objective used to get all the members of the room to say \"Hello\".",
+      "ref": {
+        "module": "https://cardstack.com/base/room-objective",
+        "name": "RoomObjectiveField"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}

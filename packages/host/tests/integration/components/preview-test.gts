@@ -1,19 +1,15 @@
-import Service from '@ember/service';
-import { waitFor } from '@ember/test-helpers';
-import GlimmerComponent from '@glimmer/component';
-
-import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
-
+import GlimmerComponent from '@glimmer/component';
+import { setupRenderingTest } from 'ember-qunit';
 import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
-
 import Preview from '@cardstack/host/components/preview';
-
-import type LoaderService from '@cardstack/host/services/loader-service';
-
-import { testRealmURL } from '../../helpers';
+import Service from '@ember/service';
 import { renderComponent } from '../../helpers/render-component';
+import { testRealmURL, shimModule } from '../../helpers';
+import { waitFor } from '@ember/test-helpers';
+import type LoaderService from '@cardstack/host/services/loader-service';
+import { shimExternals } from '@cardstack/host/lib/externals';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
@@ -29,6 +25,7 @@ module('Integration | preview', function (hooks) {
   hooks.beforeEach(async function () {
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
+    shimExternals(loader);
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     this.owner.register('service:local-indexer', MockLocalIndexer);
@@ -45,7 +42,7 @@ module('Integration | preview', function (hooks) {
         </template>
       };
     }
-    loader.shimModule(`${testRealmURL}test-cards`, { TestCard });
+    await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
     let card = new TestCard({ firstName: 'Mango ' });
     await renderComponent(
       class TestDriver extends GlimmerComponent {

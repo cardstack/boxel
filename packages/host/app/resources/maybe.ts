@@ -1,8 +1,6 @@
 import { associateDestroyableChild, destroy } from '@ember/destroyable';
-
-import { getOwner, setOwner } from '@ember/owner';
-
 import { resource } from 'ember-resources';
+import { getOwner, setOwner } from '@ember/owner';
 
 export function maybe<T>(
   parent: object,

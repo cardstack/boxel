@@ -1,15 +1,16 @@
-import { waitUntil, fillIn, RenderingTestContext } from '@ember/test-helpers';
-
-import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
-
-import { baseRealm } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
-
-import type LoaderService from '@cardstack/host/services/loader-service';
-
-import { cleanWhiteSpace, testRealmURL, setupCardLogs } from '../../helpers';
 import { renderCard } from '../../helpers/render-component';
+import { setupRenderingTest } from 'ember-qunit';
+import { waitUntil, fillIn, RenderingTestContext } from '@ember/test-helpers';
+import {
+  cleanWhiteSpace,
+  testRealmURL,
+  shimModule,
+  setupCardLogs,
+} from '../../helpers';
+import { Loader } from '@cardstack/runtime-common/loader';
+import { baseRealm } from '@cardstack/runtime-common';
+import type LoaderService from '@cardstack/host/services/loader-service';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
@@ -102,7 +103,7 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
+    await shimModule(`${testRealmURL}test-cards`, { Post, Person }, loader);
 
     let firstPost = new Post({
       title: 'First Post',
@@ -272,7 +273,7 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
+    await shimModule(`${testRealmURL}test-cards`, { Post, Person }, loader);
 
     let firstPost = new Post({
       title: 'First Post',
@@ -407,7 +408,7 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    loader.shimModule(`${testRealmURL}test-cards`, { Family, Person });
+    await shimModule(`${testRealmURL}test-cards`, { Family, Person }, loader);
 
     let abdelRahmans = new Family({
       people: [
@@ -490,7 +491,7 @@ module('Integration | computeds', function (hooks) {
         return totalAge;
       }
     }
-    loader.shimModule(`${testRealmURL}test-cards`, { Family, Person });
+    await shimModule(`${testRealmURL}test-cards`, { Family, Person }, loader);
 
     let family = new Family({
       people: [
@@ -566,7 +567,7 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    loader.shimModule(`${testRealmURL}test-cards`, { Location, Person });
+    await shimModule(`${testRealmURL}test-cards`, { Location, Person }, loader);
 
     let person = new Person({
       firstName: 'Mango',
@@ -642,16 +643,6 @@ module('Integration | computeds', function (hooks) {
     assert
       .dom('[data-test-field="friend"] [data-test="name"]')
       .hasText('Van Gogh');
-
-    await renderCard(loader, firstPost, 'edit');
-    assert
-      .dom(
-        '[data-test-field="bestFriend"] [data-test-links-to-editor="bestFriend"]',
-      )
-      .exists();
-    assert
-      .dom('[data-test-field="friend"] [data-test-links-to-editor="friend"]')
-      .doesNotExist();
   });
 
   test('can render an asynchronous computed linksTo field', async function (assert) {
@@ -759,14 +750,6 @@ module('Integration | computeds', function (hooks) {
       ].map((element) => element.textContent?.trim()),
       ['Mango', 'A', 'B', 'C'],
     );
-
-    await renderCard(loader, firstPost, 'edit');
-    assert
-      .dom('[data-test-links-to-many="factCheckers"] [data-test-remove-card]')
-      .exists({ count: 3 });
-    assert
-      .dom('[data-test-links-to-many="collaborators"] [data-test-remove-card]')
-      .doesNotExist();
   });
 
   test('can render an asynchronous computed linksToMany field', async function (this: RenderingTestContext, assert) {

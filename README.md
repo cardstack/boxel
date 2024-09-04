@@ -1,7 +1,5 @@
 # Boxel Runtime
 
-For a quickstart, see [here](./QUICKSTART.md)
-
 ## Setup
 
 - you will want the [Glint](https://marketplace.visualstudio.com/items?itemName=typed-ember.glint-vscode) vscode extension
@@ -17,19 +15,15 @@ For a quickstart, see [here](./QUICKSTART.md)
 
 `packages/realm-server` is a node app that serves the realm as an HTTP server, as well as, it can also host the runtime application for its own realm.
 
-`packages/boxel-ui/addon` is the UI components Ember addon
+`packages/boxel-motion` is the animation primitives ember addon.
 
-`packages/boxel-ui/test-app` is the test suite and component explorer for boxel-ui, deployed at [boxel-ui.stack.cards](https://boxel-ui.stack.cards)
+`packages/boxel-motion-test-app` is the test suite for boxel-motion
 
-`packages/boxel-motion/addon` is the animation primitives ember addon.
-
-`packages/boxel-motion/test-app` is the demo app for boxel-motion, deployed at [boxel-motion.stack.cards](https://boxel-motion.stack.cards)
+`packages/boxel-motion-demo-app` is the demo app for boxel-motion
 
 `packages/matrix` is the docker container for running the matrix server: synapse, as well as tests that involve running a matrix client.
 
 `packages/ai-bot` is a node app that runs a matrix client session and an OpenAI session. Matrix message queries sent to the AI bot are packaged with an OpenAI system prompt and operator mode context and sent to OpenAI. The ai bot enriches the OpenAI response and posts the response back into the matrix room.
-
-To learn more about Boxel and Cards, see our [documentation](./docs/README.md)
 
 ## Running the Host App
 
@@ -37,19 +31,12 @@ There exists a "dev" mode in which we can use ember-cli to host the card runtime
 
 ### ember-cli Hosted App
 
-Prerequisite:
-Make sure that you have created a matrix user for the base realm, drafts realm, and for the published realm. To make it easier, you can execute `pnpm register-realm-users` in `packages/matrix/`, this will create a matrix user for the base realm, drafts realm, and a matrix user for the published realm.
-
 In order to run the ember-cli hosted app:
 
-1. `pnpm build` in the boxel-ui/addon workspace to build the boxel-ui addon.
-2. `pnpm build` in the boxel-motion/addon workspace to build the boxel-motion addon.
-3. `pnpm start` in the host/ workspace to serve the ember app. Note that this script includes the environment variable `OWN_REALM_URL=http://localhost:4201/draft/` which configures the host to point to the draft realm's cards realm by default.
-4. `pnpm start:all` in the realm-server/ to serve the base realm, draft realm and published realm -- this will also allow you to switch between the app and the tests without having to restart servers)
+1. `pnpm start` in the host/ workspace to serve the ember app. Note that this script includes the environment variable `OWN_REALM_URL=http://localhost:4201/draft/` which configures the host to point to the draft realm's cards realm by default.
+2. `pnpm start:all` in the realm-server/ to serve the base realm, draft realm and published realm -- this will also allow you to switch between the app and the tests without having to restart servers)
 
 The app is available at http://localhost:4200. It will serve the draft realm (configurable with OWN_REALM_URL, as mentioned above). You can open the base and draft cards workspace directly by entering http://localhost:4201/base or http://localhost:4201/draft in the browser (and additionally the published realm by entering http://localhost:4201/published).
-
-If you want to use operator mode, you need to register an account on Matrix. To make it easier, you can execute `pnpm register-test-user` in `packages/matrix/`. Now you can sign in with the test user using the credentials `username: user`, `password: password`.
 
 When you are done running the app you can stop the synapse server by running the following from the `packages/matrix` workspace:
 
@@ -72,17 +59,16 @@ Live reloads are not available in this mode, but you can just refresh the page t
 
 Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. Here's what is spun up with `start:all`:
 
-| Port  | Description                                               | Running `start:all` | Running `start:base` |
-| ----- | --------------------------------------------------------- | ------------------- | -------------------- |
-| :4201 | `/base` base realm                                        | ✅                  | ✅                   |
-| :4201 | `/drafts` draft realm                                     | ✅                  | 🚫                   |
-| :4201 | `/published` draft realm                                  | ✅                  | 🚫                   |
-| :4202 | `/test` host test realm, `/node-test` node test realm     | ✅                  | 🚫                   |
-| :4203 | `root (/)` base realm                                     | ✅                  | 🚫                   |
-| :4204 | `root (/)` drafts realm                                   | ✅                  | 🚫                   |
-| :4205 | qunit server mounting realms in iframes for testing       | ✅                  | 🚫                   |
-| :5001 | Mail user interface for viewing emails sent to local SMTP | ✅                  | 🚫                   |
-| :8008 | Matrix synapse server                                     | ✅                  | 🚫                   |
+| Port  | Description                                           | Running `start:all` | Running `start:base` |
+| ----- | ----------------------------------------------------- | ------------------- | -------------------- |
+| :4201 | `/base` base realm                                    | ✅                  | ✅                   |
+| :4201 | `/drafts` draft realm                                 | ✅                  | 🚫                   |
+| :4201 | `/published` draft realm                              | ✅                  | 🚫                   |
+| :4202 | `/test` host test realm, `/node-test` node test realm | ✅                  | 🚫                   |
+| :4203 | `root (/)` base realm                                 | ✅                  | 🚫                   |
+| :4204 | `root (/)` drafts realm                               | ✅                  | 🚫                   |
+| :4205 | qunit server mounting realms in iframes for testing   | ✅                  | 🚫                   |
+| :8008 | Matrix synapse server                                 | ✅                  | 🚫                   |
 
 #### Using `start:development`
 
@@ -96,17 +82,16 @@ In order to support server-side rendered cards, this project incorporates FastBo
 The realm server also uses FastBoot to pre-render card html. The realm server boots up the host app in a FastBoot container. The realm server will automatically look for the host app's `dist/` output to use when booting up the infrastructure for pre-rendering cards. Make sure to start to the host app first before starting the realm server so that the host app's `dist/` output will be generated. If you are making changes that effect the `/render` route in the host app, you'll want to restart the host app (or run `pnpm build`) in order for the realm server to pick up your changes.
 
 ### Request Accept Header
+The realm server uses the request accept header to determine the type of request being made and in what format it should return the content. 
 
-The realm server uses the request accept header to determine the type of request being made and in what format it should return the content.
-
-| Accept Header                 | URL rules                                                                                                                                                                                                                                                                                                            | Description                                                                                                                                                                    |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `application/vnd.card+json`   | If card instance URL includes the `.json` extension, the server will redirect to the URL without the extension.                                                                                                                                                                                                      | Used to request card instances for normal consumption                                                                                                                          |
-| `application/vnd.card+source` | For code modules we support node-like resolution, which means that the extension is optional. If the extension is not provided the server will redirect to the URL with the extension. We also support card instance requests without the `.json` extension. The server will redirect to the URL with the extension. | Used to request source file format for code modules or card instances (note that card instances are returned using file serialization which notably contains no `id` property) |
-| `application/vnd.api+json`    | Directory listing requests need to have their URL's end with a `/` character                                                                                                                                                                                                                                         | Used to request a directory listing or to get realm info                                                                                                                       |
-| `text/event-stream`           | only `<REALM_URL>/_messages` is supported                                                                                                                                                                                                                                                                            | Used to subscribe to realm events via Server Sent Events                                                                                                                       |
-| `text/html`                   | Card instance URL's should not include the `.json` file extension. This is considered a 404                                                                                                                                                                                                                          | Used to request rendered card instance html (this serves the host application)                                                                                                 |
-| `*/*`                         | We support node-like resolution, which means that the extension is optional                                                                                                                                                                                                                                          | Used to request transpiled executable code modules                                                                                                                             |
+| Accept Header | URL rules | Description |
+|---------------|-------------------|-------------|
+| `application/vnd.card+json`| If card instance URL includes the `.json` extension, the server will redirect to the URL without the extension.| Used to request card instances for normal consumption|
+| `application/vnd.card+source`| For code modules we support node-like resolution, which means that the extension is optional. If the extension is not provided the server will redirect to the URL with the extension. We also support card instance requests without the `.json` extension. The server will redirect to the URL with the extension.| Used to request source file format for code modules or card instances (note that card instances are returned using file serialization which notably contains no `id` property)|
+| `application/vnd.api+json` | Directory listing requests need to have their URL's end with a `/` character| Used to request a directory listing or to get realm info|
+| `text/event-stream`| only `<REALM_URL>/_messages` is supported |Used to subscribe to realm events via Server Sent Events|
+| `text/html`| Card instance URL's should not include the `.json` file extension. This is considered a 404 | Used to request rendered card instance html (this serves the host application) |
+|`*/*` | We support node-like resolution, which means that the extension is optional | Used to request transpiled executable code modules|
 
 ### Matrix Server
 
@@ -128,7 +113,7 @@ pnpm stop:synapse
 
 #### Matrix Administration
 
-Matrix administration requires an administrative user and a special client in order to use. Matrix administration is used for creating users, creating rooms, creating registration tokens, managing media, viewing events, etc. Note that you will need to use the matrix administration UI to create tokens to register new matrix users or you can execute `pnpm register-test-token` and use the token `dev-token`.
+Matrix administration requires an administrative user and a special client in order to use. Matrix administration is used for creating users, creating rooms, creating registration tokens, managing media, viewing events, etc. Note that you will need to use the matrix administration UI to create tokens to register new matrix users.
 
 First you must create an administrative user:
 
@@ -137,9 +122,12 @@ First you must create an administrative user:
    ```
    docker exec -it boxel-synapse register_new_matrix_user http://localhost:8008 -c /data/homeserver.yaml -u admin -p your_admin_password --admin
    ```
-   Alternatively, you can execute `pnpm register-test-admin` and utilize the following credentials: `user: admin` and `password: password`.
+3. Run the docker container:
+   ```
+   docker run --name synapse-admin -p 8080:80 -d awesometechnologies/synapse-admin
+   ```
 
-After you have created an administrative user and can start the admin console by executing the following in the packages/matrix workspace:
+After you have created an administrative user and have created the docker container you can start the admin console by executing the following in the packages/matrix workspace:
 
 ```
 pnpm start:admin
@@ -147,7 +135,7 @@ pnpm start:admin
 
 Then visit `http://localhost:8080`, and enter the admin user's username (`admin`) and the password, also enter in your matrix server url `http://localhost:8008` in the homeserver URL field, and click "Signin".
 
-Note you can use this same administrative interface to login to the staging and production matrix server. The credentials are available in AWS SSM Parameter Store.
+Note you can use this same administrative interface to login to the staging and production matrix server. The credentials are available in AWS secrets manager.
 
 To stop the admin console run the following in the packages/matrix workspace:
 
@@ -155,15 +143,11 @@ To stop the admin console run the following in the packages/matrix workspace:
 pnpm stop:admin
 ```
 
-#### SMTP Server
-
-Matrix requires an SMTP server in order to send emails. In order to facilitate this we leverage [smtp4dev](https://github.com/rnwood/smtp4dev) in dev and test (CI) environments . This is a docker container that includes both a local SMTP server and hosts a web app for viewing all emails send from the SMTP server (the emails never leave the docker container). smtp4dev runs in the same docker network as synapse, so the SMTP port is never projected to the docker host. smtp4dev also runs the web app used to view emails sent from the SMTP server at `http://localhost:5001`. You can open a browser tab with this URL to view any emails sent from the matrix server. As well as, our matrix tests leverage the mail web app in order to perform email assertions. smtp4dev is automatically started as part of running `pnpm start:all` in the `packages/realm-server` workspace.
-
 ## Boxel UI Component Explorer
 
 There is a ember-freestyle component explorer available to assist with development. In order to run the freestyle app:
 
-1. `cd packages/boxel-ui/test-app`
+1. `cd packages/boxel-ui`
 2. `pnpm start`
 3. Visit http://localhost:4210/ in your browser
 
@@ -171,7 +155,7 @@ There is a ember-freestyle component explorer available to assist with developme
 
 In order to run the boxel-motion demo app:
 
-1. `cd packages/boxel-motion/test-app`
+1. `cd packages/boxel-motion-demo-app`
 2. `pnpm start`
 3. Visit http://localhost:4200 in your browser
 
@@ -205,11 +189,6 @@ This test suite contains acceptance tests for asserting that the Realm server is
 
 Visit `http://localhost:4205` after the realms have finished starting up
 
-### Boxel UI
-
-1. `cd packages/boxel-ui/test-app`
-2. `pnpm test` (or `pnpm start` and visit http://localhost:4210/tests to run tests in the browser)
-
 ### Boxel Motion
 
 1. `cd packages/boxel-motion-test-app`
@@ -238,7 +217,7 @@ pnpm start:without-matrix
 Then to run the tests from the CLI execute the following from `packages/matrix`:
 
 ```
-pnpm test
+pnpm start:test
 ```
 
 Alternatively you can also run these tests from VS Code using the VS Code Playwright plugin (which is very strongly recommended). From the "test tube" icon, you can click on the play button to run a single test or all the tests.

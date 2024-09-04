@@ -1,0 +1,10 @@
+{{#unless this.model.isFastBoot}}
+  {{page-title 'Boxel'}}
+
+  <CardCatalog::Modal />
+  <CreateCardModal />
+
+  <Editor::Go @monaco={{this.model.monaco}} />
+
+  {{outlet}}
+{{/unless}}

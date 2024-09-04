@@ -1,94 +1,47 @@
-import { registerDestructor } from '@ember/destroyable';
-import { fn, array } from '@ember/helper';
-import { on } from '@ember/modifier';
-import { action } from '@ember/object';
 import Component from '@glimmer/component';
-
 import { tracked } from '@glimmer/tracking';
-
 import { task } from 'ember-concurrency';
-
-import perform from 'ember-concurrency/helpers/perform';
-import Modifier from 'ember-modifier';
-
-import {
-  BoxelDropdown,
-  IconButton,
-  Menu as BoxelMenu,
-  Tooltip,
-} from '@cardstack/boxel-ui/components';
-
-import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
-import { IconLink, ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
-
-import { cardTypeDisplayName } from '@cardstack/runtime-common';
-
-import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
-import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
-import Preview from '@cardstack/host/components/preview';
-
+import { on } from '@ember/modifier';
+import { fn } from '@ember/helper';
+import { action } from '@ember/object';
+import { Tooltip, IconButton, BoxelDropdown } from '@cardstack/boxel-ui';
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import perform from 'ember-concurrency/helpers/perform';
+import BoxelMenu from '@cardstack/boxel-ui/components/menu';
+import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
+import { array } from '@ember/helper';
+import { cardTypeDisplayName } from '@cardstack/runtime-common';
+import Preview from '@cardstack/host/components/preview';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 interface Signature {
   Element: HTMLElement;
   Args: {
     card: CardDef;
-    realmURL: URL;
-    format?: Format; // defaults to 'isolated'
-    setFormat: (format: Format) => void;
+    realmIconURL: string | null | undefined;
   };
   Blocks: {};
 }
 
 export default class CardPreviewPanel extends Component<Signature> {
-  @tracked footerWidthPx = 0;
-
-  private scrollPositions = new Map<string, number>();
-  private copyToClipboard = task(async () => {
+  copyToClipboard = task(async () => {
     await navigator.clipboard.writeText(this.args.card.id);
   });
 
-  private onScroll = (event: Event) => {
-    let scrollPosition = (event.target as HTMLElement).scrollTop;
-    this.scrollPositions.set(this.format, scrollPosition);
-  };
+  @tracked previewFormat: Format = 'isolated';
 
-  private get scrollPosition() {
-    return this.scrollPositions.get(this.format);
-  }
-
-  private get format(): Format {
-    return this.args.format ?? 'isolated';
-  }
-
-  @action setFooterWidthPx(footerWidthPx: number) {
-    this.footerWidthPx = footerWidthPx;
-  }
-
-  get footerButtonsClass() {
-    if (this.footerWidthPx < 380) {
-      // Adjust this as needed - it's where the buttons in single line start to get too squished
-      return 'collapsed';
-    }
-    return null;
+  @action setPreviewFormat(format: Format) {
+    this.previewFormat = format;
   }
 
   <template>
     <div
       class='preview-header'
-      data-test-code-mode-card-preview-header={{@card.id}}
+      data-test-code-mode-card-preview-header
       ...attributes
     >
       <div class='header-icon'>
-        <RealmInfoProvider @realmURL={{@realmURL}}>
-          <:ready as |realmInfo|>
-            <RealmIcon
-              @realmIconURL={{realmInfo.iconURL}}
-              @realmName={{realmInfo.name}}
-              class='icon'
-            />
-          </:ready>
-        </RealmInfoProvider>
+        <img src={{@realmIconURL}} alt='Realm icon' />
       </div>
       <div class='header-title'>
         {{cardTypeDisplayName @card}}
@@ -99,7 +52,7 @@ export default class CardPreviewPanel extends Component<Signature> {
             <Tooltip @placement='top'>
               <:trigger>
                 <IconButton
-                  @icon={{ThreeDotsHorizontal}}
+                  @icon='three-dots-horizontal'
                   @width='20px'
                   @height='20px'
                   class='icon-button'
@@ -118,7 +71,9 @@ export default class CardPreviewPanel extends Component<Signature> {
               @closeMenu={{dd.close}}
               @items={{array
                 (menuItem
-                  'Copy Card URL' (perform this.copyToClipboard) icon=IconLink
+                  'Copy Card URL'
+                  (perform this.copyToClipboard)
+                  icon='icon-link'
                 )
               }}
             />
@@ -127,52 +82,42 @@ export default class CardPreviewPanel extends Component<Signature> {
       </div>
     </div>
 
-    <div
-      class='preview-body'
-      data-test-code-mode-card-preview-body
-      {{ScrollModifier
-        initialScrollPosition=this.scrollPosition
-        onScroll=this.onScroll
-      }}
-    >
-      <Preview @card={{@card}} @format={{this.format}} />
+    <div class='preview-body' data-test-code-mode-card-preview-body>
+      <Preview @card={{@card}} @format={{this.previewFormat}} />
     </div>
 
-    <div
-      class='preview-footer'
-      {{ResizeModifier setFooterWidthPx=this.setFooterWidthPx}}
-      data-test-code-mode-card-preview-footer
-    >
-      <div class='preview-footer-title'>Preview as</div>
-      <div class='footer-buttons {{this.footerButtonsClass}}'>
+    <div class='preview-footer' data-test-code-mode-card-preview-footer>
+      <div class='footer-buttons'>
         <button
-          class='footer-button {{if (eq this.format "isolated") "active"}}'
-          {{on 'click' (fn @setFormat 'isolated')}}
+          class='footer-button
+            {{if (eq this.previewFormat "isolated") "active"}}'
+          {{on 'click' (fn this.setPreviewFormat 'isolated')}}
           data-test-preview-card-footer-button-isolated
         >Isolated</button>
         <button
-          class='footer-button {{if (eq this.format "atom") "active"}}'
-          {{on 'click' (fn @setFormat 'atom')}}
-          data-test-preview-card-footer-button-atom
-        >
-          Atom</button>
-        <button
-          class='footer-button {{if (eq this.format "embedded") "active"}}'
-          {{on 'click' (fn @setFormat 'embedded')}}
+          class='footer-button
+            {{if (eq this.previewFormat "embedded") "active"}}'
+          {{on 'click' (fn this.setPreviewFormat 'embedded')}}
           data-test-preview-card-footer-button-embedded
         >
           Embedded</button>
         <button
-          class='footer-button {{if (eq this.format "edit") "active"}}'
-          {{on 'click' (fn @setFormat 'edit')}}
+          class='footer-button {{if (eq this.previewFormat "edit") "active"}}'
+          {{on 'click' (fn this.setPreviewFormat 'edit')}}
           data-test-preview-card-footer-button-edit
         >Edit</button>
       </div>
     </div>
 
     <style>
+      :global(:root) {
+        --code-mode-preview-footer-height: 70px;
+        --code-mode-preview-header-height: 70px;
+      }
+
       .preview-header {
         background: white;
+        height: var(--code-mode-preview-header-height);
         border-top-left-radius: var(--boxel-border-radius);
         border-top-right-radius: var(--boxel-border-radius);
         padding: var(--boxel-sp-lg);
@@ -189,7 +134,10 @@ export default class CardPreviewPanel extends Component<Signature> {
       }
 
       .preview-body {
-        flex-grow: 1;
+        height: calc(
+          100% - var(--code-mode-preview-footer-height) -
+            var(--code-mode-preview-header-height)
+        );
         overflow-y: auto;
       }
 
@@ -208,67 +156,35 @@ export default class CardPreviewPanel extends Component<Signature> {
       }
 
       .preview-footer {
+        bottom: 0;
+        height: var(--code-mode-preview-footer-height);
         background-color: var(--boxel-200);
         border-bottom-left-radius: var(--boxel-border-radius);
         border-bottom-right-radius: var(--boxel-border-radius);
-        padding-bottom: var(--boxel-sp-sm);
-      }
-
-      .preview-footer-title {
-        text-align: center;
-        padding: var(--boxel-sp-xs) 0;
-        text-transform: uppercase;
-        font-weight: 600;
-        color: var(--boxel-400);
-        letter-spacing: 0.6px;
       }
 
       .footer-buttons {
-        margin: auto var(--boxel-sp-sm);
+        margin: auto;
         display: flex;
-        width: 100% - calc(2 * var(--boxel-sp));
-      }
-
-      .footer-buttons.collapsed {
-        display: block;
         gap: var(--boxel-sp-sm);
-        width: 100% - calc(2 * var(--boxel-sp));
       }
 
       .footer-button {
-        padding: var(--boxel-sp-xxxs) 0;
-        flex-grow: 1;
-        flex-basis: 0;
+        padding: var(--boxel-sp-xxxs) var(--boxel-sp-lg);
         font-weight: 600;
         background: transparent;
         color: var(--boxel-dark);
-        border: 1px solid var(--boxel-400);
-      }
-
-      .footer-buttons.collapsed .footer-button {
-        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
         border-radius: 6px;
-        margin-top: var(--boxel-sp-xxxs);
-        margin-right: var(--boxel-sp-xxs);
-      }
-
-      .footer-button:first-child {
-        border-top-left-radius: var(--boxel-border-radius);
-        border-bottom-left-radius: var(--boxel-border-radius);
-      }
-
-      .footer-button:last-child {
-        border-top-right-radius: var(--boxel-border-radius);
-        border-bottom-right-radius: var(--boxel-border-radius);
-      }
-
-      .footer-button + .footer-button {
-        margin-left: -1px;
+        border: 1px solid var(--boxel-400);
       }
 
       .footer-button.active {
         background: #27232f;
         color: var(--boxel-teal);
+      }
+
+      .preview-footer {
+        display: flex;
       }
 
       .icon-button {
@@ -292,61 +208,4 @@ export default class CardPreviewPanel extends Component<Signature> {
       }
     </style>
   </template>
-}
-
-interface ScrollSignature {
-  Args: {
-    Named: {
-      initialScrollPosition?: number;
-      onScroll?: (event: Event) => void;
-    };
-  };
-}
-
-class ScrollModifier extends Modifier<ScrollSignature> {
-  modify(
-    element: HTMLElement,
-    _positional: [],
-    { initialScrollPosition = 0, onScroll }: ScrollSignature['Args']['Named'],
-  ) {
-    // note that when testing make sure "disable cache" in chrome network settings is unchecked,
-    // as this assumes that previously loaded images will be cached. otherwise the scroll will
-    // happen *before* the geometry is altered by images that haven't completed loading yet.
-    element.scrollTop = initialScrollPosition;
-    if (onScroll) {
-      element.addEventListener('scroll', onScroll);
-      registerDestructor(this, () => {
-        element.removeEventListener('scroll', onScroll);
-      });
-    }
-  }
-}
-
-interface ResizeSignature {
-  Args: {
-    Named: {
-      setFooterWidthPx: (footerWidthPx: number) => void;
-    };
-  };
-}
-
-class ResizeModifier extends Modifier<ResizeSignature> {
-  modify(
-    element: HTMLElement,
-    _positional: [],
-    { setFooterWidthPx }: ResizeSignature['Args']['Named'],
-  ) {
-    let resizeObserver = new ResizeObserver(() => {
-      // setTimeout prevents the "ResizeObserver loop completed with undelivered notifications" error that happens in tests
-      setTimeout(() => {
-        setFooterWidthPx(element.clientWidth);
-      }, 1);
-    });
-
-    resizeObserver.observe(element);
-
-    registerDestructor(this, () => {
-      resizeObserver.disconnect();
-    });
-  }
 }

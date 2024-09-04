@@ -7,7 +7,6 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import DateTimeCard from 'https://cardstack.com/base/datetime';
 import StringCard from 'https://cardstack.com/base/string';
-
 import { PersonField } from './person';
 import { PostField } from './post';
 

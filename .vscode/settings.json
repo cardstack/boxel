@@ -10,5 +10,4 @@
     "editor.formatOnSave": true
   },
   "prettier.documentSelectors": ["**/*.gjs", "**/*.gts"],
-  "search.followSymlinks": false
 }

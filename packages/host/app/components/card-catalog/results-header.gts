@@ -1,9 +1,7 @@
 import Component from '@glimmer/component';
-
 import cssUrl from 'ember-css-url';
-
-import { cn, eq, gt, not } from '@cardstack/boxel-ui/helpers';
-
+import { eq, gt, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import cn from '@cardstack/boxel-ui/helpers/cn';
 import type { RealmInfo } from '@cardstack/runtime-common';
 
 interface Signature {

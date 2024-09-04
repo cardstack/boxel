@@ -4,19 +4,20 @@ import {
   type MatrixClient,
   type IEvent,
 } from 'matrix-js-sdk';
-
-import { type LooseCardResource, baseRealm } from '@cardstack/runtime-common';
-
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type * as MatrixSDK from 'matrix-js-sdk';
 import type {
-  CardMessageContent,
   RoomField,
   MatrixEvent as DiscreteMatrixEvent,
-  MessageField,
 } from 'https://cardstack.com/base/room';
-
+import type { RoomObjectiveField } from 'https://cardstack.com/base/room-objective';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import {
+  type LooseCardResource,
+  type MatrixCardError,
+  baseRealm,
+  isMatrixCardError,
+} from '@cardstack/runtime-common';
 import type LoaderService from '../../services/loader-service';
-import type * as MatrixSDK from 'matrix-js-sdk';
 
 export * as Membership from './membership';
 export * as Timeline from './timeline';
@@ -39,12 +40,12 @@ export type Event = Partial<IEvent>;
 
 export interface EventSendingContext {
   rooms: Map<string, Promise<RoomField>>;
-  pendingMessages: Map<string, MessageField | undefined>;
   cardAPI: typeof CardAPI;
   loaderService: LoaderService;
 }
 
 export interface Context extends EventSendingContext {
+  roomObjectives: Map<string, RoomObjectiveField | MatrixCardError>;
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[];
@@ -60,14 +61,6 @@ export interface Context extends EventSendingContext {
 
 export async function addRoomEvent(context: EventSendingContext, event: Event) {
   let { event_id: eventId, room_id: roomId, state_key: stateKey } = event;
-  // If we are receiving an event which contains
-  // a data field, we need to parse it
-  // because matrix doesn't support all json types
-  // Corresponding encoding is done in
-  // sendEvent in the matrix-service
-  if (event.content?.data) {
-    event.content.data = JSON.parse(event.content.data);
-  }
   eventId = eventId ?? stateKey; // room state may not necessary have an event ID
   if (!eventId) {
     throw new Error(
@@ -105,16 +98,20 @@ export async function addRoomEvent(context: EventSendingContext, event: Event) {
       ...(resolvedRoom.events ?? []),
       event as unknown as DiscreteMatrixEvent,
     ];
+  }
+}
 
-    let pendingMessage = context.pendingMessages.get(resolvedRoom.roomId);
-    if (
-      pendingMessage &&
-      event.type === 'm.room.message' &&
-      event.content?.msgtype === 'org.boxel.message' &&
-      (event.content as CardMessageContent).clientGeneratedId ===
-        pendingMessage.clientGeneratedId
-    ) {
-      context.pendingMessages.set(resolvedRoom.roomId, undefined);
-    }
+// our reactive system doesn't cascade "up" through our consumers. meaning that
+// when a card's contained field is another card and the interior card's field
+// changes, the consuming card's computeds will not automatically recompute. To
+// work around that, we are performing the assignment of the interior card to
+// the consuming card again which will trigger the consuming card's computeds to
+// pick up the interior card's updated fields. In this case the consuming
+// card/field is the RoomObjectiveField and the interior field is the RoomField.
+export async function recomputeRoomObjective(context: Context, roomId: string) {
+  let room = await context.rooms.get(roomId);
+  let objective = context.roomObjectives.get(roomId);
+  if (objective && room && !isMatrixCardError(objective)) {
+    objective.room = room;
   }
 }

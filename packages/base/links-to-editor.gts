@@ -18,8 +18,7 @@ import {
   identifyCard,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
-import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
-import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
+import { AddButton, IconButton } from '@cardstack/boxel-ui';
 
 interface Signature {
   Args: {
@@ -31,7 +30,7 @@ interface Signature {
 
 class LinksToEditor extends GlimmerComponent<Signature> {
   <template>
-    <div class='links-to-editor' data-test-links-to-editor={{@field.name}}>
+    <div class='links-to-editor'>
       {{#if this.isEmpty}}
         <AddButton
           class='add-new'
@@ -40,7 +39,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
           {{on 'click' this.add}}
           data-test-add-new
         >
-          Link
+          Choose
           {{@field.card.displayName}}
         </AddButton>
       {{else}}
@@ -48,7 +47,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
         <div class='remove-button-container'>
           <IconButton
             @variant='primary'
-            @icon={{IconMinusCircle}}
+            @icon='icon-minus-circle'
             @width='20px'
             @height='20px'
             class='remove'
@@ -120,7 +119,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
     let chosenCard: CardDef | undefined = await chooseCard(
       { filter: { type } },
       {
-        offerToCreate: { ref: type, relativeTo: undefined },
+        offerToCreate: type,
         createNewCard: this.args.context?.actions?.createCard,
       },
     );

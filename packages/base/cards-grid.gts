@@ -8,20 +8,20 @@ import {
   CardDef,
   realmInfo,
   realmURL,
+  relativeTo,
   type BaseDef,
 } from './card-api';
-import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
+import { AddButton, Tooltip } from '@cardstack/boxel-ui';
 import {
   chooseCard,
   catalogEntryRef,
-  getLiveCards,
+  getCards,
   baseRealm,
   cardTypeDisplayName,
-  isCardInstance,
+  subscribeToRealm,
 } from '@cardstack/runtime-common';
+import { registerDestructor } from '@ember/destroyable';
 import { tracked } from '@glimmer/tracking';
-// @ts-ignore no types
-import cssUrl from 'ember-css-url';
 import { type CatalogEntry } from './catalog-entry';
 import StringField from './string';
 
@@ -39,21 +39,13 @@ class Isolated extends Component<typeof CardsGrid> {
               fieldName=undefined
             }}
             data-test-cards-grid-item={{card.id}}
-            {{! In order to support scrolling cards into view
-            we use a selector that is not pruned out in production builds }}
-            data-cards-grid-item={{card.id}}
           >
             <div class='grid-card'>
-              <div
-                class='grid-thumbnail'
-                style={{cssUrl 'background-image' card.thumbnailURL}}
-              >
-                {{#unless card.thumbnailURL}}
-                  <div
-                    class='grid-thumbnail-text'
-                    data-test-cards-grid-item-thumbnail-text
-                  >{{cardTypeDisplayName card}}</div>
-                {{/unless}}
+              <div class='grid-thumbnail'>
+                <div
+                  class='grid-thumbnail-text'
+                  data-test-cards-grid-item-thumbnail-text
+                >{{cardTypeDisplayName card}}</div>
               </div>
               <h3
                 class='grid-title'
@@ -66,7 +58,7 @@ class Isolated extends Component<typeof CardsGrid> {
             </div>
           </li>
         {{else}}
-          {{#if this.liveQuery.isLoading}}
+          {{#if this.request.isLoading}}
             Loading...
           {{else}}
             <p>No cards available</p>
@@ -90,14 +82,13 @@ class Isolated extends Component<typeof CardsGrid> {
     <style>
       .cards-grid {
         --grid-card-text-thumbnail-height: 6.25rem;
-        --grid-card-label-color: var(--boxel-450);
+        --grid-card-label-color: #919191;
         --grid-card-width: 10.125rem;
         --grid-card-height: 15.125rem;
 
+        position: relative; /* Do not change this */
         max-width: 70rem;
         margin: 0 auto;
-        padding: var(--boxel-sp-xl);
-        position: relative; /* Do not change this */
       }
       .cards {
         list-style-type: none;
@@ -141,9 +132,6 @@ class Isolated extends Component<typeof CardsGrid> {
         align-items: center;
         height: var(--grid-card-text-thumbnail-height);
         background-color: var(--boxel-teal);
-        background-position: center;
-        background-size: cover;
-        background-repeat: no-repeat;
         color: var(--boxel-light);
         padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
         border-radius: var(--boxel-border-radius);
@@ -171,21 +159,74 @@ class Isolated extends Component<typeof CardsGrid> {
   </template>
 
   @tracked
-  private declare liveQuery: {
+  private declare request: {
     instances: CardDef[];
     isLoading: boolean;
+    ready: Promise<void>;
   };
+  @tracked staleInstances: CardDef[] = [];
+  private subscription: { url: string; unsubscribe: () => void } | undefined;
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
-    this.liveQuery = getLiveCards(
+    this.refresh();
+
+    let url = `${this.args.model[realmURL]}_message`;
+    this.subscription = {
+      url,
+      unsubscribe: subscribeToRealm(url, ({ type }) => {
+        // we are only interested in index events
+        if (type !== 'index') {
+          return;
+        }
+        // we show stale instances during a live refresh while we are
+        // waiting for the new instances to arrive--this eliminates the flash
+        // while we wait
+        this.staleInstances = [...(this.instances ?? [])];
+
+        if (this.args.context?.actions) {
+          this.args.context?.actions?.doWithStableScroll(
+            this.args.model as CardDef,
+            async () => {
+              this.refresh();
+              await this.request.ready;
+            },
+          );
+        } else {
+          this.refresh();
+        }
+      }),
+    };
+    registerDestructor(this, () => {
+      if (this.subscription) {
+        this.subscription.unsubscribe();
+      }
+    });
+  }
+
+  get instances() {
+    if (!this.request) {
+      return;
+    }
+    return this.request.isLoading
+      ? this.staleInstances
+      : this.request.instances;
+  }
+
+  private refresh() {
+    this.request = getCards(
       {
         filter: {
           not: {
-            type: {
-              module: `${baseRealm.url}cards-grid`,
-              name: 'CardsGrid',
-            },
+            any: [
+              { type: catalogEntryRef },
+              {
+                type: {
+                  module: `${baseRealm.url}cards-grid`,
+                  name: 'CardsGrid',
+                },
+              },
+            ],
           },
         },
         // sorting by title so that we can maintain stability in
@@ -197,36 +238,12 @@ class Isolated extends Component<typeof CardsGrid> {
               module: `${baseRealm.url}card-api`,
               name: 'CardDef',
             },
-            by: 'cardType',
-          },
-          {
-            on: {
-              module: `${baseRealm.url}card-api`,
-              name: 'CardDef',
-            },
             by: 'title',
           },
         ],
       },
       this.args.model[realmURL] ? [this.args.model[realmURL].href] : undefined,
-      async (ready: Promise<void> | undefined) => {
-        if (this.args.context?.actions) {
-          this.args.context.actions.doWithStableScroll(
-            this.args.model as CardDef,
-            async () => {
-              await ready;
-            },
-          );
-        }
-      },
     );
-  }
-
-  get instances() {
-    if (!this.liveQuery) {
-      return;
-    }
-    return this.liveQuery.instances;
   }
 
   @action
@@ -238,16 +255,23 @@ class Isolated extends Component<typeof CardsGrid> {
     let card = await chooseCard<CatalogEntry>({
       filter: {
         on: catalogEntryRef,
-        eq: { isField: false },
+        eq: { isPrimitive: false },
       },
     });
     if (!card) {
       return;
     }
 
-    await this.args.context?.actions?.createCard?.(card.ref, new URL(card.id), {
-      realmURL: this.args.model[realmURL],
-    });
+    // before auto save we used to add the new card to the stack
+    // after it was created. now this no longer really makes sense
+    // after auto-save. The card is in the stack in an edit mode.
+    //if the user wants to view the card in isolated mode they can
+    // just toggle the edit button. otherwise we'll pop 2 of the
+    // same cards into the stack.
+    await this.args.context?.actions?.createCard?.(
+      card.ref,
+      this.args.model[relativeTo],
+    );
   });
 }
 
@@ -266,8 +290,8 @@ export class CardsGrid extends CardDef {
   });
 
   static getDisplayName(instance: BaseDef) {
-    if (isCardInstance(instance)) {
-      return (instance as CardDef)[realmInfo]?.name ?? this.displayName;
+    if (instance instanceof CardDef) {
+      return instance[realmInfo]?.name ?? this.displayName;
     }
     return this.displayName;
   }

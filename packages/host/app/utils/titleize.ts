@@ -1,5 +1,5 @@
-import { capitalize } from '@ember/string';
 import { typeOf } from '@ember/utils';
+import { capitalize } from '@ember/string';
 
 export function titleize(val: string): string | undefined {
   if (!val || typeOf(val) !== 'string') {

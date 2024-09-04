@@ -12,7 +12,6 @@ import {
   type SerializeOpts,
   type JSONAPISingleResourceDocument,
 } from './card-api';
-import { ResolvedCodeRef } from '@cardstack/runtime-common';
 
 class BaseView extends Component<typeof CodeRefField> {
   <template>
@@ -25,44 +24,44 @@ class BaseView extends Component<typeof CodeRefField> {
   </template>
 }
 
+type CardId = { name: string; module: string };
+
 export default class CodeRefField extends FieldDef {
-  static [primitive]: ResolvedCodeRef;
+  static [primitive]: CardId;
 
   static [serialize](
-    codeRef: ResolvedCodeRef,
+    cardRef: CardId,
     _doc: JSONAPISingleResourceDocument,
     _visited?: Set<string>,
     opts?: SerializeOpts,
   ) {
     return {
-      ...codeRef,
+      ...cardRef,
       ...(opts?.maybeRelativeURL
-        ? { module: opts.maybeRelativeURL(codeRef.module) }
+        ? { module: opts.maybeRelativeURL(cardRef.module) }
         : {}),
     };
   }
   static async [deserialize]<T extends BaseDefConstructor>(
     this: T,
-    codeRef: ResolvedCodeRef,
+    cardRef: CardId,
   ): Promise<BaseInstanceType<T>> {
-    return { ...codeRef } as BaseInstanceType<T>; // return a new object so that the model cannot be mutated from the outside
+    return { ...cardRef } as BaseInstanceType<T>; // return a new object so that the model cannot be mutated from the outside
   }
-  static [queryableValue](
-    codeRef: ResolvedCodeRef | undefined,
-    stack: CardDef[] = [],
-  ) {
-    if (codeRef) {
+  static [queryableValue](cardRef: CardId | undefined, stack: CardDef[] = []) {
+    if (cardRef) {
       // if a stack is passed in, use the containing card to resolve relative references
       let moduleHref =
         stack.length > 0
-          ? new URL(codeRef.module, stack[0][relativeTo]).href
-          : codeRef.module;
-      return `${moduleHref}/${codeRef.name}`;
+          ? new URL(cardRef.module, stack[0][relativeTo]).href
+          : cardRef.module;
+      return `${moduleHref}/${cardRef.name}`;
     }
     return undefined;
   }
 
   static embedded = class Embedded extends BaseView {};
+  static isolated = class Isolated extends BaseView {};
   // The edit template is meant to be read-only, this field card is not mutable
   static edit = class Edit extends BaseView {};
 }

@@ -1,30 +1,22 @@
-import { action } from '@ember/object';
 import Component from '@glimmer/component';
-
-import { IconInherit as InheritIcon } from '@cardstack/boxel-ui/icons';
-
-import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
+//@ts-ignore cached not available yet in definitely typed
+import { cached } from '@glimmer/tracking';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
-
-import CardSchemaEditor from '@cardstack/host/components/operator-mode/card-schema-editor';
-import { CardInheritance } from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
-
-import { stripFileExtension } from '@cardstack/host/lib/utils';
-import { Type } from '@cardstack/host/resources/card-type';
+import { loadCard } from '@cardstack/runtime-common/code-ref';
 import type { Ready } from '@cardstack/host/resources/file';
-
-import { isOwnField } from '@cardstack/host/utils/schema-editor';
+import type { BaseDef } from 'https://cardstack.com/base/card-api';
+import CardSchemaEditor from '@cardstack/host/components/operator-mode/card-schema-editor';
+import LoaderService from '@cardstack/host/services/loader-service';
+import { service } from '@ember/service';
+import { getCardType } from '@cardstack/host/resources/card-type';
+import { tracked } from '@glimmer/tracking';
+import { type Type } from '@cardstack/host/resources/card-type';
+import { restartableTask } from 'ember-concurrency';
 
 interface Signature {
-  Element: HTMLDivElement;
   Args: {
     file: Ready;
-    cardInheritanceChain: CardInheritance[];
-    moduleSyntax: ModuleSyntax;
-    goToDefinition: (
-      codeRef: ResolvedCodeRef | undefined,
-      localName: string | undefined,
-    ) => void;
+    importedModule: Record<string, any>;
   };
 }
 
@@ -32,100 +24,89 @@ export default class CardAdoptionChain extends Component<Signature> {
   <template>
     <style>
       .card-adoption-chain {
+        height: 100%;
         background-color: var(--boxel-200);
-        min-height: 100%;
-        padding: var(--boxel-sp-sm);
-      }
-      .content-with-line {
-        position: relative;
-        transform: translateX(calc(var(--boxel-sp-sm) * -1));
-
-        display: flex;
-        align-items: center;
-        width: calc(100% + calc(var(--boxel-sp-sm) * 2));
-        height: 60px;
-        padding: var(--boxel-sp) 0;
-      }
-
-      .inherits-from {
-        display: flex;
-        align-items: center;
-        padding: 0 var(--boxel-sp-xs);
-        gap: var(--boxel-sp-xxxs);
-        font: 500 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
-        text-wrap: nowrap;
-        background: var(--boxel-200);
-
-        position: absolute;
-        left: 50%;
-        transform: translateX(-50%);
-      }
-
-      .chain:last-child .content-with-line {
-        display: none;
-      }
-
-      .inherits-icon {
-        height: 24px;
-      }
-
-      .line {
-        width: 100%;
-        border: 1px solid var(--boxel-purple-200);
+        padding: var(--boxel-sp);
+        overflow-y: auto;
       }
     </style>
 
-    <div class='card-adoption-chain' ...attributes>
-      {{#each @cardInheritanceChain as |data index|}}
-        <div class='chain'>
-          <CardSchemaEditor
-            @card={{data.card}}
-            @cardType={{data.cardType}}
-            @file={{@file}}
-            @moduleSyntax={{@moduleSyntax}}
-            @childFields={{this.getFields index 'successors'}}
-            @parentFields={{this.getFields index 'ancestors'}}
-            @allowFieldManipulation={{this.allowFieldManipulation
-              @file
-              data.cardType
-            }}
-            @goToDefinition={{@goToDefinition}}
-          />
-          <div class='content-with-line'>
-            <hr class='line' />
-            <div class='inherits-from'>
-              <span class='inherits-icon'><InheritIcon
-                  width='24px'
-                  height='24px'
-                /></span>
-              <span>Inherits From</span>
-            </div>
-          </div>
-        </div>
+    <div class='card-adoption-chain'>
+      <h3>Schema Editor</h3>
+
+      {{#each this.cardInheritanceChain as |data|}}
+        <CardSchemaEditor
+          @card={{data.card}}
+          @cardType={{data.cardType}}
+          @file={{@file}}
+          @moduleSyntax={{this.moduleSyntax}}
+        />
       {{/each}}
     </div>
   </template>
 
-  @action
-  getFields(cardIndex: number, from: 'ancestors' | 'successors'): string[] {
-    const children = this.args.cardInheritanceChain.filter((_data, index) =>
-      from === 'ancestors' ? index > cardIndex : index < cardIndex,
-    );
+  @service declare loaderService: LoaderService;
+  @tracked cardInheritanceChain: {
+    cardType: Type;
+    card: any;
+  }[] = [];
 
-    const fields = children.reduce((result: string[], data) => {
-      return result.concat(
-        data.cardType.fields
-          .filter((field) => isOwnField(data.card, field.name))
-          .map((field) => field.name),
+  constructor(owner: unknown, args: Signature['Args']) {
+    super(owner, args);
+    this.loadInheritanceChain.perform();
+  }
+
+  @cached
+  get moduleSyntax() {
+    return new ModuleSyntax(this.args.file.content);
+  }
+
+  loadInheritanceChain = restartableTask(async () => {
+    let fileUrl = this.args.file.url;
+    let module = this.args.importedModule;
+
+    let card = cardsFromModule(module)[0]; // TODO: this must come from the export selection in the left column
+    let cardTypeResource = getCardType(this, () => card);
+    await cardTypeResource.ready;
+
+    let cardType = cardTypeResource.type;
+    if (!cardType) {
+      throw new Error(
+        `Bug: should never get here because we waited for it to be ready`,
       );
-    }, []);
+    }
 
-    return fields;
-  }
+    // Chain goes from most specific to least specific
+    let cardInheritanceChain = [
+      {
+        cardType,
+        card,
+      },
+    ];
 
-  @action allowFieldManipulation(file: Ready, cardType: Type): boolean {
-    // Only allow add/edit/remove for fields from the currently opened module
-    return stripFileExtension(file.url) === cardType.module;
-  }
+    while (cardType.super) {
+      cardType = cardType.super;
+
+      let superCard = await loadCard(cardType.codeRef, {
+        loader: this.loaderService.loader,
+        relativeTo: new URL(fileUrl), // because the module can be relative
+      });
+
+      cardInheritanceChain.push({
+        cardType,
+        card: superCard,
+      });
+    }
+
+    this.cardInheritanceChain = cardInheritanceChain;
+  });
+}
+
+function cardsFromModule(
+  module: Record<string, any>,
+  _never?: never,
+): (typeof BaseDef)[] {
+  return Object.values(module).filter(
+    (maybeCard) => typeof maybeCard === 'function' && 'baseDef' in maybeCard,
+  );
 }

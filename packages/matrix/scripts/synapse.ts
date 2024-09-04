@@ -12,6 +12,7 @@ let dataDir = process.env.SYNAPSE_DATA_DIR
       template: 'dev',
       dataDir,
       containerName: 'boxel-synapse',
+      hostPort: 8008,
     });
   } else if (command === 'stop') {
     await dockerStop({ containerId: 'boxel-synapse' });

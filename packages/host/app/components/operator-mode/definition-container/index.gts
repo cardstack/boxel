@@ -1,34 +1,8 @@
 import Component from '@glimmer/component';
-
 import { BaseDefinitionContainer, BaseArgs, Active, ActiveArgs } from './base';
 import { Clickable, ClickableArgs } from './clickable';
 
-interface FileArgs
-  extends Omit<BaseArgs, 'title' | 'name' | 'isActive'>,
-    ActiveArgs {}
-
-interface FileSignature {
-  Element: HTMLElement;
-  Args: FileArgs;
-}
-
-export class FileDefinitionContainer extends Component<FileSignature> {
-  <template>
-    <BaseDefinitionContainer
-      @title='File'
-      @name={{undefined}}
-      @fileExtension={{@fileExtension}}
-      @isActive={{true}}
-      @fileURL={{@fileURL}}
-      data-test-file-definition
-    >
-      <:activeContent>
-        <Active @actions={{@actions}} @infoText={{@infoText}} />
-      </:activeContent>
-    </BaseDefinitionContainer>
-  </template>
-}
-interface ModuleArgs extends BaseArgs, ActiveArgs {}
+interface ModuleArgs extends Omit<BaseArgs, 'title'>, ActiveArgs {}
 
 interface ModuleSignature {
   Element: HTMLElement;
@@ -38,11 +12,12 @@ interface ModuleSignature {
 export class ModuleDefinitionContainer extends Component<ModuleSignature> {
   <template>
     <BaseDefinitionContainer
-      @title={{@title}}
+      @title='Card Definition'
       @name={{@name}}
       @fileExtension={{@fileExtension}}
+      @realmInfo={{@realmInfo}}
+      @realmIconURL={{@realmIconURL}}
       @isActive={{@isActive}}
-      @fileURL={{@fileURL}}
       data-test-card-module-definition
     >
       <:activeContent>
@@ -53,7 +28,7 @@ export class ModuleDefinitionContainer extends Component<ModuleSignature> {
 }
 
 interface InstanceArgs
-  extends Omit<BaseArgs, 'title' | 'isActive'>,
+  extends Omit<BaseArgs, 'title' | 'infoText' | 'isActive'>,
     ActiveArgs {}
 
 interface InstanceSignature {
@@ -65,10 +40,11 @@ export class InstanceDefinitionContainer extends Component<InstanceSignature> {
   <template>
     <BaseDefinitionContainer
       @title='Card Instance'
-      @fileExtension={{@fileExtension}}
+      @fileExtension='.JSON'
       @name={{@name}}
+      @realmInfo={{@realmInfo}}
+      @realmIconURL={{@realmIconURL}}
       @isActive={{true}}
-      @fileURL={{@fileURL}}
       data-test-card-instance-definition
     >
       <:activeContent>
@@ -79,7 +55,7 @@ export class InstanceDefinitionContainer extends Component<InstanceSignature> {
 }
 
 interface ClickableModuleArgs
-  extends Omit<BaseArgs, 'infoText' | 'isActive'>,
+  extends Omit<BaseArgs, 'title' | 'infoText' | 'isActive'>,
     ClickableArgs {}
 
 interface ClickableModuleSignature {
@@ -90,17 +66,17 @@ interface ClickableModuleSignature {
 export class ClickableModuleDefinitionContainer extends Component<ClickableModuleSignature> {
   <template>
     <Clickable
-      @goToDefinition={{@goToDefinition}}
-      @codeRef={{@codeRef}}
-      @localName={{@localName}}
-      data-test-clickable-definition-container
+      @onSelectDefinition={{@onSelectDefinition}}
+      @url={{@url}}
+      data-test-definition-container
     >
       <BaseDefinitionContainer
-        @title={{@title}}
+        @title='Card Definition'
         @name={{@name}}
         @fileExtension={{@fileExtension}}
+        @realmInfo={{@realmInfo}}
+        @realmIconURL={{@realmIconURL}}
         @isActive={{false}}
-        @fileURL={{@fileURL}}
         data-test-card-module-definition
       />
     </Clickable>

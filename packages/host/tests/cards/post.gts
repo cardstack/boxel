@@ -8,7 +8,6 @@ import {
 import DatetimeCard from 'https://cardstack.com/base/datetime';
 import NumberCard from 'https://cardstack.com/base/number';
 import StringCard from 'https://cardstack.com/base/string';
-
 import { PersonField } from './person';
 
 export class Post extends CardDef {

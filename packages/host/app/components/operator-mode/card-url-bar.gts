@@ -1,38 +1,19 @@
-import { on } from '@ember/modifier';
-import { service } from '@ember/service';
 import Component from '@glimmer/component';
-
-import { BoxelInput } from '@cardstack/boxel-ui/components';
-
-import { and, bool, not } from '@cardstack/boxel-ui/helpers';
-
-import {
-  IconCircle,
-  IconGlobe,
-  Warning as IconWarning,
-} from '@cardstack/boxel-ui/icons';
-
-import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
-import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import { BoxelInput } from '@cardstack/boxel-ui';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import { service } from '@ember/service';
+import { type RealmInfo } from '@cardstack/runtime-common';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import URLBarResource, {
   urlBarResource,
 } from '@cardstack/host/resources/url-bar';
 
-import type CardService from '../../services/card-service';
-import type OperatorModeStateService from '../../services/operator-mode-state-service';
-
 interface Signature {
   Element: HTMLElement;
   Args: {
-    // TODO consider refactoring so that the upstream component (code-submode.gts)
-    // doesn't manage the error state, and rather that moves into this component
-    // as we have 4 params related to error state management that are passed into
-    // this component. This might be a good code-mode.gts refactoring effort...
-    loadFileError: string | null; // upstream error message
-    userHasDismissedError: boolean; // user driven state that indicates if we should show error message
-    resetLoadFileError: () => void; // callback to reset upstream error state -- perform on keypress
-    dismissURLError: () => void; // callback allow user to dismiss the error message
-    realmURL: URL;
+    loadFileError: string | null;
+    resetLoadFileError: () => void;
+    realmInfo: RealmInfo | null;
   };
 }
 
@@ -40,31 +21,17 @@ export default class CardURLBar extends Component<Signature> {
   <template>
     <div
       id='card-url-bar'
-      class='card-url-bar {{if this.urlBar.isFocused "focused"}}'
+      class={{this.cssClasses}}
       data-test-card-url-bar
       ...attributes
     >
       <div class='realm-info' data-test-card-url-bar-realm-info>
-        <RealmInfoProvider @realmURL={{@realmURL}}>
-          <:ready as |realmInfo|>
-            <div class='realm-icon'>
-              <RealmIcon
-                @realmIconURL={{realmInfo.iconURL}}
-                @realmName={{realmInfo.name}}
-              />
-            </div>
-            <span>in {{realmInfo.name}}</span>
-          </:ready>
-          <:error>
-            <div class='realm-icon'>
-              <IconCircle width='22px' height='22px' />
-            </div>
-            <span>in Unknown Workspace</span>
-          </:error>
-        </RealmInfoProvider>
+        <img src={{this.realmIcon}} alt='realm-icon' />
+        <span>in
+          {{if this.realmName this.realmName 'Unknown Workspace'}}</span>
       </div>
       <div class='input'>
-        <IconGlobe width='22px' height='22px' />
+        {{svgJar 'icon-globe' width='22px' height='22px'}}
         <BoxelInput
           class='url-input'
           @value={{this.urlBar.url}}
@@ -75,17 +42,9 @@ export default class CardURLBar extends Component<Signature> {
           data-test-card-url-bar-input
         />
       </div>
-      {{#if (and (not @userHasDismissedError) (bool this.urlBar.errorMessage))}}
+      {{#if this.urlBar.showErrorMessage}}
         <div class='error-message' data-test-card-url-bar-error>
-          <span class='warning'>
-            <IconWarning width='20px' height='20px' />
-          </span>
-          <span class='message'>{{this.urlBar.errorMessage}}</span>
-          <button
-            data-test-dismiss-url-error-button
-            class='dismiss'
-            {{on 'click' @dismissURLError}}
-          >Dismiss</button>
+          <span>{{this.urlBar.errorMessage}}</span>
         </div>
       {{/if}}
 
@@ -93,10 +52,8 @@ export default class CardURLBar extends Component<Signature> {
     <style>
       :global(:root) {
         --card-url-bar-width: 100%;
-        --card-url-bar-height: var(--boxel-form-control-height);
       }
       .card-url-bar {
-        position: relative;
         display: flex;
         align-items: center;
 
@@ -105,7 +62,6 @@ export default class CardURLBar extends Component<Signature> {
         padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
 
         width: var(--card-url-bar-width);
-        height: var(--card-url-bar-height);
       }
       .focused {
         outline: 2px solid var(--boxel-highlight);
@@ -126,20 +82,8 @@ export default class CardURLBar extends Component<Signature> {
 
         white-space: nowrap;
       }
-      .realm-icon {
-        display: flex;
-        align-items: center;
-        background-color: var(--boxel-light);
-        background-image: var(--card-url-bar-realm-icon);
-
-        border: 1px solid var(--boxel-light);
-        border-radius: 4px;
-
-        --icon-color: var(--boxel-light);
-      }
-      .realm-icon img {
-        width: 20px;
-        height: 20px;
+      .realm-info img {
+        width: 22px;
       }
       .input {
         display: flex;
@@ -164,48 +108,15 @@ export default class CardURLBar extends Component<Signature> {
       }
       .error-message {
         position: absolute;
-        display: flex;
-        overflow: hidden;
-        align-items: center;
-        top: var(--submode-switcher-height);
-        left: 0;
-        background-color: var(--boxel-light);
-        width: 100%;
-        height: var(--submode-switcher-height);
-        border-radius: var(--boxel-border-radius);
-        box-shadow: var(--boxel-deep-box-shadow);
-        font: var(--boxel-font-sm);
-        font-weight: 500;
-        z-index: 1;
-      }
-      .warning {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background-color: var(--boxel-yellow);
-        width: 40px;
-        height: 100%;
-      }
-      .message {
-        margin-left: var(--boxel-sp);
-      }
-
-      .dismiss {
-        position: absolute;
-        right: 0;
-        margin-right: var(--boxel-sp-xxs);
-        font-weight: bold;
-        color: var(--boxel-highlight);
-        border: none;
-        background-color: transparent;
+        bottom: calc(calc(var(--boxel-sp-xs) * 2) * -1);
+        color: red;
       }
     </style>
   </template>
 
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare cardService: CardService;
+  @service declare operatorModeStateService: OperatorModeStateService;
 
-  private urlBar: URLBarResource = urlBarResource(this, () => ({
+  urlBar: URLBarResource = urlBarResource(this, () => ({
     getValue: () => this.codePath,
     setValue: (url: string) => {
       this.operatorModeStateService.updateCodePath(new URL(url));
@@ -214,9 +125,27 @@ export default class CardURLBar extends Component<Signature> {
     resetValueError: this.args.resetLoadFileError,
   }));
 
-  private get codePath() {
+  get codePath() {
     return this.operatorModeStateService.state.codePath
       ? this.operatorModeStateService.state.codePath.toString()
       : null;
+  }
+
+  get realmIcon() {
+    return this.args.realmInfo?.iconURL;
+  }
+
+  get realmName() {
+    return this.args.realmInfo?.name;
+  }
+
+  get cssClasses() {
+    if (this.urlBar.showErrorMessage) {
+      return 'card-url-bar error';
+    } else if (this.urlBar.isFocused) {
+      return 'card-url-bar focused';
+    } else {
+      return 'card-url-bar';
+    }
   }
 }

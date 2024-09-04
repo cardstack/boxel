@@ -10,9 +10,9 @@ import {
 import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Address } from './address';
-import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { FieldContainer } from '@cardstack/boxel-ui';
 import { startCase } from 'lodash';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { PaymentMethod } from './payment-method';
 import GlimmerComponent from '@glimmer/component';
 
@@ -57,7 +57,6 @@ class VendorDetails extends FieldDef {
 }
 
 class Contact extends FieldDef {
-  static displayName = 'Contact';
   @field fullName = contains(StringCard);
   @field preferredName = contains(StringCard);
   @field jobTitle = contains(StringCard);
@@ -87,7 +86,6 @@ class Contact extends FieldDef {
 }
 
 class ContactMethod extends FieldDef {
-  static displayName = 'ContactMethod';
   @field platform = contains(StringCard); // Dropdown (Telegram, Discord, Facebook, LinkedIn, Twitter)
   @field username = contains(StringCard);
   static embedded = class Embedded extends Component<typeof this> {
@@ -98,7 +96,6 @@ class ContactMethod extends FieldDef {
 }
 
 export class Vendor extends CardDef {
-  static displayName = 'Vendor';
   @field vendor = contains(VendorDetails); // required
   @field contact = contains(Contact); // required
   @field contactMethod = containsMany(ContactMethod);
@@ -125,7 +122,7 @@ export class Vendor extends CardDef {
   };
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <VendorContainer class='container'>
+      <VendorContainer>
         <section>
           <h2>Title</h2>
           <@fields.title />
@@ -157,16 +154,11 @@ export class Vendor extends CardDef {
           {{/if}}
         </section>
       </VendorContainer>
-      <style>
-        .container {
-          padding: var(--boxel-sp-xl);
-        }
-      </style>
     </template>
   };
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <VendorContainer class='container'>
+      <VendorContainer>
         <section>
           <h2>Vendor</h2>
           <@fields.vendor />
@@ -192,12 +184,6 @@ export class Vendor extends CardDef {
           <@fields.alternatePaymentMethod />
         </section>
       </VendorContainer>
-      <style>
-        .container {
-          padding: var(--boxel-sp-xl) var(--boxel-sp-xxl) var(--boxel-sp-xl)
-            var(--boxel-sp-xl);
-        }
-      </style>
     </template>
   };
 }

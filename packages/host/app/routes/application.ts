@@ -1,6 +1,5 @@
 import Route from '@ember/routing/route';
 import { service } from '@ember/service';
-
 import ENV from '@cardstack/host/config/environment';
 
 interface Model {

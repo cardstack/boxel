@@ -1,14 +1,11 @@
 import Component from '@glimmer/component';
-
-import { CardContainer } from '@cardstack/boxel-ui/components';
-
-import { cn } from '@cardstack/boxel-ui/helpers';
-
-import { cardTypeDisplayName } from '@cardstack/runtime-common';
-
-import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
-
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+import { cardTypeDisplayName } from '@cardstack/runtime-common';
+import { CardContainer } from '@cardstack/boxel-ui';
+import { trackedFunction } from 'ember-resources/util/function';
+import type CardService from '../../../services/card-service';
+import { service } from '@ember/service';
+import cn from '@cardstack/boxel-ui/helpers/cn';
 
 interface Signature {
   Element: HTMLElement;
@@ -29,15 +26,9 @@ export default class SearchResult extends Component<Signature> {
       <header class='search-result__title'>{{@card.title}}</header>
       <p class='search-result__subtitle'>
         <span class='search-result__display-name'>
-          {{cardTypeDisplayName @card}}{{if @compact ', in' ''}}
+          {{cardTypeDisplayName @card}}
         </span>
-        <span class='search-result__realm-name'>
-          <RealmInfoProvider @fileURL={{@card.id}}>
-            <:ready as |realmInfo|>
-              {{realmInfo.name}}
-            </:ready>
-          </RealmInfoProvider>
-        </span>
+        <span class='search-result__realm-name'>In {{this.realmName}}</span>
       </p>
     </CardContainer>
     <style>
@@ -69,7 +60,7 @@ export default class SearchResult extends Component<Signature> {
       .search-result__display-name {
         margin: 0;
         font: 500 var(--boxel-font-xs);
-        color: var(--boxel-450);
+        color: #919191;
       }
       .search-result:not(.is-compact) .search-result__realm-name {
         display: block;
@@ -79,6 +70,20 @@ export default class SearchResult extends Component<Signature> {
         color: var(--boxel-teal);
         font-size: var(--boxel-font-size-xs);
       }
+      .is-compact .search-result__display-name:after {
+        content: ', ';
+      }
     </style>
   </template>
+
+  @service declare cardService: CardService;
+
+  fetchRealmName = trackedFunction(this, async () => {
+    let realmInfoSymbol = await this.cardService.getRealmInfo(this.args.card);
+    return realmInfoSymbol?.name;
+  });
+
+  get realmName() {
+    return this.fetchRealmName.value ?? '';
+  }
 }

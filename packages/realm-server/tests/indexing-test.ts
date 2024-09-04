@@ -1,10 +1,10 @@
 import { module, test } from 'qunit';
 import { dirSync, setGracefulCleanup } from 'tmp';
 import {
+  Loader,
   baseRealm,
   LooseSingleCardDocument,
   Realm,
-  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
   createRealm,
@@ -33,14 +33,12 @@ setGracefulCleanup();
 // underlying filesystem in a manner that doesn't leak into other tests (as well
 // as to test through loader caching)
 module('indexing', function (hooks) {
-  let virtualNetwork = new VirtualNetwork();
-  let loader = virtualNetwork.createLoader();
-
+  let loader = new Loader();
   loader.addURLMapping(
     new URL(baseRealm.url),
     new URL('http://localhost:4201/base/'),
   );
-  shimExternals(virtualNetwork);
+  shimExternals(loader);
 
   setupCardLogs(
     hooks,
@@ -53,12 +51,12 @@ module('indexing', function (hooks) {
   setupBaseRealmServer(hooks, loader);
 
   hooks.beforeEach(async function () {
-    let testRealmLoader = virtualNetwork.createLoader();
+    let testRealmLoader = new Loader();
     testRealmLoader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/'),
     );
-    shimExternals(virtualNetwork);
+    shimExternals(testRealmLoader);
 
     dir = dirSync().name;
     realm = await createRealm(testRealmLoader, dir, {
@@ -503,7 +501,6 @@ module('indexing', function (hooks) {
             status: 404,
             title: 'Not Found',
             deps: ['http://test-realm/post'],
-            responseText: undefined,
           },
         }),
         'card instance is an error document',
