@@ -152,7 +152,15 @@ export default class Room extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
+
+    this.loadRoomSkills.perform();
   }
+
+  private loadRoomSkills = restartableTask(async () => {
+    await this.roomResource.loading;
+    let defaultSkills = await this.matrixService.loadDefaultSkills();
+    this.roomResource.room!.skills = defaultSkills;
+  });
 
   maybeRetryAction = (messageIndex: number, message: Message) => {
     if (this.isLastMessage(messageIndex) && message.isRetryable) {

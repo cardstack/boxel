@@ -5,7 +5,7 @@ import { cached, tracked } from '@glimmer/tracking';
 
 import format from 'date-fns/format';
 
-import { task } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
 import window from 'ember-window-mock';
 import {
   type LoginResponse,
@@ -169,7 +169,6 @@ export default class MatrixService
   );
 
   private loadState = task(async () => {
-    await this.loadDefaultSkills();
     await this.loadSDK();
   });
 
@@ -816,7 +815,6 @@ export default class MatrixService
   }
 
   setRoom(roomId: string, room: RoomState) {
-    room.skills = [...this.defaultSkills];
     this.rooms.set(roomId, room);
     if (!this.roomResourcesCache.has(roomId)) {
       this.roomResourcesCache.set(
@@ -830,13 +828,21 @@ export default class MatrixService
     }
   }
 
-  private async loadDefaultSkills() {
-    for (let skillCardURL of DefaultSkillCards) {
-      let cardResource = getCard(this, () => skillCardURL);
-      await cardResource.loaded;
-      let card = cardResource.card as SkillCard;
-      this.defaultSkills.push(new TrackedObject({ card, isActive: true }));
+  async loadDefaultSkills() {
+    if (this.defaultSkills.length > 0) {
+      return this.defaultSkills;
     }
+
+    await Promise.all(
+      DefaultSkillCards.map(async (skillCardURL) => {
+        let cardResource = getCard(this, () => skillCardURL);
+        await cardResource.loaded;
+        let card = cardResource.card as SkillCard;
+        this.defaultSkills.push(new TrackedObject({ card, isActive: true }));
+      }),
+    );
+
+    return this.defaultSkills;
   }
 
   @cached
