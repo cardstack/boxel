@@ -2,7 +2,7 @@ name: CI Host
 
 on:
   push:
-    branches: [main]
+    branches: [bisect-branch]
   pull_request:
 
 permissions:
