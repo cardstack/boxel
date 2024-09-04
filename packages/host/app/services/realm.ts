@@ -283,6 +283,20 @@ export default class RealmService extends Service {
       .sort(([, i], [, j]) => i.info.name.localeCompare(j.info.name));
 
     let first = writeableRealms[0];
+
+    if (!first) {
+      throw new Error(
+        `No writable realms found, known realms and writability: ${Object.keys(
+          this.allRealmsMeta,
+        )
+          .map(
+            (realmUrl) =>
+              `${realmUrl}: ${this.allRealmsMeta[realmUrl].canWrite}`,
+          )
+          .join(', ')}`,
+      );
+    }
+
     return { path: first[0], info: first[1].info };
   }
 
