@@ -122,7 +122,7 @@ export class VirtualNetwork {
       return next(await this.mapRequest(request, 'virtual-to-real'));
     });
 
-    return fetchWithRetries(new URL(request.url), () =>
+    return withRetries(new URL(request.url), () =>
       fetcher(this.nativeFetch, handlers)(request, init),
     );
   }
@@ -206,7 +206,7 @@ function isUrlLike(moduleIdentifier: string): boolean {
 // Fetch failed" exceptions.
 const maxAttempts = 5;
 const backOffMs = 100;
-async function fetchWithRetries(
+async function withRetries(
   url: URL,
   fetchFn: () => ReturnType<typeof globalThis.fetch>,
 ) {
