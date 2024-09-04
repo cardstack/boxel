@@ -19,9 +19,11 @@ export default class ProgressBarUsage extends Component {
   @cssVariable({ cssClassName: 'progress-bar-freestyle-container' })
   declare boxelProgressBarBackgroundColor: CSSVariableInfo;
   @cssVariable({ cssClassName: 'progress-bar-freestyle-container' })
-  declare boxelProgressBarValueColor: CSSVariableInfo;
+  declare boxelProgressBarFillColor: CSSVariableInfo;
   @cssVariable({ cssClassName: 'progress-bar-freestyle-container' })
   declare boxelProgressBarBorderRadius: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'progress-bar-freestyle-container' })
+  declare boxelProgressBarFontColor: CSSVariableInfo;
 
   get progressValue() {
     return `${this.value} / ${this.max}`;
@@ -32,8 +34,9 @@ export default class ProgressBarUsage extends Component {
       class='progress-bar-freestyle-container'
       style={{cssVar
         boxel-progress-bar-background-color=this.boxelProgressBarBackgroundColor.value
-        boxel-progress-bar-value-color=this.boxelProgressBarValueColor.value
+        boxel-progress-bar-fill-color=this.boxelProgressBarFillColor.value
         boxel-progress-bar-border-radius=this.boxelProgressBarBorderRadius.value
+        boxel-progress-bar-font-color=this.boxelProgressBarFontColor.value
       }}
     >
       <FreestyleUsage @name='Progress'>
@@ -85,12 +88,12 @@ export default class ProgressBarUsage extends Component {
             @onInput={{this.boxelProgressBarBackgroundColor.update}}
           />
           <Css.Basic
-            @name='boxel-progress-bar-value-color'
+            @name='boxel-progress-bar-fill-color'
             @type='color'
             @description='Color of the progress value'
-            @defaultValue={{this.boxelProgressBarValueColor.defaults}}
-            @value={{this.boxelProgressBarValueColor.value}}
-            @onInput={{this.boxelProgressBarValueColor.update}}
+            @defaultValue={{this.boxelProgressBarFillColor.defaults}}
+            @value={{this.boxelProgressBarFillColor.value}}
+            @onInput={{this.boxelProgressBarFillColor.update}}
           />
           <Css.Basic
             @name='boxel-progress-bar-border-radius'
@@ -100,7 +103,14 @@ export default class ProgressBarUsage extends Component {
             @value={{this.boxelProgressBarBorderRadius.value}}
             @onInput={{this.boxelProgressBarBorderRadius.update}}
           />
-
+          <Css.Basic
+            @name='boxel-progress-bar-font-color'
+            @type='color'
+            @description='Font color of the progress bar label'
+            @defaultValue={{this.boxelProgressBarFontColor.defaults}}
+            @value={{this.boxelProgressBarFontColor.value}}
+            @onInput={{this.boxelProgressBarFontColor.update}}
+          />
         </:cssVars>
       </FreestyleUsage>
 

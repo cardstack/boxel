@@ -57,17 +57,14 @@ export default class ProgressBar extends Component<Signature> {
             --boxel-progress-bar-border-radius,
             var(--boxel-border-radius-sm)
           );
-          --progress-bar-value-color: var(
-            --boxel-progress-bar-value-color,
+          --progress-bar-fill-color: var(
+            --boxel-progress-bar-fill-color,
             var(--boxel-highlight)
           );
           --progress-bar-font-color: var(
             --boxel-progress-bar-font-color,
             var(--boxel-light)
           );
-          --progress-bar-position: var(end);
-          --progress-bar-font: var(--boxel-progress-bar-font-weight, 600)
-            var(--boxel-progress-bar-text-font, var(--boxel-font-xs));
           height: 1.5em;
           width: 100%;
           background-color: var(--progress-bar-background-color);
@@ -86,7 +83,7 @@ export default class ProgressBar extends Component<Signature> {
         .progress-bar-value {
           position: relative;
           height: 100%;
-          background-color: var(--progress-bar-value-color);
+          background-color: var(--progress-bar-fill-color);
           border-radius: var(--progress-bar-border-radius) 0 0
             var(--progress-bar-border-radius);
         }
@@ -114,7 +111,7 @@ export default class ProgressBar extends Component<Signature> {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          color: var(--boxel-light);
+          color: var(--progress-bar-font-color);
         }
       }
     </style>
