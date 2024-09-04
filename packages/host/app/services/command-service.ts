@@ -74,6 +74,27 @@ export default class CommandService extends Service {
         res = await Promise.all(
           instances.map((c) => this.cardService.serializeCard(c)),
         );
+      } else if (command.name === 'generateAppModule') {
+        let realmURL = this.cardService.defaultURL;
+        let timestamp = Date.now();
+        let fileName =
+          (payload.appTitle as string)?.replace(/ /g, '-').toLowerCase() ??
+          `untitled-app-${timestamp}`;
+        let moduleId = `${realmURL.href}AppModules/${fileName}-${timestamp}`;
+        let content = (payload.moduleCode as string) ?? '';
+        res = await this.cardService.saveSource(
+          new URL(`${moduleId}.gts`),
+          content,
+        );
+        if (!payload.attached_card_id) {
+          throw new Error(
+            `Could not update 'moduleURL' with a link to the generated module.`,
+          );
+        }
+        await this.operatorModeStateService.patchCard.perform(
+          String(payload.attached_card_id),
+          { attributes: { moduleURL: moduleId } },
+        );
       }
       await this.matrixService.sendReactionEvent(roomId, eventId, 'applied');
       if (res) {
