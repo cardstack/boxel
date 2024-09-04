@@ -10,7 +10,6 @@ overrides:
   '@glimmer/tracking>@glimmer/validator': 0.84.3
   jsesc: ^3.0.0
   ember-modifier: ^4.1.0
-  glimmer-scoped-css: github:cardstack/glimmer-scoped-css#explicit-scope-cs-7159
   prettier: github:cardstack/prettier#glimmer-style-tag-in-template-support
 
 patchedDependencies:
@@ -569,8 +568,8 @@ importers:
         specifier: ^8.0.1
         version: 8.1.1(eslint@8.57.0)
       glimmer-scoped-css:
-        specifier: github:cardstack/glimmer-scoped-css#explicit-scope-cs-7159
-        version: github.com/cardstack/glimmer-scoped-css/d0e7909ba68b600b3f177e4cb48f2ba8bf045fa7
+        specifier: ^0.6.0
+        version: 0.6.0
       loader.js:
         specifier: ^4.7.0
         version: 4.7.0
@@ -762,8 +761,8 @@ importers:
         specifier: ^3.2.0
         version: 3.2.0(@typescript-eslint/parser@7.16.1)(eslint@8.57.0)(typescript@5.1.6)
       glimmer-scoped-css:
-        specifier: github:cardstack/glimmer-scoped-css#explicit-scope-cs-7159
-        version: github.com/cardstack/glimmer-scoped-css/d0e7909ba68b600b3f177e4cb48f2ba8bf045fa7
+        specifier: ^0.6.0
+        version: 0.6.0
       prettier:
         specifier: github:cardstack/prettier#glimmer-style-tag-in-template-support
         version: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
@@ -1362,8 +1361,8 @@ importers:
         specifier: ^5.0.2
         version: 5.0.2
       glimmer-scoped-css:
-        specifier: github:cardstack/glimmer-scoped-css#explicit-scope-cs-7159
-        version: github.com/cardstack/glimmer-scoped-css/d0e7909ba68b600b3f177e4cb48f2ba8bf045fa7
+        specifier: ^0.6.0
+        version: 0.6.0
       ignore:
         specifier: ^5.2.0
         version: 5.2.0
@@ -1773,8 +1772,8 @@ importers:
         specifier: ^5.0.2
         version: 5.0.2
       glimmer-scoped-css:
-        specifier: github:cardstack/glimmer-scoped-css#explicit-scope-cs-7159
-        version: github.com/cardstack/glimmer-scoped-css/d0e7909ba68b600b3f177e4cb48f2ba8bf045fa7
+        specifier: ^0.6.0
+        version: 0.6.0
       http-status-codes:
         specifier: ^2.2.0
         version: 2.2.0
@@ -15439,6 +15438,17 @@ packages:
       through: 2.2.7
     dev: true
 
+  /glimmer-scoped-css@0.6.0:
+    resolution: {integrity: sha512-gC8k7BKOF9Z0ZFptEH99XAklAcZc/vkF9Ms0dDGdUWGtHxRepQI+72xaQ92zIZStj0CwhfGVl5Qs13n1Qwgrnw==}
+    dependencies:
+      '@embroider/addon-shim': 1.8.9
+      js-string-escape: 1.0.1
+      postcss: 8.4.31
+      postcss-selector-parser: 6.0.13
+      super-fast-md5: 1.0.1
+    transitivePeerDependencies:
+      - supports-color
+
   /glob-parent@3.1.0:
     resolution: {integrity: sha512-E8Ak/2+dZY6fnzlR7+ueWvhsH1SjHr4jjss4YS/h4py44jY9MhK/VFdaZJAWDz6BbL21KeteKxFSFpq8OS5gVA==}
     requiresBuild: true
@@ -23786,14 +23796,6 @@ packages:
       lodash: 4.17.21
       readable-stream: 2.3.8
     dev: true
-
-  github.com/cardstack/glimmer-scoped-css/d0e7909ba68b600b3f177e4cb48f2ba8bf045fa7:
-    resolution: {tarball: https://codeload.github.com/cardstack/glimmer-scoped-css/tar.gz/d0e7909ba68b600b3f177e4cb48f2ba8bf045fa7}
-    name: glimmer-scoped-css
-    version: 0.5.0
-    engines: {pnpm: ^8}
-    prepare: true
-    requiresBuild: true
 
   github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6:
     resolution: {tarball: https://codeload.github.com/cardstack/prettier/tar.gz/60eccfdc598d682a931d3c569ffb0c4f92ef5db6}

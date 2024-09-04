@@ -27,7 +27,6 @@
       "@glimmer/tracking>@glimmer/validator": "0.84.3",
       "jsesc": "^3.0.0",
       "ember-modifier": "^4.1.0",
-      "glimmer-scoped-css": "github:cardstack/glimmer-scoped-css#explicit-scope-cs-7159",
       "prettier": "github:cardstack/prettier#glimmer-style-tag-in-template-support"
     },
     "peerDependencyRules": {
