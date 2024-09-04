@@ -13,7 +13,7 @@ import Pill from '@cardstack/host/components/pill';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
 interface CardPillSignature {
-  Element: HTMLDivElement | HTMLButtonElement;
+  Element: HTMLDivElement;
   Args: {
     card: CardDef;
     isAutoAttachedCard?: boolean;
@@ -23,15 +23,15 @@ interface CardPillSignature {
 
 export default class CardPill extends Component<CardPillSignature> {
   get component() {
-    return this.args.card.constructor.getComponent(this.args.card);
+    return this.args.card.constructor.getComponent(this.args.card, 'atom');
   }
 
   <template>
     <Pill
+      @inert={{true}}
       class={{cn 'card-pill' is-autoattached=@isAutoAttachedCard}}
       data-test-attached-card={{@card.id}}
       data-test-autoattached-card={{@isAutoAttachedCard}}
-      ...attributes
     >
       <:icon>
         <RealmInfoProvider @fileURL={{@card.id}}>
@@ -46,9 +46,7 @@ export default class CardPill extends Component<CardPillSignature> {
         </RealmInfoProvider>
       </:icon>
       <:default>
-        <div class='card-content' title={{@card.title}}>
-          <this.component @format='atom' @displayContainer={{false}} />
-        </div>
+        <this.component @displayContainer={{false}} />
         {{#if @removeCard}}
           <IconButton
             class='remove-button'
@@ -60,40 +58,33 @@ export default class CardPill extends Component<CardPillSignature> {
       </:default>
     </Pill>
     <style>
-      .card-pill {
-        --pill-icon-size: 18px;
-        border: 1px solid var(--boxel-400);
-        height: var(--pill-height, 1.875rem);
-      }
-      .is-autoattached {
-        border-style: dashed;
-      }
-      .card-content {
-        display: flex;
-        max-width: 100px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .card-content > :deep(.atom-format) {
-        background: none;
-        border-radius: 0;
-        white-space: inherit;
-        overflow: inherit;
-        text-overflow: inherit;
-      }
       .remove-button {
-        --boxel-icon-button-width: 12px;
+        --boxel-icon-button-width: 25px;
         --boxel-icon-button-height: 25px;
         display: flex;
         align-items: center;
         justify-content: center;
         outline: 0;
-        margin-right: var(--boxel-sp-5xs);
       }
       .remove-button:focus:not(:disabled),
       .remove-button:hover:not(:disabled) {
         --icon-color: var(--boxel-highlight);
+      }
+      .card-pill {
+        --pill-icon-size: 18px;
+        padding: var(--boxel-sp-5xs);
+        background-color: var(--boxel-light);
+        border: 1px solid var(--boxel-400);
+        height: var(--pill-height);
+      }
+      .card-title {
+        max-width: 10rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .is-autoattached {
+        border-style: dashed;
       }
     </style>
   </template>

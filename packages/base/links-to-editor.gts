@@ -4,11 +4,7 @@ import {
   restartableTask,
   type EncapsulatedTaskDescriptor as Descriptor,
 } from 'ember-concurrency';
-import {
-  DefaultFormatProvider,
-  RealmSessionConsumer,
-  getBoxComponent,
-} from './field-component';
+import { getBoxComponent } from './field-component';
 import {
   type CardDef,
   type BaseDef,
@@ -20,82 +16,68 @@ import {
   chooseCard,
   baseCardRef,
   identifyCard,
-  CardContextName,
 } from '@cardstack/runtime-common';
+import type { ComponentLike } from '@glint/template';
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
 import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
-import { consume } from 'ember-provide-consume-context';
-import { and } from '@cardstack/boxel-ui/helpers';
 
 interface Signature {
   Args: {
     model: Box<CardDef | null>;
     field: Field<typeof CardDef>;
+    context?: CardContext;
   };
 }
 
-export class LinksToEditor extends GlimmerComponent<Signature> {
-  @consume(CardContextName) declare cardContext: CardContext;
-
+class LinksToEditor extends GlimmerComponent<Signature> {
   <template>
-    <RealmSessionConsumer as |realmSession|>
-      <div class='links-to-editor' data-test-links-to-editor={{@field.name}}>
-        {{#if (and realmSession.canWrite this.isEmpty)}}
-          <AddButton
-            class='add-new'
-            @variant='full-width'
-            @hideIcon={{true}}
-            {{on 'click' this.add}}
-            data-test-add-new
-          >
-            Link
-            {{@field.card.displayName}}
-          </AddButton>
-        {{else}}
-          {{#if realmSession.canWrite}}
-            <IconButton
-              @variant='primary'
-              @icon={{IconMinusCircle}}
-              @width='20px'
-              @height='20px'
-              class='remove'
-              {{on 'click' this.remove}}
-              disabled={{this.isEmpty}}
-              aria-label='Remove'
-              data-test-remove-card
-            />
-          {{/if}}
-          <DefaultFormatProvider @value='embedded'>
-            <this.linkedCard />
-          </DefaultFormatProvider>
-        {{/if}}
-      </div>
-    </RealmSessionConsumer>
+    <div class='links-to-editor' data-test-links-to-editor={{@field.name}}>
+      {{#if this.isEmpty}}
+        <AddButton
+          class='add-new'
+          @variant='full-width'
+          @hideIcon={{true}}
+          {{on 'click' this.add}}
+          data-test-add-new
+        >
+          Link
+          {{@field.card.displayName}}
+        </AddButton>
+      {{else}}
+        <this.linkedCard />
+        <div class='remove-button-container'>
+          <IconButton
+            @variant='primary'
+            @icon={{IconMinusCircle}}
+            @width='20px'
+            @height='20px'
+            class='remove'
+            {{on 'click' this.remove}}
+            disabled={{this.isEmpty}}
+            aria-label='Remove'
+            data-test-remove-card
+          />
+        </div>
+      {{/if}}
+    </div>
     <style>
       .links-to-editor {
-        --remove-icon-size: var(--boxel-icon-lg);
         position: relative;
-        display: grid;
-        grid-template-columns: 1fr var(--remove-icon-size);
       }
-      .links-to-editor > :deep(.boxel-card-container.embedded-format) {
-        order: -1;
+      .remove-button-container {
+        position: absolute;
+        top: 0;
+        left: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
       }
       .remove {
         --icon-color: var(--boxel-light);
-        align-self: center;
-        outline: 0;
       }
-      .remove:focus,
       .remove:hover {
         --icon-bg: var(--boxel-dark);
         --icon-border: var(--boxel-dark);
-      }
-      .remove:focus + :deep(.boxel-card-container.embedded-format),
-      .remove:hover + :deep(.boxel-card-container.embedded-format) {
-        box-shadow:
-          0 0 0 1px var(--boxel-light-500),
-          var(--boxel-box-shadow-hover);
       }
     </style>
   </template>
@@ -126,8 +108,10 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
       .constructor as typeof BaseDef;
     return getBoxComponent(
       card,
+      'embedded',
       this.args.model as Box<BaseDef>,
       this.args.field,
+      this.args.context,
     );
   }
 
@@ -137,7 +121,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
       { filter: { type } },
       {
         offerToCreate: { ref: type, relativeTo: undefined },
-        createNewCard: this.cardContext?.actions?.createCard,
+        createNewCard: this.args.context?.actions?.createCard,
       },
     );
     if (chosenCard) {
@@ -148,11 +132,23 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
   private createCard = restartableTask(async () => {
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
     let newCard: CardDef | undefined =
-      await this.cardContext?.actions?.createCard(type, undefined, {
+      await this.args.context?.actions?.createCard(type, undefined, {
         isLinkedCard: true,
       });
     if (newCard) {
       this.args.model.value = newCard;
     }
   });
+}
+
+export function getLinksToEditor(
+  model: Box<CardDef | null>,
+  field: Field<typeof CardDef>,
+  context?: CardContext,
+): ComponentLike<{ Args: {}; Blocks: {} }> {
+  return class LinksToEditTemplate extends GlimmerComponent {
+    <template>
+      <LinksToEditor @model={{model}} @field={{field}} @context={{context}} />
+    </template>
+  };
 }

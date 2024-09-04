@@ -54,8 +54,10 @@ const AuthContainer: TemplateOnlyComponent<Signature> = <template>
       position: relative;
     }
     .header {
+      --boxel-header-icon-width: var(--boxel-icon-med);
+      --boxel-header-icon-height: var(--boxel-icon-med);
       --boxel-header-padding: var(--boxel-sp);
-      --boxel-header-text-font: var(--boxel-font);
+      --boxel-header-text-size: var(--boxel-font);
 
       background-color: var(--boxel-light);
       text-transform: uppercase;

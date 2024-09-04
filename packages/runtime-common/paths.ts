@@ -4,12 +4,20 @@ interface LocalOptions {
 export class RealmPaths {
   readonly url: string;
 
-  constructor(realmURL: URL) {
-    this.url = ensureTrailingSlash(decodeURI(realmURL.href));
+  constructor(realmURL: string | URL) {
+    this.url =
+      (typeof realmURL === 'string' ? realmURL : realmURL.href).replace(
+        /\/$/,
+        '',
+      ) + '/';
   }
 
-  local(url: URL, opts: LocalOptions = {}): LocalPath {
-    if (!this.inRealm(url)) {
+  local(url: URL | string, opts: LocalOptions = {}): LocalPath {
+    if (typeof url === 'string') {
+      url = new URL(url);
+    }
+
+    if (!url.href.startsWith(this.url)) {
       let error = new Error(`realm ${this.url} does not contain ${url.href}`);
       (error as any).status = 404;
       throw error;
@@ -17,12 +25,12 @@ export class RealmPaths {
 
     if (opts.preserveQuerystring !== true) {
       // strip query params
-      url = new URL(decodeURI(url.pathname), url);
+      url = new URL(url.pathname, url);
     }
 
     // this will always remove a leading slash because our constructor ensures
     // this.#realm has a trailing slash.
-    let local = decodeURI(url.href).slice(this.url.length);
+    let local = url.href.slice(this.url.length);
 
     // this will remove any trailing slashes
     local = local.replace(/\/+$/, '');
@@ -44,11 +52,7 @@ export class RealmPaths {
   }
 
   inRealm(url: URL): boolean {
-    let decodedHref = decodeURI(url.href);
-    return (
-      decodedHref.startsWith(this.url) ||
-      decodedHref.split('?')[0] == this.url.replace(/\/$/, '') // check if url without querystring same as realm url without trailing slash (for detecting root realm urls with missing trailing slash)
-    );
+    return url.href.startsWith(this.url);
   }
 }
 
@@ -57,10 +61,6 @@ export function join(...pathParts: string[]): LocalPath {
     .map((p) => p.replace(/^\//, '').replace(/\/$/, ''))
     .filter(Boolean)
     .join('/');
-}
-
-function ensureTrailingSlash(realmUrlString: string) {
-  return realmUrlString.replace(/\/$/, '') + '/';
 }
 
 // Documenting that this represents a local path within realm, with no leading

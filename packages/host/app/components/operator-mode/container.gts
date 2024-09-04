@@ -74,9 +74,13 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   // public API
   @action
-  getCard(url: URL, opts?: { loader?: Loader; isLive?: boolean }) {
+  getCard(
+    url: URL,
+    opts?: { cachedOnly?: true; loader?: Loader; isLive?: boolean },
+  ) {
     return getCard(this, () => url.href, {
       ...(opts?.isLive ? { isLive: () => opts.isLive! } : {}),
+      ...(opts?.cachedOnly ? { cachedOnly: () => opts.cachedOnly! } : {}),
       ...(opts?.loader ? { loader: () => opts.loader! } : {}),
     });
   }

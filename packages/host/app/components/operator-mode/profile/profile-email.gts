@@ -1,7 +1,6 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
 import { inject as service } from '@ember/service';
 
 import Component from '@glimmer/component';
@@ -121,98 +120,6 @@ class PasswordModal extends Component<PasswordModalSignature> {
   </template>
 }
 
-interface EmailWrapperSignature {
-  Args: {
-    isWaitingValidation: boolean;
-    email?: string;
-    isResending?: boolean;
-    resendEmailVerification?: () => void;
-  };
-}
-
-class EmailWrapper extends Component<EmailWrapperSignature> {
-  @action resendEmailVerification() {
-    this.args.resendEmailVerification?.();
-  }
-
-  <template>
-    <div class='email-wrapper'>
-      {{#if @isWaitingValidation}}
-        <div class='email-value' data-test-new-email>{{@email}}</div>
-        <div class='indicator'>
-          <div class='verification-icon'>
-            <IconX class='cross-out' />
-          </div>
-          <div class='not-verified'>
-            <span class='verification' data-test-new-email-not-verified>Not
-              Verified</span>
-            <BoxelButton
-              @kind='text-only'
-              @size='extra-small'
-              @loading={{@isResending}}
-              data-test-resend-validation
-              {{on 'click' this.resendEmailVerification}}
-            >Resend</BoxelButton>
-          </div>
-        </div>
-      {{else if @email}}
-        <div class='email-value' data-test-current-email>
-          {{@email}}
-        </div>
-        <div class='indicator'>
-          <div class='verification-icon'>
-            <CheckMark class='checked' />
-          </div>
-          <span class='verification'>Verified</span>
-        </div>
-      {{else}}
-        <div class='email-value' data-test-no-current-email>- email not set -</div>
-      {{/if}}
-    </div>
-
-    <style>
-      .email-wrapper {
-        display: flex;
-        flex-direction: column;
-        justify-content: flex-start;
-        align-items: flex-start;
-        gap: var(--boxel-sp-xxs);
-      }
-      .email-value {
-        font: var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-sm);
-      }
-      .verification-icon {
-        width: 18px;
-        height: 18px;
-        display: flex;
-      }
-      .verification {
-        font: var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp-xs);
-        font-weight: 600;
-        text-wrap: nowrap;
-        line-height: 18px;
-      }
-      .not-verified {
-        display: flex;
-        align-items: center;
-      }
-      .indicator {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxxs);
-      }
-      .checked {
-        --icon-color: var(--boxel-green);
-      }
-      .cross-out {
-        --icon-color: var(--boxel-red);
-      }
-    </style>
-  </template>
-}
-
 interface Signature {
   Args: {
     onSetup: (onSave: () => void, resetChangeEmail: () => void) => void;
@@ -230,20 +137,33 @@ export default class ProfileEmail extends Component<Signature> {
         <div class='email-versions'>
           <div class='email-version current'>
             <div class='header'>Current</div>
-            <EmailWrapper
-              @email={{this.matrixService.profile.email}}
-              @isWaitingValidation={{false}}
-            />
+            <div
+              class='email-value'
+              data-test-current-email
+            >{{this.matrixService.profile.email}}</div>
+            <div class='verification-status'>
+              <div class='indicator'>
+                <CheckMark class='checked' />
+                <span class='verification'>Verified</span>
+              </div>
+            </div>
           </div>
           <div class='email-version pending'>
             <div class='header'>Pending</div>
-            <div class='pending-email'>
-              <EmailWrapper
-                @email={{this.email}}
-                @isWaitingValidation={{true}}
-                @resendEmailVerification={{this.resendEmailVerification}}
-                @isResending={{this.isResending}}
-              />
+            <div class='email-value' data-test-new-email>{{this.email}}</div>
+            <div class='verification-status'>
+              <div class='indicator'>
+                <IconX class='cross-out' />
+                <span class='verification' data-test-new-email-not-verified>Not
+                  Verified</span>
+              </div>
+              <BoxelButton
+                @kind='text-only'
+                @size='extra-small'
+                @loading={{this.isResending}}
+                data-test-resend-validation
+                {{on 'click' this.resendEmailVerification}}
+              >Resend</BoxelButton>
               <BoxelButton
                 @kind='secondary-light'
                 @size='extra-small'
@@ -257,10 +177,22 @@ export default class ProfileEmail extends Component<Signature> {
     {{else if (eq this.emailState.type 'initial')}}
       <FieldContainer @label='Email' @tag='label' class='profile-field'>
         <div class='email initial'>
-          <EmailWrapper
-            @email={{this.matrixService.profile.email}}
-            @isWaitingValidation={{false}}
-          />
+          <div class='email-wrapper'>
+            {{#if this.matrixService.profile.email}}
+              <div class='email-value' data-test-current-email>
+                {{this.matrixService.profile.email}}
+              </div>
+              <div class='verification-status'>
+                <div class='indicator'>
+                  <CheckMark class='checked' />
+                  <span class='verification'>Verified</span>
+                </div>
+              </div>
+            {{else}}
+              <div class='email-value' data-test-no-current-email>- email not
+                set -</div>
+            {{/if}}
+          </div>
           <BoxelButton
             @kind='secondary-light'
             @size='extra-small'
@@ -272,10 +204,20 @@ export default class ProfileEmail extends Component<Signature> {
     {{else}}
       <FieldContainer @label='Current Email' @tag='label' class='profile-field'>
         <div class='email'>
-          <EmailWrapper
-            @email={{this.matrixService.profile.email}}
-            @isWaitingValidation={{false}}
-          />
+          {{#if this.matrixService.profile.email}}
+            <div class='email-value' data-test-current-email>
+              {{this.matrixService.profile.email}}
+            </div>
+            <div class='verification-status'>
+              <div class='indicator'>
+                <CheckMark class='checked' />
+                <span class='verification'>Verified</span>
+              </div>
+            </div>
+          {{else}}
+            <div class='email-value' data-test-no-current-email>- email not set
+              -</div>
+          {{/if}}
         </div>
       </FieldContainer>
       <FieldContainer @label='New Email' @tag='label' class='profile-field'>
@@ -334,6 +276,21 @@ export default class ProfileEmail extends Component<Signature> {
       }
       .profile-field + .profile-field {
         margin-top: var(--boxel-sp-xl);
+      }
+      .verification-status {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .indicator {
+        display: flex;
+        align-items: center;
+      }
+      .checked {
+        --icon-color: var(--boxel-green);
+      }
+      .cross-out {
+        --icon-color: var(--boxel-red);
       }
       .warning-box {
         margin-top: var(--boxel-sp-xl);
@@ -405,9 +362,14 @@ export default class ProfileEmail extends Component<Signature> {
       .pending .header {
         color: var(--boxel-green);
       }
-      .pending-email {
-        display: flex;
-        justify-content: space-between;
+      .email-value {
+        font: var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-sm);
+      }
+      .verification {
+        font: var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-xs);
+        font-weight: 600;
       }
     </style>
   </template>
@@ -446,7 +408,7 @@ export default class ProfileEmail extends Component<Signature> {
         password: string;
       } = { type: 'initial' };
 
-  constructor(owner: Owner, args: any) {
+  constructor(owner: unknown, args: any) {
     super(owner, args);
     this.initialize.perform();
     this.args.onSetup(

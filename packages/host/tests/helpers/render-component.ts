@@ -10,6 +10,7 @@ import type {
   BaseDef,
   Format,
   Field,
+  CardContext,
 } from 'https://cardstack.com/base/card-api';
 
 async function cardApi(
@@ -18,13 +19,8 @@ async function cardApi(
   return await loader.import(`${baseRealm.url}card-api`);
 }
 
-export async function renderComponent(C: ComponentLike, format?: Format) {
-  await render(
-    precompileTemplate(`<C @format={{format}} />`, {
-      strictMode: true,
-      scope: () => ({ C, format }),
-    }),
-  );
+export async function renderComponent(C: ComponentLike) {
+  await render(precompileTemplate(`<C/>`, { scope: () => ({ C }) }));
 }
 
 export async function renderCard(
@@ -32,9 +28,10 @@ export async function renderCard(
   card: BaseDef,
   format: Format,
   field?: Field,
+  context?: CardContext,
 ) {
   let api = await cardApi(loader);
   await api.recompute(card, { recomputeAllFields: true });
-  await renderComponent(api.getComponent(card, field), format);
+  await renderComponent(api.getComponent(card, format, field, context));
   return (getContext() as { element: Element }).element;
 }

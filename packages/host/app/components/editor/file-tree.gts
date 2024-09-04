@@ -8,10 +8,7 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask, timeout } from 'ember-concurrency';
 
 import { Tooltip } from '@cardstack/boxel-ui/components';
-import {
-  IconPencilNotCrossedOut,
-  IconPencilCrossedOut,
-} from '@cardstack/boxel-ui/icons';
+import { IconPencil, IconPencilCrossedOut } from '@cardstack/boxel-ui/icons';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
@@ -48,7 +45,7 @@ export default class FileTree extends Component<Signature> {
           {{#if this.canWrite}}
             <Tooltip @placement='top' class='editability-icon'>
               <:trigger>
-                <IconPencilNotCrossedOut
+                <IconPencil
                   width='18px'
                   height='18px'
                   aria-label='Can edit files in this workspace'

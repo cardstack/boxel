@@ -1,5 +1,9 @@
 import { Deferred } from './deferred';
-import { SearchIndex } from './search-index';
+import {
+  SearchIndex,
+  type IndexRunner,
+  type RunnerOptionsManager,
+} from './search-index';
 import { type SingleCardDocument } from './card-document';
 import { Loader } from './loader';
 import { RealmPaths, LocalPath, join } from './paths';
@@ -12,26 +16,23 @@ import {
 } from './error';
 import { v4 as uuidV4 } from 'uuid';
 import { formatRFC7231 } from 'date-fns';
+import { md5 } from 'super-fast-md5';
 import {
   isCardResource,
   executableExtensions,
   hasExecutableExtension,
   isNode,
   isSingleCardDocument,
+  baseRealm,
   assetsDir,
   logger,
   type CodeRef,
   type LooseSingleCardDocument,
   type ResourceObjectWithId,
   type DirectoryEntryRelationship,
-  type DBAdapter,
-  type Queue,
-  type Indexer,
-  fetchUserPermissions,
-  addAuthorizationHeader,
-  maybeHandleScopedCSSRequest,
 } from './index';
 import merge from 'lodash/merge';
+import flatMap from 'lodash/flatMap';
 import mergeWith from 'lodash/mergeWith';
 import cloneDeep from 'lodash/cloneDeep';
 import {
@@ -40,12 +41,29 @@ import {
   getFileWithFallbacks,
   writeToStream,
   waitForClose,
-  type TextFileRef,
 } from './stream';
-import { transpileJS } from './transpile';
+import { preprocessEmbeddedTemplates } from '@cardstack/ember-template-imports/lib/preprocess-embedded-templates';
+import * as babel from '@babel/core';
+//@ts-ignore type import requires a newer Typescript with node16 moduleResolution
+import makeEmberTemplatePlugin from 'babel-plugin-ember-template-compilation/browser';
+import type { Options as EmberTemplatePluginOptions } from 'babel-plugin-ember-template-compilation/src/plugin';
+import type { EmberTemplateCompiler } from 'babel-plugin-ember-template-compilation/src/ember-template-compiler';
+import type { ExtendedPluginBuilder } from 'babel-plugin-ember-template-compilation/src/js-utils';
+//@ts-ignore no types are available
+import * as etc from 'ember-source/dist/ember-template-compiler';
+import { loaderPlugin } from './loader-plugin';
+//@ts-ignore no types are available
+import glimmerTemplatePlugin from '@cardstack/ember-template-imports/src/babel-plugin';
+//@ts-ignore no types are available
+import decoratorsProposalPlugin from '@babel/plugin-proposal-decorators';
+//@ts-ignore no types are available
+import classPropertiesProposalPlugin from '@babel/plugin-proposal-class-properties';
+//@ts-ignore ironically no types are available
+import typescriptPlugin from '@babel/plugin-transform-typescript';
+//@ts-ignore no types are available
+import emberConcurrencyAsyncPlugin from 'ember-concurrency-async-plugin';
 import {
   AuthenticationError,
-  AuthenticationErrorMessages,
   AuthorizationError,
   Method,
   RouteTable,
@@ -54,26 +72,19 @@ import {
   lookupRouteTable,
 } from './router';
 import { parseQueryString } from './query';
+//@ts-ignore service worker can't handle this
 import type { Readable } from 'stream';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
 import type { LoaderType } from 'https://cardstack.com/base/card-api';
+import scopedCSSTransform from 'glimmer-scoped-css/ast-transform';
 import { MatrixClient, waitForMatrixMessage } from './matrix-client';
 import { Sha256 } from '@aws-crypto/sha256-js';
 
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import RealmPermissionChecker from './realm-permission-checker';
-import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
-
-import { RealmAuthDataSource } from './realm-auth-data-source';
-import { fetcher } from './fetcher';
-
-export interface RealmSession {
-  canRead: boolean;
-  canWrite: boolean;
-}
 
 export type RealmInfo = {
   name: string;
@@ -85,7 +96,10 @@ export interface FileRef {
   path: LocalPath;
   content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
   lastModified: number;
-  [key: symbol]: object;
+}
+
+export interface ResponseWithNodeStream extends Response {
+  nodeStream?: Readable;
 }
 
 export interface TokenClaims {
@@ -123,8 +137,8 @@ export interface RealmAdapter {
   ): TokenClaims & { iat: number; exp: number };
 
   createStreamingResponse(
+    realm: Realm,
     req: Request,
-    requestContext: RequestContext,
     init: ResponseInit,
     cleanup: () => void,
   ): {
@@ -135,8 +149,6 @@ export interface RealmAdapter {
   subscribe(cb: (message: UpdateEventData) => void): Promise<void>;
 
   unsubscribe(): void;
-
-  setLoader?(loader: Loader): void;
 }
 
 interface Options {
@@ -159,12 +171,6 @@ interface UpdateEvent {
   type: 'update';
   data: UpdateEventData;
   id?: string;
-}
-
-export interface MatrixConfig {
-  url: URL;
-  username: string;
-  password: string;
 }
 
 export type UpdateEventData =
@@ -203,11 +209,25 @@ interface MessageEvent {
   id?: string;
 }
 
+type Operation = WriteOperation | DeleteOperation;
+
 interface WriteResult {
   lastModified: number;
 }
 
-export type RequestContext = { realm: Realm; permissions: RealmPermissions };
+interface WriteOperation {
+  type: 'write';
+  path: LocalPath;
+  contents: string;
+  clientRequestId?: string | null; // Used for client to be able to see if the SSE event is a result of the client's own write
+  deferred: Deferred<WriteResult>;
+}
+
+interface DeleteOperation {
+  type: 'delete';
+  path: LocalPath;
+  deferred: Deferred<void>;
+}
 
 export class Realm {
   #startedUp = new Deferred<void>();
@@ -217,29 +237,16 @@ export class Realm {
   #router: Router;
   #deferStartup: boolean;
   #useTestingDomain = false;
+  #transpileCache = new Map<string, string>();
   #log = logger('realm');
-  #perfLog = logger('perf');
-  #startTime = Date.now();
   #getIndexHTML: () => Promise<string>;
   #updateItems: UpdateItem[] = [];
   #flushUpdateEvents: Promise<void> | undefined;
   #recentWrites: Map<string, number> = new Map();
+  #flushOperations: Promise<void> | undefined;
+  #operationQueue: Operation[] = [];
   #realmSecretSeed: string;
-
-  #onIndexer: ((indexer: Indexer) => Promise<void>) | undefined;
-  #publicEndpoints: RouteTable<true> = new Map([
-    [
-      SupportedMimeType.Session,
-      new Map([['POST' as Method, new Map([['/_session', true]])]]),
-    ],
-    [
-      SupportedMimeType.JSONAPI,
-      new Map([['GET' as Method, new Map([['/_readiness-check', true]])]]),
-    ],
-  ]);
-  #assetsURL: URL;
-  #dbAdapter: DBAdapter;
-
+  #permissions: RealmPermissions;
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
   readonly loaderTemplate: Loader;
@@ -261,69 +268,43 @@ export class Realm {
     {
       url,
       adapter,
+      loader,
+      indexRunner,
+      runnerOptsMgr,
       getIndexHTML,
       matrix,
       realmSecretSeed,
-      dbAdapter,
-      queue,
-      virtualNetwork,
-      onIndexer,
-      assetsURL,
+      permissions,
     }: {
       url: string;
       adapter: RealmAdapter;
+      loader: Loader;
+      indexRunner: IndexRunner;
+      runnerOptsMgr: RunnerOptionsManager;
       getIndexHTML: () => Promise<string>;
-      matrix: MatrixConfig;
+      matrix: { url: URL; username: string; password: string };
+      permissions: RealmPermissions;
       realmSecretSeed: string;
-      dbAdapter: DBAdapter;
-      queue: Queue;
-      virtualNetwork: VirtualNetwork;
-      onIndexer?: (indexer: Indexer) => Promise<void>;
-      assetsURL: URL;
     },
     opts?: Options,
   ) {
-    this.paths = new RealmPaths(new URL(url));
+    this.paths = new RealmPaths(url);
     let { username, password, url: matrixURL } = matrix;
     this.#matrixClient = new MatrixClient(matrixURL, username, password);
+    this.#permissions = permissions;
     this.#realmSecretSeed = realmSecretSeed;
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
-    this.#assetsURL = assetsURL;
-
-    let maybeHandle = this.maybeHandle.bind(this);
-    let fetch = fetcher(virtualNetwork.fetch, [
-      async (req, next) => {
-        return (await maybeHandleScopedCSSRequest(req)) || next(req);
-      },
-      async (request, next) => {
-        let response = await maybeHandle(request);
-        return response || next(request);
-      },
-      async (request, next) => {
-        let authHandler = addAuthorizationHeader(
-          fetch,
-          new RealmAuthDataSource(this.#matrixClient, fetch, this.url),
-        );
-        let response = await authHandler(request);
-        return response || next(request);
-      },
-    ]);
-
-    let loader = new Loader(fetch, virtualNetwork.resolveImport);
-    adapter.setLoader?.(loader);
-
     this.loaderTemplate = loader;
-
+    this.loaderTemplate.registerURLHandler(this.maybeHandle.bind(this));
     this.#adapter = adapter;
-    this.#onIndexer = onIndexer;
-    this.#searchIndex = new SearchIndex({
-      realm: this,
-      dbAdapter,
-      queue,
-    });
-
-    this.#dbAdapter = dbAdapter;
+    this.#searchIndex = new SearchIndex(
+      this,
+      this.#adapter.readdir.bind(this.#adapter),
+      this.readFileAsText.bind(this),
+      indexRunner,
+      runnerOptsMgr,
+    );
 
     this.#router = new Router(new URL(url))
       .post('/', SupportedMimeType.CardJson, this.createCard.bind(this))
@@ -357,7 +338,7 @@ export class Realm {
       .get(
         '/.*',
         SupportedMimeType.CardSource,
-        this.getSourceOrRedirect.bind(this),
+        this.getCardSourceOrRedirect.bind(this),
       )
       .delete(
         '/.+',
@@ -374,40 +355,12 @@ export class Realm {
         SupportedMimeType.DirectoryListing,
         this.getDirectoryListing.bind(this),
       )
-      .get('/.*', SupportedMimeType.HTML, this.respondWithHTML.bind(this))
-      .get(
-        '/_readiness-check',
-        SupportedMimeType.RealmInfo,
-        this.readinessCheck.bind(this),
-      );
-
-    Object.values(SupportedMimeType).forEach((mimeType) => {
-      this.#router.head('/.*', mimeType as SupportedMimeType, async () => {
-        let requestContext = await this.createRequestContext();
-        return createResponse({ init: { status: 200 }, requestContext });
-      });
-    });
+      .get('/.*', SupportedMimeType.HTML, this.respondWithHTML.bind(this));
 
     this.#deferStartup = opts?.deferStartUp ?? false;
     if (!opts?.deferStartUp) {
       this.#startedUp.fulfill((() => this.#startup())());
     }
-  }
-
-  private async readinessCheck(
-    _request: Request,
-    requestContext: RequestContext,
-  ) {
-    await this.ready;
-
-    return createResponse({
-      body: null,
-      init: {
-        headers: { 'content-type': 'text/html' },
-        status: 200,
-      },
-      requestContext,
-    });
   }
 
   // it's only necessary to call this when the realm is using a deferred startup
@@ -418,12 +371,41 @@ export class Realm {
     await this.ready;
   }
 
-  async fullIndex() {
-    await this.searchIndex.fullIndex();
-  }
-
   async flushUpdateEvents() {
     return this.#flushUpdateEvents;
+  }
+
+  async flushOperations() {
+    return this.#flushOperations;
+  }
+
+  // in order to prevent issues with concurrent index manipulation clobbering
+  // each other we use a queue of operations to mutate realm state. We should
+  // remove this queue when we move to a pg backed index
+  private async drainOperations() {
+    await this.#flushOperations;
+
+    let operationsDrained: () => void;
+    this.#flushOperations = new Promise<void>(
+      (res) => (operationsDrained = res),
+    );
+    let operations = [...this.#operationQueue];
+    this.#operationQueue = [];
+    for (let operation of operations) {
+      if (operation.type === 'write') {
+        let result = await this.#write(
+          operation.path,
+          operation.contents,
+          operation.clientRequestId,
+        );
+        operation.deferred.fulfill(result);
+      } else {
+        await this.#delete(operation.path);
+        operation.deferred.fulfill();
+      }
+    }
+
+    operationsDrained!();
   }
 
   createJWT(claims: TokenClaims, expiration: string): string {
@@ -431,6 +413,23 @@ export class Realm {
   }
 
   async write(
+    path: LocalPath,
+    contents: string,
+    clientRequestId?: string | null,
+  ): Promise<WriteResult> {
+    let deferred = new Deferred<WriteResult>();
+    this.#operationQueue.push({
+      type: 'write',
+      path,
+      contents,
+      clientRequestId,
+      deferred,
+    });
+    this.drainOperations();
+    return deferred.promise;
+  }
+
+  async #write(
     path: LocalPath,
     contents: string,
     clientRequestId?: string | null,
@@ -499,6 +498,17 @@ export class Realm {
   }
 
   async delete(path: LocalPath): Promise<void> {
+    let deferred = new Deferred<void>();
+    this.#operationQueue.push({
+      type: 'delete',
+      path,
+      deferred,
+    });
+    this.drainOperations();
+    return deferred.promise;
+  }
+
+  async #delete(path: LocalPath): Promise<void> {
     await this.trackOwnWrite(path, { isDelete: true });
     await this.#adapter.remove(path);
     await this.#searchIndex.update(this.paths.fileURL(path), {
@@ -515,7 +525,7 @@ export class Realm {
     });
   }
 
-  private get loader() {
+  get loader() {
     // the current loader used by the search index will contain the latest
     // module updates as we obtain a new loader for each indexing run.
     if (isNode) {
@@ -544,45 +554,51 @@ export class Realm {
 
   async #startup() {
     await Promise.resolve();
-    await this.#searchIndex.run(this.#onIndexer);
+    await this.#warmUpCache();
+    await this.#searchIndex.run();
     this.sendServerEvent({ type: 'index', data: { type: 'full' } });
-    this.#perfLog.debug(
-      `realm server startup in ${Date.now() - this.#startTime}ms`,
+  }
+
+  // Take advantage of the fact that the base realm modules are static (for now)
+  // and cache the transpiled js for all the base realm modules so that all
+  // consuming realms can benefit from this work
+  async #warmUpCache() {
+    if (this.url !== baseRealm.url) {
+      return;
+    }
+
+    let entries = await this.recursiveDirectoryEntries(new URL(this.url));
+    let modules = flatMap(entries, (e) =>
+      e.kind === 'file' && hasExecutableExtension(e.path) ? [e.path] : [],
     );
+    for (let mod of modules) {
+      let handle = await this.#adapter.openFile(mod);
+      if (!handle) {
+        this.#log.error(
+          `cannot open file ${mod} when warming up transpilation cache`,
+        );
+        continue;
+      }
+      this.makeJS(await fileContentToText(handle), handle.path);
+    }
   }
 
   get ready(): Promise<void> {
     return this.#startedUp.promise;
   }
 
-  maybeHandle = async (
-    request: Request,
-  ): Promise<ResponseWithNodeStream | null> => {
+  async maybeHandle(request: Request): Promise<Response | null> {
     if (!this.paths.inRealm(new URL(request.url))) {
       return null;
     }
     return await this.internalHandle(request, true);
-  };
-
-  // This is scaffolding that should be deleted once we can finish the isolated
-  // loader refactor
-  maybeExternalHandle = async (
-    request: Request,
-  ): Promise<ResponseWithNodeStream | null> => {
-    if (!this.paths.inRealm(new URL(request.url))) {
-      return null;
-    }
-    return await this.internalHandle(request, false);
-  };
+  }
 
   async handle(request: Request): Promise<ResponseWithNodeStream> {
     return this.internalHandle(request, false);
   }
 
-  private async createSession(
-    request: Request,
-    requestContext: RequestContext,
-  ) {
+  private async createSession(request: Request) {
     if (!(await this.#matrixClient.isTokenValid())) {
       await this.#matrixClient.login();
     }
@@ -592,26 +608,26 @@ export class Realm {
       json = JSON.parse(body);
     } catch (e) {
       return badRequest(
+        this,
         JSON.stringify({ errors: [`Request body is not valid JSON`] }),
-        requestContext,
       );
     }
     let { user, challenge } = json as { user?: string; challenge?: string };
     if (!user) {
       return badRequest(
+        this,
         JSON.stringify({ errors: [`Request body missing 'user' property`] }),
-        requestContext,
       );
     }
 
     if (challenge) {
-      return await this.verifyChallenge(user, requestContext);
+      return await this.verifyChallenge(user);
     } else {
-      return await this.createChallenge(user, requestContext);
+      return await this.createChallenge(user);
     }
   }
 
-  private async createChallenge(user: string, requestContext: RequestContext) {
+  private async createChallenge(user: string) {
     let dmRooms =
       (await this.#matrixClient.getAccountData<Record<string, string>>(
         'boxel.session-rooms',
@@ -633,22 +649,22 @@ export class Realm {
       msgtype: 'm.text',
     });
 
-    return createResponse({
-      body: JSON.stringify({
+    return createResponse(
+      this,
+      JSON.stringify({
         room: roomId,
         challenge,
       }),
-      init: {
+      {
         status: 401,
         headers: {
           'Content-Type': 'application/json',
         },
       },
-      requestContext,
-    });
+    );
   }
 
-  private async verifyChallenge(user: string, requestContext: RequestContext) {
+  private async verifyChallenge(user: string) {
     let dmRooms =
       (await this.#matrixClient.getAccountData<Record<string, string>>(
         'boxel.session-rooms',
@@ -656,10 +672,10 @@ export class Realm {
     let roomId = dmRooms[user];
     if (!roomId) {
       return badRequest(
+        this,
         JSON.stringify({
           errors: [`No challenge previously issued for user ${user}`],
         }),
-        requestContext,
       );
     }
 
@@ -704,17 +720,17 @@ export class Realm {
 
     if (!latestAuthChallengeMessage) {
       return badRequest(
+        this,
         JSON.stringify({ errors: [`No challenge found for user ${user}`] }),
-        requestContext,
       );
     }
 
     if (!latestAuthResponseMessage) {
       return badRequest(
+        this,
         JSON.stringify({
           errors: [`No challenge response response found for user ${user}`],
         }),
-        requestContext,
       );
     }
 
@@ -731,36 +747,27 @@ export class Realm {
     hash.update(this.#realmSecretSeed);
     let hashedResponse = uint8ArrayToHex(await hash.digest());
     if (hashedResponse === challenge) {
-      let permissions = requestContext.permissions;
-
-      let userPermissions = await new RealmPermissionChecker(
-        permissions,
-        this.#matrixClient,
-      ).for(user);
-
+      let permissions = await (new RealmPermissionChecker(this.#permissions, this.#matrixClient)).for(user);
       let jwt = this.#adapter.createJWT(
         {
           user,
           realm: this.url,
-          permissions: userPermissions,
+          permissions,
         },
         '7d',
         this.#realmSecretSeed,
       );
-      return createResponse({
-        body: null,
-        init: {
-          status: 201,
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: jwt,
-          },
+      return createResponse(this, null, {
+        status: 201,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: jwt,
         },
-        requestContext,
       });
     } else {
-      return createResponse({
-        body: JSON.stringify({
+      return createResponse(
+        this,
+        JSON.stringify({
           errors: [
             `user ${user} failed auth challenge: latest challenge message: "${JSON.stringify(
               latestAuthChallengeMessage,
@@ -769,11 +776,10 @@ export class Realm {
             )}"`,
           ],
         }),
-        init: {
+        {
           status: 401,
         },
-        requestContext,
-      });
+      );
     }
   }
 
@@ -781,58 +787,33 @@ export class Realm {
     request: Request,
     isLocal: boolean,
   ): Promise<ResponseWithNodeStream> {
-    let redirectResponse = this.rootRealmRedirect(request);
-    if (redirectResponse) {
-      return redirectResponse;
-    }
-
-    let requestContext = await this.createRequestContext(); // Cache realm permissions for the duration of the request so that we don't have to fetch them multiple times
-
     try {
       // local requests are allowed to query the realm as the index is being built up
       if (!isLocal) {
-        let timeout = await Promise.race<void | Error>([
-          this.ready,
-          new Promise((resolve) =>
-            setTimeout(() => {
-              resolve(
-                new Error(
-                  `Timeout waiting for realm ${this.url} to become ready`,
-                ),
-              );
-            }, 60 * 1000),
-          ),
-        ]);
-        if (timeout) {
-          return new Response(timeout.message, { status: 500 });
-        }
+        await this.ready;
 
         let isWrite = ['PUT', 'PATCH', 'POST', 'DELETE'].includes(
           request.method,
         );
-        await this.checkPermission(
-          request,
-          requestContext,
-          isWrite ? 'write' : 'read',
-        );
+        await this.checkPermission(request, isWrite ? 'write' : 'read');
       }
       if (!this.searchIndex) {
-        return systemError(requestContext, 'search index is not available');
+        return systemError(this, 'search index is not available');
       }
       if (this.#router.handles(request)) {
-        return this.#router.handle(request, requestContext);
+        return this.#router.handle(this, request);
       } else {
-        return this.fallbackHandle(request, requestContext);
+        return this.fallbackHandle(request);
       }
     } catch (e) {
       if (e instanceof AuthenticationError) {
-        return new Response(`${e.message}`, {
+        return new Response(`Authentication error: ${e.message}`, {
           status: 401,
         });
       }
 
       if (e instanceof AuthorizationError) {
-        return new Response(`${e.message}`, {
+        return new Response(`Authorization error: ${e.message}`, {
           status: 403,
         });
       }
@@ -841,128 +822,54 @@ export class Realm {
     }
   }
 
-  // Requests for the root of the realm without a trailing slash aren't
-  // technically inside the realm (as the realm includes the trailing '/'),
-  // so issue a redirect in those scenarios.
-  private rootRealmRedirect(request: Request) {
-    let url = new URL(request.url);
-    let urlWithoutQueryParams = url.protocol + '//' + url.host + url.pathname;
-    if (`${urlWithoutQueryParams}/` === this.url) {
-      return new Response(null, {
-        status: 302,
-        headers: {
-          Location: String(url.searchParams)
-            ? `${this.url}?${url.searchParams}`
-            : this.url,
-        },
-      });
-    }
-    return undefined;
-  }
-
-  async fallbackHandle(request: Request, requestContext: RequestContext) {
-    let start = Date.now();
+  async fallbackHandle(request: Request) {
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
+    let maybeHandle = await this.getFileWithFallbacks(
+      localPath,
+      executableExtensions,
+    );
 
-    if (!localPath.startsWith(assetsDir)) {
-      let useWorkInProgressIndex = Boolean(
-        request.headers.get('X-Boxel-Use-WIP-Index'),
-      );
-      let module = await this.#searchIndex.module(url, {
-        useWorkInProgressIndex,
-      });
-      if (module?.type === 'module') {
-        try {
-          return createResponse({
-            body: module.executableCode,
-            init: {
-              status: 200,
-              headers: { 'content-type': 'text/javascript' },
-            },
-            requestContext,
-          });
-        } finally {
-          this.#logRequestPerformance(request, start, 'cache hit');
-        }
-      }
-      if (module?.type === 'error') {
-        try {
-          // using "Not Acceptable" here because no text/javascript representation
-          // can be made and we're sending text/html error page instead
-          return createResponse({
-            body: JSON.stringify(module.error, null, 2),
-            init: {
-              status: 406,
-              headers: { 'content-type': 'text/html' },
-            },
-            requestContext,
-          });
-        } finally {
-          this.#logRequestPerformance(request, start, 'cache hit');
-        }
-      }
+    if (!maybeHandle) {
+      return notFound(this, request, `${request.url} not found`);
     }
 
-    try {
-      let maybeFileRef = await this.getFileWithFallbacks(
-        localPath,
-        executableExtensions,
-      );
-      if (!maybeFileRef) {
-        return notFound(request, requestContext, `${request.url} not found`);
-      }
+    let handle = maybeHandle;
 
-      let fileRef = maybeFileRef;
-      if (
-        hasExecutableExtension(fileRef.path) &&
-        !localPath.startsWith(assetsDir)
-      ) {
-        if (fileRef[Symbol.for('shimmed-module')]) {
-          // this response is ultimately thrown away and only the symbol value
-          // is preserved. so what is inside this response is not important
-          let response = createResponse({ requestContext });
-          (response as any)[Symbol.for('shimmed-module')] =
-            fileRef[Symbol.for('shimmed-module')];
-          return response;
-        }
-        // fallback to the file system only after trying the index. during the
-        // initial index we need to use the API to run the indexer whose modules
-        // would otherwise live in index (this conundrum would go away if the
-        // API could be statically loaded and not come from the base realm.)
-        return this.makeJS(
-          await fileContentToText(fileRef),
-          fileRef.path,
-          requestContext,
-        );
-      }
-      return await this.serveLocalFile(fileRef, requestContext);
-    } finally {
-      this.#logRequestPerformance(request, start, 'cache miss');
+    if (
+      executableExtensions.some((extension) =>
+        handle.path.endsWith(extension),
+      ) &&
+      !localPath.startsWith(assetsDir)
+    ) {
+      return this.makeJS(await fileContentToText(handle), handle.path);
+    } else {
+      return await this.serveLocalFile(handle);
     }
   }
 
   async getIndexHTML(opts?: IndexHTMLOptions): Promise<string> {
+    let resolvedBaseRealmURL = this.#searchIndex.loader.resolve(
+      baseRealm.url,
+    ).href;
     let indexHTML = (await this.#getIndexHTML()).replace(
       /(<meta name="@cardstack\/host\/config\/environment" content=")([^"].*)(">)/,
       (_match, g1, g2, g3) => {
         let config = JSON.parse(decodeURIComponent(g2));
         config = merge({}, config, {
           ownRealmURL: this.url, // unresolved url
-          resolvedOwnRealmURL: this.url,
+          resolvedBaseRealmURL,
+          resolvedOwnRealmURL: this.#searchIndex.loader.resolve(this.url).href,
           hostsOwnAssets: !isNode,
           realmsServed: opts?.realmsServed,
-          assetsURL: this.#assetsURL.href,
         });
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
       },
     );
 
     if (isNode) {
-      indexHTML = indexHTML.replace(
-        /(src|href)="\//g,
-        `$1="${this.#assetsURL.href}`,
-      );
+      // set the static public asset paths in index.html
+      indexHTML = indexHTML.replace(/(src|href)="\//g, `$1="/${assetsDir}`);
 
       // this installs an event listener to allow a test driver to introspect
       // the DOM from a different localhost:4205 origin (the test driver's
@@ -1030,23 +937,16 @@ export class Realm {
     return indexHTML;
   }
 
-  private async serveLocalFile(
-    ref: FileRef,
-    requestContext: RequestContext,
-  ): Promise<ResponseWithNodeStream> {
+  private async serveLocalFile(ref: FileRef): Promise<ResponseWithNodeStream> {
     if (
       ref.content instanceof ReadableStream ||
       ref.content instanceof Uint8Array ||
       typeof ref.content === 'string'
     ) {
-      return createResponse({
-        body: ref.content,
-        init: {
-          headers: {
-            'last-modified': formatRFC7231(ref.lastModified),
-          },
+      return createResponse(this, ref.content, {
+        headers: {
+          'last-modified': formatRFC7231(ref.lastModified),
         },
-        requestContext,
       });
     }
 
@@ -1055,42 +955,58 @@ export class Realm {
     }
 
     // add the node stream to the response which will get special handling in the node env
-    let response = createResponse({
-      body: null,
-      init: {
-        headers: {
-          'last-modified': formatRFC7231(ref.lastModified),
-        },
+    let response = createResponse(this, null, {
+      headers: {
+        'last-modified': formatRFC7231(ref.lastModified),
       },
-      requestContext,
     }) as ResponseWithNodeStream;
-
     response.nodeStream = ref.content;
     return response;
   }
 
   private async checkPermission(
     request: Request,
-    requestContext: RequestContext,
     neededPermission: 'read' | 'write',
   ) {
-    let realmPermissions = requestContext.permissions;
+      let endpontsWithoutAuthNeeded: RouteTable<true> = new Map([
+        // authentication endpoint
+        [
+          SupportedMimeType.Session,
+          new Map([
+            ['POST' as Method, new Map([['/_session', true]])],
+          ]),
+        ],
+        // SSE endpoint
+        [
+          SupportedMimeType.EventStream,
+          new Map([
+            ['GET' as Method, new Map([['/_message', true]])],
+          ]),
+        ],
+        // serve a text/html endpoint
+        [
+          SupportedMimeType.HTML,
+          new Map([
+            ['GET' as Method, new Map([['/.*', true]])],
+          ]),
+        ],
+      ]);
+    
     if (
-      lookupRouteTable(this.#publicEndpoints, this.paths, request) ||
+      lookupRouteTable(endpontsWithoutAuthNeeded, this.paths, request) ||
       request.method === 'HEAD' ||
       // If the realm is public readable or writable, do not require a JWT
       (neededPermission === 'read' &&
-        realmPermissions['*']?.includes('read')) ||
-      (neededPermission === 'write' && realmPermissions['*']?.includes('write'))
+        this.#permissions['*']?.includes('read')) ||
+      (neededPermission === 'write' &&
+        this.#permissions['*']?.includes('write'))
     ) {
       return;
     }
 
     let authorizationString = request.headers.get('Authorization');
     if (!authorizationString) {
-      throw new AuthenticationError(
-        AuthenticationErrorMessages.MissingAuthHeader,
-      );
+      throw new AuthenticationError("Missing 'Authorization' header");
     }
     let tokenString = authorizationString.replace('Bearer ', ''); // Parse the JWT
 
@@ -1098,19 +1014,15 @@ export class Realm {
 
     try {
       token = this.#adapter.verifyJWT(tokenString, this.#realmSecretSeed);
-
       let realmPermissionChecker = new RealmPermissionChecker(
-        realmPermissions,
-        this.#matrixClient,
+        this.#permissions,
+        this.#matrixClient
       );
-
-      let userPermissions = await realmPermissionChecker.for(token.user);
-      if (
-        JSON.stringify(token.permissions.sort()) !==
-        JSON.stringify(userPermissions.sort())
-      ) {
+      
+      let permissions = await realmPermissionChecker.for(token.user);
+      if (JSON.stringify(token.permissions.sort()) !== JSON.stringify(permissions.sort())) {
         throw new AuthenticationError(
-          AuthenticationErrorMessages.PermissionMismatch,
+          'User permissions have been updated. Please refresh the token',
         );
       }
 
@@ -1121,192 +1033,124 @@ export class Realm {
       }
     } catch (e) {
       if (e instanceof TokenExpiredError) {
-        throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
+        throw new AuthenticationError('Token expired');
       }
 
       if (e instanceof JsonWebTokenError) {
-        throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
+        throw new AuthenticationError('Invalid token');
       }
 
       throw e;
     }
   }
 
-  private async upsertCardSource(
-    request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
+  private async upsertCardSource(request: Request): Promise<Response> {
     let { lastModified } = await this.write(
-      this.paths.local(new URL(request.url)),
+      this.paths.local(request.url),
       await request.text(),
     );
-    return createResponse({
-      body: null,
-      init: {
-        status: 204,
-        headers: { 'last-modified': formatRFC7231(lastModified) },
-      },
-      requestContext,
+    return createResponse(this, null, {
+      status: 204,
+      headers: { 'last-modified': formatRFC7231(lastModified) },
     });
   }
 
-  private async getSourceOrRedirect(
+  private async getCardSourceOrRedirect(
     request: Request,
-    requestContext: RequestContext,
   ): Promise<ResponseWithNodeStream> {
-    let indexedSource = await this.getSourceFromIndex(new URL(request.url));
-    if (indexedSource) {
-      let { canonicalURL, lastModified, source } = indexedSource;
-      if (request.url !== canonicalURL.href) {
-        return createResponse({
-          body: null,
-          init: {
-            status: 302,
-            headers: {
-              Location: `${new URL(this.url).pathname}${this.paths.local(
-                canonicalURL,
-              )}`,
-            },
-          },
-          requestContext,
-        });
-      }
-      return createResponse({
-        body: source,
-        init: {
-          headers: {
-            'last-modified': formatRFC7231(lastModified),
-          },
-        },
-        requestContext,
-      });
-    }
-
-    // fallback to file system if there is an error document or this is the
-    // first time index
-    let localName = this.paths.local(new URL(request.url));
-    let handle = await this.getFileWithFallbacks(localName, [
-      ...executableExtensions,
-      '.json',
-    ]);
-    let start = Date.now();
-    try {
-      if (!handle) {
-        return notFound(request, requestContext, `${localName} not found`);
-      }
-
-      if (handle.path !== localName) {
-        return createResponse({
-          body: null,
-          init: {
-            status: 302,
-            headers: {
-              Location: `${new URL(this.url).pathname}${handle.path}`,
-            },
-          },
-          requestContext,
-        });
-      }
-      return await this.serveLocalFile(handle, requestContext);
-    } finally {
-      this.#logRequestPerformance(request, start);
-    }
-  }
-
-  private async getSourceFromIndex(url: URL): Promise<
-    | {
-        source: string;
-        lastModified: number;
-        canonicalURL: URL;
-      }
-    | undefined
-  > {
-    let [module, instance] = await Promise.all([
-      this.#searchIndex.module(url),
-      this.#searchIndex.instance(url),
-    ]);
-    if (module?.type === 'module' || instance?.type === 'instance') {
-      let canonicalURL =
-        module?.type === 'module'
-          ? module.canonicalURL
-          : instance?.type === 'instance'
-          ? instance.canonicalURL
-          : undefined;
-      let source =
-        module?.type === 'module'
-          ? module.source
-          : instance?.type === 'instance'
-          ? instance.source
-          : undefined;
-      let lastModified =
-        module?.type === 'module'
-          ? module.lastModified
-          : instance?.type === 'instance'
-          ? instance.lastModified
-          : undefined;
-      if (canonicalURL == null || source == null || lastModified == null) {
-        throw new Error(
-          `missing 'canonicalURL', 'source', and/or 'lastModified' from index entry ${
-            url.href
-          }, where type is ${
-            module?.type === 'module' ? 'module' : 'instance'
-          }`,
-        );
-      }
-      return { canonicalURL: new URL(canonicalURL), lastModified, source };
-    }
-    return undefined;
-  }
-
-  private async removeCardSource(
-    request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
-    let localName = this.paths.local(new URL(request.url));
+    let localName = this.paths.local(request.url);
     let handle = await this.getFileWithFallbacks(localName, [
       ...executableExtensions,
       '.json',
     ]);
     if (!handle) {
-      return notFound(request, requestContext, `${localName} not found`);
+      return notFound(this, request, `${localName} not found`);
     }
-    await this.delete(handle.path);
-    return createResponse({
-      body: null,
-      init: { status: 204 },
-      requestContext,
-    });
-  }
 
-  private makeJS(
-    content: string,
-    debugFilename: string,
-    requestContext: RequestContext,
-  ): Response {
-    try {
-      if (content.match(/^\s*$/)) {
-        throw new Error('File is empty');
-      }
-      content = transpileJS(content, debugFilename);
-    } catch (err: any) {
-      // using "Not Acceptable" here because no text/javascript representation
-      // can be made and we're sending text/html error page instead
-      return createResponse({
-        body: err.message,
-        init: {
-          status: 406,
-          headers: { 'content-type': 'text/html' },
-        },
-        requestContext,
+    if (handle.path !== localName) {
+      return createResponse(this, null, {
+        status: 302,
+        headers: { Location: `${new URL(this.url).pathname}${handle.path}` },
       });
     }
-    return createResponse({
-      body: content,
-      init: {
-        status: 200,
-        headers: { 'content-type': 'text/javascript' },
-      },
-      requestContext,
+    return await this.serveLocalFile(handle);
+  }
+
+  private async removeCardSource(request: Request): Promise<Response> {
+    let localName = this.paths.local(request.url);
+    let handle = await this.getFileWithFallbacks(localName, [
+      ...executableExtensions,
+      '.json',
+    ]);
+    if (!handle) {
+      return notFound(this, request, `${localName} not found`);
+    }
+    await this.delete(handle.path);
+    return createResponse(this, null, { status: 204 });
+  }
+
+  private transpileJS(content: string, debugFilename: string): string {
+    let hash = md5(content);
+    let cached = this.#transpileCache.get(hash);
+    if (cached) {
+      return cached;
+    }
+    content = preprocessEmbeddedTemplates(content, {
+      relativePath: debugFilename,
+      getTemplateLocals: etc._GlimmerSyntax.getTemplateLocals,
+      templateTag: 'template',
+      templateTagReplacement: '__GLIMMER_TEMPLATE',
+      includeSourceMaps: true,
+      includeTemplateTokens: true,
+    }).output;
+
+    let templateOptions: EmberTemplatePluginOptions = {
+      compiler: etc as unknown as EmberTemplateCompiler,
+      transforms: [scopedCSSTransform as ExtendedPluginBuilder],
+    };
+
+    let src = babel.transformSync(content, {
+      filename: debugFilename,
+      compact: false, // this helps for readability when debugging
+      plugins: [
+        glimmerTemplatePlugin,
+        emberConcurrencyAsyncPlugin,
+        [typescriptPlugin, { allowDeclareFields: true }],
+        [decoratorsProposalPlugin, { legacy: true }],
+        classPropertiesProposalPlugin,
+        [makeEmberTemplatePlugin, templateOptions],
+        loaderPlugin,
+      ],
+      highlightCode: false, // Do not output ANSI color codes in error messages so that the client can display them plainly
+    })?.code;
+    if (!src) {
+      throw new Error('bug: should never get here');
+    }
+
+    // This assumes the base realm is static. We take advantage of the static
+    // nature of the base realm such that we can cache the transpiled JS, which
+    // is the slowest part of module loading (and base realm modules are
+    // imported a lot by all realms)
+    if (this.url === baseRealm.url) {
+      this.#transpileCache.set(hash, src);
+    }
+    return src;
+  }
+
+  private makeJS(content: string, debugFilename: string): Response {
+    try {
+      content = this.transpileJS(content, debugFilename);
+    } catch (err: any) {
+      return createResponse(this, err.message, {
+        // using "Not Acceptable" here because no text/javascript representation
+        // can be made and we're sending text/html error page instead
+        status: 406,
+        headers: { 'content-type': 'text/html' },
+      });
+    }
+    return createResponse(this, content, {
+      status: 200,
+      headers: { 'content-type': 'text/javascript' },
     });
   }
 
@@ -1314,7 +1158,7 @@ export class Realm {
   // explicit file extensions in your source code
   private async getFileWithFallbacks(
     path: LocalPath,
-    fallbackExtensions: string[] = [],
+    fallbackExtensions: string[],
   ): Promise<FileRef | undefined> {
     return getFileWithFallbacks(
       path,
@@ -1323,26 +1167,17 @@ export class Realm {
     );
   }
 
-  private async createCard(
-    request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
+  private async createCard(request: Request): Promise<Response> {
     let body = await request.text();
     let json;
     try {
       json = JSON.parse(body);
     } catch (e) {
-      return badRequest(
-        `Request body is not valid card JSON-API`,
-        requestContext,
-      );
+      return badRequest(this, `Request body is not valid card JSON-API`);
     }
     let { data: resource } = json;
     if (!isCardResource(resource)) {
-      return badRequest(
-        `Request body is not valid card JSON-API`,
-        requestContext,
-      );
+      return badRequest(this, `Request body is not valid card JSON-API`);
     }
 
     let name: string;
@@ -1370,7 +1205,7 @@ export class Realm {
       ),
     );
     let newURL = fileURL.href.replace(/\.json$/, '');
-    let entry = await this.#searchIndex.cardDocument(new URL(newURL), {
+    let entry = await this.#searchIndex.card(new URL(newURL), {
       loadLinks: true,
     });
     if (!entry || entry?.type === 'error') {
@@ -1378,7 +1213,7 @@ export class Realm {
         ? CardError.fromSerializableError(entry.error)
         : undefined;
       return systemError(
-        requestContext,
+        this,
         `Unable to index new card, can't find new instance in index`,
         err,
       );
@@ -1389,36 +1224,29 @@ export class Realm {
         meta: { lastModified },
       },
     });
-    return createResponse({
-      body: JSON.stringify(doc, null, 2),
-      init: {
-        status: 201,
-        headers: {
-          'content-type': SupportedMimeType.CardJson,
-          ...lastModifiedHeader(doc),
-        },
+    return createResponse(this, JSON.stringify(doc, null, 2), {
+      status: 201,
+      headers: {
+        'content-type': SupportedMimeType.CardJson,
+        ...lastModifiedHeader(doc),
       },
-      requestContext,
     });
   }
 
-  private async patchCard(
-    request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
-    let localPath = this.paths.local(new URL(request.url));
+  private async patchCard(request: Request): Promise<Response> {
+    let localPath = this.paths.local(request.url);
     if (localPath.startsWith('_')) {
-      return methodNotAllowed(request, requestContext);
+      return methodNotAllowed(this, request);
     }
 
     let url = this.paths.fileURL(localPath);
-    let originalMaybeError = await this.#searchIndex.cardDocument(url);
+    let originalMaybeError = await this.#searchIndex.card(url);
     if (!originalMaybeError) {
-      return notFound(request, requestContext);
+      return notFound(this, request);
     }
     if (originalMaybeError.type === 'error') {
       return systemError(
-        requestContext,
+        this,
         `unable to patch card, cannot load original from index`,
         CardError.fromSerializableError(originalMaybeError.error),
       );
@@ -1429,10 +1257,7 @@ export class Realm {
 
     let patch = await request.json();
     if (!isSingleCardDocument(patch)) {
-      return badRequest(
-        `The request body was not a card document`,
-        requestContext,
-      );
+      return badRequest(this, `The request body was not a card document`);
     }
     // prevent the client from changing the card type or ID in the patch
     delete (patch as any).data.meta;
@@ -1475,12 +1300,12 @@ export class Realm {
       request.headers.get('X-Boxel-Client-Request-Id'),
     );
     let instanceURL = url.href.replace(/\.json$/, '');
-    let entry = await this.#searchIndex.cardDocument(new URL(instanceURL), {
+    let entry = await this.#searchIndex.card(new URL(instanceURL), {
       loadLinks: true,
     });
     if (!entry || entry?.type === 'error') {
       return systemError(
-        requestContext,
+        this,
         `Unable to index card: can't find patched instance in index`,
         entry ? CardError.fromSerializableError(entry.error) : undefined,
       );
@@ -1491,96 +1316,63 @@ export class Realm {
         meta: { lastModified },
       },
     });
-    return createResponse({
-      body: JSON.stringify(doc, null, 2),
-      init: {
-        headers: {
-          'content-type': SupportedMimeType.CardJson,
-          ...lastModifiedHeader(doc),
-        },
+    return createResponse(this, JSON.stringify(doc, null, 2), {
+      headers: {
+        'content-type': SupportedMimeType.CardJson,
+        ...lastModifiedHeader(doc),
       },
-      requestContext,
     });
   }
 
-  private async getCard(
-    request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
-    let localPath = this.paths.local(new URL(request.url));
+  private async getCard(request: Request): Promise<Response> {
+    let localPath = this.paths.local(request.url);
     if (localPath === '') {
       localPath = 'index';
     }
 
-    let useWorkInProgressIndex = Boolean(
-      request.headers.get('X-Boxel-Use-WIP-Index'),
-    );
-
     let url = this.paths.fileURL(localPath.replace(/\.json$/, ''));
-    let maybeError = await this.#searchIndex.cardDocument(url, {
-      loadLinks: true,
-      useWorkInProgressIndex,
-    });
-    let start = Date.now();
-    try {
-      if (!maybeError) {
-        return notFound(request, requestContext);
-      }
-      if (maybeError.type === 'error') {
-        return systemError(
-          requestContext,
-          `cannot return card from index: ${maybeError.error.title} - ${maybeError.error.detail}`,
-          CardError.fromSerializableError(maybeError.error),
-        );
-      }
-      let { doc: card } = maybeError;
-      card.data.links = { self: url.href };
-
-      let foundPath = this.paths.local(url);
-      if (localPath !== foundPath) {
-        return createResponse({
-          requestContext,
-          body: null,
-          init: {
-            status: 302,
-            headers: { Location: `${new URL(this.url).pathname}${foundPath}` },
-          },
-        });
-      }
-
-      return createResponse({
-        body: JSON.stringify(card, null, 2),
-        init: {
-          headers: {
-            'content-type': SupportedMimeType.CardJson,
-            ...lastModifiedHeader(card),
-          },
-        },
-        requestContext,
-      });
-    } finally {
-      this.#logRequestPerformance(request, start);
+    let maybeError = await this.#searchIndex.card(url, { loadLinks: true });
+    if (!maybeError) {
+      return notFound(this, request);
     }
+    if (maybeError.type === 'error') {
+      return systemError(
+        this,
+        `cannot return card from index: ${maybeError.error.title} - ${maybeError.error.detail}`,
+        CardError.fromSerializableError(maybeError.error),
+      );
+    }
+    let { doc: card } = maybeError;
+    card.data.links = { self: url.href };
+
+    let foundPath = this.paths.local(url);
+    if (localPath !== foundPath) {
+      return createResponse(this, null, {
+        status: 302,
+        headers: { Location: `${new URL(this.url).pathname}${foundPath}` },
+      });
+    }
+
+    return createResponse(this, JSON.stringify(card, null, 2), {
+      headers: {
+        'last-modified': formatRFC7231(card.data.meta.lastModified!),
+        'content-type': SupportedMimeType.CardJson,
+        ...lastModifiedHeader(card),
+      },
+    });
   }
 
-  private async removeCard(
-    request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
+  private async removeCard(request: Request): Promise<Response> {
     let reqURL = request.url.replace(/\.json$/, '');
     // strip off query params
     let url = new URL(new URL(reqURL).pathname, reqURL);
-    let result = await this.#searchIndex.cardDocument(url);
+    let result = await this.#searchIndex.card(url);
     if (!result) {
-      return notFound(request, requestContext);
+      return notFound(this, request);
     }
     let path = this.paths.local(url) + '.json';
     await this.delete(path);
-    return createResponse({
-      body: null,
-      init: { status: 204 },
-      requestContext,
-    });
+    return createResponse(this, null, { status: 204 });
   }
 
   private async directoryEntries(
@@ -1594,7 +1386,6 @@ export class Realm {
       return undefined;
     }
     let entries: { name: string; kind: Kind; path: LocalPath }[] = [];
-
     for await (let entry of this.#adapter.readdir(path)) {
       let innerPath = join(path, entry.name);
       let innerURL =
@@ -1609,17 +1400,32 @@ export class Realm {
     return entries;
   }
 
-  private async getDirectoryListing(
-    request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
+  private async recursiveDirectoryEntries(
+    url: URL,
+  ): Promise<{ name: string; kind: Kind; path: LocalPath }[]> {
+    let entries = await this.directoryEntries(url);
+    if (!entries) {
+      return [];
+    }
+    let nestedEntries: { name: string; kind: Kind; path: LocalPath }[] = [];
+    for (let dirEntry of entries.filter((e) => e.kind === 'directory')) {
+      nestedEntries.push(
+        ...(await this.recursiveDirectoryEntries(
+          new URL(`${url.href}${dirEntry.name}`),
+        )),
+      );
+    }
+    return [...entries, ...nestedEntries];
+  }
+
+  private async getDirectoryListing(request: Request): Promise<Response> {
     // a LocalPath has no leading nor trailing slash
-    let localPath: LocalPath = this.paths.local(new URL(request.url));
+    let localPath: LocalPath = this.paths.local(request.url);
     let url = this.paths.directoryURL(localPath);
     let entries = await this.directoryEntries(url);
     if (!entries) {
       this.#log.warn(`can't find directory ${url.href}`);
-      return notFound(request, requestContext);
+      return notFound(this, request);
     }
 
     let data: ResourceObjectWithId = {
@@ -1652,19 +1458,15 @@ export class Realm {
       ] = relationship;
     }
 
-    return createResponse({
-      body: JSON.stringify({ data }, null, 2),
-      init: {
-        headers: { 'content-type': SupportedMimeType.DirectoryListing },
-      },
-      requestContext,
+    return createResponse(this, JSON.stringify({ data }, null, 2), {
+      headers: { 'content-type': SupportedMimeType.DirectoryListing },
     });
   }
 
   private async readFileAsText(
     path: LocalPath,
     opts: { withFallbacks?: true } = {},
-  ): Promise<TextFileRef | undefined> {
+  ): Promise<{ content: string; lastModified: number } | undefined> {
     return readFileAsText(
       path,
       this.#adapter.openFile.bind(this.#adapter),
@@ -1676,33 +1478,20 @@ export class Realm {
     return this.#searchIndex.isIgnored(url);
   }
 
-  private async search(
-    request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
-    let useWorkInProgressIndex = Boolean(
-      request.headers.get('X-Boxel-Use-WIP-Index'),
-    );
+  private async search(request: Request): Promise<Response> {
     let doc = await this.#searchIndex.search(
       parseQueryString(new URL(request.url).search.slice(1)),
-      { loadLinks: true, useWorkInProgressIndex },
+      { loadLinks: true },
     );
-    return createResponse({
-      body: JSON.stringify(doc, null, 2),
-      init: {
-        headers: { 'content-type': SupportedMimeType.CardJson },
-      },
-      requestContext,
+    return createResponse(this, JSON.stringify(doc, null, 2), {
+      headers: { 'content-type': SupportedMimeType.CardJson },
     });
   }
 
-  private async realmInfo(
-    _request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
+  private async realmInfo(_request: Request): Promise<Response> {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
-    let realmConfig = await this.readFileAsText(localPath, undefined);
+    let realmConfig = await this.readFileAsText(localPath);
     let realmInfo: RealmInfo = {
       name: 'Unnamed Workspace',
       backgroundURL: null,
@@ -1727,12 +1516,8 @@ export class Realm {
         attributes: realmInfo,
       },
     };
-    return createResponse({
-      body: JSON.stringify(doc, null, 2),
-      init: {
-        headers: { 'content-type': SupportedMimeType.RealmInfo },
-      },
-      requestContext,
+    return createResponse(this, JSON.stringify(doc, null, 2), {
+      headers: { 'content-type': SupportedMimeType.RealmInfo },
     });
   }
 
@@ -1761,10 +1546,7 @@ export class Realm {
 
   private listeningClients: WritableStream[] = [];
 
-  private async subscribe(
-    request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
+  private async subscribe(req: Request): Promise<Response> {
     let headers = {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -1772,8 +1554,8 @@ export class Realm {
     };
 
     let { response, writable } = this.#adapter.createStreamingResponse(
-      request,
-      requestContext,
+      this,
+      req,
       {
         status: 200,
         headers,
@@ -1852,7 +1634,7 @@ export class Realm {
   }
 
   private async sendServerEvent(event: ServerEvents): Promise<void> {
-    this.#log.debug(
+    this.#log.info(
       `sending updates to ${this.listeningClients.length} clients`,
     );
     let { type, data, id } = event;
@@ -1866,41 +1648,19 @@ export class Realm {
     );
   }
 
-  private async respondWithHTML(
-    _request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
-    return createResponse({
-      body: await this.getIndexHTML(),
-      init: {
+  private async respondWithHTML() {
+    return createResponse(
+      this,
+      await this.getIndexHTML(),
+      {
         headers: { 'content-type': 'text/html' },
       },
-      relaxDocumentDomain: this.#useTestingDomain,
-      requestContext,
-    });
+      this.#useTestingDomain,
+    );
   }
 
-  private async createRequestContext(): Promise<RequestContext> {
-    let permissions = await fetchUserPermissions(
-      this.#dbAdapter,
-      new URL(this.url),
-    );
-    return {
-      realm: this,
-      permissions,
-    };
-  }
-
-  #logRequestPerformance(
-    request: Request,
-    startTime: number,
-    prefix = 'serve time',
-  ) {
-    this.#perfLog.debug(
-      `${prefix}: ${Date.now() - startTime}ms - ${request.method} ${
-        request.url
-      } ${request.headers.get('Accept') ?? ''}`,
-    );
+  get isPublicReadable(): boolean {
+    return this.#permissions['*']?.includes('read') ?? false;
   }
 }
 

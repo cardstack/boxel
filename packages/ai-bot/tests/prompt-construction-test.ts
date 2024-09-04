@@ -1,30 +1,27 @@
 import { module, test, assert } from 'qunit';
-import { getTools, getModifyPrompt, getRelevantCards } from '../helpers';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import { getFunctions, getModifyPrompt, getRelevantCards } from '../helpers';
+import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
 
-function getPatchTool(cardId: string, properties: any) {
+function getPatchFunction(cardId: string, properties: any) {
   return {
-    type: 'function',
-    function: {
-      name: 'patchCard',
-      description: 'description',
-      parameters: {
-        type: 'object',
-        properties: {
-          description: {
-            type: 'string',
-          },
-          card_id: {
-            type: 'string',
-            const: cardId,
-          },
-          attributes: {
-            type: 'object',
-            properties: properties,
-          },
+    name: 'patchCard',
+    description: 'description',
+    parameters: {
+      type: 'object',
+      properties: {
+        description: {
+          type: 'string',
         },
-        required: ['card_id', 'attributes', 'description'],
+        card_id: {
+          type: 'string',
+          const: cardId,
+        },
+        attributes: {
+          type: 'object',
+          properties: properties,
+        },
       },
+      required: ['card_id', 'attributes', 'description'],
     },
   };
 }
@@ -73,7 +70,7 @@ module('getModifyPrompt', () => {
           formatted_body: 'Hey',
           data: {
             context: {
-              tools: [],
+              functions: [],
               submode: undefined,
             },
             attachedCards: [
@@ -197,7 +194,7 @@ module('getModifyPrompt', () => {
               },
             ],
             context: {
-              tools: [],
+              functions: [],
               submode: 'interact',
             },
           },
@@ -249,7 +246,7 @@ module('getModifyPrompt', () => {
               },
             ],
             context: {
-              tools: [],
+              functions: [],
               submode: 'interact',
             },
           },
@@ -295,7 +292,7 @@ module('getModifyPrompt', () => {
           data: {
             context: {
               openCardIds: [],
-              tools: [],
+              functions: [],
               submode: 'interact',
             },
           },
@@ -319,7 +316,7 @@ module('getModifyPrompt', () => {
           data: {
             context: {
               openCardIds: [],
-              tools: [],
+              functions: [],
               submode: 'interact',
             },
           },
@@ -370,7 +367,7 @@ module('getModifyPrompt', () => {
             ],
             context: {
               openCards: [],
-              tools: [],
+              functions: [],
               submode: 'interact',
             },
           },
@@ -419,7 +416,7 @@ module('getModifyPrompt', () => {
             ],
             context: {
               openCards: [],
-              tools: [],
+              functions: [],
               submode: 'interact',
             },
           },
@@ -461,7 +458,7 @@ module('getModifyPrompt', () => {
             ],
             context: {
               openCards: [],
-              tools: [],
+              functions: [],
               submode: 'interact',
             },
           },
@@ -476,105 +473,6 @@ module('getModifyPrompt', () => {
     ];
     const relevantCards = getRelevantCards(history, '@aibot:localhost');
     assert.equal(relevantCards.length, 2);
-  });
-
-  test('Gets multiple uploaded cards in the system prompt', () => {
-    const history: DiscreteMatrixEvent[] = [
-      {
-        type: 'm.room.message',
-        event_id: '1',
-        origin_server_ts: 1234567890,
-        content: {
-          msgtype: 'org.boxel.message',
-          format: 'org.matrix.custom.html',
-          body: 'Hey',
-          formatted_body: 'Hey',
-          data: {
-            attachedCards: [
-              {
-                data: {
-                  type: 'card',
-                  id: 'http://localhost:4201/drafts/Author/1',
-                  attributes: {
-                    firstName: 'Terry',
-                    lastName: 'Pratchett',
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: '../author',
-                      name: 'Author',
-                    },
-                  },
-                },
-              },
-            ],
-            context: {
-              openCards: [],
-              tools: [],
-              submode: 'interact',
-            },
-          },
-        },
-        sender: '@user:localhost',
-        room_id: 'room1',
-        unsigned: {
-          age: 115498,
-          transaction_id: '1',
-        },
-      },
-      {
-        type: 'm.room.message',
-        event_id: '1',
-        origin_server_ts: 1234567890,
-        content: {
-          msgtype: 'org.boxel.message',
-          format: 'org.matrix.custom.html',
-          body: 'Hey',
-          formatted_body: 'Hey',
-          data: {
-            attachedCards: [
-              {
-                data: {
-                  type: 'card',
-                  id: 'http://localhost:4201/drafts/Author/2',
-                  attributes: {
-                    firstName: 'Mr',
-                    lastName: 'T',
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: '../author',
-                      name: 'Author',
-                    },
-                  },
-                },
-              },
-            ],
-            context: {
-              openCards: [],
-              tools: [],
-              submode: 'interact',
-            },
-          },
-        },
-        sender: '@user:localhost',
-        room_id: 'room1',
-        unsigned: {
-          age: 115498,
-          transaction_id: '2',
-        },
-      },
-    ];
-    const fullPrompt = getModifyPrompt(history, '@aibot:localhost');
-    const systemMessage = fullPrompt.find(
-      (message) => message.role === 'system',
-    );
-    assert.true(
-      systemMessage?.content?.includes('http://localhost:4201/drafts/Author/1'),
-    );
-    assert.true(
-      systemMessage?.content?.includes('http://localhost:4201/drafts/Author/2'),
-    );
   });
 
   test('If a user stops sharing their context keep it in the system prompt', () => {
@@ -620,7 +518,7 @@ module('getModifyPrompt', () => {
             context: {
               openCardIds: ['http://localhost:4201/drafts/Friend/1'],
               submode: 'interact',
-              tools: [],
+              functions: [],
             },
           },
         },
@@ -667,7 +565,7 @@ module('getModifyPrompt', () => {
           data: {
             context: {
               openCardIds: [],
-              tools: [],
+              functions: [],
               submode: 'interact',
             },
           },
@@ -681,7 +579,7 @@ module('getModifyPrompt', () => {
         event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
       },
     ];
-    const functions = getTools(history, '@aibot:localhost');
+    const functions = getFunctions(history, '@aibot:localhost');
     assert.equal(functions.length, 0);
   });
 
@@ -698,8 +596,8 @@ module('getModifyPrompt', () => {
           data: {
             context: {
               openCardIds: ['http://localhost:4201/drafts/Friend/1'],
-              tools: [
-                getPatchTool('http://localhost:4201/drafts/Friend/1', {
+              functions: [
+                getPatchFunction('http://localhost:4201/drafts/Friend/1', {
                   firstName: { type: 'string' },
                 }),
               ],
@@ -726,7 +624,7 @@ module('getModifyPrompt', () => {
           data: {
             context: {
               openCardIds: [],
-              tools: [],
+              functions: [],
               submode: 'interact',
             },
           },
@@ -740,7 +638,7 @@ module('getModifyPrompt', () => {
         event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
       },
     ];
-    const functions = getTools(history, '@aibot:localhost');
+    const functions = getFunctions(history, '@aibot:localhost');
     assert.equal(functions.length, 0);
   });
 
@@ -785,8 +683,8 @@ module('getModifyPrompt', () => {
                   },
                 },
               ],
-              tools: [
-                getPatchTool('http://localhost:4201/drafts/Friend/1', {
+              functions: [
+                getPatchFunction('http://localhost:4201/drafts/Friend/1', {
                   firstName: { type: 'string' },
                 }),
               ],
@@ -804,34 +702,31 @@ module('getModifyPrompt', () => {
       },
     ];
 
-    const functions = getTools(history, '@aibot:localhost');
+    const functions = getFunctions(history, '@aibot:localhost');
     assert.equal(functions.length, 1);
     assert.deepEqual(functions[0], {
-      type: 'function',
-      function: {
-        name: 'patchCard',
-        description: 'description',
-        parameters: {
-          type: 'object',
-          properties: {
-            description: {
-              type: 'string',
-            },
-            card_id: {
-              type: 'string',
-              const: 'http://localhost:4201/drafts/Friend/1',
-            },
-            attributes: {
-              type: 'object',
-              properties: {
-                firstName: {
-                  type: 'string',
-                },
+      name: 'patchCard',
+      description: 'description',
+      parameters: {
+        type: 'object',
+        properties: {
+          description: {
+            type: 'string',
+          },
+          card_id: {
+            type: 'string',
+            const: 'http://localhost:4201/drafts/Friend/1',
+          },
+          attributes: {
+            type: 'object',
+            properties: {
+              firstName: {
+                type: 'string',
               },
             },
           },
-          required: ['card_id', 'attributes', 'description'],
         },
+        required: ['card_id', 'attributes', 'description'],
       },
     });
   });
@@ -848,8 +743,8 @@ module('getModifyPrompt', () => {
           data: {
             context: {
               openCardIds: ['http://localhost:4201/drafts/Friend/1'],
-              tools: [
-                getPatchTool('http://localhost:4201/drafts/Friend/1', {
+              functions: [
+                getPatchFunction('http://localhost:4201/drafts/Friend/1', {
                   firstName: { type: 'string' },
                 }),
               ],
@@ -866,34 +761,31 @@ module('getModifyPrompt', () => {
       },
     ];
 
-    const functions = getTools(history, '@aibot:localhost');
+    const functions = getFunctions(history, '@aibot:localhost');
     assert.equal(functions.length, 1);
     assert.deepEqual(functions[0], {
-      type: 'function',
-      function: {
-        name: 'patchCard',
-        description: 'description',
-        parameters: {
-          type: 'object',
-          properties: {
-            description: {
-              type: 'string',
-            },
-            card_id: {
-              type: 'string',
-              const: 'http://localhost:4201/drafts/Friend/1',
-            },
-            attributes: {
-              type: 'object',
-              properties: {
-                firstName: {
-                  type: 'string',
-                },
+      name: 'patchCard',
+      description: 'description',
+      parameters: {
+        type: 'object',
+        properties: {
+          description: {
+            type: 'string',
+          },
+          card_id: {
+            type: 'string',
+            const: 'http://localhost:4201/drafts/Friend/1',
+          },
+          attributes: {
+            type: 'object',
+            properties: {
+              firstName: {
+                type: 'string',
               },
             },
           },
-          required: ['card_id', 'attributes', 'description'],
         },
+        required: ['card_id', 'attributes', 'description'],
       },
     });
   });
@@ -911,8 +803,8 @@ module('getModifyPrompt', () => {
           data: {
             context: {
               openCardIds: ['http://localhost:4201/drafts/Friend/1'],
-              tools: [
-                getPatchTool('http://localhost:4201/drafts/Friend/1', {
+              functions: [
+                getPatchFunction('http://localhost:4201/drafts/Friend/1', {
                   firstName: { type: 'string' },
                 }),
               ],
@@ -939,8 +831,8 @@ module('getModifyPrompt', () => {
           data: {
             context: {
               openCardIds: ['http://localhost:4201/drafts/Meeting/2'],
-              tools: [
-                getPatchTool('http://localhost:4201/drafts/Meeting/2', {
+              functions: [
+                getPatchFunction('http://localhost:4201/drafts/Meeting/2', {
                   location: { type: 'string' },
                 }),
               ],
@@ -958,35 +850,32 @@ module('getModifyPrompt', () => {
       },
     ];
 
-    const functions = getTools(history, '@aibot:localhost');
+    const functions = getFunctions(history, '@aibot:localhost');
     assert.equal(functions.length, 1);
     if (functions.length > 0) {
       assert.deepEqual(functions[0], {
-        type: 'function',
-        function: {
-          name: 'patchCard',
-          description: 'description',
-          parameters: {
-            type: 'object',
-            properties: {
-              description: {
-                type: 'string',
-              },
-              card_id: {
-                type: 'string',
-                const: 'http://localhost:4201/drafts/Meeting/2',
-              },
-              attributes: {
-                type: 'object',
-                properties: {
-                  location: {
-                    type: 'string',
-                  },
+        name: 'patchCard',
+        description: 'description',
+        parameters: {
+          type: 'object',
+          properties: {
+            description: {
+              type: 'string',
+            },
+            card_id: {
+              type: 'string',
+              const: 'http://localhost:4201/drafts/Meeting/2',
+            },
+            attributes: {
+              type: 'object',
+              properties: {
+                location: {
+                  type: 'string',
                 },
               },
             },
-            required: ['card_id', 'attributes', 'description'],
           },
+          required: ['card_id', 'attributes', 'description'],
         },
       });
     }

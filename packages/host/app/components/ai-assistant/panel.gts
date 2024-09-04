@@ -5,11 +5,11 @@ import type Owner from '@ember/owner';
 import RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+//@ts-expect-error the types don't recognize the cached export
 import { tracked, cached } from '@glimmer/tracking';
 
 import { restartableTask, timeout } from 'ember-concurrency';
 import { Velcro } from 'ember-velcro';
-import window from 'ember-window-mock';
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
@@ -38,6 +38,7 @@ import {
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type { RoomField } from 'https://cardstack.com/base/room';
 
@@ -61,27 +62,6 @@ let currentRoomIdPersistenceKey = 'aiPanelCurrentRoomId';
 let newSessionIdPersistenceKey = 'aiPanelNewSessionId';
 
 export default class AiAssistantPanel extends Component<Signature> {
-  get hasOtherActiveSessions() {
-    let oneMinuteAgo = new Date(Date.now() - 60 * 1000).getTime();
-
-    return this.aiSessionRooms
-      .filter((session) => session.roomId !== this.currentRoom?.roomId)
-      .some((session) => {
-        let isSessionActive =
-          this.matrixService.getLastActiveTimestamp(session) > oneMinuteAgo;
-
-        let lastMessageEventId =
-          session.messages[session.messages.length - 1]?.eventId;
-
-        let hasSeenLastMessage =
-          this.matrixService.currentUserEventReadReceipts.has(
-            lastMessageEventId,
-          );
-
-        return isSessionActive && !hasSeenLastMessage;
-      });
-  }
-
   <template>
     <Velcro @placement='bottom' @offsetOptions={{-50}} as |popoverVelcro|>
       <div
@@ -108,8 +88,8 @@ export default class AiAssistantPanel extends Component<Signature> {
             class='close-ai-panel'
             @variant='primary'
             @icon={{IconX}}
-            @width='12px'
-            @height='12px'
+            @width='20px'
+            @height='20px'
             {{on 'click' @onClose}}
             aria-label='Close AI Assistant'
             data-test-close-ai-assistant
@@ -130,21 +110,15 @@ export default class AiAssistantPanel extends Component<Signature> {
               <LoadingIndicator @color='var(--boxel-light)' />
             {{else}}
               <Button
-                class='past-sessions-button
-                  {{if
-                    this.hasOtherActiveSessions
-                    "past-sessions-button-active"
-                  }}'
+                class='past-sessions-button'
                 @kind='secondary-dark'
                 @size='small'
                 @disabled={{this.displayRoomError}}
                 {{on 'click' this.displayPastSessions}}
                 data-test-past-sessions-button
-                data-test-has-active-sessions={{this.hasOtherActiveSessions}}
               >
-                All Sessions
+                Past Sessions
                 <DropdownArrowFilled width='10' height='10' />
-
               </Button>
             {{/if}}
           </div>
@@ -155,7 +129,6 @@ export default class AiAssistantPanel extends Component<Signature> {
             @sessions={{this.aiSessionRooms}}
             @roomActions={{this.roomActions}}
             @onClose={{this.hidePastSessions}}
-            @currentRoomId={{this.currentRoomId}}
             {{popoverVelcro.loop}}
           />
         {{else if this.roomToRename}}
@@ -168,19 +141,13 @@ export default class AiAssistantPanel extends Component<Signature> {
 
         {{#if this.displayRoomError}}
           <NewSession @errorAction={{this.createNewSession}} />
-        {{else if this.isReady}}
-          {{! below if statement is covered in 'isReady' check above but added due to glint not realizing it }}
-          {{#if this.currentRoomId}}
-            <Room
-              @roomId={{this.currentRoomId}}
-              @monacoSDK={{this.monacoSDK}}
-            />
-          {{/if}}
-        {{else}}
+        {{else if this.doCreateRoom.isRunning}}
           <LoadingIndicator
             class='loading-new-session'
             @color='var(--boxel-light)'
           />
+        {{else if this.currentRoomId}}
+          <Room @roomId={{this.currentRoomId}} @monacoSDK={{this.monacoSDK}} />
         {{/if}}
       </div>
     </Velcro>
@@ -213,7 +180,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
       :deep(.separator-horizontal) {
         min-width: calc(
-          var(--boxel-panel-resize-handle-width) +
+          var(--boxel-panel-resize-handler-width) +
             calc(var(--boxel-sp-xxxs) * 2)
         );
         position: absolute;
@@ -285,67 +252,15 @@ export default class AiAssistantPanel extends Component<Signature> {
         --icon-color: var(--boxel-light);
         margin-left: var(--boxel-sp-xs);
       }
-
-      .past-sessions-button-active::before {
-        content: '';
-        position: absolute;
-        top: -105px;
-        left: -55px;
-        width: 250px;
-        height: 250px;
-        background: conic-gradient(
-          #ffcc8f 0deg,
-          #ff3966 45deg,
-          #ff309e 90deg,
-          #aa1dc9 135deg,
-          #d7fad6 180deg,
-          #5fdfea 225deg,
-          #3d83f2 270deg,
-          #5145e8 315deg,
-          #ffcc8f 360deg
-        );
-        z-index: -1;
-        animation: spin 4s infinite linear;
-      }
-
-      .past-sessions-button-active::after {
-        content: '';
-        position: absolute;
-        top: 1px;
-        left: 1px;
-        right: 1px;
-        bottom: 1px;
-        background: var(--boxel-700);
-        border-radius: inherit;
-        z-index: -1;
-      }
-
-      .past-sessions-button-active {
-        position: relative;
-        display: inline-block;
-        border-radius: 3rem;
-        color: white;
-        background: var(--boxel-700);
-        border: none;
-        cursor: pointer;
-        z-index: 1;
-        overflow: hidden;
-      }
-
       .loading-new-session {
         padding: var(--boxel-sp);
-      }
-
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
       }
     </style>
   </template>
 
   @service private declare matrixService: MatrixService;
   @service private declare monacoService: MonacoService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare router: RouterService;
 
   @tracked private currentRoomId: string | undefined;
@@ -425,6 +340,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         window.localStorage.setItem(newSessionIdPersistenceKey, newRoomId);
         this.enterRoom(newRoomId);
       } catch (e) {
+        console.error(e);
         this.displayRoomError = true;
         this.currentRoomId = undefined;
       }
@@ -561,11 +477,5 @@ export default class AiAssistantPanel extends Component<Signature> {
       return this.maybeMonacoSDK;
     }
     throw new Error(`cannot use monaco SDK before it has loaded`);
-  }
-
-  private get isReady() {
-    return Boolean(
-      this.currentRoomId && this.maybeMonacoSDK && this.doCreateRoom.isIdle,
-    );
   }
 }

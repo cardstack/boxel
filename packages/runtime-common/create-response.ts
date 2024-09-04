@@ -1,29 +1,19 @@
-import { RequestContext } from './realm';
+import { Realm } from './realm';
 
-interface CreateResponseArgs {
-  body?: BodyInit | null | undefined;
-  init?: ResponseInit | undefined;
-  relaxDocumentDomain?: boolean; // only use for CI!
-  requestContext: RequestContext;
-}
-
-export function createResponse({
-  body,
-  init,
-  relaxDocumentDomain,
-  requestContext,
-}: CreateResponseArgs): Response {
+export function createResponse(
+  realm: Realm,
+  body?: BodyInit | null | undefined,
+  init?: ResponseInit | undefined,
+  relaxDocumentDomain?: boolean, // only use for CI!
+): Response {
   return new Response(body, {
     ...init,
     headers: {
       ...init?.headers,
-      'X-Boxel-Realm-Url': requestContext.realm.url,
-      ...(requestContext.permissions['*']?.includes('read') && {
-        'X-Boxel-Realm-Public-Readable': 'true',
-      }),
+      'X-Boxel-Realm-Url': realm.url,
+      ...(realm.isPublicReadable && { 'X-Boxel-Realm-Public-Readable': 'true' }),
       vary: 'Accept',
-      'Access-Control-Expose-Headers':
-        'X-Boxel-Realm-Url,X-Boxel-Realm-Public-Readable,Authorization',
+      'Access-Control-Expose-Headers': 'X-Boxel-Realm-Url,X-Boxel-Realm-Public-Readable,Authorization',
       ...(relaxDocumentDomain
         ? {
             // we use this header to permit cross origin communication to

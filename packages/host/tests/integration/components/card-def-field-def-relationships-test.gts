@@ -3,11 +3,12 @@ import { click, waitFor } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
-import { RealmSessionContextName, baseRealm } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 import { type Loader } from '@cardstack/runtime-common/loader';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
@@ -16,8 +17,6 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupIntegrationTestRealm,
-  provideConsumeContext,
-  lookupLoaderService,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent, renderCard } from '../../helpers/render-component';
@@ -48,10 +47,8 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   setupMatrixServiceMock(hooks);
 
   hooks.beforeEach(async function () {
-    provideConsumeContext(RealmSessionContextName, {
-      canWrite: true,
-    });
-    loader = lookupLoaderService().loader;
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     number = await loader.import(`${baseRealm.url}number`);
@@ -350,11 +347,11 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       .dom('[data-test-field="guest"] [data-test-field="name"] input')
       .hasValue('Mama Leone');
     assert
-      .dom('[data-test-field="guest"] [data-test-plural-view-format="edit"]')
-      .exists('plural layout is rendered');
+      .dom('[data-test-field="guest"] [data-test-plural-view-format="atom"]')
+      .exists('atom layout is rendered');
     assert
       .dom('[data-test-field="guest"] [data-test-plural-view="containsMany"]')
-      .hasClass('edit-format', 'field has correct class');
+      .hasClass('atom-format', 'field has correct class');
     assert
       .dom(
         '[data-test-field="guest"] [data-test-plural-view="containsMany"] [data-test-plural-view-item]',
@@ -379,10 +376,10 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       .dom('[data-test-field="guest2"] [data-test-field="name"] input')
       .hasValue('Papa Leone');
     assert
-      .dom('[data-test-field="guest2"] [data-test-plural-view-format="edit"]')
+      .dom('[data-test-field="guest2"] [data-test-plural-view-format="atom"]')
       .hasClass('empty', 'empty containsMany field has correct class');
     assert
-      .dom('[data-test-field="guest2"] [data-test-plural-view-format="edit"]')
+      .dom('[data-test-field="guest2"] [data-test-plural-view-format="atom"]')
       .hasText('', 'field is empty');
 
     assert
@@ -563,13 +560,13 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
     assert.dom('[data-test-field="trips"] [data-test-add-new]').exists();
+
     await click('[data-test-links-to-many="countries"] [data-test-add-new]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}japan"]`);
     await click(`[data-test-select="${testRealmURL}japan"]`);
     await click('[data-test-card-catalog-go-button]');
 
     await waitFor('[card-catalog-modal]', { count: 0 });
-
     assert.dom('[data-test-pill-item]').exists({ count: 1 });
     assert.dom('[data-test-field="trips"]').containsText('Japan');
 

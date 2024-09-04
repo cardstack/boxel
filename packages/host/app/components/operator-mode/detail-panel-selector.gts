@@ -1,3 +1,5 @@
+import { type EmptyObject } from '@ember/component/helper';
+
 import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -78,7 +80,7 @@ interface Signature {
     class?: string;
     items: Array<SelectorItem>;
   };
-  Blocks: Record<string, never>;
+  Blocks: EmptyObject;
 }
 
 function typeOfCardOrField(cardOrField: typeof BaseDef) {
@@ -164,7 +166,7 @@ export default class Selector extends Component<Signature> {
                   <div class='selector-item'>
                     {{#if selectorItem.declaration.exportName}}
                       <span class='exported-arrow'>
-                        <DiagonalArrowLeftUp width='10' height='10' />
+                        <DiagonalArrowLeftUp width='20' height='20' />
                       </span>
                       <span
                         class='exported'

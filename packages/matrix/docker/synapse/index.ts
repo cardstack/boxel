@@ -408,7 +408,7 @@ export async function getAllRoomEvents(
     from = end;
     let events: MessageEvent[] = chunk;
     messages.push(...events);
-  } while (from);
+  } while (!from);
   return messages;
 }
 

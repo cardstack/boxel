@@ -16,6 +16,8 @@ import {
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
 import { Loader } from '@cardstack/runtime-common/loader';
 
+import type LoaderService from '@cardstack/host/services/loader-service';
+
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as StringFieldMod from 'https://cardstack.com/base/string';
 
@@ -27,7 +29,6 @@ import {
   setupServerSentEvents,
   type TestContextWithSSE,
   setupIntegrationTestRealm,
-  lookupLoaderService,
 } from '../helpers';
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -38,9 +39,9 @@ module('Integration | realm', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
-    loader = lookupLoaderService().loader;
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
   });
-
   setupServerSentEvents(hooks);
   setupLocalIndexing(hooks);
   setupCardLogs(
@@ -439,7 +440,7 @@ module('Integration | realm', function (hooks) {
     }
 
     let searchIndex = realm.searchIndex;
-    let result = await searchIndex.cardDocument(new URL(json.data.links.self));
+    let result = await searchIndex.card(new URL(json.data.links.self));
     if (result?.type === 'error') {
       throw new Error(
         `unexpected error when getting card from index: ${result.error.detail}`,
@@ -667,7 +668,7 @@ module('Integration | realm', function (hooks) {
             ),
           }),
         );
-        await realm.flushUpdateEvents();
+        await Promise.all([realm.flushOperations(), realm.flushUpdateEvents()]);
         return await response;
       },
     });
@@ -725,7 +726,7 @@ module('Integration | realm', function (hooks) {
     }
 
     let searchIndex = realm.searchIndex;
-    let result = await searchIndex.cardDocument(new URL(json.data.links.self));
+    let result = await searchIndex.card(new URL(json.data.links.self));
     if (result?.type === 'error') {
       throw new Error(
         `unexpected error when getting card from index: ${result.error.detail}`,
@@ -749,10 +750,7 @@ module('Integration | realm', function (hooks) {
 
     let { data: cards } = await searchIndex.search({
       filter: {
-        on: {
-          module: `http://localhost:4202/test/person`,
-          name: 'Person',
-        },
+        on: { module: `http://localhost:4202/test/person`, name: 'Person' },
         eq: { firstName: 'Van Gogh' },
       },
     });
@@ -942,9 +940,7 @@ module('Integration | realm', function (hooks) {
             id: `${testRealmURL}jackie`,
             attributes: { firstName: 'Jackie' },
             relationships: {
-              'pets.0': {
-                links: { self: `${testRealmURL}dir/van-gogh` },
-              },
+              'pets.0': { links: { self: `${testRealmURL}dir/van-gogh` } },
               friend: { links: { self: `${testRealmURL}dir/friend` } },
             },
             meta: {
@@ -968,9 +964,7 @@ module('Integration | realm', function (hooks) {
             data: {
               type: 'card',
               relationships: {
-                'pets.0': {
-                  links: { self: `${testRealmURL}dir/van-gogh` },
-                },
+                'pets.0': { links: { self: `${testRealmURL}dir/van-gogh` } },
               },
               meta: {
                 adoptsFrom: {
@@ -1147,9 +1141,7 @@ module('Integration | realm', function (hooks) {
             id: `${testRealmURL}jackie`,
             attributes: { firstName: 'Jackie' },
             relationships: {
-              'pets.0': {
-                links: { self: `${testRealmURL}dir/van-gogh` },
-              },
+              'pets.0': { links: { self: `${testRealmURL}dir/van-gogh` } },
               friend: { links: { self: `${testRealmURL}dir/friend` } },
             },
             meta: {
@@ -1173,9 +1165,7 @@ module('Integration | realm', function (hooks) {
               type: 'card',
               relationships: {
                 'pets.0': { links: { self: `${testRealmURL}dir/mango` } },
-                'pets.1': {
-                  links: { self: `${testRealmURL}dir/van-gogh` },
-                },
+                'pets.1': { links: { self: `${testRealmURL}dir/van-gogh` } },
               },
               meta: {
                 adoptsFrom: {
@@ -1296,9 +1286,7 @@ module('Integration | realm', function (hooks) {
               type: 'card',
               relationships: {
                 'pets.0': { links: { self: `${testRealmURL}dir/mango` } },
-                'pets.1': {
-                  links: { self: `${testRealmURL}dir/van-gogh` },
-                },
+                'pets.1': { links: { self: `${testRealmURL}dir/van-gogh` } },
               },
               meta: {
                 adoptsFrom: {
@@ -1385,9 +1373,7 @@ module('Integration | realm', function (hooks) {
             attributes: { firstName: 'Jackie' },
             relationships: {
               'pets.0': { links: { self: `${testRealmURL}dir/mango` } },
-              'pets.1': {
-                links: { self: `${testRealmURL}dir/van-gogh` },
-              },
+              'pets.1': { links: { self: `${testRealmURL}dir/van-gogh` } },
             },
             meta: {
               adoptsFrom: {
@@ -1497,9 +1483,7 @@ module('Integration | realm', function (hooks) {
             id: `${testRealmURL}jackie`,
             attributes: { firstName: 'Jackie' },
             relationships: {
-              'pets.0': {
-                links: { self: `${testRealmURL}dir/van-gogh` },
-              },
+              'pets.0': { links: { self: `${testRealmURL}dir/van-gogh` } },
               friend: { links: { self: `${testRealmURL}dir/friend` } },
             },
             meta: {
@@ -1560,10 +1544,7 @@ module('Integration | realm', function (hooks) {
         },
         friend: {
           links: { self: `./dir/different-friend` },
-          data: {
-            id: `${testRealmURL}dir/different-friend`,
-            type: 'card',
-          },
+          data: { id: `${testRealmURL}dir/different-friend`, type: 'card' },
         },
       },
       meta: {
@@ -1637,9 +1618,7 @@ module('Integration | realm', function (hooks) {
             id: `${testRealmURL}jackie`,
             attributes: { firstName: 'Jackie' },
             relationships: {
-              'pets.0': {
-                links: { self: `${testRealmURL}dir/van-gogh` },
-              },
+              'pets.0': { links: { self: `${testRealmURL}dir/van-gogh` } },
               friend: { links: { self: `${testRealmURL}dir/friend` } },
             },
             meta: {
@@ -1701,10 +1680,7 @@ module('Integration | realm', function (hooks) {
         },
         friend: {
           links: { self: `./dir/different-friend` },
-          data: {
-            id: `${testRealmURL}dir/different-friend`,
-            type: 'card',
-          },
+          data: { id: `${testRealmURL}dir/different-friend`, type: 'card' },
         },
       },
       meta: {
@@ -1941,9 +1917,7 @@ module('Integration | realm', function (hooks) {
     let { data: cards } = await searchIndex.search({});
     assert.strictEqual(cards.length, 2, 'two cards found');
 
-    let result = await searchIndex.cardDocument(
-      new URL(`${testRealmURL}cards/2`),
-    );
+    let result = await searchIndex.card(new URL(`${testRealmURL}cards/2`));
     if (result?.type === 'error') {
       throw new Error(
         `unexpected error when getting card from index: ${result.error.detail}`,
@@ -1977,16 +1951,16 @@ module('Integration | realm', function (hooks) {
             },
           }),
         );
-        await realm.flushUpdateEvents();
+        await Promise.all([realm.flushOperations(), realm.flushUpdateEvents()]);
         return await response;
       },
     });
     assert.strictEqual(response.status, 204, 'status was 204');
 
-    result = await searchIndex.cardDocument(new URL(`${testRealmURL}cards/2`));
+    result = await searchIndex.card(new URL(`${testRealmURL}cards/2`));
     assert.strictEqual(result, undefined, 'card was deleted');
 
-    result = await searchIndex.cardDocument(new URL(`${testRealmURL}cards/1`));
+    result = await searchIndex.card(new URL(`${testRealmURL}cards/1`));
     if (result?.type === 'error') {
       throw new Error(
         `unexpected error when getting card from index: ${result.error.detail}`,
@@ -2092,7 +2066,10 @@ module('Integration | realm', function (hooks) {
               body: cardSrc,
             }),
           );
-          await realm.flushUpdateEvents();
+          await Promise.all([
+            realm.flushOperations(),
+            realm.flushUpdateEvents(),
+          ]);
           return await response;
         },
       });
@@ -2158,7 +2135,7 @@ module('Integration | realm', function (hooks) {
             },
           }),
         );
-        await realm.flushUpdateEvents();
+        await Promise.all([realm.flushOperations(), realm.flushUpdateEvents()]);
         assert.strictEqual((await response).status, 302, 'file exists');
 
         response = realm.handle(
@@ -2169,7 +2146,7 @@ module('Integration | realm', function (hooks) {
             },
           }),
         );
-        await realm.flushUpdateEvents();
+        await Promise.all([realm.flushOperations(), realm.flushUpdateEvents()]);
         return await response;
       },
     });

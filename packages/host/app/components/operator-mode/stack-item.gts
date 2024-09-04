@@ -8,6 +8,7 @@ import { service } from '@ember/service';
 import { htmlSafe, SafeString } from '@ember/template';
 import Component from '@glimmer/component';
 
+//@ts-expect-error cached type not available yet
 import { tracked, cached } from '@glimmer/tracking';
 
 import { formatDistanceToNow } from 'date-fns';
@@ -18,7 +19,6 @@ import {
   waitForProperty,
 } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
-import { provide } from 'ember-provide-consume-context';
 import { trackedFunction } from 'ember-resources/util/function';
 
 import { TrackedArray } from 'tracked-built-ins';
@@ -46,8 +46,6 @@ import {
 import {
   type Actions,
   cardTypeDisplayName,
-  CardContextName,
-  RealmSessionContextName,
   Deferred,
 } from '@cardstack/runtime-common';
 
@@ -115,8 +113,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private subscribedCard: CardDef | undefined;
   private contentEl: HTMLElement | undefined;
   private containerEl: HTMLElement | undefined;
-
-  @provide(RealmSessionContextName)
   private realmSession: RealmSessionResource | undefined;
 
   cardTracker = new ElementTracker<{
@@ -178,10 +174,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.args.index + 1 < this.args.stackItems.length;
   }
 
-  @provide(CardContextName)
-  // @ts-expect-error noUnusedLocals
   private get context() {
     return {
+      renderedIn: this as Component<any>,
       cardComponentModifier: this.cardTracker.trackElement,
       actions: this.args.publicAPI,
     };
@@ -412,7 +407,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
           </div>
         {{else}}
           <Header
-            @size='large'
             @title={{this.headerTitle}}
             class={{cn 'header' header--icon-hovered=this.isHoverOnRealmIcon}}
             {{on
@@ -442,8 +436,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
                     <:trigger>
                       <IconButton
                         @icon={{IconPencil}}
-                        @width='20px'
-                        @height='20px'
+                        @width='24px'
+                        @height='24px'
                         class='icon-button'
                         aria-label='Edit'
                         {{on 'click' (fn @publicAPI.editCard this.card)}}
@@ -459,8 +453,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
                     <:trigger>
                       <IconButton
                         @icon={{IconPencil}}
-                        @width='20px'
-                        @height='20px'
+                        @width='24px'
+                        @height='24px'
                         class='icon-save'
                         aria-label='Finish Editing'
                         {{on 'click' (fn @publicAPI.saveCard this.card true)}}
@@ -505,8 +499,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
                 <:trigger>
                   <IconButton
                     @icon={{IconX}}
-                    @width='16px'
-                    @height='16px'
+                    @width='24px'
+                    @height='24px'
                     class='icon-button'
                     aria-label='Close'
                     {{on 'click' (fn @close @item)}}
@@ -535,7 +529,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
             {{ContentElement onSetup=this.setupContentEl}}
             data-test-stack-item-content
           >
-            <Preview @card={{this.card}} @format={{@item.format}} />
+            <Preview
+              @card={{this.card}}
+              @format={{@item.format}}
+              @context={{this.context}}
+            />
             <OperatorModeOverlays
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
               @publicAPI={{@publicAPI}}
@@ -557,7 +555,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         --boxel-header-icon-width: var(--boxel-icon-med);
         --boxel-header-icon-height: var(--boxel-icon-med);
         --boxel-header-padding: var(--boxel-sp-sm);
-        --boxel-header-text-font: var(--boxel-font-med);
+        --boxel-header-text-size: var(--boxel-font-med);
         --boxel-header-border-radius: var(--boxel-border-radius-xl);
         z-index: 1;
         background-color: var(--boxel-light);
@@ -579,7 +577,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
       .header--icon-hovered {
         --boxel-header-text-color: var(--boxel-highlight);
-        --boxel-header-text-font: var(--boxel-font);
+        --boxel-header-text-size: var(--boxel-font);
       }
 
       .save-indicator {
@@ -639,7 +637,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         font: 700 var(--boxel-font);
         gap: var(--boxel-sp-xxxs);
         --boxel-header-padding: var(--boxel-sp-xs);
-        --boxel-header-text-font: var(--boxel-font-size);
+        --boxel-header-text-size: var(--boxel-font-size);
         --boxel-header-icon-width: var(--boxel-icon-sm);
         --boxel-header-icon-height: var(--boxel-icon-sm);
         --boxel-header-border-radius: var(--boxel-border-radius-lg);

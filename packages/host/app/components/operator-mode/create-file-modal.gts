@@ -1,17 +1,19 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
+import { capitalize } from '@ember/string';
 import { buildWaiter } from '@ember/test-waiters';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import camelCase from 'camelcase';
 import { restartableTask, enqueueTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
+import camelCase from 'lodash/camelCase';
 
 import {
   FieldContainer,
@@ -40,11 +42,13 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
-import CardPill from '../card-pill';
 import ModalContainer from '../modal-container';
 
 import Pill from '../pill';
 import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
+
+import RealmIcon from './realm-icon';
+import RealmInfoProvider from './realm-info-provider';
 
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
@@ -119,15 +123,12 @@ export default class CreateFileModal extends Component<Signature> {
               >
                 <div class='field-contents'>
                   {{#if this.definitionClass}}
-                    <Pill class='definition-pill'>
+                    <Pill @inert={{true}}>
                       {{this.definitionClass.displayName}}
                     </Pill>
                   {{else}}
                     {{#if this.selectedCatalogEntry}}
-                      <CardPill
-                        @card={{this.selectedCatalogEntry}}
-                        data-test-selected-type={{this.selectedCatalogEntry.title}}
-                      />
+                      <SelectedTypePill @entry={{this.selectedCatalogEntry}} />
                     {{/if}}
                     <Button
                       class={{if this.selectedCatalogEntry 'change-trigger'}}
@@ -298,9 +299,6 @@ export default class CreateFileModal extends Component<Signature> {
       .error-message {
         color: var(--boxel-error-100);
         margin-top: var(--boxel-sp-lg);
-      }
-      .definition-pill {
-        padding-left: var(--boxel-sp-xxxs);
       }
     </style>
   </template>
@@ -518,7 +516,6 @@ export default class CreateFileModal extends Component<Signature> {
     this.selectedCatalogEntry = await chooseCard({
       filter: {
         on: catalogEntryRef,
-        // REMEMBER ME
         eq: { isField },
       },
     });
@@ -571,13 +568,19 @@ export default class CreateFileModal extends Component<Signature> {
     let {
       ref: { name: exportName, module },
     } = (this.definitionClass ?? this.selectedCatalogEntry)!; // we just checked above to make sure one of these exists
-    let className = convertToClassName(this.displayName);
+    let className = camelize(this.displayName);
+    // make sure we don't collide with a javascript built-in object
+    if (typeof (globalThis as any)[className] !== 'undefined') {
+      className = `${className}0`;
+    }
     let absoluteModule = new URL(module, this.selectedCatalogEntry?.id);
     let moduleURL = maybeRelativeURL(
       absoluteModule,
       url,
       this.selectedRealmURL,
     );
+    // sanitize the name since it will be used in javascript code
+    let safeName = this.displayName.replace(/[^A-Za-z \d-_]/g, '').trim();
     let src: string[] = [];
 
     // There is actually only one possible declaration collision: `className` and `parent`,
@@ -587,14 +590,13 @@ export default class CreateFileModal extends Component<Signature> {
 import { ${exportName} as ${exportName}Parent } from '${moduleURL}';
 import { Component } from 'https://cardstack.com/base/card-api';
 export class ${className} extends ${exportName}Parent {
-  static displayName = "${this.displayName}";`);
+  static displayName = "${safeName}";`);
     } else if (exportName === 'default') {
-      let parent = camelCase(
+      let parent = camelize(
         module
           .split('/')
           .pop()!
           .replace(/\.[^.]+$/, ''),
-        { pascalCase: true },
       );
       // check for parent/className declaration collision
       parent = parent === className ? `${parent}Parent` : parent;
@@ -602,13 +604,13 @@ export class ${className} extends ${exportName}Parent {
 import ${parent} from '${moduleURL}';
 import { Component } from 'https://cardstack.com/base/card-api';
 export class ${className} extends ${parent} {
-  static displayName = "${this.displayName}";`);
+  static displayName = "${safeName}";`);
     } else {
       src.push(`
 import { ${exportName} } from '${moduleURL}';
 import { Component } from 'https://cardstack.com/base/card-api';
 export class ${className} extends ${exportName} {
-  static displayName = "${this.displayName}";`);
+  static displayName = "${safeName}";`);
     }
     src.push(`\n  /*`);
     if (this.fileType.id === 'card-definition') {
@@ -728,31 +730,39 @@ export class ${className} extends ${exportName} {
   });
 }
 
-export function convertToClassName(input: string) {
-  // \p{L}: a letter
-  let invalidLeadingCharactersRemoved = camelCase(
-    input.replace(/^[^\p{L}_$]+/u, ''),
-    { pascalCase: true },
-  );
-
-  if (!invalidLeadingCharactersRemoved) {
-    let prefixedInput = `Class${input}`;
-    invalidLeadingCharactersRemoved = camelCase(
-      prefixedInput.replace(/^[^\p{L}_$]+/u, ''),
-      { pascalCase: true },
-    );
-  }
-
-  let className = invalidLeadingCharactersRemoved.replace(
-    // \p{N}: a number
-    /[^\p{L}\p{N}_$]+/gu,
-    '',
-  );
-
-  // make sure we don't collide with a javascript built-in object
-  if (typeof (globalThis as any)[className] !== 'undefined') {
-    className = `${className}0`;
-  }
-
-  return className;
+function camelize(name: string) {
+  return capitalize(camelCase(name));
 }
+
+const SelectedTypePill: TemplateOnlyComponent<{
+  entry: CatalogEntry;
+}> = <template>
+  <Pill
+    @inert={{true}}
+    class='selected-type'
+    data-test-selected-type={{@entry.title}}
+  >
+    <:icon>
+      <RealmInfoProvider @fileURL={{@entry.id}}>
+        <:ready as |realmInfo|>
+          <RealmIcon
+            @realmIconURL={{realmInfo.iconURL}}
+            @realmName={{realmInfo.name}}
+          />
+        </:ready>
+      </RealmInfoProvider>
+    </:icon>
+    <:default>
+      {{@entry.title}}
+    </:default>
+  </Pill>
+  <style>
+    .selected-type {
+      padding: var(--boxel-sp-xxxs);
+      gap: var(--boxel-sp-xxxs);
+    }
+    .selected-type :deep(.icon) {
+      margin-right: 0;
+    }
+  </style>
+</template>;

@@ -22,7 +22,7 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
   <div class={{cn 'accordion-item' @className open=@isOpen}} ...attributes>
     <button class='title' {{on 'click' @onClick}}>
       <span class='caret'>
-        <DropdownArrowDown width={{12}} height={{12}} />
+        <DropdownArrowDown width={{20}} height={{20}} />
       </span>
       {{yield to='title'}}
     </button>
@@ -74,16 +74,13 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
     .caret {
       --icon-color: var(--boxel-highlight);
       display: inline-block;
+      margin-right: var(--boxel-sp-xxxs);
       width: var(--boxel-icon-sm);
       height: var(--boxel-icon-sm);
-    }
-
-    .caret :deep(svg) {
       transform: rotate(-90deg);
       transition: transform var(--boxel-transition);
     }
-
-    .accordion-item.open > .title > .caret :deep(svg) {
+    .accordion-item.open > .title > .caret {
       transform: rotate(0deg);
     }
   </style>

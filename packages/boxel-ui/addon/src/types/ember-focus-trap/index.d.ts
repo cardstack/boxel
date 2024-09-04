@@ -1,5 +1,6 @@
 declare module 'ember-focus-trap/modifiers/focus-trap' {
   import type { FunctionBasedModifier } from 'ember-modifier';
+  import type { EmptyObject } from '@ember/component/helper';
   import type { Options } from 'focus-trap';
 
   const focusTrap: FunctionBasedModifier<{
@@ -11,7 +12,7 @@ declare module 'ember-focus-trap/modifiers/focus-trap' {
         isPaused?: boolean;
         shouldSelfFocus?: boolean;
       };
-      Positional: Record<string, never>;
+      Positional: EmptyObject;
     };
     Element: HTMLElement;
   }>;

@@ -1,21 +1,11 @@
 import { notFound, CardError, responseWithError } from './error';
-import { RealmPaths, RequestContext, logger } from './index';
+import { Realm, RealmPaths, logger } from './index';
 
 export class AuthenticationError extends Error {}
 export class AuthorizationError extends Error {}
-export enum AuthenticationErrorMessages {
-  MissingAuthHeader = 'Missing Authorization header',
-  PermissionMismatch = "User permissions in the JWT payload do not match the server's permissions", // Could happen if the user's permissions were changed during the life of the JWT
-  TokenExpired = 'Token expired',
-  TokenInvalid = 'Token invalid',
-}
 
-type Handler = (
-  request: Request,
-  requestContext: RequestContext,
-) => Promise<Response>;
-
-export type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'HEAD';
+type Handler = (request: Request) => Promise<Response>;
+export type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 export enum SupportedMimeType {
   CardJson = 'application/vnd.card+json',
   CardSource = 'application/vnd.card+source',
@@ -24,15 +14,13 @@ export enum SupportedMimeType {
   Session = 'application/json',
   EventStream = 'text/event-stream',
   HTML = 'text/html',
-  JSONAPI = 'application/vnd.api+json',
-  All = '*/*',
 }
 
 function isHTTPMethod(method: unknown): method is Method {
   if (typeof method !== 'string') {
     return false;
   }
-  return ['GET', 'POST', 'PATCH', 'DELETE', 'HEAD'].includes(method);
+  return ['GET', 'POST', 'PATCH', 'DELETE'].includes(method);
 }
 
 export function extractSupportedMimeType(
@@ -55,14 +43,10 @@ export function extractSupportedMimeType(
 
 export type RouteTable<T> = Map<SupportedMimeType, Map<Method, Map<string, T>>>;
 
-export function lookupRouteTable<T>(
-  routeTable: RouteTable<T>,
-  paths: RealmPaths,
-  request: Request,
-) {
+export function lookupRouteTable<T>(routeTable: RouteTable<T>, paths: RealmPaths, request: Request) {
   let acceptMimeType = extractSupportedMimeType(
     request.headers.get('Accept') as unknown as null | string | [string],
-  );
+  )
   if (!acceptMimeType) {
     return;
   }
@@ -75,7 +59,7 @@ export function lookupRouteTable<T>(
   }
 
   // we construct a new URL within RealmPath.local() param that strips off the query string
-  let requestPath = `/${paths.local(new URL(request.url))}`;
+  let requestPath = `/${paths.local(request.url)}`;
   // add a leading and trailing slashes back so we can match on routing rules for directories.
   requestPath =
     request.url.endsWith('/') && requestPath !== '/'
@@ -93,10 +77,7 @@ export function lookupRouteTable<T>(
 }
 
 export class Router {
-  #routeTable: RouteTable<Handler> = new Map<
-    SupportedMimeType,
-    Map<Method, Map<string, Handler>>
-  >();
+  #routeTable: RouteTable<Handler> = new Map<SupportedMimeType, Map<Method, Map<string, Handler>>>();
   log = logger('realm:router');
   #paths: RealmPaths;
   constructor(mountURL: URL) {
@@ -117,10 +98,6 @@ export class Router {
   }
   delete(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
     this.setRoute(mimeType, 'DELETE', path, handler);
-    return this;
-  }
-  head(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
-    this.setRoute(mimeType, 'HEAD', path, handler);
     return this;
   }
 
@@ -147,19 +124,16 @@ export class Router {
     return !!this.lookupHandler(request);
   }
 
-  async handle(
-    request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
+  async handle(realm: Realm, request: Request): Promise<Response> {
     let handler = this.lookupHandler(request);
     if (!handler) {
-      return notFound(request, requestContext);
+      return notFound(realm, request);
     }
     try {
-      return await handler(request, requestContext);
+      return await handler(request);
     } catch (err) {
       if (err instanceof CardError) {
-        return responseWithError(err, requestContext);
+        return responseWithError(realm, err);
       }
 
       this.log.error(err);

@@ -12,7 +12,7 @@ import { cn, eq, gt } from '@cardstack/boxel-ui/helpers';
 
 import { Eye as EyeIcon } from '@cardstack/boxel-ui/icons';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
 
 import CardCatalogItem from './item';
 import CardCatalogResultsHeader from './results-header';
@@ -26,6 +26,7 @@ interface Signature {
     results: RealmCards[];
     select: (card?: CardDef, ev?: KeyboardEvent | MouseEvent) => void;
     selectedCard: CardDef | undefined;
+    context?: CardContext;
   };
 }
 
@@ -59,6 +60,7 @@ export default class CardCatalog extends Component<Signature> {
                     @title={{card.title}}
                     @description={{card.description}}
                     @thumbnailURL={{card.thumbnailURL}}
+                    @context={{@context}}
                   />
                   <button
                     class='select'

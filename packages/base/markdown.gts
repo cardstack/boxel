@@ -1,19 +1,29 @@
-import { not } from '@cardstack/boxel-ui/helpers';
-import { Component } from './card-api';
-import StringField from './string';
+import { primitive, Component, useIndexBasedKey, FieldDef } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-import { markdownToHtml } from '@cardstack/runtime-common';
+import { marked } from 'marked';
+import { sanitizeHtml } from '@cardstack/runtime-common';
+
+const markdownOpts = {
+  mangle: false,
+  headerIds: false,
+};
+
+function toHtml(markdown: string | null) {
+  return markdown ? sanitizeHtml(marked(markdown, markdownOpts)) : '';
+}
 
 class View extends Component<typeof MarkdownField> {
   <template>
     <div>
-      {{{markdownToHtml @model}}}
+      {{{toHtml @model}}}
     </div>
   </template>
 }
 
-export default class MarkdownField extends StringField {
+export default class MarkdownField extends FieldDef {
   static displayName = 'Markdown';
+  static [primitive]: string;
+  static [useIndexBasedKey]: never;
 
   static embedded = View;
   static atom = View;
@@ -25,7 +35,6 @@ export default class MarkdownField extends StringField {
         @type='textarea'
         @value={{@model}}
         @onInput={{@set}}
-        @disabled={{not @canEdit}}
       />
     </template>
   };

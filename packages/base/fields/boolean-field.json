@@ -4,7 +4,6 @@
     "attributes": {
       "title": "Boolean Field",
       "description": "A field that captures boolean values (true/false)",
-      "isField": true,
       "ref": {
         "module": "https://cardstack.com/base/boolean",
         "name": "default"

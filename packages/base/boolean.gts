@@ -2,7 +2,6 @@ import {
   primitive,
   serialize,
   queryableValue,
-  formatQuery,
   Component,
   useIndexBasedKey,
   FieldDef,
@@ -12,7 +11,6 @@ import {
 } from './card-api';
 import { fn } from '@ember/helper';
 import { RadioInput } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
 
 // this allows multiple radio groups rendered on the page
 // to stay independent of one another.
@@ -50,10 +48,10 @@ export default class BooleanField extends FieldDef {
   }
 
   static [queryableValue](val: any): boolean {
-    return asBoolean(val);
-  }
-  static [formatQuery](val: any): boolean {
-    return asBoolean(val);
+    if (typeof val === 'string') {
+      return val.toLowerCase() === 'true';
+    }
+    return Boolean(val);
   }
 
   static embedded = View;
@@ -68,7 +66,6 @@ export default class BooleanField extends FieldDef {
           name='{{this.radioGroup}}'
           @checkedId={{this.checkedId}}
           @hideBorder={{true}}
-          @disabled={{not @canEdit}}
           as |item|
         >
           <item.component @onChange={{fn @set item.data.value}}>
@@ -89,11 +86,4 @@ export default class BooleanField extends FieldDef {
       return String(this.args.model);
     }
   };
-}
-
-function asBoolean(val: any): boolean {
-  if (typeof val === 'string') {
-    return val.toLowerCase() === 'true';
-  }
-  return Boolean(val);
 }

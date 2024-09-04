@@ -32,8 +32,8 @@ export default class AiAssistantChatInput extends Component<Signature> {
         @value={{@value}}
         @onInput={{@onInput}}
         @placeholder='Enter a prompt'
-        {{onKeyMod 'Shift+Enter' this.insertNewLine}}
-        {{onKeyMod 'Enter' this.onSend}}
+        {{onKeyMod 'cmd+Enter' this.onSend}}
+        {{onKeyMod 'ctrl+Enter' this.onSend}}
         {{setCssVar chat-input-height=this.height}}
         ...attributes
       />
@@ -90,25 +90,11 @@ export default class AiAssistantChatInput extends Component<Signature> {
         background-color: var(--boxel-300);
         pointer-events: none;
       }
-      .send-button :deep(svg) {
-        padding-top: var(--boxel-sp-5xs);
-      }
     </style>
   </template>
 
-  @action onSend(ev: Event) {
-    ev.preventDefault();
-    if ('shiftKey' in ev && ev.shiftKey) {
-      return;
-    }
-    if (!this.args.canSend) {
-      return;
-    }
+  @action onSend() {
     this.args.onSend(this.args.value);
-  }
-
-  @action insertNewLine() {
-    this.args.onInput(`${this.args.value}\n\n`);
   }
 
   get height() {

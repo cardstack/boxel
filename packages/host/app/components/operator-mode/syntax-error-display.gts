@@ -49,9 +49,7 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
         </div>
 
         <hr />
-        <pre data-test-syntax-errors>{{this.removeSourceMappingURL
-            @syntaxErrors
-          }}</pre>
+        <pre>{{this.removeSourceMappingURL @syntaxErrors}}</pre>
       </div>
     </div>
   </template>

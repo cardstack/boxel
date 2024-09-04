@@ -336,32 +336,6 @@ export async function selectCardFromCatalog(
   await page.locator('[data-test-card-catalog-go-button]').click();
 }
 
-export async function setupTwoStackItems(
-  page: Page,
-  leftStackTopCardId: string,
-  rightStackTopCardId: string,
-) {
-  await page
-    .locator(
-      `[data-test-stack-item-content] [data-test-cards-grid-item='${rightStackTopCardId}']`,
-    )
-    .click();
-  await page
-    .locator(
-      `[data-test-stack-card='${rightStackTopCardId}'] [data-test-close-button]`,
-    )
-    .click();
-  await page
-    .locator(
-      `[data-test-stack-item-content] [data-test-cards-grid-item='${leftStackTopCardId}']`,
-    )
-    .click();
-  await page.locator('[data-test-add-card-right-stack]').click();
-  await page
-    .locator(`[data-test-search-result="${rightStackTopCardId}"]`)
-    .click();
-}
-
 export async function sendMessage(
   page: Page,
   roomId: string,

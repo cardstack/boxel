@@ -18,7 +18,8 @@ import {
   Options as RemoveOptions,
 } from './remove-field-plugin';
 import { ImportUtil } from 'babel-import-util';
-import camelCase from 'camelcase';
+import camelCase from 'lodash/camelCase';
+import upperFirst from 'lodash/upperFirst';
 import isEqual from 'lodash/isEqual';
 import { parseTemplates } from '@cardstack/ember-template-imports/lib/parse-templates';
 import {
@@ -472,7 +473,7 @@ function suggestedCardName(
   if (name === 'default') {
     name = ref.module.split('/').pop()!;
   }
-  return camelCase(`${name} ${type}`, { pascalCase: true });
+  return upperFirst(camelCase(`${name} ${type}`));
 }
 
 function insertFieldBeforePath(

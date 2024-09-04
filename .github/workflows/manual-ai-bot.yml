@@ -1,0 +1,36 @@
+name: Manual Deploy [ai-bot]
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: false
+        default: staging
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: Build Docker image
+    uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
+    secrets: inherit
+    with:
+      repository: "boxel-ai-bot-${{ inputs.environment }}"
+      environment: ${{ inputs.environment }}
+      dockerfile: "packages/ai-bot/Dockerfile"
+
+  deploy:
+    needs: [build]
+    name: Deploy to AWS ECS
+    uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
+    secrets: inherit
+    with:
+      container-name: "boxel-ai-bot"
+      environment: ${{ inputs.environment }}
+      cluster: ${{ inputs.environment }}
+      service-name: "boxel-ai-bot-${{ inputs.environment }}"
+      image: ${{ needs.build.outputs.image }}

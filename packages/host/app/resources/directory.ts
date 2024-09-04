@@ -1,5 +1,4 @@
 import { registerDestructor } from '@ember/destroyable';
-import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
@@ -38,7 +37,7 @@ export class DirectoryResource extends Resource<Args> {
   @service declare loaderService: LoaderService;
   @service declare messageService: MessageService;
 
-  constructor(owner: Owner) {
+  constructor(owner: unknown) {
     super(owner);
     registerDestructor(this, () => {
       if (this.subscription) {
@@ -77,7 +76,6 @@ export class DirectoryResource extends Resource<Args> {
       return;
     }
     let entries = await this.getEntries(this.directoryURL);
-
     entries.sort((a, b) => {
       // need to re-insert the leading and trailing /'s in order to get a sort
       // that can organize the paths correctly
@@ -95,7 +93,6 @@ export class DirectoryResource extends Resource<Args> {
     });
     if (!response.ok) {
       // the server takes a moment to become ready do be tolerant of errors at boot
-
       log.error(
         `Could not get directory listing ${url}, status ${response.status}: ${
           response.statusText

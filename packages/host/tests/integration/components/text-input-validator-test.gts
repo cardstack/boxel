@@ -12,7 +12,7 @@ import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
-import { RealmSessionContextName, baseRealm } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 
@@ -21,6 +21,7 @@ import CardEditor from '@cardstack/host/components/card-editor';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
+import type LoaderService from '@cardstack/host/services/loader-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -30,10 +31,7 @@ import {
   setupLocalIndexing,
   saveCard,
   setupIntegrationTestRealm,
-  provideConsumeContext,
-  lookupLoaderService,
 } from '../../helpers';
-import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -44,11 +42,10 @@ module('Integration | text-input-validator', function (hooks) {
   let realm: Realm;
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
-  setupMatrixServiceMock(hooks);
 
   async function loadCard(url: string): Promise<CardDef> {
     let { createFromSerialized, recompute } = cardApi;
-    let result = await realm.searchIndex.cardDocument(new URL(url));
+    let result = await realm.searchIndex.card(new URL(url));
     if (!result || result.type === 'error') {
       throw new Error(
         `cannot get instance ${url} from the index: ${
@@ -67,12 +64,13 @@ module('Integration | text-input-validator', function (hooks) {
   }
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
-    provideConsumeContext(RealmSessionContextName, {
-      canWrite: true,
-    });
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
 
-    loader = lookupLoaderService().loader;
-
+    loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL('http://localhost:4201/base/'),
+    );
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     let bigInteger: typeof import('https://cardstack.com/base/big-integer');
     cardApi = await loader.import(`${baseRealm.url}card-api`);

@@ -1,10 +1,10 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
+//@ts-ignore cached not available yet in definitely typed
 import { cached, tracked } from '@glimmer/tracking';
 
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
@@ -26,10 +26,7 @@ import {
 
 import { eq, gt, or } from '@cardstack/boxel-ui/helpers';
 
-import {
-  type ResolvedCodeRef,
-  catalogEntryRef,
-} from '@cardstack/runtime-common';
+import { catalogEntryRef } from '@cardstack/runtime-common';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RecentCards from '@cardstack/host/services/recent-cards-service';
@@ -58,7 +55,6 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     mode: SearchSheetMode;
-    onSetup: (doSearch: (term: string) => void) => void;
     onCancel: () => void;
     onFocus: () => void;
     onBlur: () => void;
@@ -78,27 +74,22 @@ let elementCallback = modifier(
 );
 
 export default class SearchSheet extends Component<Signature> {
-  @tracked private searchKey = '';
-  @tracked private isSearching = false;
-  private searchCardResults: CardDef[] = new TrackedArray<CardDef>();
+  @tracked searchKey = '';
+  @tracked isSearching = false;
+  searchCardResults: CardDef[] = new TrackedArray<CardDef>();
   @tracked cardURL = '';
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
   @service declare recentCardsService: RecentCards;
 
-  constructor(owner: Owner, args: any) {
-    super(owner, args);
-    this.args.onSetup(this.doExternallyTriggeredSearch);
-  }
-
-  private get inputBottomTreatment() {
+  get inputBottomTreatment() {
     return this.args.mode == SearchSheetModes.Closed
       ? BoxelInputBottomTreatments.Rounded
       : BoxelInputBottomTreatments.Flat;
   }
 
-  private get searchLabel() {
+  get searchLabel() {
     if (this.getCard.isRunning) {
       return `Fetching ${this.searchKey}`;
     } else if (this.searchKeyIsURL) {
@@ -116,7 +107,7 @@ export default class SearchSheet extends Component<Signature> {
     }
   }
 
-  private get inputValidationState() {
+  get inputValidationState() {
     if (
       this.searchKeyIsURL &&
       !this.getCard.isRunning &&
@@ -128,7 +119,7 @@ export default class SearchSheet extends Component<Signature> {
     }
   }
 
-  private get sheetSize() {
+  get sheetSize() {
     switch (this.args.mode) {
       case SearchSheetModes.Closed:
         return 'closed';
@@ -142,7 +133,14 @@ export default class SearchSheet extends Component<Signature> {
     return undefined;
   }
 
-  private get placeholderText() {
+  get isGoDisabled() {
+    // TODO after we have ember concurrency task for search implemented,
+    // make sure to also include the task.isRunning as criteria for
+    // disabling the go button
+    return (!this.searchKey && !this.cardURL) || this.getCard.isRunning;
+  }
+
+  get placeholderText() {
     let mode = this.args.mode;
     if (
       mode == SearchSheetModes.SearchPrompt ||
@@ -153,11 +151,7 @@ export default class SearchSheet extends Component<Signature> {
     return 'Search for…';
   }
 
-  private get searchKeyIsURL() {
-    let maybeType = getCodeRefFromSearchKey(this.searchKey);
-    if (maybeType) {
-      return false;
-    }
+  get searchKeyIsURL() {
     try {
       new URL(this.searchKey);
       return true;
@@ -185,35 +179,42 @@ export default class SearchSheet extends Component<Signature> {
   });
 
   @action
-  private onCancel() {
+  onCancel() {
     this.resetState();
     this.args.onCancel();
   }
 
-  @action private handleCardSelect(card: CardDef) {
+  @action handleCardSelect(card: CardDef) {
     this.resetState();
     this.args.onCardSelect(card);
   }
 
   @action
-  private doExternallyTriggeredSearch(term: string) {
-    this.searchKey = term;
-    this.searchCard.perform(this.searchKey);
+  setCardURL(cardURL: string) {
+    this.cardURL = cardURL;
   }
 
-  private resetState() {
+  @action
+  onGo() {
+    // load card if URL field is populated, otherwise perform search if search term specified
+    if (this.cardURL) {
+      this.getCard.perform(this.cardURL);
+    }
+  }
+
+  resetState() {
     this.searchKey = '';
     this.cardURL = '';
     this.clearSearchCardResults();
   }
 
   @cached
-  private get orderedRecentCards() {
+  get orderedRecentCards() {
     // Most recently added first
     return [...this.recentCardsService.recentCards].reverse();
   }
 
-  private debouncedSearchFieldUpdate = debounce(() => {
+  debouncedSearchFieldUpdate = debounce(() => {
     if (!this.searchKey) {
       this.clearSearchCardResults();
       this.isSearching = false;
@@ -223,7 +224,7 @@ export default class SearchSheet extends Component<Signature> {
   }, 500);
 
   @action
-  private onSearchFieldUpdated() {
+  onSearchFieldUpdated() {
     if (this.searchKey) {
       if (this.searchKeyIsURL) {
         this.getCard.perform(this.searchKey);
@@ -235,7 +236,7 @@ export default class SearchSheet extends Component<Signature> {
   }
 
   @action
-  private setSearchKey(searchKey: string) {
+  setSearchKey(searchKey: string) {
     this.searchKey = searchKey;
     this.isSearching = true;
     this.debouncedSearchFieldUpdate();
@@ -247,29 +248,19 @@ export default class SearchSheet extends Component<Signature> {
   }
 
   private searchCard = restartableTask(async (searchKey: string) => {
-    let type = getCodeRefFromSearchKey(searchKey);
-    let searchTerm = !type ? searchKey : undefined;
     let query = {
       filter: {
         every: [
           {
-            ...(type
-              ? { type }
-              : {
-                  not: {
-                    type: catalogEntryRef,
-                  },
-                }),
+            not: {
+              type: catalogEntryRef,
+            },
           },
-          ...(searchTerm
-            ? [
-                {
-                  contains: {
-                    title: searchTerm,
-                  },
-                },
-              ]
-            : []),
+          {
+            contains: {
+              title: searchKey,
+            },
+          },
         ],
       },
     };
@@ -291,11 +282,11 @@ export default class SearchSheet extends Component<Signature> {
     this.isSearching = false;
   });
 
-  private get isSearchKeyNotEmpty() {
+  get isSearchKeyNotEmpty() {
     return !!this.searchKey && this.searchKey !== '';
   }
 
-  @action private onSearchInputKeyDown(e: KeyboardEvent) {
+  @action onSearchInputKeyDown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       this.onCancel();
       (e.target as HTMLInputElement)?.blur?.();
@@ -503,17 +494,4 @@ export default class SearchSheet extends Component<Signature> {
       }
     </style>
   </template>
-}
-
-function getCodeRefFromSearchKey(
-  searchKey: string,
-): ResolvedCodeRef | undefined {
-  if (searchKey.startsWith('carddef:')) {
-    let internalKey = searchKey.substring('carddef:'.length);
-    let parts = internalKey.split('/');
-    let name = parts.pop()!;
-    let module = parts.join('/');
-    return { module, name };
-  }
-  return undefined;
 }

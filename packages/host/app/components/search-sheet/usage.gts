@@ -36,10 +36,6 @@ export default class SearchSheetUsage extends Component {
     // noop
   }
 
-  @action onSearchSetup() {
-    // noop
-  }
-
   <template>
     <FreestyleUsage @name='SearchSheet'>
       <:description>
@@ -49,7 +45,6 @@ export default class SearchSheetUsage extends Component {
         <div class='example-container'>
           <SearchSheet
             @mode={{this.mode}}
-            @onSetup={{this.onSearchSetup}}
             @onCancel={{this.onCancel}}
             @onFocus={{this.onFocus}}
             @onBlur={{this.onBlur}}

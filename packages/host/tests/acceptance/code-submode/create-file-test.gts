@@ -2,11 +2,13 @@ import type Owner from '@ember/owner';
 import { click, fillIn, waitFor } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
+import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
 
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import {
@@ -19,10 +21,9 @@ import {
   waitForCodeEditor,
   getMonacoContent,
   visitOperatorMode as _visitOperatorMode,
+  TestRealmAdapter,
   type TestContextWithSave,
-  lookupLoaderService,
 } from '../../helpers';
-import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
 const testRealmURL2 = 'http://test-realm/test2/';
@@ -92,7 +93,6 @@ const files: Record<string, any> = {
       attributes: {
         title: 'Error',
         description: 'Catalog entry for Error',
-        isField: false,
         ref: {
           module: '../error',
           name: 'default',
@@ -115,7 +115,6 @@ const files: Record<string, any> = {
       attributes: {
         title: 'Pet',
         description: 'Catalog entry for Pet',
-        isField: false,
         ref: { module: `../pet`, name: 'default' },
       },
       meta: {
@@ -132,7 +131,6 @@ const files: Record<string, any> = {
       attributes: {
         title: 'Person',
         description: 'Catalog entry for Person',
-        isField: false,
         ref: { module: `../person`, name: 'Person' },
       },
       meta: {
@@ -222,29 +220,34 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks, { realmPermissions: () => realmPermissions });
 
+  hooks.afterEach(async function () {
+    window.localStorage.removeItem('recent-files');
+  });
+
   hooks.beforeEach(async function () {
+    window.localStorage.removeItem('recent-files');
     realmPermissions = {
       [baseRealm.url]: ['read'],
       [testRealmURL]: ['read', 'write'],
       [testRealmURL2]: ['read', 'write'],
     };
-
-    lookupLoaderService().virtualNetwork.mount(
-      async (req: Request) => {
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+    await setupAcceptanceTestRealm({
+      loader,
+      contents: filesB,
+      realmURL: testRealmURL2,
+      onFetch: async (req: Request) => {
         // Some tests need a simulated creation failure
         if (req.url.includes('fetch-failure')) {
           throw new Error('A deliberate fetch error');
         }
-        return null;
-      },
-      { prepend: true },
-    );
 
-    await setupAcceptanceTestRealm({
-      contents: filesB,
-      realmURL: testRealmURL2,
+        return { req, res: null };
+      },
     });
     ({ adapter } = await setupAcceptanceTestRealm({
+      loader,
       contents: files,
     }));
   });
@@ -557,12 +560,12 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   });
 
   test<TestContextWithSave>('can create a new card definition in different realm than inherited definition', async function (assert) {
-    assert.expect(11);
+    assert.expect(9);
     let expectedSrc = `
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
-export class TrèsTestCard extends CardDef {
-  static displayName = "Très test card 😀";
+export class TestCard extends CardDef {
+  static displayName = "Test Card";
 
   /*
   static isolated = class Isolated extends Component<typeof this> {
@@ -588,14 +591,14 @@ export class TrèsTestCard extends CardDef {
     assert
       .dom('[data-test-create-definition]')
       .isDisabled('create button is disabled');
-    await fillIn('[data-test-display-name-field]', 'Très test card 😀');
+    await fillIn('[data-test-display-name-field]', 'Test Card');
     assert
       .dom(`[data-test-inherits-from-field] [data-test-boxel-field-label]`)
       .hasText('Inherits From');
     assert
       .dom('[data-test-create-definition]')
       .isDisabled('create button is disabled');
-    await fillIn('[data-test-file-name-field]', 'très-test-card');
+    await fillIn('[data-test-file-name-field]', 'test-card');
     assert
       .dom('[data-test-create-definition]')
       .isEnabled('create button is enabled');
@@ -615,11 +618,7 @@ export class TrèsTestCard extends CardDef {
       'monaco displays the new definition',
     );
 
-    await waitFor('[data-test-card-schema="Très test card 😀"]');
-    assert.dom('[data-test-current-module-name]').hasText('très-test-card.gts');
-    assert
-      .dom('[data-test-card-url-bar-input]')
-      .hasValue(`${testRealmURL}très-test-card.gts`);
+    await waitFor('[data-test-card-schema="Test Card"]');
     assert
       .dom('[data-test-card-schema]')
       .exists({ count: 3 }, 'the card hierarchy is displayed in schema editor');
@@ -682,34 +681,7 @@ export class TestCard extends Person {
     await deferred.promise;
   });
 
-  test<TestContextWithSave>('can create new card definition in different realm than realm of current file opened in code mode', async function (assert) {
-    let done = assert.async();
-    await visitOperatorMode(this.owner, `${baseRealm.url}card-api.gts`);
-    await openNewFileModal('Card Definition');
-
-    await click('[data-test-select-card-type]');
-    await waitFor('[data-test-card-catalog-modal]');
-    await waitFor(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
-    await click(`[data-test-select="${testRealmURL}Catalog-Entry/person"]`);
-    await click('[data-test-card-catalog-go-button]');
-    await waitFor(`[data-test-selected-type="Person"]`);
-
-    await fillIn('[data-test-display-name-field]', 'Test Card');
-    await fillIn('[data-test-file-name-field]', 'test-card');
-
-    this.onSave((url, content) => {
-      if (typeof content !== 'string') {
-        throw new Error(`expected string save data`);
-      }
-      assert.strictEqual(url.href, `${testRealmURL}test-card.gts`);
-      done();
-    });
-
-    await click('[data-test-create-definition]');
-    await waitFor('[data-test-create-file-modal]', { count: 0 });
-  });
-
-  test('an error when creating a new card definition is shown', async function (assert) {
+  test<TestContextWithSave>('an error when creating a new card definition is shown', async function (assert) {
     await visitOperatorMode(this.owner);
     await openNewFileModal('Card Definition');
 
@@ -796,7 +768,7 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
     await deferred.promise;
   });
 
-  test('an error when creating a new field definition is shown', async function (assert) {
+  test<TestContextWithSave>('an error when creating a new field definition is shown', async function (assert) {
     await visitOperatorMode(this.owner);
     await openNewFileModal('Field Definition');
     await click('[data-test-select-card-type]');
@@ -960,6 +932,54 @@ import Pet from './pet';
 import { Component } from 'https://cardstack.com/base/card-api';
 export class Map0 extends Pet {
   static displayName = "Map";
+
+  /*
+  static isolated = class Isolated extends Component<typeof this> {
+    <template></template>
+  }
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+  static atom = class Atom extends Component<typeof this> {
+    <template></template>
+  }
+
+  static edit = class Edit extends Component<typeof this> {
+    <template></template>
+  }
+  */
+}`.trim(),
+        'the source is correct',
+      );
+      deferred.fulfill();
+    });
+
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+  });
+
+  test<TestContextWithSave>('can sanitize display name when creating a new definition', async function (assert) {
+    assert.expect(1);
+    await visitOperatorMode(this.owner);
+    await openNewFileModal('Card Definition');
+
+    await fillIn('[data-test-display-name-field]', 'Test Card; { }');
+    await fillIn('[data-test-file-name-field]', 'test-card');
+    let deferred = new Deferred<void>();
+    this.onSave((_, content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(
+        content,
+        `
+import { CardDef } from 'https://cardstack.com/base/card-api';
+import { Component } from 'https://cardstack.com/base/card-api';
+export class TestCard extends CardDef {
+  static displayName = "Test Card";
 
   /*
   static isolated = class Isolated extends Component<typeof this> {

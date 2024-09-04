@@ -1,5 +1,4 @@
 import Service, { service } from '@ember/service';
-
 import { tracked } from '@glimmer/tracking';
 
 import type LoaderService from './loader-service';
@@ -13,13 +12,13 @@ export default class MessageService extends Service {
   }
 
   subscribe(realmURL: string, cb: (ev: MessageEvent) => void): () => void {
-    let maybeEventSource = this.subscriptions.get(realmURL);
+    let resolvedRealmURL = this.loaderService.loader.resolve(realmURL);
+    let maybeEventSource = this.subscriptions.get(resolvedRealmURL.href);
 
     if (!maybeEventSource) {
-      maybeEventSource =
-        this.loaderService.virtualNetwork.createEventSource(realmURL);
+      maybeEventSource = new EventSource(resolvedRealmURL);
       maybeEventSource.onerror = () => eventSource.close();
-      this.subscriptions.set(realmURL, maybeEventSource);
+      this.subscriptions.set(resolvedRealmURL.href, maybeEventSource);
     }
 
     let eventSource = maybeEventSource;

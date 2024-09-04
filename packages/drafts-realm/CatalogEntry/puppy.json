@@ -4,7 +4,6 @@
     "attributes": {
       "title": "Puppy",
       "description": "Catalog entry for Puppy card",
-      "isField": false,
       "ref": {
         "module": "../puppy-card",
         "name": "PuppyCard"

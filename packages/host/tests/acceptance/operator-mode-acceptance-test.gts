@@ -23,6 +23,7 @@ import {
   tokenRefreshPeriodSec,
   sessionLocalStorageKey,
 } from '@cardstack/host/resources/realm-session';
+import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
   percySnapshot,
@@ -32,7 +33,6 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
-  lookupLoaderService,
 } from '../helpers';
 import {
   MockMatrixService,
@@ -49,10 +49,18 @@ module('Acceptance | operator mode tests', function (hooks) {
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks, { expiresInSec: () => sessionExpirationSec });
 
+  hooks.afterEach(async function () {
+    window.localStorage.removeItem('recent-cards');
+    window.localStorage.removeItem('recent-files');
+  });
+
   hooks.beforeEach(async function () {
+    window.localStorage.removeItem('recent-cards');
+    window.localStorage.removeItem('recent-files');
     sessionExpirationSec = 60 * 60;
 
-    let loader = lookupLoaderService().loader;
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
@@ -249,6 +257,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     }
 
     await setupAcceptanceTestRealm({
+      loader,
       contents: {
         'address.gts': { Address },
         'boom-field.gts': { BoomField },
@@ -265,7 +274,6 @@ module('Acceptance | operator mode tests', function (hooks) {
             attributes: {
               title: 'Person Card',
               description: 'Catalog entry for Person Card',
-              isField: false,
               ref: {
                 module: `${testRealmURL}person`,
                 name: 'Person',
@@ -398,7 +406,6 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.dom('[data-test-stack-card-index="0"]').exists(); // Index card opens in the stack
 
     await waitFor(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`);
-
     assert
       .dom(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`)
       .exists();
@@ -408,14 +415,6 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert
       .dom(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`)
       .exists();
-    assert
-      .dom(`[data-test-cards-grid-item="${testRealmURL}index"]`)
-      .doesNotExist('grid cards do not show other grid cards');
-    // this was an unspelled, but very valid assertion that percy is making
-    // that I'm now making concrete
-    assert
-      .dom(`[data-test-cards-grid-item="${testRealmURL}grid"]`)
-      .doesNotExist('grid cards do not show other grid cards');
     // this asserts that cards that throw errors during search
     // query deserialization (boom.json) are handled gracefully
     assert
@@ -442,7 +441,6 @@ module('Acceptance | operator mode tests', function (hooks) {
       codePath: `${testRealmURL}employee.gts`,
     });
 
-    await waitFor('[data-test-profile-icon-button]');
     assert.dom('[data-test-profile-icon]').hasText('T');
     assert
       .dom('[data-test-profile-icon]')
@@ -569,11 +567,19 @@ module('Acceptance | operator mode tests', function (hooks) {
     await click(
       '[data-test-address-with-no-embedded] [data-test-open-code-submode]',
     );
-    await waitUntil(() =>
-      currentURL().includes('address-with-no-embedded-template.gts'),
-    );
     assert.operatorModeParametersMatch(currentURL(), {
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: Submodes.Code,
       codePath: `${testRealmURL}address-with-no-embedded-template.gts`,
+      fileView: 'inspector',
+      openDirs: {},
     });
 
     // Toggle back to interactive mode
@@ -587,12 +593,19 @@ module('Acceptance | operator mode tests', function (hooks) {
     await click(
       '[data-test-country-with-no-embedded] [data-test-open-code-submode]',
     );
-    await waitUntil(() =>
-      currentURL().includes('country-with-no-embedded-template.gts'),
-    );
     assert.operatorModeParametersMatch(currentURL(), {
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+        ],
+      ],
       submode: Submodes.Code,
       codePath: `${testRealmURL}country-with-no-embedded-template.gts`,
+      fileView: 'inspector',
+      openDirs: {},
     });
   });
 
@@ -626,6 +639,20 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       // Submode is reflected in the URL
       assert.operatorModeParametersMatch(currentURL(), {
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+          ],
+          [
+            {
+              id: `${testRealmURL}Pet/mango`,
+              format: 'isolated',
+            },
+          ],
+        ],
         submode: Submodes.Code,
         codePath: `${testRealmURL}Pet/mango.json`,
         fileView: 'inspector',
@@ -643,12 +670,28 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       // Submode is reflected in the URL
       assert.operatorModeParametersMatch(currentURL(), {
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+          ],
+          [
+            {
+              id: `${testRealmURL}Pet/mango`,
+              format: 'isolated',
+            },
+          ],
+        ],
         submode: Submodes.Interact,
+        fileView: 'inspector',
+        openDirs: { [testRealmURL]: ['Pet/'] },
       });
     });
   });
 
-  module('realm session expiration', function (hooks) {
+  module('realm session expiration', function () {
     let refreshInSec = 2;
 
     hooks.beforeEach(async function () {

@@ -7,11 +7,7 @@ import { type CodeRef, isCodeRef } from './index';
 export interface Query {
   filter?: Filter;
   sort?: Sort;
-  page?: {
-    number: number; // page.number is 0-based
-    size: number;
-    realmVersion?: number;
-  };
+  page?: { size?: number | string; cursor?: string }; // Support for this is not yet implmented
 }
 
 export type CardURL = string;
@@ -59,20 +55,16 @@ export interface EqFilter extends TypedFilter {
   eq: { [fieldName: string]: JSON.Value };
 }
 
-export const RANGE_OPERATORS: Record<RangeOperator, string> = {
-  gt: '>',
-  gte: '>=',
-  lt: '<',
-  lte: '<=',
-};
-export type RangeOperator = 'gt' | 'gte' | 'lt' | 'lte';
-export type RangeFilterValue = {
-  [range in RangeOperator]?: JSON.Value;
-};
-
 export interface RangeFilter extends TypedFilter {
   range: {
-    [fieldName: string]: RangeFilterValue;
+    [fieldName: string]: {
+      // these might be objects that have custom queryable values so we need to
+      // be permissive on the types
+      gt?: JSON.Value;
+      gte?: JSON.Value;
+      lt?: JSON.Value;
+      lte?: JSON.Value;
+    };
   };
 }
 

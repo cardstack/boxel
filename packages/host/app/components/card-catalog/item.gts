@@ -7,6 +7,8 @@ import { cn } from '@cardstack/boxel-ui/helpers';
 
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
+import type { CardContext } from 'https://cardstack.com/base/card-api';
+
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
 
@@ -16,6 +18,7 @@ interface Signature {
     title: string | null;
     description: string | null;
     thumbnailURL: string | null;
+    context?: CardContext;
   };
 }
 
@@ -93,7 +96,7 @@ export default class CardCatalogItem extends Component<Signature> {
     if (!path) {
       return undefined;
     }
-    let realmPath = new RealmPaths(this.cardService.defaultURL);
+    let realmPath = new RealmPaths(this.cardService.defaultURL.href);
 
     if (/^(\.\.\/)+/.test(path)) {
       let localPath = new URL(path, realmPath.url).pathname.replace(/^\//, '');

@@ -6,10 +6,6 @@ import { tracked } from '@glimmer/tracking';
 
 import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
-import { v4 as uuidv4 } from 'uuid';
-
-import type { StackItem } from '@cardstack/host/lib/stack-item';
-import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
 import { getRoom } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -19,7 +15,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
-import type { MessageField } from 'https://cardstack.com/base/message';
+import type { MessageField } from 'https://cardstack.com/base/room';
 
 import AiAssistantCardPicker from '../ai-assistant/card-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
@@ -44,23 +40,29 @@ export default class Room extends Component<Signature> {
       data-test-room-name={{this.room.name}}
       data-test-room={{this.room.roomId}}
     >
-      {{#if this.room.messages}}
+      {{#if this.hasMessagesOrPending}}
         <AiAssistantConversation>
           {{#each this.room.messages as |message i|}}
             <RoomMessage
-              @room={{this.room}}
-              @roomId={{@roomId}}
               @message={{message}}
-              @index={{i}}
-              @isPending={{this.isPendingMessage message}}
               @monacoSDK={{@monacoSDK}}
               @isStreaming={{this.isMessageStreaming message i}}
               @currentEditor={{this.currentMonacoContainer}}
               @setCurrentEditor={{this.setCurrentMonacoContainer}}
-              @retryAction={{this.maybeRetryAction i message}}
               data-test-message-idx={{i}}
             />
           {{/each}}
+          {{#if this.pendingMessage}}
+            <RoomMessage
+              @message={{this.pendingMessage}}
+              @monacoSDK={{@monacoSDK}}
+              @isStreaming={{false}}
+              @isPending={{true}}
+              @currentEditor={{this.currentMonacoContainer}}
+              @setCurrentEditor={{this.setCurrentMonacoContainer}}
+              data-test-message-idx={{this.room.messages.length}}
+            />
+          {{/if}}
         </AiAssistantConversation>
       {{else}}
         <NewSession @sendPrompt={{this.sendPrompt}} />
@@ -76,7 +78,7 @@ export default class Room extends Component<Signature> {
             data-test-message-field={{this.room.roomId}}
           />
           <AiAssistantCardPicker
-            @autoAttachedCards={{this.autoAttachedCards}}
+            @autoAttachedCard={{this.autoAttachedCard}}
             @cardsToAttach={{this.cardsToAttach}}
             @chooseCard={{this.chooseCard}}
             @removeCard={{this.removeCard}}
@@ -118,25 +120,15 @@ export default class Room extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
 
   private roomResource = getRoom(this, () => this.args.roomId);
-  private autoAttachmentResource = getAutoAttachment(
-    this,
-    () => this.topMostStackItems,
-    () => this.cardsToAttach,
-  );
+  private lastTopMostCard: CardDef | undefined;
 
+  @tracked private isAutoAttachedCardDisplayed = true;
   @tracked private currentMonacoContainer: number | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
   }
-
-  maybeRetryAction = (messageIndex: number, message: MessageField) => {
-    if (this.isLastMessage(messageIndex) && message.isRetryable) {
-      return this.resendLastMessage;
-    }
-    return undefined;
-  };
 
   @action isMessageStreaming(message: MessageField, messageIndex: number) {
     return (
@@ -152,9 +144,12 @@ export default class Room extends Component<Signature> {
     await this.roomResource.loading;
   });
 
+  private get hasMessagesOrPending() {
+    return (this.room && this.room.messages.length > 0) || this.pendingMessage;
+  }
+
   private get room() {
-    let room = this.roomResource.room;
-    return room;
+    return this.roomResource.room;
   }
 
   private doWhenRoomChanges = restartableTask(async () => {
@@ -169,32 +164,8 @@ export default class Room extends Component<Signature> {
     return this.matrixService.cardsToSend.get(this.args.roomId);
   }
 
-  @action resendLastMessage() {
-    if (!this.room) {
-      throw new Error(
-        'Bug: should not be able to resend a message without a room.',
-      );
-    }
-
-    let myMessages = this.room.messages.filter(
-      (message) => message.author.userId === this.matrixService.userId,
-    );
-    if (myMessages.length === 0) {
-      throw new Error(
-        'Bug: should not be able to resend a message that does not exist.',
-      );
-    }
-    let myLastMessage = myMessages[myMessages.length - 1];
-
-    let attachedCards = (myLastMessage!.attachedResources || [])
-      .map((resource) => resource.card)
-      .filter((card) => card !== undefined) as CardDef[];
-
-    this.doSendMessage.perform(
-      myLastMessage.message,
-      attachedCards,
-      myLastMessage.clientGeneratedId,
-    );
+  private get pendingMessage() {
+    return this.matrixService.pendingMessages.get(this.args.roomId);
   }
 
   @action sendPrompt(prompt: string) {
@@ -212,10 +183,8 @@ export default class Room extends Component<Signature> {
     if (this.cardsToAttach) {
       cards.push(...this.cardsToAttach);
     }
-    if (this.autoAttachedCards.size > 0) {
-      this.autoAttachedCards.forEach((card) => {
-        cards.push(card);
-      });
+    if (this.autoAttachedCard) {
+      cards.push(this.autoAttachedCard);
     }
     this.doSendMessage.perform(
       this.messageToSend,
@@ -232,60 +201,52 @@ export default class Room extends Component<Signature> {
   }
 
   @action
-  private isAutoAttachedCard(card: CardDef) {
-    return this.autoAttachedCards.has(card);
+  private removeCard(card: CardDef) {
+    // If card doesn't exist in `cardsToAttch`,
+    // then it is an auto-attached card.
+    const cardIndex = this.cardsToAttach?.findIndex((c) => c.id === card.id);
+    if (
+      cardIndex == undefined ||
+      (cardIndex === -1 && this.autoAttachedCard?.id === card.id)
+    ) {
+      this.isAutoAttachedCardDisplayed = false;
+    } else {
+      if (cardIndex != undefined && cardIndex !== -1) {
+        this.cardsToAttach?.splice(cardIndex, 1);
+      }
+      this.matrixService.cardsToSend.set(
+        this.args.roomId,
+        this.cardsToAttach?.length ? this.cardsToAttach : undefined,
+      );
+    }
   }
 
-  @action
-  private removeCard(card: CardDef) {
-    if (this.isAutoAttachedCard(card)) {
-      this.autoAttachmentResource.onCardRemoval(card);
-    } else {
-      const cardIndex = this.cardsToAttach?.findIndex((c) => c.id === card.id);
-      if (cardIndex != undefined && cardIndex !== -1) {
-        if (this.cardsToAttach !== undefined) {
-          this.autoAttachmentResource.onCardRemoval(
-            this.cardsToAttach[cardIndex],
-          );
-          this.cardsToAttach.splice(cardIndex, 1);
-        }
-      }
-    }
-    this.matrixService.cardsToSend.set(
-      this.args.roomId,
-      this.cardsToAttach?.length ? this.cardsToAttach : undefined,
-    );
-  }
   private doSendMessage = enqueueTask(
-    async (
-      message: string | undefined,
-      cards?: CardDef[],
-      clientGeneratedId: string = uuidv4(),
-    ) => {
-      this.matrixService.messagesToSend.set(this.args.roomId, undefined);
-      this.matrixService.cardsToSend.set(this.args.roomId, undefined);
+    async (message: string | undefined, cards?: CardDef[]) => {
       let context = {
         submode: this.operatorModeStateService.state.submode,
         openCardIds: this.operatorModeStateService
           .topMostStackItems()
-          .filter((stackItem) => stackItem)
           .map((stackItem) => stackItem.card.id),
       };
       await this.matrixService.sendMessage(
         this.args.roomId,
         message,
         cards,
-        clientGeneratedId,
         context,
       );
     },
   );
 
-  get topMostStackItems(): StackItem[] {
-    return this.operatorModeStateService.topMostStackItems();
+  @action
+  private setLastTopMostCard(card: CardDef) {
+    if (this.lastTopMostCard?.id !== card.id) {
+      this.lastTopMostCard = card;
+      this.isAutoAttachedCardDisplayed = true;
+    }
   }
 
-  get lastTopMostCard() {
+  private get autoAttachedCard(): CardDef | undefined {
     let stackItems = this.operatorModeStateService.topMostStackItems();
     if (stackItems.length === 0) {
       return undefined;
@@ -305,23 +266,24 @@ export default class Room extends Component<Signature> {
         return undefined;
       }
     }
-    return topMostCard;
-  }
+    this.setLastTopMostCard(topMostCard);
 
-  private get autoAttachedCards() {
-    return this.autoAttachmentResource.cards;
+    let card = this.cardsToAttach?.find((c) => c.id === topMostCard.id);
+    if (!this.isAutoAttachedCardDisplayed || card) {
+      return undefined;
+    }
+
+    return topMostCard;
   }
 
   private get canSend() {
     return (
       !this.doSendMessage.isRunning &&
       Boolean(
-        this.messageToSend?.trim() ||
+        this.messageToSend ||
           this.cardsToAttach?.length ||
-          this.autoAttachedCards.size !== 0,
-      ) &&
-      !!this.room &&
-      !this.room.messages.some((m) => this.isPendingMessage(m))
+          this.autoAttachedCard,
+      )
     );
   }
 
@@ -334,10 +296,6 @@ export default class Room extends Component<Signature> {
 
   @action private setCurrentMonacoContainer(index: number | undefined) {
     this.currentMonacoContainer = index;
-  }
-
-  private isPendingMessage(message: MessageField) {
-    return message.status === 'sending' || message.status === 'queued';
   }
 }
 

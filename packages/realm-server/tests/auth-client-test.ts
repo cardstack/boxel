@@ -35,11 +35,12 @@ module('realm-auth-client', function (assert) {
     } as RealmAuthMatrixClientInterface;
 
     let virtualNetwork = new VirtualNetwork();
+    let loader = virtualNetwork.createLoader();
 
     client = new RealmAuthClient(
       new URL('http://testrealm.com/'),
       mockMatrixClient,
-      virtualNetwork.fetch,
+      loader,
     ) as any;
 
     // [] notation is a hack to make TS happy so we can set private properties with mocks

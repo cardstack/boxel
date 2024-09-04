@@ -1,5 +1,4 @@
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
 import { on } from '@ember/modifier';
 import { restartableTask } from 'ember-concurrency';
 import {
@@ -177,14 +176,15 @@ class Isolated extends Component<typeof CardsGrid> {
     isLoading: boolean;
   };
 
-  constructor(owner: Owner, args: any) {
+  constructor(owner: unknown, args: any) {
     super(owner, args);
     this.liveQuery = getLiveCards(
       {
         filter: {
           not: {
-            eq: {
-              _cardType: 'Cards Grid',
+            type: {
+              module: `${baseRealm.url}cards-grid`,
+              name: 'CardsGrid',
             },
           },
         },
@@ -197,7 +197,7 @@ class Isolated extends Component<typeof CardsGrid> {
               module: `${baseRealm.url}card-api`,
               name: 'CardDef',
             },
-            by: '_cardType',
+            by: 'cardType',
           },
           {
             on: {
@@ -225,21 +225,6 @@ class Isolated extends Component<typeof CardsGrid> {
   get instances() {
     if (!this.liveQuery) {
       return;
-    }
-
-    // This is a nice place to measure the end of the app boot as this is where
-    // we'll get the instances to show in the index card's grid which is usually
-    // what we present when showing the app for the first time
-    if (
-      (globalThis as any).__bootStart &&
-      (globalThis as any).__environment !== 'test' &&
-      this.liveQuery.instances.length > 0
-    ) {
-      console.log(
-        `time since app boot: ${
-          performance.now() - (globalThis as any).__bootStart
-        } ms`,
-      );
     }
     return this.liveQuery.instances;
   }

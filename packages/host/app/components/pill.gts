@@ -1,10 +1,10 @@
-import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import Component from '@glimmer/component';
 
-import { element, cn, eq } from '@cardstack/boxel-ui/helpers';
+import { element, cn } from '@cardstack/boxel-ui/helpers';
 
 export interface PillSignature {
   Args: {
-    kind?: 'button' | 'default';
+    inert?: boolean;
   };
   Blocks: {
     default: [];
@@ -13,38 +13,38 @@ export interface PillSignature {
   Element: HTMLButtonElement | HTMLDivElement;
 }
 
-const Pill: TemplateOnlyComponent<PillSignature> = <template>
-  {{#let (element (if (eq @kind 'button') 'button' 'div')) as |Tag|}}
-    <Tag class={{cn 'pill' button-pill=(eq @kind 'button')}} ...attributes>
-      {{#if (has-block 'icon')}}
+export default class Pill extends Component<PillSignature> {
+  <template>
+    {{#let (element (if @inert 'div' 'button')) as |Tag|}}
+      <Tag class={{cn 'pill' inert=@inert}} ...attributes>
         <figure class='icon'>
           {{yield to='icon'}}
         </figure>
-      {{/if}}
-      {{yield}}
-    </Tag>
-  {{/let}}
+        {{yield}}
+      </Tag>
+    {{/let}}
 
-  <style>
-    @layer {
+    <style>
       .pill {
         display: inline-flex;
         align-items: center;
-        gap: var(--pill-gap, var(--boxel-sp-5xs));
-        padding: var(
-          --pill-padding,
-          var(--boxel-sp-5xs) var(--boxel-sp-xxxs) var(--boxel-sp-5xs)
-            var(--boxel-sp-5xs)
-        );
+        gap: var(--boxel-sp-5xs);
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-xxxs) var(--boxel-sp-5xs)
+          var(--boxel-sp-5xs);
         background-color: var(--boxel-light);
-        color: var(--boxel-dark);
         border: 1px solid var(--boxel-400);
         border-radius: var(--boxel-border-radius-sm);
         font: 700 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
       }
 
-      .button-pill:not(:disabled):hover {
+      .inert {
+        border: 0;
+        background-color: var(--boxel-100);
+        color: inherit;
+      }
+
+      .pill:not(.inert):hover {
         background-color: var(--boxel-100);
       }
 
@@ -57,8 +57,6 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
       .icon > :deep(*) {
         height: var(--pill-icon-size, 1.25rem);
       }
-    }
-  </style>
-</template>;
-
-export default Pill;
+    </style>
+  </template>
+}

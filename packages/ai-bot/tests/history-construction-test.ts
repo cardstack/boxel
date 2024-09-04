@@ -1,7 +1,7 @@
 import { module, test, assert } from 'qunit';
 import { constructHistory } from '../helpers';
 import { type IRoomEvent } from 'matrix-js-sdk';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
 
 module('constructHistory', () => {
   test('should return an empty array when the input array is empty', () => {

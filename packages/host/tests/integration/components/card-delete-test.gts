@@ -2,7 +2,6 @@ import { waitUntil, waitFor, click, focus } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { setupRenderingTest } from 'ember-qunit';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -11,6 +10,8 @@ import { Realm } from '@cardstack/runtime-common/realm';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RecentCardsService from '@cardstack/host/services/recent-cards-service';
@@ -24,11 +25,10 @@ import {
   setupLocalIndexing,
   setupOnSave,
   setupServerSentEvents,
+  TestRealmAdapter,
   type TestContextWithSSE,
   setupIntegrationTestRealm,
-  lookupLoaderService,
 } from '../../helpers';
-import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
 
@@ -40,12 +40,12 @@ let setCardInOperatorModeState: (
 ) => Promise<void>;
 
 module('Integration | card-delete', function (hooks) {
-  let realm: Realm;
   let adapter: TestRealmAdapter;
+  let realm: Realm;
   let noop = () => {};
   async function loadCard(url: string): Promise<CardDef> {
     let { createFromSerialized, recompute } = cardApi;
-    let result = await realm.searchIndex.cardDocument(new URL(url));
+    let result = await realm.searchIndex.card(new URL(url));
     if (!result || result.type === 'error') {
       throw new Error(
         `cannot get instance ${url} from the index: ${
@@ -64,7 +64,8 @@ module('Integration | card-delete', function (hooks) {
   }
   setupRenderingTest(hooks);
   hooks.beforeEach(async function () {
-    loader = lookupLoaderService().loader;
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
     cardApi = await loader.import(`${baseRealm.url}card-api`);
   });
   setupLocalIndexing(hooks);
@@ -75,9 +76,13 @@ module('Integration | card-delete', function (hooks) {
   );
   setupServerSentEvents(hooks);
   setupMatrixServiceMock(hooks);
-  setupWindowMock(hooks);
+  hooks.afterEach(async function () {
+    localStorage.removeItem('recent-cards');
+  });
 
   hooks.beforeEach(async function () {
+    localStorage.removeItem('recent-cards');
+
     setCardInOperatorModeState = async (
       leftCards: string[],
       rightCards: string[] = [],

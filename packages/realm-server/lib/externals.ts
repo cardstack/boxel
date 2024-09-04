@@ -18,11 +18,6 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@cardstack/boxel-ui/icons', {
     default() {},
   });
-  virtualNetwork.shimModule('@cardstack/boxel-ui/modifiers', {
-    setCssVar: class {},
-    SortableGroupModifier: class {},
-    SortableItemModifier: class {},
-  });
   // import * as glimmerComponent from "@glimmer/component";
   virtualNetwork.shimModule('@glimmer/component', {
     default: class {},
@@ -81,26 +76,6 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     task() {},
     restartableTask() {},
   });
-  virtualNetwork.shimModule('ember-provide-consume-context', {
-    consume() {
-      return () => {};
-    },
-    provide() {
-      return () => {};
-    },
-  });
-  virtualNetwork.shimModule(
-    'ember-provide-consume-context/components/context-consumer',
-    {
-      default: class {},
-    },
-  );
-  virtualNetwork.shimModule(
-    'ember-provide-consume-context/components/context-provider',
-    {
-      default: class {},
-    },
-  );
   // import * as emberConcurrencyAsyncArrowRuntime from 'ember-concurrency/-private/async-arrow-runtime';
   virtualNetwork.shimModule('ember-concurrency/-private/async-arrow-runtime', {
     default: () => {},
@@ -124,6 +99,4 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@ember/destroyable', {});
   virtualNetwork.shimModule('marked', { marked: () => {} });
   virtualNetwork.shimModule('ethers', ethers);
-  virtualNetwork.shimModule('super-fast-md5', { md5: (_data: string) => {} });
-  virtualNetwork.shimModule('matrix-js-sdk', {});
 }

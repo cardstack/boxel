@@ -9,6 +9,7 @@ import {
 } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
+import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
@@ -22,6 +23,7 @@ import {
 
 import { Realm } from '@cardstack/runtime-common/realm';
 
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
@@ -413,14 +415,23 @@ module('Acceptance | code submode tests', function (hooks) {
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks);
 
+  hooks.afterEach(async function () {
+    window.localStorage.removeItem('recent-files');
+  });
+
   hooks.beforeEach(async function () {
+    window.localStorage.removeItem('recent-files');
     monacoService = this.owner.lookup(
       'service:monaco-service',
     ) as MonacoService;
 
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     ({ realm } = await setupAcceptanceTestRealm({
+      loader,
       contents: {
         'index.gts': indexCardSource,
         'pet-person.gts': personCardSource,
@@ -443,7 +454,6 @@ module('Acceptance | code submode tests', function (hooks) {
             attributes: {
               title: 'Person',
               description: 'Catalog entry',
-              isField: false,
               ref: {
                 module: `./person`,
                 name: 'Person',
@@ -1419,7 +1429,6 @@ module('Acceptance | code submode tests', function (hooks) {
 
     await click('[data-test-select-card-type]');
     await waitFor('[data-test-card-catalog-modal]');
-    await percySnapshot(assert);
     let cardCatalogModalOverlay = document.querySelector(
       '[data-test-card-catalog-modal]',
     )?.previousElementSibling;

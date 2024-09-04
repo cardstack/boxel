@@ -15,6 +15,7 @@ import { baseRealm } from '@cardstack/runtime-common';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
+import type LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
@@ -22,7 +23,6 @@ import {
   setupLocalIndexing,
   setupIntegrationTestRealm,
   setupServerSentEvents,
-  lookupLoaderService,
 } from '../../helpers';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
@@ -38,7 +38,8 @@ module('Integration | card-catalog', function (hooks) {
   const noop = () => {};
 
   hooks.beforeEach(async function () {
-    let loader = lookupLoaderService().loader;
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
     let textArea: typeof import('https://cardstack.com/base/text-area');
@@ -94,7 +95,6 @@ module('Integration | card-catalog', function (hooks) {
         'CatalogEntry/publishing-packet.json': new CatalogEntry({
           title: 'Publishing Packet',
           description: 'Catalog entry for PublishingPacket',
-          isField: false,
           ref: {
             module: `../publishing-packet`,
             name: 'PublishingPacket',
@@ -103,7 +103,6 @@ module('Integration | card-catalog', function (hooks) {
         'CatalogEntry/author.json': new CatalogEntry({
           title: 'Author',
           description: 'Catalog entry for Author',
-          isField: false,
           ref: {
             module: `${testRealmURL}author`,
             name: 'Author',
@@ -112,7 +111,6 @@ module('Integration | card-catalog', function (hooks) {
         'CatalogEntry/blog-post.json': new CatalogEntry({
           title: 'BlogPost',
           description: 'Catalog entry for BlogPost',
-          isField: false,
           ref: {
             module: `${testRealmURL}blog-post`,
             name: 'BlogPost',
@@ -121,7 +119,6 @@ module('Integration | card-catalog', function (hooks) {
         'CatalogEntry/address.json': new CatalogEntry({
           title: 'Address',
           description: 'Catalog entry for Address field',
-          isField: true,
           ref: {
             module: `${testRealmURL}address`,
             name: 'Address',

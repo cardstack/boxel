@@ -1,29 +1,26 @@
 import Service from '@ember/service';
 
+import { type RealmAdapter } from '@cardstack/runtime-common';
 import {
-  type IndexResults,
-  type Indexer,
-  type RealmAdapter,
-} from '@cardstack/runtime-common';
+  SearchEntryWithErrors,
+  type RunState,
+} from '@cardstack/runtime-common/search-index';
 
 // Tests inject an implementation of this service to help perform indexing
 // for the test-realm-adapter
 export default class LocalIndexer extends Service {
   setup(
-    _fromScratch: (realmURL: URL) => Promise<IndexResults>,
+    _fromScratch: (realmURL: URL) => Promise<RunState>,
     _incremental: (
+      prev: RunState,
       url: URL,
-      realmURL: URL,
       operation: 'update' | 'delete',
-      ignoreData: Record<string, string>,
-    ) => Promise<IndexResults>,
+    ) => Promise<RunState>,
   ) {}
   get adapter(): RealmAdapter {
     return {} as RealmAdapter;
   }
-  get indexer(): Indexer {
-    return {} as Indexer;
-  }
+  async setEntry(_url: URL, _entry: SearchEntryWithErrors) {}
 }
 
 declare module '@ember/service' {

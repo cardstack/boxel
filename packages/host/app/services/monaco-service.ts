@@ -1,4 +1,3 @@
-import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
@@ -32,8 +31,8 @@ export default class MonacoService extends Service {
   // this is in the service so that we can manipulate it in our tests
   serverEchoDebounceMs = serverEchoDebounceMs;
 
-  constructor(owner: Owner) {
-    super(owner);
+  constructor(properties: object) {
+    super(properties);
     this.#ready = this.loadMonacoSDK.perform();
   }
 

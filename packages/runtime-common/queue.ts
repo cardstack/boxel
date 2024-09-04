@@ -1,4 +1,4 @@
-import { type PgPrimitive } from './index';
+import { PgPrimitive } from './index';
 import { Deferred } from './deferred';
 
 export interface QueueOpts {
@@ -10,7 +10,7 @@ export interface Queue {
   hasStarted: boolean;
   // postgres needs time to initialize, so we only start our queue after
   // postgres is running
-  start: () => Promise<void>;
+  start: () => void;
   destroy: () => Promise<void>;
   register: <A, T>(category: string, handler: (arg: A) => Promise<T>) => void;
   publish: <T>(
@@ -27,7 +27,7 @@ export interface JobNotifier {
 
 export class Job<T> {
   constructor(
-    readonly id: number,
+    public uuid: string,
     private notifier: Deferred<T>,
   ) {}
   get done(): Promise<T> {

@@ -7,12 +7,15 @@ import {
 } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
+import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
 
 import { Realm } from '@cardstack/runtime-common/realm';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
   setupLocalIndexing,
@@ -230,13 +233,22 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks);
 
+  hooks.afterEach(async function () {
+    window.localStorage.removeItem('recent-files');
+  });
+
   hooks.beforeEach(async function () {
+    window.localStorage.removeItem('recent-files');
+
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     ({ realm } = await setupAcceptanceTestRealm({
+      loader,
       contents: {
         'index.gts': indexCardSource,
-        'empty.gts': ' ',
         'pet-person.gts': personCardSource,
         'person.gts': personCardSource,
         'friend.gts': friendCardSource,
@@ -249,7 +261,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
             attributes: {
               title: 'Person',
               description: 'Catalog entry',
-              isField: false,
               ref: {
                 module: `./person`,
                 name: 'Person',
@@ -573,15 +584,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       '[data-test-select="https://cardstack.com/base/fields/biginteger-field"]',
     );
     await click('[data-test-card-catalog-go-button]');
-    // There is some additional thing we are waiting on here, probably the
-    // card to load in the card resource, but I'm not too sure so using waitUntil instead
-    await waitUntil(
-      () =>
-        document
-          .querySelector('[data-test-selected-field-display-name]')
-          ?.textContent?.includes('BigInteger'),
-    );
-
     await assert.dom('[data-test-selected-field-realm-icon] img').exists();
     await assert
       .dom('[data-test-selected-field-display-name]')
@@ -597,15 +599,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       '[data-test-select="https://cardstack.com/base/fields/date-field"]',
     );
     await click('[data-test-card-catalog-go-button]');
-    // There is some additional thing we are waiting on here, probably the
-    // card to load in the card resource, but I'm not too sure so using waitUntil instead
-    await waitUntil(
-      () =>
-        document
-          .querySelector('[data-test-selected-field-display-name]')
-          ?.textContent?.includes('Date'),
-    );
-
     await assert.dom('[data-test-selected-field-display-name]').hasText('Date');
     assert.dom('[data-test-save-field-button]').hasAttribute('disabled');
 
@@ -653,7 +646,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   });
 
   test<TestContextWithSSE>('adding a field from schema editor - cardinality test', async function (assert) {
-    assert.expect(10);
+    assert.expect(9);
     let waitForOpts = { timeout: 2000 }; // Helps mitigating flaky tests since Writing to a file + reflecting that in the UI can be a bit slow
     let expectedEvents = [
       {
@@ -688,10 +681,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'luckyNumbers');
     await click('[data-test-boxel-radio-option-id="many"]');
-    await waitFor('.card-chooser-area [data-test-selected-field-display-name]');
-    assert
-      .dom('.card-chooser-area [data-test-selected-field-display-name]')
-      .containsText('BigInteger');
     await saveField(this, assert, expectedEvents);
 
     await waitFor(
@@ -1079,17 +1068,5 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       '[data-test-card-schema="Blog Post"] [data-test-field-name="editorBio"] [data-test-card-display-name="Author Bio"]',
       'mouseleave',
     );
-  });
-
-  test('an empty file is detected', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}empty.gts`,
-    });
-
-    await waitForCodeEditor();
-    await waitFor('[data-test-syntax-errors]');
-
-    assert.dom('[data-test-syntax-errors]').hasText('File is empty');
   });
 });

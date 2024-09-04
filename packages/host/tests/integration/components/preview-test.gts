@@ -10,7 +10,9 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import Preview from '@cardstack/host/components/preview';
 
-import { lookupLoaderService, testRealmURL } from '../../helpers';
+import type LoaderService from '@cardstack/host/services/loader-service';
+
+import { testRealmURL } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -25,7 +27,8 @@ module('Integration | preview', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(async function () {
-    loader = lookupLoaderService().loader;
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     this.owner.register('service:local-indexer', MockLocalIndexer);

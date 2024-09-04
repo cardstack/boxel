@@ -1,3 +1,4 @@
+import { type EmptyObject } from '@ember/component/helper';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import type { ComponentLike } from '@glint/template';
 
@@ -82,7 +83,7 @@ export const IconButton: TemplateOnlyComponent<IconButtonSignature> = <template>
 </template>;
 
 interface TextSignature {
-  Args: unknown;
+  Args: EmptyObject;
   Blocks: { default: [] };
   Element: HTMLSpanElement;
 }
@@ -121,7 +122,7 @@ export const Text: TemplateOnlyComponent<TextSignature> = <template>
 interface SelectAccessorySignature<ItemT = any> {
   Args: BoxelSelectArgs<ItemT>;
   Blocks: {
-    default: [ItemT];
+    default: [ItemT, string];
   };
   Element: HTMLElement;
 }
@@ -140,10 +141,7 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
     >
       <BoxelSelect
         @disabled={{@disabled}}
-        @dropdownClass={{cn
-          'boxel-input-group__select-accessory__dropdown'
-          @dropdownClass
-        }}
+        @dropdownClass={{@dropdownClass}}
         @placeholder={{@placeholder}}
         @options={{@options}}
         @searchField={{@searchField}}
@@ -151,15 +149,14 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
         @selected={{@selected}}
         @onChange={{@onChange}}
         @onBlur={{@onBlur}}
-        @matchTriggerWidth={{@matchTriggerWidth}}
         data-test-boxel-input-group-select-accessory-trigger
         ...attributes
-        as |item|
+        as |item itemCssClass|
       >
         {{#if (has-block)}}
-          {{yield item}}
+          {{yield item itemCssClass}}
         {{else}}
-          <div>{{item}}</div>
+          <div class={{itemCssClass}}>{{item}}</div>
         {{/if}}
       </BoxelSelect>
     </div>
@@ -177,11 +174,16 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
         z-index: 2;
       }
 
-      .boxel-input-group__select-accessory :deep(.boxel-select) {
+      .boxel-input-group__select-accessory :deep(.boxel-select),
+      .boxel-input-group__select-accessory
+        :deep(.boxel-select--selected .boxel-select__item) {
         font: var(--boxel-button-font, var(--boxel-font-sm));
         font-weight: 600;
-        padding: var(--boxel-sp-xs) var(--boxel-sp-xs) var(--boxel-sp-xs)
-          var(--boxel-sp-xs);
+        padding: var(
+          --boxel-button-padding,
+          var(--boxel-sp-xs) var(--boxel-sp-xs) var(--boxel-sp-xs)
+            var(--boxel-sp-xs)
+        );
       }
 
       .boxel-input-group__select-accessory
@@ -189,6 +191,12 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
         font: var(--boxel-button-font, var(--boxel-font-sm));
         font-weight: 600;
       }
+
+      .boxel-input-group__select-accessory
+        :deep(.boxel-select--selected .boxel-select__item) {
+        padding: 0;
+      }
+
       .boxel-input-group__select-accessory
         :deep([aria-expanded='true'] .ember-power-select-status-icon) {
         transform: rotate(180deg);
@@ -202,20 +210,6 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
 
       .boxel-input-group--invalid .boxel-input-group__select-accessory {
         border-color: var(--boxel-error-100);
-      }
-
-      .boxel-input-group__select-accessory
-        :deep(.ember-power-select-status-icon) {
-        position: relative;
-      }
-
-      :global(
-          .boxel-input-group__select-accessory__dropdown
-            .ember-power-select-option
-        ) {
-        font: var(--boxel-button-font, var(--boxel-font-sm));
-        padding: var(--boxel-sp-xs) var(--boxel-sp-xs) var(--boxel-sp-xs)
-          var(--boxel-sp-xs);
       }
     </style>
   </template>;

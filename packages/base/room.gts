@@ -4,32 +4,25 @@ import {
   field,
   Component,
   primitive,
+  useIndexBasedKey,
   FieldDef,
+  type CardDef,
 } from './card-api';
 import StringField from './string';
 import DateTimeField from './datetime';
+import NumberField from './number';
+import MarkdownField from './markdown';
+import Modifier from 'ember-modifier';
+import { type Schema } from '@cardstack/runtime-common/helpers/ai';
 import {
   Loader,
+  getCard,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
+//@ts-expect-error cached type not available yet
+import { cached } from '@glimmer/tracking';
 import { initSharedState } from './shared-state';
-import { md5 } from 'super-fast-md5';
-import { EventStatus } from 'matrix-js-sdk';
-import { RoomMemberField } from './room-membership';
-import { MessageField } from './message';
-import { PatchField } from './command';
-import {
-  CardFragmentContent,
-  CardMessageContent,
-  MatrixEvent,
-  ReactionEvent,
-  RoomCreateEvent,
-  RoomNameEvent,
-} from './matrix-event';
-
-const ErrorMessage: Record<string, string> = {
-  ['M_TOO_LARGE']: 'Message is too large',
-};
+import BooleanField from './boolean';
 
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember({
@@ -84,7 +77,7 @@ function upsertRoomMember({
   return member;
 }
 
-export class JSONView extends Component<typeof MatrixEventField> {
+class JSONView extends Component<typeof MatrixEventField> {
   <template>
     <pre>{{this.json}}</pre>
   </template>
@@ -102,10 +95,49 @@ class MatrixEventField extends FieldDef {
   static edit = class Edit extends JSONView {};
 }
 
-type MessageFieldArgs = {
+class RoomMemberView extends Component<typeof RoomMemberField> {
+  <template>
+    <div class='container'>
+      <div>
+        User ID:
+        {{@model.userId}}
+      </div>
+      <div>
+        Name:
+        {{@model.displayName}}
+      </div>
+      <div>
+        Membership:
+        {{@model.membership}}
+      </div>
+    </div>
+    <style>
+      .container {
+        padding: var(--boxel-sp-xl);
+      }
+    </style>
+  </template>
+}
+
+class RoomMembershipField extends FieldDef {
+  static [primitive]: 'invite' | 'join' | 'leave';
+  static [useIndexBasedKey]: never;
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      {{@model}}
+    </template>
+  };
+  // The edit template is meant to be read-only, this field card is not mutable, room state can only be changed via matrix API
+  static edit = class Edit extends Component<typeof this> {
+    <template>
+      {{@model}}
+    </template>
+  };
+}
+
+type CardArgs = {
   author: RoomMemberField;
   created: Date;
-  updated: Date;
   message: string;
   formattedMessage: string;
   index: number;
@@ -114,23 +146,144 @@ type MessageFieldArgs = {
   command: string | null;
   isStreamingFinished?: boolean;
   clientGeneratedId?: string | null;
-  status: EventStatus | null;
-  eventId: string;
 };
 
-// A map from a hash of roomId + card document to the first card fragment event id.
-// This map can be used to avoid sending the same version of the card more than once in a conversation.
-// We can reuse exisiting eventId if user attached the same version of the card.
-const cardHashes: Map<string, string> = new Map();
-function generateCardHashKey(roomId: string, cardDoc: LooseSingleCardDocument) {
-  return md5(roomId + JSON.stringify(cardDoc));
+type AttachedCardResource = {
+  card: CardDef | undefined;
+  loaded?: Promise<void>;
+  cardError?: { id: string; error: Error };
+};
+
+export class RoomMemberField extends FieldDef {
+  @field userId = contains(StringField);
+  @field roomId = contains(StringField);
+  @field displayName = contains(StringField);
+  @field membership = contains(RoomMembershipField);
+  @field membershipDateTime = contains(DateTimeField);
+  @field membershipInitiator = contains(StringField);
+  @field name = contains(StringField, {
+    computeVia: function (this: RoomMemberField) {
+      return this.displayName ?? this.userId?.split(':')[0].substring(1);
+    },
+  });
+  static embedded = class Embedded extends RoomMemberView {};
+  static isolated = class Isolated extends RoomMemberView {};
+  // The edit template is meant to be read-only, this field card is not mutable
+  static edit = class Edit extends RoomMemberView {};
 }
 
-export function getEventIdForCard(
-  roomId: string,
-  cardDoc: LooseSingleCardDocument,
-) {
-  return cardHashes.get(generateCardHashKey(roomId, cardDoc));
+class ScrollIntoView extends Modifier {
+  modify(element: HTMLElement) {
+    element.scrollIntoView();
+  }
+}
+
+function getCardComponent(card: CardDef) {
+  return card.constructor.getComponent(card, 'atom');
+}
+
+class EmbeddedMessageField extends Component<typeof MessageField> {
+  <template>
+    <div
+      {{ScrollIntoView}}
+      data-test-message-idx={{@model.index}}
+      data-test-message-cards
+    >
+      <div>
+        {{@fields.message}}
+      </div>
+
+      {{#each @model.attachedResources as |cardResource|}}
+        {{#if cardResource.cardError}}
+          <div data-test-card-error={{cardResource.cardError.id}} class='error'>
+            Error: cannot render card
+            {{cardResource.cardError.id}}:
+            {{cardResource.cardError.error.message}}
+          </div>
+        {{else if cardResource.card}}
+          {{#let (getCardComponent cardResource.card) as |CardComponent|}}
+            <div data-test-attached-card={{cardResource.card.id}}>
+              <CardComponent />
+            </div>
+          {{/let}}
+        {{/if}}
+      {{/each}}
+    </div>
+
+    <style>
+      .error {
+        color: var(--boxel-danger);
+        font-weight: 'bold';
+      }
+    </style>
+  </template>
+
+  get timestamp() {
+    if (!this.args.model.created) {
+      throw new Error(`message created time is undefined`);
+    }
+    return this.args.model.created.getTime();
+  }
+}
+
+type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
+
+type JSONObject = { [x: string]: JSONValue };
+
+type PatchObject = { patch: { attributes: JSONObject }; id: string };
+
+class PatchObjectField extends FieldDef {
+  static [primitive]: PatchObject;
+}
+
+class CommandType extends FieldDef {
+  static [primitive]: 'patch';
+}
+
+// Subclass, add a validator that checks the fields required?
+class PatchField extends FieldDef {
+  @field commandType = contains(CommandType);
+  @field payload = contains(PatchObjectField);
+}
+
+export class MessageField extends FieldDef {
+  @field author = contains(RoomMemberField);
+  @field message = contains(MarkdownField);
+  @field formattedMessage = contains(MarkdownField);
+  @field created = contains(DateTimeField);
+  @field attachedCardIds = containsMany(StringField);
+  @field index = contains(NumberField);
+  @field transactionId = contains(StringField);
+  @field command = contains(PatchField);
+  @field isStreamingFinished = contains(BooleanField);
+  // ID from the client and can be used by client
+  // to verify whether the message is already sent or not.
+  @field clientGeneratedId = contains(StringField);
+
+  static embedded = EmbeddedMessageField;
+  // The edit template is meant to be read-only, this field card is not mutable
+  static edit = class Edit extends JSONView {};
+
+  @cached
+  get attachedResources(): AttachedCardResource[] | undefined {
+    if (!this.attachedCardIds?.length) {
+      return undefined;
+    }
+    let cards = this.attachedCardIds.map((id) => {
+      let card = getCard(new URL(id));
+      if (!card) {
+        return {
+          card: undefined,
+          cardError: {
+            id,
+            error: new Error(`cannot find card for id "${id}"`),
+          },
+        };
+      }
+      return card;
+    });
+    return cards;
+  }
 }
 
 interface RoomState {
@@ -273,7 +426,7 @@ export class RoomField extends FieldDef {
         roomMemberCache.set(this, roomMembers);
       }
 
-      for (let event of this.events) {
+      for (let event of this.newEvents) {
         if (event.type !== 'm.room.member') {
           continue;
         }
@@ -327,10 +480,9 @@ export class RoomField extends FieldDef {
         }
 
         let author = upsertRoomMember({ room: this, userId: event.sender });
-        let cardArgs: MessageFieldArgs = {
+        let cardArgs: CardArgs = {
           author,
           created: new Date(event.origin_server_ts),
-          updated: new Date(), // Changes every time an update from AI bot streaming is received, used for detecting timeouts
           message: event.content.body,
           formattedMessage: event.content.formatted_body,
           index,
@@ -338,22 +490,7 @@ export class RoomField extends FieldDef {
           transactionId: event.unsigned?.transaction_id || null,
           attachedCard: null,
           command: null,
-          status: event.status,
-          eventId: event.event_id,
         };
-
-        if (event.status === 'cancelled' || event.status === 'not_sent') {
-          (cardArgs as any).errorMessage =
-            event.error?.data.errcode &&
-            Object.keys(ErrorMessage).includes(event.error?.data.errcode)
-              ? ErrorMessage[event.error?.data.errcode]
-              : 'Failed to send';
-        }
-
-        if ('errorMessage' in event.content) {
-          (cardArgs as any).errorMessage = event.content.errorMessage;
-        }
-
         let messageField = undefined;
         if (event.content.msgtype === 'org.boxel.cardFragment') {
           let fragments = fragmentCache.get(this);
@@ -389,24 +526,17 @@ export class RoomField extends FieldDef {
         } else if (event.content.msgtype === 'org.boxel.command') {
           // We only handle patches for now
           let command = event.content.data.command;
-          let annotation = this.events.find(
-            (e) =>
-              e.type === 'm.reaction' &&
-              e.content['m.relates_to']?.rel_type === 'm.annotation' &&
-              e.content['m.relates_to']?.event_id ===
-                // If the message is a replacement message, eventId in command payload will be undefined.
-                // Because it will not refer to any other events, so we can use event_id of the message itself.
-                (command.eventId ?? event_id),
-          ) as ReactionEvent | undefined;
-
+          if (command.type !== 'patch') {
+            throw new Error(
+              `cannot handle commands in room with type ${command.type}`,
+            );
+          }
           messageField = new MessageField({
             ...cardArgs,
             formattedMessage: `<p class="patch-message">${event.content.formatted_body}</p>`,
             command: new PatchField({
-              eventId: event_id,
               commandType: command.type,
               payload: command,
-              status: annotation?.content['m.relates_to'].key ?? 'ready',
             }),
             isStreamingFinished: true,
           });
@@ -419,26 +549,14 @@ export class RoomField extends FieldDef {
         }
 
         if (messageField) {
-          // if the message is a replacement for other messages,
-          // use `created` from the oldest one.
-          if (newMessages.has(event_id)) {
-            messageField.created = newMessages.get(event_id)!.created;
-          }
-          newMessages.set(
-            (event.content as CardMessageContent).clientGeneratedId ?? event_id,
-            messageField,
-          );
+          newMessages.set(event_id, messageField);
           index++;
         }
       }
 
-      // update the cache with the new messages
-      for (let [id, message] of newMessages) {
-        // The `id` can either be an `eventId` or `clientGeneratedId`.
-        // For messages sent by the user, we prefer to use `clientGeneratedId`
-        // because `eventId` can change in certain scenarios,
-        // such as when resending a failed message or updating its status from sending to sent.
-        cache.set(id, message);
+      // upodate the cache with the new messages
+      for (let [eventId, message] of newMessages) {
+        cache.set(eventId, message);
       }
 
       // this sort should hopefully be very optimized since events will
@@ -488,12 +606,9 @@ export class RoomField extends FieldDef {
         `Expected to find ${fragments[0].data.totalParts} fragments for fragment of event id ${eventId} but found ${fragments.length} fragments`,
       );
     }
-
-    let cardDoc = JSON.parse(
+    return JSON.parse(
       fragments.map((f) => f.data.cardFragment).join(''),
     ) as LooseSingleCardDocument;
-    cardHashes.set(generateCardHashKey(this.roomId, cardDoc), eventId);
-    return cardDoc;
   }
 
   // The edit template is meant to be read-only, this field card is not mutable
@@ -503,3 +618,202 @@ export class RoomField extends FieldDef {
     </template>
   };
 }
+
+interface BaseMatrixEvent {
+  sender: string;
+  origin_server_ts: number;
+  event_id: string;
+  room_id: string;
+  unsigned: {
+    age: number;
+    prev_content?: any;
+    prev_sender?: string;
+  };
+}
+
+interface RoomStateEvent extends BaseMatrixEvent {
+  state_key: string;
+  unsigned: {
+    age: number;
+    prev_content?: any;
+    prev_sender?: string;
+    replaces_state?: string;
+  };
+}
+
+interface RoomCreateEvent extends RoomStateEvent {
+  type: 'm.room.create';
+  content: {
+    creator: string;
+    room_version: string;
+  };
+}
+
+interface RoomJoinRules extends RoomStateEvent {
+  type: 'm.room.join_rules';
+  content: {
+    // TODO
+  };
+}
+
+interface RoomPowerLevels extends RoomStateEvent {
+  type: 'm.room.power_levels';
+  content: {
+    // TODO
+  };
+}
+
+interface RoomNameEvent extends RoomStateEvent {
+  type: 'm.room.name';
+  content: {
+    name: string;
+  };
+}
+
+interface RoomTopicEvent extends RoomStateEvent {
+  type: 'm.room.topic';
+  content: {
+    topic: string;
+  };
+}
+
+interface InviteEvent extends RoomStateEvent {
+  type: 'm.room.member';
+  content: {
+    membership: 'invite';
+    displayname: string;
+  };
+}
+
+interface JoinEvent extends RoomStateEvent {
+  type: 'm.room.member';
+  content: {
+    membership: 'join';
+    displayname: string;
+  };
+}
+
+interface LeaveEvent extends RoomStateEvent {
+  type: 'm.room.member';
+  content: {
+    membership: 'leave';
+    displayname: string;
+  };
+}
+
+interface MessageEvent extends BaseMatrixEvent {
+  type: 'm.room.message';
+  content: {
+    'm.relates_to'?: {
+      rel_type: string;
+      event_id: string;
+    };
+    msgtype: 'm.text';
+    format: 'org.matrix.custom.html';
+    body: string;
+    formatted_body: string;
+    isStreamingFinished: boolean;
+  };
+  unsigned: {
+    age: number;
+    transaction_id: string;
+    prev_content?: any;
+    prev_sender?: string;
+  };
+}
+
+interface CommandEvent extends BaseMatrixEvent {
+  type: 'm.room.message';
+  content: {
+    data: {
+      command: any;
+    };
+    'm.relates_to'?: {
+      rel_type: string;
+      event_id: string;
+    };
+    msgtype: 'org.boxel.command';
+    format: 'org.matrix.custom.html';
+    body: string;
+    formatted_body: string;
+  };
+  unsigned: {
+    age: number;
+    transaction_id: string;
+    prev_content?: any;
+    prev_sender?: string;
+  };
+}
+
+interface CardMessageEvent extends BaseMatrixEvent {
+  type: 'm.room.message';
+  content: CardMessageContent | CardFragmentContent;
+  unsigned: {
+    age: number;
+    transaction_id: string;
+    prev_content?: any;
+    prev_sender?: string;
+  };
+}
+
+export interface CardMessageContent {
+  'm.relates_to'?: {
+    rel_type: string;
+    event_id: string;
+  };
+  msgtype: 'org.boxel.message';
+  format: 'org.matrix.custom.html';
+  body: string;
+  formatted_body: string;
+  isStreamingFinished?: boolean;
+  // ID from the client and can be used by client
+  // to verify whether the message is already sent or not.
+  clientGeneratedId?: string;
+  data: {
+    // we use this field over the wire since the matrix message protocol
+    // limits us to 65KB per message
+    attachedCardsEventIds?: string[];
+    // we materialize this field on the server from the card
+    // fragments that we receive
+    attachedCards?: LooseSingleCardDocument[];
+    context: {
+      openCardIds?: string[];
+      functions: {
+        name: string;
+        description: string;
+        parameters: Schema;
+      }[];
+      submode: string | undefined;
+    };
+  };
+}
+
+export interface CardFragmentContent {
+  'm.relates_to'?: {
+    rel_type: string;
+    event_id: string;
+  };
+  msgtype: 'org.boxel.cardFragment';
+  format: 'org.boxel.card';
+  formatted_body: string;
+  body: string;
+  data: {
+    nextFragment?: string;
+    cardFragment: string;
+    index: number;
+    totalParts: number;
+  };
+}
+
+export type MatrixEvent =
+  | RoomCreateEvent
+  | RoomJoinRules
+  | RoomPowerLevels
+  | MessageEvent
+  | CommandEvent
+  | CardMessageEvent
+  | RoomNameEvent
+  | RoomTopicEvent
+  | InviteEvent
+  | JoinEvent
+  | LeaveEvent;

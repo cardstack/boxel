@@ -4,7 +4,6 @@
     "attributes": {
       "title": "PublishingPacket from ../publishing-packet",
       "description": "Catalog entry for PublishingPacket from ../publishing-packet",
-      "isField": false,
       "ref": {
         "module": "../publishing-packet",
         "name": "PublishingPacket"

@@ -1,4 +1,3 @@
-/* eslint-disable no-useless-escape */
 export const cardSrc = `
 import {
   contains,

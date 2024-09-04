@@ -5,8 +5,6 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 
-import { TrackedSet } from 'tracked-built-ins';
-
 import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
 import { and, cn, gt, not } from '@cardstack/boxel-ui/helpers';
 
@@ -20,7 +18,7 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    autoAttachedCards?: TrackedSet<CardDef>;
+    autoAttachedCard?: CardDef;
     cardsToAttach: CardDef[] | undefined;
     chooseCard: (card: CardDef) => void;
     removeCard: (card: CardDef) => void;
@@ -65,11 +63,7 @@ export default class AiAssistantCardPicker extends Component<Signature> {
           (not this.isViewAllAttachedCards)
         )
       }}
-        <Pill
-          @kind='button'
-          {{on 'click' this.toggleViewAllAttachedCards}}
-          data-test-view-all
-        >
+        <Pill {{on 'click' this.toggleViewAllAttachedCards}} data-test-view-all>
           View All ({{this.cardsToDisplay.length}})
         </Pill>
       {{/if}}
@@ -89,6 +83,8 @@ export default class AiAssistantCardPicker extends Component<Signature> {
     </div>
     <style>
       .card-picker {
+        --pill-height: 1.875rem;
+        --pill-content-max-width: 10rem;
         background-color: var(--boxel-light);
         color: var(--boxel-dark);
         display: flex;
@@ -107,9 +103,6 @@ export default class AiAssistantCardPicker extends Component<Signature> {
         transition: color var(--boxel-transition);
         outline: 0;
       }
-      .attach-button :deep(svg) {
-        padding: var(--boxel-sp-5xs);
-      }
       .attach-button:hover:not(:disabled),
       .attach-button:focus:not(:disabled) {
         --icon-color: var(--boxel-highlight-hover);
@@ -118,7 +111,8 @@ export default class AiAssistantCardPicker extends Component<Signature> {
         box-shadow: none;
       }
       .attach-button.icon-only {
-        width: 30px;
+        padding: 0;
+        width: 20px;
         height: var(--pill-height);
       }
     </style>
@@ -147,8 +141,8 @@ export default class AiAssistantCardPicker extends Component<Signature> {
 
   private get cardsToDisplay() {
     let cards = this.args.cardsToAttach ?? [];
-    if (this.args.autoAttachedCards) {
-      cards = [...new Set([...this.args.autoAttachedCards, ...cards])];
+    if (this.args.autoAttachedCard) {
+      cards = [...new Set([this.args.autoAttachedCard, ...cards])];
     }
     return cards;
   }
@@ -177,9 +171,6 @@ export default class AiAssistantCardPicker extends Component<Signature> {
 
   @action
   private isAutoAttachedCard(card: CardDef) {
-    if (this.args.autoAttachedCards === undefined) {
-      return false;
-    }
-    return this.args.autoAttachedCards.has(card);
+    return this.args.autoAttachedCard?.id === card.id;
   }
 }

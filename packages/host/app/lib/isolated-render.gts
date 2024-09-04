@@ -10,25 +10,16 @@ import { type ComponentLike } from '@glint/template';
 
 import { CardError } from '@cardstack/runtime-common/error';
 
-import { Format } from 'https://cardstack.com/base/card-api';
-
 import type { SimpleElement } from '@simple-dom/interface';
 
-interface Signature {
-  Args: {
-    format: Format;
-  };
-}
-
 export function render(
-  C: ComponentLike<Signature>,
+  C: ComponentLike,
   element: SimpleElement,
   owner: Owner,
-  format: Format,
 ): void {
   // this needs to be a template-only component because the way we're invoking it
   // just grabs the template and would drop any associated class.
-  const root = <template><C @format={{format}} /></template>;
+  const root = <template><C /></template>;
 
   // clear any previous render work
   removeChildren(element);

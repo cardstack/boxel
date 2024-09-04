@@ -4,7 +4,6 @@
     "attributes": {
       "title": "BlogPost",
       "description": "Catalog entry for BlogPost",
-      "isField": false,
       "ref": {
         "module": "../blog-post",
         "name": "BlogPost"

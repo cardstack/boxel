@@ -23,11 +23,13 @@ import { Realm } from '@cardstack/runtime-common/realm';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import {
+  TestRealmAdapter,
   elementIsVisible,
   getMonacoContent,
   percySnapshot,
@@ -42,7 +44,6 @@ import {
   type TestContextWithSave,
   setMonacoContent,
 } from '../../helpers';
-import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
 const testRealmURL2 = 'http://test-realm/test2/';
@@ -408,16 +409,26 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks, { realmPermissions: () => realmPermissions });
 
+  hooks.afterEach(async function () {
+    window.localStorage.removeItem('recent-files');
+  });
+
   hooks.beforeEach(async function () {
+    window.localStorage.removeItem('recent-files');
     realmPermissions = { [testRealmURL]: ['read', 'write'] };
+
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     await setupAcceptanceTestRealm({
+      loader,
       contents: realmAFiles,
       realmURL: testRealmURL2,
     });
     ({ realm, adapter } = await setupAcceptanceTestRealm({
+      loader,
       contents: {
         'index.gts': indexCardSource,
         'pet-person.gts': personCardSource,
@@ -437,7 +448,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
             attributes: {
               title: 'Person',
               description: 'Catalog entry',
-              isField: false,
               ref: {
                 module: `./person`,
                 name: 'Person',
@@ -463,7 +473,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
             },
           },
         },
-        'léame.md': 'hola mundo',
         'readme.md': 'hello world',
         'not-json.json': 'I am not JSON.',
         'Person/1.json': {
@@ -929,8 +938,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test<TestContextWithSSE>('can delete a card instance from code submode with no recent files to fall back on', async function (assert) {
-    let done = assert.async();
-
     let expectedEvents = [
       {
         type: 'index',
@@ -989,7 +996,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       expectedEvents,
       callback: async () => {
         await click('[data-test-confirm-delete-button]');
-        done();
       },
     });
     await waitFor('[data-test-empty-code-mode]');
@@ -1226,21 +1232,21 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
-      codePath: `${testRealmURL}léame.md`,
+      codePath: `${testRealmURL}readme.md`,
     });
     await waitForCodeEditor();
     assert.dom('[data-test-delete-modal-container]').doesNotExist();
 
     await waitFor(`[data-test-action-button="Delete"]`);
     await click('[data-test-action-button="Delete"]');
-    await waitFor(`[data-test-delete-modal="${testRealmURL}l%C3%A9ame.md"]`);
+    await waitFor(`[data-test-delete-modal="${testRealmURL}readme.md"]`);
     assert
       .dom('[data-test-delete-msg]')
-      .includesText('Delete the file léame.md?');
+      .includesText('Delete the file readme.md?');
     await click('[data-test-confirm-delete-button]');
     await waitFor('[data-test-empty-code-mode]');
 
-    let notFound = await adapter.openFile('léame.md');
+    let notFound = await adapter.openFile('readme.md');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
     assert.dom('[data-test-delete-modal-container]').doesNotExist();
   });
@@ -1261,7 +1267,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}imports.gts`,
       codeSelection: elementName,
+      fileView: 'inspector',
+      openDirs: {},
+      stacks: [[]],
+      submode: Submodes.Code,
     });
     let selected = 'AncestorCard2 card';
     await waitFor(`[data-test-clickable-definition-container]`);
@@ -1276,7 +1287,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}imports.gts`,
       codeSelection: elementName,
+      fileView: 'inspector',
+      openDirs: {},
+      stacks: [[]],
+      submode: Submodes.Code,
     });
     selected = 'default (DefaultAncestorCard) card';
     await waitFor(`[data-test-clickable-definition-container]`);
@@ -1291,7 +1307,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}imports.gts`,
       codeSelection: elementName,
+      fileView: 'inspector',
+      openDirs: {},
+      stacks: [[]],
+      submode: Submodes.Code,
     });
     selected = 'RenamedAncestorCard (AncestorCard) card';
     await waitFor(`[data-test-clickable-definition-container]`);
@@ -1306,7 +1327,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}imports.gts`,
       codeSelection: elementName,
+      fileView: 'inspector',
+      openDirs: {},
+      stacks: [[]],
+      submode: Submodes.Code,
     });
     selected = 'AncestorCard3 card';
     await click(`[data-test-clickable-definition-container]`);
@@ -1321,7 +1347,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}imports.gts`,
       codeSelection: elementName,
+      fileView: 'inspector',
+      openDirs: {},
+      stacks: [[]],
+      submode: Submodes.Code,
     });
     selected = 'ChildCard2 card';
     await waitFor(`[data-test-clickable-definition-container]`);
@@ -1337,7 +1368,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}imports.gts`,
       codeSelection: elementName,
+      fileView: 'inspector',
+      openDirs: {},
+      stacks: [[]],
+      submode: Submodes.Code,
     });
     selected = 'AncestorField1 field';
     await click(`[data-test-clickable-definition-container]`);
@@ -1366,7 +1402,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       `[data-test-card-schema="${elementName}"] [data-test-card-schema-navigational-button]`,
     );
     assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}exports.gts`,
       codeSelection: elementName,
+      fileView: 'inspector',
+      openDirs: {},
+      stacks: [],
+      submode: Submodes.Code,
     });
 
     await waitFor('[data-test-boxel-selector-item-selected]');
@@ -1385,7 +1426,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       `[data-test-card-schema="ChildCard1"] [data-test-field-name="field1"] [data-test-card-display-name="${elementName}"]`,
     );
     assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}exports.gts`,
       codeSelection: elementName,
+      fileView: 'inspector',
+      openDirs: {},
+      stacks: [],
+      submode: Submodes.Code,
     });
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert
@@ -1405,7 +1451,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     );
 
     assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}exports.gts`,
       codeSelection: elementName,
+      fileView: 'inspector',
+      openDirs: {},
+      stacks: [],
+      submode: Submodes.Code,
     });
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert
@@ -1423,7 +1474,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       `[data-test-card-schema="ChildCard1"] [data-test-field-name="field3"] [data-test-card-display-name="${elementName}"]`,
     );
     assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}imports.gts`,
       codeSelection: elementName,
+      fileView: 'inspector',
+      openDirs: {},
+      stacks: [],
+      submode: Submodes.Code,
     });
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert
@@ -1443,7 +1499,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     );
 
     assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}exports.gts`,
       codeSelection: elementName,
+      fileView: 'inspector',
+      openDirs: {},
+      stacks: [],
+      submode: Submodes.Code,
     });
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert
@@ -1787,7 +1848,7 @@ export class TestCard extends ExportedCard {
     );
 
     assert
-      .dom('[data-test-inherits-from-field] .pill')
+      .dom('[data-test-inherits-from-field] .pill.inert')
       .includesText('exported card', 'the inherits from is correct');
     assert.dom('[data-test-create-definition]').isDisabled();
 
@@ -1831,7 +1892,7 @@ export class TestCard extends ExportedCard {
       `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
     );
     assert
-      .dom('[data-test-inherits-from-field] .pill')
+      .dom('[data-test-inherits-from-field] .pill.inert')
       .includesText('Test Card', 'the inherits from is correct');
     assert
       .dom('[data-test-display-name-field]')
@@ -1861,7 +1922,7 @@ export class TestCard extends ExportedCard {
     );
 
     assert
-      .dom('[data-test-inherits-from-field] .pill')
+      .dom('[data-test-inherits-from-field] .pill.inert')
       .includesText('exported field', 'the inherits from is correct');
 
     await fillIn('[data-test-display-name-field]', 'Test Field');
@@ -1936,7 +1997,7 @@ export class TestField extends ExportedField {
       `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
     );
     assert
-      .dom('[data-test-inherits-from-field] .pill')
+      .dom('[data-test-inherits-from-field] .pill.inert')
       .includesText('exported card', 'the inherits from is correct');
     assert
       .dom('[data-test-display-name-field]')
@@ -2095,7 +2156,7 @@ export class ExportedCard extends ExportedCardParent {
     );
 
     assert
-      .dom('[data-test-inherits-from-field] .pill')
+      .dom('[data-test-inherits-from-field] .pill.inert')
       .includesText('exported card', 'the inherits from is correct');
     assert.dom('[data-test-create-card-instance]').isEnabled();
 
@@ -2180,71 +2241,6 @@ export class ExportedCard extends ExportedCardParent {
     assert
       .dom('[data-test-action-button="Create Instance"]')
       .doesNotExist('field defs do not display a create instance button');
-  });
-
-  test('can find instances of an exported card definition', async function (assert) {
-    await visitOperatorMode({
-      stacks: [[]],
-      submode: 'code',
-      codePath: `${testRealmURL}pet`,
-    });
-
-    await waitForCodeEditor();
-    await waitFor('[data-boxel-selector-item-text="Pet"]');
-
-    await click('[data-boxel-selector-item-text="Pet"]');
-    await waitFor('[data-test-card-module-definition]');
-
-    await click('[data-test-action-button="Find instances"]');
-    await waitFor('[data-test-search-sheet-search-result]');
-    assert
-      .dom('[data-test-search-field]')
-      .hasValue(`carddef:${testRealmURL}pet/Pet`);
-    assert
-      .dom('[data-test-search-label]')
-      .hasText(`2 Results for “carddef:${testRealmURL}pet/Pet”`);
-    assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
-    assert
-      .dom(`[data-test-search-result="${testRealmURL}Pet/vangogh"]`)
-      .exists();
-  });
-
-  test('find instances action is not displayed for non-exported Card definition', async function (assert) {
-    await visitOperatorMode({
-      stacks: [[]],
-      submode: 'code',
-      codePath: `${testRealmURL}in-this-file.gts`,
-    });
-
-    await waitForCodeEditor();
-    await waitFor('[data-boxel-selector-item-text="LocalCard"]');
-
-    await click('[data-boxel-selector-item-text="LocalCard"]');
-    await waitFor('[data-test-card-module-definition]');
-
-    assert
-      .dom('[data-test-action-button="Find instances"]')
-      .doesNotExist(
-        'non-exported card defs do not display a Find instances button',
-      );
-  });
-
-  test('find instances action is not displayed for field definition', async function (assert) {
-    await visitOperatorMode({
-      stacks: [[]],
-      submode: 'code',
-      codePath: `${testRealmURL}in-this-file.gts`,
-    });
-
-    await waitForCodeEditor();
-    await waitFor('[data-boxel-selector-item-text="ExportedField"]');
-
-    await click('[data-boxel-selector-item-text="ExportedField"]');
-    await waitFor('[data-test-card-module-definition]');
-
-    assert
-      .dom('[data-test-action-button="Find instances"]')
-      .doesNotExist('field defs do not display a Find instances button');
   });
 
   module('when the user lacks write permissions', function (hooks) {

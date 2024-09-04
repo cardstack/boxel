@@ -1,4 +1,3 @@
-import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
@@ -6,6 +5,7 @@ import { tracked } from '@glimmer/tracking';
 import format from 'date-fns/format';
 
 import { task } from 'ember-concurrency';
+import { marked } from 'marked';
 import {
   type LoginResponse,
   type MatrixEvent,
@@ -17,9 +17,11 @@ import {
 } from 'matrix-js-sdk';
 import { TrackedMap } from 'tracked-built-ins';
 
+import { v4 as uuidv4 } from 'uuid';
+
 import {
   type LooseSingleCardDocument,
-  markdownToHtml,
+  sanitizeHtml,
   aiBotUsername,
   splitStringIntoChunks,
   baseRealm,
@@ -42,14 +44,14 @@ import { getRealmSession } from '@cardstack/host/resources/realm-session';
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import * as RoomModule from 'https://cardstack.com/base/room';
 import type {
+  RoomField,
   MatrixEvent as DiscreteMatrixEvent,
+  MessageField,
   CardMessageContent,
   CardFragmentContent,
-  ReactionEventContent,
-} from 'https://cardstack.com/base/matrix-event';
-import * as RoomModule from 'https://cardstack.com/base/room';
-import type { RoomField } from 'https://cardstack.com/base/room';
+} from 'https://cardstack.com/base/room';
 
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
 import { importResource } from '../resources/import';
@@ -72,7 +74,6 @@ export type OperatorModeContext = {
   submode: Submode;
   openCardIds: string[];
 };
-
 export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
@@ -85,24 +86,19 @@ export default class MatrixService extends Service {
   rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
-  failedCommandState: TrackedMap<string, Error> = new TrackedMap();
+  pendingMessages: TrackedMap<string, MessageField | undefined> =
+    new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[] = [];
-  timelineQueue: { event: MatrixEvent; oldEventId?: string }[] = [];
+  timelineQueue: MatrixEvent[] = [];
   #ready: Promise<void>;
   #matrixSDK: typeof MatrixSDK | undefined;
   #eventBindings: [EmittedEvents, (...arg: any[]) => void][] | undefined;
-  currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
-    new TrackedMap();
 
-  constructor(owner: Owner) {
-    super(owner);
+  constructor(properties: object) {
+    super(properties);
     this.#ready = this.loadSDK.perform();
-  }
-
-  addEventReadReceipt(eventId: string, receipt: { readAt: Date }) {
-    this.currentUserEventReadReceipts.set(eventId, receipt);
   }
 
   get ready() {
@@ -137,11 +133,6 @@ export default class MatrixService extends Service {
         Membership.onMembership(this),
       ],
       [this.matrixSDK.RoomEvent.Timeline, Timeline.onTimeline(this)],
-      [
-        this.matrixSDK.RoomEvent.LocalEchoUpdated,
-        Timeline.onUpdateEventStatus(this),
-      ],
-      [this.matrixSDK.RoomEvent.Receipt, Timeline.onReceipt(this)],
     ];
   });
 
@@ -295,7 +286,7 @@ export default class MatrixService extends Service {
     let realmAuthClient = new RealmAuthClient(
       realmURL,
       this.client,
-      this.loaderService.loader.fetch,
+      this.loaderService.loader,
     );
 
     let jwtPromise = realmAuthClient.getJWT();
@@ -368,9 +359,9 @@ export default class MatrixService extends Service {
   private async sendEvent(
     roomId: string,
     eventType: string,
-    content: CardMessageContent | CardFragmentContent | ReactionEventContent,
+    content: CardMessageContent | CardFragmentContent,
   ) {
-    if ('data' in content) {
+    if (content.data) {
       const encodedContent = {
         ...content,
         data: JSON.stringify(content.data),
@@ -381,34 +372,18 @@ export default class MatrixService extends Service {
     }
   }
 
-  async sendReactionEvent(roomId: string, eventId: string, status: string) {
-    let content: ReactionEventContent = {
-      'm.relates_to': {
-        event_id: eventId,
-        key: status,
-        rel_type: 'm.annotation',
-      },
-    };
-    try {
-      return await this.sendEvent(roomId, 'm.reaction', content);
-    } catch (e) {
-      throw new Error(
-        `Error sending reaction event: ${
-          'message' in (e as Error) ? (e as Error).message : e
-        }`,
-      );
-    }
-  }
-
   async sendMessage(
     roomId: string,
     body: string | undefined,
     attachedCards: CardDef[] = [],
-    clientGeneratedId: string,
     context?: OperatorModeContext,
   ): Promise<void> {
-    let html = markdownToHtml(body);
-    let tools = [];
+    this.messagesToSend.set(roomId, undefined);
+    this.cardsToSend.set(roomId, undefined);
+    await this.setPendingMessage(roomId, body, attachedCards);
+
+    let html = body != null ? sanitizeHtml(marked(body)) : '';
+    let functions = [];
     let serializedAttachedCards: LooseSingleCardDocument[] = [];
     let attachedOpenCards: CardDef[] = [];
     let submode = context?.submode;
@@ -420,7 +395,7 @@ export default class MatrixService extends Service {
       attachedOpenCards = attachedCards.filter((c) =>
         (context?.openCardIds ?? []).includes(c.id),
       );
-      // Generate tool calls for patching currently open cards permitted for modification
+      // Generate function calls for patching currently open cards permitted for modification
       for (let attachedOpenCard of attachedOpenCards) {
         let patchSpec = generateCardPatchCallSpecification(
           attachedOpenCard.constructor as typeof CardDef,
@@ -432,25 +407,22 @@ export default class MatrixService extends Service {
         });
         await realmSession.loaded;
         if (realmSession.canWrite) {
-          tools.push({
-            type: 'function',
-            function: {
-              name: 'patchCard',
-              description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.`,
-              parameters: {
-                type: 'object',
-                properties: {
-                  card_id: {
-                    type: 'string',
-                    const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
-                  },
-                  description: {
-                    type: 'string',
-                  },
-                  ...patchSpec,
+          functions.push({
+            name: 'patchCard',
+            description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. Ensure the description explains what change you are making`,
+            parameters: {
+              type: 'object',
+              properties: {
+                description: {
+                  type: 'string',
                 },
-                required: ['card_id', 'attributes', 'description'],
+                card_id: {
+                  type: 'string',
+                  const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
+                },
+                attributes: patchSpec,
               },
+              required: ['card_id', 'attributes', 'description'],
             },
           });
         }
@@ -469,18 +441,11 @@ export default class MatrixService extends Service {
         }),
       );
     }
-
-    let roomModule = await this.getRoomModule();
     let attachedCardsEventIds: string[] = [];
     if (serializedAttachedCards.length > 0) {
       for (let attachedCard of serializedAttachedCards) {
-        let eventId = roomModule.getEventIdForCard(roomId, attachedCard);
-        if (!eventId) {
-          let responses = await this.sendCardFragments(roomId, attachedCard);
-          eventId = responses[0].event_id; // we only care about the first fragment
-        }
-
-        attachedCardsEventIds.push(eventId);
+        let eventIds = await this.sendCardFragments(roomId, attachedCard);
+        attachedCardsEventIds.push(eventIds[0].event_id); // we only care about the first fragment
       }
     }
 
@@ -489,16 +454,42 @@ export default class MatrixService extends Service {
       body: body || '',
       format: 'org.matrix.custom.html',
       formatted_body: html,
-      clientGeneratedId,
+      clientGeneratedId: this.pendingMessages.get(roomId)?.clientGeneratedId,
       data: {
         attachedCardsEventIds,
         context: {
           openCardIds: attachedOpenCards.map((c) => c.id),
-          tools,
+          functions,
           submode,
         },
       },
     } as CardMessageContent);
+  }
+
+  private async setPendingMessage(
+    roomId: string,
+    body: string | undefined,
+    attachedCards: CardDef[] = [],
+  ) {
+    let roomModule = await this.getRoomModule();
+    let roomMember = new roomModule.RoomMemberField({
+      id: this.userId,
+      userId: this.userId,
+      roomId: roomId,
+    });
+    let clientGeneratedId = uuidv4();
+    this.pendingMessages.set(
+      roomId,
+      new roomModule.MessageField({
+        author: roomMember,
+        message: body,
+        formattedMessage: body ? sanitizeHtml(marked(body)) : '',
+        created: new Date().getTime(),
+        clientGeneratedId,
+        transactionId: null,
+        attachedCardIds: attachedCards?.map((c) => c.id) || [],
+      }),
+    );
   }
 
   private async sendCardFragments(
@@ -535,15 +526,9 @@ export default class MatrixService extends Service {
     let { joined_rooms: joinedRooms } = await this.client.getJoinedRooms();
     for (let roomId of joinedRooms) {
       let stateEvents = await this.client.roomState(roomId);
-      await Promise.all(
-        stateEvents.map((event) =>
-          addRoomEvent(this, { ...event, status: null }),
-        ),
-      );
+      await Promise.all(stateEvents.map((event) => addRoomEvent(this, event)));
       let messages = await this.allRoomMessages(roomId);
-      await Promise.all(
-        messages.map((event) => addRoomEvent(this, { ...event, status: null })),
-      );
+      await Promise.all(messages.map((event) => addRoomEvent(this, event)));
     }
   }
 
@@ -571,7 +556,7 @@ export default class MatrixService extends Service {
         await opts.onMessages(events);
       }
       messages.push(...events);
-    } while (from);
+    } while (!from);
     return messages;
   }
 

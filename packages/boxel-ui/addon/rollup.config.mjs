@@ -94,15 +94,10 @@ function scopedCSS(srcDir) {
       hash.update(source);
       let cssFileName = hash.digest('hex').slice(0, 10) + '.css';
       let dir = path.dirname(localPath);
-      let cssAndFile = decodeScopedCSSRequest(source);
+      let css = decodeScopedCSSRequest(source);
       return {
         id: path.resolve(path.dirname(importer), cssFileName),
-        meta: {
-          'scoped-css': {
-            css: cssAndFile.css,
-            fileName: path.join(dir, cssFileName),
-          },
-        },
+        meta: { 'scoped-css': { css, fileName: path.join(dir, cssFileName) } },
         external: 'relative',
       };
     },

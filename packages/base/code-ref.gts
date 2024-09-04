@@ -3,7 +3,6 @@ import {
   primitive,
   serialize,
   deserialize,
-  formatQuery,
   queryableValue,
   CardDef,
   BaseDefConstructor,
@@ -52,28 +51,18 @@ export default class CodeRefField extends FieldDef {
     codeRef: ResolvedCodeRef | undefined,
     stack: CardDef[] = [],
   ) {
-    return maybeSerializeCodeRef(codeRef, stack);
-  }
-  static [formatQuery](codeRef: ResolvedCodeRef) {
-    return maybeSerializeCodeRef(codeRef);
+    if (codeRef) {
+      // if a stack is passed in, use the containing card to resolve relative references
+      let moduleHref =
+        stack.length > 0
+          ? new URL(codeRef.module, stack[0][relativeTo]).href
+          : codeRef.module;
+      return `${moduleHref}/${codeRef.name}`;
+    }
+    return undefined;
   }
 
   static embedded = class Embedded extends BaseView {};
   // The edit template is meant to be read-only, this field card is not mutable
   static edit = class Edit extends BaseView {};
-}
-
-function maybeSerializeCodeRef(
-  codeRef: ResolvedCodeRef | undefined,
-  stack: CardDef[] = [],
-) {
-  if (codeRef) {
-    // if a stack is passed in, use the containing card to resolve relative references
-    let moduleHref =
-      stack.length > 0
-        ? new URL(codeRef.module, stack[0][relativeTo]).href
-        : codeRef.module;
-    return `${moduleHref}/${codeRef.name}`;
-  }
-  return undefined;
 }

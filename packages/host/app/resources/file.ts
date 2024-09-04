@@ -1,5 +1,4 @@
 import { registerDestructor } from '@ember/destroyable';
-import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
@@ -84,7 +83,7 @@ class _FileResource extends Resource<Args> {
   @service declare recentFilesService: RecentFilesService;
   @service declare operatorModeStateService: OperatorModeStateService;
 
-  constructor(owner: Owner) {
+  constructor(owner: unknown) {
     super(owner);
     registerDestructor(this, () => {
       if (this.subscription) {
@@ -182,7 +181,6 @@ class _FileResource extends Resource<Args> {
     await realmSession.loaded;
 
     let self = this;
-    let rawName = response.url.split('/').pop();
 
     this.updateState({
       state: 'ready',
@@ -190,7 +188,7 @@ class _FileResource extends Resource<Args> {
       realmURL,
       content,
       realmSession,
-      name: rawName ? decodeURIComponent(rawName) : rawName!,
+      name: response.url.split('/').pop()!,
       size,
       url: response.url,
       write(content: string, flushLoader?: true) {

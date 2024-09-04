@@ -2,7 +2,6 @@ import { fn } from '@ember/helper';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -28,7 +27,7 @@ import {
   catalogEntryRef,
   CodeRef,
 } from '@cardstack/runtime-common';
-
+import { makeResolvedURL } from '@cardstack/runtime-common/loader';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
@@ -78,7 +77,7 @@ export default class EditFieldModal extends Component<Signature> {
     },
   ];
 
-  constructor(owner: Owner, args: Signature['Args']) {
+  constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
 
     // This component has 2 flows - adding a new field, and editing an existing field. When adding a new field, this.args.field will be undefined and when editing, it will be present
@@ -236,8 +235,8 @@ export default class EditFieldModal extends Component<Signature> {
         fieldType,
         fieldDefinitionType: this.isFieldDef ? 'field' : 'card',
         incomingRelativeTo,
-        outgoingRelativeTo: new URL(
-          this.operatorModeStateService.state.codePath!,
+        outgoingRelativeTo: this.loaderService.loader.reverseResolution(
+          makeResolvedURL(this.operatorModeStateService.state.codePath!).href,
         ),
         outgoingRealmURL: new URL(this.args.file.realmURL),
         addFieldAtIndex,
@@ -313,6 +312,32 @@ export default class EditFieldModal extends Component<Signature> {
         margin-left: auto;
       }
 
+      .pill {
+        border: 1px solid var(--boxel-400);
+        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
+        border-radius: 8px;
+        background-color: white;
+        font-weight: 600;
+        display: inline-flex;
+      }
+
+      .pill > div {
+        display: flex;
+      }
+
+      .pill > div > span {
+        margin: auto;
+      }
+
+      .realm-icon {
+        margin-right: var(--boxel-sp-xxxs);
+      }
+
+      .realm-icon > img {
+        height: 20px;
+        width: 20px;
+      }
+
       .card-chooser-area {
         display: flex;
       }
@@ -345,7 +370,7 @@ export default class EditFieldModal extends Component<Signature> {
         <FieldContainer @label='Field Type'>
           <div class='card-chooser-area'>
             {{#if this.fieldCard}}
-              <Pill data-test-selected-field-realm-icon>
+              <Pill @inert={{true}} data-test-selected-field-realm-icon>
                 <:icon>
                   {{#if this.fieldModuleURL.href}}
                     <RealmInfoProvider @fileURL={{this.fieldModuleURL.href}}>

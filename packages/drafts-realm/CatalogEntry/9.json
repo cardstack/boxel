@@ -4,7 +4,6 @@
     "attributes": {
       "title": "Claim from ../claim",
       "description": "Catalog entry for Claim from ../claim",
-      "isField": false,
       "ref": {
         "module": "../claim",
         "name": "Claim"

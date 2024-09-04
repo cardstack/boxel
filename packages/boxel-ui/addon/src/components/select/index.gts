@@ -13,14 +13,14 @@ export interface BoxelSelectArgs<ItemT> extends PowerSelectArgs {
 interface Signature<ItemT = any> {
   Args: BoxelSelectArgs<ItemT>;
   Blocks: {
-    default: [ItemT];
+    default: [ItemT, string];
   };
   Element: HTMLElement;
 }
 
 const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
   <PowerSelect
-    class='boxel-select'
+    class={{cn 'boxel-select' boxel-select--selected=@selected}}
     @options={{@options}}
     @searchField={{@searchField}}
     @selected={{@selected}}
@@ -33,16 +33,15 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
     @dropdownClass={{cn 'boxel-select__dropdown' @dropdownClass}}
     @triggerComponent={{@triggerComponent}}
     @disabled={{@disabled}}
-    @matchTriggerWidth={{@matchTriggerWidth}}
+    @matchTriggerWidth={{false}}
     @eventType='click'
     @searchEnabled={{@searchEnabled}}
     @beforeOptionsComponent={{component BeforeOptions autofocus=false}}
     ...attributes
     as |item|
   >
-    {{yield item}}
+    {{yield item 'boxel-select__item'}}
   </PowerSelect>
-
   <style>
     .boxel-select {
       border: 1px solid var(--boxel-form-control-border-color);
@@ -50,53 +49,129 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
       background: none;
       display: flex;
       gap: var(--boxel-sp-sm);
+      padding-right: var(--boxel-sp);
     }
+    .boxel-select__dropdown {
+      --boxel-select-current-color: var(--boxel-light-100);
+      --boxel-select-selected-color: var(--boxel-highlight);
+      --boxel-select-below-transitioning-in-animation: drop-fade-below
+        var(--boxel-transition);
+      --boxel-select-below-transitioning-out-animation: var(
+          --boxel-select-below-transitioning-in-animation
+        )
+        reverse;
+      --boxel-select-above-transitioning-in-animation: drop-fade-above
+        var(--boxel-transition);
+      --boxel-select-above-transitioning-out-animation: var(
+          --boxel-select-above-transitioning-in-animation
+        )
+        reverse;
 
-    .boxel-select:after {
-      display: none;
-    }
-  </style>
-  {{! Note: When editing dropdown of the PowerSelect component we target 
-  the styles using :global -- this is not a mistake. The reason we do this is because 
-  content is teleported to an element #ember-basic-dropdown-wormhole at the top of the dom 
-  Therefore, our out-of-the-box scoped css solution do not work and we must use an escape hatch (ie :global) to 
-  ensure styles are being applied correctly.
-   }}
-  <style>
-    :global(.boxel-select__dropdown) {
-      --boxel-select-current-color: var(--boxel-highlight);
-      --boxel-select-selected-color: var(--boxel-light-100);
       box-shadow: var(--boxel-box-shadow);
       border-radius: var(--boxel-form-control-border-radius);
     }
-    :global(.boxel-select__dropdown ul) {
+
+    .boxel-select__dropdown :deep(ul) {
       list-style: none;
       padding: 0;
       overflow: auto;
     }
-    :global(
-        .boxel-select__dropdown .ember-power-select-option[aria-selected='true']
-      ) {
+
+    .boxel-select__dropdown
+      :deep(.ember-power-select-option[aria-selected='true']) {
       background-color: var(--boxel-select-selected-color);
     }
 
-    :global(
-        .boxel-select__dropdown .ember-power-select-option[aria-current='true']
-      ) {
+    .boxel-select__dropdown
+      :deep(.ember-power-select-option[aria-current='true']) {
       background-color: var(--boxel-select-current-color);
-      color: black;
     }
 
-    :global(.boxel-select__dropdown .ember-power-select-search-input:focus) {
+    /* stylelint-disable-next-line max-line-length */
+    .boxel-select__dropdown
+      :deep(
+        .ember-power-select-option:hover:not([aria-disabled='true']):not(
+            .ember-power-select-option--no-matches-message
+          )
+      ) {
+      cursor: pointer;
+    }
+
+    .boxel-select__dropdown :deep(.ember-power-select-search) {
+      padding: 4px;
+    }
+
+    .boxel-select__dropdown :deep(.ember-power-select-search-input) {
+      border: 1px solid #aaa;
+      border-radius: 0;
+      width: 100%;
+      font-size: inherit;
+      line-height: inherit;
+      padding: 0 5px;
+    }
+
+    .boxel-select__dropdown :deep(.ember-power-select-search-input:focus) {
       border: 1px solid var(--boxel-outline-color);
       box-shadow: var(--boxel-box-shadow-hover);
       outline: var(--boxel-outline);
     }
 
-    :global(
-        .boxel-select__dropdown .ember-power-select-option--no-matches-message
-      ) {
+    .boxel-select__dropdown
+      :deep(.ember-power-select-option--no-matches-message) {
       padding: var(--boxel-sp-xxs) var(--boxel-sp-sm);
+    }
+
+    .boxel-select__item {
+      font-weight: 600;
+      font-size: var(--boxel-font-size-sm);
+      padding: var(--boxel-sp-xxs) var(--boxel-sp-sm);
+    }
+
+    .boxel-select__dropdown.ember-basic-dropdown-content--below.ember-basic-dropdown--transitioning-in {
+      animation: var(--boxel-select-below-transitioning-in-animation);
+    }
+
+    .boxel-select__dropdown.ember-basic-dropdown-content--below.ember-basic-dropdown--transitioning-out {
+      animation: var(--boxel-select-below-transitioning-out-animation);
+    }
+
+    .boxel-select__dropdown.ember-basic-dropdown-content--above.ember-basic-dropdown--transitioning-in {
+      animation: var(--boxel-select-above-transitioning-in-animation);
+    }
+
+    .boxel-select__dropdown.ember-basic-dropdown-content--above.ember-basic-dropdown--transitioning-out {
+      animation: var(--boxel-select-above-transitioning-out-animation);
+    }
+
+    .boxel-select :deep(.ember-power-select-status-icon) {
+      position: relative;
+    }
+    .boxel-select:after {
+      display: none;
+    }
+
+    @keyframes drop-fade-below {
+      0% {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+
+      100% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes drop-fade-above {
+      0% {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+
+      100% {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
   </style>
 </template>;

@@ -135,7 +135,7 @@ export default class DeleteModal extends Component<Signature> {
     if (this.item instanceof URL) {
       return {
         type: 'file',
-        name: decodeURI(this.item.href).split('/').pop()!,
+        name: this.item.href.split('/').pop()!,
         id: this.item.href,
       };
     }

@@ -20,7 +20,6 @@ import Exclamation from './icons/exclamation.gts';
 import Eye from './icons/eye.gts';
 import FailureBordered from './icons/failure-bordered.gts';
 import File from './icons/file.gts';
-import FourLines from './icons/four-lines.gts';
 import IconCircle from './icons/icon-circle.gts';
 import IconCircleSelected from './icons/icon-circle-selected.gts';
 import IconCode from './icons/icon-code.gts';
@@ -30,7 +29,6 @@ import IconLink from './icons/icon-link.gts';
 import IconMinusCircle from './icons/icon-minus-circle.gts';
 import IconPencil from './icons/icon-pencil.gts';
 import IconPencilCrossedOut from './icons/icon-pencil-crossed-out.gts';
-import IconPencilNotCrossedOut from './icons/icon-pencil-not-crossed-out.gts';
 import IconPlus from './icons/icon-plus.gts';
 import IconPlusCircle from './icons/icon-plus-circle.gts';
 import IconSearch from './icons/icon-search.gts';
@@ -65,7 +63,6 @@ export const ALL_ICON_COMPONENTS = [
   Eye,
   FailureBordered,
   File,
-  FourLines,
   IconCircle,
   IconCircleSelected,
   IconCode,
@@ -75,7 +72,6 @@ export const ALL_ICON_COMPONENTS = [
   IconMinusCircle,
   IconPencil,
   IconPencilCrossedOut,
-  IconPencilNotCrossedOut,
   IconPlus,
   IconPlusCircle,
   IconSearch,
@@ -111,7 +107,6 @@ export {
   Eye,
   FailureBordered,
   File,
-  FourLines,
   IconCircle,
   IconCircleSelected,
   IconCode,
@@ -121,7 +116,6 @@ export {
   IconMinusCircle,
   IconPencil,
   IconPencilCrossedOut,
-  IconPencilNotCrossedOut,
   IconPlus,
   IconPlusCircle,
   IconSearch,

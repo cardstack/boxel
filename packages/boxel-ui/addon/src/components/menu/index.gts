@@ -118,7 +118,7 @@ export default class Menu extends Component<Signature> {
                       check-icon--selected=menuItem.selected
                     }}
                   >
-                    <CheckMark width='12' height='12' />
+                    <CheckMark width='20' height='20' />
                   </span>
                 </div>
               </li>

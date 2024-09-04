@@ -2,21 +2,20 @@ import { RenderingTestContext } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { setupRenderingTest } from 'ember-qunit';
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 
 import {
   baseRealm,
   baseCardRef,
-  internalKeyFor,
   type CodeRef,
   type LooseSingleCardDocument,
-  type IndexedInstance,
-  type Realm,
 } from '@cardstack/runtime-common';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import { SearchIndex } from '@cardstack/runtime-common/search-index';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
   testRealmURL,
@@ -27,20 +26,19 @@ import {
   setupLocalIndexing,
   type CardDocFiles,
   setupIntegrationTestRealm,
-  getDbAdapter,
-  lookupLoaderService,
 } from '../helpers';
 
-const paths = new RealmPaths(new URL(testRealmURL));
+const paths = new RealmPaths(testRealmURL);
 const testModuleRealm = 'http://localhost:4202/test/';
 
 let loader: Loader;
 
-module(`Integration | search-index`, function (hooks) {
+module('Integration | search-index', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
-    loader = lookupLoaderService().loader;
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
   });
 
   setupLocalIndexing(hooks);
@@ -48,17 +46,6 @@ module(`Integration | search-index`, function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-
-  async function getInstance(
-    realm: Realm,
-    url: URL,
-  ): Promise<IndexedInstance | undefined> {
-    let maybeInstance = await realm.searchIndex.instance(url);
-    if (maybeInstance?.type === 'error') {
-      return undefined;
-    }
-    return maybeInstance;
-  }
 
   test('full indexing discovers card instances', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
@@ -132,9 +119,7 @@ module(`Integration | search-index`, function (hooks) {
     });
     let indexer = realm.searchIndex;
     {
-      let mango = await indexer.cardDocument(
-        new URL(`${testRealmURL}Pet/mango`),
-      );
+      let mango = await indexer.card(new URL(`${testRealmURL}Pet/mango`));
       if (mango?.type === 'error') {
         assert.deepEqual(
           mango.error.detail,
@@ -166,9 +151,7 @@ module(`Integration | search-index`, function (hooks) {
       } as LooseSingleCardDocument),
     );
     {
-      let mango = await indexer.cardDocument(
-        new URL(`${testRealmURL}Pet/mango`),
-      );
+      let mango = await indexer.card(new URL(`${testRealmURL}Pet/mango`));
       if (mango?.type === 'doc') {
         assert.deepEqual(mango.doc.data, {
           id: `${testRealmURL}Pet/mango`,
@@ -203,123 +186,6 @@ module(`Integration | search-index`, function (hooks) {
         });
       } else {
         assert.ok(false, `search entry was an error: ${mango?.error.detail}`);
-      }
-    }
-  });
-
-  test('can query the "production" index while performing indexing operations', async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
-      loader,
-      contents: {
-        'Pet/mango.json': {
-          data: {
-            id: `${testRealmURL}Pet/mango`,
-            attributes: {
-              firstName: 'Mango',
-            },
-            meta: {
-              adoptsFrom: {
-                module: 'http://localhost:4202/test/pet',
-                name: 'Pet',
-              },
-            },
-          },
-        },
-      },
-    });
-    let indexer = realm.searchIndex;
-    let updateCard = realm.write(
-      'Pet/mango.json',
-      JSON.stringify({
-        data: {
-          id: `${testRealmURL}Pet/mango`,
-          attributes: {
-            firstName: 'Van Gogh',
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/pet',
-              name: 'Pet',
-            },
-          },
-        },
-      } as LooseSingleCardDocument),
-    );
-    let getCard = indexer.cardDocument(new URL(`${testRealmURL}Pet/mango`));
-    let [_, entry] = await Promise.all([updateCard, getCard]);
-    if (entry?.type === 'doc') {
-      // we see the "production" version of this card while it is being indexed
-      delete entry.doc.data.meta.lastModified;
-      assert.deepEqual(entry.doc.data, {
-        id: `${testRealmURL}Pet/mango`,
-        type: 'card',
-        links: {
-          self: `${testRealmURL}Pet/mango`,
-        },
-        attributes: {
-          description: null,
-          firstName: 'Mango',
-          title: 'Mango',
-          thumbnailURL: null,
-        },
-        relationships: {
-          owner: {
-            links: {
-              self: null,
-            },
-          },
-        },
-        meta: {
-          adoptsFrom: {
-            module: 'http://localhost:4202/test/pet',
-            name: 'Pet',
-          },
-          realmInfo: testRealmInfo,
-          realmURL: 'http://test-realm/test/',
-        },
-      });
-    } else {
-      assert.ok(false, `search entry was an error: ${entry?.error.detail}`);
-    }
-    {
-      // after the card has been indexed, the update is moved from the WIP version
-      // of the index to the production version of the index
-      let entry = await indexer.cardDocument(
-        new URL(`${testRealmURL}Pet/mango`),
-      );
-      if (entry?.type === 'doc') {
-        // we see the "production" version of this card while it is being indexed
-        delete entry.doc.data.meta.lastModified;
-        assert.deepEqual(entry.doc.data, {
-          id: `${testRealmURL}Pet/mango`,
-          type: 'card',
-          links: {
-            self: `${testRealmURL}Pet/mango`,
-          },
-          attributes: {
-            description: null,
-            firstName: 'Van Gogh',
-            title: 'Van Gogh',
-            thumbnailURL: null,
-          },
-          relationships: {
-            owner: {
-              links: {
-                self: null,
-              },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/pet',
-              name: 'Pet',
-            },
-            realmInfo: testRealmInfo,
-            realmURL: 'http://test-realm/test/',
-          },
-        });
-      } else {
-        assert.ok(false, `search entry was an error: ${entry?.error.detail}`);
       }
     }
   });
@@ -366,7 +232,7 @@ module(`Integration | search-index`, function (hooks) {
       },
     });
     let indexer = realm.searchIndex;
-    let mango = await indexer.cardDocument(new URL(`${testRealmURL}Pet/mango`));
+    let mango = await indexer.card(new URL(`${testRealmURL}Pet/mango`));
     if (mango?.type === 'doc') {
       assert.deepEqual(mango.doc.data, {
         id: `${testRealmURL}Pet/mango`,
@@ -446,7 +312,7 @@ module(`Integration | search-index`, function (hooks) {
       },
     });
     let indexer = realm.searchIndex;
-    let mango = await indexer.cardDocument(new URL(`${testRealmURL}Pet/mango`));
+    let mango = await indexer.card(new URL(`${testRealmURL}Pet/mango`));
     if (mango?.type === 'doc') {
       assert.deepEqual(mango.doc.data, {
         id: `${testRealmURL}Pet/mango`,
@@ -506,7 +372,6 @@ module(`Integration | search-index`, function (hooks) {
             attributes: {
               title: 'Person Card',
               description: 'Catalog entry for Person card',
-              isField: false,
               ref: {
                 module: './person',
                 name: 'Person',
@@ -534,7 +399,7 @@ module(`Integration | search-index`, function (hooks) {
       },
     });
     let indexer = realm.searchIndex;
-    let entry = await indexer.cardDocument(
+    let entry = await indexer.card(
       new URL(`${testRealmURL}person-catalog-entry`),
     );
     if (entry?.type === 'doc') {
@@ -550,6 +415,7 @@ module(`Integration | search-index`, function (hooks) {
           moduleHref: `${testRealmURL}person`,
           realmName: 'Unnamed Workspace',
           isField: false,
+          isPrimitive: false,
           ref: {
             module: `./person`,
             name: 'Person',
@@ -603,11 +469,6 @@ module(`Integration | search-index`, function (hooks) {
             <h1><@fields.firstName /></h1>
           </template>
         };
-        static embedded = class Isolated extends Component<typeof this> {
-          <template>
-            <h1> Person Embedded Card: <@fields.firstName /></h1>
-          </template>
-        };
       }
 
       class Boom extends CardDef {
@@ -657,7 +518,7 @@ module(`Integration | search-index`, function (hooks) {
       });
       let indexer = realm.searchIndex;
       {
-        let entry = await indexer.cardDocument(new URL(`${testRealmURL}boom`));
+        let entry = await indexer.card(new URL(`${testRealmURL}boom`));
         if (entry?.type === 'error') {
           assert.strictEqual(
             entry.error.detail,
@@ -669,20 +530,15 @@ module(`Integration | search-index`, function (hooks) {
         }
       }
       {
-        let entry = await indexer.cardDocument(
-          new URL(`${testRealmURL}vangogh`),
-        );
+        let entry = await indexer.card(new URL(`${testRealmURL}vangogh`));
         if (entry?.type === 'doc') {
           assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
-          let { isolatedHtml, embeddedHtml } =
-            (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
+          let { html } =
+            (await indexer.searchEntry(new URL(`${testRealmURL}vangogh`))) ??
+            {};
           assert.strictEqual(
-            trimCardContainer(stripScopedCSSAttributes(isolatedHtml!)),
+            trimCardContainer(stripScopedCSSAttributes(html!)),
             cleanWhiteSpace(`<h1> Van Gogh </h1>`),
-          );
-          assert.strictEqual(
-            trimCardContainer(stripScopedCSSAttributes(embeddedHtml!)),
-            cleanWhiteSpace(`<h1> Person Embedded Card: Van Gogh </h1>`),
           );
         } else {
           assert.ok(
@@ -695,7 +551,6 @@ module(`Integration | search-index`, function (hooks) {
 
     {
       // perform a new index to assert that render stack is still consistent
-      (await getDbAdapter()).reset();
       let cardApi: typeof import('https://cardstack.com/base/card-api');
       let string: typeof import('https://cardstack.com/base/string');
       cardApi = await loader.import(`${baseRealm.url}card-api`);
@@ -709,11 +564,6 @@ module(`Integration | search-index`, function (hooks) {
         static isolated = class Isolated extends Component<typeof this> {
           <template>
             <h1><@fields.firstName /></h1>
-          </template>
-        };
-        static embedded = class Isolated extends Component<typeof this> {
-          <template>
-            <h1> Person Embedded Card: <@fields.firstName /></h1>
           </template>
         };
       }
@@ -738,20 +588,15 @@ module(`Integration | search-index`, function (hooks) {
       });
       let indexer = realm.searchIndex;
       {
-        let entry = await indexer.cardDocument(
-          new URL(`${testRealmURL}vangogh`),
-        );
+        let entry = await indexer.card(new URL(`${testRealmURL}vangogh`));
         if (entry?.type === 'doc') {
           assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
-          let { isolatedHtml, embeddedHtml } =
-            (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
+          let { html } =
+            (await indexer.searchEntry(new URL(`${testRealmURL}vangogh`))) ??
+            {};
           assert.strictEqual(
-            trimCardContainer(stripScopedCSSAttributes(isolatedHtml!)),
+            trimCardContainer(stripScopedCSSAttributes(html!)),
             cleanWhiteSpace(`<h1> Van Gogh </h1>`),
-          );
-          assert.strictEqual(
-            trimCardContainer(stripScopedCSSAttributes(embeddedHtml!)),
-            cleanWhiteSpace(`<h1> Person Embedded Card: Van Gogh </h1>`),
           );
         } else {
           assert.ok(
@@ -802,11 +647,6 @@ module(`Integration | search-index`, function (hooks) {
           <h1><@fields.firstName /></h1>
         </template>
       };
-      static embedded = class Isolated extends Component<typeof this> {
-        <template>
-          <h1> Person Embedded Card: <@fields.firstName /></h1>
-        </template>
-      };
     }
     let { realm } = await setupIntegrationTestRealm({
       loader,
@@ -847,7 +687,7 @@ module(`Integration | search-index`, function (hooks) {
     });
     let indexer = realm.searchIndex;
 
-    let entry = await indexer.cardDocument(new URL(`${testRealmURL}vangogh`));
+    let entry = await indexer.card(new URL(`${testRealmURL}vangogh`));
     if (entry?.type === 'error') {
       assert.strictEqual(
         entry.error.detail,
@@ -860,23 +700,16 @@ module(`Integration | search-index`, function (hooks) {
     // Reindex to assert that the broken card has been indexed before the working one
     await realm.reindex();
 
-    entry = await indexer.cardDocument(
-      new URL(`${testRealmURL}working-van-gogh`),
-    );
+    entry = await indexer.card(new URL(`${testRealmURL}working-van-gogh`));
     if (entry?.type === 'doc') {
       assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
-      let { isolatedHtml, embeddedHtml } =
-        (await getInstance(
-          realm,
+      let { html } =
+        (await indexer.searchEntry(
           new URL(`${testRealmURL}working-van-gogh`),
         )) ?? {};
       assert.strictEqual(
-        trimCardContainer(stripScopedCSSAttributes(isolatedHtml!)),
+        trimCardContainer(stripScopedCSSAttributes(html!)),
         cleanWhiteSpace(`<h1> Van Gogh </h1>`),
-      );
-      assert.strictEqual(
-        trimCardContainer(stripScopedCSSAttributes(embeddedHtml!)),
-        cleanWhiteSpace(`<h1> Person Embedded Card: Van Gogh </h1>`),
       );
     } else {
       assert.ok(
@@ -929,11 +762,6 @@ module(`Integration | search-index`, function (hooks) {
           <h1><@fields.firstName /></h1>
         </template>
       };
-      static embedded = class Isolated extends Component<typeof this> {
-        <template>
-          <h1> Person Embedded Card: <@fields.firstName /></h1>
-        </template>
-      };
     }
 
     let { realm } = await setupIntegrationTestRealm({
@@ -976,7 +804,7 @@ module(`Integration | search-index`, function (hooks) {
     });
 
     let indexer = realm.searchIndex;
-    let entry = await indexer.cardDocument(new URL(`${testRealmURL}vangogh`));
+    let entry = await indexer.card(new URL(`${testRealmURL}vangogh`));
     if (entry?.type === 'error') {
       assert.strictEqual(
         entry.error.detail,
@@ -989,234 +817,23 @@ module(`Integration | search-index`, function (hooks) {
     // Reindex to assert that the broken card has been indexed before the working one
     await realm.reindex();
 
-    entry = await indexer.cardDocument(
-      new URL(`${testRealmURL}working-vangogh`),
-    );
+    entry = await indexer.card(new URL(`${testRealmURL}working-vangogh`));
     if (entry?.type === 'doc') {
       assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
-      let { isolatedHtml, embeddedHtml } =
-        (await getInstance(realm, new URL(`${testRealmURL}working-vangogh`))) ??
-        {};
+      let { html } =
+        (await indexer.searchEntry(
+          new URL(`${testRealmURL}working-vangogh`),
+        )) ?? {};
       assert.strictEqual(
-        trimCardContainer(stripScopedCSSAttributes(isolatedHtml!)),
+        trimCardContainer(stripScopedCSSAttributes(html!)),
         cleanWhiteSpace(`<h1> Van Gogh </h1>`),
       );
-      assert.strictEqual(
-        trimCardContainer(stripScopedCSSAttributes(embeddedHtml!)),
-        cleanWhiteSpace(`<h1> Person Embedded Card: Van Gogh </h1>`),
-      );
     } else {
       assert.ok(
         false,
         `expected search entry to be a document but was: ${entry?.error.detail}`,
       );
     }
-  });
-
-  test('can capture atom html when indexing a card', async function (assert) {
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-
-    let { field, contains, CardDef, Component } = cardApi;
-    let { default: StringField } = string;
-
-    class Person extends CardDef {
-      @field firstName = contains(StringField);
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <h1><@fields.firstName /></h1>
-        </template>
-      };
-      static atom = class Atom extends Component<typeof this> {
-        <template>
-          <div class='atom'>{{@model.firstName}}</div>
-        </template>
-      };
-    }
-    let { realm } = await setupIntegrationTestRealm({
-      loader,
-      contents: {
-        'person.gts': { Person },
-        'vangogh.json': {
-          data: {
-            attributes: {
-              firstName: 'Van Gogh',
-            },
-            meta: {
-              adoptsFrom: {
-                module: './person',
-                name: 'Person',
-              },
-            },
-          },
-        },
-      },
-    });
-    let { atomHtml } =
-      (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
-
-    assert.strictEqual(
-      trimCardContainer(stripScopedCSSAttributes(atomHtml!)),
-      cleanWhiteSpace(`<div class="atom">Van Gogh</div>`),
-      'atom html is correct',
-    );
-  });
-
-  test('can capture css when indexing a card', async function (assert) {
-    let { realm } = await setupIntegrationTestRealm({
-      loader,
-      contents: {
-        // we use a string src here because shimmed modules are skipped by the indexer
-        'person.gts': `
-          import { contains, field, Component, CardDef } from 'https://cardstack.com/base/card-api';
-          import StringField from 'https://cardstack.com/base/string';
-
-          export class Person extends CardDef {
-            @field firstName = contains(StringField);
-            static isolated = class Isolated extends Component<typeof this> {
-              <template>
-                <h2><@fields.firstName /></h2>
-                <style>
-                  h2 {
-                    color: red;
-                  }
-                </style>
-              </template>
-            };
-          }
-        `,
-        'mango.json': {
-          data: {
-            attributes: { firstName: 'Mango' },
-            meta: {
-              adoptsFrom: { module: `./person`, name: 'Person' },
-            },
-          },
-        },
-      },
-    });
-
-    let indexer = realm.searchIndex;
-    let scope = `data-scopedcss-a61576b4d4-6ad446b263`;
-    let entry = await indexer.css(new URL(`${testRealmURL}person`));
-    if (entry?.type === 'css') {
-      assert.strictEqual(
-        cleanWhiteSpace(entry.source),
-        cleanWhiteSpace(`h2[${scope}] { color: red; }`),
-        'the CSS is correct',
-      );
-    } else {
-      assert.ok(
-        false,
-        `expected search entry to be a document but was: ${entry?.error.detail}`,
-      );
-    }
-    let { isolatedHtml } =
-      (await getInstance(realm, new URL(`${testRealmURL}mango`))) ?? {};
-    let fragment = isolatedHtml!.match(/<h2[^<]+<\/h2>/)![0];
-    assert.strictEqual(
-      cleanWhiteSpace(fragment),
-      cleanWhiteSpace(`<h2 ${scope}> Mango </h2>`),
-      'the HTML is correct',
-    );
-  });
-
-  test(`can generate embedded HTML for instance's card class hierarchy`, async function (assert) {
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-
-    let { field, contains, CardDef, Component } = cardApi;
-    let { default: StringField } = string;
-
-    class Person extends CardDef {
-      @field firstName = contains(StringField);
-      static embedded = class Isolated extends Component<typeof this> {
-        <template>
-          <h1> Person Embedded Card: <@fields.firstName /></h1>
-        </template>
-      };
-    }
-
-    class FancyPerson extends Person {
-      @field favoriteColor = contains(StringField);
-      static embedded = class Isolated extends Component<typeof this> {
-        <template>
-          <h1>
-            Fancy Person Embedded Card:
-            <@fields.firstName />
-            -
-            <@fields.favoriteColor /></h1>
-        </template>
-      };
-    }
-
-    let { realm } = await setupIntegrationTestRealm({
-      loader,
-      contents: {
-        'person.gts': { Person },
-        'fancy-person.gts': { FancyPerson },
-        'germaine.json': {
-          data: {
-            attributes: {
-              firstName: 'Germaine',
-              favoriteColor: 'hot pink',
-            },
-            meta: {
-              adoptsFrom: {
-                module: './fancy-person',
-                name: 'FancyPerson',
-              },
-            },
-          },
-        },
-      },
-    });
-
-    let { embeddedHtml, _embeddedHtmlByClassHierarchy } =
-      (await getInstance(realm, new URL(`${testRealmURL}germaine`))) ?? {};
-    assert.strictEqual(
-      trimCardContainer(stripScopedCSSAttributes(embeddedHtml!)),
-      cleanWhiteSpace(
-        `<h1> Fancy Person Embedded Card: Germaine - hot pink </h1>`,
-      ),
-      'default embedded HTML is correct',
-    );
-    let embeddedHtmls = _embeddedHtmlByClassHierarchy!;
-    let cardDefRefURL = internalKeyFor(baseCardRef, undefined);
-    assert.deepEqual(
-      Object.keys(embeddedHtmls),
-      ['default', `${testRealmURL}person/Person`, cardDefRefURL],
-      'embedded class hierarchy is correct',
-    );
-    assert.strictEqual(
-      trimCardContainer(stripScopedCSSAttributes(embeddedHtmls['default'])),
-      cleanWhiteSpace(
-        `<h1> Fancy Person Embedded Card: Germaine - hot pink </h1>`,
-      ),
-      'default embedded HTML is correct',
-    );
-    assert.strictEqual(
-      trimCardContainer(
-        stripScopedCSSAttributes(embeddedHtmls[`${testRealmURL}person/Person`]),
-      ),
-      cleanWhiteSpace(`<h1> Person Embedded Card: Germaine </h1>`),
-      `${testRealmURL}person/Person embedded HTML is correct`,
-    );
-    assert.strictEqual(
-      trimCardContainer(stripScopedCSSAttributes(embeddedHtmls[cardDefRefURL])),
-      // TODO the default embeded template cards will eventually change as part of CS-6831
-      cleanWhiteSpace(`
-        <div class="missing-embedded-template card">
-          <span data-test-missing-embedded-template-text>Missing embedded component for CardDef: Card</span>
-          <!---->
-        </div>
-      `),
-      `${cardDefRefURL} embedded HTML is correct`,
-    );
   });
 
   test('can index a card that has a cyclic relationship with the field of a card in its fields', async function (assert) {
@@ -1269,9 +886,7 @@ module(`Integration | search-index`, function (hooks) {
               description: 'Dog',
               thumbnailURL: './jackie.jpg',
             },
-            meta: {
-              adoptsFrom: { module: `./pet-card`, name: 'PetCard' },
-            },
+            meta: { adoptsFrom: { module: `./pet-card`, name: 'PetCard' } },
             relationships: {
               'appointment.contact.pet': {
                 links: { self: `${testRealmURL}mango` },
@@ -1291,7 +906,7 @@ module(`Integration | search-index`, function (hooks) {
     });
 
     let indexer = realm.searchIndex;
-    let card = await indexer.cardDocument(new URL(`${testRealmURL}jackie`));
+    let card = await indexer.card(new URL(`${testRealmURL}jackie`));
 
     if (card?.type === 'doc') {
       assert.deepEqual(card.doc.data.attributes, {
@@ -1391,12 +1006,9 @@ module(`Integration | search-index`, function (hooks) {
       },
     });
     let indexer = realm.searchIndex;
-    let vendor = await indexer.cardDocument(
-      new URL(`${testRealmURL}Vendor/vendor1`),
-      {
-        loadLinks: true,
-      },
-    );
+    let vendor = await indexer.card(new URL(`${testRealmURL}Vendor/vendor1`), {
+      loadLinks: true,
+    });
     if (vendor?.type === 'doc') {
       console.log(vendor.doc);
       assert.deepEqual(vendor.doc, {
@@ -1549,9 +1161,7 @@ module(`Integration | search-index`, function (hooks) {
     });
     let indexer = realm.searchIndex;
     {
-      let card = await indexer.cardDocument(
-        new URL(`${testRealmURL}Boom/boom`),
-      );
+      let card = await indexer.card(new URL(`${testRealmURL}Boom/boom`));
       if (card?.type === 'error') {
         assert.ok(
           card.error.detail.includes('intentional error thrown'),
@@ -1563,9 +1173,7 @@ module(`Integration | search-index`, function (hooks) {
     }
 
     {
-      let card = await indexer.cardDocument(
-        new URL(`${testRealmURL}Person/owner`),
-      );
+      let card = await indexer.card(new URL(`${testRealmURL}Person/owner`));
       if (card?.type === 'doc') {
         assert.strictEqual(card.doc.data.attributes?.firstName, 'Hassan');
       } else {
@@ -1613,12 +1221,12 @@ module(`Integration | search-index`, function (hooks) {
         },
       },
     });
-    let entry = await getInstance(
-      realm,
+    let indexer = realm.searchIndex;
+    let entry = await indexer.searchEntry(
       new URL(`${testRealmURL}Person/hassan`),
     );
     assert.deepEqual(
-      entry?.searchDoc,
+      entry?.searchData,
       {
         id: `${testRealmURL}Person/hassan`,
         firstName: 'Hassan',
@@ -1626,7 +1234,8 @@ module(`Integration | search-index`, function (hooks) {
         email: 'hassan@cardstack.com',
         posts: 100,
         title: 'Hassan Abdel-Rahman',
-        _cardType: 'Person',
+        thumbnailURL: undefined,
+        cardType: 'Person',
       },
       `search doc does not include fullName field`,
     );
@@ -1641,7 +1250,6 @@ module(`Integration | search-index`, function (hooks) {
             attributes: {
               title: 'Booking',
               description: 'Catalog entry for Booking',
-              isField: false,
               ref: {
                 module: 'http://localhost:4202/test/booking',
                 name: 'Booking',
@@ -1673,21 +1281,25 @@ module(`Integration | search-index`, function (hooks) {
         },
       },
     });
-    let entry = await getInstance(
-      realm,
+    let indexer = realm.searchIndex;
+    let entry = await indexer.searchEntry(
       new URL(`${testRealmURL}CatalogEntry/booking`),
     );
-    assert.deepEqual(entry?.searchDoc, {
-      _cardType: 'Catalog Entry',
+    assert.deepEqual(entry?.searchData, {
+      cardType: 'Catalog Entry',
       id: `${testRealmURL}CatalogEntry/booking`,
       demo: {
-        hosts: null,
-        sponsors: null,
+        endTime: undefined,
+        hosts: [],
+        id: undefined,
+        sponsors: [],
+        startTime: undefined,
         title: null,
         venue: null,
       },
       description: 'Catalog entry for Booking',
       isField: false,
+      isPrimitive: false,
       moduleHref: 'http://localhost:4202/test/booking',
       realmName: 'Unnamed Workspace',
       ref: 'http://localhost:4202/test/booking/Booking',
@@ -1696,7 +1308,7 @@ module(`Integration | search-index`, function (hooks) {
     // we should be able to perform a structured clone of the search doc (this
     // emulates the limitations of the postMessage used to communicate between
     // DOM and worker). Success is not throwing an error
-    structuredClone(entry?.searchDoc);
+    structuredClone(entry?.searchData);
   });
 
   test('can index a card with linksToMany field', async function (assert) {
@@ -1748,7 +1360,7 @@ module(`Integration | search-index`, function (hooks) {
     });
 
     let indexer = realm.searchIndex;
-    let hassan = await indexer.cardDocument(
+    let hassan = await indexer.card(
       new URL(`${testRealmURL}PetPerson/hassan`),
       { loadLinks: true },
     );
@@ -1837,13 +1449,12 @@ module(`Integration | search-index`, function (hooks) {
       assert.ok(false, `search entry was an error: ${hassan?.error.detail}`);
     }
 
-    let hassanEntry = await getInstance(
-      realm,
+    let hassanEntry = await indexer.searchEntry(
       new URL(`${testRealmURL}PetPerson/hassan`),
     );
     if (hassanEntry) {
-      assert.deepEqual(hassanEntry.searchDoc, {
-        _cardType: 'Pet Person',
+      assert.deepEqual(hassanEntry.searchData, {
+        cardType: 'Pet Person',
         id: `${testRealmURL}PetPerson/hassan`,
         firstName: 'Hassan',
         pets: [
@@ -1896,12 +1507,9 @@ module(`Integration | search-index`, function (hooks) {
       },
     });
     let indexer = realm.searchIndex;
-    let card = await indexer.cardDocument(
-      new URL(`${testRealmURL}PetPerson/burcu`),
-      {
-        loadLinks: true,
-      },
-    );
+    let card = await indexer.card(new URL(`${testRealmURL}PetPerson/burcu`), {
+      loadLinks: true,
+    });
 
     if (card?.type === 'doc') {
       assert.deepEqual(card.doc, {
@@ -1936,16 +1544,15 @@ module(`Integration | search-index`, function (hooks) {
       assert.ok(false, `search entry was an error: ${card?.error.detail}`);
     }
 
-    let entry = await getInstance(
-      realm,
+    let entry = await indexer.searchEntry(
       new URL(`${testRealmURL}PetPerson/burcu`),
     );
     if (entry) {
-      assert.deepEqual(entry.searchDoc, {
-        _cardType: 'Pet Person',
+      assert.deepEqual(entry.searchData, {
+        cardType: 'Pet Person',
         id: `${testRealmURL}PetPerson/burcu`,
         firstName: 'Burcu',
-        pets: null,
+        pets: [],
         friend: null,
         title: 'Burcu Pet Person',
         description: 'A person with pets',
@@ -1979,7 +1586,6 @@ module(`Integration | search-index`, function (hooks) {
             attributes: {
               title: 'PetPerson',
               description: 'Catalog entry for PetPerson',
-              isField: false,
               ref: {
                 module: `${testModuleRealm}pet-person`,
                 name: 'PetPerson',
@@ -2025,7 +1631,7 @@ module(`Integration | search-index`, function (hooks) {
     });
 
     let indexer = realm.searchIndex;
-    let catalogEntry = await indexer.cardDocument(
+    let catalogEntry = await indexer.card(
       new URL(`${testRealmURL}pet-person-catalog-entry`),
       { loadLinks: true },
     );
@@ -2044,6 +1650,7 @@ module(`Integration | search-index`, function (hooks) {
           },
           demo: { firstName: 'Hassan' },
           isField: false,
+          isPrimitive: false,
           moduleHref: `${testModuleRealm}pet-person`,
           realmName: 'Unnamed Workspace',
         },
@@ -2128,18 +1735,18 @@ module(`Integration | search-index`, function (hooks) {
       );
     }
 
-    let entry = await getInstance(
-      realm,
+    let entry = await indexer.searchEntry(
       new URL(`${testRealmURL}pet-person-catalog-entry`),
     );
     if (entry) {
-      assert.deepEqual(entry.searchDoc, {
-        _cardType: 'Catalog Entry',
+      assert.deepEqual(entry.searchData, {
+        cardType: 'Catalog Entry',
         id: `${testRealmURL}pet-person-catalog-entry`,
         title: 'PetPerson',
         description: 'Catalog entry for PetPerson',
         ref: `${testModuleRealm}pet-person/PetPerson`,
         demo: {
+          id: undefined,
           firstName: 'Hassan',
           pets: [
             {
@@ -2162,6 +1769,7 @@ module(`Integration | search-index`, function (hooks) {
           friend: null,
         },
         isField: false,
+        isPrimitive: false,
         moduleHref: `${testModuleRealm}pet-person`,
         realmName: 'Unnamed Workspace',
       });
@@ -2247,9 +1855,7 @@ module(`Integration | search-index`, function (hooks) {
       },
     });
     let indexer = realm.searchIndex;
-    let hassan = await indexer.cardDocument(
-      new URL(`${testRealmURL}Friend/hassan`),
-    );
+    let hassan = await indexer.card(new URL(`${testRealmURL}Friend/hassan`));
     if (hassan?.type === 'doc') {
       assert.deepEqual(hassan.doc.data, {
         id: `${testRealmURL}Friend/hassan`,
@@ -2286,22 +1892,23 @@ module(`Integration | search-index`, function (hooks) {
       assert.ok(false, `search entry was an error: ${hassan?.error.detail}`);
     }
 
-    let hassanEntry = await getInstance(
-      realm,
+    let hassanEntry = await indexer.searchEntry(
       new URL(`${testRealmURL}Friend/hassan`),
     );
     if (hassanEntry) {
-      assert.deepEqual(hassanEntry.searchDoc, {
-        _cardType: 'Friend',
+      assert.deepEqual(hassanEntry.searchData, {
+        cardType: 'Friend',
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
         title: 'Hassan',
         description: 'Friend of dogs',
+        thumbnailURL: undefined,
         friend: {
           id: `${testRealmURL}Friend/mango`,
           firstName: 'Mango',
           title: 'Mango',
           description: 'Dog friend',
+          thumbnailURL: undefined,
           friend: {
             id: `${testRealmURL}Friend/vanGogh`,
             firstName: 'Van Gogh',
@@ -2371,12 +1978,9 @@ module(`Integration | search-index`, function (hooks) {
       },
     });
     let indexer = realm.searchIndex;
-    let hassan = await indexer.cardDocument(
-      new URL(`${testRealmURL}Friend/hassan`),
-      {
-        loadLinks: true,
-      },
-    );
+    let hassan = await indexer.card(new URL(`${testRealmURL}Friend/hassan`), {
+      loadLinks: true,
+    });
     if (hassan?.type === 'doc') {
       assert.deepEqual(hassan.doc, {
         data: {
@@ -2452,16 +2056,16 @@ module(`Integration | search-index`, function (hooks) {
       assert.ok(false, `search entry was an error: ${hassan?.error.detail}`);
     }
 
-    let hassanEntry = await getInstance(
-      realm,
+    let hassanEntry = await indexer.searchEntry(
       new URL(`${testRealmURL}Friend/hassan`),
     );
     if (hassanEntry) {
-      assert.deepEqual(hassanEntry.searchDoc, {
-        _cardType: 'Friend',
+      assert.deepEqual(hassanEntry.searchData, {
+        cardType: 'Friend',
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
         description: 'Dog owner',
+        thumbnailURL: undefined,
         friend: {
           id: `${testRealmURL}Friend/mango`,
           firstName: 'Mango',
@@ -2470,6 +2074,7 @@ module(`Integration | search-index`, function (hooks) {
             id: `${testRealmURL}Friend/hassan`,
           },
           description: 'Dog friend',
+          thumbnailURL: undefined,
         },
         title: 'Hassan',
       });
@@ -2480,12 +2085,9 @@ module(`Integration | search-index`, function (hooks) {
       );
     }
 
-    let mango = await indexer.cardDocument(
-      new URL(`${testRealmURL}Friend/mango`),
-      {
-        loadLinks: true,
-      },
-    );
+    let mango = await indexer.card(new URL(`${testRealmURL}Friend/mango`), {
+      loadLinks: true,
+    });
     if (mango?.type === 'doc') {
       assert.deepEqual(mango.doc, {
         data: {
@@ -2561,17 +2163,17 @@ module(`Integration | search-index`, function (hooks) {
       assert.ok(false, `search entry was an error: ${mango?.error.detail}`);
     }
 
-    let mangoEntry = await getInstance(
-      realm,
+    let mangoEntry = await indexer.searchEntry(
       new URL(`${testRealmURL}Friend/mango`),
     );
     if (mangoEntry) {
-      assert.deepEqual(mangoEntry.searchDoc, {
-        _cardType: 'Friend',
+      assert.deepEqual(mangoEntry.searchData, {
+        cardType: 'Friend',
         id: `${testRealmURL}Friend/mango`,
         firstName: 'Mango',
         title: 'Mango',
         description: 'Dog friend',
+        thumbnailURL: undefined,
         friend: {
           id: `${testRealmURL}Friend/hassan`,
           firstName: 'Hassan',
@@ -2579,6 +2181,7 @@ module(`Integration | search-index`, function (hooks) {
             id: `${testRealmURL}Friend/mango`,
           },
           description: 'Dog owner',
+          thumbnailURL: undefined,
         },
       });
     } else {
@@ -2593,10 +2196,7 @@ module(`Integration | search-index`, function (hooks) {
     let hassanID = `${testRealmURL}Friends/hassan`;
     let mangoID = `${testRealmURL}Friends/mango`;
     let vanGoghID = `${testRealmURL}Friends/vanGogh`;
-    let friendsRef = {
-      module: `${testModuleRealm}friends`,
-      name: 'Friends',
-    };
+    let friendsRef = { module: `${testModuleRealm}friends`, name: 'Friends' };
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
       contents: {
@@ -2637,9 +2237,7 @@ module(`Integration | search-index`, function (hooks) {
       'instances are indexed without error',
     );
 
-    let hassan = await indexer.cardDocument(new URL(hassanID), {
-      loadLinks: true,
-    });
+    let hassan = await indexer.card(new URL(hassanID), { loadLinks: true });
     if (hassan?.type === 'doc') {
       assert.deepEqual(
         hassan.doc.data,
@@ -2729,26 +2327,32 @@ module(`Integration | search-index`, function (hooks) {
       assert.ok(false, `search entry was an error: ${hassan?.error.detail}`);
     }
 
-    let hassanEntry = await getInstance(realm, new URL(hassanID));
+    let hassanEntry = await indexer.searchEntry(new URL(hassanID));
     if (hassanEntry) {
       assert.deepEqual(
-        hassanEntry.searchDoc,
+        hassanEntry.searchData,
         {
-          _cardType: 'Friends',
+          cardType: 'Friends',
           id: hassanID,
           firstName: 'Hassan',
           title: 'Hassan',
+          description: undefined,
+          thumbnailURL: undefined,
           friends: [
             {
               id: mangoID,
               firstName: 'Mango',
               title: 'Mango',
               friends: [{ id: hassanID }],
+              description: undefined,
+              thumbnailURL: undefined,
             },
             {
               id: vanGoghID,
               firstName: 'Van Gogh',
               friends: [{ id: hassanID }],
+              description: undefined,
+              thumbnailURL: undefined,
             },
           ],
         },
@@ -2758,9 +2362,7 @@ module(`Integration | search-index`, function (hooks) {
       assert.ok(false, `could not find ${hassanID} in the index`);
     }
 
-    let mango = await indexer.cardDocument(new URL(mangoID), {
-      loadLinks: true,
-    });
+    let mango = await indexer.card(new URL(mangoID), { loadLinks: true });
     if (mango?.type === 'doc') {
       assert.deepEqual(
         mango.doc.data,
@@ -2849,25 +2451,31 @@ module(`Integration | search-index`, function (hooks) {
       assert.ok(false, `search entry was an error: ${mango?.error.detail}`);
     }
 
-    let mangoEntry = await getInstance(realm, new URL(mangoID));
+    let mangoEntry = await indexer.searchEntry(new URL(mangoID));
     if (mangoEntry) {
       assert.deepEqual(
-        mangoEntry.searchDoc,
+        mangoEntry.searchData,
         {
-          _cardType: 'Friends',
+          cardType: 'Friends',
           id: mangoID,
           firstName: 'Mango',
           title: 'Mango',
+          description: undefined,
+          thumbnailURL: undefined,
           friends: [
             {
               id: hassanID,
               firstName: 'Hassan',
+              description: undefined,
+              thumbnailURL: undefined,
               friends: [
                 { id: mangoID },
                 {
                   id: vanGoghID,
                   firstName: 'Van Gogh',
                   friends: [{ id: hassanID }],
+                  description: undefined,
+                  thumbnailURL: undefined,
                 },
               ],
             },
@@ -2879,9 +2487,7 @@ module(`Integration | search-index`, function (hooks) {
       assert.ok(false, `could not find ${mangoID} in the index`);
     }
 
-    let vanGogh = await indexer.cardDocument(new URL(vanGoghID), {
-      loadLinks: true,
-    });
+    let vanGogh = await indexer.card(new URL(vanGoghID), { loadLinks: true });
     if (vanGogh?.type === 'doc') {
       assert.deepEqual(
         vanGogh.doc.data,
@@ -2970,26 +2576,32 @@ module(`Integration | search-index`, function (hooks) {
       assert.ok(false, `search entry was an error: ${vanGogh?.error.detail}`);
     }
 
-    let vanGoghEntry = await getInstance(realm, new URL(vanGoghID));
+    let vanGoghEntry = await indexer.searchEntry(new URL(vanGoghID));
     if (vanGoghEntry) {
       assert.deepEqual(
-        vanGoghEntry.searchDoc,
+        vanGoghEntry.searchData,
         {
-          _cardType: 'Friends',
+          cardType: 'Friends',
           id: vanGoghID,
           firstName: 'Van Gogh',
           title: 'Van Gogh',
+          description: undefined,
+          thumbnailURL: undefined,
           friends: [
             {
               id: hassanID,
               firstName: 'Hassan',
               title: 'Hassan',
+              description: undefined,
+              thumbnailURL: undefined,
               friends: [
                 {
                   id: mangoID,
                   firstName: 'Mango',
                   title: 'Mango',
                   friends: [{ id: hassanID }],
+                  description: undefined,
+                  thumbnailURL: undefined,
                 },
                 { id: vanGoghID },
               ],
@@ -3022,29 +2634,29 @@ module(`Integration | search-index`, function (hooks) {
         },
       },
     });
-    let refs = (await getInstance(realm, new URL(`${testRealmURL}person-1`)))
+    let indexer = realm.searchIndex;
+    let refs = (await indexer.searchEntry(new URL(`${testRealmURL}person-1`)))
       ?.deps;
     assert.deepEqual(
-      refs!
+      [...refs!.keys()]
         .sort()
         // Exclude synthetic imports that encapsulate scoped CSS
-        .filter((ref) => !ref.includes('glimmer-scoped.css')),
+        .filter((key) => !key.includes('glimmer-scoped.css')),
       [
+        'http://localhost:4201/base/card-api',
+        'http://localhost:4201/base/contains-many-component',
+        'http://localhost:4201/base/field-component',
+        'http://localhost:4201/base/links-to-editor',
+        'http://localhost:4201/base/links-to-many-component',
+        'http://localhost:4201/base/number',
+        'http://localhost:4201/base/shared-state',
+        'http://localhost:4201/base/string',
+        'http://localhost:4201/base/text-input-validator',
+        'http://localhost:4201/base/watched-array',
         'http://localhost:4202/test/person',
-        'https://cardstack.com/base/card-api',
-        'https://cardstack.com/base/contains-many-component',
-        'https://cardstack.com/base/field-component',
-        'https://cardstack.com/base/links-to-editor',
-        'https://cardstack.com/base/links-to-many-component',
-        'https://cardstack.com/base/number',
-        'https://cardstack.com/base/shared-state',
-        'https://cardstack.com/base/string',
-        'https://cardstack.com/base/text-input-validator',
-        'https://cardstack.com/base/watched-array',
         'https://packages/@cardstack/boxel-ui/components',
         'https://packages/@cardstack/boxel-ui/helpers',
         'https://packages/@cardstack/boxel-ui/icons',
-        'https://packages/@cardstack/boxel-ui/modifiers',
         'https://packages/@cardstack/runtime-common',
         'https://packages/@ember/component',
         'https://packages/@ember/component/template-only',
@@ -3057,7 +2669,6 @@ module(`Integration | search-index`, function (hooks) {
         'https://packages/ember-concurrency',
         'https://packages/ember-concurrency/-private/async-arrow-runtime',
         'https://packages/ember-modifier',
-        'https://packages/ember-provide-consume-context',
         'https://packages/lodash',
         'https://packages/tracked-built-ins',
       ],
@@ -3069,12 +2680,8 @@ module(`Integration | search-index`, function (hooks) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
       contents: {
-        'ignore-me-1.json': {
-          data: { meta: { adoptsFrom: baseCardRef } },
-        },
-        'posts/nested.json': {
-          data: { meta: { adoptsFrom: baseCardRef } },
-        },
+        'ignore-me-1.json': { data: { meta: { adoptsFrom: baseCardRef } } },
+        'posts/nested.json': { data: { meta: { adoptsFrom: baseCardRef } } },
         'posts/please-ignore-me.json': {
           data: { meta: { adoptsFrom: baseCardRef } },
         },
@@ -3094,7 +2701,7 @@ posts/please-ignore-me.json
     let indexer = realm.searchIndex;
 
     {
-      let card = await indexer.cardDocument(
+      let card = await indexer.card(
         new URL(`${testRealmURL}posts/please-ignore-me`),
       );
       assert.deepEqual(
@@ -3104,7 +2711,7 @@ posts/please-ignore-me.json
       );
     }
     {
-      let card = await indexer.cardDocument(new URL(`${testRealmURL}dir/card`));
+      let card = await indexer.card(new URL(`${testRealmURL}dir/card`));
       assert.deepEqual(
         card,
         undefined,
@@ -3112,9 +2719,7 @@ posts/please-ignore-me.json
       );
     }
     {
-      let card = await indexer.cardDocument(
-        new URL(`${testRealmURL}ignore-me-1`),
-      );
+      let card = await indexer.card(new URL(`${testRealmURL}ignore-me-1`));
       assert.deepEqual(
         card,
         undefined,
@@ -3122,7 +2727,7 @@ posts/please-ignore-me.json
       );
     }
     {
-      let card = await indexer.cardDocument(
+      let card = await indexer.card(
         new URL(`${testRealmURL}posts/ignore-me-2`),
       );
       assert.deepEqual(
@@ -3132,13 +2737,11 @@ posts/please-ignore-me.json
       );
     }
     {
-      let card = await indexer.cardDocument(new URL(`${testRealmURL}post`));
+      let card = await indexer.card(new URL(`${testRealmURL}post`));
       assert.ok(card, 'instance exists');
     }
     {
-      let card = await indexer.cardDocument(
-        new URL(`${testRealmURL}posts/nested`),
-      );
+      let card = await indexer.card(new URL(`${testRealmURL}posts/nested`));
       assert.ok(card, 'instance exists');
     }
   });
@@ -3153,11 +2756,9 @@ posts/please-ignore-me.json
     });
 
     let indexer = realm.searchIndex;
-    let card = await indexer.cardDocument(new URL(`${testRealmURL}post`));
+    let card = await indexer.card(new URL(`${testRealmURL}post`));
     assert.ok(card, 'instance exists');
-    let instance = await indexer.cardDocument(
-      new URL(`${testRealmURL}.realm.json`),
-    );
+    let instance = await indexer.card(new URL(`${testRealmURL}.realm.json`));
     assert.strictEqual(
       instance,
       undefined,
@@ -3169,9 +2770,7 @@ posts/please-ignore-me.json
     let { realm } = await setupIntegrationTestRealm({
       loader,
       contents: {
-        'posts/ignore-me.json': {
-          data: { meta: { adoptsFrom: baseCardRef } },
-        },
+        'posts/ignore-me.json': { data: { meta: { adoptsFrom: baseCardRef } } },
         '.gitignore': `
 posts/ignore-me.json
       `,
@@ -3181,7 +2780,7 @@ posts/ignore-me.json
     let indexer = realm.searchIndex;
     await indexer.update(new URL(`${testRealmURL}posts/ignore-me.json`));
 
-    let instance = await indexer.cardDocument(
+    let instance = await indexer.card(
       new URL(`${testRealmURL}posts/ignore-me`),
     );
     assert.strictEqual(
@@ -3221,16 +2820,9 @@ posts/ignore-me.json
       'card-2.json': {
         data: {
           type: 'card',
-          attributes: {
-            author: { firstName: 'Cardy', lastName: 'Jones' },
-            editions: 1,
-            pubDate: '2023-09-01',
-          },
+          attributes: { author: { firstName: 'Cardy' }, editions: 1 },
           meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}book`,
-              name: 'Book',
-            },
+            adoptsFrom: { module: `${testModuleRealm}book`, name: 'Book' },
           },
         },
       },
@@ -3249,10 +2841,7 @@ posts/ignore-me.json
             views: 10,
           },
           meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}post`,
-              name: 'Post',
-            },
+            adoptsFrom: { module: `${testModuleRealm}post`, name: 'Post' },
           },
         },
       },
@@ -3290,10 +2879,7 @@ posts/ignore-me.json
             pubDate: '2022-07-01',
           },
           meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}book`,
-              name: 'Book',
-            },
+            adoptsFrom: { module: `${testModuleRealm}book`, name: 'Book' },
           },
         },
       },
@@ -3309,10 +2895,7 @@ posts/ignore-me.json
             pubDate: '2023-08-01',
           },
           meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}book`,
-              name: 'Book',
-            },
+            adoptsFrom: { module: `${testModuleRealm}book`, name: 'Book' },
           },
         },
       },
@@ -3328,10 +2911,7 @@ posts/ignore-me.json
             pubDate: '2022-08-01',
           },
           meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}book`,
-              name: 'Book',
-            },
+            adoptsFrom: { module: `${testModuleRealm}book`, name: 'Book' },
           },
         },
       },
@@ -3341,7 +2921,6 @@ posts/ignore-me.json
           attributes: {
             title: 'Post',
             description: 'A card that represents a blog post',
-            isField: false,
             ref: {
               module: `${testModuleRealm}post`,
               name: 'Post',
@@ -3361,7 +2940,6 @@ posts/ignore-me.json
           attributes: {
             title: 'Article',
             description: 'A card that represents an online article ',
-            isField: false,
             ref: {
               module: `${testModuleRealm}article`,
               name: 'Article',
@@ -3371,38 +2949,6 @@ posts/ignore-me.json
             adoptsFrom: {
               module: `${baseRealm.url}catalog-entry`,
               name: 'CatalogEntry',
-            },
-          },
-        },
-      },
-      'event-1.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            title: "Mango's Birthday",
-            venue: 'Dog Park',
-            date: '2024-10-30',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}event`,
-              name: 'Event',
-            },
-          },
-        },
-      },
-      'event-2.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            title: "Van Gogh's Birthday",
-            venue: 'Backyard',
-            date: '2024-11-19',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}event`,
-              name: 'Event',
             },
           },
         },
@@ -3513,7 +3059,6 @@ posts/ignore-me.json
                 title: 'post 1',
                 author: {
                   firstName: 'A',
-                  lastName: null,
                   posts: 10,
                 },
                 views: 16,
@@ -3539,7 +3084,6 @@ posts/ignore-me.json
                 lastName: 'Faulkner',
               },
             ],
-            sponsors: null,
             posts: [
               {
                 title: 'post 1',
@@ -3609,125 +3153,6 @@ posts/ignore-me.json
           },
         },
       },
-      'larry.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Larry',
-          },
-          relationships: {
-            'friends.0': {
-              links: {
-                self: './missing',
-              },
-            },
-            'friends.1': {
-              links: {
-                self: './empty',
-              },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}friends`,
-              name: 'Friends',
-            },
-          },
-        },
-      },
-      'missing.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Missing',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}friends`,
-              name: 'Friends',
-            },
-          },
-        },
-      },
-      'empty.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Empty',
-          },
-          relationships: {
-            'friends.0': {
-              links: {
-                self: null,
-              },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}friends`,
-              name: 'Friends',
-            },
-          },
-        },
-      },
-      'bob.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            stringField: 'Bob',
-            stringArrayField: ['blue', 'tree', 'carrot'],
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}type-examples`,
-              name: 'TypeExamples',
-            },
-          },
-        },
-      },
-      'alicia.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            stringField: 'Alicia',
-            stringArrayField: null,
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}type-examples`,
-              name: 'TypeExamples',
-            },
-          },
-        },
-      },
-      'margaret.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            stringField: 'Margaret',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}type-examples`,
-              name: 'TypeExamples',
-            },
-          },
-        },
-      },
-      'noname.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            stringArrayField: ['happy', 'green'],
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}type-examples`,
-              name: 'TypeExamples',
-            },
-          },
-        },
-      },
     };
 
     let indexer: SearchIndex;
@@ -3753,64 +3178,16 @@ posts/ignore-me.json
       );
     });
 
-    test(`can use 'eq' to find empty values`, async function (assert) {
+    test(`can use 'eq' to find 'null' values`, async function (assert) {
       let { data: matching } = await indexer.search({
         filter: {
-          on: { module: `${testModuleRealm}booking`, name: 'Booking' },
-          eq: { 'posts.author.lastName': null },
+          on: { module: `${testModuleRealm}book`, name: 'Book' },
+          eq: { 'author.lastName': null },
         },
       });
       assert.deepEqual(
         matching.map((m) => m.id),
-        [`${testRealmURL}booking1`],
-      );
-    });
-
-    test(`can use 'eq' to find missing values`, async function (assert) {
-      let { data: matching } = await indexer.search({
-        filter: {
-          on: {
-            module: `${testModuleRealm}type-examples`,
-            name: 'TypeExamples',
-          },
-          eq: { stringField: null },
-        },
-      });
-      assert.deepEqual(
-        matching.map((m) => m.id),
-        [`${testRealmURL}noname`],
-      );
-    });
-
-    test(`can use 'eq' to find empty containsMany field and missing containsMany field`, async function (assert) {
-      let { data: matching } = await indexer.search({
-        filter: {
-          on: {
-            module: `${testModuleRealm}type-examples`,
-            name: 'TypeExamples',
-          },
-          eq: { stringArrayField: null },
-        },
-      });
-      assert.deepEqual(
-        matching.map((m) => m.id),
-        [`${testRealmURL}alicia`, `${testRealmURL}margaret`],
-      );
-    });
-
-    test(`can use 'eq' to find empty linksToMany field and missing linksToMany field`, async function (assert) {
-      let { data: matching } = await indexer.search({
-        filter: {
-          on: {
-            module: `${testModuleRealm}friends`,
-            name: 'Friends',
-          },
-          eq: { friends: null },
-        },
-      });
-      assert.deepEqual(
-        matching.map((m) => m.id),
-        [`${testRealmURL}empty`, `${testRealmURL}missing`],
+        [`${testRealmURL}card-2`],
       );
     });
 
@@ -3843,10 +3220,7 @@ posts/ignore-me.json
     test(`can search for cards that have custom queryableValue`, async function (assert) {
       let { data: matching } = await indexer.search({
         filter: {
-          on: {
-            module: `${baseRealm.url}catalog-entry`,
-            name: 'CatalogEntry',
-          },
+          on: { module: `${baseRealm.url}catalog-entry`, name: 'CatalogEntry' },
           eq: {
             ref: {
               module: `${testModuleRealm}post`,
@@ -3905,9 +3279,7 @@ posts/ignore-me.json
 
       matching = (
         await indexer.search({
-          filter: {
-            type: { module: `${testModuleRealm}post`, name: 'Post' },
-          },
+          filter: { type: { module: `${testModuleRealm}post`, name: 'Post' } },
         })
       ).data;
       assert.deepEqual(
@@ -3921,10 +3293,7 @@ posts/ignore-me.json
       let { data: matching } = await indexer.search({
         filter: {
           on: { module: `${testModuleRealm}post`, name: 'Post' },
-          range: {
-            views: { lte: 10, gt: 5 },
-            'author.posts': { gte: 1 },
-          },
+          range: { views: { lte: 10, gt: 5 }, 'author.posts': { gte: 1 } },
         },
       });
       assert.deepEqual(
@@ -3963,38 +3332,34 @@ posts/ignore-me.json
           [`${paths.url}booking2`],
         );
       }
+      {
+        let { data: matching } = await indexer.search({
+          filter: {
+            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+            range: {
+              'posts.views': { lte: undefined },
+            },
+          },
+        });
+        assert.deepEqual(
+          matching.map((m) => m.id),
+          [],
+        );
+      }
     });
 
-    test('can use a range filter with custom formatQuery', async function (assert) {
+    test('can use a range filter with custom queryableValue', async function (assert) {
       let { data: matching } = await indexer.search({
         filter: {
           on: { module: `${testModuleRealm}dog`, name: 'Dog' },
           range: {
-            numberOfTreats: {
-              lt: ['three', 'zero'],
-              gt: ['two', 'zero'],
-            },
+            numberOfTreats: { lt: ['three', 'zero'], gt: ['two', 'zero'] },
           },
         },
       });
       assert.deepEqual(
         matching.map((m) => m.id),
         [`${paths.url}vangogh`],
-      );
-    });
-
-    test('can use an eq filter with a date field', async function (assert) {
-      let { data: matching } = await indexer.search({
-        filter: {
-          on: { module: `${testModuleRealm}event`, name: 'Event' },
-          eq: {
-            date: '2024-10-30',
-          },
-        },
-      });
-      assert.deepEqual(
-        matching.map((m) => m.id),
-        [`${paths.url}event-1`],
       );
     });
 
@@ -4105,10 +3470,7 @@ posts/ignore-me.json
         let { data: matching } = await indexer.search({
           filter: {
             on: { module: `${testModuleRealm}booking`, name: 'Booking' },
-            eq: {
-              'posts.author.firstName': 'A',
-              'posts.author.lastName': 'B',
-            },
+            eq: { 'posts.author.firstName': 'A', 'posts.author.lastName': 'B' },
           },
         });
         assert.deepEqual(
@@ -4135,15 +3497,12 @@ posts/ignore-me.json
       }
     });
 
-    test(`can filter on an array of primitive fields inside a containsMany using 'eq'`, async function (assert) {
+    skip(`can filter on an array of primitive fields inside a containsMany using 'eq'`, async function (assert) {
       {
         let { data: matching } = await indexer.search({
           filter: {
-            on: {
-              module: `${testModuleRealm}booking`,
-              name: 'Booking',
-            },
-            eq: { sponsors: 'Nintendo' },
+            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+            eq: { sponsors: ['Nintendo'] },
           },
         });
         assert.deepEqual(
@@ -4155,11 +3514,8 @@ posts/ignore-me.json
       {
         let { data: matching } = await indexer.search({
           filter: {
-            on: {
-              module: `${testModuleRealm}booking`,
-              name: 'Booking',
-            },
-            eq: { sponsors: 'Playstation' },
+            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
+            eq: { sponsors: ['Playstation'] },
           },
         });
         assert.strictEqual(
@@ -4171,10 +3527,7 @@ posts/ignore-me.json
       {
         let { data: matching } = await indexer.search({
           filter: {
-            on: {
-              module: `${testModuleRealm}booking`,
-              name: 'Booking',
-            },
+            on: { module: `${testModuleRealm}booking`, name: 'Booking' },
             eq: {
               'hosts.firstName': 'Arthur',
               sponsors: null,
@@ -4207,10 +3560,7 @@ posts/ignore-me.json
         filter: {
           any: [
             {
-              on: {
-                module: `${testModuleRealm}article`,
-                name: 'Article',
-              },
+              on: { module: `${testModuleRealm}article`, name: 'Article' },
               eq: { 'author.firstName': 'Cardy' },
             },
             {
@@ -4254,9 +3604,7 @@ posts/ignore-me.json
             direction: 'desc',
           },
         ],
-        filter: {
-          type: { module: `${testModuleRealm}post`, name: 'Post' },
-        },
+        filter: { type: { module: `${testModuleRealm}post`, name: 'Post' } },
       });
       assert.deepEqual(
         matching.map((m) => m.id),
@@ -4277,9 +3625,7 @@ posts/ignore-me.json
             direction: 'asc',
           },
         ],
-        filter: {
-          type: { module: `${testModuleRealm}dog`, name: 'Dog' },
-        },
+        filter: { type: { module: `${testModuleRealm}dog`, name: 'Dog' } },
       });
       assert.deepEqual(
         matching.map((m) => m.id),
@@ -4296,22 +3642,20 @@ posts/ignore-me.json
         sort: [
           {
             on: baseCardRef,
-            by: '_cardType',
+            by: 'cardType',
           },
         ],
       });
 
-      // note that the card id is always included as a secondary sort
-      // field in the case of ties for the specified sort field
       assert.deepEqual(
         matching.map((m) => m.id),
         [
           `${paths.url}card-1`, // article
           `${paths.url}cards/2`, // article
+          `${paths.url}card-2`, // book
           `${paths.url}books/1`, // book
           `${paths.url}books/2`, // book
           `${paths.url}books/3`, // book
-          `${paths.url}card-2`, // book
           `${paths.url}booking1`, // booking
           `${paths.url}booking2`, // booking
           `${paths.url}catalog-entry-1`, // catalog entry
@@ -4319,20 +3663,11 @@ posts/ignore-me.json
           `${paths.url}mango`, // dog
           `${paths.url}ringo`, // dog
           `${paths.url}vangogh`, // dog
-          `${paths.url}event-1`, // event
-          `${paths.url}event-2`, // event
-          `${paths.url}friend1`, // friend
           `${paths.url}friend2`, // friend
-          `${paths.url}empty`, // friends
-          `${paths.url}larry`, // friends
-          `${paths.url}missing`, // friends
+          `${paths.url}friend1`, // friend
           `${paths.url}person-card1`, // person
           `${paths.url}person-card2`, // person
           `${paths.url}cards/1`, // person
-          `${paths.url}alicia`, // type example
-          `${paths.url}bob`, // type example
-          `${paths.url}margaret`, // type example
-          `${paths.url}noname`, // type example
         ],
       );
     });
@@ -4351,9 +3686,7 @@ posts/ignore-me.json
             direction: 'desc',
           },
         ],
-        filter: {
-          type: { module: `${testModuleRealm}book`, name: 'Book' },
-        },
+        filter: { type: { module: `${testModuleRealm}book`, name: 'Book' } },
       });
       assert.deepEqual(
         matching.map((m) => m.id),
@@ -4378,9 +3711,7 @@ posts/ignore-me.json
             on: { module: `${testModuleRealm}book`, name: 'Book' },
           },
         ],
-        filter: {
-          type: { module: `${testModuleRealm}book`, name: 'Book' },
-        },
+        filter: { type: { module: `${testModuleRealm}book`, name: 'Book' } },
       });
       assert.deepEqual(
         matching.map((m) => m.id),
@@ -4401,22 +3732,15 @@ posts/ignore-me.json
             on: { module: `${testModuleRealm}book`, name: 'Book' },
           },
         ],
-        filter: {
-          type: { module: `${testModuleRealm}book`, name: 'Book' },
-        },
+        filter: { type: { module: `${testModuleRealm}book`, name: 'Book' } },
       });
-      // note that sorting by nulls is problematic in that sqlite
-      // considers nulls the smallest possible value and postgres considers
-      // nulls the largest possible value. removing tests that make
-      // assertions around the positions of nulls as it cannot be run
-      // consistently between postgres, sqlite, and our in-memory index
       assert.deepEqual(
         matching.map((m) => m.id),
         [
           `${paths.url}books/1`, // 2022-07-01
           `${paths.url}books/3`, // 2022-08-01
           `${paths.url}books/2`, // 2023-08-01
-          `${paths.url}card-2`, // 2023-09-01
+          `${paths.url}card-2`, // null
         ],
       );
     });
@@ -4434,16 +3758,14 @@ posts/ignore-me.json
             on: { module: `${testModuleRealm}book`, name: 'Book' },
           },
         ],
-        filter: {
-          type: { module: `${testModuleRealm}book`, name: 'Book' },
-        },
+        filter: { type: { module: `${testModuleRealm}book`, name: 'Book' } },
       });
       assert.deepEqual(
         matching.map((m) => m.id),
         [
           `${paths.url}books/3`, // 2
           `${paths.url}books/1`, // 1 // Ab
-          `${paths.url}card-2`, // 1 // Jo
+          `${paths.url}card-2`, // 1 // null
           `${paths.url}books/2`, // 0
         ],
       );
@@ -4464,18 +3786,8 @@ posts/ignore-me.json
         ],
         filter: {
           any: [
-            {
-              type: {
-                module: `${testModuleRealm}book`,
-                name: 'Book',
-              },
-            },
-            {
-              type: {
-                module: `${testModuleRealm}article`,
-                name: 'Article',
-              },
-            },
+            { type: { module: `${testModuleRealm}book`, name: 'Book' } },
+            { type: { module: `${testModuleRealm}article`, name: 'Article' } },
           ],
         },
       });
@@ -4485,9 +3797,9 @@ posts/ignore-me.json
           `${paths.url}books/2`, // Ab Van Gogh
           `${paths.url}books/1`, // Ab Mango
           `${paths.url}books/3`, // Ag Jackie
-          `${paths.url}cards/2`, // De Darrin
-          `${paths.url}card-2`, // Jo Cardy
-          `${paths.url}card-1`, // St Cardy
+          `${paths.url}card-2`, // null
+          `${paths.url}card-1`, // (article)
+          `${paths.url}cards/2`, // (article)
         ],
       );
     });
@@ -4516,10 +3828,7 @@ posts/ignore-me.json
       });
       assert.deepEqual(
         matching.map((m) => m.id),
-        [
-          `${paths.url}books/1`, // Mango
-          `${paths.url}card-2`, // Cardy
-        ],
+        [`${paths.url}books/1`],
       );
     });
 

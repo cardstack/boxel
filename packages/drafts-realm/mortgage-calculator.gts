@@ -5,8 +5,6 @@ import {
   field,
   contains,
 } from 'https://cardstack.com/base/card-api';
-import { concat } from '@ember/helper';
-import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
 
 const formatter = new Intl.NumberFormat('en-US', {
@@ -408,7 +406,7 @@ export class MortgageCalculator extends CardDef {
               {{#each this.chartData as |item|}}
                 <div><div
                     class='swatch'
-                    style={{htmlSafe (concat 'background: ' item.color)}}
+                    style='background: {{item.color}}'
                   ></div>
                   {{item.percent}}% -
                   {{item.label}}</div>
@@ -596,6 +594,12 @@ export class MortgageCalculator extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+
+
+
+
+
 
   */
 }

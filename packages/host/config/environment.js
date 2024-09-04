@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 
-let sqlSchema = fs.readFileSync(getLatestSchemaFile(), 'utf8');
+let sqlSchema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
 
 module.exports = function (environment) {
   const ENV = {
@@ -56,7 +56,7 @@ module.exports = function (environment) {
       environment === 'test'
         ? 'http://test-realm/test/'
         : process.env.OWN_REALM_URL || 'http://localhost:4200/',
-    featureFlags: {},
+    sqlSchema,
   };
 
   if (environment === 'development') {
@@ -85,7 +85,6 @@ module.exports = function (environment) {
     ENV.serverEchoDebounceMs = 0;
     ENV.loginMessageTimeoutMs = 0;
     ENV.minSaveTaskDurationMs = 0;
-    ENV.sqlSchema = sqlSchema;
   }
 
   if (environment === 'production') {
@@ -95,26 +94,3 @@ module.exports = function (environment) {
 
   return ENV;
 };
-
-function getLatestSchemaFile() {
-  const migrationsDir = path.resolve(
-    path.join(__dirname, '..', '..', 'realm-server', 'migrations'),
-  );
-  let migrations = fs.readdirSync(migrationsDir);
-  let lastMigration = migrations
-    .filter((f) => f !== '.eslintrc.js')
-    .sort()
-    .pop();
-  const schemaDir = path.join(__dirname, 'schema');
-  let files = fs.readdirSync(schemaDir);
-  let latestSchemaFile = files.sort().pop();
-  if (
-    lastMigration.replace(/_.*/, '') !== latestSchemaFile.replace(/_.*/, '') &&
-    ['development', 'test'].includes(process.env.EMBER_ENV)
-  ) {
-    throw new Error(
-      `The sqlite schema file is out of date--please regenerate the sqlite schema file using \`pnpm make-schema\` in the realm server`,
-    );
-  }
-  return path.join(schemaDir, latestSchemaFile);
-}

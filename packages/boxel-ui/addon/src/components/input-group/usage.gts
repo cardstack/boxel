@@ -331,9 +331,9 @@ export default class BoxelInputGroupUsage extends Component {
               @options={{this.selectExampleItems}}
               @dropdownClass='boxel-select-usage-dropdown'
               aria-label='Select an item'
-              as |item|
+              as |item itemCssClass|
             >
-              <div>{{item}}</div>
+              <div class={{itemCssClass}}>{{item}}</div>
             </Accessories.Select>
           </:after>
         </BoxelInputGroup>

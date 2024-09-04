@@ -5,10 +5,9 @@ import { instantiateFastBoot } from './fastboot-from-deployed';
 import {
   type IndexRunner,
   type RunnerOpts,
-} from '@cardstack/runtime-common/worker';
+} from '@cardstack/runtime-common/search-index';
 import { JSDOM } from 'jsdom';
 import { type ErrorReporter } from '@cardstack/runtime-common/realm';
-import { performance } from 'perf_hooks';
 
 const appName = '@cardstack/host';
 export async function makeFastBootIndexRunner(
@@ -34,8 +33,6 @@ export async function makeFastBootIndexRunner(
           Request: globalThis.Request,
           Response: globalThis.Response,
           btoa,
-          atob,
-          performance,
           getRunnerOpts,
           _logDefinitions: (globalThis as any)._logDefinitions,
           jsdom: new JSDOM(''),
@@ -53,8 +50,6 @@ export async function makeFastBootIndexRunner(
           Request: globalThis.Request,
           Response: globalThis.Response,
           btoa,
-          atob,
-          performance,
           getRunnerOpts,
           _logDefinitions: (globalThis as any)._logDefinitions,
           jsdom: new JSDOM(''),
@@ -81,14 +76,4 @@ function btoa(str: string | Buffer) {
     buffer = Buffer.from(str.toString(), 'binary');
   }
   return buffer.toString('base64');
-}
-
-function atob(base64: string | Buffer) {
-  let buffer;
-  if (base64 instanceof Buffer) {
-    buffer = base64;
-  } else {
-    buffer = Buffer.from(base64.toString(), 'base64');
-  }
-  return buffer.toString('ascii');
 }

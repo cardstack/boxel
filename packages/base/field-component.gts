@@ -12,96 +12,19 @@ import {
   isCompoundField,
   formats,
 } from './card-api';
-import {
-  CardContextName,
-  DefaultFormatContextName,
-  RealmSession,
-  RealmSessionContextName,
-  getField,
-} from '@cardstack/runtime-common';
+import { getField } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import Modifier from 'ember-modifier';
 import { initSharedState } from './shared-state';
 import { eq } from '@cardstack/boxel-ui/helpers';
-import { consume, provide } from 'ember-provide-consume-context';
-import Component from '@glimmer/component';
 
-export interface BoxComponentSignature {
+interface BoxComponentSignature {
   Args: { Named: { format?: Format; displayContainer?: boolean } };
   Blocks: {};
 }
 
 export type BoxComponent = ComponentLike<BoxComponentSignature>;
-
-interface CardContextConsumerSignature {
-  Blocks: { default: [CardContext] };
-}
-
-// cardComponentModifier, when provided, is used for the host environment to get access to card's rendered elements
-const DEFAULT_CARD_CONTEXT = {
-  cardComponentModifier: class NoOpModifier extends Modifier<any> {
-    modify() {}
-  },
-  actions: undefined,
-};
-
-export class CardContextConsumer extends Component<CardContextConsumerSignature> {
-  @consume(CardContextName) declare dynamicCardContext: CardContext;
-
-  get context(): CardContext {
-    return {
-      ...DEFAULT_CARD_CONTEXT,
-      ...this.dynamicCardContext,
-    };
-  }
-
-  <template>
-    {{yield this.context}}
-  </template>
-}
-
-interface DefaultFormatConsumerSignature {
-  Blocks: { default: [Format] };
-}
-
-export class DefaultFormatConsumer extends Component<DefaultFormatConsumerSignature> {
-  @consume(DefaultFormatContextName) declare defaultFormat: Format | undefined;
-
-  get effectiveDefaultFormat(): Format {
-    return this.defaultFormat ?? 'isolated';
-  }
-
-  <template>
-    {{yield this.effectiveDefaultFormat}}
-  </template>
-}
-
-interface DefaultFormatProviderSignature {
-  Args: { value: Format };
-  Blocks: { default: [] };
-}
-
-export class DefaultFormatProvider extends Component<DefaultFormatProviderSignature> {
-  @provide(DefaultFormatContextName)
-  get defaultFormat() {
-    return this.args.value;
-  }
-}
-
-interface RealmSessionConsumerSignature {
-  Blocks: { default: [RealmSession | undefined] };
-}
-
-export class RealmSessionConsumer extends Component<RealmSessionConsumerSignature> {
-  @consume(RealmSessionContextName) declare realmSession:
-    | RealmSession
-    | undefined;
-
-  <template>
-    {{yield this.realmSession}}
-  </template>
-}
 
 const componentCache = initSharedState(
   'componentCache',
@@ -109,18 +32,32 @@ const componentCache = initSharedState(
 );
 
 export function getBoxComponent(
-  cardOrField: typeof BaseDef,
+  card: typeof BaseDef,
+  defaultFormat: Format,
   model: Box<BaseDef>,
   field: Field | undefined,
+  context: CardContext = {},
 ): BoxComponent {
   let stable = componentCache.get(model);
   if (stable) {
     return stable;
   }
-  function determineFormat(
-    userFormat: Format | undefined,
-    defaultFormat: Format,
-  ): Format {
+  let internalFieldsCache:
+    | { fields: FieldsTypeFor<BaseDef>; format: Format }
+    | undefined;
+
+  // cardComponentModifier, when provided, is used for the host environment to get access to card's rendered elements
+  let cardComponentModifier =
+    context.cardComponentModifier ??
+    class NoOpModifier extends Modifier<any> {
+      modify() {}
+    };
+
+  function lookupFormat(userFormat: Format | undefined): {
+    Implementation: BaseDefComponent;
+    fields: FieldsTypeFor<BaseDef>;
+    format: Format;
+  } {
     let format: Format;
     let availableFormats = formats;
     let effectiveDefaultFormat = defaultFormat;
@@ -136,113 +73,93 @@ export function getBoxComponent(
       userFormat && availableFormats.includes(userFormat)
         ? userFormat
         : effectiveDefaultFormat;
-    return format;
-  }
 
-  let internalFieldsCache:
-    | { fields: FieldsTypeFor<BaseDef>; format: Format }
-    | undefined;
-
-  function lookupComponents(effectiveFormat: Format): {
-    CardOrFieldFormatComponent: BaseDefComponent;
-    fields: FieldsTypeFor<BaseDef>;
-  } {
     let fields: FieldsTypeFor<BaseDef>;
-    if (internalFieldsCache?.format === effectiveFormat) {
+    if (internalFieldsCache?.format === format) {
       fields = internalFieldsCache.fields;
     } else {
-      fields = fieldsComponentsFor({}, model);
-      internalFieldsCache = { fields, format: effectiveFormat };
+      fields = fieldsComponentsFor(
+        {},
+        model,
+        defaultFieldFormat(format),
+        context,
+      );
+      internalFieldsCache = { fields, format };
     }
+
     return {
-      CardOrFieldFormatComponent: (cardOrField as any)[effectiveFormat],
+      Implementation: (card as any)[format],
       fields,
+      format,
     };
   }
 
   let component: TemplateOnlyComponent<{
     Args: { format?: Format; displayContainer?: boolean };
   }> = <template>
-    <CardContextConsumer as |context|>
-      <RealmSessionConsumer as |realmSession|>
-        <DefaultFormatConsumer as |defaultFormat|>
-          {{#let (determineFormat @format defaultFormat) as |effectiveFormat|}}
-            {{#let
-              (lookupComponents effectiveFormat)
-              (if (eq @displayContainer false) false true)
-              as |c displayContainer|
-            }}
-              <DefaultFormatProvider
-                @value={{defaultFieldFormat effectiveFormat}}
-              >
-                {{#if (isCard model.value)}}
-                  <CardContainer
-                    @displayBoundaries={{displayContainer}}
-                    class='field-component-card
-                      {{effectiveFormat}}-format display-container-{{displayContainer}}'
-                    {{context.cardComponentModifier
-                      card=model.value
-                      format=effectiveFormat
-                      fieldType=field.fieldType
-                      fieldName=field.name
-                    }}
-                    data-test-card-format={{effectiveFormat}}
-                    data-test-field-component-card
-                    {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
-                    ...attributes
-                  >
-                    <c.CardOrFieldFormatComponent
-                      @cardOrField={{cardOrField}}
-                      @model={{model.value}}
-                      @fields={{c.fields}}
-                      @format={{effectiveFormat}}
-                      @set={{model.set}}
-                      @fieldName={{model.name}}
-                      @context={{context}}
-                      @canEdit={{realmSession.canWrite}}
-                    />
-                  </CardContainer>
-                {{else if (isCompoundField model.value)}}
-                  <div
-                    data-test-compound-field-format={{effectiveFormat}}
-                    data-test-compound-field-component
-                    {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
-                    ...attributes
-                  >
-                    <c.CardOrFieldFormatComponent
-                      @cardOrField={{cardOrField}}
-                      @model={{model.value}}
-                      @fields={{c.fields}}
-                      @format={{effectiveFormat}}
-                      @set={{model.set}}
-                      @fieldName={{model.name}}
-                      @context={{context}}
-                      @canEdit={{realmSession.canWrite}}
-                    />
-                  </div>
-                {{else}}
-                  <c.CardOrFieldFormatComponent
-                    @cardOrField={{cardOrField}}
-                    @model={{model.value}}
-                    @fields={{c.fields}}
-                    @format={{effectiveFormat}}
-                    @set={{model.set}}
-                    @fieldName={{model.name}}
-                    @context={{context}}
-                    @canEdit={{realmSession.canWrite}}
-                  />
-                {{/if}}
-              </DefaultFormatProvider>
-            {{/let}}
-          {{/let}}
-        </DefaultFormatConsumer>
-      </RealmSessionConsumer>
-    </CardContextConsumer>
+    {{#let
+      (lookupFormat @format) (if (eq @displayContainer false) false true)
+      as |f displayContainer|
+    }}
+      {{#if (isCard model.value)}}
+        <CardContainer
+          @displayBoundaries={{displayContainer}}
+          class='field-component-card
+            {{f.format}}-format display-container-{{displayContainer}}'
+          {{cardComponentModifier
+            card=model.value
+            format=f.format
+            fieldType=field.fieldType
+            fieldName=field.name
+          }}
+          data-test-card-format={{f.format}}
+          data-test-field-component-card
+          {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
+          ...attributes
+        >
+          <f.Implementation
+            @cardOrField={{card}}
+            @model={{model.value}}
+            @fields={{f.fields}}
+            @format={{f.format}}
+            @displayContainer={{@displayContainer}}
+            @set={{model.set}}
+            @fieldName={{model.name}}
+            @context={{context}}
+          />
+        </CardContainer>
+      {{else if (isCompoundField model.value)}}
+        <div
+          data-test-compound-field-format={{f.format}}
+          data-test-compound-field-component
+          {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
+          ...attributes
+        >
+          <f.Implementation
+            @cardOrField={{card}}
+            @model={{model.value}}
+            @fields={{f.fields}}
+            @format={{f.format}}
+            @displayContainer={{@displayContainer}}
+            @set={{model.set}}
+            @fieldName={{model.name}}
+            @context={{context}}
+          />
+        </div>
+      {{else}}
+        <f.Implementation
+          @cardOrField={{card}}
+          @model={{model.value}}
+          @fields={{f.fields}}
+          @format={{f.format}}
+          @displayContainer={{@displayContainer}}
+          @set={{model.set}}
+          @fieldName={{model.name}}
+          @context={{context}}
+        />
+      {{/if}}
+    {{/let}}
     <style>
-      .field-component-card.isolated-format {
-        height: 100%;
-      }
-
       .field-component-card.embedded-format {
         padding: var(--boxel-sp);
       }
@@ -266,7 +183,12 @@ export function getBoxComponent(
   // It would be possible to use `externalFields` in place of `internalFields` above,
   // avoiding the need for two separate Proxies. But that has the uncanny property of
   // making `<@fields />` be an infinite recursion.
-  let externalFields = fieldsComponentsFor(component, model);
+  let externalFields = fieldsComponentsFor(
+    component,
+    model,
+    defaultFieldFormat(defaultFormat),
+    context,
+  );
 
   // This cast is safe because we're returning a proxy that wraps component.
   stable = externalFields as unknown as typeof component;
@@ -289,6 +211,8 @@ function defaultFieldFormat(format: Format): Format {
 function fieldsComponentsFor<T extends BaseDef>(
   target: object,
   model: Box<T>,
+  defaultFormat: Format,
+  context?: CardContext,
 ): FieldsTypeFor<T> {
   // This is a cache of the fields we've already created components for
   // so that they do not get recreated
@@ -321,7 +245,11 @@ function fieldsComponentsFor<T extends BaseDef>(
       }
       let field = maybeField;
 
-      let result = field.component(model as unknown as Box<BaseDef>);
+      let result = field.component(
+        model as unknown as Box<BaseDef>,
+        defaultFormat,
+        context,
+      );
       stableComponents.set(property, result);
       return result;
     },
@@ -364,4 +292,82 @@ function fieldsComponentsFor<T extends BaseDef>(
       };
     },
   }) as any;
+}
+
+export function getPluralViewComponent(
+  model: Box<BaseDef[]>,
+  field: Field<typeof BaseDef>,
+  format: Format,
+  cardTypeFor: (
+    field: Field<typeof BaseDef>,
+    boxedElement: Box<BaseDef>,
+  ) => typeof BaseDef,
+  context?: CardContext,
+): BoxComponent {
+  let getComponents = () =>
+    model.children.map((child) =>
+      getBoxComponent(cardTypeFor(field, child), format, child, field, context),
+    ); // Wrap the the components in a function so that the template is reactive to changes in the model (this is essentially a helper)
+  let pluralViewComponent: TemplateOnlyComponent<BoxComponentSignature> =
+    <template>
+      {{#let (if @format @format format) as |format|}}
+        <div
+          class='plural-field
+            {{field.fieldType}}-field
+            {{format}}-format
+            {{unless model.children.length "empty"}}'
+          data-test-plural-view={{field.fieldType}}
+          data-test-plural-view-format={{format}}
+        >
+          {{#each (getComponents) as |Item i|}}
+            <div data-test-plural-view-item={{i}}>
+              <Item @format={{format}} />
+            </div>
+          {{/each}}
+        </div>
+      {{/let}}
+      <style>
+        .linksToMany-field.embedded-format > div + div {
+          margin-top: var(--boxel-sp);
+        }
+        .linksToMany-field.atom-format {
+          display: flex;
+          gap: var(--boxel-sp-sm);
+          padding: var(--boxel-sp-sm);
+          border: var(--boxel-border);
+          border-radius: var(--boxel-border-radius);
+        }
+        .containsMany-field.atom-format {
+          padding: var(--boxel-sp-sm);
+          background-color: var(--boxel-100);
+          border: none !important;
+          border-radius: var(--boxel-border-radius);
+        }
+      </style>
+    </template>;
+  return new Proxy(pluralViewComponent, {
+    get(target, property, received) {
+      // proxying the bare minimum of an Array in order to render within a
+      // template. add more getters as necessary...
+      let components = getComponents();
+
+      if (property === Symbol.iterator) {
+        return components[Symbol.iterator];
+      }
+      if (property === 'length') {
+        return components.length;
+      }
+      if (typeof property === 'string' && property.match(/\d+/)) {
+        return components[parseInt(property)];
+      }
+      return Reflect.get(target, property, received);
+    },
+    getPrototypeOf() {
+      // This is necessary for Ember to be able to locate the template associated
+      // with a proxied component. Our Proxy object won't be in the template WeakMap,
+      // but we can pretend our Proxy object inherits from the true component, and
+      // Ember's template lookup respects inheritance.
+      return pluralViewComponent;
+    },
+  });
 }

@@ -3,8 +3,6 @@ import { tracked } from '@glimmer/tracking';
 
 import { TrackedMap } from 'tracked-built-ins';
 
-import { v4 as uuid } from 'uuid';
-
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 import { clearAllRealmSessions } from '@cardstack/host/resources/realm-session';
@@ -14,8 +12,7 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import { OperatorModeContext } from '@cardstack/host/services/matrix-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
-import type { ReactionEventContent } from 'https://cardstack.com/base/matrix-event';
-import type { RoomField } from 'https://cardstack.com/base/room';
+import type { RoomField, MessageField } from 'https://cardstack.com/base/room';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let nonce = 0;
@@ -23,20 +20,15 @@ let nonce = 0;
 export type MockMatrixService = MatrixService & {
   cardAPI: typeof cardApi;
   createAndJoinRoom(roomId: string, roomName?: string): Promise<string>;
+  lastMessageSent: any;
 };
 
 class MockClient {
-  matrixService: MockMatrixService;
   lastSentEvent: any;
   userId?: string;
   displayname?: string;
 
-  constructor(
-    matrixService: MockMatrixService,
-    userId?: string,
-    displayname?: string,
-  ) {
-    this.matrixService = matrixService;
+  constructor(userId?: string, displayname?: string) {
     this.userId = userId;
     this.displayname = displayname;
   }
@@ -66,12 +58,6 @@ class MockClient {
   public getUserId() {
     return this.userId;
   }
-
-  public sendReadReceipt(event: { getId: () => string }) {
-    this.matrixService.addEventReadReceipt(event.getId(), {
-      readAt: new Date(),
-    });
-  }
 }
 function generateMockMatrixService(
   realmPermissions?: () => {
@@ -81,21 +67,20 @@ function generateMockMatrixService(
 ) {
   class MockMatrixService extends Service implements MockMatrixService {
     @service declare loaderService: LoaderService;
-
+    lastMessageSent: any;
     // @ts-ignore
-    @tracked client: MockClient = new MockClient(this, '@testuser:staging', '');
+    @tracked client: MockClient = new MockClient('@testuser:staging', '');
     // @ts-ignore
     cardAPI!: typeof cardApi;
 
     profile = getMatrixProfile(this, () => this.userId);
 
+    // These will be empty in the tests, but we need to define them to satisfy the interface
     rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
 
     messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
     cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
-    failedCommandState: TrackedMap<string, Error> = new TrackedMap();
-    currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
-      new TrackedMap();
+    pendingMessages: TrackedMap<string, MessageField> = new TrackedMap();
 
     async start(_auth?: any) {}
 
@@ -133,10 +118,6 @@ function generateMockMatrixService(
       return Promise.resolve(`${headerAndPayload}.${secret}`);
     }
 
-    addEventReadReceipt(eventId: string, readAt: Date) {
-      this.currentUserEventReadReceipts.set(eventId, { readAt });
-    }
-
     async createRoom(
       name: string,
       _invites: string[], // these can be local names
@@ -148,68 +129,17 @@ function generateMockMatrixService(
       return await this.createAndJoinRoom(name);
     }
 
-    async sendReactionEvent(roomId: string, eventId: string, status: string) {
-      let content: ReactionEventContent = {
-        'm.relates_to': {
-          event_id: eventId,
-          key: status,
-          rel_type: 'm.annotation',
-        },
-      };
-      try {
-        return await this.sendEvent(roomId, 'm.reaction', content);
-      } catch (e) {
-        throw new Error(
-          `Error sending reaction event: ${
-            'message' in (e as Error) ? (e as Error).message : e
-          }`,
-        );
-      }
-    }
-
-    async sendEvent(roomId: string, eventType: string, content: any) {
-      await addRoomEvent(this, {
-        event_id: uuid(),
-        room_id: roomId,
-        type: eventType,
-        sender: this.userId,
-        origin_server_ts: Date.now(),
-        content,
-        status: null,
-      });
-    }
-
     async sendMessage(
       roomId: string,
       body: string | undefined,
-      _cards: CardDef[],
-      clientGeneratedId: string,
-      _context?: OperatorModeContext,
+      cards?: CardDef[],
+      context?: OperatorModeContext,
     ) {
-      let event = {
-        room_id: roomId,
-        state_key: 'state',
-        type: 'm.room.message',
-        sender: this.userId,
-        content: {
-          body,
-          msgtype: 'org.boxel.message',
-          formatted_body: body,
-          format: 'org.matrix.custom.html',
-        },
-        origin_server_ts: Date.now(),
-        unsigned: {
-          age: 105,
-          transaction_id: '1',
-        },
-        status: null,
-        clientGeneratedId,
-      };
-      await addRoomEvent(this, event);
+      this.lastMessageSent = { roomId, body, cards, context };
     }
 
     async logout() {
-      this.client = new MockClient(this as any, undefined);
+      this.client = new MockClient(undefined);
     }
 
     async setDisplayName(displayName: string) {
@@ -227,7 +157,6 @@ function generateMockMatrixService(
         room_id: roomId,
         type: 'm.room.name',
         content: { name: name ?? roomId },
-        status: null,
       });
 
       await addRoomEvent(this, {
@@ -239,7 +168,6 @@ function generateMockMatrixService(
           creator: '@testuser:staging',
           room_version: '0',
         },
-        status: null,
       });
 
       await addRoomEvent(this, {
@@ -255,7 +183,6 @@ function generateMockMatrixService(
           membershipTs: Date.now(),
           membershipInitiator: '@testuser:staging',
         },
-        status: null,
       });
 
       await addRoomEvent(this, {
@@ -268,7 +195,6 @@ function generateMockMatrixService(
           displayname: 'aibot',
           membership: 'invite',
         },
-        status: null,
       });
 
       return roomId;
@@ -277,7 +203,7 @@ function generateMockMatrixService(
     getLastActiveTimestamp(room: RoomField) {
       return (
         room.events[room.events.length - 1]?.origin_server_ts ??
-        room.created?.getTime()
+        room.created.getTime()
       );
     }
   }

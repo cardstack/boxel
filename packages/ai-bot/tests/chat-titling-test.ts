@@ -1,6 +1,6 @@
 import { module, test, assert } from 'qunit';
-import { shouldSetRoomTitle } from '../lib/set-title';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import { shouldSetRoomTitle } from '../helpers';
+import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
 
 module('shouldSetRoomTitle', () => {
   test('Do not set a title when there is no content', () => {
@@ -346,7 +346,7 @@ module('shouldSetRoomTitle', () => {
     assert.true(shouldSetRoomTitle(eventLog, '@aibot:localhost'));
   });
 
-  test('Title is not set if the bot has sent ONLY a command', () => {
+  test('Set a title if the bot has sent a command', () => {
     const eventLog: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -372,11 +372,11 @@ module('shouldSetRoomTitle', () => {
         content: {
           msgtype: 'org.boxel.command',
           format: 'org.matrix.custom.html',
-          body: 'patching card',
-          formatted_body: 'patching card',
+          body: 'patch',
+          formatted_body: 'patch',
           data: {
             command: {
-              type: 'patchCard',
+              type: 'patch',
               id: 'http://localhost:4201/drafts/Friend/1',
               patch: {
                 attributes: {
@@ -394,24 +394,10 @@ module('shouldSetRoomTitle', () => {
         },
       },
     ];
-    assert.false(shouldSetRoomTitle(eventLog, '@aibot:localhost'));
+    assert.true(shouldSetRoomTitle(eventLog, '@aibot:localhost'));
   });
 
-  test('Set a title if the user applied a command', () => {
-    let patchReactionEvent = {
-      getContent() {
-        return {
-          'm.relates_to': {
-            event_id: '1',
-            key: 'applied',
-            rel_type: 'm.annotation',
-          },
-        };
-      },
-      getType() {
-        return 'm.reaction';
-      },
-    };
+  test('Set a title if the bot has sent a command in the last event, not seen in the log', () => {
     const eventLog: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -430,37 +416,7 @@ module('shouldSetRoomTitle', () => {
           transaction_id: '1',
         },
       },
-      {
-        type: 'm.room.message',
-        event_id: '2',
-        origin_server_ts: 1234567890,
-        content: {
-          msgtype: 'org.boxel.command',
-          format: 'org.matrix.custom.html',
-          body: 'patching card',
-          formatted_body: 'patching card',
-          data: {
-            command: {
-              type: 'patchCard',
-              id: 'http://localhost:4201/drafts/Friend/1',
-              patch: {
-                attributes: {
-                  firstName: 'Dave',
-                },
-              },
-            },
-          },
-        },
-        sender: '@aibot:localhost',
-        room_id: 'room1',
-        unsigned: {
-          age: 1000,
-          transaction_id: '2',
-        },
-      },
     ];
-    assert.true(
-      shouldSetRoomTitle(eventLog, '@aibot:localhost', patchReactionEvent),
-    );
+    assert.true(shouldSetRoomTitle(eventLog, '@aibot:localhost', 1));
   });
 });

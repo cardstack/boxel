@@ -2,7 +2,6 @@ import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
-import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -70,7 +69,6 @@ export default class OperatorModeOverlays extends Component<Signature> {
           data-test-overlay-selected={{if isSelected card.id}}
           data-test-overlay-card={{card.id}}
           data-test-overlay-card-display-name={{cardTypeDisplayName card}}
-          style={{this.zIndexStyle renderedCard.element}}
         >
           {{#if (this.isIncludeHeader renderedCard)}}
             <OperatorModeOverlayItemHeader
@@ -238,9 +236,6 @@ export default class OperatorModeOverlays extends Component<Signature> {
   private get renderedCardsForOverlayActionsWithEvents() {
     let renderedCards = this.args.renderedCardsForOverlayActions;
     for (const renderedCard of renderedCards) {
-      if (!this.realmSessionByCard.get(renderedCard.card)) {
-        this.loadRealmSession.perform(renderedCard.card);
-      }
       if (boundRenderedCardElement.has(renderedCard.element)) {
         continue;
       }
@@ -267,6 +262,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
         );
       });
       renderedCard.element.style.cursor = 'pointer';
+      this.loadRealmSession.perform(renderedCard.card);
     }
 
     return renderedCards;
@@ -335,16 +331,4 @@ export default class OperatorModeOverlays extends Component<Signature> {
     }
     this.realmSessionByCard.set(card, resource);
   });
-
-  private zIndexStyle(element: HTMLElement) {
-    let parentElement = element.parentElement!;
-    let zIndexParentElement = window
-      .getComputedStyle(parentElement)
-      .getPropertyValue('z-index');
-    let zIndex =
-      zIndexParentElement === 'auto'
-        ? zIndexParentElement
-        : String(Number(zIndexParentElement) + 1);
-    return htmlSafe(`z-index: ${zIndex}`);
-  }
 }

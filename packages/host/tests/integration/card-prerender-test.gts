@@ -8,6 +8,8 @@ import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-sc
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 
+import type LoaderService from '@cardstack/host/services/loader-service';
+
 import {
   testRealmURL,
   setupCardLogs,
@@ -15,7 +17,6 @@ import {
   trimCardContainer,
   setupLocalIndexing,
   setupIntegrationTestRealm,
-  lookupLoaderService,
 } from '../helpers';
 
 let loader: Loader;
@@ -26,7 +27,8 @@ module('Integration | card-prerender', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function () {
-    loader = lookupLoaderService().loader;
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
   });
 
   setupLocalIndexing(hooks);
@@ -93,32 +95,24 @@ module('Integration | card-prerender', function (hooks) {
 
   test("can generate the card's pre-rendered HTML", async function (assert) {
     {
-      let entry = await realm.searchIndex.instance(
+      let entry = await realm.searchIndex.searchEntry(
         new URL(`${testRealmURL}Pet/mango`),
       );
-      if (entry?.type === 'instance') {
-        assert.strictEqual(
-          trimCardContainer(stripScopedCSSAttributes(entry!.isolatedHtml!)),
-          cleanWhiteSpace(`<h3> Mango </h3>`),
-          'the pre-rendered HTML is correct',
-        );
-      } else {
-        assert.ok(false, 'expected index entry not to be an error');
-      }
+      assert.strictEqual(
+        trimCardContainer(stripScopedCSSAttributes(entry!.html!)),
+        cleanWhiteSpace(`<h3> Mango </h3>`),
+        'the pre-rendered HTML is correct',
+      );
     }
     {
-      let entry = await realm.searchIndex.instance(
+      let entry = await realm.searchIndex.searchEntry(
         new URL(`${testRealmURL}Pet/vangogh`),
       );
-      if (entry?.type === 'instance') {
-        assert.strictEqual(
-          trimCardContainer(stripScopedCSSAttributes(entry!.isolatedHtml!)),
-          cleanWhiteSpace(`<h3> Van Gogh </h3>`),
-          'the pre-rendered HTML is correct',
-        );
-      } else {
-        assert.ok(false, 'expected index entry not to be an error');
-      }
+      assert.strictEqual(
+        trimCardContainer(stripScopedCSSAttributes(entry!.html!)),
+        cleanWhiteSpace(`<h3> Van Gogh </h3>`),
+        'the pre-rendered HTML is correct',
+      );
     }
   });
 });

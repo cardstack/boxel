@@ -1,4 +1,3 @@
-import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -48,7 +47,7 @@ interface ProfileAvatarIconVisualSignature {
   Element: HTMLDivElement;
 }
 
-const ProfileAvatarIconVisual: TemplateOnlyComponent<ProfileAvatarIconVisualSignature> =
+export class ProfileAvatarIconVisual extends Component<ProfileAvatarIconVisualSignature> {
   <template>
     <style>
       .profile-icon {
@@ -67,13 +66,12 @@ const ProfileAvatarIconVisual: TemplateOnlyComponent<ProfileAvatarIconVisualSign
       }
     </style>
 
-    <div class='profile-icon' data-test-profile-icon={{@isReady}} ...attributes>
+    <div class='profile-icon' data-test-profile-icon ...attributes>
       <span>
         {{#if @isReady}}
           {{@profileInitials}}
         {{/if}}
       </span>
     </div>
-  </template>;
-
-export { ProfileAvatarIconVisual };
+  </template>
+}

@@ -22,11 +22,7 @@ export default class CardContainerUsage extends Component {
           @isHighlighted={{this.isHighlighted}}
         >
           {{! Usage with BoxelHeader component }}
-          <BoxelHeader
-            @size='large'
-            @title='Card'
-            @isHighlighted={{this.isHighlighted}}
-          />
+          <BoxelHeader @title='Card' @isHighlighted={{this.isHighlighted}} />
           <div>Card Here</div>
         </BoxelCardContainer>
       </:example>

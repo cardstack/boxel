@@ -11,11 +11,6 @@ export interface LooseSingleCardDocument {
   included?: CardResource<Saved>[];
 }
 
-export type PatchData = {
-  attributes?: CardResource['attributes'];
-  relationships?: CardResource['relationships'];
-};
-
 export { Deferred } from './deferred';
 export { CardError } from './error';
 
@@ -43,47 +38,36 @@ import { Query } from './query';
 import { Loader } from './loader';
 export * from './constants';
 export * from './queue';
-export * from './expression';
-export * from './indexer';
+export * from './indexer/expression';
+export * from './indexer/client';
 export * from './db';
-export * from './worker';
-export * from './stream';
-export * from './realm';
-export * from './fetcher';
-export * from './scoped-css';
-export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
 export { RealmPaths, Loader, type LocalPath, type Query };
 export { NotLoaded, isNotLoadedError } from './not-loaded';
+export { NotReady, isNotReadyError } from './not-ready';
 export { cardTypeDisplayName } from './helpers/card-type-display-name';
 export { maybeRelativeURL, maybeURL, relativeURL } from './url';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';
 
-export * from './realm-permission-queries';
-
 // From https://github.com/iliakan/detect-node
 export const isNode =
   Object.prototype.toString.call((globalThis as any).process) ===
   '[object process]';
 
+export { Realm } from './realm';
 export { SupportedMimeType } from './router';
-export { VirtualNetwork, type ResponseWithNodeStream } from './virtual-network';
-export {
-  IRealmAuthDataSource,
-  RealmAuthDataSource,
-} from './realm-auth-data-source';
-export { addAuthorizationHeader } from './add-authorization-header';
+export { VirtualNetwork } from './virtual-network';
 
 export type {
   Kind,
   RealmAdapter,
   FileRef,
+  ResponseWithNodeStream,
   RealmInfo,
   TokenClaims,
   RealmPermissions,
-  RealmSession,
 } from './realm';
 
 import type { Saved } from './card-document';
@@ -112,7 +96,6 @@ export {
   isCardDocumentString,
 } from './card-document';
 export { sanitizeHtml } from './dompurify';
-export { markedSync, markdownToHtml } from './marked-sync';
 export { getPlural } from './pluralize';
 
 import type {
@@ -125,6 +108,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 export const maxLinkDepth = 5;
 export const assetsDir = '__boxel/';
+export const boxelUIAssetsDir = '@cardstack/boxel-ui/';
 
 export interface MatrixCardError {
   id?: string;
@@ -192,7 +176,7 @@ export interface CardSearch {
   };
   getCard(
     url: URL,
-    opts?: { loader?: Loader; isLive?: boolean },
+    opts?: { cachedOnly?: true; loader?: Loader; isLive?: boolean },
   ): {
     card: CardDef | undefined;
     loaded: Promise<void> | undefined;
@@ -217,7 +201,7 @@ export function getCards(query: Query, realms?: string[]) {
 
 export function getCard(
   url: URL,
-  opts?: { loader?: Loader; isLive?: boolean },
+  opts?: { cachedOnly?: true; loader?: Loader; isLive?: boolean },
 ) {
   let here = globalThis as any;
   if (!here._CARDSTACK_CARD_SEARCH) {

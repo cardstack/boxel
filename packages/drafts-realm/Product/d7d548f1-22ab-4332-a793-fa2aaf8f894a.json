@@ -30,12 +30,12 @@
       },
       "unitPrice.currency": {
         "links": {
-          "self": "../Currency/1"
+          "self": "http://localhost:4201/drafts/Currency/1"
         }
       },
       "shippingCost.currency": {
         "links": {
-          "self": "../Currency/1"
+          "self": "http://localhost:4201/drafts/Currency/1"
         }
       }
     },

@@ -95,7 +95,6 @@ export default class RenderCard extends Route<Model | null> {
 
       return model ?? null;
     } catch (e) {
-      console.error(e);
       (e as any).loadType = params.operatorModeEnabled
         ? 'stack'
         : url.href === ownRealmURL
@@ -115,9 +114,9 @@ export default class RenderCard extends Route<Model | null> {
     );
     if (
       !isPublicReadableRealm &&
-      !transition.to?.queryParams['operatorModeEnabled']
+      !transition.to.queryParams['operatorModeEnabled']
     ) {
-      let path = transition.to?.params?.path ?? '';
+      let path = transition.to.params['path'] || '';
       let url = path
         ? new URL(`/${path}`, ownRealmURL)
         : new URL('./', ownRealmURL);

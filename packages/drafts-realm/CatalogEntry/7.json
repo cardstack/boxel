@@ -4,7 +4,6 @@
     "attributes": {
       "title": "Booking Card",
       "description": "Catalog entry for Booking Card",
-      "isField": false,
       "ref": {
         "module": "../booking",
         "name": "Booking"

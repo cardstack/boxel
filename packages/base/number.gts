@@ -9,7 +9,6 @@ import {
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
-import { not } from '@cardstack/boxel-ui/helpers';
 
 function serialize(val: number | null): string | undefined {
   if (val != null && val === 0) {
@@ -89,7 +88,6 @@ export default class NumberField extends FieldDef {
         @onInput={{this.textInputValidator.onInput}}
         @errorMessage={{this.textInputValidator.errorMessage}}
         @state={{if this.textInputValidator.isInvalid 'invalid' 'none'}}
-        @disabled={{not @canEdit}}
       />
     </template>
 

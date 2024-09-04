@@ -1,4 +1,3 @@
-import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -8,6 +7,8 @@ import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 
 import { type RealmInfo, RealmPaths } from '@cardstack/runtime-common';
 
+import ENV from '@cardstack/host/config/environment';
+
 import RealmIcon from './operator-mode/realm-icon';
 
 import type RealmInfoService from '../services/realm-info-service';
@@ -15,6 +16,7 @@ import type RealmInfoService from '../services/realm-info-service';
 export interface RealmDropdownItem extends RealmInfo {
   path: string;
 }
+const { ownRealmURL } = ENV;
 
 interface Signature {
   Args: {
@@ -51,8 +53,8 @@ export default class RealmDropdown extends Component<Signature> {
           {{#if this.selectedRealm}}
             <RealmIcon
               class='icon'
-              width='18'
-              height='18'
+              width='20'
+              height='20'
               @realmIconURL={{this.selectedRealm.iconURL}}
               @realmName={{this.selectedRealm.name}}
             />
@@ -62,7 +64,7 @@ export default class RealmDropdown extends Component<Signature> {
           {{else}}
             Select a workspace
           {{/if}}
-          <DropdownArrowDown class='arrow-icon' width='13px' height='13px' />
+          <DropdownArrowDown class='arrow-icon' width='22px' height='22px' />
         </Button>
       </:trigger>
       <:content as |dd|>
@@ -83,17 +85,17 @@ export default class RealmDropdown extends Component<Signature> {
         width: var(--realm-dropdown-width, auto);
         display: flex;
         justify-content: flex-start;
-        gap: var(--boxel-sp-5xs);
-        padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs) var(--boxel-sp-5xs)
-          var(--boxel-sp-5xs);
+        gap: var(--boxel-sp-xxxs);
+        padding: var(--boxel-sp-xxxs);
         border-radius: var(--boxel-border-radius);
       }
       .arrow-icon {
         --icon-color: var(--boxel-highlight);
         margin-left: auto;
+        flex-shrink: 0;
       }
       .realm-dropdown-trigger[aria-expanded='true'] .arrow-icon {
-        transform: scaleY(-1);
+        transform: rotate(180deg);
       }
       .selected-item {
         text-overflow: ellipsis;
@@ -101,9 +103,7 @@ export default class RealmDropdown extends Component<Signature> {
         white-space: nowrap;
       }
       .realm-dropdown-menu {
-        --boxel-menu-item-content-padding: var(--boxel-sp-xxs)
-          var(--boxel-sp-xxs) var(--boxel-sp-xxs) var(--boxel-sp-xxxs);
-        --boxel-menu-item-gap: var(--boxel-sp-4xs);
+        --boxel-menu-item-content-padding: var(--boxel-sp-xs);
         width: var(--realm-dropdown-width, auto);
       }
     </style>
@@ -112,7 +112,7 @@ export default class RealmDropdown extends Component<Signature> {
   defaultRealmIcon = '/default-realm-icon.png';
   @service declare realmInfoService: RealmInfoService;
 
-  constructor(owner: Owner, args: Signature['Args']) {
+  constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
     this.realmInfoService.fetchAllKnownRealmInfos.perform();
   }
@@ -157,15 +157,22 @@ export default class RealmDropdown extends Component<Signature> {
     if (this.args.selectedRealmURL) {
       selectedRealm = this.realms.find(
         (realm) =>
-          realm.path === new RealmPaths(this.args.selectedRealmURL!).url,
+          realm.path === new RealmPaths(this.args.selectedRealmURL as URL).url,
       );
     }
     if (selectedRealm) {
       return selectedRealm;
     }
 
-    return this.realms.find(
-      (realm) => realm.path === this.realmInfoService.userDefaultRealm.path,
-    );
+    // if there is no selected realm then default to the user's personal
+    // realm. Currently the personal realm has not yet been implemented,
+    // until then default to the realm serving the host app if it is writable,
+    // otherwise default to the first writable realm lexically
+    let ownRealm = this.realms.find((r) => r.path === ownRealmURL);
+    if (ownRealm) {
+      return ownRealm;
+    } else {
+      return this.realms[0];
+    }
   }
 }

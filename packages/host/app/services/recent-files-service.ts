@@ -1,4 +1,3 @@
-import type Owner from '@ember/owner';
 import Service from '@ember/service';
 import { service } from '@ember/service';
 
@@ -26,8 +25,8 @@ export default class RecentFilesService extends Service {
 
   @tracked recentFiles = new TrackedArray<RecentFile>([]);
 
-  constructor(owner: Owner) {
-    super(owner);
+  constructor(properties: object) {
+    super(properties);
     this.extractRecentFilesFromStorage();
   }
 
@@ -46,19 +45,17 @@ export default class RecentFilesService extends Service {
     this.persistRecentFiles();
   }
 
-  addRecentFileUrl(urlString: string) {
-    if (!urlString) {
+  addRecentFileUrl(url: string) {
+    if (!url) {
       return;
     }
     // TODO this wont work when visiting files that come from multiple realms in
     // code mode...
-    let realmURL = this.operatorModeStateService.realmURL;
+    let realmURL = this.operatorModeStateService.resolvedRealmURL;
 
     if (realmURL) {
       let realmPaths = new RealmPaths(new URL(realmURL));
-      let url = new URL(urlString);
-
-      if (realmPaths.inRealm(url)) {
+      if (realmPaths.inRealm(new URL(url))) {
         this.addRecentFile(realmPaths.local(url));
       }
     }

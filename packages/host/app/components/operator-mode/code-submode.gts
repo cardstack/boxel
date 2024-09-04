@@ -15,12 +15,10 @@ import perform from 'ember-concurrency/helpers/perform';
 
 import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 
-import { provide } from 'ember-provide-consume-context';
-
 import { Accordion } from '@cardstack/boxel-ui/components';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
-import type { ResizablePanel } from '@cardstack/boxel-ui/components';
+import type { PanelContext } from '@cardstack/boxel-ui/components';
 import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
@@ -29,7 +27,6 @@ import {
   hasExecutableExtension,
   RealmPaths,
   type ResolvedCodeRef,
-  RealmSessionContextName,
 } from '@cardstack/runtime-common';
 import { SerializedError } from '@cardstack/runtime-common/error';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
@@ -52,8 +49,7 @@ import type CardService from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type RealmInfoService from '@cardstack/host/services/realm-info-service';
-import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+import RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
@@ -93,15 +89,14 @@ type PanelHeights = {
 type SelectedAccordionItem = 'schema-editor' | null;
 
 const CodeModePanelWidths = 'code-mode-panel-widths';
-const defaultLeftPanelWidth =
-  (14.0 * parseFloat(getComputedStyle(document.documentElement).fontSize)) /
-  (document.documentElement.clientWidth - 40 - 36);
 const defaultPanelWidths: PanelWidths = {
   // 14rem as a fraction of the layout width
-  leftPanel: defaultLeftPanelWidth,
-  codeEditorPanel: (1 - defaultLeftPanelWidth) / 2,
-  rightPanel: (1 - defaultLeftPanelWidth) / 2,
-  emptyCodeModePanel: 1 - defaultLeftPanelWidth,
+  leftPanel:
+    (14.0 * parseFloat(getComputedStyle(document.documentElement).fontSize)) /
+    (document.documentElement.clientWidth - 40 - 36),
+  codeEditorPanel: 0.4,
+  rightPanel: 0.4,
+  emptyCodeModePanel: 0.8,
 };
 
 const CodeModePanelHeights = 'code-mode-panel-heights';
@@ -119,7 +114,6 @@ export default class CodeSubmode extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare recentFilesService: RecentFilesService;
   @service private declare environmentService: EnvironmentService;
-  @service private declare realmInfoService: RealmInfoService;
 
   @tracked private loadFileError: string | null = null;
   @tracked private userHasDismissedURLError = false;
@@ -500,18 +494,18 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action
-  private onHorizontalPanelChange(panels: ResizablePanel[]) {
-    this.panelWidths.leftPanel = panels[0]?.lengthPx;
-    this.panelWidths.codeEditorPanel = panels[1]?.lengthPx;
-    this.panelWidths.rightPanel = panels[2]?.lengthPx;
+  private onListPanelContextChange(listPanelContext: PanelContext[]) {
+    this.panelWidths.leftPanel = listPanelContext[0]?.lengthPx;
+    this.panelWidths.codeEditorPanel = listPanelContext[1]?.lengthPx;
+    this.panelWidths.rightPanel = listPanelContext[2]?.lengthPx;
 
     localStorage.setItem(CodeModePanelWidths, JSON.stringify(this.panelWidths));
   }
 
   @action
-  private onVerticalPanelChange(panels: ResizablePanel[]) {
-    this.panelHeights.filePanel = panels[0]?.lengthPx;
-    this.panelHeights.recentPanel = panels[1]?.lengthPx;
+  private onFilePanelContextChange(filePanelContext: PanelContext[]) {
+    this.panelHeights.filePanel = filePanelContext[0]?.lengthPx;
+    this.panelHeights.recentPanel = filePanelContext[1]?.lengthPx;
 
     localStorage.setItem(
       CodeModePanelHeights,
@@ -604,10 +598,9 @@ export default class CodeSubmode extends Component<Signature> {
         throw new Error(`bug: CreateFileModal not instantiated`);
       }
       this.isCreateModalOpen = true;
-      await this.realmInfoService.fetchAllKnownRealmInfos.perform();
       let url = await this.createFileModal.createNewFile(
         fileType,
-        new URL(this.realmInfoService.userDefaultRealm.path),
+        this.realmURL,
         definitionClass,
         sourceInstance,
       );
@@ -667,11 +660,6 @@ export default class CodeSubmode extends Component<Signature> {
     return !this.readyFile.realmSession.canWrite;
   }
 
-  @provide(RealmSessionContextName)
-  get realmSession() {
-    return this.readyFile.realmSession;
-  }
-
   <template>
     <RealmInfoProvider @realmURL={{this.realmURL}}>
       <:ready as |realmInfo|>
@@ -684,7 +672,6 @@ export default class CodeSubmode extends Component<Signature> {
     <SubmodeLayout
       @onCardSelectFromSearch={{this.openSearchResultInEditor}}
       @hideAiAssistant={{true}}
-      as |search|
     >
       <div
         class='code-mode'
@@ -709,7 +696,7 @@ export default class CodeSubmode extends Component<Signature> {
         </div>
         <ResizablePanelGroup
           @orientation='horizontal'
-          @onPanelChange={{this.onHorizontalPanelChange}}
+          @onListPanelContextChange={{this.onListPanelContextChange}}
           class='columns'
           as |ResizablePanel ResizeHandle|
         >
@@ -720,7 +707,7 @@ export default class CodeSubmode extends Component<Signature> {
             <div class='column'>
               <ResizablePanelGroup
                 @orientation='vertical'
-                @onPanelChange={{this.onVerticalPanelChange}}
+                @onListPanelContextChange={{this.onFilePanelContextChange}}
                 @reverseCollapse={{true}}
                 as |VerticallyResizablePanel VerticallyResizeHandle|
               >
@@ -745,7 +732,6 @@ export default class CodeSubmode extends Component<Signature> {
                           @delete={{this.setItemToDelete}}
                           @goToDefinition={{this.goToDefinition}}
                           @createFile={{perform this.createFile}}
-                          @openSearch={{search.openSearchToResults}}
                           data-test-card-inspector-panel
                         />
                       {{/if}}
@@ -977,7 +963,7 @@ export default class CodeSubmode extends Component<Signature> {
         height: 100%;
       }
 
-      .inner-container.recent-files {
+      .recent-files {
         background-color: var(--boxel-200);
       }
 

@@ -43,6 +43,7 @@ interface Args {
     url: string | undefined;
     loader: Loader;
     isLive: boolean;
+    cachedOnly: boolean;
     // this is not always constructed within a container so we pass in our services
     cardService: CardService;
     messageService: MessageService;
@@ -79,7 +80,7 @@ export class CardResource extends Resource<Args> {
   @tracked private staleCard: CardDef | undefined;
   private declare cardService: CardService;
   private declare messageService: MessageService;
-  private declare loaderService: LoaderService;
+  private cachedOnly: boolean | undefined;
   private _loader: Loader | undefined;
   private onCardInstanceChange?: (
     oldCard: CardDef | undefined,
@@ -96,6 +97,7 @@ export class CardResource extends Resource<Args> {
       url,
       loader,
       isLive,
+      cachedOnly,
       onCardInstanceChange,
       messageService,
       cardService,
@@ -103,6 +105,7 @@ export class CardResource extends Resource<Args> {
     this.messageService = messageService;
     this.cardService = cardService;
     this.url = url;
+    this.cachedOnly = cachedOnly;
     this._loader = loader;
     this.onCardInstanceChange = onCardInstanceChange;
     this.cardError = undefined;
@@ -138,9 +141,7 @@ export class CardResource extends Resource<Args> {
 
   private get loader() {
     if (!this._loader) {
-      throw new Error(
-        `bug: should never get here, loader is obtained via owner`,
-      );
+      throw new Error(`loader has not yet been set for CardResource`);
     }
     return this._loader;
   }
@@ -162,6 +163,10 @@ export class CardResource extends Resource<Args> {
       await this.updateCardInstance(entry.card);
       return;
     }
+    if (this.cachedOnly) {
+      this.clearCardInstance();
+      return;
+    }
 
     let card = await this.getCard(url);
     if (!card) {
@@ -174,7 +179,7 @@ export class CardResource extends Resource<Args> {
       this.clearCardInstance();
       return;
     }
-    let realmURL = await this.cardService.getRealmURL(card);
+    let realmURL = await this.cardService.getRealmURL(card, this.loader);
 
     cardsForLoader.set(card.id, {
       card,
@@ -239,7 +244,7 @@ export class CardResource extends Resource<Args> {
     }
     this.cardError = undefined;
     try {
-      let json = await this.cardService.fetchJSON(url);
+      let json = await this.cardService.fetchJSON(url, undefined, this.loader);
       if (!isSingleCardDocument(json)) {
         throw new Error(
           `bug: server returned a non card document for ${url}:
@@ -250,6 +255,7 @@ export class CardResource extends Resource<Args> {
         json.data,
         json,
         url,
+        this.loader,
       );
       return card;
     } catch (error: any) {
@@ -270,6 +276,7 @@ export class CardResource extends Resource<Args> {
         incomingDoc = (await this.cardService.fetchJSON(
           card.id,
           undefined,
+          loaderFor(card),
         )) as SingleCardDocument;
       } catch (err: any) {
         if (err.status !== 404) {
@@ -309,7 +316,7 @@ export class CardResource extends Resource<Args> {
       // only do this in test env--this makes sure that we also wait for any
       // interior card instance async as part of our ember-test-waiters
       if (isTesting()) {
-        await this.cardService.cardsSettled();
+        await this.cardService.cardsSettled(this.loader);
       }
       return result;
     } finally {
@@ -368,6 +375,8 @@ export function getCard(
   url: () => string | undefined,
   opts?: {
     isLive?: () => boolean;
+    loader?: () => Loader;
+    cachedOnly?: () => boolean;
     onCardInstanceChange?: () => (
       oldCard: CardDef | undefined,
       newCard: CardDef | undefined,
@@ -378,14 +387,17 @@ export function getCard(
     named: {
       url: url(),
       isLive: opts?.isLive ? opts.isLive() : true,
+      cachedOnly: opts?.cachedOnly ? opts.cachedOnly() : false,
       onCardInstanceChange: opts?.onCardInstanceChange
         ? opts.onCardInstanceChange()
         : undefined,
-      loader: (
-        (getOwner(parent) as any).lookup(
-          'service:loader-service',
-        ) as LoaderService
-      ).loader,
+      loader: opts?.loader
+        ? opts.loader()
+        : (
+            (getOwner(parent) as any).lookup(
+              'service:loader-service',
+            ) as LoaderService
+          ).loader,
       messageService: (getOwner(parent) as any).lookup(
         'service:message-service',
       ) as MessageService,

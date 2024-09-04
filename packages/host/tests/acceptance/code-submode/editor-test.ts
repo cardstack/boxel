@@ -15,10 +15,12 @@ import {
 import { Realm } from '@cardstack/runtime-common/realm';
 
 import type EnvironmentService from '@cardstack/host/services/environment-service';
-
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
+  TestRealmAdapter,
+  percySnapshot,
   setupLocalIndexing,
   setupServerSentEvents,
   setupOnSave,
@@ -27,11 +29,11 @@ import {
   setMonacoContent,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  waitForSyntaxHighlighting,
   waitForCodeEditor,
   type TestContextWithSSE,
   type TestContextWithSave,
 } from '../../helpers';
-import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
 let realmPermissions: { [realmURL: string]: ('read' | 'write')[] };
@@ -48,6 +50,11 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks, { realmPermissions: () => realmPermissions });
 
+  hooks.afterEach(async function () {
+    window.localStorage.removeItem('recent-cards');
+    window.localStorage.removeItem('recent-files');
+  });
+
   hooks.beforeEach(async function () {
     realmPermissions = { [testRealmURL]: ['read', 'write'] };
 
@@ -55,12 +62,19 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       'service:monaco-service',
     ) as MonacoService;
 
+    window.localStorage.removeItem('recent-cards');
+    window.localStorage.removeItem('recent-files');
+
     window.localStorage.setItem(
       'recent-files',
       JSON.stringify([[testRealmURL, 'Pet/mango.json']]),
     );
 
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+
     ({ realm, adapter } = await setupAcceptanceTestRealm({
+      loader,
       contents: {
         'pet.gts': `
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
@@ -322,12 +336,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         },
       },
     });
-
-    // TODO we often timeout waiting for syntax highlighting, so i'm commenting
-    // out this assertion and creating a ticket to research this: CS-6770
-
-    // await waitForSyntaxHighlighting('"Pet"', 'rgb(4, 81, 165)');
-    // await percySnapshot(assert);
+    await waitForSyntaxHighlighting('"Pet"', 'rgb(4, 81, 165)');
+    await percySnapshot(assert);
   });
 
   test<

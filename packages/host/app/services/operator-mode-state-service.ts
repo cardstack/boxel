@@ -6,16 +6,11 @@ import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
-import { mergeWith } from 'lodash';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
-import {
-  mergeRelationships,
-  type PatchData,
-  RealmPaths,
-  type ResolvedCodeRef,
-} from '@cardstack/runtime-common';
+import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
+import { RealmPaths } from '@cardstack/runtime-common/paths';
 
 import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
 import { StackItem } from '@cardstack/host/lib/stack-item';
@@ -105,33 +100,17 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
-  patchCard = task({ enqueue: true }, async (id: string, patch: PatchData) => {
+  patchCard = task({ enqueue: true }, async (id: string, attributes: any) => {
     let stackItems = this.state?.stacks.flat() ?? [];
-    if (
-      !stackItems.length ||
-      !this.topMostStackItems().some((item) => item.card.id == id)
-    ) {
-      throw new Error(`Please open card '${id}' to make changes to it.`);
-    }
     for (let item of stackItems) {
       if ('card' in item && item.card.id == id) {
         let document = await this.cardService.serializeCard(item.card);
-        if (patch.attributes) {
-          document.data.attributes = mergeWith(
-            document.data.attributes,
-            patch.attributes,
-          );
-        }
-        if (patch.relationships) {
-          let mergedRel = mergeRelationships(
-            document.data.relationships,
-            patch.relationships,
-          );
-          if (mergedRel && Object.keys(mergedRel).length !== 0) {
-            document.data.relationships = mergedRel;
-          }
-        }
-        await this.cardService.patchCard(item.card, document, patch);
+        document.data.attributes = {
+          ...document.data.attributes,
+          ...attributes,
+        };
+
+        await this.cardService.patchCard(item.card, document);
       }
     }
   });
@@ -151,7 +130,7 @@ export default class OperatorModeStateService extends Service {
 
     let cardRealmUrl = await this.cardService.getRealmURL(card);
     let realmPaths = new RealmPaths(cardRealmUrl);
-    let cardPath = realmPaths.local(new URL(`${card.id}.json`));
+    let cardPath = realmPaths.local(`${card.id}.json`);
     this.recentFilesService.removeRecentFile(cardPath);
     await this.cardService.deleteCard(card);
   }
@@ -162,7 +141,7 @@ export default class OperatorModeStateService extends Service {
     this.state.stacks[stackIndex].splice(itemIndex); // Remove anything above the item
 
     // If the resulting stack is now empty, remove it
-    if (this.stackIsEmpty(stackIndex) && this.state.stacks.length >= 1) {
+    if (this.stackIsEmpty(stackIndex) && this.state.stacks.length > 1) {
       this.state.stacks.splice(stackIndex, 1);
 
       // If we just removed the last item in the stack, and we also removed the stack because of that, we need
@@ -232,9 +211,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   topMostStackItems() {
-    return this.state.stacks
-      .filter((stack) => stack.length > 0)
-      .map((stack) => stack[stack.length - 1]);
+    return this.state.stacks.map((stack) => stack[stack.length - 1]);
   }
 
   stackIsEmpty(stackIndex: number) {
@@ -280,8 +257,8 @@ export default class OperatorModeStateService extends Service {
   }
 
   get codePathRelativeToRealm() {
-    if (this.state.codePath && this.realmURL) {
-      let realmPath = new RealmPaths(this.realmURL);
+    if (this.state.codePath && this.resolvedRealmURL) {
+      let realmPath = new RealmPaths(this.resolvedRealmURL);
 
       if (realmPath.inRealm(this.state.codePath)) {
         try {
@@ -511,6 +488,10 @@ export default class OperatorModeStateService extends Service {
     return this.cardService.defaultURL;
   }
 
+  get resolvedRealmURL() {
+    return this.loaderService.loader.resolve(this.realmURL);
+  }
+
   subscribeToOpenFileStateChanges(subscriber: OpenFileSubscriber) {
     this.openFileSubscribers.push(subscriber);
   }
@@ -550,17 +531,4 @@ export default class OperatorModeStateService extends Service {
       },
     }));
   });
-
-  async openCardInInteractMode(card: CardDef) {
-    this.clearStacks();
-    let newItem = new StackItem({
-      card,
-      stackIndex: 0,
-      owner: this, // We need to think for better owner
-      format: 'isolated',
-    });
-    await newItem.ready();
-    this.addItemToStack(newItem);
-    this.updateSubmode(Submodes.Interact);
-  }
 }

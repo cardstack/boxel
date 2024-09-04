@@ -10,7 +10,7 @@ import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 import window from 'ember-window-mock';
 
-import { type JWTPayload, type RealmSession } from '@cardstack/runtime-common';
+import { type JWTPayload } from '@cardstack/runtime-common';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -42,10 +42,7 @@ const sessionResourceURLs: WeakMap<RealmSessionResource, string> =
 // resources are destroyed
 const sessionResources: Map<string, Set<RealmSessionResource>> = new Map();
 
-export class RealmSessionResource
-  extends Resource<Args>
-  implements RealmSession
-{
+export class RealmSessionResource extends Resource<Args> {
   @tracked private token: JWTPayload | undefined;
   private rawToken: string | undefined;
   @tracked loaded: Promise<void> | undefined;
@@ -107,11 +104,11 @@ export class RealmSessionResource
   }
 
   get canRead() {
-    return !!this.token?.permissions?.includes('read');
+    return this.token?.permissions?.includes('read');
   }
 
   get canWrite() {
-    return !!this.token?.permissions?.includes('write');
+    return this.token?.permissions?.includes('write');
   }
 
   get rawRealmToken() {

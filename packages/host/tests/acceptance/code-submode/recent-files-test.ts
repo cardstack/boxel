@@ -7,6 +7,8 @@ import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
+import type LoaderService from '@cardstack/host/services/loader-service';
+
 import {
   percySnapshot,
   setupLocalIndexing,
@@ -178,15 +180,24 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks);
 
+  hooks.afterEach(async function () {
+    window.localStorage.removeItem('recent-files');
+  });
+
   hooks.beforeEach(async function () {
+    window.localStorage.removeItem('recent-files');
+
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     await setupAcceptanceTestRealm({
+      loader,
       contents: {
         'index.gts': indexCardSource,
         'pet-person.gts': personCardSource,
         'person.gts': personCardSource,
-        'français.json': '{}',
         'friend.gts': friendCardSource,
         'employee.gts': employeeCardSource,
         'in-this-file.gts': inThisFileSource,
@@ -196,7 +207,6 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
             attributes: {
               title: 'Person',
               description: 'Catalog entry',
-              isField: false,
               ref: {
                 module: `./person`,
                 name: 'Person',
@@ -274,7 +284,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       'recent-files',
       JSON.stringify([
         [testRealmURL, 'index.json'],
-        ['http://localhost:4202/test/', 'français.json'],
+        ['http://localhost:4202/test/', 'person.gts'],
         'a-non-url-to-ignore',
       ]),
     );
@@ -327,8 +337,8 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       .dom('[data-test-recent-file]:nth-child(1)')
       .containsText('index.json');
 
-    await waitFor('[data-test-file="français.json"]');
-    await click('[data-test-file="français.json"]');
+    await waitFor('[data-test-file="person.gts"]');
+    await click('[data-test-file="person.gts"]');
 
     assert
       .dom('[data-test-recent-file]:first-child')
@@ -343,7 +353,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
 
     assert
       .dom('[data-test-recent-file]:first-child')
-      .containsText('français.json');
+      .containsText('person.gts');
     assert
       .dom('[data-test-recent-file]:nth-child(2)')
       .containsText('Person/1.json');
@@ -352,9 +362,9 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       JSON.parse(window.localStorage.getItem('recent-files') || '[]'),
       [
         [testRealmURL, 'index.json'],
-        [testRealmURL, 'français.json'],
+        [testRealmURL, 'person.gts'],
         [testRealmURL, 'Person/1.json'],
-        ['http://localhost:4202/test/', 'français.json'],
+        ['http://localhost:4202/test/', 'person.gts'],
       ],
     );
   });
@@ -488,7 +498,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
         ],
       ],
       submode: 'code',
-      codePath: `https://cardstack.com/base/date.gts`,
+      codePath: `http://localhost:4201/base/code-ref.gts`,
       fileView: 'browser',
       openDirs: {},
     });
@@ -517,8 +527,9 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     await waitFor('[data-test-file="field-component.gts"]');
     await click('[data-test-file="field-component.gts"]');
     await waitFor('[data-test-file="field-component.gts"].selected');
-
-    assert.dom('[data-test-recent-file]:nth-child(1)').containsText('date.gts');
+    assert
+      .dom('[data-test-recent-file]:nth-child(1)')
+      .containsText('field-component.gts');
     assert
       .dom('[data-test-recent-file]:nth-child(2)')
       .containsText('code-ref.gts');
@@ -530,7 +541,6 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       JSON.parse(window.localStorage.getItem('recent-files') || '[]'),
       [
         ['https://cardstack.com/base/', 'field-component.gts'],
-        ['https://cardstack.com/base/', 'date.gts'],
         ['https://cardstack.com/base/', 'code-ref.gts'],
         ['https://cardstack.com/base/', 'catalog-entry.gts'],
       ],

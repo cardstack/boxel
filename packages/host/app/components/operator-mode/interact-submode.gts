@@ -64,8 +64,8 @@ const clearSelections = new WeakMap<StackItem, () => void>();
 const stackItemScrollers = new WeakMap<
   StackItem,
   {
-    stableScroll: (_changeSizeCallback: () => Promise<void>) => void;
-    scrollIntoView: (_selector: string) => void;
+    stableScroll: (changeSizeCallback: () => Promise<void>) => void;
+    scrollIntoView: (selector: string) => void;
   }
 >();
 
@@ -102,7 +102,7 @@ class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSig
       }}
       {{on 'click' (fn @onTrigger @triggerSide)}}
     >
-      <Download width='19' height='19' />
+      <Download width='25' height='25' />
     </button>
   </template>
 }
@@ -254,9 +254,6 @@ export default class InteractSubmode extends Component<Signature> {
     // only return a background image when both stacks originate from the same realm
     // otherwise we delegate to each stack to handle this
     let { hasDifferingBackgroundURLs } = this.stackBackgroundsState;
-    if (this.stackBackgroundsState.backgroundImageURLs.length === 0) {
-      return false;
-    }
     if (!hasDifferingBackgroundURLs) {
       return htmlSafe(
         `background-image: url(${this.stackBackgroundsState.backgroundImageURLs[0]});`,
@@ -531,11 +528,11 @@ export default class InteractSubmode extends Component<Signature> {
     <SubmodeLayout
       @onSearchSheetClosed={{this.clearSearchSheetTrigger}}
       @onCardSelectFromSearch={{perform this.openSelectedSearchResultInStack}}
-      as |search|
+      as |openSearch|
     >
       <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
         {{#if (eq this.allStackItems.length 0)}}
-          <div class='no-cards' data-test-empty-stack>
+          <div class='no-cards'>
             <p class='add-card-title'>
               Add a card to get started
             </p>
@@ -545,7 +542,7 @@ export default class InteractSubmode extends Component<Signature> {
               {{on 'click' (fn (perform this.addCard))}}
               data-test-add-card-button
             >
-              <IconPlus width='36px' height='36px' />
+              <IconPlus width='50px' height='50px' />
             </button>
           </div>
         {{else}}
@@ -595,19 +592,13 @@ export default class InteractSubmode extends Component<Signature> {
             data-test-add-card-left-stack
             @triggerSide={{SearchSheetTriggers.DropCardToLeftNeighborStackButton}}
             @activeTrigger={{this.searchSheetTrigger}}
-            @onTrigger={{fn
-              this.showSearchWithTrigger
-              search.openSearchToPrompt
-            }}
+            @onTrigger={{fn this.showSearchWithTrigger openSearch}}
           />
           <NeighborStackTriggerButton
             data-test-add-card-right-stack
             @triggerSide={{SearchSheetTriggers.DropCardToRightNeighborStackButton}}
             @activeTrigger={{this.searchSheetTrigger}}
-            @onTrigger={{fn
-              this.showSearchWithTrigger
-              search.openSearchToPrompt
-            }}
+            @onTrigger={{fn this.showSearchWithTrigger openSearch}}
           />
         {{/if}}
         {{#if this.itemToDelete}}

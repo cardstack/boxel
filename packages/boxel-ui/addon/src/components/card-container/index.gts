@@ -32,7 +32,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       ...attributes
     >
       {{#if (or (has-block 'header') (bool @label) (bool @title))}}
-        <Header @size='large' @subtitle={{@label}} @title={{@title}}>
+        <Header @label={{@label}} @title={{@title}}>
           {{yield to='header'}}
         </Header>
       {{/if}}

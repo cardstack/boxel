@@ -1,4 +1,5 @@
 import { TokenClaims } from './realm';
+import { type Loader } from './loader';
 
 // iat - issued at (seconds since epoch)
 // exp - expires at (seconds since epoch)
@@ -20,7 +21,7 @@ export class RealmAuthClient {
   constructor(
     private realmURL: URL,
     private matrixClient: RealmAuthMatrixClientInterface,
-    private fetch: typeof globalThis.fetch,
+    private loader: Loader,
   ) {}
 
   async getJWT() {
@@ -45,7 +46,7 @@ export class RealmAuthClient {
   }
 
   private async createRealmSession() {
-    if (!this.matrixClient.isLoggedIn()) {
+    if (!this.matrixClient.isLoggedIn) {
       throw new Error(
         `must be logged in to matrix before a realm session can be created`,
       );
@@ -93,23 +94,19 @@ export class RealmAuthClient {
   }
 
   private async initiateSessionRequest() {
-    let userId = this.matrixClient.getUserId();
-    if (!userId) {
-      throw new Error('userId is undefined');
-    }
-    return this.fetch(`${this.realmURL.href}_session`, {
+    return this.loader.fetch(`${this.realmURL.href}_session`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
       },
       body: JSON.stringify({
-        user: userId,
+        user: this.matrixClient.getUserId(),
       }),
     });
   }
 
   private async challengeRequest(challenge: string) {
-    return this.fetch(`${this.realmURL.href}_session`, {
+    return this.loader.fetch(`${this.realmURL.href}_session`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',

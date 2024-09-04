@@ -1,7 +1,6 @@
 import { getReasonPhrase } from 'http-status-codes';
 import { createResponse } from './create-response';
-import { RequestContext } from './realm';
-
+import { Realm } from './realm';
 export interface ErrorDetails {
   status?: number;
   title?: string;
@@ -85,8 +84,6 @@ export class CardError extends Error implements SerializedError {
       } catch (err) {
         /* it's ok if we can't parse it*/
       }
-      // TODO probably we should refactor this--i don't think our errors follow
-      // this shape anymore
       if (
         maybeErrorJSON &&
         typeof maybeErrorJSON === 'object' &&
@@ -143,65 +140,65 @@ export function serializableError(err: any): any {
 }
 
 export function responseWithError(
+  realm: Realm,
   error: CardError,
-  requestContext: RequestContext,
 ): Response {
-  return createResponse({
-    body: JSON.stringify({ errors: [serializableError(error)] }),
-    init: {
+  return createResponse(
+    realm,
+    JSON.stringify({ errors: [serializableError(error)] }),
+    {
       status: error.status,
       statusText: error.title,
       headers: { 'content-type': 'application/json' },
     },
-    requestContext,
-  });
+  );
 }
 
 export function methodNotAllowed(
+  realm: Realm,
   request: Request,
-  requestContext: RequestContext,
 ): Response {
   return responseWithError(
+    realm,
     new CardError(`${request.method} not allowed for ${request.url}`, {
       status: 405,
     }),
-    requestContext,
   );
 }
 
 export function notFound(
+  realm: Realm,
   request: Request,
-  requestContext: RequestContext,
   message = `Could not find ${request.url}`,
 ): Response {
   return responseWithError(
+    realm,
     new CardError(message, { status: 404 }),
-    requestContext,
   );
 }
 
 export function badRequest(
+  realm: Realm,
   message: string,
-  requestContext: RequestContext,
 ): Response {
   return responseWithError(
+    realm,
     new CardError(message, { status: 400 }),
-    requestContext,
   );
 }
 
 export function systemUnavailable(
+  realm: Realm,
   message: string,
-  requestContext: RequestContext,
 ): Response {
   return responseWithError(
+    realm,
     new CardError(message, { status: 503 }),
-    requestContext,
   );
 }
 
 export function systemError(
-  requestContext: RequestContext,
+  realm: Realm,
   message: string,
   additionalError?: CardError | Error,
 ): Response {
@@ -209,5 +206,5 @@ export function systemError(
   if (additionalError) {
     err.additionalErrors = [additionalError];
   }
-  return responseWithError(err, requestContext);
+  return responseWithError(realm, err);
 }

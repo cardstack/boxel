@@ -4,7 +4,6 @@
     "attributes": {
       "title": "General Field",
       "description": "A general field that can contain any field type.",
-      "isField": true,
       "ref": {
         "module": "https://cardstack.com/base/card-api",
         "name": "FieldDef"

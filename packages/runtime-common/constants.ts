@@ -1,7 +1,7 @@
 import { RealmPaths } from './paths';
 import type { ResolvedCodeRef } from './code-ref';
 
-export const baseRealm = new RealmPaths(new URL('https://cardstack.com/base/'));
+export const baseRealm = new RealmPaths('https://cardstack.com/base/');
 
 export const catalogEntryRef: ResolvedCodeRef = {
   module: `${baseRealm.url}catalog-entry`,
@@ -20,7 +20,3 @@ export const isField = Symbol('cardstack-field');
 export const primitive = Symbol('cardstack-primitive');
 
 export const aiBotUsername = 'aibot';
-
-export const CardContextName = 'card-context';
-export const RealmSessionContextName = 'realm-session-context';
-export const DefaultFormatContextName = 'default-format-context';

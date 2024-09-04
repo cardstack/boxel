@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/explicit-module-boundary-types */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { cancel, schedule } from '@ember/runloop';
-import { Timer } from '@ember/runloop';
+import { EmberRunTimer } from '@ember/runloop/types';
 
 const cancellation: WeakMap<
   Promise<any>,
@@ -16,7 +16,7 @@ export function registerCancellation(
 }
 
 export function afterRender() {
-  let ticket: Timer;
+  let ticket: EmberRunTimer;
   let promise = new Promise((resolve) => {
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore

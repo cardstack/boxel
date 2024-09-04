@@ -3,7 +3,7 @@ import { type SerializedState } from '@cardstack/host/services/operator-mode-sta
 export default function (assert: Assert) {
   assert.operatorModeParametersMatch = function (
     currentURL: string,
-    operatorModeState: Partial<SerializedState>,
+    operatorModeState: SerializedState,
   ) {
     let urlParameterString =
       currentURL.split('?')[1].replace(/^\/\?/, '') ?? '';
@@ -30,23 +30,15 @@ export default function (assert: Assert) {
         message: `in query string ${urlParameterString}, operatorModeState was '${operatorModeStateString}'`,
       });
     } else {
-      let actualOperatorModeState: Partial<SerializedState> = {};
+      let actualOperatorModeState;
 
       try {
-        actualOperatorModeState = JSON.parse(
-          operatorModeStateString,
-        ) as Partial<SerializedState>;
-
-        let actualStateExpectedSubset = copyPropertyValues(
-          actualOperatorModeState,
-          {} as Partial<SerializedState>,
-          Object.keys(operatorModeState) as (keyof SerializedState)[],
-        );
+        actualOperatorModeState = JSON.parse(operatorModeStateString);
 
         assert.deepEqual(
-          actualStateExpectedSubset,
+          actualOperatorModeState,
           operatorModeState,
-          `expected current URL ${currentURL} to match expected operator mode state properties ${encodeURIComponent(
+          `expected current URL ${currentURL} to match operator mode state ${encodeURIComponent(
             JSON.stringify(operatorModeState),
           )}`,
         );
@@ -62,21 +54,11 @@ export default function (assert: Assert) {
   };
 }
 
-// Copied from https://stackoverflow.com/a/69995318
-function copyPropertyValues<T, K extends keyof T>(
-  s: Pick<T, K>,
-  d: T,
-  ks: K[],
-) {
-  ks.forEach((k) => (d[k] = s[k]));
-  return d;
-}
-
 declare global {
   interface Assert {
     operatorModeParametersMatch(
       currentURL: string,
-      operatorModeState?: Partial<SerializedState>,
+      operatorModeState?: SerializedState,
     ): void;
   }
 }

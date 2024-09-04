@@ -15,6 +15,8 @@ import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
+import type LoaderService from '@cardstack/host/services/loader-service';
+
 import {
   elementIsVisible,
   setupLocalIndexing,
@@ -195,8 +197,16 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks, { realmPermissions: () => realmPermissions });
 
+  hooks.afterEach(async function () {
+    window.localStorage.removeItem('recent-files');
+  });
+
   hooks.beforeEach(async function () {
     realmPermissions = { [testRealmURL]: ['read', 'write'] };
+    window.localStorage.removeItem('recent-files');
+
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
 
     const numStubFiles = 100;
     let stubFiles: Record<string, string> = {};
@@ -207,6 +217,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     await setupAcceptanceTestRealm({
+      loader,
       contents: {
         'index.gts': indexCardSource,
         'pet-person.gts': personCardSource,
@@ -220,7 +231,6 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
             attributes: {
               title: 'Person',
               description: 'Catalog entry',
-              isField: false,
               ref: {
                 module: `./person`,
                 name: 'Person',
@@ -441,7 +451,6 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
 
     await waitFor('[data-test-file]');
-
     assert.dom('[data-test-directory="Person/"] .icon').hasClass('open');
   });
 

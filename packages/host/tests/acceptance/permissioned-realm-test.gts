@@ -1,19 +1,20 @@
 import { visit, currentURL, triggerEvent, waitFor } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
+import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
+import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
   setupLocalIndexing,
   setupServerSentEvents,
   setupAcceptanceTestRealm,
   testRealmURL,
-  lookupLoaderService,
 } from '../helpers';
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
 
@@ -24,8 +25,15 @@ module('Acceptance | permissioned realm tests', function (hooks) {
   setupWindowMock(hooks);
   setupMatrixServiceMock(hooks);
 
+  hooks.afterEach(async function () {
+    window.localStorage.removeItem('recent-files');
+  });
+
   hooks.beforeEach(async function () {
-    let loader = lookupLoaderService().loader;
+    window.localStorage.removeItem('recent-files');
+
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
     let { field, contains, CardDef, Component } = await loader.import<
       typeof import('https://cardstack.com/base/card-api')
     >(`${baseRealm.url}card-api`);
@@ -72,13 +80,13 @@ module('Acceptance | permissioned realm tests', function (hooks) {
     }
 
     await setupAcceptanceTestRealm({
+      loader,
       contents: {
         'index.gts': { Index },
         'person.gts': { Person },
         'person-entry.json': new CatalogEntry({
           title: 'Person',
           description: 'Catalog entry',
-          isField: false,
           ref: {
             module: `./person`,
             name: 'Person',

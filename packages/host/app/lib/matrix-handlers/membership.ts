@@ -1,7 +1,7 @@
 import debounce from 'lodash/debounce';
 import { type MatrixEvent, type RoomMember } from 'matrix-js-sdk';
 
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
 
 import { eventDebounceMs } from '../matrix-utils';
 
@@ -30,9 +30,7 @@ async function drainMembership(context: Context) {
   context.roomMembershipQueue = [];
 
   await Promise.all(
-    events.map(({ event: { event, status } }) =>
-      addRoomEvent(context, { ...event, status }),
-    ),
+    events.map(({ event: { event } }) => addRoomEvent(context, event)),
   );
 
   // For rooms that we have been invited to we are unable to get the full
@@ -80,7 +78,6 @@ async function drainMembership(context: Context) {
                 ...e.event,
                 // annoyingly these events have been stripped of their id's
                 event_id: `${roomId}_${eventType}_${e.localTimestamp}`,
-                status: e.status,
               }))
               .map((event) => addRoomEvent(context, event)),
           );

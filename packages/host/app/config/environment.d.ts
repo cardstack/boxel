@@ -28,6 +28,4 @@ declare const config: {
   loginMessageTimeoutMs: number;
   minSaveTaskDurationMs: number;
   sqlSchema: string;
-  assetsURL: string;
-  featureFlags?: {};
 };

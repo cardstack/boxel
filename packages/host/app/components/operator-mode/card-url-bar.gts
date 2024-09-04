@@ -64,7 +64,7 @@ export default class CardURLBar extends Component<Signature> {
         </RealmInfoProvider>
       </div>
       <div class='input'>
-        <IconGlobe width='18px' height='18px' />
+        <IconGlobe width='22px' height='22px' />
         <BoxelInput
           class='url-input'
           @value={{this.urlBar.url}}
@@ -102,7 +102,7 @@ export default class CardURLBar extends Component<Signature> {
 
         background-color: var(--boxel-dark);
         border-radius: var(--boxel-border-radius-xl);
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
 
         width: var(--card-url-bar-width);
         height: var(--card-url-bar-height);
@@ -159,7 +159,6 @@ export default class CardURLBar extends Component<Signature> {
         outline: none;
         padding: 0;
         min-height: 0;
-        text-overflow: ellipsis;
 
         color: var(--boxel-light);
       }
@@ -207,7 +206,7 @@ export default class CardURLBar extends Component<Signature> {
   @service private declare cardService: CardService;
 
   private urlBar: URLBarResource = urlBarResource(this, () => ({
-    getValue: () => (this.codePath ? decodeURI(this.codePath) : ''),
+    getValue: () => this.codePath,
     setValue: (url: string) => {
       this.operatorModeStateService.updateCodePath(new URL(url));
     },

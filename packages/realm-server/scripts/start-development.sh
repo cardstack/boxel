@@ -1,17 +1,6 @@
 #! /bin/sh
-SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
-. "$SCRIPTS_DIR/wait-for-pg.sh"
-
-wait_for_postgres
-
 pnpm setup:base-assets
-NODE_ENV=development \
-  NODE_NO_WARNINGS=1 \
-  PGPORT=5435 \
-  PGDATABASE=boxel \
-  LOG_LEVELS='*=info' \
-  REALM_SECRET_SEED="shhh! it's a secret" \
-  ts-node \
+NODE_ENV=development NODE_NO_WARNINGS=1 LOG_LEVELS='*=info' REALM_SECRET_SEED="shhh! it's a secret"  ts-node \
   --transpileOnly main \
   --port=4201 \
   \
