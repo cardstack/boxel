@@ -9,7 +9,11 @@ import {
   baseRealm,
   LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-import { CardTypeFilter, assertQuery } from '@cardstack/runtime-common/query';
+import {
+  type CardTypeFilter,
+  type EqFilter,
+  assertQuery,
+} from '@cardstack/runtime-common/query';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -162,7 +166,7 @@ export default class CommandService extends Service {
 }
 
 type PatchPayload = { card_id: string } & PatchData;
-type SearchPayload = { card_id: string; filter: CardTypeFilter };
+type SearchPayload = { card_id: string; filter: CardTypeFilter | EqFilter };
 
 function hasPatchData(payload: any): payload is PatchPayload {
   return (

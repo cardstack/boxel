@@ -248,9 +248,11 @@ const searchTool: Tool = {
     description:
       'Propose a query to search for a card instance filtered by type. \
   If a card was shared with you, always prioritise search based upon the card that was last shared. \
-  In addition, you also have access to the following card types without any card being open in the stack: \
-  {"module": "http://localhost:4201/experiments/author", "name": "Author"}, \
-  {"module": "http://localhost:4201/experiments/pet", "name": "Pet"}',
+  If you do not have information on card module and name, do the search using the `_cardType` attribute. \
+  For example, if a user asks you to search or find Pet cards, you can use this filter: \
+  { filter: { eq: { _cardType: "Pet" } } }\
+   Another example, if you need to find Person cards, and you do not know the module and name, you can use this filter:\
+  { filter: { eq: { _cardType: "Person" } } }',
     parameters: {
       type: 'object',
       properties: {
@@ -273,6 +275,16 @@ const searchTool: Tool = {
                 },
               },
               required: ['module', 'name'],
+            },
+            eq: {
+              type: 'object',
+              properties: {
+                _cardType: {
+                  type: 'string',
+                  description: 'name of the card type',
+                },
+              },
+              required: ['_cardType'],
             },
           },
         },

@@ -423,6 +423,16 @@ export function getSearchTool() {
                 },
                 required: ['module', 'name'],
               },
+              eq: {
+                type: 'object',
+                properties: {
+                  _cardType: {
+                    type: 'string',
+                    description: 'name of the card type',
+                  },
+                },
+                required: ['_cardType'],
+              },
             },
           },
         },
