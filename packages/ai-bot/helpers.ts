@@ -241,24 +241,66 @@ export function getRelevantCards(
   };
 }
 
+const searchTool: Tool = {
+  type: 'function',
+  function: {
+    name: 'searchCard',
+    description:
+      'Propose a query to search for a card instance filtered by type. \
+  If a card was shared with you, always prioritise search based upon the card that was last shared. \
+  In addition, you also have access to the following card types without any card being open in the stack: \
+  {"module": "http://localhost:4201/experiments/author", "name": "Author"}, \
+  {"module": "http://localhost:4201/experiments/pet", "name": "Pet"}',
+    parameters: {
+      type: 'object',
+      properties: {
+        description: {
+          type: 'string',
+        },
+        filter: {
+          type: 'object',
+          properties: {
+            type: {
+              type: 'object',
+              properties: {
+                module: {
+                  type: 'string',
+                  description: 'the absolute path of the module',
+                },
+                name: {
+                  type: 'string',
+                  description: 'the name of the module',
+                },
+              },
+              required: ['module', 'name'],
+            },
+          },
+        },
+      },
+      required: ['filter', 'description'],
+    },
+  },
+};
+
 export function getTools(history: DiscreteMatrixEvent[], aiBotUserId: string) {
+  let tools = [searchTool];
   // Just get the users messages
   const userMessages = history.filter((event) => event.sender !== aiBotUserId);
   // Get the last message
   if (userMessages.length === 0) {
-    // If the user has sent no messages, there are no relevant tools to return
-    return [];
+    // If the user has sent no messages, return tools that are available by default
+    return tools;
   }
   const lastMessage = userMessages[userMessages.length - 1];
   if (
     lastMessage.type === 'm.room.message' &&
     lastMessage.content.msgtype === 'org.boxel.message' &&
-    lastMessage.content.data?.context?.tools
+    lastMessage.content.data?.context?.tools?.length
   ) {
     return lastMessage.content.data.context.tools;
   } else {
-    // If it's a different message type, or there are no tools, return an empty array
-    return [];
+    // If it's a different message type, or there are no tools, return tools that are available by default
+    return tools;
   }
 }
 
@@ -429,7 +471,7 @@ export function getModifyPrompt(
 
   if (tools.length == 0) {
     systemMessage +=
-      'You are unable to edit any cards, the user has not given you access, they need to open the card on the stack and let it be auto-attached';
+      'You are unable to edit any cards, the user has not given you access, they need to open the card on the stack and let it be auto-attached. However, you are allowed to search for cards.';
   }
 
   let messages: OpenAIPromptMessage[] = [
