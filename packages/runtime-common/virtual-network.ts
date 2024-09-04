@@ -122,7 +122,9 @@ export class VirtualNetwork {
       return next(await this.mapRequest(request, 'virtual-to-real'));
     });
 
-    // Retry if fetch fails in CI for base realm artifacts
+    // This is to handle a very mysterious situation in our CI environment where
+    // fetches for base realm artifacts seem to vanish and we see "TypeError:
+    // Fetch failed" exceptions.
     const maxAttempts = 5;
     const backOffMs = 100;
     let attempt = 0;
