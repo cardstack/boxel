@@ -135,4 +135,12 @@ module('Unit | index-writer', function (hooks) {
       adapter,
     });
   });
+
+  test('update realm meta when indexing is done', async function (assert) {
+    await runSharedTest(indexWriterTests, assert, {
+      indexWriter,
+      indexQueryEngine,
+      adapter,
+    });
+  });
 });

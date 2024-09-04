@@ -2398,6 +2398,34 @@ module('Realm Server', function (hooks) {
         'true',
       );
     });
+
+    test('can fetch card type summary', async function (assert) {
+      let response = await request
+        .get('/_types')
+        .set('Accept', 'application/json');
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.deepEqual(response.body, {
+        data: [
+          {
+            type: 'card-type-summary',
+            id: `${testRealm.url}home/Home`,
+            attributes: {
+              displayName: 'Home',
+              total: 1,
+            },
+          },
+          {
+            type: 'card-type-summary',
+            id: `${testRealm.url}person/Person`,
+            attributes: {
+              displayName: 'Person',
+              total: 3,
+            },
+          },
+        ],
+      });
+    });
   });
 
   module('BOXEL_HTTP_BASIC_PW env var', function (hooks) {

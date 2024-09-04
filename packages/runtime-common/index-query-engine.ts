@@ -50,7 +50,9 @@ import type { BaseDef, Field } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import {
   coerceTypes,
+  RealmMetaTable,
   type BoxelIndexTable,
+  type CardTypeSummary,
   type RealmVersionsTable,
 } from './index-structure';
 
@@ -471,6 +473,19 @@ export class IndexQueryEngine {
     });
 
     return { prerenderedCards, scopedCssUrls: [...scopedCssUrls], meta };
+  }
+
+  async fetchCardTypeSummary(realmURL: URL): Promise<CardTypeSummary[]> {
+    let results = (await this.query([
+      `SELECT value
+       FROM realm_meta rm
+       INNER JOIN realm_versions rv 
+       ON rm.realm_url = rv.realm_url AND rm.realm_version = rv.current_version
+       WHERE`,
+      ...every([['rm.realm_url =', param(realmURL.href)]]),
+    ] as Expression)) as Pick<RealmMetaTable, 'value'>[];
+
+    return (results[0]?.value ?? []) as unknown as CardTypeSummary[];
   }
 
   private async fetchCurrentRealmVersion(realmURL: URL) {
