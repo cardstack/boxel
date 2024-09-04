@@ -33,8 +33,7 @@ import RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
-import EmbeddedPreview from './embedded-preview';
-import FittedFormatGallery from './fitted-format-gallery';
+import EmbeddedFormatGallery from './embedded-format-gallery';
 
 interface Signature {
   Element: HTMLElement;
@@ -150,14 +149,8 @@ export default class CardPreviewPanel extends Component<Signature> {
         onScroll=this.onScroll
       }}
     >
-      {{#if (eq this.format 'fitted')}}
-        <FittedFormatGallery @card={{@card}} />
-      {{else if (eq this.format 'embedded')}}
-        <EmbeddedPreview @card={{@card}} />
-      {{else if (eq this.format 'atom')}}
-        <div class='atom-wrapper'>
-          <Preview @card={{@card}} @format={{this.format}} />
-        </div>
+      {{#if (eq this.format 'embedded')}}
+        <EmbeddedFormatGallery @card={{@card}} />
       {{else}}
         <Preview @card={{@card}} @format={{this.format}} />
       {{/if}}
@@ -176,23 +169,17 @@ export default class CardPreviewPanel extends Component<Signature> {
           data-test-preview-card-footer-button-isolated
         >Isolated</button>
         <button
-          class='footer-button {{if (eq this.format "embedded") "active"}}'
-          {{on 'click' (fn @setFormat 'embedded')}}
-          data-test-preview-card-footer-button-embedded
-        >
-          Embedded</button>
-        <button
-          class='footer-button {{if (eq this.format "fitted") "active"}}'
-          {{on 'click' (fn @setFormat 'fitted')}}
-          data-test-preview-card-footer-button-fitted
-        >
-          Fitted</button>
-        <button
           class='footer-button {{if (eq this.format "atom") "active"}}'
           {{on 'click' (fn @setFormat 'atom')}}
           data-test-preview-card-footer-button-atom
         >
           Atom</button>
+        <button
+          class='footer-button {{if (eq this.format "embedded") "active"}}'
+          {{on 'click' (fn @setFormat 'embedded')}}
+          data-test-preview-card-footer-button-embedded
+        >
+          Embedded</button>
         <button
           class='footer-button {{if (eq this.format "edit") "active"}}'
           {{on 'click' (fn @setFormat 'edit')}}
@@ -226,6 +213,11 @@ export default class CardPreviewPanel extends Component<Signature> {
 
       .header-actions {
         margin-left: auto;
+      }
+
+      .preview-body > :deep(.boxel-card-container) {
+        border-radius: 0;
+        box-shadow: none;
       }
 
       .header-title {
@@ -315,9 +307,6 @@ export default class CardPreviewPanel extends Component<Signature> {
       .icon-button:hover {
         --icon-color: var(--boxel-light);
         background-color: var(--boxel-highlight);
-      }
-      .atom-wrapper {
-        padding: var(--boxel-sp);
       }
     </style>
   </template>

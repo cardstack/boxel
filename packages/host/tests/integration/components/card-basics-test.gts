@@ -482,15 +482,19 @@ module('Integration | card-basics', function (hooks) {
         )
         .exists();
       assert
-        .dom('[data-test-plural-view-item="0"][data-test-card-format="atom"]')
+        .dom(
+          '[data-test-plural-view-item="0"] > [data-test-card-format="atom"]',
+        )
         .containsText('Madeleine');
       assert
-        .dom('[data-test-plural-view-item="1"][data-test-card-format="atom"]')
+        .dom(
+          '[data-test-plural-view-item="1"] > [data-test-card-format="atom"]',
+        )
         .containsText('Marcus');
     });
 
     test('can render a card with an empty field', async function (assert) {
-      let EmbeddedViewDriver = fittedViewDriver();
+      let EmbeddedViewDriver = embeddedViewDriver();
 
       loader.shimModule(`${testRealmURL}test-cards`, {
         EmbeddedViewDriver,
@@ -504,7 +508,7 @@ module('Integration | card-basics', function (hooks) {
       await percySnapshot(assert);
     });
 
-    test('renders a default (CardDef) fitted view for card with thumbnail', async function (assert) {
+    test('renders a default (CardDef) embedded view for card with thumbnail', async function (assert) {
       class Person extends CardDef {
         static displayName = 'Person';
         @field firstName = contains(StringField);
@@ -521,11 +525,11 @@ module('Integration | card-basics', function (hooks) {
         });
       }
 
-      let FittedViewDriver = fittedViewDriver();
+      let EmbeddedViewDriver = embeddedViewDriver();
 
       loader.shimModule(`${testRealmURL}test-cards`, {
         Person,
-        FittedViewDriver,
+        EmbeddedViewDriver,
       });
 
       let mang = new Person({
@@ -539,7 +543,7 @@ module('Integration | card-basics', function (hooks) {
           base64: `data:image/png;base64,${mango}`,
         }),
       });
-      let driver = new FittedViewDriver({ card: mang });
+      let driver = new EmbeddedViewDriver({ card: mang });
       await renderCard(loader, driver, 'isolated');
 
       assert
@@ -549,7 +553,7 @@ module('Integration | card-basics', function (hooks) {
         .dom('[data-test-driver] [data-test-card-display-name]')
         .containsText('Person');
       assert
-        .dom('[data-test-driver] [data-test-card-thumbnail-placeholder]')
+        .dom('[data-test-driver] [data-test-card-thumbnail-text]')
         .doesNotExist();
       assert
         .dom('[data-test-driver] [data-test-card-title]')
@@ -561,7 +565,7 @@ module('Integration | card-basics', function (hooks) {
       await percySnapshot(assert);
     });
 
-    test('renders a default (CardDef) fitted view for card without thumbnail', async function (assert) {
+    test('renders a default (CardDef) embedded view for card without thumbnail', async function (assert) {
       class Person extends CardDef {
         static displayName = 'Person';
         @field firstName = contains(StringField);
@@ -578,15 +582,15 @@ module('Integration | card-basics', function (hooks) {
         });
       }
 
-      let FittedViewDriver = fittedViewDriver();
+      let EmbeddedViewDriver = embeddedViewDriver();
 
       loader.shimModule(`${testRealmURL}test-cards`, {
         Person,
-        FittedViewDriver,
+        EmbeddedViewDriver,
       });
 
       let vang = new Person({ firstName: 'Van Gogh' });
-      let driver = new FittedViewDriver({ card: vang });
+      let driver = new EmbeddedViewDriver({ card: vang });
       await renderCard(loader, driver, 'isolated');
 
       assert
@@ -596,8 +600,8 @@ module('Integration | card-basics', function (hooks) {
         .dom('[data-test-driver] [data-test-card-display-name]')
         .containsText('Person');
       assert
-        .dom('[data-test-driver] [data-test-card-thumbnail-placeholder]')
-        .exists();
+        .dom('[data-test-driver] [data-test-card-thumbnail-text]')
+        .containsText('Person');
 
       await percySnapshot(assert);
     });
@@ -1224,12 +1228,11 @@ module('Integration | card-basics', function (hooks) {
       class Pet extends CardDef {
         @field firstName = contains(StringField);
         @field friend = linksTo(() => Pet);
-        static fitted = class Fitted extends Component<typeof this> {
+        static embedded = class Embedded extends Component<typeof this> {
           <template>
             <div data-test-pet={{@model.firstName}}>
               <@fields.firstName />
-              {{! template-lint-disable no-inline-styles }}
-              <@fields.friend style='margin: 10px' />
+              <@fields.friend />
             </div>
           </template>
         };
@@ -1239,11 +1242,7 @@ module('Integration | card-basics', function (hooks) {
         @field pet = linksTo(Pet);
         static embedded = class Embedded extends Component<typeof this> {
           <template>
-            <div data-test-person>
-              <h1><@fields.firstName /></h1>
-              {{! template-lint-disable no-inline-styles }}
-              <@fields.pet style='margin: 10px' />
-            </div>
+            <div data-test-person><@fields.firstName /><@fields.pet /></div>
           </template>
         };
       }
@@ -1259,22 +1258,17 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-person]').containsText('Hassan');
       assert.dom('[data-test-pet="Mango"]').containsText('Mango');
       assert.dom('[data-test-pet="Van Gogh"]').containsText('Van Gogh');
-      assert
-        .dom('[data-test-card-format="fitted"]')
-        .hasStyle({ margin: '10px' });
     });
 
-    test('render whole composite contains field', async function (assert) {
+    test('render whole composite field', async function (assert) {
       class Person extends FieldDef {
-        @field title = contains(StringField);
         @field firstName = contains(StringField);
-        @field lastName = contains(StringField);
+        @field title = contains(StringField);
         @field number = contains(NumberField);
         static embedded = class Embedded extends Component<typeof this> {
           <template>
             <div data-test-embedded-person><@fields.title />
               <@fields.firstName />
-              <@fields.lastName />
               <@fields.number /></div>
           </template>
         };
@@ -1282,40 +1276,23 @@ module('Integration | card-basics', function (hooks) {
 
       class Post extends CardDef {
         @field author = contains(Person);
-        @field body = contains(StringField);
         static isolated = class Isolated extends Component<typeof this> {
           <template>
-            <div data-test-title><@fields.title /></div>
-            {{! template-lint-disable no-inline-styles }}
-            <div data-test-author><@fields.author style='width: 120px' /></div>
-            <div data-test-body><@fields.body /></div>
+            <div data-test><@fields.author /></div>
           </template>
         };
       }
       loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
 
       let helloWorld = new Post({
-        title: 'This is My First Post',
         author: new Person({
           firstName: 'Arthur',
-          lastName: 'Mephistophoclesiasticallious',
           title: 'Mr',
           number: 10,
         }),
-        body: 'Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
       });
       await renderCard(loader, helloWorld, 'isolated');
-      assert
-        .dom(
-          '[data-test-compound-field-format="embedded"] [data-test-embedded-person]',
-        )
-        .exists();
-      assert
-        .dom('[data-test-compound-field-format="embedded"]')
-        .hasStyle({ width: '120px' });
-      assert
-        .dom('[data-test-embedded-person]')
-        .containsText('Mr Arthur Mephistophoclesiasticallious 10');
+      assert.dom('[data-test-embedded-person]').containsText('Mr Arthur 10');
     });
 
     test('render nested composite field', async function (assert) {
@@ -1508,18 +1485,9 @@ module('Integration | card-basics', function (hooks) {
     test('render a containsMany composite field', async function (this: RenderingTestContext, assert) {
       class Person extends FieldDef {
         @field firstName = contains(StringField);
-        @field lastName = contains(StringField);
         static embedded = class Embedded extends Component<typeof this> {
           <template>
-            {{! template-lint-disable no-inline-styles }}
-            <div
-              data-test-person-firstName
-              style='height: 12px'
-            ><@fields.firstName /></div>
-            <div
-              data-test-person-lastName
-              style='height: 20px'
-            ><@fields.lastName /></div>
+            <div data-test-person-firstName><@fields.firstName /></div>
           </template>
         };
       }
@@ -1536,12 +1504,12 @@ module('Integration | card-basics', function (hooks) {
 
       let abdelRahmans = new Family({
         people: [
-          new Person({ firstName: 'Mango', lastName: 'Abdel-Rahman' }),
-          new Person({ firstName: 'Van Gogh', lastName: 'Abdel-Rahman' }),
-          new Person({ firstName: 'Hassan', lastName: 'Abdel-Rahman' }),
-          new Person({ firstName: 'Mariko', lastName: 'Abdel-Rahman' }),
-          new Person({ firstName: 'Yume', lastName: 'Abdel-Rahman' }),
-          new Person({ firstName: 'Sakura', lastName: 'Abdel-Rahman' }),
+          new Person({ firstName: 'Mango' }),
+          new Person({ firstName: 'Van Gogh' }),
+          new Person({ firstName: 'Hassan' }),
+          new Person({ firstName: 'Mariko' }),
+          new Person({ firstName: 'Yume' }),
+          new Person({ firstName: 'Sakura' }),
         ],
       });
 
@@ -1552,12 +1520,6 @@ module('Integration | card-basics', function (hooks) {
         ),
         ['Mango', 'Van Gogh', 'Hassan', 'Mariko', 'Yume', 'Sakura'],
       );
-      assert
-        .dom('[data-test-compound-field-format="embedded"]')
-        .exists({ count: 6 });
-      assert
-        .dom('[data-test-plural-view-item="1"]')
-        .hasStyle({ height: '32px' });
     });
 
     test('can #each over a containsMany primitive @fields', async function (assert) {
@@ -1631,59 +1593,10 @@ module('Integration | card-basics', function (hooks) {
       );
     });
 
-    test('can render a linksToMany field', async function (this: RenderingTestContext, assert) {
-      class Person extends CardDef {
-        @field firstName = contains(StringField);
-        static fitted = class Fitted extends Component<typeof this> {
-          <template>
-            <div data-test-person-firstName><@fields.firstName /></div>
-          </template>
-        };
-      }
-
-      class Family extends CardDef {
-        @field people = linksToMany(Person);
-        static isolated = class Isolated extends Component<typeof this> {
-          <template>
-            <div>
-              {{! template-lint-disable no-inline-styles }}
-              <@fields.people style='margin: 5px' />
-            </div>
-          </template>
-        };
-      }
-      loader.shimModule(`${testRealmURL}test-cards`, { Family, Person });
-      let mango = new Person({
-        firstName: 'Mango',
-      });
-      let vanGogh = new Person({
-        firstName: 'Van Gogh',
-      });
-      await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
-      await saveCard(vanGogh, `${testRealmURL}Pet/vanGogh`, loader);
-      let abdelRahmanDogs = new Family({
-        people: [mango, vanGogh],
-      });
-      await renderCard(loader, abdelRahmanDogs, 'isolated');
-      assert.deepEqual(
-        [...this.element.querySelectorAll('[data-test-person-firstName]')].map(
-          (element) => element.textContent?.trim(),
-        ),
-        ['Mango', 'Van Gogh'],
-      );
-      assert
-        .dom('[data-test-plural-view="linksToMany"]')
-        .hasStyle({ margin: '5px' });
-      assert.dom('[data-test-card-format="fitted"]').exists({ count: 2 });
-      assert
-        .dom('[data-test-card-format="fitted"]:nth-child(2)')
-        .hasStyle({ marginTop: '20px' });
-    });
-
     test('can #each over a linksToMany @fields', async function (this: RenderingTestContext, assert) {
       class Person extends CardDef {
         @field firstName = contains(StringField);
-        static fitted = class Fitted extends Component<typeof this> {
+        static embedded = class Embedded extends Component<typeof this> {
           <template>
             <div data-test-person-firstName><@fields.firstName /></div>
           </template>
@@ -1696,8 +1609,7 @@ module('Integration | card-basics', function (hooks) {
           <template>
             <div>
               {{#each @fields.people as |Person|}}
-                {{! template-lint-disable no-inline-styles }}
-                <Person style='margin: 10px' />
+                <Person />
               {{/each}}
             </div>
           </template>
@@ -1722,10 +1634,6 @@ module('Integration | card-basics', function (hooks) {
         ),
         ['Mango', 'Van Gogh'],
       );
-      assert.dom('[data-test-card-format="fitted"]').exists({ count: 2 });
-      assert
-        .dom('[data-test-card-format="fitted"]')
-        .hasStyle({ margin: '10px' });
     });
 
     // note that polymorphic "contains" field rendering is inherently tested via the catalog entry tests
@@ -2653,8 +2561,8 @@ let assertRadioInput = (
   }
 };
 
-function fittedViewDriver() {
-  class FitedViewDriver extends CardDef {
+function embeddedViewDriver() {
+  class EmbeddedViewDriver extends CardDef {
     @field card = linksTo(CardDef);
     static isolated = class Isolated extends Component<typeof this> {
       <template>
@@ -2668,43 +2576,43 @@ function fittedViewDriver() {
               class='card'
               style='width: 226px; height: 226px'
             >
-              <@fields.card @format='fitted' />
+              <@fields.card />
             </div>
           </div>
           <div class='item'>
             <div class='desc'>AR 0.73: 164px x 224px</div>
             <div class='card' style='width: 164px; height: 224px'>
-              <@fields.card @format='fitted' />
+              <@fields.card />
             </div>
           </div>
           <div class='item'>
             <div class='desc'>AR 0.91: 164px x 180px</div>
             <div class='card' style='width: 164px; height: 180px'>
-              <@fields.card @format='fitted' />
+              <@fields.card />
             </div>
           </div>
           <div class='item'>
             <div class='desc'>AR 0.95: 140px x 148px</div>
             <div class='card' style='width: 140px; height: 148px'>
-              <@fields.card @format='fitted' />
+              <@fields.card />
             </div>
           </div>
           <div class='item'>
             <div class='desc'>AR 0.94: 120px x 128px</div>
             <div class='card' style='width: 120px; height: 128px'>
-              <@fields.card @format='fitted' />
+              <@fields.card />
             </div>
           </div>
           <div class='item'>
             <div class='desc'>AR 0.85: 100px x 118px</div>
             <div class='card' style='width: 100px; height: 118px'>
-              <@fields.card @format='fitted' />
+              <@fields.card />
             </div>
           </div>
           <div class='item'>
             <div class='desc'>AR 0.2: 100px x 500px</div>
             <div class='card' style='width: 100px; height: 500px'>
-              <@fields.card @format='fitted' />
+              <@fields.card />
             </div>
           </div>
         </div>
@@ -2714,19 +2622,19 @@ function fittedViewDriver() {
           <div class='item'>
             <div class='desc'>AR 1.9: 151px x 78px</div>
             <div class='card' style='width: 151px; height: 78px'>
-              <@fields.card @format='fitted' />
+              <@fields.card />
             </div>
           </div>
           <div class='item'>
             <div class='desc'>AR 1.99: 300px x 151px</div>
             <div class='card' style='width: 300px; height: 151px'>
-              <@fields.card @format='fitted' />
+              <@fields.card />
             </div>
           </div>
           <div class='item'>
             <div class='desc'>AR 1.66: 300px x 180px</div>
             <div class='card' style='width: 300px; height: 180px'>
-              <@fields.card @format='fitted' />
+              <@fields.card />
             </div>
           </div>
         </div>
@@ -2736,25 +2644,25 @@ function fittedViewDriver() {
           <div class='item'>
             <div class='desc'>AR 3.4: 100px x 29px</div>
             <div class='card' style='width: 100px; height: 29px'>
-              <@fields.card @format='fitted' />
+              <@fields.card />
             </div>
           </div>
           <div class='item'>
             <div class='desc'>AR 2.6: 150px x 58px</div>
             <div class='card' style='width: 150px; height: 58px'>
-              <@fields.card @format='fitted' />
+              <@fields.card />
             </div>
           </div>
           <div class='item'>
             <div class='desc'>AR 3.9: 226px x 58px</div>
             <div class='card' style='width: 226px; height: 58px'>
-              <@fields.card @format='fitted' />
+              <@fields.card />
             </div>
           </div>
           <div class='item'>
             <div class='desc'>AR 2.6: 300px x 115px</div>
             <div class='card' style='width: 300px; height: 115px'>
-              <@fields.card @format='fitted' />
+              <@fields.card />
             </div>
           </div>
         </div>
@@ -2762,7 +2670,7 @@ function fittedViewDriver() {
         <style>
           .card {
             /* this is how a border would appear around a card.
-             note that a card is not supposed to draw its own border
+             note that a card is not supposed to draw its own border 
           */
             box-shadow: 0 0 0 1px var(--boxel-light-500);
             overflow: hidden;
@@ -2785,5 +2693,5 @@ function fittedViewDriver() {
     };
   }
 
-  return FitedViewDriver;
+  return EmbeddedViewDriver;
 }

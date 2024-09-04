@@ -1,24 +1,16 @@
 import * as JSONTypes from 'json-typescript';
-import { parse } from 'date-fns';
 import {
   IndexWriter,
+  Loader,
+  readFileAsText,
   Deferred,
   reportError,
-  authorizationMiddleware,
-  maybeHandleScopedCSSRequest,
-  RealmAuthDataSource,
-  fetcher,
-  RealmPaths,
-  SupportedMimeType,
-  fileContentToText,
-  unixTime,
   type Queue,
+  type LocalPath,
+  type RealmAdapter,
   type TextFileRef,
-  type VirtualNetwork,
-  type Relationship,
-  type ResponseWithNodeStream,
 } from '.';
-import { MatrixClient } from './matrix-client';
+import { Kind } from './realm';
 
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
@@ -35,12 +27,14 @@ export interface IndexResults {
 }
 
 export interface Reader {
-  readFile: (url: URL) => Promise<TextFileRef | undefined>;
-  directoryListing: (
-    url: URL,
-  ) => Promise<
-    { kind: 'directory' | 'file'; url: string; lastModified: number | null }[]
-  >;
+  readFileAsText: (
+    path: LocalPath,
+    opts?: { withFallbacks?: true },
+  ) => Promise<TextFileRef | undefined>;
+  lastModified: (path: LocalPath) => Promise<number | undefined>;
+  readdir: (
+    path: string,
+  ) => AsyncGenerator<{ name: string; path: string; kind: Kind }, void>;
 }
 
 export type RunnerRegistration = (
@@ -60,14 +54,19 @@ export interface RunnerOpts {
   indexWriter: IndexWriter;
 }
 
-export interface WorkerArgs extends JSONTypes.Object {
+export interface FromScratchArgs extends JSONTypes.Object {
   realmURL: string;
-  realmUsername: string;
 }
 
-export interface IncrementalArgs extends WorkerArgs {
+export interface FromScratchResult extends JSONTypes.Object {
+  ignoreData: Record<string, string>;
+  stats: Stats;
+}
+
+export interface IncrementalArgs extends JSONTypes.Object {
   url: string;
   operation: 'update' | 'delete';
+  realmURL: string;
   ignoreData: Record<string, string>;
 }
 
@@ -76,12 +75,6 @@ export interface IncrementalResult {
   ignoreData: Record<string, string>;
   stats: Stats;
 }
-
-export interface FromScratchResult extends JSONTypes.Object {
-  ignoreData: Record<string, string>;
-  stats: Stats;
-}
-
 export type IndexRunner = (optsId: number) => Promise<void>;
 
 // This class is used to support concurrent index runs against the same fastboot
@@ -115,13 +108,13 @@ export class RunnerOptionsManager {
 }
 
 export class Worker {
+  #realmURL: URL;
   #runner: IndexRunner;
   runnerOptsMgr: RunnerOptionsManager;
+  #reader: Reader;
   #indexWriter: IndexWriter;
   #queue: Queue;
-  #virtualNetwork: VirtualNetwork;
-  #matrixURL: URL;
-  #secretSeed: string;
+  #loader: Loader;
   #fromScratch:
     | ((realmURL: URL, boom?: true) => Promise<IndexResults>)
     | undefined;
@@ -135,69 +128,64 @@ export class Worker {
     | undefined;
 
   constructor({
+    realmURL,
     indexWriter,
     queue,
     indexRunner,
     runnerOptsManager,
-    virtualNetwork,
-    matrixURL,
-    secretSeed,
+    realmAdapter,
+    loader,
   }: {
+    realmURL: URL;
     indexWriter: IndexWriter;
     queue: Queue;
     indexRunner: IndexRunner;
     runnerOptsManager: RunnerOptionsManager;
-    virtualNetwork: VirtualNetwork;
-    matrixURL: URL;
-    secretSeed: string;
+    loader: Loader; // this should be analogous to the realm's loader template
+    realmAdapter: RealmAdapter;
   }) {
+    this.#realmURL = realmURL;
     this.#queue = queue;
     this.#indexWriter = indexWriter;
-    this.#virtualNetwork = virtualNetwork;
-    this.#matrixURL = matrixURL;
-    this.#secretSeed = secretSeed;
+    this.#reader = {
+      readdir: realmAdapter.readdir.bind(realmAdapter),
+      lastModified: realmAdapter.lastModified.bind(realmAdapter),
+      readFileAsText: (
+        path: LocalPath,
+        opts: { withFallbacks?: true } = {},
+      ): Promise<TextFileRef | undefined> => {
+        return readFileAsText(
+          path,
+          realmAdapter.openFile.bind(realmAdapter),
+          opts,
+        );
+      },
+    };
     this.runnerOptsMgr = runnerOptsManager;
     this.#runner = indexRunner;
+    this.#loader = Loader.cloneLoader(loader);
   }
 
   async run() {
-    await Promise.all([
-      this.#queue.register(`from-scratch-index`, this.fromScratch),
-      this.#queue.register(`incremental-index`, this.incremental),
-    ]);
     await this.#queue.start();
-  }
 
-  private async prepareAndRunJob<T>(
-    args: WorkerArgs,
-    run: () => Promise<T>,
-  ): Promise<T> {
-    let deferred = new Deferred<T>();
-    let matrixClient = new MatrixClient({
-      matrixURL: new URL(this.#matrixURL),
-      username: args.realmUsername,
-      seed: this.#secretSeed,
-    });
-    let fetch = fetcher(this.#virtualNetwork.fetch, [
-      async (req, next) => {
-        req.headers.set('X-Boxel-Building-Index', 'true');
-        return next(req);
-      },
-      // TODO do we need this in our indexer?
-      async (req, next) => {
-        return (await maybeHandleScopedCSSRequest(req)) || next(req);
-      },
-      authorizationMiddleware(
-        new RealmAuthDataSource(
-          matrixClient,
-          this.#virtualNetwork.fetch,
-          args.realmURL,
-        ),
+    await Promise.all([
+      this.#queue.register(
+        `from-scratch-index:${this.#realmURL}`,
+        this.fromScratch,
+      ),
+      this.#queue.register(
+        `incremental-index:${this.#realmURL}`,
+        this.incremental,
       ),
     ]);
+  }
+
+  private async prepareAndRunJob<T>(run: () => Promise<T>): Promise<T> {
+    let deferred = new Deferred<T>();
     let optsId = this.runnerOptsMgr.setOptions({
-      _fetch: fetch,
-      reader: getReader(fetch, new URL(args.realmURL)),
+      _fetch: this.#loader.fetch.bind(this.#loader),
+      reader: this.#reader,
       indexWriter: this.#indexWriter,
       registerRunner: async (fromScratch, incremental) => {
         this.#fromScratch = fromScratch;
@@ -227,8 +215,8 @@ export class Worker {
     return result;
   }
 
-  private fromScratch = async (args: WorkerArgs) => {
-    return await this.prepareAndRunJob<FromScratchResult>(args, async () => {
+  private fromScratch = async (args: FromScratchArgs) => {
+    return await this.prepareAndRunJob<FromScratchResult>(async () => {
       if (!this.#fromScratch) {
         throw new Error(`Index runner has not been registered`);
       }
@@ -243,7 +231,7 @@ export class Worker {
   };
 
   private incremental = async (args: IncrementalArgs) => {
-    return await this.prepareAndRunJob<IncrementalResult>(args, async () => {
+    return await this.prepareAndRunJob<IncrementalResult>(async () => {
       if (!this.#incremental) {
         throw new Error(`Index runner has not been registered`);
       }
@@ -259,80 +247,5 @@ export class Worker {
         stats,
       };
     });
-  };
-}
-
-export function getReader(
-  _fetch: typeof globalThis.fetch,
-  realmURL: URL,
-): Reader {
-  return {
-    readFile: async (url: URL) => {
-      let response: ResponseWithNodeStream = await _fetch(url, {
-        headers: {
-          Accept: SupportedMimeType.CardSource,
-        },
-      });
-      if (!response.ok) {
-        return undefined;
-      }
-      let content: string;
-      if ('nodeStream' in response && response.nodeStream) {
-        content = await fileContentToText({
-          content: response.nodeStream,
-        });
-      } else {
-        content = await response.text();
-      }
-      let lastModifiedRfc7321 = response.headers.get('last-modified');
-      if (!lastModifiedRfc7321) {
-        throw new Error(
-          `Response for ${url.href} has no 'last-modified' header`,
-        );
-      }
-      // This is RFC-7321 format which is the last modified date format used in HTTP headers
-      let lastModified = unixTime(
-        parse(
-          lastModifiedRfc7321.replace(/ GMT$/, 'Z'),
-          'EEE, dd MMM yyyy HH:mm:ssX',
-          new Date(),
-        ).getTime(),
-      );
-      let path = new RealmPaths(realmURL).local(url);
-      return {
-        content,
-        lastModified,
-        path,
-        ...(Symbol.for('shimmed-module') in response ||
-        response.headers.get('X-Boxel-Shimmed-Module')
-          ? { isShimmed: true }
-          : {}),
-      };
-    },
-
-    directoryListing: async (url: URL) => {
-      let response = await _fetch(url, {
-        headers: {
-          Accept: SupportedMimeType.DirectoryListing,
-        },
-      });
-      let {
-        data: { relationships: _relationships },
-      } = await response.json();
-      let relationships = _relationships as Record<string, Relationship>;
-      return Object.values(relationships).map((entry) =>
-        entry.meta!.kind === 'file'
-          ? {
-              url: entry.links.related!,
-              kind: 'file',
-              lastModified: (entry.meta?.lastModified ?? null) as number | null,
-            }
-          : {
-              url: entry.links.related!,
-              kind: 'directory',
-              lastModified: null,
-            },
-      );
-    },
   };
 }

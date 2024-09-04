@@ -1,10 +1,4 @@
-import {
-  waitUntil,
-  waitFor,
-  click,
-  focus,
-  triggerEvent,
-} from '@ember/test-helpers';
+import { waitUntil, waitFor, click, focus } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { setupRenderingTest } from 'ember-qunit';
@@ -207,13 +201,13 @@ module('Integration | card-delete', function (hooks) {
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
     assert.ok(fileRef, 'card instance exists in file system');
-    assert.dom('[data-test-delete-modal-container]').doesNotExist();
-    await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-      'mouseenter',
+    await waitFor(
+      `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
     );
+    assert.dom('[data-test-delete-modal-container]').doesNotExist();
+
     await click(
-      `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
+      `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.more-actions`,
     );
     await percySnapshot(assert);
     await click('[data-test-boxel-menu-item-text="Delete"]');
@@ -253,12 +247,11 @@ module('Integration | card-delete', function (hooks) {
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
     assert.ok(fileRef, 'card instance exists in file system');
-    await triggerEvent(
-      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-      'mouseenter',
+    await waitFor(
+      `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
     );
     await click(
-      `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
+      `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.more-actions`,
     );
     await click('[data-test-boxel-menu-item-text="Delete"]');
     await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);
@@ -507,12 +500,14 @@ module('Integration | card-delete', function (hooks) {
       realm,
       expectedEvents,
       callback: async () => {
-        await triggerEvent(
+        await waitFor(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-          'mouseenter',
+        );
+        await waitFor(
+          `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
         );
         await click(
-          `[data-test-operator-mode-stack="0"] [data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
+          `[data-test-operator-mode-stack="0"] [data-test-overlay-card="${testRealmURL}Pet/mango"] button.more-actions`,
         );
         await click('[data-test-boxel-menu-item-text="Delete"]');
         await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);
@@ -577,12 +572,8 @@ module('Integration | card-delete', function (hooks) {
             `[data-test-operator-mode-stack="1"] [data-test-stack-card="${testRealmURL}Pet/mango"]`,
           )
           .exists();
-        await triggerEvent(
-          `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-          'mouseenter',
-        );
         await click(
-          `[data-test-operator-mode-stack="0"] [data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
+          `[data-test-operator-mode-stack="0"] [data-test-overlay-card="${testRealmURL}Pet/mango"] button.more-actions`,
         );
         await click('[data-test-boxel-menu-item-text="Delete"]');
         await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);
@@ -656,12 +647,8 @@ module('Integration | card-delete', function (hooks) {
           .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
           .exists();
         await click('[data-test-search-sheet-cancel-button]');
-        await triggerEvent(
-          `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-          'mouseenter',
-        );
         await click(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
+          `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.more-actions`,
         );
         await click('[data-test-boxel-menu-item-text="Delete"]');
         await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);
@@ -715,25 +702,23 @@ module('Integration | card-delete', function (hooks) {
       realm,
       expectedEvents,
       callback: async () => {
-        await triggerEvent(
-          `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-          'mouseenter',
+        await waitFor(
+          `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]`,
+        );
+        await waitFor(
+          `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
         );
         await click(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-select]`,
-        );
-        await triggerEvent(
-          `[data-test-cards-grid-item="${testRealmURL}Pet/vangogh"]`,
-          'mouseenter',
+          `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.select`,
         );
         await click(
-          `[data-test-overlay-card="${testRealmURL}Pet/vangogh"] [data-test-overlay-select]`,
+          `[data-test-overlay-card="${testRealmURL}Pet/vangogh"] button.select`,
         );
         assert
           .dom('[data-test-copy-button]')
           .containsText('Copy 2 Cards', 'button text is correct');
         await click(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
+          `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.more-actions`,
         );
         await click('[data-test-boxel-menu-item-text="Delete"]');
         await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);

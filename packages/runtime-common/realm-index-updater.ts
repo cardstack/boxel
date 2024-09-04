@@ -6,7 +6,7 @@ import {
   type Stats,
   type DBAdapter,
   type Queue,
-  type WorkerArgs,
+  type FromScratchArgs,
   type FromScratchResult,
   type IncrementalArgs,
   type IncrementalResult,
@@ -36,10 +36,12 @@ export class RealmIndexUpdater {
     realm,
     dbAdapter,
     queue,
+    withIndexWriter,
   }: {
     realm: Realm;
     dbAdapter: DBAdapter;
     queue: Queue;
+    withIndexWriter?: (indexWriter: IndexWriter, loader: Loader) => void;
   }) {
     if (!dbAdapter) {
       throw new Error(
@@ -50,6 +52,9 @@ export class RealmIndexUpdater {
     this.#queue = queue;
     this.#realm = realm;
     this.#loader = Loader.cloneLoader(this.#realm.loaderTemplate);
+    if (withIndexWriter) {
+      withIndexWriter(this.#indexWriter, this.#realm.loaderTemplate);
+    }
   }
 
   get stats() {
@@ -65,6 +70,7 @@ export class RealmIndexUpdater {
     return new URL(this.#realm.url);
   }
 
+  @Memoize()
   private get ignoreMap() {
     let ignoreMap = new Map<string, Ignore>();
     for (let [url, contents] of Object.entries(this.#ignoreData)) {
@@ -74,6 +80,8 @@ export class RealmIndexUpdater {
   }
 
   async run() {
+    await this.#queue.start();
+
     let isNewIndex = await this.#indexWriter.isNewIndex(this.realmURL);
     if (isNewIndex) {
       // we only await the full indexing at boot if this is a brand new index
@@ -94,12 +102,11 @@ export class RealmIndexUpdater {
   async fullIndex() {
     this.#indexingDeferred = new Deferred<void>();
     try {
-      let args: WorkerArgs = {
+      let args: FromScratchArgs = {
         realmURL: this.#realm.url,
-        realmUsername: await this.getRealmUsername(),
       };
       let job = await this.#queue.publish<FromScratchResult>(
-        `from-scratch-index`,
+        `from-scratch-index:${this.#realm.url}`,
         args,
       );
       let { ignoreData, stats } = await job.done;
@@ -130,12 +137,11 @@ export class RealmIndexUpdater {
       let args: IncrementalArgs = {
         url: url.href,
         realmURL: this.#realm.url,
-        realmUsername: await this.getRealmUsername(),
         operation: opts?.delete ? 'delete' : 'update',
         ignoreData: { ...this.#ignoreData },
       };
       let job = await this.#queue.publish<IncrementalResult>(
-        `incremental-index`,
+        `incremental-index:${this.#realm.url}`,
         args,
       );
       let { invalidations, ignoreData, stats } = await job.done;
@@ -166,30 +172,6 @@ export class RealmIndexUpdater {
       return true;
     }
     return isIgnored(this.realmURL, this.ignoreMap, url);
-  }
-
-  private async getRealmUsername(): Promise<string> {
-    // TODO for now we are just using the URL pattern and hard coding test
-    // URLs to figure out the realm username. As part of the ticket to create
-    // dynamic realms this should be updated to look up the realm owner
-    // permission
-    switch (this.realmURL.href) {
-      case 'http://127.0.0.1:4441/':
-        return 'base_realm';
-
-      case 'http://127.0.0.1:4447/':
-        return 'test_realm';
-
-      case 'http://127.0.0.1:4444/':
-      case 'http://127.0.0.1:4445/':
-      case 'http://127.0.0.1:4448/':
-        return 'node-test_realm';
-
-      default: {
-        let name = this.realmURL.href.replace(/\/$/, '').split('/').pop()!;
-        return `${name}_realm`;
-      }
-    }
   }
 }
 

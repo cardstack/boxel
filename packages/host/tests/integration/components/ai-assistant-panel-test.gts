@@ -23,8 +23,6 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import {
   addRoomEvent,
-  getCommandReactionEvents,
-  getCommandResultEvents,
   updateRoomEvent,
 } from '@cardstack/host/lib/matrix-handlers';
 
@@ -106,7 +104,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
           return this.name;
         },
       });
-      static fitted = class Fitted extends Component<typeof this> {
+      static embedded = class Embedded extends Component<typeof this> {
         <template>
           <h3 data-test-pet={{@model.name}}>
             <@fields.name />
@@ -161,7 +159,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
           return this.name;
         },
       });
-      static fitted = class Fitted extends Component<typeof this> {
+      static embedded = class Embedded extends Component<typeof this> {
         <template>
           <@fields.name />
         </template>
@@ -262,11 +260,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
             homeCountry: usa,
           }),
         }),
-        'Person/justin.json': new Person({ firstName: 'Justin' }),
-        'Person/ian.json': new Person({ firstName: 'Ian' }),
-        'Person/matic.json': new Person({ firstName: 'Matic' }),
-        'Person/buck.json': new Person({ firstName: 'Buck' }),
-        'Person/hassan.json': new Person({ firstName: 'Hassan' }),
         '.realm.json': `{ "name": "${realmName}" }`,
       },
     });
@@ -330,14 +323,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
         formatted_body: 'A patch',
         format: 'org.matrix.custom.html',
         data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: `${testRealmURL}Person/fadhlan`,
+          command: {
+            type: 'patchCard',
+            id: `${testRealmURL}Person/fadhlan`,
+            patch: {
               attributes: { firstName: 'Dave' },
             },
+            eventId: 'patch1',
           },
-          eventId: 'patch1',
         }),
         'm.relates_to': {
           rel_type: 'm.replace',
@@ -355,7 +348,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       assert.strictEqual(json.data.attributes?.firstName, 'Dave');
     });
     await click('[data-test-command-apply]');
-    await waitFor('[data-test-command-card-idle]');
+    await waitFor('[data-test-patch-card-idle]');
 
     assert.dom('[data-test-person]').hasText('Dave');
   });
@@ -385,14 +378,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         formatted_body: 'Changing first name to Evie',
         format: 'org.matrix.custom.html',
         data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: `${testRealmURL}Person/fadhlan`,
-              attributes: { firstName: 'Evie' },
-            },
+          command: {
+            type: 'patchCard',
+            id: `${testRealmURL}Person/fadhlan`,
+            patch: { attributes: { firstName: 'Evie' } },
+            eventId: 'room1-event1',
           },
-          eventId: 'room1-event1',
         }),
         'm.relates_to': {
           rel_type: 'm.replace',
@@ -413,14 +404,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         formatted_body: 'Changing first name to Jackie',
         format: 'org.matrix.custom.html',
         data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: `${testRealmURL}Person/fadhlan`,
-              attributes: { firstName: 'Jackie' },
-            },
+          command: {
+            type: 'patchCard',
+            id: `${testRealmURL}Person/fadhlan`,
+            patch: { attributes: { firstName: 'Jackie' } },
+            eventId: 'room1-event2',
           },
-          eventId: 'room1-event2',
         }),
         'm.relates_to': {
           rel_type: 'm.replace',
@@ -441,14 +430,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         formatted_body: 'Incorrect command',
         format: 'org.matrix.custom.html',
         data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            argument: {
-              card_id: `${testRealmURL}Person/fadhlan`,
-              relationships: { pet: null }, // this will error
-            },
+          command: {
+            type: 'patchCard',
+            id: `${testRealmURL}Person/fadhlan`,
+            patch: { relationships: { pet: null } }, // this will error
+            eventId: 'room2-event1',
           },
-          eventId: 'room2-event1',
         }),
         'm.relates_to': {
           rel_type: 'm.replace',
@@ -462,7 +449,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-room-name="test room 1"]');
     await waitFor('[data-test-message-idx="1"] [data-test-command-apply]');
     await click('[data-test-message-idx="1"] [data-test-command-apply]');
-    await waitFor('[data-test-command-card-idle]');
+    await waitFor('[data-test-patch-card-idle]');
 
     assert
       .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
@@ -476,7 +463,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-room-name="test room 2"]');
     await waitFor('[data-test-command-apply]');
     await click('[data-test-command-apply]');
-    await waitFor('[data-test-command-card-idle]');
+    await waitFor('[data-test-patch-card-idle]');
     assert
       .dom('[data-test-message-idx="0"] [data-test-apply-state="failed"]')
       .exists();
@@ -527,14 +514,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
           'A patch<pre><code>https://www.example.com/path/to/resource?query=param1value&anotherQueryParam=anotherValue&additionalParam=additionalValue&longparameter1=someLongValue1</code></pre>',
         format: 'org.matrix.custom.html',
         data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: otherCardID,
+          command: {
+            type: 'patchCard',
+            id: otherCardID,
+            patch: {
               attributes: { firstName: 'Dave' },
             },
+            eventId: 'event1',
           },
-          eventId: 'event1',
         }),
         'm.relates_to': {
           rel_type: 'm.replace',
@@ -547,7 +534,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-command-apply="ready"]');
     await click('[data-test-command-apply]');
 
-    await waitFor('[data-test-command-card-idle]');
+    await waitFor('[data-test-patch-card-idle]');
     assert
       .dom('[data-test-card-error]')
       .containsText(`Please open card '${otherCardID}' to make changes to it.`);
@@ -556,11 +543,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-command-apply]').doesNotExist();
     assert.dom('[data-test-person]').hasText('Fadhlan');
 
-    await triggerEvent(
-      `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-field-component-card][data-test-card-format="fitted"]`,
-      'mouseenter',
-    );
-    await waitFor('[data-test-overlay-card] [data-test-overlay-more-options]');
+    await waitFor('[data-test-embedded-card-options-button]');
     await percySnapshot(
       'Integration | ai-assistant-panel | it only applies changes from the chat if the stack contains a card with that ID | error',
     );
@@ -572,19 +555,17 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-apply-state="applying"]').exists();
     matrixService.sendReactionDeferred.fulfill();
 
-    await waitFor('[data-test-command-card-idle]');
+    await waitFor('[data-test-patch-card-idle]');
     assert.dom('[data-test-apply-state="applied"]').exists();
     assert.dom('[data-test-person]').hasText('Dave');
     assert.dom('[data-test-command-apply]').doesNotExist();
     assert.dom('[data-test-ai-bot-retry-button]').doesNotExist();
 
-    await triggerEvent(
-      `[data-test-stack-card="${testRealmURL}Person/burcu"] [data-test-plural-view="linksToMany"] [data-test-plural-view-item="0"]`,
-      'mouseenter',
+    await waitUntil(
+      () =>
+        document.querySelectorAll('[data-test-embedded-card-options-button]')
+          .length === 2,
     );
-    assert
-      .dom('[data-test-overlay-card] [data-test-overlay-more-options]')
-      .exists();
     await percySnapshot(
       'Integration | ai-assistant-panel | it only applies changes from the chat if the stack contains a card with that ID | error fixed',
     );
@@ -597,9 +578,9 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom(`[data-test-preferredcarrier="DHL"]`).exists();
 
     let payload = {
-      name: 'patchCard',
-      arguments: {
-        card_id: `${testRealmURL}Person/fadhlan`,
+      type: 'patchCard',
+      id: `${testRealmURL}Person/fadhlan`,
+      patch: {
         attributes: {
           firstName: 'Joy',
           address: { shippingInfo: { preferredCarrier: 'UPS' } },
@@ -619,7 +600,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         msgtype: 'org.boxel.command',
         formatted_body: 'A patch',
         format: 'org.matrix.custom.html',
-        data: JSON.stringify({ toolCall: payload }),
+        data: JSON.stringify({ command: payload }),
         'm.relates_to': {
           rel_type: 'm.replace',
           event_id: 'event1',
@@ -634,20 +615,9 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitForCodeEditor();
     assert.deepEqual(
       JSON.parse(getMonacoContent()),
-
       {
-        name: 'patchCard',
-        payload: {
-          attributes: {
-            address: {
-              shippingInfo: {
-                preferredCarrier: 'UPS',
-              },
-            },
-            firstName: 'Joy',
-          },
-          card_id: 'http://test-realm/test/Person/fadhlan',
-        },
+        commandType: 'patchCard',
+        payload,
       },
       'it can preview code when a change is proposed',
     );
@@ -657,7 +627,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-code-editor]').doesNotExist();
 
     await click('[data-test-command-apply="ready"]');
-    await waitFor('[data-test-command-card-idle]');
+    await waitFor('[data-test-patch-card-idle]');
     assert.dom('[data-test-apply-state="applied"]').exists();
     assert.dom('[data-test-person]').hasText('Joy');
     assert.dom(`[data-test-preferredcarrier]`).hasText('UPS');
@@ -682,10 +652,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
         formatted_body: 'Removing pet and changing preferred carrier',
         format: 'org.matrix.custom.html',
         data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: id,
+          command: {
+            type: 'patchCard',
+            id,
+            patch: {
               attributes: {
                 address: { shippingInfo: { preferredCarrier: 'Fedex' } },
               },
@@ -693,8 +663,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
                 pet: { links: { self: null } },
               },
             },
+            eventId: 'patch0',
           },
-          eventId: 'patch0',
         }),
         'm.relates_to': {
           rel_type: 'm.replace',
@@ -711,7 +681,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom(`${stackCard} [data-test-pet="Mango"]`).exists();
 
     await click('[data-test-command-apply]');
-    await waitFor('[data-test-command-card-idle]');
+    await waitFor('[data-test-patch-card-idle]');
     assert.dom('[data-test-apply-state="applied"]').exists();
     assert.dom(`${stackCard} [data-test-preferredcarrier="Fedex"]`).exists();
     assert.dom(`${stackCard} [data-test-pet="Mango"]`).doesNotExist();
@@ -728,10 +698,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
         formatted_body: 'Link to pet and change preferred carrier',
         format: 'org.matrix.custom.html',
         data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: id,
+          command: {
+            type: 'patchCard',
+            id,
+            patch: {
               attributes: {
                 address: { shippingInfo: { preferredCarrier: 'UPS' } },
               },
@@ -741,8 +711,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
                 },
               },
             },
+            eventId: 'patch1',
           },
-          eventId: 'patch1',
         }),
         'm.relates_to': {
           rel_type: 'm.replace',
@@ -756,7 +726,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom(`${stackCard} [data-test-pet]`).doesNotExist();
 
     await click('[data-test-command-apply]');
-    await waitFor('[data-test-message-idx="1"] [data-test-command-card-idle]');
+    await waitFor('[data-test-message-idx="1"] [data-test-patch-card-idle]');
     assert
       .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
       .exists();
@@ -785,14 +755,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
         formatted_body: 'Change tripTitle to Trip to Japan',
         format: 'org.matrix.custom.html',
         data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: id,
+          command: {
+            type: 'patchCard',
+            id,
+            patch: {
               attributes: { trips: { tripTitle: 'Trip to Japan' } },
             },
+            eventId: 'event1',
           },
-          eventId: 'event1',
         }),
         'm.relates_to': {
           rel_type: 'm.replace',
@@ -804,7 +774,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await waitFor('[data-test-command-apply="ready"]');
     await click('[data-test-command-apply]');
-    await waitFor('[data-test-command-card-idle]');
+    await waitFor('[data-test-patch-card-idle]');
     assert.dom('[data-test-apply-state="applied"]').exists();
     assert.dom('[data-test-tripTitle]').hasText('Trip to Japan');
   });
@@ -827,15 +797,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         formatted_body: 'Change first name to Dave',
         format: 'org.matrix.custom.html',
         data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: id,
-
-              attributes: { firstName: 'Dave' },
-            },
+          command: {
+            type: 'patchCard',
+            id,
+            patch: { attributes: { firstName: 'Dave' } },
+            eventId: 'event1',
           },
-          eventId: 'event1',
         }),
         'm.relates_to': {
           rel_type: 'm.replace',
@@ -856,16 +823,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         formatted_body: 'Incorrect patch command',
         format: 'org.matrix.custom.html',
         data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              arguments: {
-                card_id: id,
-                relationships: { pet: null },
-              },
-            },
+          command: {
+            type: 'patchCard',
+            id,
+            patch: { relationships: { pet: null } }, // this will error
+            eventId: 'event2',
           },
-          eventId: 'event2',
         }),
         'm.relates_to': {
           rel_type: 'm.replace',
@@ -886,14 +849,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         formatted_body: 'Change first name to Jackie',
         format: 'org.matrix.custom.html',
         data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: id,
-              attributes: { firstName: 'Jackie' },
-            },
+          command: {
+            type: 'patchCard',
+            id,
+            patch: { attributes: { firstName: 'Jackie' } },
+            eventId: 'event3',
           },
-          eventId: 'event3',
         }),
         'm.relates_to': {
           rel_type: 'm.replace',
@@ -913,7 +874,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .exists();
     matrixService.sendReactionDeferred.fulfill();
 
-    await waitFor('[data-test-message-idx="2"] [data-test-command-card-idle]');
+    await waitFor('[data-test-message-idx="2"] [data-test-patch-card-idle]');
     assert.dom('[data-test-apply-state="applied"]').exists({ count: 1 });
     assert
       .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
@@ -922,7 +883,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-person]').hasText('Jackie');
 
     await click('[data-test-message-idx="1"] [data-test-command-apply]');
-    await waitFor('[data-test-message-idx="1"] [data-test-command-card-idle]');
+    await waitFor('[data-test-message-idx="1"] [data-test-patch-card-idle]');
     assert.dom('[data-test-apply-state="failed"]').exists({ count: 1 });
     assert
       .dom('[data-test-message-idx="1"] [data-test-apply-state="failed"]')
@@ -951,14 +912,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
         formatted_body: 'Change first name to Dave',
         format: 'org.matrix.custom.html',
         data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: id,
-              attributes: { firstName: 'Dave' },
-            },
+          command: {
+            type: 'patchCard',
+            id,
+            patch: { attributes: { firstName: 'Dave' } },
+            eventId: undefined,
           },
-          eventId: undefined,
         }),
         'm.relates_to': {
           rel_type: 'm.replace',
@@ -978,7 +937,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .exists();
     matrixService.sendReactionDeferred?.fulfill();
 
-    await waitFor('[data-test-message-idx="0"] [data-test-command-card-idle]');
+    await waitFor('[data-test-message-idx="0"] [data-test-patch-card-idle]');
     assert.dom('[data-test-apply-state="applied"]').exists({ count: 1 });
     assert
       .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
@@ -1082,67 +1041,61 @@ module('Integration | ai-assistant-panel', function (hooks) {
   });
 
   test('when opening ai panel it opens the most recent room', async function (assert) {
-    try {
-      await setCardInOperatorModeState(`${testRealmURL}Pet/mango`);
-      await renderComponent(
-        class TestDriver extends GlimmerComponent {
-          <template>
-            <OperatorMode @onClose={{noop}} />
-            <CardPrerender />
-          </template>
-        },
+    await setCardInOperatorModeState(`${testRealmURL}Pet/mango`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await matrixService.createAndJoinRoom('test1', 'test room 1');
+    const room2Id = await matrixService.createAndJoinRoom(
+      'test2',
+      'test room 2',
+    );
+    const room3Id = await matrixService.createAndJoinRoom(
+      'test3',
+      'test room 3',
+    );
+
+    await openAiAssistant();
+    await waitFor(`[data-room-settled]`);
+
+    assert
+      .dom(`[data-test-room="${room3Id}"]`)
+      .exists(
+        "test room 3 is the most recently created room and it's opened initially",
       );
 
-      let now = Date.now();
+    await click('[data-test-past-sessions-button]');
+    await click(`[data-test-enter-room="${room2Id}"]`);
 
-      await matrixService.createAndJoinRoom('test1', 'test room 1', now - 2);
-      const room2Id = await matrixService.createAndJoinRoom(
-        'test2',
-        'test room 2',
-        now - 1,
-      );
-      const room3Id = await matrixService.createAndJoinRoom(
-        'test3',
-        'test room 3',
-        now,
+    await click('[data-test-close-ai-assistant]');
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    assert
+      .dom(`[data-test-room="${room2Id}"]`)
+      .exists(
+        "test room 2 is the most recently selected room and it's opened initially",
       );
 
-      await openAiAssistant();
-      await waitFor(`[data-room-settled]`);
-
-      assert
-        .dom(`[data-test-room="${room3Id}"]`)
-        .exists(
-          "test room 3 is the most recently created room and it's opened initially",
-        );
-
-      await click('[data-test-past-sessions-button]');
-      await click(`[data-test-enter-room="${room2Id}"]`);
-
-      await click('[data-test-close-ai-assistant]');
-      await click('[data-test-open-ai-assistant]');
-      await waitFor(`[data-room-settled]`);
-      assert
-        .dom(`[data-test-room="${room2Id}"]`)
-        .exists(
-          "test room 2 is the most recently selected room and it's opened initially",
-        );
-
-      await click('[data-test-close-ai-assistant]');
-      window.localStorage.setItem(
-        currentRoomIdPersistenceKey,
-        "room-id-that-doesn't-exist-and-should-not-break-the-implementation",
+    await click('[data-test-close-ai-assistant]');
+    window.localStorage.setItem(
+      currentRoomIdPersistenceKey,
+      "room-id-that-doesn't-exist-and-should-not-break-the-implementation",
+    );
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    assert
+      .dom(`[data-test-room="${room3Id}"]`)
+      .exists(
+        "test room 3 is the most recently created room and it's opened initially",
       );
-      await click('[data-test-open-ai-assistant]');
-      await waitFor(`[data-room-settled]`);
-      assert
-        .dom(`[data-test-room="${room3Id}"]`)
-        .exists(
-          "test room 3 is the most recently created room and it's opened initially",
-        );
-    } finally {
-      window.localStorage.removeItem(currentRoomIdPersistenceKey); // Cleanup
-    }
+
+    window.localStorage.removeItem(currentRoomIdPersistenceKey); // Cleanup
   });
 
   test('can close past-sessions list on outside click', async function (assert) {
@@ -1416,14 +1369,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
         formatted_body: 'A patch',
         format: 'org.matrix.custom.html',
         data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: `${testRealmURL}Person/fadhlan`,
+          command: {
+            type: 'patchCard',
+            id: `${testRealmURL}Person/fadhlan`,
+            patch: {
               attributes: { firstName: 'Dave' },
             },
+            eventId: 'patch1',
           },
-          eventId: 'patch1',
         }),
         'm.relates_to': {
           rel_type: 'm.replace',
@@ -1497,10 +1450,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     // Create a new room with some activity (this could happen when we will have a feature that interacts with AI outside of the AI pannel, i.e. "commands")
 
-    let anotherRoomId = await matrixService.createAndJoinRoom(
-      'Another Room',
-      'Another Room',
-    );
+    let anotherRoomId = await matrixService.createAndJoinRoom('Another Room');
 
     await addRoomEvent(matrixService, {
       event_id: 'event2',
@@ -1638,10 +1588,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       )
       .doesNotExist();
 
-    let anotherRoomId = await matrixService.createAndJoinRoom(
-      'Another Room',
-      'Another Room',
-    );
+    let anotherRoomId = await matrixService.createAndJoinRoom('Another Room');
 
     await addRoomEvent(matrixService, {
       event_id: 'botevent2',
@@ -2055,10 +2002,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await click('[data-test-close-ai-assistant]');
 
     // Create a new room with some activity
-    let anotherRoomId = await matrixService.createAndJoinRoom(
-      'Another Room',
-      'Another Room',
-    );
+    let anotherRoomId = await matrixService.createAndJoinRoom('Another Room');
 
     // A message that hasn't been seen and was sent more than fifteen minutes ago must not be shown in the toast.
     let sixteenMinutesAgo = subMinutes(new Date(), 16);
@@ -2152,275 +2096,5 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert
       .dom('[data-test-message-field]')
       .hasValue('This is 1st sentence \n\nThis is 2nd sentence');
-  });
-
-  test('after command is issued, a reaction event will be dispatched', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-    await waitFor('[data-test-person="Fadhlan"]');
-    await matrixService.createAndJoinRoom('room1', 'test room 1');
-    await addRoomEvent(matrixService, {
-      event_id: 'room1-event1',
-      room_id: 'room1',
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        msgtype: 'org.boxel.command',
-        formatted_body: 'Changing first name to Evie',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'patchCard',
-            arguments: {
-              card_id: `${testRealmURL}Person/fadhlan`,
-              attributes: { firstName: 'Evie' },
-            },
-          },
-          eventId: 'room1-event1',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'room1-event1',
-        },
-      },
-      status: null,
-    });
-    let commandReactionEvents = await getCommandReactionEvents(
-      matrixService,
-      'room1',
-    );
-    assert.equal(
-      commandReactionEvents.length,
-      0,
-      'reaction event is not dispatched',
-    );
-
-    await click('[data-test-open-ai-assistant]');
-    await waitFor('[data-test-room-name="test room 1"]');
-    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
-    await waitFor('[data-test-command-card-idle]');
-
-    assert
-      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
-      .exists();
-
-    commandReactionEvents = await getCommandReactionEvents(
-      matrixService,
-      'room1',
-    );
-    assert.equal(
-      commandReactionEvents.length,
-      1,
-      'reaction event is dispatched',
-    );
-  });
-
-  test('after search command is issued, a command result event is dispatched', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-    await waitFor('[data-test-person="Fadhlan"]');
-    await matrixService.createAndJoinRoom('room1', 'test room 1');
-    await addRoomEvent(matrixService, {
-      event_id: 'room1-event1',
-      room_id: 'room1',
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        msgtype: 'org.boxel.command',
-        formatted_body: 'Changing first name to Evie',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'searchCard',
-            arguments: {
-              description: 'Searching for card',
-              filter: {
-                type: {
-                  module: `${testRealmURL}pet`,
-                  name: 'Pet',
-                },
-              },
-            },
-          },
-          eventId: 'room1-event1',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'room1-event1',
-        },
-      },
-      status: null,
-    });
-    let commandResultEvents = await getCommandResultEvents(
-      matrixService,
-      'room1',
-    );
-    assert.equal(
-      commandResultEvents.length,
-      0,
-      'command result event is not dispatched',
-    );
-    await click('[data-test-open-ai-assistant]');
-    await waitFor('[data-test-room-name="test room 1"]');
-    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
-    await waitFor('[data-test-command-card-idle]');
-
-    assert
-      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
-      .exists();
-
-    commandResultEvents = await getCommandResultEvents(matrixService, 'room1');
-    assert.equal(
-      commandResultEvents.length,
-      1,
-      'command result event is dispatched',
-    );
-  });
-
-  test('it can search for card instances that is of the same card type as the card shared', async function (assert) {
-    let id = `${testRealmURL}Pet/mango.json`;
-    let roomId = await renderAiAssistantPanel(id);
-
-    await addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        msgtype: 'org.boxel.command',
-        formatted_body: 'Search for the following card',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'searchCard',
-            arguments: {
-              description: 'Searching for card',
-              filter: {
-                type: {
-                  module: `${testRealmURL}pet`,
-                  name: 'Pet',
-                },
-              },
-            },
-          },
-          eventId: 'search1',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'search1',
-        },
-      },
-      status: null,
-    });
-    await waitFor('[data-test-command-apply]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
-    await waitFor('[data-test-command-result]');
-    await waitFor('[data-test-result-card-idx="1"]');
-    let commandResultEvents = await getCommandResultEvents(
-      matrixService,
-      roomId,
-    );
-    assert.equal(
-      commandResultEvents[0].content.result.length,
-      2,
-      'number of search results',
-    );
-    assert
-      .dom('[data-test-command-message]')
-      .containsText('Search for the following card');
-    assert
-      .dom('[data-test-comand-result-header]')
-      .containsText('Search Results 2 results');
-
-    assert.dom('[data-test-result-card-idx="0"]').containsText('0. Jackie');
-    assert.dom('[data-test-result-card-idx="1"]').containsText('1. Mango');
-    assert.dom('[data-test-toggle-show-button]').doesNotExist();
-  });
-
-  test('toggle more search results', async function (assert) {
-    let id = `${testRealmURL}Person/fadhlan.json`;
-    let roomId = await renderAiAssistantPanel(id);
-    await addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        msgtype: 'org.boxel.command',
-        formatted_body: 'Search for the following card',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'searchCard',
-            arguments: {
-              description: 'Searching for card',
-              filter: {
-                type: {
-                  module: `${testRealmURL}person`,
-                  name: 'Person',
-                },
-              },
-            },
-          },
-          eventId: 'search1',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'search1',
-        },
-      },
-      status: null,
-    });
-    await waitFor('[data-test-command-apply]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
-    await waitFor('[data-test-command-result]');
-    await waitFor('[data-test-result-card-idx="4"]');
-    assert.dom('[data-test-result-card-idx="5"]').doesNotExist();
-    assert
-      .dom('[data-test-toggle-show-button]')
-      .containsText('Show 3 more results');
-    await click('[data-test-toggle-show-button]');
-
-    await waitFor('[data-test-result-card-idx]', { count: 8 });
-    assert.dom('[data-test-toggle-show-button]').containsText('See Less');
-    assert.dom('[data-test-result-card-idx="0"]').containsText('0. Buck');
-    assert.dom('[data-test-result-card-idx="1"]').containsText('1. Burcu');
-    assert.dom('[data-test-result-card-idx="2"]').containsText('2. Fadhlan');
-    assert.dom('[data-test-result-card-idx="3"]').containsText('3. Hassan');
-    assert.dom('[data-test-result-card-idx="4"]').containsText('4. Ian');
-    assert.dom('[data-test-result-card-idx="5"]').containsText('5. Justin');
-    assert.dom('[data-test-result-card-idx="6"]').containsText('6. Matic');
-    assert.dom('[data-test-result-card-idx="7"]').containsText('7. Mickey');
-    await click('[data-test-toggle-show-button]');
-    assert.dom('[data-test-result-card-idx="0"]').containsText('0. Buck');
-    assert.dom('[data-test-result-card-idx="1"]').containsText('1. Burcu');
-    assert.dom('[data-test-result-card-idx="2"]').containsText('2. Fadhlan');
-    assert.dom('[data-test-result-card-idx="3"]').containsText('3. Hassan');
-    assert.dom('[data-test-result-card-idx="4"]').containsText('4. Ian');
-    assert.dom('[data-test-result-card-idx="5"]').doesNotExist();
   });
 });

@@ -409,10 +409,6 @@ class AppCardIsolated extends Component<typeof AppCard> {
     this.createCard.perform(cardDoc);
   }
 
-  get isCreateCardRunning() {
-    return this.createCard.isRunning;
-  }
-
   private createCard = restartableTask(
     async (doc: LooseSingleCardDocument | undefined = undefined) => {
       if (!this.activeTabRef) {
@@ -494,8 +490,8 @@ export class CardsGrid extends GlimmerComponent<{
         width: var(--grid-card-width);
         height: var(--grid-card-height);
       }
-      .cards-grid-item > :deep(.field-component-card.fitted-format) {
-        --overlay-fitted-card-header-height: 0;
+      .cards-grid-item > :deep(.field-component-card.embedded-format) {
+        --overlay-embedded-card-header-height: 0;
       }
     </style>
   </template>

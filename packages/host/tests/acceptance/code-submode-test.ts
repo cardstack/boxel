@@ -869,15 +869,14 @@ module('Acceptance | code submode tests', function (hooks) {
       .dom('[data-test-preview-card-footer-button-isolated]')
       .hasClass('active');
 
-    await click('[data-test-preview-card-footer-button-fitted]');
+    await click('[data-test-preview-card-footer-button-atom]');
     assert
-      .dom('[data-test-preview-card-footer-button-fitted]')
+      .dom('[data-test-preview-card-footer-button-atom]')
       .hasClass('active');
+    assert.dom('[data-test-code-mode-card-preview-body] .atom-format').exists();
     assert
-      .dom(
-        '[data-test-code-mode-card-preview-body ] .field-component-card.fitted-format',
-      )
-      .exists();
+      .dom('[data-test-code-mode-card-preview-body] .atom-format')
+      .includesText('Fadhlan');
 
     await click('[data-test-preview-card-footer-button-embedded]');
     assert
@@ -888,15 +887,6 @@ module('Acceptance | code submode tests', function (hooks) {
         '[data-test-code-mode-card-preview-body ] .field-component-card.embedded-format',
       )
       .exists();
-
-    await click('[data-test-preview-card-footer-button-atom]');
-    assert
-      .dom('[data-test-preview-card-footer-button-atom]')
-      .hasClass('active');
-    assert.dom('[data-test-code-mode-card-preview-body] .atom-format').exists();
-    assert
-      .dom('[data-test-code-mode-card-preview-body] .atom-format')
-      .includesText('Fadhlan');
 
     await click('[data-test-preview-card-footer-button-edit]');
     assert
@@ -1003,8 +993,10 @@ module('Acceptance | code submode tests', function (hooks) {
     // Click on search result
     await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
 
-    await waitForCodeEditor(); // The card appears in the editor
-    assert.dom('[data-test-search-sheet]').doesNotHaveClass('results'); // Search sheet is closed
+    assert.dom('[data-test-search-sheet]').doesNotHaveClass('results'); // Search closed
+
+    // The card appears in the editor
+    await waitForCodeEditor();
     assert.deepEqual(JSON.parse(getMonacoContent()), {
       data: {
         attributes: {

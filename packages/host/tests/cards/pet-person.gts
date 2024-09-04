@@ -29,7 +29,7 @@ export class PetPerson extends CardDef {
   });
   @field thumbnailURL = contains(StringCard, { computeVia: () => null });
 
-  static fitted = class Fitted extends Component<typeof this> {
+  static embedded = class Embedded extends Component<typeof this> {
     <template>
       <GridContainer>
         <h3><@fields.firstName /></h3>
@@ -55,17 +55,6 @@ export class PetPersonField extends FieldDef {
     computeVia: () => 'A person with pets',
   });
   @field thumbnailURL = contains(StringCard, { computeVia: () => null });
-  static fitted = class Fitted extends Component<typeof this> {
-    <template>
-      <GridContainer>
-        <h3><@fields.firstName /></h3>
-        Pets:
-        <@fields.pets />
-        Friend:
-        <@fields.friend />
-      </GridContainer>
-    </template>
-  };
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <GridContainer>

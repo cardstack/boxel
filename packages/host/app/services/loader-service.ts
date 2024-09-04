@@ -1,5 +1,5 @@
 import Service, { service } from '@ember/service';
-
+import { buildWaiter } from '@ember/test-waiters';
 import { tracked } from '@glimmer/tracking';
 
 import {
@@ -23,6 +23,8 @@ import type RealmService from './realm';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
+let virtualNetworkFetchWaiter = buildWaiter('virtual-network-fetch');
+
 function getNativeFetch(): typeof fetch {
   if (isFastBoot) {
     let optsId = (globalThis as any).runnerOptsId;
@@ -34,7 +36,15 @@ function getNativeFetch(): typeof fetch {
     ) => RunnerOpts;
     return getRunnerOpts(optsId)._fetch;
   } else {
-    return fetch;
+    let fetchWithWaiter: typeof globalThis.fetch = async (...args) => {
+      let token = virtualNetworkFetchWaiter.beginAsync();
+      try {
+        return await fetch(...args);
+      } finally {
+        virtualNetworkFetchWaiter.endAsync(token);
+      }
+    };
+    return fetchWithWaiter;
   }
 }
 
@@ -77,7 +87,7 @@ export default class LoaderService extends Service {
     let middlewareStack: FetcherMiddlewareHandler[] = [];
     middlewareStack.push(async (req, next) => {
       if (this.isIndexing) {
-        req.headers.set('X-Boxel-Building-Index', 'true');
+        req.headers.set('X-Boxel-Use-WIP-Index', 'true');
       }
       return next(req);
     });

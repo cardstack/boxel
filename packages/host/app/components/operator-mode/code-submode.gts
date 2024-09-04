@@ -16,7 +16,6 @@ import perform from 'ember-concurrency/helpers/perform';
 import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 
 import { provide } from 'ember-provide-consume-context';
-import window from 'ember-window-mock';
 
 import { Accordion } from '@cardstack/boxel-ui/components';
 
@@ -59,7 +58,7 @@ import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import FileTree from '../editor/file-tree';
 
-import CardPreviewPanel from './card-preview-panel/index';
+import CardPreviewPanel from './card-preview-panel';
 import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
 import InnerContainer from './code-submode/inner-container';
@@ -161,14 +160,14 @@ export default class CodeSubmode extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.operatorModeStateService.subscribeToOpenFileStateChanges(this);
-    this.panelWidths = window.localStorage.getItem(CodeModePanelWidths)
+    this.panelWidths = localStorage.getItem(CodeModePanelWidths)
       ? // @ts-ignore Type 'null' is not assignable to type 'string'
-        JSON.parse(window.localStorage.getItem(CodeModePanelWidths))
+        JSON.parse(localStorage.getItem(CodeModePanelWidths))
       : {};
 
-    this.panelHeights = window.localStorage.getItem(CodeModePanelHeights)
+    this.panelHeights = localStorage.getItem(CodeModePanelHeights)
       ? // @ts-ignore Type 'null' is not assignable to type 'string'
-        JSON.parse(window.localStorage.getItem(CodeModePanelHeights))
+        JSON.parse(localStorage.getItem(CodeModePanelHeights))
       : {};
 
     registerDestructor(this, () => {
@@ -505,10 +504,7 @@ export default class CodeSubmode extends Component<Signature> {
     this.panelWidths.codeEditorPanel = panels[1]?.lengthPx;
     this.panelWidths.rightPanel = panels[2]?.lengthPx;
 
-    window.localStorage.setItem(
-      CodeModePanelWidths,
-      JSON.stringify(this.panelWidths),
-    );
+    localStorage.setItem(CodeModePanelWidths, JSON.stringify(this.panelWidths));
   }
 
   @action
@@ -516,7 +512,7 @@ export default class CodeSubmode extends Component<Signature> {
     this.panelHeights.filePanel = panels[0]?.lengthPx;
     this.panelHeights.recentPanel = panels[1]?.lengthPx;
 
-    window.localStorage.setItem(
+    localStorage.setItem(
       CodeModePanelHeights,
       JSON.stringify(this.panelHeights),
     );
@@ -644,10 +640,8 @@ export default class CodeSubmode extends Component<Signature> {
     this.updateCursorByName = updateCursorByName;
   };
 
-  @action private openSearchResultInEditor(cardId: string) {
-    let codePath = cardId.endsWith('.json')
-      ? new URL(cardId)
-      : new URL(cardId + '.json');
+  @action private openSearchResultInEditor(card: CardDef) {
+    let codePath = new URL(card.id + '.json');
     this.operatorModeStateService.updateCodePath(codePath);
   }
 
@@ -992,7 +986,7 @@ export default class CodeSubmode extends Component<Signature> {
 
       .code-mode-top-bar {
         --code-mode-top-bar-left-offset: calc(
-          var(--operator-mode-left-column) - var(--boxel-sp)
+          var(--submode-switcher-width) + var(--boxel-sp)
         );
 
         position: absolute;

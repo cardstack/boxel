@@ -346,7 +346,7 @@ module('Integration | computeds', function (hooks) {
   test('can render a computed linksTo relationship', async function (assert) {
     class Pet extends CardDef {
       @field name = contains(StringField);
-      static fitted = class Fitted extends Component<typeof this> {
+      static embedded = class Embedded extends Component<typeof this> {
         <template>
           <span data-test='name'><@fields.name /></span>
         </template>
@@ -399,7 +399,7 @@ module('Integration | computeds', function (hooks) {
   test('can render a computed linksToMany relationship', async function (this: RenderingTestContext, assert) {
     class Pet extends CardDef {
       @field name = contains(StringField);
-      static fitted = class Fitted extends Component<typeof this> {
+      static embedded = class Embedded extends Component<typeof this> {
         <template>
           <span data-test='name'><@fields.name /></span>
         </template>
@@ -408,7 +408,7 @@ module('Integration | computeds', function (hooks) {
     class Person extends CardDef {
       @field firstName = contains(StringField);
       @field pets = linksToMany(Pet);
-      static fitted = class Fitted extends Component<typeof this> {
+      static embedded = class Embedded extends Component<typeof this> {
         <template>
           <span data-test='firstName'><@fields.firstName /></span>
         </template>

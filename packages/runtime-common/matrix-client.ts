@@ -1,6 +1,3 @@
-import { Sha256 } from '@aws-crypto/sha256-js';
-import { uint8ArrayToHex } from './index';
-
 export interface MatrixAccess {
   accessToken: string;
   deviceId: string;
@@ -9,32 +6,12 @@ export interface MatrixAccess {
 
 export class MatrixClient {
   private access: MatrixAccess | undefined;
-  private matrixURL: URL;
-  private username: string;
-  private password?: string;
-  private seed?: string;
 
-  constructor({
-    matrixURL,
-    username,
-    password,
-    seed,
-  }: {
-    matrixURL: URL;
-    username: string;
-    password?: string;
-    seed?: string;
-  }) {
-    if (!password && !seed) {
-      throw new Error(
-        `Either password or a seed must be specified when creating a matrix client`,
-      );
-    }
-    this.matrixURL = matrixURL;
-    this.username = username;
-    this.password = password;
-    this.seed = seed;
-  }
+  constructor(
+    private matrixURL: URL,
+    private username: string,
+    private password: string,
+  ) {}
 
   getUserId() {
     return this.access?.userId;
@@ -66,20 +43,6 @@ export class MatrixClient {
   }
 
   async login() {
-    let password: string | undefined;
-    if (this.password) {
-      password = this.password;
-    } else if (this.seed) {
-      let hash = new Sha256();
-      hash.update(this.username);
-      hash.update(this.seed);
-      password = uint8ArrayToHex(await hash.digest());
-    } else {
-      throw new Error(
-        'bug: should never be here, we ensure password or seed exists in constructor',
-      );
-    }
-
     let response = await this.request(
       '_matrix/client/v3/login',
       'POST',
@@ -89,7 +52,7 @@ export class MatrixClient {
             type: 'm.id.user',
             user: this.username,
           },
-          password,
+          password: this.password,
           type: 'm.login.password',
         }),
       },

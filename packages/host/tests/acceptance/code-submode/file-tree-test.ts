@@ -743,23 +743,15 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       ],
       submode: 'code',
       fileView: 'browser',
-
-      // this was picked because it's way out in the middle of a long list of
-      // files. So it will get scrolled to the middle of the visible window,
-      // such that it's following entry (z80) is always on-screen.
-      //
-      // If instead we picked a file whose neighbor may hang off the bottom of
-      // the screen, choosing that neighbor would intentionally cause scroll and
-      // fail our test.
-      codePath: `${testRealmURL}z79.json`,
+      codePath: `${testRealmURL}person-entry.json`,
     });
 
-    await waitFor('[data-test-file="z80.json"]');
+    await waitFor('[data-test-file="person.gts"]');
 
     let scrollablePanel = find('[data-test-togglable-left-panel]');
     let currentScrollTop = scrollablePanel?.scrollTop;
 
-    await click('[data-test-file="z80.json"]');
+    await click('[data-test-file="person.gts"]');
 
     let newScrollTop = scrollablePanel?.scrollTop;
 

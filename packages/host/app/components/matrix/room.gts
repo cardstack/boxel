@@ -8,10 +8,6 @@ import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import { not } from '@cardstack/boxel-ui/helpers';
-
-import { unixTime } from '@cardstack/runtime-common';
-
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
@@ -44,63 +40,61 @@ interface Signature {
 
 export default class Room extends Component<Signature> {
   <template>
-    {{#if (not this.doMatrixEventFlush.isRunning)}}
-      <section
-        class='room'
-        data-room-settled={{this.doWhenRoomChanges.isIdle}}
-        data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
-        data-test-room-name={{this.roomResource.name}}
-        data-test-room={{@roomId}}
-      >
-        <AiAssistantConversation>
-          {{#if this.messages}}
-            {{#each this.messages as |message i|}}
-              <RoomMessage
-                @roomId={{@roomId}}
-                @messages={{this.messages}}
-                @message={{message}}
-                @index={{i}}
-                @isPending={{this.isPendingMessage message}}
-                @monacoSDK={{@monacoSDK}}
-                @isStreaming={{this.isMessageStreaming message i}}
-                @currentEditor={{this.currentMonacoContainer}}
-                @setCurrentEditor={{this.setCurrentMonacoContainer}}
-                @retryAction={{this.maybeRetryAction i message}}
-                data-test-message-idx={{i}}
-              />
-            {{/each}}
-          {{else}}
-            <NewSession @sendPrompt={{this.sendPrompt}} />
-          {{/if}}
-          {{#if this.room}}
-            <AiAssistantSkillMenu
-              class='skills'
-              @skills={{this.skills}}
-              @onChooseCard={{this.attachSkill}}
-              data-test-skill-menu
+    <section
+      class='room'
+      data-room-settled={{this.doWhenRoomChanges.isIdle}}
+      data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
+      data-test-room-name={{this.roomResource.name}}
+      data-test-room={{@roomId}}
+    >
+      <AiAssistantConversation>
+        {{#if this.messages}}
+          {{#each this.messages as |message i|}}
+            <RoomMessage
+              @roomId={{@roomId}}
+              @messages={{this.messages}}
+              @message={{message}}
+              @index={{i}}
+              @isPending={{this.isPendingMessage message}}
+              @monacoSDK={{@monacoSDK}}
+              @isStreaming={{this.isMessageStreaming message i}}
+              @currentEditor={{this.currentMonacoContainer}}
+              @setCurrentEditor={{this.setCurrentMonacoContainer}}
+              @retryAction={{this.maybeRetryAction i message}}
+              data-test-message-idx={{i}}
             />
-          {{/if}}
-        </AiAssistantConversation>
+          {{/each}}
+        {{else}}
+          <NewSession @sendPrompt={{this.sendPrompt}} />
+        {{/if}}
+        {{#if this.room}}
+          <AiAssistantSkillMenu
+            class='skills'
+            @skills={{this.skills}}
+            @onChooseCard={{this.attachSkill}}
+            data-test-skill-menu
+          />
+        {{/if}}
+      </AiAssistantConversation>
 
-        <footer class='room-actions'>
-          <div class='chat-input-area' data-test-chat-input-area>
-            <AiAssistantChatInput
-              @value={{this.messageToSend}}
-              @onInput={{this.setMessage}}
-              @onSend={{this.sendMessage}}
-              @canSend={{this.canSend}}
-              data-test-message-field={{@roomId}}
-            />
-            <AiAssistantCardPicker
-              @autoAttachedCards={{this.autoAttachedCards}}
-              @cardsToAttach={{this.cardsToAttach}}
-              @chooseCard={{this.chooseCard}}
-              @removeCard={{this.removeCard}}
-            />
-          </div>
-        </footer>
-      </section>
-    {{/if}}
+      <footer class='room-actions'>
+        <div class='chat-input-area' data-test-chat-input-area>
+          <AiAssistantChatInput
+            @value={{this.messageToSend}}
+            @onInput={{this.setMessage}}
+            @onSend={{this.sendMessage}}
+            @canSend={{this.canSend}}
+            data-test-message-field={{@roomId}}
+          />
+          <AiAssistantCardPicker
+            @autoAttachedCards={{this.autoAttachedCards}}
+            @cardsToAttach={{this.cardsToAttach}}
+            @chooseCard={{this.chooseCard}}
+            @removeCard={{this.removeCard}}
+          />
+        </div>
+      </footer>
+    </section>
 
     <style>
       .room {
@@ -111,7 +105,7 @@ export default class Room extends Component<Signature> {
       }
       .skills {
         position: sticky;
-        bottom: 0;
+        bottom: var(--boxel-sp-5xs);
         margin-left: auto;
       }
       .room-actions {
@@ -125,9 +119,6 @@ export default class Room extends Component<Signature> {
       }
       :deep(.ai-assistant-conversation > *:first-child) {
         margin-top: auto;
-      }
-      :deep(.ai-assistant-conversation > *:nth-last-of-type(2)) {
-        padding-bottom: var(--boxel-sp-xl);
       }
     </style>
   </template>
@@ -165,11 +156,7 @@ export default class Room extends Component<Signature> {
     return (
       !message.isStreamingFinished &&
       this.isLastMessage(messageIndex) &&
-      // Older events do not come with isStreamingFinished property so we have
-      // no other way to determine if the message is done streaming other than
-      // checking if they are old messages (older than 60 seconds as an arbitrary
-      // threshold)
-      unixTime(new Date().getTime() - message.created.getTime()) < 60
+      (new Date().getTime() - message.created.getTime()) / 1000 < 60 // Older events do not come with isStreamingFinished property so we have no other way to determine if the message is done streaming other than checking if they are old messages (older than 60 seconds as an arbitrary threshold)
     );
   }
 

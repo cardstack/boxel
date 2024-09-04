@@ -20,7 +20,6 @@ import {
   moduleFrom,
   isCardDef,
   IndexWriter,
-  unixTime,
   type Batch,
   type LooseCardResource,
   type InstanceEntry,
@@ -226,24 +225,25 @@ export class CurrentRun {
     url: URL,
     mtimes: LastModifiedTimes,
   ): Promise<void> {
-    log.debug(`discovering invalidations in dir ${url.href}`);
-    let ignorePatterns = await this.#reader.readFile(
-      new URL('.gitignore', url),
+    let ignorePatterns = await this.#reader.readFileAsText(
+      this.#realmPaths.local(new URL('.gitignore', url)),
     );
     if (ignorePatterns && ignorePatterns.content) {
       this.ignoreMap.set(url.href, ignore().add(ignorePatterns.content));
       this.#ignoreData[url.href] = ignorePatterns.content;
     }
 
-    let entries = await this.#reader.directoryListing(url);
-    for (let { url, kind, lastModified } of entries) {
-      let innerURL = new URL(url);
+    for await (let { path: innerPath, kind } of this.#reader.readdir(
+      this.#realmPaths.local(url),
+    )) {
+      let innerURL = this.#realmPaths.fileURL(innerPath);
       if (isIgnored(this.#realmURL, this.ignoreMap, innerURL)) {
         continue;
       }
 
       if (kind === 'directory') {
-        await this.discoverInvalidations(innerURL, mtimes);
+        let directoryURL = this.#realmPaths.directoryURL(innerPath);
+        await this.discoverInvalidations(directoryURL, mtimes);
       } else {
         let indexEntry = mtimes.get(innerURL.href);
         if (
@@ -255,6 +255,8 @@ export class CurrentRun {
           continue;
         }
 
+        let localPath = this.#realmPaths.local(innerURL);
+        let lastModified = await this.#reader.lastModified(localPath);
         if (lastModified !== indexEntry.lastModified) {
           await this.batch.invalidate(innerURL);
         }
@@ -284,9 +286,9 @@ export class CurrentRun {
       return;
     }
 
-    let fileRef = await this.#reader.readFile(url);
+    let fileRef = await this.#reader.readFileAsText(localPath);
     if (!fileRef) {
-      fileRef = await this.#reader.readFile(new URL(encodeURI(localPath), url));
+      fileRef = await this.#reader.readFileAsText(encodeURI(localPath));
     }
     if (!fileRef) {
       let error = new CardError(`missing file ${url.href}`, { status: 404 });
@@ -316,12 +318,6 @@ export class CurrentRun {
         }
 
         if (resource && isCardResource(resource)) {
-          if (lastModified == null) {
-            log.warn(
-              `No lastModified date available for ${url.href}, using current time`,
-            );
-            lastModified = unixTime(Date.now());
-          }
           await this.indexCard({
             path: localPath,
             source: content,
@@ -483,7 +479,7 @@ export class CurrentRun {
         data: {
           id: instanceURL.href,
           meta: {
-            lastModified,
+            lastModified: lastModified,
             realmInfo: this.#realmInfo,
             realmURL: this.realmURL.href,
           },
@@ -514,19 +510,9 @@ export class CurrentRun {
     }
     let embeddedHtml: Record<string, string> | undefined;
     if (card && typesMaybeError?.type === 'types') {
-      embeddedHtml = await this.buildCardHtml(
+      embeddedHtml = await this.buildEmbeddedHtml(
         card,
         typesMaybeError.types,
-        'embedded',
-        identityContext,
-      );
-    }
-    let fittedHtml: Record<string, string> | undefined;
-    if (card && typesMaybeError?.type === 'types') {
-      fittedHtml = await this.buildCardHtml(
-        card,
-        typesMaybeError.types,
-        'fitted',
         identityContext,
       );
     }
@@ -539,7 +525,6 @@ export class CurrentRun {
         isolatedHtml,
         atomHtml,
         embeddedHtml,
-        fittedHtml,
         lastModified,
         types: typesMaybeError.types.map(({ refURL }) => refURL),
         deps: new Set([
@@ -578,19 +563,18 @@ export class CurrentRun {
     deferred.fulfill();
   }
 
-  private async buildCardHtml(
+  private async buildEmbeddedHtml(
     card: CardDef,
     types: CardType[],
-    format: 'embedded' | 'fitted',
     identityContext: IdentityContextType,
   ): Promise<{ [refURL: string]: string }> {
     let result: { [refURL: string]: string } = {};
     for (let { codeRef: componentCodeRef, refURL } of types) {
-      let html = unwrap(
+      let embeddedHtml = unwrap(
         sanitizeHTML(
           await this.#renderCard({
             card,
-            format,
+            format: 'embedded',
             visit: this.visitFile.bind(this),
             identityContext,
             realmPath: this.#realmPaths,
@@ -598,7 +582,7 @@ export class CurrentRun {
           }),
         ),
       );
-      result[refURL] = html;
+      result[refURL] = embeddedHtml;
     }
     return result;
   }

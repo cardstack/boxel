@@ -8,7 +8,7 @@ import {
 } from '@cardstack/runtime-common';
 import migrate from 'node-pg-migrate';
 import { join } from 'path';
-import { Pool, Client, type Notification } from 'pg';
+import { Pool, Client, type Notification, type PoolClient } from 'pg';
 
 import postgresConfig from './pg-config';
 
@@ -20,18 +20,14 @@ function config() {
   });
 }
 
-type Config = ReturnType<typeof config>;
-
 export default class PgAdapter implements DBAdapter {
   #isClosed = false;
   private pool: Pool;
   private started = this.#startClient();
-  private config: Config;
 
   constructor() {
-    this.config = config();
-    let { user, host, database, password, port } = this.config;
-    log.info(`connecting to DB ${this.url}`);
+    let { user, host, database, password, port } = config();
+    log.info(`connecting to DB ${user}@${host}:${port}/${database}`);
     this.pool = new Pool({
       user,
       host,
@@ -47,18 +43,11 @@ export default class PgAdapter implements DBAdapter {
     return this.#isClosed;
   }
 
-  get url() {
-    let { user, host, database, port } = this.config;
-    return `${user}@${host}:${port}/${database}`;
-  }
-
   async #startClient() {
     await this.migrateDb();
   }
 
   async close() {
-    log.info(`closing ${this.url}`);
-    this.#isClosed = true;
     await this.started;
     await this.pool.end();
   }
@@ -102,7 +91,14 @@ export default class PgAdapter implements DBAdapter {
     // Pool, and this is substantiated by commentary on GitHub:
     //   https://github.com/brianc/node-postgres/issues/1543#issuecomment-353622236
     // So for listen purposes, we establish a completely separate connection.
-    let client = new Client(this.config);
+    let c = config();
+    let client = new Client({
+      user: c.user,
+      host: c.host,
+      database: c.database,
+      password: c.password,
+      port: c.port,
+    });
     await client.connect();
     try {
       client.on('notification', (n) => {
@@ -117,9 +113,10 @@ export default class PgAdapter implements DBAdapter {
   }
 
   async withConnection<T>(
-    fn: (
-      query: (e: Expression) => Promise<Record<string, PgPrimitive>[]>,
-    ) => Promise<T>,
+    fn: (connection: {
+      client: PoolClient;
+      query: (e: Expression) => Promise<Record<string, PgPrimitive>[]>;
+    }) => Promise<T>,
   ): Promise<T> {
     await this.started;
 
@@ -131,7 +128,7 @@ export default class PgAdapter implements DBAdapter {
       return rows;
     };
     try {
-      return await fn(query);
+      return await fn({ query, client });
     } finally {
       client.release();
     }
