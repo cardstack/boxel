@@ -332,17 +332,11 @@ module('Acceptance | interact submode tests', function (hooks) {
       // Click on search result
       await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
 
-      await waitUntil(
-        () =>
-          !document
-            .querySelector('[data-test-search-sheet]')!
-            .classList.contains('results'),
-      ); // Search closed
+      assert.dom('[data-test-search-sheet]').doesNotHaveClass('results'); // Search closed
 
       // The card appears on a new stack
       await waitFor('[data-test-operator-mode-stack]');
 
-      await waitFor('[data-test-operator-mode-stack="0"]');
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
       assert
         .dom(
@@ -663,8 +657,19 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
       await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
+      // There is some additional thing we are waiting on here, probably the
+      // card to load in the card resource, but I'm not too sure so using waitUntil instead
+      await waitUntil(() =>
+        document
+          .querySelector('[data-test-operator-mode-stack="0"]')
+          ?.textContent?.includes('Mango'),
+      );
 
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
+
+      // There are now 2 stacks
+
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
       assert.dom('[data-test-operator-mode-stack="0"]').includesText('Mango'); // Mango goes on the left stack
       assert.dom('[data-test-operator-mode-stack="1"]').includesText('Fadhlan');
 
@@ -678,22 +683,11 @@ module('Acceptance | interact submode tests', function (hooks) {
       );
 
       // There is now only 1 stack and the buttons to add a neighbor stack are back
-      await waitUntil(
-        () =>
-          document.querySelectorAll('[data-test-operator-mode-stack]')
-            .length === 1,
-      );
-      assert
-        .dom('[data-test-operator-mode-stack]')
-        .exists({ count: 1 }, 'after close, expect 1 stack');
-      assert
-        .dom('[data-test-add-card-left-stack]')
-        .exists('after close, expect add to left stack button');
-      assert
-        .dom('[data-test-add-card-right-stack]')
-        .exists('after close, expect add to right stack button');
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
+      assert.dom('[data-test-add-card-left-stack]').exists();
+      assert.dom('[data-test-add-card-right-stack]').exists();
 
-      // Add a card to the left stack
+      // Add a card to the right stack
       await click('[data-test-add-card-left-stack]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
@@ -703,19 +697,10 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
       // There are now 2 stacks
+      await waitFor('[data-test-operator-mode-stack="0"]');
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
-      await waitUntil(() =>
-        document
-          .querySelector('[data-test-operator-mode-stack="0"]')
-          ?.textContent?.includes('Fadhlan'),
-      );
       assert.dom('[data-test-operator-mode-stack="0"]').includesText('Fadhlan');
-      await waitUntil(() =>
-        document
-          .querySelector('[data-test-operator-mode-stack="1"]')
-          ?.textContent?.includes('Mango'),
-      );
-      assert.dom('[data-test-operator-mode-stack="1"]').includesText('Mango'); // Mango gets moved onto the right stack
+      assert.dom('[data-test-operator-mode-stack="1"]').includesText('Mango'); // Mango gets move onto the right stack
 
       // Buttons to add a neighbor stack are gone
       assert.dom('[data-test-add-card-left-stack]').doesNotExist();
@@ -915,11 +900,11 @@ module('Acceptance | interact submode tests', function (hooks) {
       });
       assert
         .dom(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-fitted-card-edit-button]`,
+          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-embedded-card-edit-button]`,
         )
         .exists();
       await click(
-        `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-fitted-card-edit-button]`,
+        `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-embedded-card-edit-button]`,
       );
       await waitFor(`[data-test-stack-card="${testRealmURL}Pet/mango"]`);
       assert
@@ -1170,7 +1155,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         .exists();
       assert
         .dom(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-fitted-card-edit-button]`,
+          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-embedded-card-edit-button]`,
         )
         .doesNotExist('edit icon not displayed for linked card');
       await click(

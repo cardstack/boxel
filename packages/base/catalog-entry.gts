@@ -69,9 +69,9 @@ export class CatalogEntry extends CardDef {
     </template>
   };
 
-  static fitted = class Fitted extends Component<typeof this> {
+  static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CatalogEntryContainer class='fitted'>
+      <CatalogEntryContainer class='embedded'>
         <header class='title'>
           <@fields.title />
         </header>
@@ -80,7 +80,7 @@ export class CatalogEntry extends CardDef {
         </p>
       </CatalogEntryContainer>
       <style>
-        .fitted > * {
+        .embedded > * {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;

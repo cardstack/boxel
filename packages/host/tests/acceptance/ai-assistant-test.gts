@@ -211,7 +211,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     });
   });
 
-  test('attaches a card in a conversation multiple times', async function (assert) {
+  test('attaches a card in a coversation multiple times', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -254,10 +254,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click(
       `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testCard}"]`,
     );
-    await waitFor(
-      `[data-test-stack-card="${testCard}"] [data-test-edit-button]`,
-    );
-
     await click(`[data-test-stack-card="${testCard}"] [data-test-edit-button]`);
     await fillIn(
       '[data-test-field="firstName"] [data-test-boxel-input]',

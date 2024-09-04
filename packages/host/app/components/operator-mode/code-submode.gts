@@ -58,7 +58,7 @@ import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import FileTree from '../editor/file-tree';
 
-import CardPreviewPanel from './card-preview-panel/index';
+import CardPreviewPanel from './card-preview-panel';
 import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
 import InnerContainer from './code-submode/inner-container';
@@ -640,10 +640,8 @@ export default class CodeSubmode extends Component<Signature> {
     this.updateCursorByName = updateCursorByName;
   };
 
-  @action private openSearchResultInEditor(cardId: string) {
-    let codePath = cardId.endsWith('.json')
-      ? new URL(cardId)
-      : new URL(cardId + '.json');
+  @action private openSearchResultInEditor(card: CardDef) {
+    let codePath = new URL(card.id + '.json');
     this.operatorModeStateService.updateCodePath(codePath);
   }
 

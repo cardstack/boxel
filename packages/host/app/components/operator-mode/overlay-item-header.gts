@@ -34,10 +34,9 @@ import { type RenderedCardForOverlayActions } from './stack-item';
 
 interface Signature {
   item: RenderedCardForOverlayActions;
-  card: CardDef;
   canWrite: boolean;
   openOrSelectCard: (
-    cardId: string,
+    card: CardDef,
     format?: Format,
     fieldType?: FieldType,
     fieldName?: string,
@@ -49,7 +48,7 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
 
   fetchRealmInfo = trackedFunction(
     this,
-    async () => await this.cardService.getRealmInfo(this.args.card),
+    async () => await this.cardService.getRealmInfo(this.args.item.card),
   );
 
   get iconURL() {
@@ -65,7 +64,7 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
           <img src={{this.iconURL}} width='20' height='20' alt='' />
         {{/if}}
         <span class='header-title__text'>
-          {{cardTypeDisplayName @card}}
+          {{cardTypeDisplayName @item.card}}
         </span>
       </div>
 
@@ -79,12 +78,12 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
             @height='20px'
             class='header-actions__button'
             aria-label='Edit'
-            data-test-fitted-card-edit-button
+            data-test-embedded-card-edit-button
             {{on
               'click'
               (fn
                 @openOrSelectCard
-                @card.id
+                @item.card
                 'edit'
                 @item.fieldType
                 @item.fieldName
@@ -103,7 +102,7 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
                   @height='16px'
                   class='header-actions__button'
                   aria-label='Options'
-                  data-test-fitted-card-options-button
+                  data-test-embedded-card-options-button
                   {{bindings}}
                 />
               </:trigger>
@@ -116,7 +115,7 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
             <Menu
               @closeMenu={{dd.close}}
               @items={{array
-                (menuItem 'View card' (fn @openOrSelectCard @card.id))
+                (menuItem 'View card' (fn @openOrSelectCard @item.card))
               }}
             />
           </:content>
@@ -128,7 +127,7 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
       .overlay-item-header {
         background-color: var(--boxel-light);
         border-bottom: 1px solid var(--boxel-200);
-        height: var(--overlay-fitted-card-header-height);
+        height: var(--overlay-embedded-card-header-height);
         display: flex;
         justify-content: space-between;
         padding: var(--boxel-sp-xxs);
@@ -160,10 +159,10 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
         display: flex;
         border-radius: 5px;
         height: calc(
-          var(--overlay-fitted-card-header-height) - 2 * var(--boxel-sp-xxxs)
+          var(--overlay-embedded-card-header-height) - 2 * var(--boxel-sp-xxxs)
         );
         width: calc(
-          var(--overlay-fitted-card-header-height) - 2 * var(--boxel-sp-xxxs)
+          var(--overlay-embedded-card-header-height) - 2 * var(--boxel-sp-xxxs)
         );
       }
       .header-actions__button:hover {

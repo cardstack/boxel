@@ -227,7 +227,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         overflow: auto;
       }
 
-      .content > :deep(.command-message) {
+      .content > :deep(.patch-message) {
         font-weight: 700;
         letter-spacing: var(--boxel-lsp-sm);
       }

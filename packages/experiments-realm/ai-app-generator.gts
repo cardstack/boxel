@@ -14,10 +14,9 @@ import { action } from '@ember/object';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
-import {
-  baseRealm,
-  type CodeRef,
-  type LooseSingleCardDocument,
+import type {
+  CodeRef,
+  LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { AppCard, Tab, CardsGrid } from './app-card';
 
@@ -178,7 +177,6 @@ class PromptContainer extends GlimmerComponent<{
           class='generate-button'
           @kind='primary-dark'
           @loading={{@isLoading}}
-          @disabled={{@isLoading}}
           {{on 'click' @generateProductRequirementsDoc}}
         >
           {{#unless @isLoading}}
@@ -274,7 +272,7 @@ class Isolated extends AppCard.isolated {
                 @prompt={{this.prompt}}
                 @setPrompt={{this.setPrompt}}
                 @generateProductRequirementsDoc={{this.generateProductRequirementsDoc}}
-                @isLoading={{this.generateRequirements.isRunning}}
+                @isLoading={{this.generatePrd.isRunning}}
               />
               {{#if this.errorMessage}}
                 <p class='error'>{{this.errorMessage}}</p>
@@ -292,19 +290,15 @@ class Isolated extends AppCard.isolated {
           }}
             <Button
               @kind='text-only'
-              @loading={{this.isCreateCardRunning}}
-              @disabled={{this.isCreateCardRunning}}
               class='create-new-button'
               {{on 'click' this.createNew}}
             >
-              {{#unless this.isCreateCardRunning}}
-                <IconPlus
-                  class='plus-icon'
-                  width='15'
-                  height='15'
-                  role='presentation'
-                />
-              {{/unless}}
+              <IconPlus
+                class='plus-icon'
+                width='15'
+                height='15'
+                role='presentation'
+              />
               Create new requirement
             </Button>
           {{/if}}
@@ -355,18 +349,11 @@ class Isolated extends AppCard.isolated {
 
       /* Create New button */
       .create-new-button {
-        --boxel-button-loading-icon-size: 15px;
-        --boxel-button-text-color: var(--boxel-dark);
         margin-left: var(--boxel-sp-sm);
         color: var(--boxel-dark);
         font-weight: 500;
         padding: var(--boxel-sp-xxs);
         gap: var(--boxel-sp-xxs);
-      }
-      .create-new-button :deep(.loading-indicator) {
-        width: 15px;
-        height: 15px;
-        margin-right: 0;
       }
       .create-new-button:hover:not(:disabled) {
         --icon-color: var(--boxel-highlight);
@@ -420,36 +407,20 @@ class Isolated extends AppCard.isolated {
       ? `that has these features: ${this.prompt.customRequirements}`
       : '';
     let prompt = `I want to make a ${this.prompt.appType} tailored for a ${this.prompt.domain} ${requirements}`;
-    this.generateRequirements.perform(ref, {
+    this.generatePrd.perform(ref, {
       data: {
         attributes: { appTitle, prompt },
         meta: { adoptsFrom: ref },
       },
     });
   }
-  private generateRequirements = restartableTask(
+  private generatePrd = restartableTask(
     async (ref: CodeRef, doc: LooseSingleCardDocument) => {
       try {
         this.errorMessage = '';
-        let { createCard, viewCard, runCommand } =
-          this.args.context?.actions ?? {};
-        if (!createCard || !viewCard || !runCommand) {
-          this.errorMessage = 'Error: Missing required card actions';
-          return;
-        }
-        let card = await createCard(ref, this.currentRealm, {
+        await this.args.context?.actions?.createCard?.(ref, this.currentRealm, {
           doc,
-          cardModeAfterCreation: 'isolated',
         });
-        if (!card) {
-          this.errorMessage = 'Error: Failed to create card';
-          return;
-        }
-        await runCommand(
-          card,
-          `${baseRealm.url}SkillCard/generate-product-requirements`,
-          'Generate product requirements document',
-        );
         this.prompt = this.promptReset;
         this.setActiveTab(1);
       } catch (e) {

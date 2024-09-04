@@ -1625,11 +1625,6 @@ module('Realm Server', function (hooks) {
                     Embedded Card Person: <@fields.firstName/>
                   </template>
                 }
-                static fitted = class Fitted extends Component<typeof this> {
-                  <template>
-                    Fitted Card Person: <@fields.firstName/>
-                  </template>
-                }
               }
             `,
             'john.json': {
@@ -2679,11 +2674,11 @@ module('Realm server serving multiple realms', function (hooks) {
       });
       virtualNetwork.mount(testRealm.handle);
 
-      let matrixClient = new MatrixClient({
-        matrixURL: realmServerTestMatrix.url,
-        username: realmServerTestMatrix.username,
-        seed: realmSecretSeed,
-      });
+      let matrixClient = new MatrixClient(
+        realmServerTestMatrix.url,
+        realmServerTestMatrix.username,
+        realmServerTestMatrix.password,
+      );
       testRealmServer = new RealmServer(
         [base, testRealm],
         virtualNetwork,
@@ -2837,13 +2832,11 @@ module('Realm server authentication', function (hooks) {
   });
 
   test('authenticates user', async function (assert) {
-    let matrixClient = new MatrixClient({
-      matrixURL: realmServerTestMatrix.url,
-      // it's a little awkward that we are hijacking a realm user to pretend to
-      // act like a normal user, but that's what's happening here
-      username: 'test_realm',
-      seed: realmSecretSeed,
-    });
+    let matrixClient = new MatrixClient(
+      realmServerTestMatrix.url,
+      'test_realm',
+      'password',
+    );
     await matrixClient.login();
     let userId = matrixClient.getUserId();
 
@@ -2896,10 +2889,7 @@ function assertScopedCssUrlsContain(
 
 // These modules have CSS that CardDef consumes, so we expect to see them in all relationships of a prerendered card
 let cardDefModuleDependencies = [
-  'https://cardstack.com/base/default-templates/fitted.gts',
-  'https://cardstack.com/base/default-templates/embedded.gts',
-  'https://cardstack.com/base/default-templates/isolated-and-edit.gts',
-  'https://cardstack.com/base/default-templates/field-edit.gts',
+  'https://cardstack.com/base/card-api.gts',
   'https://cardstack.com/base/field-component.gts',
   'https://cardstack.com/base/contains-many-component.gts',
   'https://cardstack.com/base/links-to-editor.gts',

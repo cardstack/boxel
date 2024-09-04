@@ -52,6 +52,7 @@ import {
 import {
   type Actions,
   cardTypeDisplayName,
+  CardContextName,
   PermissionsContextName,
   type Permissions,
   Deferred,
@@ -88,10 +89,7 @@ interface Signature {
     publicAPI: Actions;
     close: (item: StackItem) => void;
     dismissStackedCardsAbove: (stackIndex: number) => void;
-    onSelectedCards: (
-      selectedCards: CardDefOrId[],
-      stackItem: StackItem,
-    ) => void;
+    onSelectedCards: (selectedCards: CardDef[], stackItem: StackItem) => void;
     setupStackItem: (
       stackItem: StackItem,
       clearSelections: () => void,
@@ -101,11 +99,9 @@ interface Signature {
   };
 }
 
-export type CardDefOrId = CardDef | string;
-
 export interface RenderedCardForOverlayActions {
   element: HTMLElement;
-  cardDefOrId: CardDefOrId;
+  card: CardDef;
   fieldType: FieldType | undefined;
   fieldName: string | undefined;
   format: Format | 'data';
@@ -117,8 +113,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @service private declare environmentService: EnvironmentService;
   @service private declare realm: RealmService;
 
-  // @tracked private selectedCards = new TrackedArray<CardDef>([]);
-  @tracked private selectedCards = new TrackedArray<CardDefOrId>([]);
+  @tracked private selectedCards = new TrackedArray<CardDef>([]);
   @tracked private isHoverOnRealmIcon = false;
   @tracked private isSaving = false;
   @tracked private lastSaved: number | undefined;
@@ -133,8 +128,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.realm.permissions(this.card.id);
   }
   cardTracker = new ElementTracker<{
-    cardId?: string;
-    card?: CardDef;
+    card: CardDef;
     format: Format | 'data';
     fieldType: FieldType | undefined;
     fieldName: string | undefined;
@@ -153,22 +147,25 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
-    return this.cardTracker.elements
-      .filter((entry) => {
-        return (
-          entry.meta.format === 'data' ||
-          entry.meta.fieldType === 'linksTo' ||
-          entry.meta.fieldType === 'linksToMany'
-        );
-      })
-      .map((entry) => ({
-        element: entry.element,
-        cardDefOrId: entry.meta.card || entry.meta.cardId!,
-        fieldType: entry.meta.fieldType,
-        fieldName: entry.meta.fieldName,
-        format: entry.meta.format,
-        stackItem: this.args.item,
-      }));
+    return (
+      this.cardTracker.elements
+        .filter((entry) => {
+          return (
+            entry.meta.format === 'data' ||
+            entry.meta.fieldType === 'linksTo' ||
+            entry.meta.fieldType === 'linksToMany'
+          );
+        })
+        // this mapping could probably be eliminated or simplified if we refactor OperatorModeOverlays to accept our type
+        .map((entry) => ({
+          element: entry.element,
+          card: entry.meta.card,
+          fieldType: entry.meta.fieldType,
+          fieldName: entry.meta.fieldName,
+          format: entry.meta.format,
+          stackItem: this.args.item,
+        }))
+    );
   }
 
   private get isItemFullWidth() {
@@ -205,18 +202,20 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.args.index + 1 < this.args.stackItems.length;
   }
 
-  private get cardContext() {
+  @provide(CardContextName)
+  // @ts-expect-error noUnusedLocals
+  private get context() {
     return {
       cardComponentModifier: this.cardTracker.trackElement,
       actions: this.args.publicAPI,
     };
   }
 
-  @action private toggleSelect(cardDefOrId: CardDefOrId) {
-    let index = this.selectedCards.findIndex((c) => c === cardDefOrId);
+  @action private toggleSelect(card: CardDef) {
+    let index = this.selectedCards.findIndex((c) => c === card);
 
     if (index === -1) {
-      this.selectedCards.push(cardDefOrId);
+      this.selectedCards.push(card);
     } else {
       this.selectedCards.splice(index, 1);
     }
@@ -550,11 +549,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             {{ContentElement onSetup=this.setupContentEl}}
             data-test-stack-item-content
           >
-            <Preview
-              @card={{this.card}}
-              @format={{@item.format}}
-              @cardContext={{this.cardContext}}
-            />
+            <Preview @card={{this.card}} @format={{@item.format}} />
             <OperatorModeOverlays
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
               @publicAPI={{@publicAPI}}

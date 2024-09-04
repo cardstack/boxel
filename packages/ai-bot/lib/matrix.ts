@@ -2,7 +2,6 @@ import { IContent } from 'matrix-js-sdk';
 import { logger } from '@cardstack/runtime-common';
 import { OpenAIError } from 'openai/error';
 import * as Sentry from '@sentry/node';
-import { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
 
 let log = logger('ai-bot');
 
@@ -74,24 +73,36 @@ export async function sendMessage(
 export async function sendOption(
   client: MatrixClient,
   roomId: string,
-  functionCall: FunctionToolCall,
+  patch: any,
   eventToUpdate: string | undefined,
 ) {
-  let messageObject = toMatrixMessageCommandContent(
-    functionCall,
+  log.debug('sending option', patch);
+  const id = patch['card_id'];
+  const body = patch['description'] || "Here's the change:";
+  let messageObject = {
+    body: body,
+    msgtype: 'org.boxel.command',
+    formatted_body: body,
+    format: 'org.matrix.custom.html',
+    data: {
+      command: {
+        type: 'patchCard',
+        id: id,
+        patch: {
+          attributes: patch['attributes'],
+          relationships: patch['relationships'],
+        },
+        eventId: eventToUpdate,
+      },
+    },
+  };
+  return await sendEvent(
+    client,
+    roomId,
+    'm.room.message',
+    messageObject,
     eventToUpdate,
   );
-
-  if (messageObject !== undefined) {
-    return await sendEvent(
-      client,
-      roomId,
-      'm.room.message',
-      messageObject,
-      eventToUpdate,
-    );
-  }
-  return;
 }
 
 export async function sendError(
@@ -120,25 +131,6 @@ export async function sendError(
     Sentry.captureException(e);
   }
 }
-
-export const toMatrixMessageCommandContent = (
-  functionCall: FunctionToolCall,
-  eventToUpdate: string | undefined,
-): IContent | undefined => {
-  let { arguments: payload } = functionCall;
-  const body = payload['description'] || 'Issuing command';
-  let messageObject: IContent = {
-    body: body,
-    msgtype: 'org.boxel.command',
-    formatted_body: body,
-    format: 'org.matrix.custom.html',
-    data: {
-      eventId: eventToUpdate,
-      toolCall: functionCall,
-    },
-  };
-  return messageObject;
-};
 
 function getErrorMessage(error: any): string {
   if (error instanceof OpenAIError) {
