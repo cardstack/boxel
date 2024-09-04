@@ -128,6 +128,10 @@ class CardRouteComponent extends Component<CardRouteSignature> {
   toggleOperatorModeTask = restartableTask(async () => {
     // Users are not allowed to open guest mode
     // if realm is not publicly readable
+    if (!this.realm.userDefaultRealm) {
+      return;
+    }
+
     let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
       new URL(this.realm.userDefaultRealm.path),
     );
@@ -170,9 +174,10 @@ class CardRouteComponent extends Component<CardRouteSignature> {
   private fetchIsPublicReadableStatus = trackedFunction(
     this,
     async () =>
-      await this.realmInfoService.isPublicReadable(
+      this.realm.userDefaultRealm &&
+      (await this.realmInfoService.isPublicReadable(
         new URL(this.realm.userDefaultRealm.path),
-      ),
+      )),
   );
 
   <template>

@@ -277,12 +277,17 @@ export default class RealmService extends Service {
   // until then default to the realm serving the host app if it is writable,
   // otherwise default to the first writable realm lexically
   @cached
-  get userDefaultRealm(): { path: string; info: RealmInfo } {
+  get userDefaultRealm(): { path: string; info: RealmInfo } | null {
     let writeableRealms = Object.entries(this.allRealmsMeta)
       .filter(([, i]) => i.canWrite)
       .sort(([, i], [, j]) => i.info.name.localeCompare(j.info.name));
 
     let first = writeableRealms[0];
+
+    if (!first) {
+      return null;
+    }
+
     return { path: first[0], info: first[1].info };
   }
 
