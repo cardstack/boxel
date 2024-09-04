@@ -174,7 +174,7 @@ export default class SearchSheet extends Component<Signature> {
     }
     let cardURL = this.searchKey;
 
-    let maybeIndexCardURL = this.cardService.realmURLs.find(
+    let maybeIndexCardURL = this.cardService.unresolvedRealmURLs.find(
       (u) => u === cardURL + '/',
     );
     let cardResource = getCard(this, () => maybeIndexCardURL ?? cardURL, {

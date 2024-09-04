@@ -446,7 +446,7 @@ export default class CardCatalogModal extends Component<Signature> {
     if (!this.state) {
       return undefined;
     }
-    let maybeIndexCardURL = this.cardService.realmURLs.find(
+    let maybeIndexCardURL = this.cardService.unresolvedRealmURLs.find(
       (u) => u === cardURL + '/',
     );
     const cardResource = getCard(this, () => maybeIndexCardURL ?? cardURL, {

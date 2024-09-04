@@ -27,6 +27,8 @@ import { Message } from '../lib/matrix-classes/message';
 
 import CardService from './card-service';
 
+import type Realm from '@cardstack/realm/services/realm';
+
 function getComponent(cardOrField: BaseDef) {
   return cardOrField.constructor.getComponent(cardOrField);
 }
@@ -35,6 +37,7 @@ export default class CommandService extends Service {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
   @service private declare cardService: CardService;
+  @service private declare realm: Realm;
 
   //TODO: Convert to non-EC async method after fixing CS-6987
   run = task(async (command: CommandField, roomId: string) => {
@@ -75,7 +78,7 @@ export default class CommandService extends Service {
           instances.map((c) => this.cardService.serializeCard(c)),
         );
       } else if (command.name === 'generateAppModule') {
-        let realmURL = this.cardService.defaultURL;
+        let realmURL = this.realm.userDefaultRealm.path;
         let timestamp = Date.now();
         let fileName =
           (payload.appTitle as string)?.replace(/ /g, '-').toLowerCase() ??
