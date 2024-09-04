@@ -34,9 +34,16 @@ export interface DirectoryEntryRelationship {
   links: {
     related: string;
   };
-  meta: {
-    kind: 'directory' | 'file';
-  };
+  meta: FileMeta | DirectoryMeta;
+}
+
+export interface FileMeta {
+  kind: 'file';
+  lastModified: number | null;
+}
+
+export interface DirectoryMeta {
+  kind: 'directory';
 }
 
 export interface RealmCards {
@@ -200,7 +207,7 @@ export interface CardSearch {
     realms?: string[],
   ): {
     instances: CardDef[];
-    ready: Promise<void>;
+    loaded: Promise<void>;
     isLoading: boolean;
   };
   getCard(
@@ -323,8 +330,9 @@ export interface Actions {
     opts?: {
       // TODO: consider renaming isLinkedCard to be more semantic
       isLinkedCard?: boolean;
-      realmURL?: URL;
-      doc?: LooseSingleCardDocument;
+      realmURL?: URL; // the realm to create the card in
+      doc?: LooseSingleCardDocument; // initial data for the card
+      cardModeAfterCreation?: Format; // by default, the new card opens in the stack in edit mode
     },
   ) => Promise<CardDef | undefined>;
   viewCard: (
@@ -341,6 +349,11 @@ export interface Actions {
     changeSizeCallback: () => Promise<void>,
   ) => Promise<void>;
   changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
+  runCommand?: (
+    card: CardDef, // the card that the command is being run on
+    skillCardId: string, // skill card id that the command is associated with
+    message?: string, // message that posts in the chat
+  ) => Promise<void>;
 }
 
 export function hasExecutableExtension(path: string): boolean {
@@ -434,4 +447,14 @@ export function splitStringIntoChunks(str: string, maxSizeKB: number) {
     startIndex = endIndex;
   }
   return chunks;
+}
+
+export function uint8ArrayToHex(uint8: Uint8Array) {
+  return Array.from(uint8)
+    .map((i) => i.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+export function unixTime(epochTimeMs: number) {
+  return Math.floor(epochTimeMs / 1000);
 }

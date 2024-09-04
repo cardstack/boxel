@@ -24,11 +24,7 @@ import {
   RealmPaths,
   Realm,
   RealmPermissions,
-  VirtualNetwork,
   type LooseSingleCardDocument,
-  Loader,
-  fetcher,
-  maybeHandleScopedCSSRequest,
 } from '@cardstack/runtime-common';
 import { stringify } from 'qs';
 import { Query } from '@cardstack/runtime-common/query';
@@ -36,11 +32,14 @@ import {
   setupCardLogs,
   setupBaseRealmServer,
   runTestRealmServer,
-  localBaseRealm,
   setupDB,
   createRealm,
   realmServerTestMatrix,
   realmSecretSeed,
+  createVirtualNetwork,
+  createVirtualNetworkAndLoader,
+  matrixURL,
+  closeServer,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
@@ -53,7 +52,7 @@ import jwt from 'jsonwebtoken';
 
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
-const testRealm2URL = new URL('http://127.0.0.1:4445');
+const testRealm2URL = new URL('http://127.0.0.1:4445/');
 const testRealmHref = testRealmURL.href;
 const testRealm2Href = testRealm2URL.href;
 const distDir = resolve(join(__dirname, '..', '..', 'host', 'dist'));
@@ -67,24 +66,6 @@ let createJWT = (
 ) => {
   return realm.createJWT({ user, realm: realmUrl, permissions }, '7d');
 };
-
-function createVirtualNetwork() {
-  let virtualNetwork = new VirtualNetwork();
-  shimExternals(virtualNetwork);
-  virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
-  return virtualNetwork;
-}
-
-function createVirtualNetworkAndLoader() {
-  let virtualNetwork = createVirtualNetwork();
-  let fetch = fetcher(virtualNetwork.fetch, [
-    async (req, next) => {
-      return (await maybeHandleScopedCSSRequest(req)) || next(req);
-    },
-  ]);
-  let loader = new Loader(fetch, virtualNetwork.resolveImport);
-  return { virtualNetwork, loader };
-}
 
 module('Realm Server', function (hooks) {
   async function expectEvent<T>({
@@ -164,6 +145,7 @@ module('Realm Server', function (hooks) {
           permissions,
           dbAdapter,
           queue,
+          matrixURL,
           fileSystem,
         }));
 
@@ -179,15 +161,15 @@ module('Realm Server', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  setupBaseRealmServer(hooks, virtualNetwork);
+  setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
 
   hooks.beforeEach(async function () {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
   });
 
-  hooks.afterEach(function () {
-    testRealmServer.close();
+  hooks.afterEach(async function () {
+    await closeServer(testRealmServer);
   });
 
   module('card GET request', function (_hooks) {
@@ -1417,6 +1399,9 @@ module('Realm Server', function (hooks) {
           'realm is public readable',
         );
         let json = response.body;
+        for (let relationship of Object.values(json.data.relationships)) {
+          delete (relationship as any).meta.lastModified;
+        }
         assert.deepEqual(
           json,
           {
@@ -1623,6 +1608,11 @@ module('Realm Server', function (hooks) {
                 static embedded = class Embedded extends Component<typeof this> {
                   <template>
                     Embedded Card Person: <@fields.firstName/>
+                  </template>
+                }
+                static fitted = class Fitted extends Component<typeof this> {
+                  <template>
+                    Fitted Card Person: <@fields.firstName/>
                   </template>
                 }
               }
@@ -1972,6 +1962,46 @@ module('Realm Server', function (hooks) {
         assert.strictEqual(json.data[0].id, 'http://127.0.0.1:4444/jimmy.json');
       });
 
+      test('can use cardUrls to filter prerendered instances', async function (assert) {
+        let query: Query & {
+          prerenderedHtmlFormat: string;
+          cardUrls: string[];
+        } = {
+          prerenderedHtmlFormat: 'embedded',
+          cardUrls: [`${testRealmHref}jimmy.json`],
+        };
+        let response = await request
+          .get(`/_search-prerendered?${stringify(query)}`)
+          .set('Accept', 'application/vnd.card+json');
+
+        let json = response.body;
+
+        assert.strictEqual(
+          json.data.length,
+          1,
+          'one prerendered card instance is returned in the filtered search results',
+        );
+        assert.strictEqual(json.data[0].id, 'http://127.0.0.1:4444/jimmy.json');
+
+        query = {
+          prerenderedHtmlFormat: 'embedded',
+          cardUrls: [`${testRealmHref}jimmy.json`, `${testRealmHref}jane.json`],
+        };
+        response = await request
+          .get(`/_search-prerendered?${stringify(query)}`)
+          .set('Accept', 'application/vnd.card+json');
+
+        json = response.body;
+
+        assert.strictEqual(
+          json.data.length,
+          2,
+          '2 prerendered card instances are returned in the filtered search results',
+        );
+        assert.strictEqual(json.data[0].id, 'http://127.0.0.1:4444/jane.json');
+        assert.strictEqual(json.data[1].id, 'http://127.0.0.1:4444/jimmy.json');
+      });
+
       test('can sort prerendered instances', async function (assert) {
         let query: Query & { prerenderedHtmlFormat: string } = {
           sort: [
@@ -2111,10 +2141,11 @@ module('Realm Server', function (hooks) {
             realmURL: testRealm2URL,
             dbAdapter,
             queue,
+            matrixURL,
           }));
       },
       afterEach: async () => {
-        testRealmServer2.close();
+        await closeServer(testRealmServer2);
       },
     });
 
@@ -2435,7 +2466,7 @@ module('Realm Server serving from root', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  setupBaseRealmServer(hooks, virtualNetwork);
+  setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
 
   hooks.beforeEach(async function () {
     dir = dirSync();
@@ -2451,12 +2482,13 @@ module('Realm Server serving from root', function (hooks) {
           realmURL: testRealmURL,
           dbAdapter,
           queue,
+          matrixURL,
         })
       ).testRealmServer;
       request = supertest(testRealmServer);
     },
     afterEach: async () => {
-      testRealmServer.close();
+      await closeServer(testRealmServer);
     },
   });
 
@@ -2467,6 +2499,9 @@ module('Realm Server serving from root', function (hooks) {
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
     let json = response.body;
+    for (let relationship of Object.values(json.data.relationships)) {
+      delete (relationship as any).meta.lastModified;
+    }
     assert.deepEqual(
       json,
       {
@@ -2655,6 +2690,7 @@ module('Realm server serving multiple realms', function (hooks) {
       virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
 
       base = await createRealm({
+        withWorker: true,
         dir: basePath,
         realmURL: baseRealm.url,
         virtualNetwork,
@@ -2665,6 +2701,7 @@ module('Realm server serving multiple realms', function (hooks) {
       virtualNetwork.mount(base.handle);
 
       testRealm = await createRealm({
+        withWorker: true,
         dir: dir.name,
         virtualNetwork,
         realmURL: 'http://127.0.0.1:4446/demo/',
@@ -2674,11 +2711,11 @@ module('Realm server serving multiple realms', function (hooks) {
       });
       virtualNetwork.mount(testRealm.handle);
 
-      let matrixClient = new MatrixClient(
-        realmServerTestMatrix.url,
-        realmServerTestMatrix.username,
-        realmServerTestMatrix.password,
-      );
+      let matrixClient = new MatrixClient({
+        matrixURL: realmServerTestMatrix.url,
+        username: realmServerTestMatrix.username,
+        seed: realmSecretSeed,
+      });
       testRealmServer = new RealmServer(
         [base, testRealm],
         virtualNetwork,
@@ -2691,7 +2728,7 @@ module('Realm server serving multiple realms', function (hooks) {
       request = supertest(testRealmServer);
     },
     afterEach: async () => {
-      testRealmServer.close();
+      await closeServer(testRealmServer);
     },
   });
 
@@ -2744,7 +2781,7 @@ module('Realm Server serving from a subdirectory', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  setupBaseRealmServer(hooks, virtualNetwork);
+  setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
 
   hooks.beforeEach(async function () {
     dir = dirSync();
@@ -2760,12 +2797,13 @@ module('Realm Server serving from a subdirectory', function (hooks) {
           realmURL: new URL('http://127.0.0.1:4446/demo/'),
           dbAdapter,
           queue,
+          matrixURL,
         })
       ).testRealmServer;
       request = supertest(testRealmServer);
     },
     afterEach: async () => {
-      testRealmServer.close();
+      await closeServer(testRealmServer);
     },
   });
 
@@ -2806,7 +2844,7 @@ module('Realm server authentication', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  setupBaseRealmServer(hooks, virtualNetwork);
+  setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
 
   hooks.beforeEach(async function () {
     dir = dirSync();
@@ -2822,21 +2860,24 @@ module('Realm server authentication', function (hooks) {
           realmURL: testRealmURL,
           dbAdapter,
           queue,
+          matrixURL,
         })
       ).testRealmServer;
       request = supertest(testRealmServer);
     },
     afterEach: async () => {
-      testRealmServer.close();
+      await closeServer(testRealmServer);
     },
   });
 
   test('authenticates user', async function (assert) {
-    let matrixClient = new MatrixClient(
-      realmServerTestMatrix.url,
-      'test_realm',
-      'password',
-    );
+    let matrixClient = new MatrixClient({
+      matrixURL: realmServerTestMatrix.url,
+      // it's a little awkward that we are hijacking a realm user to pretend to
+      // act like a normal user, but that's what's happening here
+      username: 'test_realm',
+      seed: realmSecretSeed,
+    });
     await matrixClient.login();
     let userId = matrixClient.getUserId();
 
@@ -2889,7 +2930,10 @@ function assertScopedCssUrlsContain(
 
 // These modules have CSS that CardDef consumes, so we expect to see them in all relationships of a prerendered card
 let cardDefModuleDependencies = [
-  'https://cardstack.com/base/card-api.gts',
+  'https://cardstack.com/base/default-templates/fitted.gts',
+  'https://cardstack.com/base/default-templates/embedded.gts',
+  'https://cardstack.com/base/default-templates/isolated-and-edit.gts',
+  'https://cardstack.com/base/default-templates/field-edit.gts',
   'https://cardstack.com/base/field-component.gts',
   'https://cardstack.com/base/contains-many-component.gts',
   'https://cardstack.com/base/links-to-editor.gts',

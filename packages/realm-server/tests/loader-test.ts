@@ -12,6 +12,8 @@ import {
   setupBaseRealmServer,
   runTestRealmServer,
   setupDB,
+  matrixURL,
+  closeServer,
 } from './helpers';
 import { copySync } from 'fs-extra';
 import { shimExternals } from '../lib/externals';
@@ -39,7 +41,7 @@ module('loader', function (hooks) {
     return new Loader(fetch, virtualNetwork.resolveImport);
   }
 
-  setupBaseRealmServer(hooks, virtualNetwork);
+  setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
 
   hooks.before(async function () {
     dir = dirSync();
@@ -54,10 +56,11 @@ module('loader', function (hooks) {
         realmURL: testRealmURL,
         dbAdapter,
         queue,
+        matrixURL,
       }));
     },
     after: async () => {
-      testRealmServer.close();
+      await closeServer(testRealmServer);
     },
   });
 
@@ -153,6 +156,7 @@ module('loader', function (hooks) {
       before: async (dbAdapter, queue) => {
         loader2 = createLoader();
         realm = await createRealm({
+          withWorker: true,
           dir: dir.name,
           fileSystem: {
             'foo.js': `

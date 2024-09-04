@@ -240,7 +240,7 @@ module('Integration | card-prerender', function (hooks) {
     );
 
     assert.ok(
-      results.prerenderedCards[0].html.includes('Embedded Card FancyPerson'),
+      results.prerenderedCards[0].html!.includes('Embedded Card FancyPerson'),
       'the embedded card html looks correct',
     );
   });
@@ -249,7 +249,7 @@ module('Integration | card-prerender', function (hooks) {
     let results = await realm.realmIndexQueryEngine.searchPrerendered(
       {},
       {
-        htmlFormat: 'embedded',
+        htmlFormat: 'fitted',
       },
     );
 
@@ -269,13 +269,13 @@ module('Integration | card-prerender', function (hooks) {
     ].forEach(([title, type], index) => {
       assert.strictEqual(
         cleanWhiteSpace(
-          stripScopedCSSAttributes(results.prerenderedCards[index].html),
+          stripScopedCSSAttributes(results.prerenderedCards[index].html!),
         ),
         cleanWhiteSpace(`
-        <div class="embedded-template">
+        <div class="fitted-template">
           <div class="thumbnail-section">
             <div class="card-thumbnail">
-              <div class="card-thumbnail-text" data-test-card-thumbnail-text>${type}</div>
+              <div class="card-thumbnail-placeholder" data-test-card-thumbnail-placeholder></div>
             </div>
           </div>
           <div class="info-section">

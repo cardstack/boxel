@@ -6,6 +6,7 @@ import { cached, tracked } from '@glimmer/tracking';
 import format from 'date-fns/format';
 
 import { task } from 'ember-concurrency';
+import window from 'ember-window-mock';
 import {
   type LoginResponse,
   type MatrixEvent,
@@ -17,6 +18,7 @@ import {
 } from 'matrix-js-sdk';
 import { md5 } from 'super-fast-md5';
 import { TrackedMap, TrackedObject } from 'tracked-built-ins';
+import { v4 as uuidv4 } from 'uuid';
 
 import {
   type LooseSingleCardDocument,
@@ -26,12 +28,15 @@ import {
   baseRealm,
   loaderFor,
   LooseCardResource,
+  ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import {
   basicMappings,
   generateCardPatchCallSpecification,
+  getSearchTool,
 } from '@cardstack/runtime-common/helpers/ai';
 
+import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
 import { currentRoomIdPersistenceKey } from '@cardstack/host/components/ai-assistant/panel';
@@ -42,14 +47,14 @@ import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import { BaseDef, type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import { PatchField } from 'https://cardstack.com/base/command';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardMessageContent,
   CardFragmentContent,
   ReactionEventContent,
+  CommandResultContent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
@@ -421,7 +426,11 @@ export default class MatrixService
   private async sendEvent(
     roomId: string,
     eventType: string,
-    content: CardMessageContent | CardFragmentContent | ReactionEventContent,
+    content:
+      | CardMessageContent
+      | CardFragmentContent
+      | ReactionEventContent
+      | CommandResultContent,
   ) {
     if ('data' in content) {
       const encodedContent = {
@@ -453,6 +462,35 @@ export default class MatrixService
     }
   }
 
+  async sendCommandResultMessage(
+    roomId: string,
+    eventId: string,
+    result: Record<string, any>,
+  ) {
+    let body = `Command Results from command event ${eventId}`;
+    let html = markdownToHtml(body);
+    let jsonStringResult = JSON.stringify(result);
+    let content: CommandResultContent = {
+      'm.relates_to': {
+        event_id: eventId,
+        rel_type: 'm.annotation',
+        key: 'applied', //this is aggregated key. All annotations must have one. This identifies the reaction event.
+      },
+      body,
+      formatted_body: html,
+      msgtype: 'org.boxel.commandResult',
+      result: jsonStringResult,
+    };
+    try {
+      return await this.sendEvent(roomId, 'm.room.message', content);
+    } catch (e) {
+      throw new Error(
+        `Error sending reaction event: ${
+          'message' in (e as Error) ? (e as Error).message : e
+        }`,
+      );
+    }
+  }
   async getCardEventIds(
     cards: CardDef[],
     roomId: string,
@@ -494,7 +532,7 @@ export default class MatrixService
     body: string | undefined,
     attachedCards: CardDef[] = [],
     skillCards: CardDef[] = [],
-    clientGeneratedId: string,
+    clientGeneratedId = uuidv4(),
     context?: OperatorModeContext,
   ): Promise<void> {
     let html = markdownToHtml(body);
@@ -517,27 +555,8 @@ export default class MatrixService
           mappings,
         );
         if (this.realm.canWrite(attachedOpenCard.id)) {
-          tools.push({
-            type: 'function',
-            function: {
-              name: 'patchCard',
-              description: `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.`,
-              parameters: {
-                type: 'object',
-                properties: {
-                  card_id: {
-                    type: 'string',
-                    const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
-                  },
-                  description: {
-                    type: 'string',
-                  },
-                  ...patchSpec,
-                },
-                required: ['card_id', 'attributes', 'description'],
-              },
-            },
-          });
+          tools.push(getPatchTool(attachedOpenCard, patchSpec));
+          tools.push(getSearchTool());
         }
       }
     }
@@ -546,12 +565,13 @@ export default class MatrixService
       attachedCards,
       roomId,
       this.cardHashes,
+      { maybeRelativeURL: null },
     );
     let attachedSkillEventIds = await this.getCardEventIds(
       skillCards,
       roomId,
       this.skillCardHashes,
-      { includeComputeds: true },
+      { includeComputeds: true, maybeRelativeURL: null },
     );
 
     await this.sendEvent(roomId, 'm.room.message', {
@@ -849,19 +869,19 @@ export default class MatrixService
     }
   }
 
-  async createCommandField(attr: Record<string, any>): Promise<PatchField> {
+  async createCard<T extends typeof BaseDef>(
+    codeRef: ResolvedCodeRef,
+    attr: Record<string, any>,
+  ) {
     let data: LooseCardResource = {
       meta: {
-        adoptsFrom: {
-          name: 'PatchField',
-          module: `${baseRealm.url}command`,
-        },
+        adoptsFrom: codeRef,
       },
       attributes: {
         ...attr,
       },
     };
-    let card = this.cardAPI.createFromSerialized<typeof PatchField>(
+    let card = await this.cardAPI.createFromSerialized<T>(
       data,
       { data },
       undefined,
@@ -871,16 +891,16 @@ export default class MatrixService
 }
 
 function saveAuth(auth: LoginResponse) {
-  localStorage.setItem('auth', JSON.stringify(auth));
+  window.localStorage.setItem('auth', JSON.stringify(auth));
 }
 
 function clearAuth() {
-  localStorage.removeItem('auth');
-  localStorage.removeItem(currentRoomIdPersistenceKey);
+  window.localStorage.removeItem('auth');
+  window.localStorage.removeItem(currentRoomIdPersistenceKey);
 }
 
 function getAuth(): LoginResponse | undefined {
-  let auth = localStorage.getItem('auth');
+  let auth = window.localStorage.getItem('auth');
   if (!auth) {
     return;
   }
