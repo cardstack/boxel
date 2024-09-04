@@ -1,6 +1,7 @@
 import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import Service, { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 import { cached, tracked } from '@glimmer/tracking';
 
 import format from 'date-fns/format';
@@ -174,8 +175,16 @@ export default class MatrixService extends Service {
         async (e) => {
           if (e.event.type == 'com.cardstack.boxel.realms') {
             this.cardService.setRealms(e.event.content.realms);
+            // It would be better to not have this special exception for tests,
+            // but we don't have the ability to mock the Realm server's matrix
+            // client yet, so this would fail under test.
+            //
+            // Previously this entire service was unused in tests, so we're at
+            // least using *more* of it, even if we're skipping this part.
+            if (!isTesting()) {
+              await this.loginToRealms();
+            }
             this.accountDataProcessed.fulfill();
-            await this.loginToRealms();
           }
         },
       ],
@@ -301,8 +310,6 @@ export default class MatrixService extends Service {
       try {
         await this._client.startClient();
         await this.accountDataProcessed.promise;
-        debugger;
-        await this.loginToRealms();
         await this.initializeRooms();
       } catch (e) {
         console.log('Error starting Matrix client', e);

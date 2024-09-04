@@ -102,7 +102,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  setupMockMatrix(hooks, { loggedInAs: '@testuser:staging' });
+  setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [testRealmURL],
+  });
 
   hooks.beforeEach(async function () {
     class Pet extends CardDef {
