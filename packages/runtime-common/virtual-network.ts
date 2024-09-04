@@ -1,4 +1,5 @@
 import { RealmPaths } from './paths';
+import { baseRealm } from './index';
 import {
   PackageShimHandler,
   PACKAGES_FAKE_ORIGIN,
@@ -121,7 +122,29 @@ export class VirtualNetwork {
       return next(await this.mapRequest(request, 'virtual-to-real'));
     });
 
-    return await fetcher(this.nativeFetch, handlers)(request, init);
+    // Retry if fetch fails in CI for base realm artifacts
+    const maxAttempts = 5;
+    const backOffMs = 100;
+    let attempt = 0;
+    for (;;) {
+      try {
+        return await fetcher(this.nativeFetch, handlers)(request, init);
+      } catch (err: any) {
+        if (
+          (globalThis as any).__environment !== 'test' ||
+          !baseRealm.inRealm(new URL(request.url)) ||
+          ++attempt > maxAttempts
+        ) {
+          throw err;
+        }
+        console.error(
+          `Encountered fetch failed for ${
+            request.url
+          } retry attempt #${attempt} in ${attempt * backOffMs}ms`,
+        );
+        await new Promise((r) => setTimeout(r, attempt * backOffMs));
+      }
+    }
   }
 
   // This method is used to handle the boundary between the real and virtual network,
