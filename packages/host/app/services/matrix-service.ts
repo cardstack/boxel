@@ -151,7 +151,7 @@ export default class MatrixService extends Service {
     await this.cardAPIModule.loaded;
     // The matrix SDK is VERY big so we only load it when we need it
     this.#matrixSDK = await this.matrixSdkLoader.load();
-    this._client = await this.matrixSDK.createClient({
+    this._client = this.matrixSDK.createClient({
       baseUrl: matrixURL,
     });
 
@@ -301,6 +301,7 @@ export default class MatrixService extends Service {
       try {
         await this._client.startClient();
         await this.accountDataProcessed.promise;
+        debugger;
         await this.loginToRealms();
         await this.initializeRooms();
       } catch (e) {
