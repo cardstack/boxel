@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Puppy",
+      "description": "Catalog entry for Puppy card",
+      "isField": false,
+      "ref": {
+        "module": "../puppy-card",
+        "name": "PuppyCard"
+      },
+      "demo": {}
+    },
+    "meta": {
+      "fields": {
+        "demo": {
+          "adoptsFrom": {
+            "module": "../puppy-card",
+            "name": "PuppyCard"
+          }
+        }
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}

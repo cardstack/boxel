@@ -12,7 +12,6 @@ import {
   logger,
   asExpressions,
   Deferred,
-  upsert,
   Job,
   setErrorReporter,
 } from '@cardstack/runtime-common';
@@ -218,14 +217,12 @@ export default class PgQueue implements Queue {
           category,
           status: 'idle',
         } as QueueTable);
-        await this.query(
-          upsert(
-            'queues',
-            'working_queues_pkey',
-            nameExpressions,
-            valueExpressions,
-          ),
-        );
+        await this.query([
+          'INSERT INTO queues',
+          ...addExplicitParens(separatedByCommas(nameExpressions)),
+          'VALUES',
+          ...addExplicitParens(separatedByCommas(valueExpressions)),
+        ] as Expression);
       }
     }
     {
@@ -257,6 +254,7 @@ export default class PgQueue implements Queue {
   async start() {
     if (!this.jobRunner && !this.#isDestroyed) {
       this.#hasStarted = true;
+      await this.pgClient.startClient();
       this.jobRunner = new WorkLoop('jobRunner', this.pollInterval);
       this.jobRunner.run(async (loop) => {
         await this.pgClient.listen('jobs', loop.wake.bind(loop), async () => {

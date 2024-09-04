@@ -15,7 +15,7 @@ export interface RealmAuthMatrixClientInterface {
 }
 
 export class RealmAuthClient {
-  private _jwt: string | undefined;
+  private jwt: string | undefined;
 
   constructor(
     private realmURL: URL,
@@ -23,27 +23,23 @@ export class RealmAuthClient {
     private fetch: typeof globalThis.fetch,
   ) {}
 
-  get jwt(): string | undefined {
-    return this._jwt;
-  }
-
   async getJWT() {
     let tokenRefreshLeadTimeSeconds = 60;
     let jwt: string;
 
-    if (!this._jwt) {
+    if (!this.jwt) {
       jwt = await this.createRealmSession();
-      this._jwt = jwt;
+      this.jwt = jwt;
       return jwt;
     } else {
-      let jwtData = JSON.parse(atob(this._jwt.split('.')[1])) as JWTPayload;
+      let jwtData = JSON.parse(atob(this.jwt.split('.')[1])) as JWTPayload;
       // If the token is about to expire (in tokenRefreshLeadTimeSeconds), create a new one just to make sure we reduce the risk of the token getting outdated during things happening in createRealmSession
       if (jwtData.exp - tokenRefreshLeadTimeSeconds < Date.now() / 1000) {
         jwt = await this.createRealmSession();
-        this._jwt = jwt;
+        this.jwt = jwt;
         return jwt;
       } else {
-        return this._jwt;
+        return this.jwt;
       }
     }
   }

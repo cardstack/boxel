@@ -15,10 +15,6 @@ export const baseFieldRef: ResolvedCodeRef = {
   module: `${baseRealm.url}card-api`,
   name: 'FieldDef',
 };
-export const skillCardRef: ResolvedCodeRef = {
-  module: `${baseRealm.url}skill-card`,
-  name: 'SkillCard',
-};
 
 export const isField = Symbol('cardstack-field');
 export const primitive = Symbol('cardstack-primitive');
@@ -26,11 +22,5 @@ export const primitive = Symbol('cardstack-primitive');
 export const aiBotUsername = 'aibot';
 
 export const CardContextName = 'card-context';
+export const RealmSessionContextName = 'realm-session-context';
 export const DefaultFormatContextName = 'default-format-context';
-
-export const PermissionsContextName = 'permissions-context';
-
-export interface Permissions {
-  readonly canRead: boolean;
-  readonly canWrite: boolean;
-}

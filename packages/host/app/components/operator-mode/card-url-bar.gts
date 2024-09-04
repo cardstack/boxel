@@ -6,14 +6,17 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 
 import { and, bool, not } from '@cardstack/boxel-ui/helpers';
 
-import { IconGlobe, Warning as IconWarning } from '@cardstack/boxel-ui/icons';
+import {
+  IconCircle,
+  IconGlobe,
+  Warning as IconWarning,
+} from '@cardstack/boxel-ui/icons';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
+import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import URLBarResource, {
   urlBarResource,
 } from '@cardstack/host/resources/url-bar';
-
-import type RealmService from '@cardstack/host/services/realm';
 
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -42,12 +45,23 @@ export default class CardURLBar extends Component<Signature> {
       ...attributes
     >
       <div class='realm-info' data-test-card-url-bar-realm-info>
-        {{#let (this.realm.info @realmURL.href) as |realmInfo|}}
-          <div class='realm-icon'>
-            <RealmIcon @realmInfo={{realmInfo}} />
-          </div>
-          <span>in {{realmInfo.name}}</span>
-        {{/let}}
+        <RealmInfoProvider @realmURL={{@realmURL}}>
+          <:ready as |realmInfo|>
+            <div class='realm-icon'>
+              <RealmIcon
+                @realmIconURL={{realmInfo.iconURL}}
+                @realmName={{realmInfo.name}}
+              />
+            </div>
+            <span>in {{realmInfo.name}}</span>
+          </:ready>
+          <:error>
+            <div class='realm-icon'>
+              <IconCircle width='22px' height='22px' />
+            </div>
+            <span>in Unknown Workspace</span>
+          </:error>
+        </RealmInfoProvider>
       </div>
       <div class='input'>
         <IconGlobe width='18px' height='18px' />
@@ -191,7 +205,6 @@ export default class CardURLBar extends Component<Signature> {
 
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare cardService: CardService;
-  @service private declare realm: RealmService;
 
   private urlBar: URLBarResource = urlBarResource(this, () => ({
     getValue: () => (this.codePath ? decodeURI(this.codePath) : ''),

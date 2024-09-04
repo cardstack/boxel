@@ -15,8 +15,9 @@ export default class SQLiteAdapter implements DBAdapter {
   private _dbId: string | undefined;
   private primaryKeys = new Map<string, string>();
   private tables: string[] = [];
+  private start: Promise<void> | undefined;
+  #hasStarted = false;
   #isClosed = false;
-  private started = this.#startClient();
 
   // TODO: one difference that I'm seeing is that it looks like "json_each" is
   // actually similar to "json_each_text" in postgres. i think we might need to
@@ -31,7 +32,17 @@ export default class SQLiteAdapter implements DBAdapter {
     return this.#isClosed;
   }
 
-  async #startClient() {
+  async startClient() {
+    if (this.#hasStarted) {
+      return;
+    }
+    if (this.start) {
+      await this.start;
+      return;
+    }
+    let deferred = new Deferred<void>();
+    this.start = deferred.promise;
+
     this.assertNotClosed();
     let ready = new Deferred<typeof SQLiteWorker>();
     const promisedWorker = sqlite3Worker1Promiser({
@@ -70,11 +81,11 @@ export default class SQLiteAdapter implements DBAdapter {
       }
 
       this.tables = (
-        (await this.internalExecute(
+        (await this.execute(
           `SELECT name FROM pragma_table_list WHERE schema = 'main' AND name != 'sqlite_schema'`,
         )) as { name: string }[]
       ).map((r) => r.name);
-      let pks = (await this.internalExecute(
+      let pks = (await this.execute(
         `
         SELECT m.name AS table_name,
         GROUP_CONCAT(p.name, ', ') AS primary_keys
@@ -88,41 +99,27 @@ export default class SQLiteAdapter implements DBAdapter {
         this.primaryKeys.set(table_name, primary_keys);
       }
     }
+    this.#hasStarted = true;
+    deferred.fulfill();
   }
 
   async execute(sql: string, opts?: ExecuteOptions) {
     this.assertNotClosed();
-    await this.started;
-    return await this.internalExecute(sql, opts);
-  }
-
-  private async internalExecute(sql: string, opts?: ExecuteOptions) {
     sql = this.adjustSQL(sql);
     return await this.query(sql, opts);
   }
 
   async close() {
     this.assertNotClosed();
-    await this.started;
     await this.sqlite('close', { dbId: this.dbId });
     this.#isClosed = true;
   }
 
   async reset() {
     this.assertNotClosed();
-    await this.started;
     for (let table of this.tables) {
       await this.execute(`DELETE FROM ${table};`);
     }
-  }
-
-  async getColumnNames(tableName: string): Promise<string[]> {
-    await this.started;
-    let result = await this.execute('SELECT name FROM pragma_table_info($1);', {
-      bind: [tableName],
-    });
-
-    return result.map((row) => row.name) as string[];
   }
 
   private get sqlite() {
@@ -229,9 +226,7 @@ export default class SQLiteAdapter implements DBAdapter {
       .replace(/\.text_value/g, '.value')
       .replace(/\.jsonb_value/g, '.value')
       .replace(/= 'null'::jsonb/g, 'IS NULL')
-      .replace(/COLLATE "POSIX"/g, '')
-      .replace(/array_agg\(/g, 'json_group_array(')
-      .replace(/array_to_json\(/g, 'json(');
+      .replace(/COLLATE "POSIX"/g, '');
   }
 
   private assertNotClosed() {

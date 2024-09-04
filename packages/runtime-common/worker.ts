@@ -1,6 +1,6 @@
 import * as JSONTypes from 'json-typescript';
 import {
-  IndexWriter,
+  Indexer,
   Loader,
   readFileAsText,
   Deferred,
@@ -14,10 +14,8 @@ import { Kind } from './realm';
 
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
-  modulesIndexed: number;
   instanceErrors: number;
   moduleErrors: number;
-  totalIndexEntries: number;
 }
 
 export interface IndexResults {
@@ -31,7 +29,6 @@ export interface Reader {
     path: LocalPath,
     opts?: { withFallbacks?: true },
   ) => Promise<TextFileRef | undefined>;
-  lastModified: (path: LocalPath) => Promise<number | undefined>;
   readdir: (
     path: string,
   ) => AsyncGenerator<{ name: string; path: string; kind: Kind }, void>;
@@ -51,7 +48,7 @@ export interface RunnerOpts {
   _fetch: typeof fetch;
   reader: Reader;
   registerRunner: RunnerRegistration;
-  indexWriter: IndexWriter;
+  indexer: Indexer;
 }
 
 export interface FromScratchArgs extends JSONTypes.Object {
@@ -112,12 +109,13 @@ export class Worker {
   #runner: IndexRunner;
   runnerOptsMgr: RunnerOptionsManager;
   #reader: Reader;
-  #indexWriter: IndexWriter;
+  #indexer: Indexer;
   #queue: Queue;
   #loader: Loader;
   #fromScratch:
     | ((realmURL: URL, boom?: true) => Promise<IndexResults>)
     | undefined;
+  #realmAdapter: RealmAdapter;
   #incremental:
     | ((
         url: URL,
@@ -129,7 +127,7 @@ export class Worker {
 
   constructor({
     realmURL,
-    indexWriter,
+    indexer,
     queue,
     indexRunner,
     runnerOptsManager,
@@ -137,7 +135,7 @@ export class Worker {
     loader,
   }: {
     realmURL: URL;
-    indexWriter: IndexWriter;
+    indexer: Indexer;
     queue: Queue;
     indexRunner: IndexRunner;
     runnerOptsManager: RunnerOptionsManager;
@@ -146,20 +144,11 @@ export class Worker {
   }) {
     this.#realmURL = realmURL;
     this.#queue = queue;
-    this.#indexWriter = indexWriter;
+    this.#indexer = indexer;
+    this.#realmAdapter = realmAdapter;
     this.#reader = {
-      readdir: realmAdapter.readdir.bind(realmAdapter),
-      lastModified: realmAdapter.lastModified.bind(realmAdapter),
-      readFileAsText: (
-        path: LocalPath,
-        opts: { withFallbacks?: true } = {},
-      ): Promise<TextFileRef | undefined> => {
-        return readFileAsText(
-          path,
-          realmAdapter.openFile.bind(realmAdapter),
-          opts,
-        );
-      },
+      readdir: this.#realmAdapter.readdir.bind(this.#realmAdapter),
+      readFileAsText: this.readFileAsText.bind(this),
     };
     this.runnerOptsMgr = runnerOptsManager;
     this.#runner = indexRunner;
@@ -168,17 +157,27 @@ export class Worker {
 
   async run() {
     await this.#queue.start();
+    await this.#indexer.ready();
 
-    await Promise.all([
-      this.#queue.register(
-        `from-scratch-index:${this.#realmURL}`,
-        this.fromScratch,
-      ),
-      this.#queue.register(
-        `incremental-index:${this.#realmURL}`,
-        this.incremental,
-      ),
-    ]);
+    await this.#queue.register(
+      `from-scratch-index:${this.#realmURL}`,
+      this.fromScratch,
+    );
+    await this.#queue.register(
+      `incremental-index:${this.#realmURL}`,
+      this.incremental,
+    );
+  }
+
+  private async readFileAsText(
+    path: LocalPath,
+    opts: { withFallbacks?: true } = {},
+  ): Promise<TextFileRef | undefined> {
+    return readFileAsText(
+      path,
+      this.#realmAdapter.openFile.bind(this.#realmAdapter),
+      opts,
+    );
   }
 
   private async prepareAndRunJob<T>(run: () => Promise<T>): Promise<T> {
@@ -186,7 +185,7 @@ export class Worker {
     let optsId = this.runnerOptsMgr.setOptions({
       _fetch: this.#loader.fetch.bind(this.#loader),
       reader: this.#reader,
-      indexWriter: this.#indexWriter,
+      indexer: this.#indexer,
       registerRunner: async (fromScratch, incremental) => {
         this.#fromScratch = fromScratch;
         this.#incremental = incremental;

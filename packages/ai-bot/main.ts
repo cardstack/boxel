@@ -168,26 +168,11 @@ Common issues are:
         let eventList = (initial!.messages?.chunk ||
           []) as DiscreteMatrixEvent[];
         log.info('Total event list', eventList.length);
-        let history: DiscreteMatrixEvent[] = [],
-          historyError = false;
-
-        try {
-          history = constructHistory(eventList);
-          log.info("Compressed into just the history that's ", history.length);
-        } catch (e) {
-          historyError = true;
-        }
+        let history: DiscreteMatrixEvent[] = constructHistory(eventList);
+        log.info("Compressed into just the history that's ", history.length);
 
         const responder = new Responder(client, room.roomId);
         await responder.initialize();
-
-        if (historyError) {
-          responder.finalize(
-            'There was an error processing chat history. Please open another session.',
-          );
-          return;
-        }
-
         const runner = assistant
           .getResponse(history)
           .on('chunk', async (chunk, _snapshot) => {

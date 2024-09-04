@@ -112,6 +112,7 @@ export default class OperatorModeStack extends Component<Signature> {
         position: relative;
         display: flex;
         justify-content: center;
+        max-width: 50rem;
         margin: 0 auto;
         border-bottom-left-radius: var(--boxel-border-radius);
         border-bottom-right-radius: var(--boxel-border-radius);

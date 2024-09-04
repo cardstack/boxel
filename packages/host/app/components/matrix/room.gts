@@ -8,7 +8,6 @@ import { enqueueTask, restartableTask, timeout, all } from 'ember-concurrency';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
 import { getRoom } from '@cardstack/host/resources/room';
@@ -19,17 +18,15 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-import type { SkillCard } from 'https://cardstack.com/base/skill-card';
+
+import type { MessageField } from 'https://cardstack.com/base/message';
 
 import AiAssistantCardPicker from '../ai-assistant/card-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
 import { AiAssistantConversation } from '../ai-assistant/message';
 import NewSession from '../ai-assistant/new-session';
-import AiAssistantSkillMenu from '../ai-assistant/skill-menu';
 
 import RoomMessage from './room-message';
-
-import type { Skill } from '../ai-assistant/skill-menu';
 
 interface Signature {
   Args: {
@@ -44,15 +41,15 @@ export default class Room extends Component<Signature> {
       class='room'
       data-room-settled={{this.doWhenRoomChanges.isIdle}}
       data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
-      data-test-room-name={{this.roomResource.name}}
-      data-test-room={{@roomId}}
+      data-test-room-name={{this.room.name}}
+      data-test-room={{this.room.roomId}}
     >
-      <AiAssistantConversation>
-        {{#if this.messages}}
-          {{#each this.messages as |message i|}}
+      {{#if this.room.messages}}
+        <AiAssistantConversation>
+          {{#each this.room.messages as |message i|}}
             <RoomMessage
+              @room={{this.room}}
               @roomId={{@roomId}}
-              @messages={{this.messages}}
               @message={{message}}
               @index={{i}}
               @isPending={{this.isPendingMessage message}}
@@ -64,18 +61,10 @@ export default class Room extends Component<Signature> {
               data-test-message-idx={{i}}
             />
           {{/each}}
-        {{else}}
-          <NewSession @sendPrompt={{this.sendPrompt}} />
-        {{/if}}
-        {{#if this.room}}
-          <AiAssistantSkillMenu
-            class='skills'
-            @skills={{this.skills}}
-            @onChooseCard={{this.attachSkill}}
-            data-test-skill-menu
-          />
-        {{/if}}
-      </AiAssistantConversation>
+        </AiAssistantConversation>
+      {{else}}
+        <NewSession @sendPrompt={{this.sendPrompt}} />
+      {{/if}}
 
       <footer class='room-actions'>
         <div class='chat-input-area' data-test-chat-input-area>
@@ -84,7 +73,7 @@ export default class Room extends Component<Signature> {
             @onInput={{this.setMessage}}
             @onSend={{this.sendMessage}}
             @canSend={{this.canSend}}
-            data-test-message-field={{@roomId}}
+            data-test-message-field={{this.room.roomId}}
           />
           <AiAssistantCardPicker
             @autoAttachedCards={{this.autoAttachedCards}}
@@ -103,14 +92,15 @@ export default class Room extends Component<Signature> {
         height: 100%;
         overflow: hidden;
       }
-      .skills {
-        position: sticky;
-        bottom: var(--boxel-sp-5xs);
-        margin-left: auto;
+      .timeline-start {
+        padding-bottom: var(--boxel-sp);
       }
       .room-actions {
-        padding: var(--boxel-sp-xxs) var(--boxel-sp) var(--boxel-sp);
+        padding: var(--boxel-sp);
         box-shadow: var(--boxel-box-shadow);
+      }
+      .room-actions > * + * {
+        margin-top: var(--boxel-sp-sm);
       }
       .chat-input-area {
         background-color: var(--boxel-light);
@@ -127,11 +117,7 @@ export default class Room extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
 
-  private roomResource = getRoom(
-    this,
-    () => this.args.roomId,
-    () => this.matrixService.getRoom(this.args.roomId)?.events,
-  );
+  private roomResource = getRoom(this, () => this.args.roomId);
   private autoAttachmentResource = getAutoAttachment(
     this,
     () => this.topMostStackItems,
@@ -145,14 +131,14 @@ export default class Room extends Component<Signature> {
     this.doMatrixEventFlush.perform();
   }
 
-  maybeRetryAction = (messageIndex: number, message: Message) => {
+  maybeRetryAction = (messageIndex: number, message: MessageField) => {
     if (this.isLastMessage(messageIndex) && message.isRetryable) {
       return this.resendLastMessage;
     }
     return undefined;
   };
 
-  @action isMessageStreaming(message: Message, messageIndex: number) {
+  @action isMessageStreaming(message: MessageField, messageIndex: number) {
     return (
       !message.isStreamingFinished &&
       this.isLastMessage(messageIndex) &&
@@ -165,14 +151,6 @@ export default class Room extends Component<Signature> {
     await this.matrixService.flushTimeline;
     await this.roomResource.loading;
   });
-
-  private get messages() {
-    return this.roomResource.messages;
-  }
-
-  private get skills(): Skill[] {
-    return this.roomResource.skills;
-  }
 
   private get room() {
     let room = this.roomResource.room;
@@ -198,7 +176,7 @@ export default class Room extends Component<Signature> {
       );
     }
 
-    let myMessages = this.messages.filter(
+    let myMessages = this.room.messages.filter(
       (message) => message.author.userId === this.matrixService.userId,
     );
     if (myMessages.length === 0) {
@@ -293,14 +271,10 @@ export default class Room extends Component<Signature> {
           .filter((stackItem) => stackItem)
           .map((stackItem) => stackItem.card.id),
       };
-      let activeSkillCards = this.skills
-        .filter((skill) => skill.isActive)
-        .map((c) => c.card);
       await this.matrixService.sendMessage(
         this.args.roomId,
         message,
         cards,
-        activeSkillCards,
         clientGeneratedId,
         context,
       );
@@ -347,25 +321,23 @@ export default class Room extends Component<Signature> {
           this.autoAttachedCards.size !== 0,
       ) &&
       !!this.room &&
-      !this.messages.some((m) => this.isPendingMessage(m))
+      !this.room.messages.some((m) => this.isPendingMessage(m))
     );
   }
 
   @action
   private isLastMessage(messageIndex: number) {
-    return (this.room && messageIndex === this.messages.length - 1) ?? false;
+    return (
+      (this.room && messageIndex === this.room.messages.length - 1) ?? false
+    );
   }
 
   @action private setCurrentMonacoContainer(index: number | undefined) {
     this.currentMonacoContainer = index;
   }
 
-  private isPendingMessage(message: Message) {
+  private isPendingMessage(message: MessageField) {
     return message.status === 'sending' || message.status === 'queued';
-  }
-
-  @action private attachSkill(card: SkillCard) {
-    this.roomResource?.addSkill(card);
   }
 }
 

@@ -10,12 +10,10 @@ import queueTests from '@cardstack/runtime-common/tests/queue-test';
 
 module('queue', function (hooks) {
   let queue: Queue;
-  let adapter: PgAdapter;
 
   hooks.beforeEach(async function () {
     prepareTestDB();
-    adapter = new PgAdapter();
-    queue = new PgQueue(adapter);
+    queue = new PgQueue(new PgAdapter());
     await queue.start();
   });
 
@@ -40,15 +38,8 @@ module('queue', function (hooks) {
   module('multiple queue clients', function (nestedHooks) {
     let queue2: Queue;
     nestedHooks.beforeEach(async function () {
-      let adapter2 = new PgAdapter();
-      queue2 = new PgQueue(adapter2);
+      queue2 = new PgQueue(new PgAdapter());
       await queue2.start();
-
-      // Because we need tight timing control for this test, we don't want any
-      // concurrent migrations and their retries altering the timing. This
-      // ensures both adapters have gotten fully past that and are quiescent.
-      await adapter.execute('select 1');
-      await adapter2.execute('select 1');
     });
 
     nestedHooks.afterEach(async function () {

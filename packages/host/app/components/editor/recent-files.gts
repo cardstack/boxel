@@ -6,10 +6,8 @@ import Component from '@glimmer/component';
 import { RealmPaths } from '@cardstack/runtime-common';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
-import RealmService from '@cardstack/host/services/realm';
+import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import { RecentFile } from '@cardstack/host/services/recent-files-service';
-
-import WithLoadedRealm from '../with-loaded-realm';
 
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -49,7 +47,6 @@ interface FileArgs {
 class File extends Component<FileArgs> {
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
-  @service declare realm: RealmService;
 
   @action
   openFile() {
@@ -74,18 +71,25 @@ class File extends Component<FileArgs> {
 
   <template>
     {{#unless this.isSelected}}
+      {{! RealmInfoProvider and :ready do not produce children elements }}
       {{! template-lint-disable require-presentational-children }}
-      <WithLoadedRealm @realmURL={{@recentFile.realmURL.href}} as |realm|>
-        <li
-          class='recent-file'
-          data-test-recent-file={{this.fullUrl.href}}
-          role='button'
-          {{on 'click' this.openFile}}
-        >
-          <RealmIcon @realmInfo={{realm.info}} class='icon' />
-          {{@recentFile.filePath}}
-        </li>
-      </WithLoadedRealm>
+      <li
+        class='recent-file'
+        data-test-recent-file={{this.fullUrl.href}}
+        role='button'
+        {{on 'click' this.openFile}}
+      >
+        <RealmInfoProvider @realmURL={{@recentFile.realmURL}}>
+          <:ready as |realmInfo|>
+            <RealmIcon
+              @realmIconURL={{realmInfo.iconURL}}
+              @realmName={{realmInfo.name}}
+              class='icon'
+            />
+          </:ready>
+        </RealmInfoProvider>
+        {{@recentFile.filePath}}
+      </li>
     {{/unless}}
     <style>
       .recent-file {

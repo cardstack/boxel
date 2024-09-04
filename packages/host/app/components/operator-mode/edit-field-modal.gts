@@ -32,14 +32,13 @@ import {
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
+import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import Pill from '@cardstack/host/components/pill';
 import { FieldOfType, Type } from '@cardstack/host/resources/card-type';
 
 import { Ready } from '@cardstack/host/resources/file';
 import LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
-import type RealmService from '@cardstack/host/services/realm';
 
 import { BaseDef, FieldType } from 'https://cardstack.com/base/card-api';
 
@@ -67,7 +66,6 @@ export default class EditFieldModal extends Component<Signature> {
   @tracked fieldNameErrorMessage: string | undefined;
   @service declare loaderService: LoaderService;
   @service declare operatorModeStateService: OperatorModeStateService;
-  @service private declare realm: RealmService;
 
   cardinalityItems = [
     {
@@ -350,16 +348,15 @@ export default class EditFieldModal extends Component<Signature> {
               <Pill data-test-selected-field-realm-icon>
                 <:icon>
                   {{#if this.fieldModuleURL.href}}
-                    {{#let
-                      (this.realm.info this.fieldModuleURL.href)
-                      as |realmInfo|
-                    }}
-                      <img
-                        src={{realmInfo.iconURL}}
-                        alt='Workspace icon'
-                        data-test-realm-icon-url={{realmInfo.iconURL}}
-                      />
-                    {{/let}}
+                    <RealmInfoProvider @fileURL={{this.fieldModuleURL.href}}>
+                      <:ready as |realmInfo|>
+                        <img
+                          src={{realmInfo.iconURL}}
+                          alt='Workspace icon'
+                          data-test-realm-icon-url={{realmInfo.iconURL}}
+                        />
+                      </:ready>
+                    </RealmInfoProvider>
                   {{/if}}
                 </:icon>
                 <:default>

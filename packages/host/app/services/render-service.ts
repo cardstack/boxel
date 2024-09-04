@@ -6,7 +6,7 @@ import Serializer from '@simple-dom/serializer';
 
 import voidMap from '@simple-dom/void-map';
 
-import { baseRealm, RealmPaths, type CodeRef } from '@cardstack/runtime-common';
+import { baseRealm, RealmPaths } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { isCardError, CardError } from '@cardstack/runtime-common/error';
 import {
@@ -42,7 +42,6 @@ interface RenderCardParams {
   format?: Format;
   identityContext: IdentityContextType;
   realmPath: RealmPaths;
-  componentCodeRef?: CodeRef;
 }
 export type RenderCard = (params: RenderCardParams) => Promise<string>;
 
@@ -63,11 +62,8 @@ export default class RenderService extends Service {
       format = 'embedded',
       identityContext,
       realmPath,
-      componentCodeRef,
     } = params;
-    let component = card.constructor.getComponent(card, undefined, {
-      componentCodeRef,
-    });
+    let component = card.constructor.getComponent(card);
 
     let element = getIsolatedRenderElement(this.document);
     let notLoaded: NotLoaded | undefined;

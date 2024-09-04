@@ -1,32 +1,27 @@
-import type {
-  CardResource,
-  LooseSingleCardDocument,
-} from '@cardstack/runtime-common';
+import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardFragmentContent,
   CommandEvent,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
-import * as Sentry from '@sentry/node';
-import { logger } from '@cardstack/runtime-common';
-
-let log = logger('ai-bot');
 
 const MODIFY_SYSTEM_MESSAGE =
   '\
 The user is using an application called Boxel, where they are working on editing "Cards" which are data models representable as JSON. \
 The user may be non-technical and should not need to understand the inner workings of Boxel. \
 The user may be asking questions about the contents of the cards rather than help editing them. Use your world knowledge to help them. \
+If the user wants the data they see edited, AND the patchCard function is available, you MUST use the "patchCard" function to make the change. \
+If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you \
+If you do not call patchCard, the user will not see the change. \
+You can ONLY modify cards shared with you, if there is no patchCard function or tool then the user hasn\'t given you access \
+NEVER tell the user to use patchCard, you should always do it for them. \
 If the user request is unclear, you may ask clarifying questions. \
 You may make multiple function calls, all calls are gated by the user so multiple options can be explored.\
 If a user asks you about things in the world, use your existing knowledge to help them. Only if necessary, add a *small* caveat at the end of your message to explain that you do not have live external data. \
 \
 If you need access to the cards the user can see, you can ask them to attach the cards. \
 If you encounter JSON structures, please enclose them within backticks to ensure they are displayed stylishly in Markdown.';
-
-export const SKILL_INSTRUCTIONS_MESSAGE =
-  '\nThe user has given you the following instructions. You must obey these instructions when responding to the user:\n';
 
 type CommandMessage = {
   type: 'command';
@@ -40,13 +35,6 @@ type TextMessage = {
 };
 
 export type Message = CommandMessage | TextMessage;
-
-export class HistoryConstructionError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'HistoryConstructionError';
-  }
-}
 
 export function constructHistory(history: IRoomEvent[]) {
   /**
@@ -63,13 +51,7 @@ export function constructHistory(history: IRoomEvent[]) {
   const latestEventsMap = new Map<string, DiscreteMatrixEvent>();
   for (let rawEvent of history) {
     if (rawEvent.content.data) {
-      try {
-        rawEvent.content.data = JSON.parse(rawEvent.content.data);
-      } catch (e) {
-        Sentry.captureException(e);
-        log.error('Error parsing JSON', e);
-        throw new HistoryConstructionError((e as Error).message);
-      }
+      rawEvent.content.data = JSON.parse(rawEvent.content.data);
     }
     let event = { ...rawEvent } as DiscreteMatrixEvent;
     if (event.type !== 'm.room.message') {
@@ -80,16 +62,14 @@ export function constructHistory(history: IRoomEvent[]) {
       fragments.set(eventId, event.content);
       continue;
     } else if (event.content.msgtype === 'org.boxel.message') {
-      let { attachedCardsEventIds, attachedSkillEventIds } = event.content.data;
-      if (attachedCardsEventIds && attachedCardsEventIds.length > 0) {
-        event.content.data.attachedCards = attachedCardsEventIds.map((id) =>
-          serializedCardFromFragments(id, fragments),
-        );
-      }
-      if (attachedSkillEventIds && attachedSkillEventIds.length > 0) {
-        event.content.data.skillCards = attachedSkillEventIds.map((id) =>
-          serializedCardFromFragments(id, fragments),
-        );
+      if (
+        event.content.data.attachedCardsEventIds &&
+        event.content.data.attachedCardsEventIds.length > 0
+      ) {
+        event.content.data.attachedCards =
+          event.content.data.attachedCardsEventIds!.map((id) =>
+            serializedCardFromFragments(id, fragments),
+          );
       }
     }
 
@@ -162,29 +142,11 @@ export interface OpenAIPromptMessage {
   role: 'system' | 'user' | 'assistant';
 }
 
-function setRelevantCards(
-  cardMap: Map<string, CardResource> = new Map(),
-  cards: LooseSingleCardDocument[] = [],
-) {
-  for (let card of cards) {
-    if (card.data.id) {
-      cardMap.set(card.data.id, card.data as CardResource);
-    } else {
-      throw new Error(`bug: don't know how to handle card without ID`);
-    }
-  }
-  return cardMap;
-}
-
 export function getRelevantCards(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ) {
-  let attachedCardMap = new Map<string, CardResource>();
-  let skillCardMap = new Map<string, CardResource>();
-  let latestMessageEventId = history
-    .filter((ev) => ev.sender !== aiBotUserId && ev.type === 'm.room.message')
-    .slice(-1)[0]?.event_id;
+  let relevantCards: Map<string, any> = new Map();
   for (let event of history) {
     if (event.type !== 'm.room.message') {
       continue;
@@ -192,25 +154,23 @@ export function getRelevantCards(
     if (event.sender !== aiBotUserId) {
       let { content } = event;
       if (content.msgtype === 'org.boxel.message') {
-        setRelevantCards(attachedCardMap, content.data?.attachedCards);
-
-        // setting skill card instructions only based on the latest boxel message event (not cumulative)
-        if (event.event_id === latestMessageEventId) {
-          setRelevantCards(skillCardMap, content.data?.skillCards);
+        const attachedCards = content.data?.attachedCards || [];
+        for (let card of attachedCards) {
+          if (card.data.id) {
+            relevantCards.set(card.data.id, card.data);
+          } else {
+            throw new Error(`bug: don't know how to handle card without ID`);
+          }
         }
       }
     }
   }
-  let attachedCards = Array.from(attachedCardMap.values()).sort((a, b) =>
-    a.id.localeCompare(b.id),
-  );
-  let skillCards = Array.from(skillCardMap.values()).sort((a, b) =>
-    a.id.localeCompare(b.id),
-  );
-  return {
-    attachedCards,
-    skillCards,
-  };
+
+  // Return the cards in a consistent manner
+  let sortedCards = Array.from(relevantCards.values()).sort((a, b) => {
+    return a.id.localeCompare(b.id);
+  });
+  return sortedCards;
 }
 
 export function getTools(history: DiscreteMatrixEvent[], aiBotUserId: string) {
@@ -267,20 +227,12 @@ export function getModifyPrompt(
     }
   }
 
-  let { attachedCards, skillCards } = getRelevantCards(history, aiBotUserId);
   let systemMessage =
     MODIFY_SYSTEM_MESSAGE +
     `
   The user currently has given you the following data to work with:
   Cards:\n`;
-  systemMessage += attachedCardsToMessage(attachedCards);
-
-  if (skillCards.length) {
-    systemMessage += SKILL_INSTRUCTIONS_MESSAGE;
-    systemMessage += skillCardsToMessage(skillCards);
-    systemMessage += '\n';
-  }
-
+  systemMessage += attachedCardsToMessage(history, aiBotUserId);
   if (tools.length == 0) {
     systemMessage +=
       'You are unable to edit any cards, the user has not given you access, they need to open the card on the stack and let it be auto-attached';
@@ -297,13 +249,12 @@ export function getModifyPrompt(
   return messages;
 }
 
-export const attachedCardsToMessage = (cards: CardResource[]) => {
-  return `Full card data: ${JSON.stringify(cards)}`;
-};
-
-export const skillCardsToMessage = (cards: CardResource[]) => {
-  return `${JSON.stringify(
-    cards.map((card) => card.attributes?.instructions),
+export const attachedCardsToMessage = (
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+) => {
+  return `Full card data: ${JSON.stringify(
+    getRelevantCards(history, aiBotUserId),
   )}`;
 };
 

@@ -2,7 +2,7 @@ import Service from '@ember/service';
 
 import {
   type IndexResults,
-  type IndexWriter,
+  type Indexer,
   type RealmAdapter,
 } from '@cardstack/runtime-common';
 
@@ -21,8 +21,8 @@ export default class LocalIndexer extends Service {
   get adapter(): RealmAdapter {
     return {} as RealmAdapter;
   }
-  get indexWriter(): IndexWriter {
-    return {} as IndexWriter;
+  get indexer(): Indexer {
+    return {} as Indexer;
   }
 }
 

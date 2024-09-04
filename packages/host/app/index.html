@@ -16,20 +16,8 @@
     />
 
     {{content-for "head-footer"}}
-
-    <style>
-      #host-loading {
-        display: grid;
-        justify-items: center;
-        padding: var(--boxel-sp-xl);
-      }
-    </style>
   </head>
   <body>
-    <div id='host-loading'>
-      Loading…
-    </div>
-
     <!-- in case embercli's hooks insn't run,
          we embed the following div manually -->
     <div id="ember-basic-dropdown-wormhole"></div>

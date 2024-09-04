@@ -21,7 +21,7 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 import {
   baseRealm,
   primitive,
-  PermissionsContextName,
+  RealmSessionContextName,
 } from '@cardstack/runtime-common';
 
 import { cardTypeDisplayName, type CodeRef } from '@cardstack/runtime-common';
@@ -61,7 +61,6 @@ import {
   linksTo,
   linksToMany,
   MarkdownField,
-  MaybeBase64Field,
   NumberField,
   queryableValue,
   setupBaseRealm,
@@ -71,23 +70,22 @@ import {
   unsubscribeFromChanges,
 } from '../../helpers/base-realm';
 import { mango } from '../../helpers/image-fixture';
-import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderCard } from '../../helpers/render-component';
 
 let loader: Loader;
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
-  setupMatrixServiceMock(hooks, { autostart: true });
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = lookupLoaderService().loader;
   });
 
-  setupCardLogs(hooks, async () => {
-    return await loader.import(`${baseRealm.url}card-api`);
-  });
+  setupCardLogs(
+    hooks,
+    async () => await loader.import(`${baseRealm.url}card-api`),
+  );
 
   module('cards are read-only', function (_hooks) {
     test('input fields are disabled', async function (assert) {
@@ -140,7 +138,7 @@ module('Integration | card-basics', function (hooks) {
 
   module('cards allowed to be edited', function (hooks) {
     hooks.beforeEach(function () {
-      provideConsumeContext(PermissionsContextName, {
+      provideConsumeContext(RealmSessionContextName, {
         canWrite: true,
       });
     });
@@ -490,119 +488,6 @@ module('Integration | card-basics', function (hooks) {
           '[data-test-plural-view-item="1"] > [data-test-card-format="atom"]',
         )
         .containsText('Marcus');
-    });
-
-    test('can render a card with an empty field', async function (assert) {
-      let EmbeddedViewDriver = embeddedViewDriver();
-
-      loader.shimModule(`${testRealmURL}test-cards`, {
-        EmbeddedViewDriver,
-      });
-
-      let driver = new EmbeddedViewDriver();
-      await renderCard(loader, driver, 'isolated');
-
-      assert.dom('[data-test-driver] [data-test-empty-field]').exists();
-
-      await percySnapshot(assert);
-    });
-
-    test('renders a default (CardDef) embedded view for card with thumbnail', async function (assert) {
-      class Person extends CardDef {
-        static displayName = 'Person';
-        @field firstName = contains(StringField);
-        @field image = contains(Base64ImageField);
-        @field title = contains(StringField, {
-          computeVia: function (this: Person) {
-            return this.firstName;
-          },
-        });
-        @field thumbnailURL = contains(MaybeBase64Field, {
-          computeVia: function (this: Person) {
-            return this.image.base64;
-          },
-        });
-      }
-
-      let EmbeddedViewDriver = embeddedViewDriver();
-
-      loader.shimModule(`${testRealmURL}test-cards`, {
-        Person,
-        EmbeddedViewDriver,
-      });
-
-      let mang = new Person({
-        firstName: 'Mango',
-        description: 'test card',
-        image: new Base64ImageField({
-          altText: 'Picture of Mango',
-          size: 'contain',
-          width: null,
-          height: 200,
-          base64: `data:image/png;base64,${mango}`,
-        }),
-      });
-      let driver = new EmbeddedViewDriver({ card: mang });
-      await renderCard(loader, driver, 'isolated');
-
-      assert
-        .dom('[data-test-driver] [data-test-card-title]')
-        .containsText('Mango');
-      assert
-        .dom('[data-test-driver] [data-test-card-display-name]')
-        .containsText('Person');
-      assert
-        .dom('[data-test-driver] [data-test-card-thumbnail-text]')
-        .doesNotExist();
-      assert
-        .dom('[data-test-driver] [data-test-card-title]')
-        .containsText('Mango');
-      assert
-        .dom('[data-test-driver] [data-test-card-description]')
-        .containsText('test card');
-
-      await percySnapshot(assert);
-    });
-
-    test('renders a default (CardDef) embedded view for card without thumbnail', async function (assert) {
-      class Person extends CardDef {
-        static displayName = 'Person';
-        @field firstName = contains(StringField);
-        @field image = contains(Base64ImageField);
-        @field title = contains(StringField, {
-          computeVia: function (this: Person) {
-            return this.firstName;
-          },
-        });
-        @field thumbnailURL = contains(MaybeBase64Field, {
-          computeVia: function (this: Person) {
-            return this.image.base64;
-          },
-        });
-      }
-
-      let EmbeddedViewDriver = embeddedViewDriver();
-
-      loader.shimModule(`${testRealmURL}test-cards`, {
-        Person,
-        EmbeddedViewDriver,
-      });
-
-      let vang = new Person({ firstName: 'Van Gogh' });
-      let driver = new EmbeddedViewDriver({ card: vang });
-      await renderCard(loader, driver, 'isolated');
-
-      assert
-        .dom('[data-test-driver] [data-test-card-title]')
-        .containsText('Van Gogh');
-      assert
-        .dom('[data-test-driver] [data-test-card-display-name]')
-        .containsText('Person');
-      assert
-        .dom('[data-test-driver] [data-test-card-thumbnail-text]')
-        .containsText('Person');
-
-      await percySnapshot(assert);
     });
 
     test('can set the ID for an unsaved card', async function (assert) {
@@ -1805,16 +1690,14 @@ module('Integration | card-basics', function (hooks) {
       loader.shimModule(`${testRealmURL}test-cards`, { Person });
       assert.throws(
         () => new Person({ languagesSpoken: 'english' }),
-        /Expected array for field value of field 'languagesSpoken'/,
+        /Expected array for field value languagesSpoken/,
       );
       try {
         new Person({ languagesSpoken: 'english' });
         throw new Error(`expected exception to be thrown`);
       } catch (err: any) {
         assert.ok(
-          err.message.match(
-            /Expected array for field value of field 'languagesSpoken'/,
-          ),
+          err.message.match(/Expected array for field value languagesSpoken/),
           'expected error received',
         );
       }
@@ -2538,138 +2421,3 @@ let assertRadioInput = (
       .isNotChecked('the isCool true radio has correct state');
   }
 };
-
-function embeddedViewDriver() {
-  class EmbeddedViewDriver extends CardDef {
-    @field card = linksTo(CardDef);
-    static isolated = class Isolated extends Component<typeof this> {
-      <template>
-        {{! template-lint-disable no-inline-styles }}
-        <div class='group'>
-          <div class='header'>Aspect ratio &lt;= 1.0</div>
-          <div class='item'>
-            <div class='desc'>AR 1.0: 226px x 226px</div>
-            <div
-              data-test-driver
-              class='card'
-              style='width: 226px; height: 226px'
-            >
-              <@fields.card />
-            </div>
-          </div>
-          <div class='item'>
-            <div class='desc'>AR 0.73: 164px x 224px</div>
-            <div class='card' style='width: 164px; height: 224px'>
-              <@fields.card />
-            </div>
-          </div>
-          <div class='item'>
-            <div class='desc'>AR 0.91: 164px x 180px</div>
-            <div class='card' style='width: 164px; height: 180px'>
-              <@fields.card />
-            </div>
-          </div>
-          <div class='item'>
-            <div class='desc'>AR 0.95: 140px x 148px</div>
-            <div class='card' style='width: 140px; height: 148px'>
-              <@fields.card />
-            </div>
-          </div>
-          <div class='item'>
-            <div class='desc'>AR 0.94: 120px x 128px</div>
-            <div class='card' style='width: 120px; height: 128px'>
-              <@fields.card />
-            </div>
-          </div>
-          <div class='item'>
-            <div class='desc'>AR 0.85: 100px x 118px</div>
-            <div class='card' style='width: 100px; height: 118px'>
-              <@fields.card />
-            </div>
-          </div>
-          <div class='item'>
-            <div class='desc'>AR 0.2: 100px x 500px</div>
-            <div class='card' style='width: 100px; height: 500px'>
-              <@fields.card />
-            </div>
-          </div>
-        </div>
-
-        <div class='group'>
-          <div class='header'>1.0 &lt; Aspect ratio &lt; 2.0</div>
-          <div class='item'>
-            <div class='desc'>AR 1.9: 151px x 78px</div>
-            <div class='card' style='width: 151px; height: 78px'>
-              <@fields.card />
-            </div>
-          </div>
-          <div class='item'>
-            <div class='desc'>AR 1.99: 300px x 151px</div>
-            <div class='card' style='width: 300px; height: 151px'>
-              <@fields.card />
-            </div>
-          </div>
-          <div class='item'>
-            <div class='desc'>AR 1.66: 300px x 180px</div>
-            <div class='card' style='width: 300px; height: 180px'>
-              <@fields.card />
-            </div>
-          </div>
-        </div>
-
-        <div class='group'>
-          <div class='header'>Aspect ratio &gt; 2.0</div>
-          <div class='item'>
-            <div class='desc'>AR 3.4: 100px x 29px</div>
-            <div class='card' style='width: 100px; height: 29px'>
-              <@fields.card />
-            </div>
-          </div>
-          <div class='item'>
-            <div class='desc'>AR 2.6: 150px x 58px</div>
-            <div class='card' style='width: 150px; height: 58px'>
-              <@fields.card />
-            </div>
-          </div>
-          <div class='item'>
-            <div class='desc'>AR 3.9: 226px x 58px</div>
-            <div class='card' style='width: 226px; height: 58px'>
-              <@fields.card />
-            </div>
-          </div>
-          <div class='item'>
-            <div class='desc'>AR 2.6: 300px x 115px</div>
-            <div class='card' style='width: 300px; height: 115px'>
-              <@fields.card />
-            </div>
-          </div>
-        </div>
-
-        <style>
-          .card {
-            /* this is how a border would appear around a card.
-             note that a card is not supposed to draw its own border 
-          */
-            box-shadow: 0 0 0 1px var(--boxel-light-500);
-            overflow: hidden;
-            border-radius: var(--boxel-border-radius);
-          }
-          .group {
-            margin: 2rem;
-          }
-          .header {
-            font: 700 var(--boxel-font-lg);
-          }
-          .item {
-            padding-bottom: 1rem;
-          }
-          .desc {
-            padding-top: 1rem;
-          }
-        </style>
-      </template>
-    };
-  }
-
-  return EmbeddedViewDriver;
-}

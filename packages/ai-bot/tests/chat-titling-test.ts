@@ -377,7 +377,7 @@ module('shouldSetRoomTitle', () => {
           data: {
             command: {
               type: 'patchCard',
-              id: 'http://localhost:4201/experiments/Friend/1',
+              id: 'http://localhost:4201/drafts/Friend/1',
               patch: {
                 attributes: {
                   firstName: 'Dave',
@@ -442,7 +442,7 @@ module('shouldSetRoomTitle', () => {
           data: {
             command: {
               type: 'patchCard',
-              id: 'http://localhost:4201/experiments/Friend/1',
+              id: 'http://localhost:4201/drafts/Friend/1',
               patch: {
                 attributes: {
                   firstName: 'Dave',

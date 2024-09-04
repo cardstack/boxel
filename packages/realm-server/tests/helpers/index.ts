@@ -1,4 +1,4 @@
-import { writeFileSync, writeJSONSync } from 'fs-extra';
+import { writeFileSync, writeJSONSync, readFileSync } from 'fs-extra';
 import { NodeAdapter } from '../../node-realm';
 import { resolve, join } from 'path';
 import {
@@ -12,6 +12,7 @@ import {
   type MatrixConfig,
   type Queue,
   type IndexRunner,
+  assetsDir,
   insertPermissions,
 } from '@cardstack/runtime-common';
 import { makeFastBootIndexRunner } from '../../fastboot';
@@ -30,15 +31,13 @@ const testMatrix: MatrixConfig = {
   username: 'node-test_realm',
   password: 'password',
 };
-
+let distPath = resolve(__dirname, '..', '..', '..', 'host', 'dist');
 let basePath = resolve(join(__dirname, '..', '..', '..', 'base'));
 
 let manager = new RunnerOptionsManager();
-let fastbootState:
-  | { getRunner: IndexRunner; getIndexHTML: () => Promise<string> }
-  | undefined;
+let getRunner: IndexRunner | undefined;
 
-export function prepareTestDB(): void {
+export async function prepareTestDB() {
   process.env.PGDATABASE = `test_db_${Math.floor(10000000 * Math.random())}`;
 }
 
@@ -63,6 +62,7 @@ export function setupDB(
     prepareTestDB();
     dbAdapter = new PgAdapter();
     queue = new PgQueue(dbAdapter);
+    await dbAdapter.startClient();
   };
 
   const runAfterHook = async () => {
@@ -118,6 +118,7 @@ export async function createRealm({
   queue,
   dbAdapter,
   matrixConfig = testMatrix,
+  deferStartUp,
 }: {
   dir: string;
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
@@ -131,13 +132,13 @@ export async function createRealm({
 }): Promise<Realm> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
-  if (!fastbootState) {
-    fastbootState = await makeFastBootIndexRunner(
-      new URL('http://localhost:4200/'),
+  if (!getRunner) {
+    ({ getRunner } = await makeFastBootIndexRunner(
+      distPath,
       manager.getOptions.bind(manager),
-    );
+    ));
   }
-  let indexRunner = fastbootState.getRunner;
+  let indexRunner = getRunner;
   for (let [filename, contents] of Object.entries(fileSystem)) {
     if (typeof contents === 'string') {
       writeFileSync(join(dir, filename), contents);
@@ -147,33 +148,33 @@ export async function createRealm({
   }
 
   let adapter = new NodeAdapter(dir);
-  let worker: Worker | undefined;
-  let realm = new Realm({
-    url: realmURL,
-    adapter,
-    getIndexHTML: fastbootState.getIndexHTML,
-    matrix: matrixConfig,
-    realmSecretSeed: "shhh! it's a secret",
-    virtualNetwork,
-    dbAdapter,
-    queue,
-    withIndexWriter: (indexWriter, loader) => {
-      worker = new Worker({
-        realmURL: new URL(realmURL!),
-        indexWriter,
-        queue,
-        realmAdapter: adapter,
-        runnerOptsManager: manager,
-        loader,
-        indexRunner,
-      });
+  let realm = new Realm(
+    {
+      url: realmURL,
+      adapter,
+      getIndexHTML: async () =>
+        readFileSync(join(distPath, 'index.html')).toString(),
+      matrix: matrixConfig,
+      realmSecretSeed: "shhh! it's a secret",
+      virtualNetwork,
+      dbAdapter,
+      queue,
+      onIndexer: async (indexer) => {
+        let worker = new Worker({
+          realmURL: new URL(realmURL!),
+          indexer,
+          queue,
+          realmAdapter: adapter,
+          runnerOptsManager: manager,
+          loader: realm.loaderTemplate,
+          indexRunner,
+        });
+        await worker.run();
+      },
+      assetsURL: new URL(`${realmURL}${assetsDir}`),
     },
-    assetsURL: new URL(`http://example.com/notional-assets-host/`),
-  });
-  if (!worker) {
-    throw new Error(`worker for realm ${realmURL} was not created`);
-  }
-  await worker.run();
+    { deferStartUp },
+  );
   return realm;
 }
 
@@ -213,8 +214,8 @@ export async function runBaseRealmServer(
     dbAdapter,
     permissions,
   });
-  virtualNetwork.mount(testBaseRealm.handle);
-  await testBaseRealm.start();
+  virtualNetwork.mount(testBaseRealm.maybeExternalHandle);
+  await testBaseRealm.ready;
   let testBaseRealmServer = new RealmServer([testBaseRealm], virtualNetwork);
   return testBaseRealmServer.listen(parseInt(localBaseRealmURL.port));
 }
@@ -248,8 +249,8 @@ export async function runTestRealmServer({
     queue,
     dbAdapter,
   });
-  virtualNetwork.mount(testRealm.handle);
-  await testRealm.start();
+  virtualNetwork.mount(testRealm.maybeExternalHandle);
+  await testRealm.ready;
   let testRealmServer = await new RealmServer(
     [testRealm],
     virtualNetwork,

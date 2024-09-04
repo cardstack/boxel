@@ -19,13 +19,11 @@ interface ProfileAssertions {
 interface LoginOptions {
   url?: string;
   expectFailure?: true;
-  skipOpeningAssistant?: true;
-  skipOpeningOperatorMode?: true;
 }
 
 export async function registerRealmUsers(synapse: SynapseInstance) {
   await registerUser(synapse, 'base_realm', 'password');
-  await registerUser(synapse, 'experiments_realm', 'password');
+  await registerUser(synapse, 'drafts_realm', 'password');
   await registerUser(synapse, 'published_realm', 'password');
   await registerUser(synapse, 'test_realm', 'password');
   await registerUser(synapse, 'node-test_realm', 'password');
@@ -228,11 +226,8 @@ export async function login(
   password: string,
   opts?: LoginOptions,
 ) {
-  if (!opts?.skipOpeningOperatorMode) {
-    await openRoot(page, opts?.url);
-    await toggleOperatorMode(page);
-  }
-
+  await openRoot(page, opts?.url);
+  await toggleOperatorMode(page);
   await page.waitForFunction(() =>
     document.querySelector('[data-test-username-field]'),
   );
@@ -243,9 +238,7 @@ export async function login(
   if (opts?.expectFailure) {
     await expect(page.locator('[data-test-login-error]')).toHaveCount(1);
   } else {
-    if (!opts?.skipOpeningAssistant) {
-      await openAiAssistant(page);
-    }
+    await openAiAssistant(page);
   }
 }
 
@@ -336,9 +329,6 @@ export async function selectCardFromCatalog(
   realmName = 'Test Workspace A',
 ) {
   await page.locator('[data-test-choose-card-btn]').click();
-  await page
-    .locator(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`)
-    .click();
   await page
     .locator(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`)
     .click();

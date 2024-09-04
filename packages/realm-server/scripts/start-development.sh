@@ -4,6 +4,7 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 wait_for_postgres
 
+pnpm setup:base-assets
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   PGPORT=5435 \
@@ -21,12 +22,12 @@ NODE_ENV=development \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl='http://localhost:4201/base/' \
   \
-  --path='../experiments-realm' \
+  --path='../drafts-realm' \
   --matrixURL='http://localhost:8008' \
-  --username='experiments_realm' \
+  --username='drafts_realm' \
   --password='password' \
-  --fromUrl='http://localhost:4201/experiments/' \
-  --toUrl='http://localhost:4201/experiments/' \
+  --fromUrl='http://localhost:4201/drafts/' \
+  --toUrl='http://localhost:4201/drafts/' \
   \
   --path='../published-realm' \
   --matrixURL='http://localhost:8008' \

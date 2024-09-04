@@ -18,6 +18,6 @@
       }
     ],
     ["@babel/plugin-proposal-decorators", { "version": "legacy" }],
-    "@babel/plugin-transform-class-properties"
+    "@babel/plugin-proposal-class-properties"
   ]
 }

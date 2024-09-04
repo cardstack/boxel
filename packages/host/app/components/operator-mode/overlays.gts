@@ -6,9 +6,9 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { dropTask } from 'ember-concurrency';
+import { dropTask, task } from 'ember-concurrency';
 import { velcro } from 'ember-velcro';
-import { type TrackedArray } from 'tracked-built-ins';
+import { type TrackedArray, TrackedWeakMap } from 'tracked-built-ins';
 
 import {
   BoxelDropdown,
@@ -27,9 +27,11 @@ import {
 
 import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
 
+import {
+  type RealmSessionResource,
+  getRealmSession,
+} from '@cardstack/host/resources/realm-session';
 import type CardService from '@cardstack/host/services/card-service';
-
-import RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
@@ -55,7 +57,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
       {{#let
         renderedCard.card
         (this.isSelected renderedCard.card)
-        (this.realm.canWrite renderedCard.card.id)
+        (this.canWrite renderedCard.card)
         as |card isSelected canWrite|
       }}
         <div
@@ -105,8 +107,8 @@ export default class OperatorModeOverlays extends Component<Signature> {
               @icon={{EyeIcon}}
               aria-label='preview card'
             />
-            {{! Since there is just one item in the drop down, if that one item
-                  cannot be shown then we just don't show the drop down. This should
+            {{! Since there is just one item in the drop down, if that one item 
+                  cannot be shown then we just don't show the drop down. This should 
                   change if we add more items in the dropdown }}
             {{#if canWrite}}
               <BoxelDropdown>
@@ -202,10 +204,13 @@ export default class OperatorModeOverlays extends Component<Signature> {
   </template>
 
   @service private declare cardService: CardService;
-  @service private declare realm: RealmService;
-
   @tracked private currentlyHoveredCard: RenderedCardForOverlayActions | null =
     null;
+  @tracked private realmSessionByCard: TrackedWeakMap<
+    CardDef,
+    RealmSessionResource
+  > = new TrackedWeakMap();
+  private realmSessions: Map<string, RealmSessionResource> = new Map();
 
   private offset = {
     name: 'offset',
@@ -233,6 +238,9 @@ export default class OperatorModeOverlays extends Component<Signature> {
   private get renderedCardsForOverlayActionsWithEvents() {
     let renderedCards = this.args.renderedCardsForOverlayActions;
     for (const renderedCard of renderedCards) {
+      if (!this.realmSessionByCard.get(renderedCard.card)) {
+        this.loadRealmSession.perform(renderedCard.card);
+      }
       if (boundRenderedCardElement.has(renderedCard.element)) {
         continue;
       }
@@ -300,6 +308,10 @@ export default class OperatorModeOverlays extends Component<Signature> {
     return this.args.selectedCards?.some((c: CardDef) => c === card);
   }
 
+  @action private canWrite(card: CardDef) {
+    return !!this.realmSessionByCard.get(card)?.canWrite;
+  }
+
   private viewCard = dropTask(
     async (
       card: CardDef,
@@ -307,11 +319,22 @@ export default class OperatorModeOverlays extends Component<Signature> {
       fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
       fieldName?: string,
     ) => {
-      let canWrite = this.realm.canWrite(card.id);
+      let canWrite = this.canWrite(card);
       format = canWrite ? format : 'isolated';
       await this.args.publicAPI.viewCard(card, format, fieldType, fieldName);
     },
   );
+
+  private loadRealmSession = task(async (card: CardDef) => {
+    let realmURL = await this.cardService.getRealmURL(card);
+    let resource = this.realmSessions.get(realmURL.href);
+    if (!resource) {
+      resource = getRealmSession(this, { realmURL: () => realmURL });
+      await resource.loaded;
+      this.realmSessions.set(realmURL.href, resource);
+    }
+    this.realmSessionByCard.set(card, resource);
+  });
 
   private zIndexStyle(element: HTMLElement) {
     let parentElement = element.parentElement!;

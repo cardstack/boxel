@@ -33,11 +33,12 @@
     "environment": ["ember-loose", "ember-template-imports"],
     "transform": {
       "include": [
-        "../experiments-realm/**",
+        "../drafts-realm/**",
         "../published-realm/**",
         "../base/**",
         "../boxel-ui/addon/**"
       ]
     }
-  }
+  },
+  "exclude": ["../base/__boxel/**/*"]
 }

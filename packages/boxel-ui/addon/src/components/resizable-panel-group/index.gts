@@ -13,10 +13,6 @@ import ResizablePanel from './panel.gts';
 export { default as ResizeHandle } from './handle.gts';
 export { default as ResizablePanel } from './panel.gts';
 
-import { buildWaiter } from '@ember/test-waiters';
-
-let waiter = buildWaiter('resizable-panel-group');
-
 function sumArray(array: number[]) {
   return array.reduce((partialSum, a) => partialSum + a, 0);
 }
@@ -103,8 +99,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
   resizablePanelIdCache = new WeakMap<ResizablePanel, number>();
   panels = new TrackedArray<ResizablePanel>();
   resizeHandles = new TrackedArray<ResizeHandle>();
-
-  private initializationWaiter = waiter.beginAsync();
 
   currentResizeHandle: {
     handle: ResizeHandle;
@@ -267,15 +261,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
       !this.currentResizeHandle.prevPanel ||
       !this.currentResizeHandle.nextPanel
     ) {
-      return;
-    }
-
-    if (!this.isCursorInTheRightPlace(event)) {
-      let resizeHandleRect =
-        this.currentResizeHandle.handle.element.getBoundingClientRect();
-      this.currentResizeHandle.initialPosition = Math.round(
-        (resizeHandleRect.left + resizeHandleRect.right) / 2,
-      );
       return;
     }
 
@@ -481,7 +466,6 @@ export default class ResizablePanelGroup extends Component<Signature> {
   onContainerResize(entry?: ResizeObserverEntry, observer?: ResizeObserver) {
     if (!this.panelGroupElement) {
       if (entry) {
-        waiter.endAsync(this.initializationWaiter);
         this.panelGroupElement = entry.target as HTMLDivElement;
         next(this, this.onContainerResize, entry, observer);
       }
@@ -577,44 +561,5 @@ export default class ResizablePanelGroup extends Component<Signature> {
       prevPanel,
       nextPanel,
     };
-  }
-
-  private isCursorInTheRightPlace(event: MouseEvent): boolean {
-    let { currentResizeHandle } = this;
-    if (!currentResizeHandle) {
-      return true;
-    }
-
-    let { handle, prevPanel, nextPanel } = currentResizeHandle;
-    if (!handle || !prevPanel || !nextPanel) {
-      return true;
-    }
-
-    let resizeHandleRect = handle.element.getBoundingClientRect();
-    let rightCursorPosition = this.isHorizontal
-      ? (resizeHandleRect.left + resizeHandleRect.right) / 2
-      : (resizeHandleRect.top + resizeHandleRect.bottom) / 2;
-
-    let isCursorLeftOfHandle =
-      event[this.clientPositionProperty] <= Math.ceil(rightCursorPosition);
-    let isCursorRightOfHandle =
-      event[this.clientPositionProperty] >= Math.round(rightCursorPosition);
-
-    let isPrevPanelAtMinLength =
-      !prevPanel.collapsible &&
-      prevPanel.initialMinLengthPx === prevPanel.lengthPx;
-    let isNextPanelAtMinLength =
-      !nextPanel.collapsible &&
-      nextPanel.initialMinLengthPx === nextPanel.lengthPx;
-
-    if (isPrevPanelAtMinLength && isCursorLeftOfHandle) {
-      return false;
-    }
-
-    if (isNextPanelAtMinLength && isCursorRightOfHandle) {
-      return false;
-    }
-
-    return true;
   }
 }

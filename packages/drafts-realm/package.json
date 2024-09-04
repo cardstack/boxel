@@ -1,0 +1,15 @@
+{
+  "name": "@cardstack/drafts-realm",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "devDependencies": {
+    "@cardstack/boxel-ui": "workspace:*",
+    "@cardstack/runtime-common": "workspace:*",
+    "@types/lodash": "^4.14.182",
+    "chess.js": "1.0.0-beta.8",
+    "ember-modifier": "^4.1.0",
+    "tracked-built-ins": "^3.3.0"
+  },
+  "scripts": {}
+}

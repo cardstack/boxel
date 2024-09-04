@@ -23,17 +23,20 @@ import {
 } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 
-import CardService from '@cardstack/host/services/card-service';
+import { AuthenticationErrorMessages } from '@cardstack/runtime-common/router';
+
+import { claimsFromRawToken } from '@cardstack/host/resources/realm-session';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import { claimsFromRawToken } from '@cardstack/host/services/realm';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 
 import {
+  createJWT,
   percySnapshot,
   setupLocalIndexing,
   setupServerSentEvents,
   setupOnSave,
   testRealmURL,
+  testRealmSecretSeed,
   type TestContextWithSSE,
   type TestContextWithSave,
   setupAcceptanceTestRealm,
@@ -43,6 +46,7 @@ import {
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
 
 const testRealm2URL = `http://test-realm/test2/`;
+let realmPermissions: { [realmURL: string]: ('read' | 'write')[] };
 
 module('Acceptance | interact submode tests', function (hooks) {
   let realm: Realm;
@@ -52,9 +56,14 @@ module('Acceptance | interact submode tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  let { setRealmPermissions } = setupMatrixServiceMock(hooks);
+  setupMatrixServiceMock(hooks, { realmPermissions: () => realmPermissions });
 
   hooks.beforeEach(async function () {
+    realmPermissions = {
+      [testRealmURL]: ['read', 'write'],
+      [testRealm2URL]: ['read', 'write'],
+    };
+
     let loader = lookupLoaderService().loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
@@ -506,7 +515,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
   });
 
-  module('1 stack', function (_hooks) {
+  module('1 stack', function () {
     test('restoring the stack from query param', async function (assert) {
       await visitOperatorMode({
         stacks: [
@@ -887,7 +896,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         .exists({ count: 1 });
     });
 
-    test('embedded card from writable realm shows pencil icon in edit mode', async function (assert) {
+    test('embedded card from writable realm shows pencil icon in edit mode', async (assert) => {
       await visitOperatorMode({
         stacks: [
           [
@@ -914,270 +923,305 @@ module('Acceptance | interact submode tests', function (hooks) {
         .exists('linked card now rendered as a stack item in edit format');
     });
 
-    test('New card is auto-attached once it is saved', async function (assert) {
-      let indexCardId = `${testRealm2URL}index`;
-      await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: indexCardId,
-              format: 'isolated',
-            },
+    module('when the user lacks write permissions', function (hooks) {
+      hooks.beforeEach(async function () {
+        realmPermissions = {
+          [testRealmURL]: ['read'],
+          [testRealm2URL]: ['read', 'write'],
+        };
+      });
+
+      test('the edit button is hidden when the user lacks permissions', async function (assert) {
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}Pet/mango`,
+                format: 'isolated',
+              },
+            ],
           ],
-        ],
+        });
+
+        assert.dom('[data-test-edit-button]').doesNotExist();
       });
-      assert.dom(`[data-test-stack-card="${indexCardId}"]`).exists();
-      await click('[data-test-open-ai-assistant]');
-      assert.dom('[data-test-attached-card]').doesNotExist();
-      // Press the + button to create a new card instance
-      await click('[data-test-create-new-card-button]');
-      // Select a card from catalog entries
-      await click(
-        `[data-test-select="https://cardstack.com/base/fields/skill-card"]`,
-      );
-      await waitUntil(
-        () =>
-          (
-            document.querySelector(`[data-test-card-catalog-go-button]`) as
-              | HTMLButtonElement
-              | undefined
-          )?.disabled === false,
-      );
-      await click(`[data-test-card-catalog-go-button]`);
 
-      // When edit view of new card opens, fill in a field and press the Pencil icon to finish editing
-      await waitFor('[data-test-field="instructions"] textarea');
-      await fillIn(
-        '[data-test-field="instructions"] textarea',
-        'Do this and that and this and that',
-      );
-      await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
-      await waitFor(
-        '[data-test-card-format="isolated"] [data-test-field="instructions"] p',
-      );
-    });
-  });
-
-  module('1 stack, when the user lacks write permissions', function (hooks) {
-    hooks.beforeEach(async function () {
-      setRealmPermissions({
-        [testRealmURL]: ['read'],
-        [testRealm2URL]: ['read', 'write'],
-      });
-    });
-
-    test('the edit button is hidden when the user lacks permissions', async function (assert) {
-      await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: `${testRealmURL}Pet/mango`,
-              format: 'isolated',
-            },
+      test('the card format components are informed whether it is editable', async function (assert) {
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}Pet/mango`,
+                format: 'isolated',
+              },
+            ],
           ],
-        ],
-      });
-      assert.dom('[data-test-edit-button]').doesNotExist();
-    });
+        });
 
-    test('the card format components are informed whether it is editable', async function (assert) {
-      await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: `${testRealmURL}Pet/mango`,
-              format: 'isolated',
-            },
+        assert
+          .dom('[data-test-editable-meta]')
+          .containsText('Mango is NOT editable');
+
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealm2URL}Pet/ringo`,
+                format: 'isolated',
+              },
+            ],
           ],
-        ],
-      });
+        });
 
-      assert
-        .dom('[data-test-editable-meta]')
-        .containsText('Mango is NOT editable');
+        assert
+          .dom('[data-test-editable-meta]')
+          .containsText('Ringo is editable');
 
-      await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: `${testRealm2URL}Pet/ringo`,
-              format: 'isolated',
-            },
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}Person/fadhlan`,
+                format: 'isolated',
+              },
+            ],
           ],
-        ],
-      });
+        });
 
-      assert.dom('[data-test-editable-meta]').containsText('Ringo is editable');
+        assert
+          .dom('[data-test-editable-meta]')
+          .containsText('address is NOT editable');
 
-      await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: `${testRealmURL}Person/fadhlan`,
-              format: 'isolated',
-            },
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}Person/fadhlan`,
+                format: 'edit',
+              },
+            ],
           ],
-        ],
-      });
+        });
 
-      assert
-        .dom('[data-test-editable-meta]')
-        .containsText('address is NOT editable');
+        assert
+          .dom("[data-test-contains-many='additionalAddresses'] input:enabled")
+          .doesNotExist();
 
-      await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: `${testRealmURL}Person/fadhlan`,
-              format: 'edit',
-            },
+        assert
+          .dom(
+            "[data-test-contains-many='additionalAddresses'] [data-test-remove]",
+          )
+          .doesNotExist();
+        assert
+          .dom(
+            "[data-test-contains-many='additionalAddresses'] [data-test-add-new]",
+          )
+          .doesNotExist();
+
+        assert
+          .dom("[data-test-field='pet'] [data-test-remove-card]")
+          .doesNotExist();
+
+        assert
+          .dom("[data-test-field='friends'] [data-test-add-new]")
+          .doesNotExist();
+        assert
+          .dom("[data-test-field='friends'] [data-test-remove-card]")
+          .doesNotExist();
+
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealm2URL}Person/hassan`,
+                format: 'isolated',
+              },
+            ],
           ],
-        ],
+        });
+
+        assert
+          .dom('[data-test-editable-meta]')
+          .containsText('address is editable');
+
+        await click('[data-test-operator-mode-stack] [data-test-edit-button]');
+
+        assert
+          .dom("[data-test-contains-many='additionalAddresses'] input:disabled")
+          .doesNotExist();
+
+        assert
+          .dom(
+            "[data-test-contains-many='additionalAddresses'] [data-test-remove]",
+          )
+          .exists();
+
+        assert
+          .dom(
+            "[data-test-contains-many='additionalAddresses'] [data-test-add-new]",
+          )
+          .exists();
+
+        assert.dom("[data-test-field='pet'] [data-test-remove-card]").exists();
+        assert.dom("[data-test-field='friends'] [data-test-add-new]").exists();
+        assert
+          .dom("[data-test-field='friends'] [data-test-remove-card]")
+          .exists();
       });
-
-      assert
-        .dom("[data-test-contains-many='additionalAddresses'] input:enabled")
-        .doesNotExist();
-
-      assert
-        .dom(
-          "[data-test-contains-many='additionalAddresses'] [data-test-remove]",
-        )
-        .doesNotExist();
-      assert
-        .dom(
-          "[data-test-contains-many='additionalAddresses'] [data-test-add-new]",
-        )
-        .doesNotExist();
-
-      assert
-        .dom("[data-test-field='pet'] [data-test-remove-card]")
-        .doesNotExist();
-
-      assert
-        .dom("[data-test-field='friends'] [data-test-add-new]")
-        .doesNotExist();
-      assert
-        .dom("[data-test-field='friends'] [data-test-remove-card]")
-        .doesNotExist();
-
-      await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: `${testRealm2URL}Person/hassan`,
-              format: 'isolated',
-            },
+      test('the delete item is not present in "..." menu of stack item', async function (assert) {
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}Pet/mango`,
+                format: 'isolated',
+              },
+            ],
           ],
-        ],
+        });
+        await waitFor('[data-test-more-options-button]');
+        await click('[data-test-more-options-button]');
+        assert
+          .dom('[data-test-boxel-menu-item-text="Delete"]')
+          .doesNotExist('delete menu item is not rendered');
       });
 
-      assert
-        .dom('[data-test-editable-meta]')
-        .containsText('address is editable');
-
-      await click('[data-test-operator-mode-stack] [data-test-edit-button]');
-
-      assert
-        .dom("[data-test-contains-many='additionalAddresses'] input:disabled")
-        .doesNotExist();
-
-      assert
-        .dom(
-          "[data-test-contains-many='additionalAddresses'] [data-test-remove]",
-        )
-        .exists();
-
-      assert
-        .dom(
-          "[data-test-contains-many='additionalAddresses'] [data-test-add-new]",
-        )
-        .exists();
-
-      assert.dom("[data-test-field='pet'] [data-test-remove-card]").exists();
-      assert.dom("[data-test-field='friends'] [data-test-add-new]").exists();
-      assert
-        .dom("[data-test-field='friends'] [data-test-remove-card]")
-        .exists();
-    });
-    test('the delete item is not present in "..." menu of stack item', async function (assert) {
-      await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: `${testRealmURL}Pet/mango`,
-              format: 'isolated',
-            },
+      test('the "..."" menu does not exist for card overlay in index view (since delete is the only item in this menu)', async function (assert) {
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}index`,
+                format: 'isolated',
+              },
+            ],
           ],
-        ],
-      });
-      await waitFor('[data-test-more-options-button]');
-      await click('[data-test-more-options-button]');
-      assert
-        .dom('[data-test-boxel-menu-item-text="Delete"]')
-        .doesNotExist('delete menu item is not rendered');
-    });
-
-    test('the "..."" menu does not exist for card overlay in index view (since delete is the only item in this menu)', async function (assert) {
-      await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: `${testRealmURL}index`,
-              format: 'isolated',
-            },
-          ],
-        ],
-      });
-      await waitFor(
-        `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-      );
-      assert
-        .dom(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.more-actions`,
-        )
-        .doesNotExist('"..." menu does not exist');
-    });
-
-    test('embedded card from read-only realm does not show pencil icon in edit mode', async (assert) => {
-      await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: `${testRealm2URL}Person/hassan`,
-              format: 'edit',
-            },
-          ],
-        ],
-      });
-      assert
-        .dom(`[data-test-overlay-card="${testRealmURL}Pet/mango"]`)
-        .exists();
-      assert
-        .dom(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-embedded-card-edit-button]`,
-        )
-        .doesNotExist('edit icon not displayed for linked card');
-      await click(
-        `[data-test-links-to-editor="pet"] [data-test-field-component-card]`,
-      );
-      await waitFor(`[data-test-stack-card="${testRealmURL}Pet/mango"]`);
-      assert
-        .dom(
-          `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-card-format="isolated"]`,
-        )
-        .exists(
-          'linked card now rendered as a stack item in isolated (non-edit) format',
+        });
+        await waitFor(
+          `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
         );
+        assert
+          .dom(
+            `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.more-actions`,
+          )
+          .doesNotExist('"..." menu does not exist');
+      });
+
+      test('embedded card from read-only realm does not show pencil icon in edit mode', async (assert) => {
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealm2URL}Person/hassan`,
+                format: 'edit',
+              },
+            ],
+          ],
+        });
+        assert
+          .dom(`[data-test-overlay-card="${testRealmURL}Pet/mango"]`)
+          .exists();
+        assert
+          .dom(
+            `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-embedded-card-edit-button]`,
+          )
+          .doesNotExist('edit icon not displayed for linked card');
+        await click(
+          `[data-test-links-to-editor="pet"] [data-test-field-component-card]`,
+        );
+        await waitFor(`[data-test-stack-card="${testRealmURL}Pet/mango"]`);
+        assert
+          .dom(
+            `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-card-format="isolated"]`,
+          )
+          .exists(
+            'linked card now rendered as a stack item in isolated (non-edit) format',
+          );
+      });
     });
+
+    module(
+      'when permission is updated after user has obtained the token',
+      function (hooks) {
+        hooks.beforeEach(async function () {
+          realmPermissions = { [testRealmURL]: ['read'] };
+        });
+
+        test('retrieve a new JWT on 401 error', async function (assert) {
+          let token = createJWT(
+            {
+              user: '@testuser:staging',
+              realm: testRealmURL,
+              permissions: ['read', 'write'],
+            },
+            '7d',
+            testRealmSecretSeed,
+          );
+          let session = {
+            [`${testRealmURL}`]: token,
+          };
+          window.localStorage.setItem('boxel-session', JSON.stringify(session));
+
+          await visitOperatorMode({
+            stacks: [
+              [
+                {
+                  id: `${testRealmURL}Pet/mango`,
+                  format: 'isolated',
+                },
+              ],
+            ],
+          });
+
+          lookupLoaderService().virtualNetwork.mount(
+            async (req) => {
+              // Mock `Authentication` error response from the server.
+              if (
+                req.method !== 'GET' &&
+                req.method !== 'HEAD' &&
+                req.headers.get('Authorization') === token
+              ) {
+                return new Response(
+                  AuthenticationErrorMessages.PermissionMismatch,
+                  {
+                    status: 401,
+                  },
+                );
+              }
+              return null;
+            },
+            { prepend: true },
+          );
+          assert
+            .dom('[data-test-operator-mode-stack] [data-test-edit-button]')
+            .exists();
+          await click(
+            '[data-test-operator-mode-stack] [data-test-edit-button]',
+          );
+          await fillIn(
+            '[data-test-operator-mode-stack] [data-test-field="name"] [data-test-boxel-input]',
+            'Updated Ringo',
+          );
+          await click(
+            '[data-test-operator-mode-stack] [data-test-edit-button]',
+          );
+
+          let newToken = window.localStorage.getItem('boxel-session');
+          let claims = claimsFromRawToken(newToken!);
+          assert.notStrictEqual(newToken, token);
+          assert.strictEqual(claims.user, '@testuser:staging');
+          assert.deepEqual(claims.permissions, ['read']);
+        });
+      },
+    );
   });
 
   module('2 stacks with differing permissions', function (hooks) {
     hooks.beforeEach(async function () {
-      setRealmPermissions({
+      realmPermissions = {
         [testRealmURL]: ['read'],
         [testRealm2URL]: ['read', 'write'],
-      });
+      };
     });
 
     test('the edit button respects the realm permissions of the cards in differing realms', async function (assert) {
@@ -1363,10 +1407,6 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test('visiting 2 stacks from differing realms', async function (assert) {
-      let cardService = this.owner.lookup(
-        'service:card-service',
-      ) as CardService;
-      cardService.realmURLs.push('http://localhost:4202/test/');
       await visitOperatorMode({
         stacks: [
           [
@@ -1462,66 +1502,62 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
   });
 
-  module('index changes', function () {
-    test<TestContextWithSSE>('stack item live updates when index changes', async function (assert) {
-      assert.expect(3);
-      let expectedEvents = [
-        {
-          type: 'index',
-          data: {
-            type: 'incremental',
-            invalidations: [`${testRealmURL}Person/fadhlan`],
-          },
+  test<TestContextWithSSE>('stack item live updates when index changes', async function (assert) {
+    assert.expect(3);
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Person/fadhlan`],
         },
-      ];
-      await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: `${testRealmURL}Person/fadhlan`,
-              format: 'isolated',
-            },
-          ],
+      },
+    ];
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
         ],
-      });
-      assert
-        .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
-        .hasText('Fadhlan');
-      await this.expectEvents({
-        assert,
-        realm,
-        expectedEvents,
-        callback: async () => {
-          await realm.write(
-            'Person/fadhlan.json',
-            JSON.stringify({
-              data: {
-                type: 'card',
-                attributes: {
-                  firstName: 'FadhlanXXX',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: '../person',
-                    name: 'Person',
-                  },
+      ],
+    });
+    assert
+      .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
+      .hasText('Fadhlan');
+    await this.expectEvents({
+      assert,
+      realm,
+      expectedEvents,
+      callback: async () => {
+        await realm.write(
+          'Person/fadhlan.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'FadhlanXXX',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
                 },
               },
-            } as LooseSingleCardDocument),
-          );
-        },
-      });
-
-      await waitUntil(() =>
-        document
-          .querySelector(
-            '[data-test-operator-mode-stack="0"] [data-test-person]',
-          )
-          ?.textContent?.includes('FadhlanXXX'),
-      );
-      assert
-        .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
-        .hasText('FadhlanXXX');
+            },
+          } as LooseSingleCardDocument),
+        );
+      },
     });
+
+    await waitUntil(() =>
+      document
+        .querySelector('[data-test-operator-mode-stack="0"] [data-test-person]')
+        ?.textContent?.includes('FadhlanXXX'),
+    );
+    assert
+      .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
+      .hasText('FadhlanXXX');
   });
 });

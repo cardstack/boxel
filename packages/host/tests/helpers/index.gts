@@ -20,10 +20,11 @@ import {
   RunnerOptionsManager,
   type RealmInfo,
   type TokenClaims,
-  type IndexWriter,
+  type Indexer,
   type RunnerRegistration,
   type IndexRunner,
   type IndexResults,
+  assetsDir,
   insertPermissions,
 } from '@cardstack/runtime-common';
 
@@ -82,6 +83,13 @@ export function cleanWhiteSpace(text: string) {
   return text.replace(/[\s ]+/g, ' ').trim();
 }
 
+export function trimCardContainer(text: string) {
+  return cleanWhiteSpace(text).replace(
+    /<div .*? data-test-field-component-card>\s?[<!---->]*? (.*?) <\/div>/g,
+    '$1',
+  );
+}
+
 export function getMonacoContent(): string {
   return (window as any).monaco.editor.getModels()[0].getValue();
 }
@@ -101,6 +109,7 @@ export async function getDbAdapter() {
     | undefined;
   if (!dbAdapter) {
     dbAdapter = new SQLiteAdapter(sqlSchema);
+    await dbAdapter.startClient();
     (globalThis as any).__sqliteAdapter = dbAdapter;
   }
   return dbAdapter;
@@ -129,9 +138,8 @@ export async function waitForSyntaxHighlighting(
 
   await waitUntil(
     () =>
-      window
-        .getComputedStyle(finalHighlightedToken!)
-        .getPropertyValue('color') === color,
+      finalHighlightedToken?.computedStyleMap()?.get('color')?.toString() ===
+      color,
     {
       timeout: 2000,
       timeoutMessage: 'timed out waiting for syntax highlighting',
@@ -191,7 +199,7 @@ async function makeRenderer() {
 class MockLocalIndexer extends Service {
   url = new URL(testRealmURL);
   #adapter: RealmAdapter | undefined;
-  #indexWriter: IndexWriter | undefined;
+  #indexer: Indexer | undefined;
   #fromScratch: ((realmURL: URL) => Promise<IndexResults>) | undefined;
   #incremental:
     | ((
@@ -216,7 +224,7 @@ class MockLocalIndexer extends Service {
   async configureRunner(
     registerRunner: RunnerRegistration,
     adapter: RealmAdapter,
-    indexWriter: IndexWriter,
+    indexer: Indexer,
   ) {
     if (!this.#fromScratch || !this.#incremental) {
       throw new Error(
@@ -224,7 +232,7 @@ class MockLocalIndexer extends Service {
       );
     }
     this.#adapter = adapter;
-    this.#indexWriter = indexWriter;
+    this.#indexer = indexer;
     await registerRunner(
       this.#fromScratch.bind(this),
       this.#incremental.bind(this),
@@ -236,11 +244,11 @@ class MockLocalIndexer extends Service {
     }
     return this.#adapter;
   }
-  get indexWriter() {
-    if (!this.#indexWriter) {
-      throw new Error(`indexWriter not registered with MockLocalIndexer`);
+  get indexer() {
+    if (!this.#indexer) {
+      throw new Error(`indexer not registered with MockLocalIndexer`);
     }
-    return this.#indexWriter;
+    return this.#indexer;
   }
 }
 
@@ -338,8 +346,8 @@ export function setupServerSentEvents(hooks: NestedHooks) {
           },
         }),
       );
-      if (!response?.ok) {
-        throw new Error(`failed to connect to realm: ${response?.status}`);
+      if (!response.ok) {
+        throw new Error(`failed to connect to realm: ${response.status}`);
       }
       let reader = response.body!.getReader();
       let timeout = setTimeout(
@@ -478,11 +486,6 @@ async function setupTestRealm({
 
   realmURL = realmURL ?? testRealmURL;
 
-  let cardService = owner.lookup('service:card-service') as CardService;
-  if (!cardService.realmURLs.includes(realmURL)) {
-    cardService.realmURLs.push(realmURL);
-  }
-
   if (isAcceptanceTest) {
     await visit('/acceptance-test-setup');
   } else {
@@ -499,13 +502,12 @@ async function setupTestRealm({
 
   let adapter = new TestRealmAdapter(contents, new URL(realmURL));
   let indexRunner: IndexRunner = async (optsId) => {
-    let { registerRunner, indexWriter } = runnerOptsMgr.getOptions(optsId);
-    await localIndexer.configureRunner(registerRunner, adapter, indexWriter);
+    let { registerRunner, indexer } = runnerOptsMgr.getOptions(optsId);
+    await localIndexer.configureRunner(registerRunner, adapter, indexer);
   };
 
   let dbAdapter = await getDbAdapter();
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
-  let worker: Worker | undefined;
   realm = new Realm({
     url: realmURL,
     adapter,
@@ -516,26 +518,23 @@ async function setupTestRealm({
     virtualNetwork,
     dbAdapter,
     queue,
-    withIndexWriter: async (indexWriter, loader) => {
-      worker = new Worker({
+    onIndexer: async (indexer) => {
+      let worker = new Worker({
         realmURL: new URL(realmURL!),
-        indexWriter,
+        indexer,
         queue,
         realmAdapter: adapter,
         runnerOptsManager: runnerOptsMgr,
-        loader,
+        loader: realm.loaderTemplate,
         indexRunner,
       });
       await worker.run();
     },
-    assetsURL: new URL(`http://example.com/notional-assets-host/`),
+    assetsURL: new URL(`${realmURL}${assetsDir}`),
   });
   virtualNetwork.mount(realm.maybeHandle);
-  if (!worker) {
-    throw new Error(`worker for realm ${realmURL} was not created`);
-  }
-  await worker.run();
-  await realm.start();
+
+  await realm.ready;
 
   return { realm, adapter };
 }

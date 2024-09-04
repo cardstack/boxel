@@ -23,7 +23,6 @@ import {
   FieldContainer,
 } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
-import { CheckMark } from '@cardstack/boxel-ui/icons';
 
 import ENV from '@cardstack/host/config/environment';
 import {
@@ -71,7 +70,7 @@ export default class RegisterUser extends Component<Signature> {
       >Resend Email</Button>
     {{else if (eq this.currentPage 'token-form')}}
       <FieldContainer
-        @label='This site is currently invite-only. Enter your invite code here.'
+        @label='Registration Token'
         @tag='label'
         class='registration-field'
         @vertical={{true}}
@@ -139,7 +138,6 @@ export default class RegisterUser extends Component<Signature> {
           @errorMessage={{this.usernameError}}
           @onInput={{this.setUsername}}
           @onBlur={{this.checkUsername}}
-          @validIcon={{CheckMark}}
         >
           <:before as |Accessories|>
             <Accessories.Text class='username-prefix'>@</Accessories.Text>
@@ -235,9 +233,6 @@ export default class RegisterUser extends Component<Signature> {
       }
       .registration-field :deep(.validation-icon-container.invalid) {
         display: none;
-      }
-      .registration-field :deep(.validation-icon-container.valid svg) {
-        height: var(--boxel-sp-xs);
       }
       .registration-field
         :deep(.boxel-input-group--invalid > :nth-last-child(2)) {

@@ -15,16 +15,13 @@ import {
 import {
   CardContextName,
   DefaultFormatContextName,
-  PermissionsContextName,
+  RealmSession,
+  RealmSessionContextName,
   getField,
-  Loader,
-  type CodeRef,
-  type Permissions,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import Modifier from 'ember-modifier';
-import { isEqual } from 'lodash';
 import { initSharedState } from './shared-state';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { consume, provide } from 'ember-provide-consume-context';
@@ -92,15 +89,17 @@ export class DefaultFormatProvider extends Component<DefaultFormatProviderSignat
   }
 }
 
-interface PermissionsConsumerSignature {
-  Blocks: { default: [Permissions | undefined] };
+interface RealmSessionConsumerSignature {
+  Blocks: { default: [RealmSession | undefined] };
 }
 
-export class PermissionsConsumer extends Component<PermissionsConsumerSignature> {
-  @consume(PermissionsContextName) declare permissions: Permissions | undefined;
+export class RealmSessionConsumer extends Component<RealmSessionConsumerSignature> {
+  @consume(RealmSessionContextName) declare realmSession:
+    | RealmSession
+    | undefined;
 
   <template>
-    {{yield this.permissions}}
+    {{yield this.realmSession}}
   </template>
 }
 
@@ -113,10 +112,7 @@ export function getBoxComponent(
   cardOrField: typeof BaseDef,
   model: Box<BaseDef>,
   field: Field | undefined,
-  opts?: { componentCodeRef?: CodeRef },
 ): BoxComponent {
-  // the componentCodeRef is only set on the server during card prerendering,
-  // it should have no effect on component stability
   let stable = componentCache.get(model);
   if (stable) {
     return stable;
@@ -151,26 +147,6 @@ export function getBoxComponent(
     CardOrFieldFormatComponent: BaseDefComponent;
     fields: FieldsTypeFor<BaseDef>;
   } {
-    let currentCardOrFieldClass: typeof BaseDef | null = cardOrField;
-    let effectiveCardOrFieldComponent: typeof BaseDef | undefined;
-    while (
-      opts?.componentCodeRef &&
-      !effectiveCardOrFieldComponent &&
-      currentCardOrFieldClass
-    ) {
-      let ref = Loader.identify(currentCardOrFieldClass);
-      if (isEqual(ref, opts.componentCodeRef)) {
-        effectiveCardOrFieldComponent = currentCardOrFieldClass;
-        break;
-      }
-      currentCardOrFieldClass = Reflect.getPrototypeOf(
-        currentCardOrFieldClass,
-      ) as typeof BaseDef | null;
-    }
-    if (!effectiveCardOrFieldComponent) {
-      effectiveCardOrFieldComponent = cardOrField;
-    }
-
     let fields: FieldsTypeFor<BaseDef>;
     if (internalFieldsCache?.format === effectiveFormat) {
       fields = internalFieldsCache.fields;
@@ -179,11 +155,7 @@ export function getBoxComponent(
       internalFieldsCache = { fields, format: effectiveFormat };
     }
     return {
-      // note that Fields do not have an "isolated" format--only Cards do,
-      // the "any" cast is hiding that type warning
-      CardOrFieldFormatComponent: (effectiveCardOrFieldComponent as any)[
-        effectiveFormat
-      ],
+      CardOrFieldFormatComponent: (cardOrField as any)[effectiveFormat],
       fields,
     };
   }
@@ -192,7 +164,7 @@ export function getBoxComponent(
     Args: { format?: Format; displayContainer?: boolean };
   }> = <template>
     <CardContextConsumer as |context|>
-      <PermissionsConsumer as |permissions|>
+      <RealmSessionConsumer as |realmSession|>
         <DefaultFormatConsumer as |defaultFormat|>
           {{#let (determineFormat @format defaultFormat) as |effectiveFormat|}}
             {{#let
@@ -227,7 +199,7 @@ export function getBoxComponent(
                       @set={{model.set}}
                       @fieldName={{model.name}}
                       @context={{context}}
-                      @canEdit={{permissions.canWrite}}
+                      @canEdit={{realmSession.canWrite}}
                     />
                   </CardContainer>
                 {{else if (isCompoundField model.value)}}
@@ -245,7 +217,7 @@ export function getBoxComponent(
                       @set={{model.set}}
                       @fieldName={{model.name}}
                       @context={{context}}
-                      @canEdit={{permissions.canWrite}}
+                      @canEdit={{realmSession.canWrite}}
                     />
                   </div>
                 {{else}}
@@ -257,14 +229,14 @@ export function getBoxComponent(
                     @set={{model.set}}
                     @fieldName={{model.name}}
                     @context={{context}}
-                    @canEdit={{permissions.canWrite}}
+                    @canEdit={{realmSession.canWrite}}
                   />
                 {{/if}}
               </DefaultFormatProvider>
             {{/let}}
           {{/let}}
         </DefaultFormatConsumer>
-      </PermissionsConsumer>
+      </RealmSessionConsumer>
     </CardContextConsumer>
     <style>
       .field-component-card.isolated-format {
@@ -272,26 +244,9 @@ export function getBoxComponent(
       }
 
       .field-component-card.embedded-format {
-        /*
-          The cards themselves need to be in charge of the styles within the card boundary
-          in order for the container queries to make sense--otherwise we need to do style 
-          math to figure out what the actual breakpoints are. please resist the urge to add 
-          padding or anything that alters the geometry inside of the card boundary.
-
-          we need to use height 100% because the container query for embedded cards only
-          works if we use up all the space horizontally and vertically that is available
-          to the card since some of our queries are height queries
-        */
-        height: 100%;
-        container-name: embedded-card;
-        container-type: size;
-        overflow: hidden;
+        padding: var(--boxel-sp);
       }
 
-      /* 
-        TODO: regarding the atom format styling below, we probably want to refactor to move 
-        any styles that effect the inside of the card boundary into the CardDef's atom template
-      */
       .field-component-card.atom-format {
         font: 700 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);

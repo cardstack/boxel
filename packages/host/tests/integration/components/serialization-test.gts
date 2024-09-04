@@ -10,8 +10,7 @@ import {
   baseRealm,
   NotLoaded,
   type LooseSingleCardDocument,
-  PermissionsContextName,
-  type Permissions,
+  RealmSessionContextName,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
@@ -64,11 +63,9 @@ module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
   hooks.beforeEach(async function () {
-    let permissions: Permissions = {
+    provideConsumeContext(RealmSessionContextName, {
       canWrite: true,
-      canRead: true,
-    };
-    provideConsumeContext(PermissionsContextName, permissions);
+    });
 
     loader = lookupLoaderService().loader;
   });
@@ -118,6 +115,7 @@ module('Integration | serialization', function (hooks) {
       resource,
       { data: resource },
       undefined,
+      loader,
     );
     let root = await renderCard(loader, firstPost, 'isolated');
 
@@ -162,6 +160,7 @@ module('Integration | serialization', function (hooks) {
       resource,
       { data: resource },
       undefined,
+      loader,
     ); // Deserializing should be fault tolerant and not throw an error if the instance data does not match the card definition
 
     let root = await renderCard(loader, post, 'isolated');
@@ -198,6 +197,7 @@ module('Integration | serialization', function (hooks) {
       resource,
       { data: resource },
       undefined,
+      loader,
     )) as CardDefType;
 
     assert.strictEqual(
@@ -375,6 +375,7 @@ module('Integration | serialization', function (hooks) {
       resource,
       { data: resource },
       undefined,
+      loader,
     );
 
     try {
@@ -434,6 +435,7 @@ module('Integration | serialization', function (hooks) {
       resource,
       { data: resource },
       undefined,
+      loader,
     );
     assert.ok(
       driver.ref !== ref,
@@ -546,6 +548,7 @@ module('Integration | serialization', function (hooks) {
       resource,
       { data: resource },
       undefined,
+      loader,
     );
     let root = await renderCard(loader, firstPost, 'isolated');
     assert.strictEqual(
@@ -766,6 +769,7 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       undefined,
+      loader,
     );
 
     assert.ok(card instanceof Person, 'card is an instance of person');
@@ -872,6 +876,7 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       undefined,
+      loader,
     );
 
     try {
@@ -1045,6 +1050,7 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       undefined,
+      loader,
     );
     assert.ok(card instanceof Person, 'card is a Person');
     assert.strictEqual(card.firstName, 'Hassan');
@@ -1113,7 +1119,12 @@ module('Integration | serialization', function (hooks) {
         },
       ],
     };
-    let card = await createFromSerialized<typeof Pet>(doc.data, doc, undefined);
+    let card = await createFromSerialized<typeof Pet>(
+      doc.data,
+      doc,
+      undefined,
+      loader,
+    );
 
     assert.ok(card instanceof Pet, 'card is an instance of pet');
     assert.strictEqual(card.firstName, 'Jackie');
@@ -1305,6 +1316,7 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       undefined,
+      loader,
     );
     assert.ok(card instanceof Person, 'card is a Person');
     assert.strictEqual(card.firstName, 'Hassan');
@@ -1452,6 +1464,7 @@ module('Integration | serialization', function (hooks) {
       serialized.data,
       serialized,
       undefined,
+      loader,
     );
     if (card instanceof Person) {
       assert.strictEqual(card.firstName, 'Hassan');
@@ -1572,6 +1585,7 @@ module('Integration | serialization', function (hooks) {
       serialized.data,
       serialized,
       undefined,
+      loader,
     );
     if (card instanceof Person) {
       assert.strictEqual(card.firstName, 'Hassan');
@@ -1703,6 +1717,7 @@ module('Integration | serialization', function (hooks) {
       serialized.data,
       serialized,
       undefined,
+      loader,
     );
     if (card instanceof Person) {
       assert.strictEqual(card.firstName, 'Hassan');
@@ -1791,6 +1806,7 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       undefined,
+      loader,
     );
     if (mango instanceof Person) {
       let { parent, favorite } = mango;
@@ -1880,6 +1896,7 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       undefined,
+      loader,
     );
     let root = await renderCard(loader, firstPost, 'isolated');
     assert.strictEqual(
@@ -1942,6 +1959,7 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       undefined,
+      loader,
     );
     await renderCard(loader, firstPost, 'isolated');
     assert
@@ -2345,6 +2363,7 @@ module('Integration | serialization', function (hooks) {
         doc.data,
         doc,
         undefined,
+        loader,
       );
 
       assert.ok(card instanceof Person, 'card is an instance of person');
@@ -2462,6 +2481,7 @@ module('Integration | serialization', function (hooks) {
         doc.data,
         doc,
         undefined,
+        loader,
       );
       assert.ok(card instanceof Person, 'card is a Person');
       assert.strictEqual(card.firstName, 'Burcu');
@@ -2509,6 +2529,7 @@ module('Integration | serialization', function (hooks) {
         doc.data,
         doc,
         undefined,
+        loader,
       );
 
       try {
@@ -2569,6 +2590,7 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       undefined,
+      loader,
     );
     let root = await renderCard(loader, classSchedule, 'isolated');
     assert.strictEqual(
@@ -2627,6 +2649,7 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       undefined,
+      loader,
     );
     await renderCard(loader, classSchedule, 'isolated');
     assert.deepEqual(
@@ -2896,6 +2919,7 @@ module('Integration | serialization', function (hooks) {
       payload.data,
       payload,
       new URL(testRealmURL),
+      loader,
     ); // success is not blowing up
     assert.strictEqual(post2.author.firstName, 'Mango');
     let { author } = post2;
@@ -3004,6 +3028,7 @@ module('Integration | serialization', function (hooks) {
       payload.data,
       payload,
       new URL(testRealmURL),
+      loader,
     ); // success is not blowing up
     assert.strictEqual(post2.author.firstName, 'Mango');
     assert.strictEqual(post2.author.loves.firstName, 'Van Gogh');
@@ -3121,6 +3146,7 @@ module('Integration | serialization', function (hooks) {
       payload.data,
       payload,
       new URL(testRealmURL),
+      loader,
     );
     let { people } = group2;
     assert.ok(Array.isArray(people), 'people is an array');
@@ -3256,6 +3282,7 @@ module('Integration | serialization', function (hooks) {
       payload.data,
       payload,
       new URL(testRealmURL),
+      loader,
     );
     let { people } = group2;
     assert.ok(Array.isArray(people), 'people is an array');
@@ -3354,6 +3381,7 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       undefined,
+      loader,
     );
 
     assert.ok(card instanceof Person, 'card is an instance of person');
@@ -3411,6 +3439,7 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       new URL(testRealmURL),
+      loader,
     );
     assert.strictEqual(person.firstName, 'Mango');
     assert.deepEqual(
@@ -3482,6 +3511,7 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       new URL(testRealmURL),
+      loader,
     );
     assert.strictEqual(post.title, 'Things I Want to Chew');
     assert.strictEqual(post.author.firstName, 'Mango');
@@ -3577,6 +3607,7 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       new URL(testRealmURL),
+      loader,
     );
     let posts = blog.posts;
     assert.strictEqual(posts.length, 2, 'number of posts is correct');
@@ -3760,6 +3791,7 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       new URL(testRealmURL),
+      loader,
     );
     let posts = blog.posts;
     assert.strictEqual(
@@ -4170,6 +4202,7 @@ module('Integration | serialization', function (hooks) {
         doc.data,
         doc,
         undefined,
+        loader,
       );
 
       assert.ok(card instanceof Person, 'card is an instance of person');
@@ -4344,6 +4377,7 @@ module('Integration | serialization', function (hooks) {
         serialized.data,
         serialized,
         undefined,
+        loader,
       );
       if (card instanceof Person) {
         assert.strictEqual(card.firstName, 'Hassan');
@@ -4487,6 +4521,7 @@ module('Integration | serialization', function (hooks) {
         doc.data,
         doc,
         undefined,
+        loader,
       );
       assert.ok(card instanceof Person, 'card is a Person');
       assert.strictEqual(card.firstName, 'Hassan');
@@ -4561,6 +4596,7 @@ module('Integration | serialization', function (hooks) {
         doc.data,
         doc,
         undefined,
+        loader,
       );
 
       try {
@@ -4814,6 +4850,7 @@ module('Integration | serialization', function (hooks) {
         doc.data,
         doc,
         new URL(`${testRealmURL}Person/hassan`),
+        loader,
       );
       assert.ok(card instanceof Person, 'card is a Person');
       assert.strictEqual(card.firstName, 'Hassan');
@@ -5038,6 +5075,7 @@ module('Integration | serialization', function (hooks) {
         doc.data,
         doc,
         undefined,
+        loader,
       );
       assert.ok(card instanceof Person, 'card is an instance of person');
       assert.strictEqual(card.firstName, 'Burcu');
@@ -5153,6 +5191,7 @@ module('Integration | serialization', function (hooks) {
         doc.data,
         doc,
         undefined,
+        loader,
       );
 
       assert.ok(card instanceof Person, 'card is a Person');
@@ -5211,6 +5250,7 @@ module('Integration | serialization', function (hooks) {
         doc.data,
         doc,
         undefined,
+        loader,
       );
 
       try {
@@ -5331,6 +5371,7 @@ module('Integration | serialization', function (hooks) {
           resource,
           { data: resource },
           undefined,
+          loader,
         );
 
         assert.strictEqual(sample.someNumber, 42);
@@ -5428,6 +5469,7 @@ module('Integration | serialization', function (hooks) {
           resource,
           { data: resource },
           undefined,
+          loader,
         );
 
         assert.strictEqual(isBigInt(sample.someBigInt), true);
@@ -5581,6 +5623,7 @@ module('Integration | serialization', function (hooks) {
           resource,
           { data: resource },
           undefined,
+          loader,
         );
 
         assert.strictEqual(isEthAddress(sample.someAddress), true);

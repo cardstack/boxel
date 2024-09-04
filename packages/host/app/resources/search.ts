@@ -1,18 +1,19 @@
 import { registerDestructor } from '@ember/destroyable';
 
 import { service } from '@ember/service';
-import { waitForPromise } from '@ember/test-waiters';
 import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 import flatMap from 'lodash/flatMap';
 
-import { type RealmCards, subscribeToRealm } from '@cardstack/runtime-common';
+import { subscribeToRealm } from '@cardstack/runtime-common';
 
 import type { Query } from '@cardstack/runtime-common/query';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+
+import { type RealmCards } from '../components/card-catalog/modal';
 
 import type CardService from '../services/card-service';
 
@@ -38,9 +39,7 @@ export class Search extends Resource<Args> {
   modify(_positional: never[], named: Args['named']) {
     let { query, realms, isLive, doWhileRefreshing } = named;
     this.realmsToSearch = realms ?? this.cardService.realmURLs;
-
     this.loaded = this.search.perform(query);
-    waitForPromise(this.loaded);
 
     if (isLive) {
       // TODO this triggers a new search against all realms if any single realm
@@ -124,13 +123,13 @@ export class Search extends Resource<Args> {
 
 export function getSearchResults(
   parent: object,
-  query: Query,
-  realms?: string[],
+  query: () => Query,
+  realms?: () => string[],
 ) {
   return Search.from(parent, () => ({
     named: {
-      query,
-      realms: realms ?? undefined,
+      query: query(),
+      realms: realms ? realms() : undefined,
     },
   })) as Search;
 }
@@ -141,15 +140,15 @@ export function getSearchResults(
 // order to keep the results stable between refreshes.
 export function getLiveSearchResults(
   parent: object,
-  query: Query,
-  realms?: string[],
+  query: () => Query,
+  realms?: () => string[],
   doWhileRefreshing?: () => (ready: Promise<void> | undefined) => Promise<void>,
 ) {
   return Search.from(parent, () => ({
     named: {
       isLive: true,
-      query,
-      realms: realms ?? undefined,
+      query: query(),
+      realms: realms ? realms() : undefined,
       doWhileRefreshing: doWhileRefreshing ? doWhileRefreshing() : undefined,
     },
   })) as Search;

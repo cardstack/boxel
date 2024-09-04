@@ -92,20 +92,6 @@ export class NodeAdapter implements RealmAdapter {
     return existsSync(absolutePath);
   }
 
-  async lastModified(path: string): Promise<number | undefined> {
-    let absolutePath = join(this.realmDir, path);
-    if (!existsSync(absolutePath)) {
-      return undefined;
-    }
-    let stat = statSync(absolutePath);
-    // Case-insensitive file systems need this check
-    if (stat.isDirectory()) {
-      return undefined;
-    }
-
-    return stat.mtime.getTime();
-  }
-
   async openFile(path: string): Promise<FileRef | undefined> {
     let absolutePath = join(this.realmDir, path);
     if (!existsSync(absolutePath)) {

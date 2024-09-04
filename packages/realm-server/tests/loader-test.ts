@@ -165,8 +165,8 @@ module('loader', function (hooks) {
           dbAdapter,
           queue,
         });
-        virtualNetwork.mount(realm.handle.bind(realm));
-        await realm.start();
+        virtualNetwork.mount(realm.maybeHandle.bind(realm));
+        await realm.ready;
       },
     });
 

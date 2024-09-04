@@ -33,13 +33,7 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
-import {
-  cn,
-  cssVar,
-  eq,
-  optional,
-  getContrastColor,
-} from '@cardstack/boxel-ui/helpers';
+import { cn, eq, optional } from '@cardstack/boxel-ui/helpers';
 
 import {
   IconPencil,
@@ -53,8 +47,7 @@ import {
   type Actions,
   cardTypeDisplayName,
   CardContextName,
-  PermissionsContextName,
-  type Permissions,
+  RealmSessionContextName,
   Deferred,
 } from '@cardstack/runtime-common';
 
@@ -64,9 +57,11 @@ import config from '@cardstack/host/config/environment';
 
 import { type StackItem } from '@cardstack/host/lib/stack-item';
 
+import {
+  type RealmSessionResource,
+  getRealmSession,
+} from '@cardstack/host/resources/realm-session';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
-
-import RealmService from '@cardstack/host/services/realm';
 
 import type {
   CardDef,
@@ -111,8 +106,6 @@ export interface RenderedCardForOverlayActions {
 export default class OperatorModeStackItem extends Component<Signature> {
   @service private declare cardService: CardService;
   @service private declare environmentService: EnvironmentService;
-  @service private declare realm: RealmService;
-
   @tracked private selectedCards = new TrackedArray<CardDef>([]);
   @tracked private isHoverOnRealmIcon = false;
   @tracked private isSaving = false;
@@ -123,10 +116,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private contentEl: HTMLElement | undefined;
   private containerEl: HTMLElement | undefined;
 
-  @provide(PermissionsContextName)
-  get permissions(): Permissions {
-    return this.realm.permissions(this.card.id);
-  }
+  @provide(RealmSessionContextName)
+  private realmSession: RealmSessionResource | undefined;
+
   cardTracker = new ElementTracker<{
     card: CardDef;
     format: Format | 'data';
@@ -168,26 +160,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
     );
   }
 
-  private get isItemFullWidth() {
-    return !this.isBuried && this.args.item.isWideFormat;
-  }
-
   private get styleForStackedCard(): SafeString {
-    const stackItemMaxWidth = '50rem';
-    const widthReductionPercent = 5; // Every new card on the stack is 5% wider than the previous one
-    const offsetPx = 30; // Every new card on the stack is 30px lower than the previous one
-
-    let invertedIndex = this.args.stackItems.length - this.args.index - 1;
-    let maxWidthPercent = 100 - invertedIndex * widthReductionPercent;
-    let width = this.isItemFullWidth
-      ? '100%'
-      : `calc(${stackItemMaxWidth} * ${maxWidthPercent} / 100)`;
+    let itemsOnStackCount = this.args.stackItems.length;
+    let invertedIndex = itemsOnStackCount - this.args.index - 1;
+    let widthReductionPercent = 5; // Every new card on the stack is 5% wider than the previous one
+    let offsetPx = 30; // Every new card on the stack is 30px lower than the previous one
 
     return htmlSafe(`
       height: calc(100% - ${offsetPx}px * ${this.args.index});
-      width: ${width};
-      max-width: ${maxWidthPercent}%;
-      z-index: calc(${this.args.index} + 1);
+      width: ${100 - invertedIndex * widthReductionPercent}%;
+      z-index: ${itemsOnStackCount - invertedIndex};
       margin-top: calc(${offsetPx}px * ${this.args.index});
     `); // using margin-top instead of padding-top to hide scrolled content from view
   }
@@ -238,6 +220,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.selectedCards.splice(0, this.selectedCards.length);
   };
 
+  @cached
+  private get iconURL() {
+    return this.fetchRealmInfo.value?.iconURL;
+  }
+
   private get realmName() {
     return this.fetchRealmInfo.value?.name;
   }
@@ -251,10 +238,22 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.isHoverOnRealmIcon = !this.isHoverOnRealmIcon;
   }
 
+  private get headerIcon() {
+    return {
+      URL: this.iconURL,
+      onMouseEnter: this.hoverOnRealmIcon,
+      onMouseLeave: this.hoverOnRealmIcon,
+    };
+  }
+
   private get headerTitle() {
     return this.isHoverOnRealmIcon && this.realmName
       ? `In ${this.realmName}`
       : cardTypeDisplayName(this.card);
+  }
+
+  private get canWrite() {
+    return this.realmSession?.canWrite;
   }
 
   private get moreOptionsMenuItems() {
@@ -265,7 +264,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         disabled: !this.card.id,
       }),
     ];
-    if (this.realm.canWrite(this.card.id)) {
+    if (this.canWrite) {
       menuItems.push(
         new MenuItem('Delete', 'action', {
           action: () => this.args.publicAPI.delete(this.card),
@@ -285,6 +284,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private loadCard = restartableTask(async () => {
     await this.args.item.ready();
+    this.realmSession = getRealmSession(this, {
+      card: () => this.card,
+    });
+    await this.realmSession.loaded;
   });
 
   private subscribeToCard = task(async () => {
@@ -411,12 +414,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
           <Header
             @size='large'
             @title={{this.headerTitle}}
-            @hasBackground={{true}}
             class={{cn 'header' header--icon-hovered=this.isHoverOnRealmIcon}}
-            style={{cssVar
-              boxel-header-background-color=@item.headerColor
-              boxel-header-text-color=(getContrastColor @item.headerColor)
-            }}
             {{on
               'click'
               (optional
@@ -426,20 +424,19 @@ export default class OperatorModeStackItem extends Component<Signature> {
             data-test-stack-card-header
           >
             <:icon>
-              {{#let (this.realm.info this.card.id) as |realmInfo|}}
-                {{#if realmInfo.iconURL}}
-                  <RealmIcon
-                    @realmInfo={{realmInfo}}
-                    class='header-icon'
-                    data-test-boxel-header-icon={{realmInfo.iconURL}}
-                    {{on 'mouseenter' this.hoverOnRealmIcon}}
-                    {{on 'mouseleave' this.hoverOnRealmIcon}}
-                  />
-                {{/if}}
-              {{/let}}
+              {{#if this.headerIcon.URL}}
+                <RealmIcon
+                  @realmIconURL={{this.headerIcon.URL}}
+                  @realmName={{this.realmName}}
+                  class='header-icon'
+                  data-test-boxel-header-icon={{this.headerIcon.URL}}
+                  {{on 'mouseenter' this.headerIcon.onMouseEnter}}
+                  {{on 'mouseleave' this.headerIcon.onMouseLeave}}
+                />
+              {{/if}}
             </:icon>
             <:actions>
-              {{#if (this.realm.canWrite this.card.id)}}
+              {{#if this.canWrite}}
                 {{#if (eq @item.format 'isolated')}}
                   <Tooltip @placement='top'>
                     <:trigger>
@@ -562,8 +559,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
         --boxel-header-padding: var(--boxel-sp-sm);
         --boxel-header-text-font: var(--boxel-font-med);
         --boxel-header-border-radius: var(--boxel-border-radius-xl);
-        --boxel-header-background-color: var(--boxel-light);
         z-index: 1;
+        background-color: var(--boxel-light);
         max-width: max-content;
         height: fit-content;
         min-width: 100%;
@@ -676,7 +673,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .icon-button {
-        --icon-color: var(--boxel-header-text-color, var(--boxel-highlight));
+        --icon-color: var(--boxel-highlight);
       }
 
       .icon-button:hover {

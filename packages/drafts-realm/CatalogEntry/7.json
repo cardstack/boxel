@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Booking Card",
+      "description": "Catalog entry for Booking Card",
+      "isField": false,
+      "ref": {
+        "module": "../booking",
+        "name": "Booking"
+      },
+      "demo": {
+        "title": null,
+        "venue": null,
+        "startTime": null,
+        "endTime": null,
+        "hosts": [],
+        "sponsors": []
+      }
+    },
+    "meta": {
+      "fields": {
+        "demo": {
+          "adoptsFrom": {
+            "module": "../booking",
+            "name": "Booking"
+          }
+        }
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}

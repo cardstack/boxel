@@ -12,11 +12,7 @@ import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
-import {
-  PermissionsContextName,
-  type Permissions,
-  baseRealm,
-} from '@cardstack/runtime-common';
+import { RealmSessionContextName, baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 
@@ -48,11 +44,11 @@ module('Integration | text-input-validator', function (hooks) {
   let realm: Realm;
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
-  setupMatrixServiceMock(hooks, { autostart: true });
+  setupMatrixServiceMock(hooks);
 
   async function loadCard(url: string): Promise<CardDef> {
     let { createFromSerialized, recompute } = cardApi;
-    let result = await realm.realmIndexQueryEngine.cardDocument(new URL(url));
+    let result = await realm.searchIndex.cardDocument(new URL(url));
     if (!result || result.type === 'error') {
       throw new Error(
         `cannot get instance ${url} from the index: ${
@@ -64,17 +60,16 @@ module('Integration | text-input-validator', function (hooks) {
       result.doc.data,
       result.doc,
       new URL(result.doc.data.id),
+      loader,
     );
     await recompute(card, { loadFields: true });
     return card;
   }
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
-    let permissions: Permissions = {
+    provideConsumeContext(RealmSessionContextName, {
       canWrite: true,
-      canRead: true,
-    };
-    provideConsumeContext(PermissionsContextName, permissions);
+    });
 
     loader = lookupLoaderService().loader;
 
@@ -183,6 +178,14 @@ module('Integration | text-input-validator', function (hooks) {
 
   test('if json contains undeserializable values, the input box should show empty input box', async function (assert) {
     let card = await loadCard(`${testRealmURL}Sample/1`);
+    let response = await realm.handle(
+      new Request(`${testRealmURL}Sample/1`, {
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+      }),
+    );
+    await response.json();
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>

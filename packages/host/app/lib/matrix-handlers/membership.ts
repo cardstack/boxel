@@ -50,7 +50,7 @@ async function drainMembership(context: Context) {
         `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
       );
     }
-    let room = context.client?.getRoom(roomId);
+    let room = context.client.getRoom(roomId);
     if (!room) {
       throw new Error(
         `bug: should never get here--matrix sdk returned a null room for ${roomId}`,
@@ -58,34 +58,32 @@ async function drainMembership(context: Context) {
     }
 
     if (
-      member.userId === context.client?.getUserId() &&
+      member.userId === context.client.getUserId() &&
       event.type === 'm.room.member' &&
       room.getMyMembership() === 'invite'
     ) {
       if (event.content.membership === 'invite') {
-        let forwardTimeline = context.matrixSDK?.EventTimeline.FORWARDS;
-        if (forwardTimeline) {
-          let stateEvents = room.getLiveTimeline().getState(forwardTimeline)
-            ?.events;
-          if (!stateEvents) {
-            throw new Error(`bug: cannot get state events for room ${roomId}`);
+        let stateEvents = room
+          .getLiveTimeline()
+          .getState(context.matrixSDK.EventTimeline.FORWARDS)?.events;
+        if (!stateEvents) {
+          throw new Error(`bug: cannot get state events for room ${roomId}`);
+        }
+        for (let eventType of STATE_EVENTS_OF_INTEREST) {
+          let events = stateEvents.get(eventType);
+          if (!events) {
+            continue;
           }
-          for (let eventType of STATE_EVENTS_OF_INTEREST) {
-            let events = stateEvents.get(eventType);
-            if (!events) {
-              continue;
-            }
-            await Promise.all(
-              [...events.values()]
-                .map((e) => ({
-                  ...e.event,
-                  // annoyingly these events have been stripped of their id's
-                  event_id: `${roomId}_${eventType}_${e.localTimestamp}`,
-                  status: e.status,
-                }))
-                .map((event) => addRoomEvent(context, event)),
-            );
-          }
+          await Promise.all(
+            [...events.values()]
+              .map((e) => ({
+                ...e.event,
+                // annoyingly these events have been stripped of their id's
+                event_id: `${roomId}_${eventType}_${e.localTimestamp}`,
+                status: e.status,
+              }))
+              .map((event) => addRoomEvent(context, event)),
+          );
         }
       }
     }

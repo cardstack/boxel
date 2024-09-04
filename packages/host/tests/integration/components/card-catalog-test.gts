@@ -28,13 +28,12 @@ import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
 
 const realmName = 'Local Workspace';
-const baseRealmCardCount = 2;
 
 module('Integration | card-catalog', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
-  setupMatrixServiceMock(hooks, { autostart: true });
+  setupMatrixServiceMock(hooks);
 
   const noop = () => {};
 
@@ -170,10 +169,10 @@ module('Integration | card-catalog', function (hooks) {
         .exists({ count: 3 });
       assert
         .dom(`[data-test-realm="Base Workspace"] [data-test-results-count]`)
-        .hasText(`${baseRealmCardCount} results`);
+        .hasText('1 result');
       assert
         .dom('[data-test-realm="Base Workspace"] [data-test-card-catalog-item]')
-        .exists({ count: baseRealmCardCount });
+        .exists({ count: 1 });
       assert.dom('[data-test-realm-filter-button]').hasText('Workspace: All');
 
       let localResults = [
@@ -201,7 +200,7 @@ module('Integration | card-catalog', function (hooks) {
         .hasText(`Workspace: Base Workspace`, 'Only base realm is selected');
       assert
         .dom(`[data-test-realm="Base Workspace"] [data-test-card-catalog-item]`)
-        .exists({ count: baseRealmCardCount });
+        .exists({ count: 1 });
 
       assert.dom(`[data-test-realm="${realmName}"]`).doesNotExist();
 
@@ -229,7 +228,7 @@ module('Integration | card-catalog', function (hooks) {
         .exists({ count: 3 });
       assert
         .dom('[data-test-realm="Base Workspace"] [data-test-card-catalog-item]')
-        .exists({ count: baseRealmCardCount });
+        .exists({ count: 1 });
 
       await click('[data-test-realm-filter-button]');
       assert.dom('[data-test-boxel-menu-item-selected]').exists({ count: 2 });
@@ -249,7 +248,7 @@ module('Integration | card-catalog', function (hooks) {
       assert.dom(`[data-test-realm="${realmName}"]`).doesNotExist();
       assert
         .dom('[data-test-realm="Base Workspace"] [data-test-card-catalog-item]')
-        .exists({ count: baseRealmCardCount });
+        .exists({ count: 1 });
 
       await click('[data-test-realm-filter-button]');
       assert
@@ -282,7 +281,7 @@ module('Integration | card-catalog', function (hooks) {
         .exists({ count: 3 });
       assert
         .dom('[data-test-realm="Base Workspace"] [data-test-card-catalog-item]')
-        .exists({ count: baseRealmCardCount });
+        .exists({ count: 1 });
 
       await click('[data-test-realm-filter-button]');
       assert

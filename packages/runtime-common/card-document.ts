@@ -1,6 +1,5 @@
 import { type CodeRef, isCodeRef } from './code-ref';
 import { RealmInfo } from './realm';
-import { QueryResultsMeta, PrerenderedCard } from './index-query-engine';
 
 export type Saved = string;
 export type Unsaved = string | undefined;
@@ -259,27 +258,4 @@ function isIncluded(included: any): included is CardResource<Saved>[] {
     }
   }
   return true;
-}
-
-export function transformResultsToPrerenderedCardsDoc(results: {
-  prerenderedCards: PrerenderedCard[];
-  scopedCssUrls: string[];
-  meta: QueryResultsMeta & { scopedCssUrls?: string[] };
-}) {
-  let { prerenderedCards, scopedCssUrls, meta } = results;
-
-  let data = prerenderedCards.map((card) => ({
-    type: 'prerendered-card',
-    id: card.url,
-    attributes: {
-      html: card.html,
-    },
-  }));
-
-  meta.scopedCssUrls = scopedCssUrls;
-
-  return {
-    data,
-    meta,
-  };
 }

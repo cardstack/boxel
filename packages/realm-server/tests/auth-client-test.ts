@@ -83,13 +83,13 @@ module('realm-auth-client', function (assert) {
 
   test('it refreshes the jwt if it is about to expire in the client', async function (assert) {
     let jwtFromClient = createJWT('10s'); // Expires very soon, so the client will first refresh it
-    client['_jwt'] = jwtFromClient;
+    client['jwt'] = jwtFromClient;
     assert.notEqual(jwtFromClient, await client.getJWT(), 'jwt got refreshed');
   });
 
   test('it refreshes the jwt if it expired in the client', async function (assert) {
     let jwtFromClient = createJWT(-1); // Expired 1 second ago
-    client['_jwt'] = jwtFromClient;
+    client['jwt'] = jwtFromClient;
     assert.notEqual(jwtFromClient, await client.getJWT(), 'jwt got refreshed');
   });
 });

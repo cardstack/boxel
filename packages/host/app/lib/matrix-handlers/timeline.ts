@@ -18,14 +18,12 @@ import {
 
 export function onReceipt(context: Context) {
   return async (e: MatrixEvent) => {
-    let userId = context.client?.credentials.userId;
-    if (userId) {
-      let eventIds = Object.keys(e.getContent());
-      for (let eventId of eventIds) {
-        let receipt = e.getContent()[eventId]['m.read'][userId];
-        if (receipt) {
-          context.addEventReadReceipt(eventId, { readAt: receipt.ts });
-        }
+    let userId = context.client.credentials.userId!;
+    let eventIds = Object.keys(e.getContent());
+    for (let eventId of eventIds) {
+      let receipt = e.getContent()[eventId]['m.read'][userId];
+      if (receipt) {
+        context.addEventReadReceipt(eventId, { readAt: receipt.ts });
       }
     }
   };
@@ -60,7 +58,7 @@ async function drainTimeline(context: Context) {
   let events = [...context.timelineQueue];
   context.timelineQueue = [];
   for (let { event, oldEventId } of events) {
-    await context.client?.decryptEventIfNeeded(event);
+    await context.client.decryptEventIfNeeded(event);
     await processDecryptedEvent(
       context,
       {
@@ -86,14 +84,14 @@ async function processDecryptedEvent(
       `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
     );
   }
-  let room = context.client?.getRoom(roomId);
+  let room = context.client.getRoom(roomId);
   if (!room) {
     throw new Error(
       `bug: should never get here--matrix sdk returned a null room for ${roomId}`,
     );
   }
 
-  let userId = context.client?.getUserId();
+  let userId = context.client.getUserId();
   if (!userId) {
     throw new Error(
       `bug: userId is required for event ${JSON.stringify(event, null, 2)}`,
@@ -106,12 +104,12 @@ async function processDecryptedEvent(
     return;
   }
 
-  let roomState = await context.getRoom(roomId);
+  let roomField = await context.rooms.get(roomId);
   // patch in any missing room events--this will support dealing with local
   // echoes, migrating older histories as well as handle any matrix syncing gaps
   // that might occur
   if (
-    roomState &&
+    roomField &&
     event.type === 'm.room.message' &&
     event.content?.msgtype === 'org.boxel.message' &&
     event.content.data
@@ -128,12 +126,12 @@ async function processDecryptedEvent(
       for (let attachedCardEventId of data.attachedCardsEventIds) {
         let currentFragmentId: string | undefined = attachedCardEventId;
         do {
-          let fragmentEvent = roomState.events.find(
+          let fragmentEvent = roomField.events.find(
             (e: DiscreteMatrixEvent) => e.event_id === currentFragmentId,
           );
           let fragmentData: CardFragmentContent['data'];
           if (!fragmentEvent) {
-            fragmentEvent = (await context.client?.fetchRoomEvent(
+            fragmentEvent = (await context.client.fetchRoomEvent(
               roomId,
               currentFragmentId ?? '',
             )) as DiscreteMatrixEvent;
@@ -179,6 +177,6 @@ async function processDecryptedEvent(
 
   if (room.oldState.paginationToken != null) {
     // we need to scroll back to capture any room events fired before this one
-    await context.client?.scrollback(room);
+    await context.client.scrollback(room);
   }
 }

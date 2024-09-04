@@ -38,35 +38,19 @@ export interface DirectoryEntryRelationship {
     kind: 'directory' | 'file';
   };
 }
-
-export interface RealmCards {
-  url: string | null;
-  realmInfo: RealmInfo;
-  cards: CardDef[];
-}
-
-export interface RealmPrerenderedCards {
-  url: string | null;
-  realmInfo: RealmInfo;
-  prerenderedCards: PrerenderedCard[];
-}
-
 import { RealmPaths, type LocalPath } from './paths';
 import { Query } from './query';
 import { Loader } from './loader';
 export * from './constants';
 export * from './queue';
 export * from './expression';
-export * from './index-query-engine';
-export * from './index-writer';
-export * from './index-structure';
+export * from './indexer';
 export * from './db';
 export * from './worker';
 export * from './stream';
 export * from './realm';
 export * from './fetcher';
 export * from './scoped-css';
-export * from './authorization-middleware';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
 export { RealmPaths, Loader, type LocalPath, type Query };
@@ -86,7 +70,11 @@ export const isNode =
 
 export { SupportedMimeType } from './router';
 export { VirtualNetwork, type ResponseWithNodeStream } from './virtual-network';
-export { RealmAuthDataSource } from './realm-auth-data-source';
+export {
+  IRealmAuthDataSource,
+  RealmAuthDataSource,
+} from './realm-auth-data-source';
+export { addAuthorizationHeader } from './add-authorization-header';
 
 export type {
   Kind,
@@ -134,10 +122,9 @@ import type {
   Format,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import { RealmInfo } from './realm';
-import { PrerenderedCard } from './index-query-engine';
 
 export const maxLinkDepth = 5;
+export const assetsDir = '__boxel/';
 
 export interface MatrixCardError {
   id?: string;

@@ -3,11 +3,7 @@ import { RenderingTestContext } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
-import {
-  PermissionsContextName,
-  type Permissions,
-  baseRealm,
-} from '@cardstack/runtime-common';
+import { RealmSessionContextName, baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import {
@@ -42,11 +38,9 @@ module('Integration | computeds', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
-    let permissions: Permissions = {
+    provideConsumeContext(RealmSessionContextName, {
       canWrite: true,
-      canRead: true,
-    };
-    provideConsumeContext(PermissionsContextName, permissions);
+    });
 
     loader = lookupLoaderService().loader;
   });

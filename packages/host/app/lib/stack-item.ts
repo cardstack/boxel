@@ -83,32 +83,6 @@ export class StackItem {
     throw new Error(`This StackItem has no card set`);
   }
 
-  get isWideFormat() {
-    if (!this.cardResource || !this.cardResource.card) {
-      return false;
-    }
-    let { constructor } = this.cardResource.card;
-    return Boolean(
-      constructor &&
-        'prefersWideFormat' in constructor &&
-        constructor.prefersWideFormat,
-    );
-  }
-
-  get headerColor() {
-    if (!this.cardResource || !this.cardResource.card) {
-      return;
-    }
-    let cardDef = this.cardResource.card.constructor;
-    if (!cardDef || !('headerColor' in cardDef)) {
-      return;
-    }
-    if (cardDef.headerColor == null) {
-      return;
-    }
-    return cardDef.headerColor as string;
-  }
-
   get api() {
     let api = this.cardResource?.api ?? this.newCardApi;
     if (!api) {

@@ -1,6 +1,5 @@
 import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
-
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -23,30 +22,31 @@ import {
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import { SessionRoomData } from './panel';
+import type { RoomField } from 'https://cardstack.com/base/room';
 
 export type RoomActions = {
   open: (roomId: string) => void;
-  rename: (room: SessionRoomData) => void;
-  delete: (room: SessionRoomData) => void;
+  rename: (room: RoomField) => void;
+  delete: (room: RoomField) => void;
 };
 
 interface Signature {
   Args: {
-    session: SessionRoomData;
+    room: RoomField;
+    currentRoomId?: string;
     actions: RoomActions;
   };
 }
 
 export default class PastSessionItem extends Component<Signature> {
   <template>
-    <li class='session' data-test-joined-room={{@session.roomId}}>
+    <li class='session' data-test-joined-room={{@room.roomId}}>
       <button
         class='view-session-button'
-        {{on 'click' (fn @actions.open @session.roomId)}}
-        data-test-enter-room={{@session.roomId}}
+        {{on 'click' (fn @actions.open @room.roomId)}}
+        data-test-enter-room={{@room.roomId}}
       >
-        <div class='name'>{{@session.name}}</div>
+        <div class='name'>{{@room.name}}</div>
         <div
           class='date
             {{if this.isStreaming "is-streaming"}}
@@ -85,7 +85,7 @@ export default class PastSessionItem extends Component<Signature> {
                 @height='20px'
                 class='menu-button'
                 aria-label='Options'
-                data-test-past-session-options-button={{@session.roomId}}
+                data-test-past-session-options-button={{@room.roomId}}
                 {{bindings}}
               />
             </:trigger>
@@ -100,10 +100,10 @@ export default class PastSessionItem extends Component<Signature> {
             @closeMenu={{dd.close}}
             @items={{array
               (menuItem
-                'Open Session' (fn @actions.open @session.roomId) icon=Upload
+                'Open Session' (fn @actions.open @room.roomId) icon=Upload
               )
-              (menuItem 'Rename' (fn @actions.rename @session) icon=IconPencil)
-              (menuItem 'Delete' (fn @actions.delete @session) icon=IconTrash)
+              (menuItem 'Rename' (fn @actions.rename @room) icon=IconPencil)
+              (menuItem 'Delete' (fn @actions.delete @room) icon=IconTrash)
             }}
           />
         </:content>
@@ -197,36 +197,38 @@ export default class PastSessionItem extends Component<Signature> {
   @service declare matrixService: MatrixService;
 
   get createDate() {
-    if (!this.args.session.created) {
+    if (!this.args.room.created) {
       // there is a race condition in the matrix SDK where newly created
       // rooms don't immediately have a created date
       return new Date();
     }
-    return this.args.session.created;
+    return this.args.room.created;
+  }
+
+  get lastSessionMessage() {
+    return this.args.room.messages[this.args.room.messages.length - 1];
   }
 
   get isStreaming() {
-    if (!this.args.session.lastMessage) {
+    if (!this.lastSessionMessage) {
       return false;
     }
-    return !this.args.session.lastMessage.isStreamingFinished;
+    return !this.lastSessionMessage.isStreamingFinished;
   }
 
   get hasUnseenMessage() {
-    if (!this.args.session.lastMessage) {
+    if (!this.lastSessionMessage) {
       return false;
     }
     return !this.matrixService.currentUserEventReadReceipts.has(
-      this.args.session.lastMessage.eventId,
+      this.lastSessionMessage.eventId,
     );
   }
 
   private get lastActive() {
     return (
-      this.matrixService.getLastActiveTimestamp(
-        this.args.session.roomId,
-        this.args.session.lastActiveTimestamp,
-      ) ?? this.createDate.getTime()
+      this.matrixService.getLastActiveTimestamp(this.args.room) ??
+      this.createDate.getTime()
     );
   }
 

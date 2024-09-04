@@ -34,6 +34,8 @@ import {
 import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 
+let realmPermissions: { [realmURL: string]: ('read' | 'write')[] };
+
 module('Acceptance | code submode | editor tests', function (hooks) {
   let realm: Realm;
   let monacoService: MonacoService;
@@ -44,10 +46,10 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  let { setRealmPermissions } = setupMatrixServiceMock(hooks);
+  setupMatrixServiceMock(hooks, { realmPermissions: () => realmPermissions });
 
   hooks.beforeEach(async function () {
-    setRealmPermissions({ [testRealmURL]: ['read', 'write'] });
+    realmPermissions = { [testRealmURL]: ['read', 'write'] };
 
     monacoService = this.owner.lookup(
       'service:monaco-service',
@@ -762,7 +764,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
 
   module('when the user lacks write permissions', function (hooks) {
     hooks.beforeEach(function () {
-      setRealmPermissions({ [testRealmURL]: ['read'] });
+      realmPermissions = { [testRealmURL]: ['read'] };
     });
 
     test('the editor is read-only', async function (assert) {
@@ -790,9 +792,10 @@ module('Acceptance | code submode | editor tests', function (hooks) {
 
       assert.dom('[data-test-realm-indicator-not-writable]').exists();
       assert.strictEqual(
-        window
-          .getComputedStyle(find('.monaco-editor')!)
-          .getPropertyValue('background-color')!,
+        find('.monaco-editor')
+          ?.computedStyleMap()
+          .get('background-color')!
+          .toString(),
         'rgb(235, 234, 237)', // equivalent to #ebeaed
         'monaco editor is greyed out when read-only',
       );

@@ -25,6 +25,7 @@ import { file, isReady, FileResource } from '@cardstack/host/resources/file';
 import { maybe } from '@cardstack/host/resources/maybe';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
+import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
@@ -85,6 +86,7 @@ export default class OperatorModeStateService extends Service {
   @service declare messageService: MessageService;
   @service declare recentCardsService: RecentCardsService;
   @service declare recentFilesService: RecentFilesService;
+  @service declare realmInfoService: RealmInfoService;
   @service declare router: RouterService;
 
   private openFileSubscribers: OpenFileSubscriber[] = [];

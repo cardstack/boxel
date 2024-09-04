@@ -19,7 +19,7 @@ import {
   identifyCard,
   moduleFrom,
   isCardDef,
-  IndexWriter,
+  type Indexer,
   type Batch,
   type LooseCardResource,
   type InstanceEntry,
@@ -31,7 +31,6 @@ import {
   type CardResource,
   type Relationship,
   type TextFileRef,
-  type LastModifiedTimes,
 } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import {
@@ -41,12 +40,13 @@ import {
   type SerializedError,
 } from '@cardstack/runtime-common/error';
 import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
-import { isIgnored } from '@cardstack/runtime-common/realm-index-updater';
+import { isIgnored } from '@cardstack/runtime-common/search-index';
 import { type Reader, type Stats } from '@cardstack/runtime-common/worker';
 
 import {
   CardDef,
   type IdentityContext as IdentityContextType,
+  LoaderType,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
@@ -75,7 +75,7 @@ export class CurrentRun {
   #typesCache = new WeakMap<typeof CardDef, Promise<TypesWithErrors>>();
   #indexingInstances = new Map<string, Promise<void>>();
   #reader: Reader;
-  #indexWriter: IndexWriter;
+  #indexer: Indexer;
   #batch: Batch | undefined;
   #realmPaths: RealmPaths;
   #ignoreData: Record<string, string>;
@@ -84,27 +84,25 @@ export class CurrentRun {
   #realmInfo?: RealmInfo;
   readonly stats: Stats = {
     instancesIndexed: 0,
-    modulesIndexed: 0,
     instanceErrors: 0,
     moduleErrors: 0,
-    totalIndexEntries: 0,
   };
   @service declare loaderService: LoaderService;
 
   constructor({
     realmURL,
     reader,
-    indexWriter,
+    indexer,
     ignoreData = {},
     renderCard,
   }: {
     realmURL: URL;
     reader: Reader;
-    indexWriter: IndexWriter;
+    indexer: Indexer;
     ignoreData?: Record<string, string>;
     renderCard: RenderCard;
   }) {
-    this.#indexWriter = indexWriter;
+    this.#indexer = indexer;
     this.#realmPaths = new RealmPaths(realmURL);
     this.#reader = reader;
     this.#realmURL = realmURL;
@@ -113,29 +111,17 @@ export class CurrentRun {
   }
 
   static async fromScratch(current: CurrentRun): Promise<IndexResults> {
-    let start = Date.now();
-    log.debug(`starting from scratch indexing`);
-
-    current.#batch = await current.#indexWriter.createBatch(current.realmURL);
-    let mtimes = await current.batch.getModifiedTimes();
-    await current.discoverInvalidations(current.realmURL, mtimes);
-    let invalidations = current.batch.invalidations.map(
-      (href) => new URL(href),
-    );
-
     await current.whileIndexing(async () => {
-      for (let invalidation of invalidations) {
-        await current.tryToVisit(invalidation);
-      }
-      let { totalIndexEntries } = await current.batch.done();
-      current.stats.totalIndexEntries = totalIndexEntries;
+      let start = Date.now();
+      log.debug(`starting from scratch indexing`);
+      current.#batch = await current.#indexer.createBatch(current.realmURL);
+      await current.batch.makeNewGeneration();
+      await current.visitDirectory(current.realmURL);
+      await current.batch.done();
       log.debug(`completed from scratch indexing in ${Date.now() - start}ms`);
     });
-    return {
-      invalidations: [...(invalidations ?? [])].map((url) => url.href),
-      ignoreData: current.#ignoreData,
-      stats: current.stats,
-    };
+    let { stats, ignoreData } = current;
+    return { invalidations: [], stats, ignoreData };
   }
 
   static async incremental(
@@ -151,7 +137,7 @@ export class CurrentRun {
     let start = Date.now();
     log.debug(`starting from incremental indexing for ${url.href}`);
 
-    current.#batch = await current.#indexWriter.createBatch(current.realmURL);
+    current.#batch = await current.#indexer.createBatch(current.realmURL);
     let invalidations = (await current.batch.invalidate(url)).map(
       (href) => new URL(href),
     );
@@ -165,8 +151,7 @@ export class CurrentRun {
         }
       }
 
-      let { totalIndexEntries } = await current.batch.done();
-      current.stats.totalIndexEntries = totalIndexEntries;
+      await current.batch.done();
 
       log.debug(
         `completed incremental indexing for ${url.href} in ${
@@ -223,10 +208,7 @@ export class CurrentRun {
     return ignoreMap;
   }
 
-  private async discoverInvalidations(
-    url: URL,
-    mtimes: LastModifiedTimes,
-  ): Promise<void> {
+  private async visitDirectory(url: URL): Promise<void> {
     let ignorePatterns = await this.#reader.readFileAsText(
       this.#realmPaths.local(new URL('.gitignore', url)),
     );
@@ -242,26 +224,11 @@ export class CurrentRun {
       if (isIgnored(this.#realmURL, this.ignoreMap, innerURL)) {
         continue;
       }
-
-      if (kind === 'directory') {
-        let directoryURL = this.#realmPaths.directoryURL(innerPath);
-        await this.discoverInvalidations(directoryURL, mtimes);
+      if (kind === 'file') {
+        await this.visitFile(innerURL, undefined);
       } else {
-        let indexEntry = mtimes.get(innerURL.href);
-        if (
-          !indexEntry ||
-          indexEntry.type === 'error' ||
-          indexEntry.lastModified == null
-        ) {
-          await this.batch.invalidate(innerURL);
-          continue;
-        }
-
-        let localPath = this.#realmPaths.local(innerURL);
-        let lastModified = await this.#reader.lastModified(localPath);
-        if (lastModified !== indexEntry.lastModified) {
-          await this.batch.invalidate(innerURL);
-        }
+        let directoryURL = this.#realmPaths.directoryURL(innerPath);
+        await this.visitDirectory(directoryURL);
       }
     }
   }
@@ -278,9 +245,6 @@ export class CurrentRun {
     let localPath = this.#realmPaths.local(url);
 
     let fileRef = await this.#reader.readFileAsText(localPath);
-    if (!fileRef) {
-      fileRef = await this.#reader.readFileAsText(encodeURI(localPath));
-    }
     if (!fileRef) {
       let error = new CardError(`missing file ${url.href}`, { status: 404 });
       error.deps = [url.href];
@@ -365,7 +329,6 @@ export class CurrentRun {
       lastModified: ref.lastModified,
       deps: new Set(deps),
     });
-    this.stats.modulesIndexed++;
 
     let request = await this.loaderService.loader.fetch(url.href);
     let transpiledSrc = await request.text();
@@ -414,7 +377,7 @@ export class CurrentRun {
     let cardType: typeof CardDef | undefined;
     let isolatedHtml: string | undefined;
     let atomHtml: string | undefined;
-    let card: CardDef | undefined;
+    let adjustedResource: CardResource | undefined;
     try {
       let api = await this.loaderService.loader.import<typeof CardAPI>(
         `${baseRealm.url}card-api`,
@@ -428,7 +391,7 @@ export class CurrentRun {
         this.#realmInfo = (await realmInfoResponse.json())?.data?.attributes;
       }
 
-      let adjustedResource: CardResource = {
+      adjustedResource = {
         ...resource,
         ...{ id: instanceURL.href, type: 'card' },
       };
@@ -440,36 +403,29 @@ export class CurrentRun {
           realmURL: this.realmURL,
         },
       });
-      card = await api.createFromSerialized<typeof CardDef>(
+      let card = await api.createFromSerialized<typeof CardDef>(
         adjustedResource,
         { data: adjustedResource },
         new URL(fileURL),
+        this.loaderService.loader as unknown as LoaderType,
         {
           identityContext,
         },
       );
-      isolatedHtml = unwrap(
-        sanitizeHTML(
-          await this.#renderCard({
-            card,
-            format: 'isolated',
-            visit: this.visitFile.bind(this),
-            identityContext,
-            realmPath: this.#realmPaths,
-          }),
-        ),
-      );
-      atomHtml = unwrap(
-        sanitizeHTML(
-          await this.#renderCard({
-            card,
-            format: 'atom',
-            visit: this.visitFile.bind(this),
-            identityContext,
-            realmPath: this.#realmPaths,
-          }),
-        ),
-      );
+      isolatedHtml = await this.#renderCard({
+        card,
+        format: 'isolated',
+        visit: this.visitFile.bind(this),
+        identityContext,
+        realmPath: this.#realmPaths,
+      });
+      atomHtml = await this.#renderCard({
+        card,
+        format: 'atom',
+        visit: this.visitFile.bind(this),
+        identityContext,
+        realmPath: this.#realmPaths,
+      });
       cardType = Reflect.getPrototypeOf(card)?.constructor as typeof CardDef;
       let data = api.serializeCard(card, { includeComputeds: true });
       // prepare the document for index serialization
@@ -512,9 +468,9 @@ export class CurrentRun {
       typesMaybeError = await this.getTypes(cardType);
     }
     let embeddedHtml: Record<string, string> | undefined;
-    if (card && typesMaybeError?.type === 'types') {
+    if (adjustedResource && typesMaybeError?.type === 'types') {
       embeddedHtml = await this.buildEmbeddedHtml(
-        card,
+        adjustedResource,
         typesMaybeError.types,
         identityContext,
       );
@@ -567,25 +523,40 @@ export class CurrentRun {
   }
 
   private async buildEmbeddedHtml(
-    card: CardDef,
+    resource: CardResource,
     types: CardType[],
     identityContext: IdentityContextType,
   ): Promise<{ [refURL: string]: string }> {
+    let api = await this.loaderService.loader.import<typeof CardAPI>(
+      `${baseRealm.url}card-api`,
+    );
     let result: { [refURL: string]: string } = {};
-    for (let { codeRef: componentCodeRef, refURL } of types) {
-      let embeddedHtml = unwrap(
-        sanitizeHTML(
-          await this.#renderCard({
-            card,
-            format: 'embedded',
-            visit: this.visitFile.bind(this),
-            identityContext,
-            realmPath: this.#realmPaths,
-            componentCodeRef,
-          }),
-        ),
+    for (let { codeRef, refURL } of types) {
+      // we need to remove ourselves from the identity context so that we don't
+      // revive a cached instance with the original card class
+      let clonedIdentities = new Map([...identityContext.identities]);
+      clonedIdentities.delete(resource.id);
+      let modifiedContext = { identities: clonedIdentities };
+
+      let resourceForType = merge(resource, { meta: { adoptsFrom: codeRef } });
+      let card = await api.createFromSerialized<typeof CardDef>(
+        resourceForType,
+        { data: resourceForType },
+        new URL(resource.id),
+        this.loaderService.loader as unknown as LoaderType,
+        {
+          identityContext: modifiedContext,
+        },
       );
-      result[refURL] = embeddedHtml;
+      let embeddedHtml = await this.#renderCard({
+        card,
+        format: 'embedded',
+        visit: this.visitFile.bind(this),
+        identityContext: modifiedContext,
+        realmPath: this.#realmPaths,
+      });
+      let ref = refURL === types[0].refURL ? 'default' : refURL;
+      result[ref] = embeddedHtml;
     }
     return result;
   }
@@ -623,9 +594,7 @@ export class CurrentRun {
           loader: this.loaderService.loader,
         });
         if (!isCardDef(maybeCard)) {
-          throw new Error(
-            `The definition at ${JSON.stringify(fullRef)} is not a CardDef`,
-          );
+          throw new Error(`The definition at ${fullRef} is not a CardDef`);
         }
         loadedCard = maybeCard;
         loadedCardRef = identifyCard(loadedCard);
@@ -655,26 +624,9 @@ export class CurrentRun {
   }
 }
 
-function sanitizeHTML(html: string): string {
-  // currently this only involves removing auto-generated ember ID's
-  return html.replace(/\s+id="ember[0-9]+"/g, '');
-}
-
 function assertURLEndsWithJSON(url: URL): URL {
   if (!url.href.endsWith('.json')) {
     return new URL(`${url}.json`);
   }
   return url;
-}
-
-// we unwrap the outer div (and cleanup empty html comments) as the
-// outer div is actually the container that the card HTML is
-// rendering into
-function unwrap(html: string): string {
-  return html
-    .trim()
-    .replace(/^<div ([^<]*\n)/, '')
-    .replace(/^<!---->/, '')
-    .replace(/<\/div>$/, '')
-    .trim();
 }

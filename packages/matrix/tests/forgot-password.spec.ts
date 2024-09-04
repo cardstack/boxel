@@ -26,10 +26,7 @@ const password = 'mypassword1!';
 test.describe('Forgot password', () => {
   let synapse: SynapseInstance;
 
-  test.beforeEach(async ({ page }, testInfo) => {
-    // These tests specifically are pretty slow as there's lots of reloading
-    // Add 30s to the overall test timeout
-    testInfo.setTimeout(testInfo.timeout + 30000);
+  test.beforeEach(async ({ page }) => {
     synapse = await synapseStart({
       template: 'test',
     });

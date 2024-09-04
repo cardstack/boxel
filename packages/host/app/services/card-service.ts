@@ -10,6 +10,7 @@ import {
   type LooseCardResource,
   isSingleCardDocument,
   isCardCollectionDocument,
+  RealmPaths,
   type CardDocument,
   type SingleCardDocument,
   type LooseSingleCardDocument,
@@ -123,7 +124,12 @@ export default class CardService extends Service {
     relativeTo?: URL | undefined,
   ): Promise<CardDef> {
     let api = await this.getAPI();
-    let card = await api.createFromSerialized(resource, doc, relativeTo);
+    let card = await api.createFromSerialized(
+      resource,
+      doc,
+      relativeTo,
+      this.loaderService.loader,
+    );
     // it's important that we absorb the field async here so that glimmer won't
     // encounter NotLoaded errors, since we don't have the luxury of the indexer
     // being able to inform us of which fields are used or not at this point.
@@ -346,6 +352,7 @@ export default class CardService extends Service {
   }
 
   async copyCard(source: CardDef, destinationRealm: URL): Promise<CardDef> {
+    let loader = this.loaderService.loader;
     let api = await this.getAPI();
     let serialized = await this.serializeCard(source, {
       maybeRelativeURL: null, // forces URL's to be absolute.
@@ -356,6 +363,7 @@ export default class CardService extends Service {
       json.data,
       json,
       new URL(json.data.id),
+      loader,
     )) as CardDef;
     if (this.subscriber) {
       this.subscriber(new URL(json.data.id), json);
@@ -443,6 +451,16 @@ export default class CardService extends Service {
   async cardsSettled() {
     let api = await this.getAPI();
     await api.flushLogs();
+  }
+
+  getRealmURLFor(url: URL) {
+    for (let realmURL of this.realmURLs) {
+      let path = new RealmPaths(new URL(realmURL));
+      if (path.inRealm(url)) {
+        return new URL(realmURL);
+      }
+    }
+    return undefined;
   }
 
   async getRealmInfoByRealmURL(realmURL: URL): Promise<RealmInfo> {

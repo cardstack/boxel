@@ -48,7 +48,6 @@ export default class RenderCard extends Route<Model | null> {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare matrixService: MatrixService;
   @service declare realmInfoService: RealmInfoService;
-
   hasLoadMatrixBeenExecuted = false;
 
   async model(params: {

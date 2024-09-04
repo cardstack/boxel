@@ -20,6 +20,7 @@ import {
   runTestRealmServer,
   runBaseRealmServer,
 } from './helpers';
+import isEqual from 'lodash/isEqual';
 import { shimExternals } from '../lib/externals';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { Server } from 'http';
@@ -85,10 +86,6 @@ module('indexing', function (hooks) {
               static embedded = class Isolated extends Component<typeof this> {
                 <template>
                   <h1> Embedded Card Person: <@fields.firstName/></h1>
-
-                  <style>
-                    h1 { color: red }
-                  </style>
                 </template>
               }
             }
@@ -102,22 +99,12 @@ module('indexing', function (hooks) {
             }
           `,
           'fancy-person.gts': `
-            import { contains, field, Component } from "https://cardstack.com/base/card-api";
+            import { contains, field } from "https://cardstack.com/base/card-api";
             import StringCard from "https://cardstack.com/base/string";
             import { Person } from "./person";
 
             export class FancyPerson extends Person {
               @field favoriteColor = contains(StringCard);
-
-              static embedded = class Embedded extends Component<typeof this> {
-                <template>
-                  <h1> Embedded Card Fancy Person: <@fields.firstName/></h1>
-
-                  <style>
-                    h1 { color: pink }
-                  </style>
-                </template>
-              }
             }
           `,
           'post.gts': `
@@ -262,9 +249,7 @@ module('indexing', function (hooks) {
   });
 
   test('can store card pre-rendered html in the index', async function (assert) {
-    let entry = await realm.realmIndexQueryEngine.instance(
-      new URL(`${testRealm}mango`),
-    );
+    let entry = await realm.searchIndex.instance(new URL(`${testRealm}mango`));
     if (entry?.type === 'instance') {
       assert.strictEqual(
         trimCardContainer(stripScopedCSSAttributes(entry!.isolatedHtml!)),
@@ -272,11 +257,7 @@ module('indexing', function (hooks) {
         'pre-rendered isolated format html is correct',
       );
       assert.strictEqual(
-        trimCardContainer(
-          stripScopedCSSAttributes(
-            entry!.embeddedHtml![`${testRealm}person/Person`],
-          ),
-        ),
+        trimCardContainer(stripScopedCSSAttributes(entry!.embeddedHtml!)),
         cleanWhiteSpace(`<h1> Embedded Card Person: Mango </h1>`),
         'pre-rendered embedded format html is correct',
       );
@@ -287,7 +268,7 @@ module('indexing', function (hooks) {
 
   test('can recover from rendering a card that has a template error', async function (assert) {
     {
-      let entry = await realm.realmIndexQueryEngine.cardDocument(
+      let entry = await realm.searchIndex.cardDocument(
         new URL(`${testRealm}boom`),
       );
       if (entry?.type === 'error') {
@@ -301,12 +282,12 @@ module('indexing', function (hooks) {
       }
     }
     {
-      let entry = await realm.realmIndexQueryEngine.cardDocument(
+      let entry = await realm.searchIndex.cardDocument(
         new URL(`${testRealm}vangogh`),
       );
       if (entry?.type === 'doc') {
         assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
-        let item = await realm.realmIndexQueryEngine.instance(
+        let item = await realm.searchIndex.instance(
           new URL(`${testRealm}vangogh`),
         );
         if (item?.type === 'instance') {
@@ -315,11 +296,7 @@ module('indexing', function (hooks) {
             cleanWhiteSpace(`<h1> Van Gogh </h1>`),
           );
           assert.strictEqual(
-            trimCardContainer(
-              stripScopedCSSAttributes(
-                item.embeddedHtml![`${testRealm}person/Person`]!,
-              ),
-            ),
+            trimCardContainer(stripScopedCSSAttributes(item.embeddedHtml!)),
             cleanWhiteSpace(`<h1> Embedded Card Person: Van Gogh </h1>`),
           );
         } else {
@@ -335,7 +312,7 @@ module('indexing', function (hooks) {
   });
 
   test('can make an error doc for a card that has a link to a URL that is not a card', async function (assert) {
-    let entry = await realm.realmIndexQueryEngine.cardDocument(
+    let entry = await realm.searchIndex.cardDocument(
       new URL(`${testRealm}bad-link`),
     );
     if (entry?.type === 'error') {
@@ -370,23 +347,20 @@ module('indexing', function (hooks) {
       } as LooseSingleCardDocument),
     );
 
-    let { data: result } = await realm.realmIndexQueryEngine.search({
+    let { data: result } = await realm.searchIndex.search({
       filter: {
         on: { module: `${testRealm}person`, name: 'Person' },
         eq: { firstName: 'Mang-Mang' },
       },
     });
     assert.strictEqual(result.length, 1, 'found updated document');
-    assert.deepEqual(
-      // we splat because despite having the same shape, the constructors are different
-      { ...realm.realmIndexUpdater.stats },
-      {
+    assert.ok(
+      // assert.deepEqual returns false because despite having the same shape, the constructors are different
+      isEqual(realm.searchIndex.stats, {
         instancesIndexed: 1,
         instanceErrors: 0,
         moduleErrors: 0,
-        modulesIndexed: 0,
-        totalIndexEntries: 14,
-      },
+      }),
       'indexed correct number of files',
     );
   });
@@ -405,16 +379,13 @@ module('indexing', function (hooks) {
           throw new Error('boom!');
         `,
     );
-    assert.deepEqual(
-      // we splat because despite having the same shape, the constructors are different
-      { ...realm.realmIndexUpdater.stats },
-      {
+    assert.ok(
+      // assert.deepEqual returns false because despite having the same shape, the constructors are different
+      isEqual(realm.searchIndex.stats, {
         instancesIndexed: 0,
         instanceErrors: 1,
         moduleErrors: 1,
-        modulesIndexed: 0,
-        totalIndexEntries: 14,
-      },
+      }),
       'indexed correct number of files',
     );
     await realm.write(
@@ -424,19 +395,16 @@ module('indexing', function (hooks) {
           export class IntentionallyThrownError {
         `,
     );
-    assert.deepEqual(
-      // we splat because despite having the same shape, the constructors are different
-      { ...realm.realmIndexUpdater.stats },
-      {
+    assert.ok(
+      // assert.deepEqual returns false because despite having the same shape, the constructors are different
+      isEqual(realm.searchIndex.stats, {
         instancesIndexed: 0,
         instanceErrors: 4, // 1 post, 2 persons, 1 bad-link post
         moduleErrors: 3, // post, fancy person, person
-        modulesIndexed: 0,
-        totalIndexEntries: 12,
-      },
+      }),
       'indexed correct number of files',
     );
-    let { data: result } = await realm.realmIndexQueryEngine.search({
+    let { data: result } = await realm.searchIndex.search({
       filter: {
         type: { module: `${testRealm}person`, name: 'Person' },
       },
@@ -457,20 +425,17 @@ module('indexing', function (hooks) {
           }
         `,
     );
-    assert.deepEqual(
-      // we splat because despite having the same shape, the constructors are different
-      { ...realm.realmIndexUpdater.stats },
-      {
+    assert.ok(
+      // assert.deepEqual returns false because despite having the same shape, the constructors are different
+      isEqual(realm.searchIndex.stats, {
         instancesIndexed: 3, // 1 post and 2 persons
         instanceErrors: 1,
         moduleErrors: 0,
-        modulesIndexed: 3,
-        totalIndexEntries: 13,
-      },
+      }),
       'indexed correct number of files',
     );
     result = (
-      await realm.realmIndexQueryEngine.search({
+      await realm.searchIndex.search({
         filter: {
           type: { module: `${testRealm}person`, name: 'Person' },
         },
@@ -486,23 +451,20 @@ module('indexing', function (hooks) {
   test('can incrementally index deleted instance', async function (assert) {
     await realm.delete('mango.json');
 
-    let { data: result } = await realm.realmIndexQueryEngine.search({
+    let { data: result } = await realm.searchIndex.search({
       filter: {
         on: { module: `${testRealm}person`, name: 'Person' },
         eq: { firstName: 'Mango' },
       },
     });
     assert.strictEqual(result.length, 0, 'found no documents');
-    assert.deepEqual(
-      // we splat because despite having the same shape, the constructors are different
-      { ...realm.realmIndexUpdater.stats },
-      {
+    assert.ok(
+      // assert.deepEqual returns false because despite having the same shape, the constructors are different
+      isEqual(realm.searchIndex.stats, {
         instancesIndexed: 0,
         instanceErrors: 0,
         moduleErrors: 0,
-        modulesIndexed: 0,
-        totalIndexEntries: 14,
-      },
+      }),
       'index did not touch any files',
     );
   });
@@ -527,23 +489,20 @@ module('indexing', function (hooks) {
       `,
     );
 
-    let { data: result } = await realm.realmIndexQueryEngine.search({
+    let { data: result } = await realm.searchIndex.search({
       filter: {
         on: { module: `${testRealm}post`, name: 'Post' },
         eq: { nickName: 'Van Gogh-poo' },
       },
     });
     assert.strictEqual(result.length, 1, 'found updated document');
-    assert.deepEqual(
-      // we splat because despite having the same shape, the constructors are different
-      { ...realm.realmIndexUpdater.stats },
-      {
+    assert.ok(
+      // assert.deepEqual returns false because despite having the same shape, the constructors are different
+      isEqual(realm.searchIndex.stats, {
         instancesIndexed: 1,
         instanceErrors: 1,
         moduleErrors: 0,
-        modulesIndexed: 1,
-        totalIndexEntries: 14,
-      },
+      }),
       'indexed correct number of files',
     );
   });
@@ -569,23 +528,20 @@ module('indexing', function (hooks) {
         `,
     );
 
-    let { data: result } = await realm.realmIndexQueryEngine.search({
+    let { data: result } = await realm.searchIndex.search({
       filter: {
         on: { module: `${testRealm}post`, name: 'Post' },
         eq: { 'author.nickName': 'Van Gogh-poo' },
       },
     });
     assert.strictEqual(result.length, 1, 'found updated document');
-    assert.deepEqual(
-      // we splat because despite having the same shape, the constructors are different
-      { ...realm.realmIndexUpdater.stats },
-      {
+    assert.ok(
+      // assert.deepEqual returns false because despite having the same shape, the constructors are different
+      isEqual(realm.searchIndex.stats, {
         instancesIndexed: 3,
         instanceErrors: 1,
         moduleErrors: 0,
-        modulesIndexed: 3,
-        totalIndexEntries: 13,
-      },
+      }),
       'indexed correct number of files',
     );
   });
@@ -593,7 +549,7 @@ module('indexing', function (hooks) {
   test('can incrementally index instance that depends on deleted card source', async function (assert) {
     await realm.delete('post.gts');
     {
-      let { data: result } = await realm.realmIndexQueryEngine.search({
+      let { data: result } = await realm.searchIndex.search({
         filter: {
           type: { module: `${testRealm}post`, name: 'Post' },
         },
@@ -604,16 +560,15 @@ module('indexing', function (hooks) {
         'the deleted type results in no card instance results',
       );
     }
-    let actual = await realm.realmIndexQueryEngine.cardDocument(
+    let actual = await realm.searchIndex.cardDocument(
       new URL(`${testRealm}post-1`),
     );
     if (actual?.type === 'error') {
       assert.ok(actual.error.stack, 'stack trace is included');
       delete actual.error.stack;
-      assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...actual },
-        {
+      assert.ok(
+        // assert.deepEqual returns false because despite having the same shape, the constructors are different
+        isEqual(actual, {
           type: 'error',
           error: {
             isCardError: true,
@@ -623,22 +578,19 @@ module('indexing', function (hooks) {
             title: 'Not Found',
             deps: ['http://test-realm/post'],
           },
-        },
+        }),
         'card instance is an error document',
       );
     } else {
       assert.ok(false, 'search index entry is not an error document');
     }
-    assert.deepEqual(
-      // we splat because despite having the same shape, the constructors are different
-      { ...realm.realmIndexUpdater.stats },
-      {
+    assert.ok(
+      // assert.deepEqual returns false because despite having the same shape, the constructors are different
+      isEqual(realm.searchIndex.stats, {
         instancesIndexed: 0,
         instanceErrors: 2,
         moduleErrors: 0,
-        modulesIndexed: 0,
-        totalIndexEntries: 14,
-      },
+      }),
       'indexed correct number of files',
     );
 
@@ -662,7 +614,7 @@ module('indexing', function (hooks) {
       `,
     );
     {
-      let { data: result } = await realm.realmIndexQueryEngine.search({
+      let { data: result } = await realm.searchIndex.search({
         filter: {
           on: { module: `${testRealm}post`, name: 'Post' },
           eq: { nickName: 'Van Gogh-poo' },
@@ -670,74 +622,15 @@ module('indexing', function (hooks) {
       });
       assert.strictEqual(result.length, 1, 'found the post instance');
     }
-    assert.deepEqual(
-      // we splat because despite having the same shape, the constructors are different
-      { ...realm.realmIndexUpdater.stats },
-      {
+    assert.ok(
+      // assert.deepEqual returns false because despite having the same shape, the constructors are different
+      isEqual(realm.searchIndex.stats, {
         instancesIndexed: 1,
         instanceErrors: 1,
         moduleErrors: 0,
-        modulesIndexed: 1,
-        totalIndexEntries: 14,
-      },
+      }),
       'indexed correct number of files',
     );
-  });
-
-  test('sets urls containing encoded CSS for deps for a module', async function (assert) {
-    let entry = (await realm.realmIndexQueryEngine.module(
-      new URL('http://test-realm/fancy-person.gts'),
-    )) as { deps: string[] };
-
-    let assertCssDependency = (
-      deps: string[],
-      pattern: RegExp,
-      fileName: string,
-    ) => {
-      assert.true(
-        !!deps.find((dep) => pattern.test(dep)),
-        `css for ${fileName} is in the deps`,
-      );
-    };
-
-    let dependencies = [
-      {
-        pattern: /fancy-person\.gts.*\.glimmer-scoped\.css$/,
-        fileName: 'fancy-person.gts',
-      },
-      {
-        pattern: /test-realm\/person\.gts.*\.glimmer-scoped\.css$/,
-        fileName: 'person.gts',
-      },
-      {
-        pattern: /cardstack.com\/base\/card-api\.gts.*\.glimmer-scoped\.css$/,
-        fileName: 'card-api.gts',
-      },
-      {
-        pattern:
-          /cardstack.com\/base\/links-to-many-component.gts.*\.glimmer-scoped\.css$/,
-        fileName: 'links-to-many-component.gts',
-      },
-      {
-        pattern:
-          /cardstack.com\/base\/links-to-editor.gts.*\.glimmer-scoped\.css$/,
-        fileName: 'links-to-editor.gts',
-      },
-      {
-        pattern:
-          /cardstack.com\/base\/contains-many-component.gts.*\.glimmer-scoped\.css$/,
-        fileName: 'contains-many-component.gts',
-      },
-      {
-        pattern:
-          /cardstack.com\/base\/field-component.gts.*\.glimmer-scoped\.css$/,
-        fileName: 'field-component.gts',
-      },
-    ];
-
-    dependencies.forEach(({ pattern, fileName }) => {
-      assertCssDependency(entry.deps, pattern, fileName);
-    });
   });
 });
 
@@ -854,16 +747,12 @@ module('permissioned realm', function (hooks) {
     });
 
     test('has no module errors when trying to index a card from another realm when it has permission to read', async function (assert) {
-      assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...testRealm2.realmIndexUpdater.stats },
-        {
+      assert.ok(
+        isEqual(testRealm2.searchIndex.stats, {
           instancesIndexed: 1,
           instanceErrors: 0,
           moduleErrors: 0,
-          modulesIndexed: 1,
-          totalIndexEntries: 2,
-        },
+        }),
         'has no module errors',
       );
     });
@@ -882,16 +771,12 @@ module('permissioned realm', function (hooks) {
     test('has a module error when trying to index a module from another realm when it has no permission to read', async function (assert) {
       // Error during indexing will be: "Authorization error: Insufficient
       // permissions to perform this action"
-      assert.deepEqual(
-        // we splat because despite having the same shape, the constructors are different
-        { ...testRealm2.realmIndexUpdater.stats },
-        {
+      assert.ok(
+        isEqual(testRealm2.searchIndex.stats, {
           instanceErrors: 1,
           instancesIndexed: 0,
           moduleErrors: 1,
-          modulesIndexed: 0,
-          totalIndexEntries: 2,
-        },
+        }),
         'has a module error',
       );
     });

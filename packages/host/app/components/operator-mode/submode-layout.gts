@@ -17,7 +17,6 @@ import { and, not } from '@cardstack/boxel-ui/helpers';
 
 import AiAssistantButton from '@cardstack/host/components/ai-assistant/button';
 import AiAssistantPanel from '@cardstack/host/components/ai-assistant/panel';
-import AiAssistantToast from '@cardstack/host/components/ai-assistant/toast';
 import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile/profile-settings-modal';
 import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
@@ -237,10 +236,6 @@ export default class SubmodeLayout extends Component<Signature> {
             @onInputInsertion={{this.storeSearchElement}}
           />
           {{#if (and APP.experimentalAIEnabled (not @hideAiAssistant))}}
-            <AiAssistantToast
-              @hide={{this.isAiAssistantVisible}}
-              @onViewInChatClick={{this.toggleChat}}
-            />
             <AiAssistantButton
               class='chat-btn'
               @isActive={{this.isAiAssistantVisible}}

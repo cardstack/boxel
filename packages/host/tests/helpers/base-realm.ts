@@ -58,7 +58,6 @@ let contains: (typeof CardAPIModule)['contains'];
 let containsMany: (typeof CardAPIModule)['containsMany'];
 let linksTo: (typeof CardAPIModule)['linksTo'];
 let linksToMany: (typeof CardAPIModule)['linksToMany'];
-let MaybeBase64Field: (typeof CardAPIModule)['MaybeBase64Field'];
 let recompute: (typeof CardAPIModule)['recompute'];
 let createFromSerialized: (typeof CardAPIModule)['createFromSerialized'];
 let updateFromSerialized: (typeof CardAPIModule)['updateFromSerialized'];
@@ -148,7 +147,6 @@ async function initialize() {
     unsubscribeFromChanges,
     flushLogs,
     queryableValue,
-    MaybeBase64Field,
     getFieldDescription,
   } = cardAPI);
 }
@@ -178,7 +176,6 @@ export {
   linksTo,
   linksToMany,
   recompute,
-  MaybeBase64Field,
   createFromSerialized,
   updateFromSerialized,
   serializeCard,

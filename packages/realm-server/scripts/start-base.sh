@@ -4,6 +4,7 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 wait_for_postgres
 
+pnpm run setup:base-assets
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   PGPORT=5435 \

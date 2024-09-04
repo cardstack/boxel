@@ -1,9 +1,23 @@
 import { MatrixClient } from './matrix-client';
 import { RealmAuthClient } from './realm-auth-client';
 
-export class RealmAuthDataSource {
+type RealmInfo = {
+  isPublicReadable: boolean;
+  url: string;
+};
+
+export interface IRealmAuthDataSource {
+  realmURL: string | undefined;
+  getRealmInfo(url: string): Promise<RealmInfo | null>;
+  getJWT(targetRealmURL: string): Promise<string>;
+  resetAuth(targetRealmURL: string): void;
+}
+
+type RealmInfoAndAuth = RealmInfo & { realmAuthClient?: RealmAuthClient };
+
+export class RealmAuthDataSource implements IRealmAuthDataSource {
   // Cached realm info and session to avoid fetching it multiple times for the same realm
-  private visitedRealms = new Map<string, RealmAuthClient>();
+  private visitedRealms = new Map<string, RealmInfoAndAuth>();
   private matrixClient: MatrixClient;
   private fetch: typeof globalThis.fetch;
   realmURL: string;
@@ -18,55 +32,65 @@ export class RealmAuthDataSource {
     this.realmURL = realmURL;
   }
 
-  token(url: string): string | undefined {
-    let targetRealmURL = this.toRealmURL(url);
-    if (!targetRealmURL) {
-      return undefined;
-    }
-    if (targetRealmURL === this.realmURL) {
-      return undefined;
-    }
-    let client = this.visitedRealms.get(targetRealmURL);
-    if (!client) {
-      return undefined;
-    }
-    if (!this.matrixClient.isLoggedIn()) {
-      return undefined;
-    }
-    return client.jwt;
-  }
-
-  async reauthenticate(targetRealmURL: string): Promise<string | undefined> {
-    if (targetRealmURL === this.realmURL) {
+  async getJWT(targetRealmURL: string): Promise<string> {
+    let targetRealm = this.visitedRealms.get(targetRealmURL);
+    if (!targetRealm || !targetRealm.realmAuthClient) {
       throw new Error(
-        `bug: did not expect to ever be asked to log into myself`,
+        `bug: should not have been able to get here without a targetRealm or without an auth client`,
       );
     }
-
-    this.visitedRealms.delete(targetRealmURL);
-    let client = this.createRealmAuthClient(
-      new URL(targetRealmURL),
-      this.matrixClient,
-      this.fetch,
-    );
-    this.visitedRealms.set(targetRealmURL, client);
 
     if (!this.matrixClient.isLoggedIn()) {
       await this.matrixClient.login();
     }
-    return await client.getJWT(); // This will use a cached JWT from the realm auth client or create a new one if it's expired or about to expire
+    return await targetRealm.realmAuthClient.getJWT(); // This will use a cached JWT from the realm auth client or create a new one if it's expired or about to expire
   }
 
-  private toRealmURL(url: string): string | undefined {
-    if (url.startsWith(this.realmURL)) {
-      return this.realmURL;
-    }
-    for (let key of this.visitedRealms.keys()) {
-      if (url.startsWith(key)) {
-        return key;
+  resetAuth(targetRealmURL: string) {
+    this.visitedRealms.delete(targetRealmURL);
+  }
+
+  async getRealmInfo(url: string) {
+    let visitedRealmURL = Array.from(this.visitedRealms.keys()).find((key) => {
+      return url.includes(key);
+    });
+    let targetRealm;
+
+    if (visitedRealmURL) {
+      targetRealm = this.visitedRealms.get(visitedRealmURL)!;
+    } else {
+      let targetRealmHeadResponse = await this.fetch(url, {
+        method: 'HEAD',
+      });
+
+      let targetRealmURL =
+        targetRealmHeadResponse.headers.get('x-boxel-realm-url');
+
+      if (!targetRealmURL) {
+        return null; // It doesn't look like we are talking to a realm (the request is for something else), so skip adding auth header
       }
+
+      let isPublicReadable = Boolean(
+        targetRealmHeadResponse.headers.get('x-boxel-realm-public-readable'),
+      );
+
+      targetRealm = {
+        isPublicReadable,
+        url: targetRealmURL,
+        realmAuthClient: this.createRealmAuthClient(
+          new URL(targetRealmURL),
+          this.matrixClient,
+          this.fetch,
+        ),
+      };
+
+      this.visitedRealms.set(targetRealmURL, targetRealm);
     }
-    return undefined;
+
+    return {
+      isPublicReadable: targetRealm.isPublicReadable,
+      url: targetRealm.url,
+    };
   }
 
   // A separate method for realm auth client creation to support mocking in tests

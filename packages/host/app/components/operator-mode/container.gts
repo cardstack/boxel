@@ -65,7 +65,11 @@ export default class OperatorModeContainer extends Component<Signature> {
   // public API
   @action
   getCards(query: Query, realms?: string[]): Search {
-    return getSearchResults(this, query, realms);
+    return getSearchResults(
+      this,
+      () => query,
+      realms ? () => realms : undefined,
+    );
   }
 
   // public API
@@ -92,8 +96,8 @@ export default class OperatorModeContainer extends Component<Signature> {
   ): Search {
     return getLiveSearchResults(
       this,
-      query,
-      realms,
+      () => query,
+      realms ? () => realms : undefined,
       doWhileRefreshing ? () => doWhileRefreshing : undefined,
     );
   }
@@ -164,7 +168,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         --operator-mode-left-column: 14rem;
       }
       :global(button:focus:not(:disabled)) {
-        outline-color: var(--boxel-header-text-color, var(--boxel-highlight));
+        outline-color: var(--boxel-highlight);
         outline-offset: -2px;
       }
       :global(button:focus:not(:focus-visible)) {

@@ -25,15 +25,12 @@ import { IconLink, Eye, ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
+import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import Preview from '@cardstack/host/components/preview';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import RealmService from '@cardstack/host/services/realm';
-
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
-
-import EmbeddedFormatGallery from './embedded-format-gallery';
 
 interface Signature {
   Element: HTMLElement;
@@ -49,7 +46,6 @@ interface Signature {
 export default class CardPreviewPanel extends Component<Signature> {
   @tracked footerWidthPx = 0;
   @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare realm: RealmService;
 
   private scrollPositions = new Map<string, number>();
   private copyToClipboard = task(async () => {
@@ -92,7 +88,15 @@ export default class CardPreviewPanel extends Component<Signature> {
       ...attributes
     >
       <div class='header-icon'>
-        <RealmIcon @realmInfo={{this.realm.info @realmURL.href}} class='icon' />
+        <RealmInfoProvider @realmURL={{@realmURL}}>
+          <:ready as |realmInfo|>
+            <RealmIcon
+              @realmIconURL={{realmInfo.iconURL}}
+              @realmName={{realmInfo.name}}
+              class='icon'
+            />
+          </:ready>
+        </RealmInfoProvider>
       </div>
       <div class='header-title'>
         {{cardTypeDisplayName @card}}
@@ -149,11 +153,7 @@ export default class CardPreviewPanel extends Component<Signature> {
         onScroll=this.onScroll
       }}
     >
-      {{#if (eq this.format 'embedded')}}
-        <EmbeddedFormatGallery @card={{@card}} />
-      {{else}}
-        <Preview @card={{@card}} @format={{this.format}} />
-      {{/if}}
+      <Preview @card={{@card}} @format={{this.format}} />
     </div>
 
     <div

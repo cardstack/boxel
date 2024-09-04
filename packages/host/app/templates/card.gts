@@ -53,7 +53,7 @@ import {
 interface CardRouteSignature {
   Args: {
     controller: CardController;
-    model: CardModel | null;
+    model: CardModel;
   };
 }
 const { ownRealmURL } = ENV;
@@ -89,7 +89,11 @@ class CardRouteComponent extends Component<CardRouteSignature> {
   }
 
   getCards(query: Query, realms?: string[]): Search {
-    return getSearchResults(this, query, realms);
+    return getSearchResults(
+      this,
+      () => query,
+      realms ? () => realms : undefined,
+    );
   }
 
   getCard(url: URL, opts?: { loader?: Loader; isLive?: boolean }) {
@@ -110,8 +114,8 @@ class CardRouteComponent extends Component<CardRouteSignature> {
   ): Search {
     return getLiveSearchResults(
       this,
-      query,
-      realms,
+      () => query,
+      realms ? () => realms : undefined,
       doWhileRefreshing ? () => doWhileRefreshing : undefined,
     );
   }

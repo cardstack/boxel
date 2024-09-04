@@ -2,7 +2,6 @@ import * as JSON from 'json-typescript';
 import isEqual from 'lodash/isEqual';
 import { assertJSONValue, assertJSONPrimitive } from './json-validation';
 import qs from 'qs';
-
 import { type CodeRef, isCodeRef } from './index';
 
 export interface Query {
@@ -100,6 +99,12 @@ export function isAnyFilter(filter: Filter): filter is AnyFilter {
   return (filter as AnyFilter).any !== undefined;
 }
 
+export function parseQueryString(querystring: string): Query {
+  let query = qs.parse(querystring);
+  assertQuery(query);
+  return query;
+}
+
 export function buildQueryString(query: Query): string {
   return `?${qs.stringify(query)}`;
 }
@@ -139,7 +144,6 @@ export function assertQuery(
       case 'page':
         assertPage(value, pointer.concat('page'));
         break;
-
       default:
         throw new Error(`unknown field in query: ${key}`);
     }

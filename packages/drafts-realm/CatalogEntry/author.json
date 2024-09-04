@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Author",
+      "description": "Catalog entry for Author",
+      "ref": {
+        "name": "Author",
+        "module": "../author"
+      },
+      "isField": false,
+      "demo": {
+        "firstName": "Alice",
+        "lastName": "Enwunder",
+        "photo": null,
+        "body": null,
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "demo": {
+          "adoptsFrom": {
+            "module": "http://localhost:4201/drafts/author",
+            "name": "Author"
+          }
+        }
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}

@@ -1,52 +1,26 @@
 import Service, { service } from '@ember/service';
-import { buildWaiter } from '@ember/test-waiters';
-import { cached, tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
-import { ISendEventResponse } from 'matrix-js-sdk';
-import { md5 } from 'super-fast-md5';
 import { TrackedMap } from 'tracked-built-ins';
 
 import { v4 as uuid } from 'uuid';
 
-import {
-  Deferred,
-  loaderFor,
-  LooseSingleCardDocument,
-  splitStringIntoChunks,
-} from '@cardstack/runtime-common';
-
-import { baseRealm, LooseCardResource } from '@cardstack/runtime-common';
-
-import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
-import { RoomResource, getRoom } from '@cardstack/host/resources/room';
-import CardService from '@cardstack/host/services/card-service';
+import { clearAllRealmSessions } from '@cardstack/host/resources/realm-session';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { OperatorModeContext } from '@cardstack/host/services/matrix-service';
 
-import RealmService from '@cardstack/host/services/realm';
-
-import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
 import { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import { PatchField } from 'https://cardstack.com/base/command';
-import type {
-  CardFragmentContent,
-  ReactionEventContent,
-} from 'https://cardstack.com/base/matrix-event';
-
-const waiter = buildWaiter('mock-matrix-service');
-
-const MAX_CARD_SIZE_KB = 60;
+import type { ReactionEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RoomField } from 'https://cardstack.com/base/room';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let nonce = 0;
 
 export type MockMatrixService = MatrixService & {
-  sendReactionDeferred: Deferred<void>; // used to assert applying state in apply button
   cardAPI: typeof cardApi;
   createAndJoinRoom(roomId: string, roomName?: string): Promise<string>;
 };
@@ -103,11 +77,9 @@ function generateMockMatrixService(
   realmPermissions?: () => {
     [realmURL: string]: ('read' | 'write')[];
   },
-  expiresInSec?: () => number | undefined,
+  expiresInSec?: () => number,
 ) {
   class MockMatrixService extends Service implements MockMatrixService {
-    @service declare cardService: CardService;
-    @service declare realm: RealmService;
     @service declare loaderService: LoaderService;
 
     // @ts-ignore
@@ -117,42 +89,15 @@ function generateMockMatrixService(
 
     profile = getMatrixProfile(this, () => this.userId);
 
-    rooms: TrackedMap<string, RoomState> = new TrackedMap();
-    roomResourcesCache: TrackedMap<string, RoomResource> = new TrackedMap();
+    rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
 
     messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
     cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
     failedCommandState: TrackedMap<string, Error> = new TrackedMap();
-    cardHashes: Map<string, string> = new Map(); // hashes <> event id
     currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
       new TrackedMap();
 
-    async start(_auth?: any) {
-      await this.loginToRealms();
-    }
-
-    private async loginToRealms() {
-      // This is where we would actually load user-specific choices out of the
-      // user's profile based on this.client.getUserId();
-      let activeRealms = this.cardService.realmURLs;
-
-      await Promise.all(
-        activeRealms.map(async (realmURL) => {
-          try {
-            // Our authorization-middleware can login automatically after seeing a
-            // 401, but this preemptive login makes it possible to see
-            // canWrite==true on realms that are publicly readable.
-            await this.realm.login(realmURL);
-          } catch (err) {
-            console.warn(
-              `Unable to establish session with realm ${realmURL}`,
-              err,
-            );
-          }
-        }),
-      );
-    }
-    sendReactionDeferred?: Deferred<void>; // used to assert applying state in apply button
+    async start(_auth?: any) {}
 
     get isLoggedIn() {
       return this.userId !== undefined;
@@ -164,7 +109,9 @@ function generateMockMatrixService(
     async createRealmSession(realmURL: URL) {
       let secret = "shhh! it's a secret";
       let nowInSeconds = Math.floor(Date.now() / 1000);
-      let expires = nowInSeconds + (expiresInSec?.() ?? 60 * 60);
+      let expires =
+        nowInSeconds +
+        (typeof expiresInSec === 'function' ? expiresInSec() : 60 * 60);
       let header = { alg: 'none', typ: 'JWT' };
       let payload = {
         iat: nowInSeconds,
@@ -210,7 +157,6 @@ function generateMockMatrixService(
         },
       };
       try {
-        await this.sendReactionDeferred?.promise;
         return await this.sendEvent(roomId, 'm.reaction', content);
       } catch (e) {
         throw new Error(
@@ -221,131 +167,45 @@ function generateMockMatrixService(
       }
     }
 
-    async sendEvent(
-      roomId: string,
-      eventType: string,
-      content: any,
-    ): Promise<ISendEventResponse> {
-      let encodedContent = content;
-      if ('data' in content) {
-        encodedContent = {
-          ...content,
-          data: JSON.stringify(content.data),
-        };
-      }
-      let roomEvent = {
+    async sendEvent(roomId: string, eventType: string, content: any) {
+      await addRoomEvent(this, {
         event_id: uuid(),
         room_id: roomId,
-        state_key: 'state',
         type: eventType,
         sender: this.userId,
         origin_server_ts: Date.now(),
-        content: encodedContent,
+        content,
         status: null,
-        unsigned: {
-          age: 105,
-          transaction_id: '1',
-        },
-      };
-      await addRoomEvent(this, roomEvent);
-      return roomEvent;
-    }
-
-    async getCardEventIds(
-      cards: CardDef[],
-      roomId: string,
-      cardHashes: Map<string, string>,
-      opts?: CardAPI.SerializeOpts,
-    ) {
-      if (!cards.length) {
-        return [];
-      }
-      let serializedCards = await Promise.all(
-        cards.map(async (card) => {
-          let { Base64ImageField } = await loaderFor(card).import<{
-            Base64ImageField: typeof Base64ImageFieldType;
-          }>(`${baseRealm.url}base64-image`);
-          return await this.cardService.serializeCard(card, {
-            omitFields: [Base64ImageField],
-            ...opts,
-          });
-        }),
-      );
-
-      let eventIds: string[] = [];
-      if (serializedCards.length) {
-        for (let card of serializedCards) {
-          let eventId = cardHashes.get(this.generateCardHashKey(roomId, card));
-          if (eventId === undefined) {
-            let responses = await this.sendCardFragments(roomId, card);
-            eventId = responses[0].event_id; // we only care about the first fragment
-            cardHashes.set(this.generateCardHashKey(roomId, card), eventId);
-          }
-          eventIds.push(eventId);
-        }
-      }
-      return eventIds;
+      });
     }
 
     async sendMessage(
       roomId: string,
       body: string | undefined,
-      attachedCards: CardDef[],
+      _cards: CardDef[],
       clientGeneratedId: string,
       _context?: OperatorModeContext,
     ) {
-      let waiterToken = waiter.beginAsync();
-      let attachedCardsEventIds = await this.getCardEventIds(
-        attachedCards,
-        roomId,
-        this.cardHashes,
-      );
-      let content = {
-        body,
-        msgtype: 'org.boxel.message',
-        formatted_body: body,
-        format: 'org.matrix.custom.html',
-        clientGeneratedId,
-        data: {
-          attachedCardsEventIds,
+      let event = {
+        room_id: roomId,
+        state_key: 'state',
+        type: 'm.room.message',
+        sender: this.userId,
+        content: {
+          body,
+          msgtype: 'org.boxel.message',
+          formatted_body: body,
+          format: 'org.matrix.custom.html',
         },
+        origin_server_ts: Date.now(),
+        unsigned: {
+          age: 105,
+          transaction_id: '1',
+        },
+        status: null,
+        clientGeneratedId,
       };
-      await this.sendEvent(roomId, 'm.room.message', content);
-      waiter.endAsync(waiterToken);
-    }
-
-    private async sendCardFragments(
-      roomId: string,
-      card: LooseSingleCardDocument,
-    ): Promise<ISendEventResponse[]> {
-      let fragments = splitStringIntoChunks(
-        JSON.stringify(card),
-        MAX_CARD_SIZE_KB,
-      );
-      let responses: ISendEventResponse[] = [];
-      for (let index = fragments.length - 1; index >= 0; index--) {
-        let cardFragment = fragments[index];
-        let response = await this.sendEvent(roomId, 'm.room.message', {
-          msgtype: 'org.boxel.cardFragment' as const,
-          format: 'org.boxel.card' as const,
-          body: `card fragment ${index + 1} of ${fragments.length}`,
-          formatted_body: `card fragment ${index + 1} of ${fragments.length}`,
-          data: {
-            ...(index < fragments.length - 1
-              ? { nextFragment: responses[0].event_id }
-              : {}),
-            cardFragment,
-            index,
-            totalParts: fragments.length,
-          },
-        } as CardFragmentContent);
-        responses.unshift(response);
-      }
-      return responses;
-    }
-
-    generateCardHashKey(roomId: string, card: LooseSingleCardDocument) {
-      return md5(roomId + JSON.stringify(card));
+      await addRoomEvent(this, event);
     }
 
     async logout() {
@@ -414,59 +274,11 @@ function generateMockMatrixService(
       return roomId;
     }
 
-    getLastActiveTimestamp(roomId: string) {
-      let resource = this.roomResources.get(roomId);
-      return resource?.lastActiveTimestamp;
-    }
-
-    getRoom(roomId: string) {
-      return this.rooms.get(roomId);
-    }
-
-    setRoom(roomId: string, room: RoomState) {
-      this.rooms.set(roomId, room);
-      if (!this.roomResourcesCache.has(roomId)) {
-        this.roomResourcesCache.set(
-          roomId,
-          getRoom(
-            this,
-            () => roomId,
-            () => this.getRoom(roomId)?.events,
-          ),
-        );
-      }
-    }
-
-    @cached
-    get roomResources() {
-      let resources: TrackedMap<string, RoomResource> = new TrackedMap();
-      for (let roomId of this.rooms.keys()) {
-        if (!this.roomResourcesCache.get(roomId)) {
-          continue;
-        }
-        resources.set(roomId, this.roomResourcesCache.get(roomId)!);
-      }
-      return resources;
-    }
-
-    async createCommandField(attr: Record<string, any>): Promise<PatchField> {
-      let data: LooseCardResource = {
-        meta: {
-          adoptsFrom: {
-            name: 'PatchField',
-            module: `${baseRealm.url}command`,
-          },
-        },
-        attributes: {
-          ...attr,
-        },
-      };
-      let card = this.cardAPI.createFromSerialized<typeof PatchField>(
-        data,
-        { data },
-        undefined,
+    getLastActiveTimestamp(room: RoomField) {
+      return (
+        room.events[room.events.length - 1]?.origin_server_ts ??
+        room.created?.getTime()
       );
-      return card;
     }
   }
   return MockMatrixService;
@@ -474,58 +286,28 @@ function generateMockMatrixService(
 
 export function setupMatrixServiceMock(
   hooks: NestedHooks,
-  // "autostart: true" is recommended for integration tests. Acceptance tests
-  // can rely on the real app's start behavior.
-  opts: { autostart: boolean } = { autostart: false },
+  opts?: {
+    realmPermissions?: () => {
+      [realmURL: string]: ('read' | 'write')[];
+    };
+    expiresInSec?: () => number;
+  },
 ) {
-  let realmService: RealmService;
-  let currentPermissions: Record<string, ('read' | 'write')[]> = {};
-  let currentExpiresInSec: number | undefined;
-
-  hooks.beforeEach(async function () {
-    currentPermissions = {};
-    currentExpiresInSec = undefined;
-    realmService = this.owner.lookup('service:realm') as RealmService;
+  hooks.beforeEach(function () {
     // clear any session refresh timers that may bleed into tests
-    realmService.logout();
+    clearAllRealmSessions();
     this.owner.register(
       'service:matrixService',
-      generateMockMatrixService(
-        () => currentPermissions,
-        () => currentExpiresInSec,
-      ),
+      generateMockMatrixService(opts?.realmPermissions, opts?.expiresInSec),
     );
     let matrixService = this.owner.lookup(
       'service:matrixService',
     ) as MockMatrixService;
     matrixService.cardAPI = cardApi;
-    if (opts.autostart) {
-      await matrixService.start();
-    }
   });
 
   hooks.afterEach(function () {
     // clear any session refresh timers that may bleed into other tests
-    realmService?.logout();
-    currentPermissions = {};
-    currentExpiresInSec = undefined;
+    clearAllRealmSessions();
   });
-
-  const setRealmPermissions = (permissions: {
-    [realmURL: string]: ('read' | 'write')[];
-  }) => {
-    currentPermissions = permissions;
-    // indexing may have already caused the realm service to establish a
-    // session, so when we change permissions we need to re-authenticate. This
-    // could stop being a problem if we make the test realm's indexing stay
-    // separate from the normal host loader.
-    realmService.logout();
-  };
-
-  const setExpiresInSec = (expiresInSec: number) => {
-    currentExpiresInSec = expiresInSec;
-    realmService.logout();
-  };
-
-  return { setRealmPermissions, setExpiresInSec };
 }

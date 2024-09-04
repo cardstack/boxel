@@ -37,5 +37,5 @@
     }
   },
   "include": ["../base/**/*", "./**/*"],
-  "exclude": ["../base/**/__boxel/**"]
+  "exclude": ["../base/__boxel/**/*"]
 }

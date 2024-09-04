@@ -18,7 +18,7 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   // General timeout per test
-  timeout: 60000,
+  timeout: 30000,
 
   // For expect calls
   expect: {
