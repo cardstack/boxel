@@ -23,7 +23,7 @@ import {
   visitOperatorMode,
   waitForCodeEditor,
 } from '../../helpers';
-import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -191,7 +191,10 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupWindowMock(hooks);
-  let { setRealmPermissions } = setupMatrixServiceMock(hooks);
+  let { setRealmPermissions } = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [baseRealm.url, testRealmURL],
+  });
 
   hooks.beforeEach(async function () {
     setRealmPermissions({ [testRealmURL]: ['read', 'write'] });

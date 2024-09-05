@@ -20,7 +20,7 @@ import {
   lookupLoaderService,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
-import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 
 const testRealmURL2 = 'http://test-realm/test2/';
 const testRealmAIconURL = 'https://i.postimg.cc/L8yXRvws/icon.png';
@@ -204,7 +204,10 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  let { setRealmPermissions } = setupMatrixServiceMock(hooks);
+  let { setRealmPermissions } = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [baseRealm.url, testRealmURL, testRealmURL2],
+  });
 
   hooks.beforeEach(async function () {
     await setupAcceptanceTestRealm({

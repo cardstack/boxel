@@ -34,7 +34,7 @@ import {
   setupIntegrationTestRealm,
   lookupLoaderService,
 } from '../../helpers';
-import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 
 const testRealm2URL = `http://test-realm/test2/`;
@@ -271,7 +271,11 @@ module('Integration | card-copy', function (hooks) {
     );
   });
 
-  setupMatrixServiceMock(hooks, { autostart: true });
+  setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [baseRealm.url, testRealmURL],
+    autostart: true,
+  });
 
   test('copy button does not appear when there is 1 stack for single card item', async function (assert) {
     await setCardInOperatorModeState([

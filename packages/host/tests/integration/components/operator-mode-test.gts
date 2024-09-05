@@ -40,7 +40,7 @@ import {
   lookupLoaderService,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
-import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 
 module('Integration | operator-mode', function (hooks) {
@@ -65,7 +65,11 @@ module('Integration | operator-mode', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
-  setupMatrixServiceMock(hooks, { autostart: true });
+  setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [baseRealm.url, testRealmURL],
+    autostart: true,
+  });
   setupWindowMock(hooks);
   let noop = () => {};
 

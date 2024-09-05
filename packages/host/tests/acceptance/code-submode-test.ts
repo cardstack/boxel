@@ -414,7 +414,7 @@ module('Acceptance | code submode tests', function (hooks) {
   setupWindowMock(hooks);
   setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
-    activeRealms: [testRealmURL],
+    activeRealms: [baseRealm.url, testRealmURL],
   });
 
   hooks.beforeEach(async function () {

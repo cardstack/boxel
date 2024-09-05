@@ -19,6 +19,7 @@ import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { baseRealm, primitive } from '@cardstack/runtime-common';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
+import MatrixService from '@cardstack/host/services/matrix-service';
 import {
   tokenRefreshPeriodSec,
   sessionLocalStorageKey,
@@ -34,10 +35,7 @@ import {
   visitOperatorMode,
   lookupLoaderService,
 } from '../helpers';
-import {
-  MockMatrixService,
-  setupMatrixServiceMock,
-} from '../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../helpers/mock-matrix';
 
 module('Acceptance | operator mode tests', function (hooks) {
   setupApplicationTest(hooks);
@@ -45,7 +43,10 @@ module('Acceptance | operator mode tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  let { setExpiresInSec } = setupMatrixServiceMock(hooks);
+  let { setExpiresInSec } = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [baseRealm.url, testRealmURL],
+  });
 
   hooks.beforeEach(async function () {
     setExpiresInSec(60 * 60);
@@ -475,7 +476,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     let matrixService = this.owner.lookup(
       'service:matrixService',
-    ) as MockMatrixService;
+    ) as MatrixService;
 
     await click('[data-test-profile-icon-button]');
     await click('[data-test-settings-button]');

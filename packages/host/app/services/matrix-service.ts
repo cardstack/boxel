@@ -331,7 +331,7 @@ export default class MatrixService extends Service {
     );
   }
 
-  public async createRealmSession(realmURL: URL) {
+  public async createRealmSession(realmURL: URL): Promise<string> {
     await this.ready;
 
     let inflightAuth = this.realmSessionTasks.get(realmURL.href);

@@ -5,16 +5,22 @@ import { render } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
+import { baseRealm } from '@cardstack/runtime-common';
+
 import RoomMessage from '@cardstack/host/components/matrix/room-message';
 
 import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
 
-import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { testRealmURL } from '../../helpers';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 
 module('Integration | Component | RoomMessage', function (hooks) {
   setupRenderingTest(hooks);
-  setupMatrixServiceMock(hooks, { autostart: true });
-
+  setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [baseRealm.url, testRealmURL],
+    autostart: true,
+  });
   function setupTestScenario(
     isStreaming: boolean,
     timeAgoForCreated: number,

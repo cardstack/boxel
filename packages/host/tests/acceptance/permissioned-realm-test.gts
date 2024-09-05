@@ -24,7 +24,7 @@ module('Acceptance | permissioned realm tests', function (hooks) {
   setupWindowMock(hooks);
   setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
-    activeRealms: [testRealmURL],
+    activeRealms: [baseRealm.url, testRealmURL],
   });
 
   hooks.beforeEach(async function () {

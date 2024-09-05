@@ -6,6 +6,8 @@ import type {
   MessageOptions,
 } from '@cardstack/host/services/matrix-sdk-loader';
 
+import MatrixService from '@cardstack/host/services/matrix-service';
+
 import { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
 import { createJWT } from './index';
@@ -16,12 +18,21 @@ export interface Options {
   loggedInAs?: string;
   displayName?: string;
   activeRealms?: string[];
+  autostart?: boolean;
+}
+
+class MockUtils {
+  setRealmPermissions = (_permissions: Record<string, string[]>) => {};
+  setExpiresInSec = (_sec: number) => {};
 }
 
 // When also using setupBaseRealm, this must come before setupBastRealm so it
 // can pre-fill the local storage mock before services start initializing.
-export function setupMockMatrix(hooks: NestedHooks, opts: Options = {}) {
-  hooks.beforeEach(function () {
+export function setupMockMatrix(
+  hooks: NestedHooks,
+  opts: Options = {},
+): MockUtils {
+  hooks.beforeEach(async function () {
     let sdk = new MockSDK(opts);
     const { loggedInAs } = opts;
     if (loggedInAs) {
@@ -64,7 +75,14 @@ export function setupMockMatrix(hooks: NestedHooks, opts: Options = {}) {
         instantiate: false,
       },
     );
+    if (opts.autostart) {
+      let matrixService = this.owner.lookup(
+        'service:matrixService',
+      ) as MatrixService;
+      await matrixService.start();
+    }
   });
+  return new MockUtils();
 }
 
 class ServerState {
