@@ -17,13 +17,16 @@ const DEFAULT_PAGE_SIZE = 50;
   actually implemented via direct HTTP.
 */
 export default class MatrixSDKLoader extends Service {
-  @service private declare loader: LoaderService;
+  @service private declare loaderService: LoaderService;
   #extended: ExtendedMatrixSDK | undefined;
 
   async load(): Promise<ExtendedMatrixSDK> {
     if (!this.#extended) {
       let sdk = await import('matrix-js-sdk');
-      this.#extended = new ExtendedMatrixSDK(sdk, this.loader.loader.fetch);
+      this.#extended = new ExtendedMatrixSDK(
+        sdk,
+        this.loaderService.loader.fetch,
+      );
     }
     return this.#extended;
   }
