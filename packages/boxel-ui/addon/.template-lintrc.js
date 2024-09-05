@@ -7,4 +7,12 @@ module.exports = {
     'no-pointer-down-event-binding': false,
     'no-positive-tabindex': false,
   },
+  overrides: [
+    {
+      files: ['src/icons/**.gts'],
+      rules: {
+        'no-inline-styles': false,
+      },
+    },
+  ],
 };
