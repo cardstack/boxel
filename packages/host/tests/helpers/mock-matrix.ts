@@ -1,5 +1,7 @@
 import window from 'ember-window-mock';
 
+import { unixTime } from '@cardstack/runtime-common';
+
 import type {
   ExtendedClient,
   ExtendedMatrixSDK,
@@ -7,8 +9,6 @@ import type {
 } from '@cardstack/host/services/matrix-sdk-loader';
 
 import { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
-
-import { createJWT } from './index';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
@@ -32,25 +32,6 @@ export function setupMockMatrix(hooks: NestedHooks, opts: Options = {}) {
           device_id: 'mock-device-id',
           user_id: loggedInAs,
         }),
-      );
-      window.localStorage.setItem(
-        'boxel-session',
-        JSON.stringify(
-          Object.fromEntries(
-            (opts.activeRealms ?? []).map((realmURL) => [
-              realmURL,
-              createJWT(
-                {
-                  user: loggedInAs,
-                  realm: realmURL,
-                  permissions: ['read', 'write'],
-                },
-                '1h',
-                'xxx',
-              ),
-            ]),
-          ),
-        ),
       );
     }
     this.owner.register(
@@ -121,15 +102,52 @@ class MockSDK implements PublicAPI<ExtendedMatrixSDK> {
   } as ExtendedMatrixSDK['ClientEvent'];
 }
 
+let nonce = 0;
+let expiresInSec: any;
+let realmPermissions: any;
+
 class MockClient implements ExtendedClient {
   private listeners = new Map();
 
   constructor(
     private sdk: MockSDK,
     private serverState: ServerState,
-    _clientOpts: MatrixSDK.ICreateClientOpts,
+    private clientOpts: MatrixSDK.ICreateClientOpts,
     private sdkOpts: Options,
   ) {}
+
+  async createRealmSession(realmURL: URL): Promise<string> {
+    let secret = "shhh! it's a secret";
+    let nowInSeconds = unixTime(Date.now());
+    let expires = nowInSeconds + (expiresInSec?.() ?? 60 * 60);
+    let header = { alg: 'none', typ: 'JWT' };
+    let payload = {
+      iat: nowInSeconds,
+      exp: expires,
+      user: this.sdkOpts.loggedInAs,
+      realm: realmURL.href,
+      // adding a nonce to the test token so that we can tell the difference
+      // between different tokens created in the same second
+      nonce: nonce++,
+      permissions: realmPermissions?.()[realmURL.href] ?? ['read', 'write'],
+    };
+    let stringifiedHeader = JSON.stringify(header);
+    let stringifiedPayload = JSON.stringify(payload);
+    let headerAndPayload = `${btoa(stringifiedHeader)}.${btoa(
+      stringifiedPayload,
+    )}`;
+    // this is our silly JWT--we don't sign with crypto since we are running in the
+    // browser so the secret is the signature
+    return `${headerAndPayload}.${secret}`;
+  }
+
+  get baseUrl(): string {
+    return this.clientOpts.baseUrl;
+  }
+
+  getAccessToken(): string | null {
+    throw new Error('Method not implemented.');
+  }
 
   addThreePidOnly(_data: MatrixSDK.IAddThreePidOnlyBody): Promise<{}> {
     throw new Error('Method not implemented.');
