@@ -89,7 +89,10 @@ module.exports = function (environment) {
     ENV.minSaveTaskDurationMs = 0;
     ENV.sqlSchema = sqlSchema;
 
-    ENV.testRealmURLs = ['http://test-realm/test/'];
+    ENV.testRealmURLs = [
+      'http://test-realm/test/',
+      'https://cardstack.com/base/',
+    ];
   }
 
   if (environment === 'production') {
