@@ -206,6 +206,9 @@ importers:
       ember-modifier:
         specifier: ^4.1.0
         version: 4.1.0(ember-source@5.4.1)
+      ember-template-lint:
+        specifier: ^5.11.2
+        version: 5.11.2
       ethers:
         specifier: ^6.6.2
         version: 6.6.2
