@@ -18,7 +18,7 @@ import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { baseRealm } from '@cardstack/runtime-common';
-import { AppCard } from './app-card';
+import { AppCard } from 'https://cardstack.com/base/app-card';
 
 class Isolated extends Component<typeof ProductRequirementDocument> {
   <template>

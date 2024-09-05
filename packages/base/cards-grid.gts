@@ -187,7 +187,7 @@ class Isolated extends Component<typeof CardsGrid> {
       query: {
         filter: {
           type: {
-            module: 'http://localhost:4201/experiments/app-card',
+            module: `${baseRealm.url}app-card`,
             name: 'AppCard',
           },
         },

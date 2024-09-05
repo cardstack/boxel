@@ -19,7 +19,7 @@ import {
   type CodeRef,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-import { AppCard, Tab, CardsGrid } from './app-card';
+import { AppCard, Tab, CardsGrid } from 'https://cardstack.com/base/app-card';
 
 class HowToSidebar extends GlimmerComponent {
   <template>
@@ -384,7 +384,7 @@ class Isolated extends AppCard.isolated {
       tabId: 'dashboard',
       ref: {
         name: 'AppCard',
-        module: `${this.currentRealm?.href}app-card`,
+        module: `${baseRealm.url}app-card`,
       },
     }),
     new Tab({
@@ -392,7 +392,7 @@ class Isolated extends AppCard.isolated {
       tabId: 'requirements',
       ref: {
         name: 'ProductRequirementDocument',
-        module: `${this.currentRealm?.href}product-requirement-document`,
+        module: `${baseRealm.url}product-requirement-document`,
       },
     }),
     new Tab({
@@ -400,7 +400,7 @@ class Isolated extends AppCard.isolated {
       tabId: 'your-apps',
       ref: {
         name: 'AppCard',
-        module: `${this.currentRealm?.href}app-card`,
+        module: `${baseRealm.url}app-card`,
       },
     }),
   ];

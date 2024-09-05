@@ -1,6 +1,6 @@
-import BooleanField from 'https://cardstack.com/base/boolean';
-import CodeRefField from 'https://cardstack.com/base/code-ref';
-import { Base64ImageField } from 'https://cardstack.com/base/base64-image';
+import BooleanField from './boolean';
+import CodeRefField from './code-ref';
+import { Base64ImageField } from './base64-image';
 import {
   CardDef,
   field,
@@ -11,7 +11,7 @@ import {
   realmURL,
   StringField,
   type CardContext,
-} from 'https://cardstack.com/base/card-api';
+} from './card-api';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
