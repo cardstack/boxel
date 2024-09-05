@@ -103,11 +103,15 @@ export default class RenderCard extends Route<Model | null> {
       return model ?? null;
     } catch (e) {
       console.error(e);
-      (e as any).loadType = params.operatorModeEnabled
-        ? 'stack'
-        : url.href === defaultRealmURL
-        ? 'index'
-        : 'card';
+      // FIXME what can replace url.href === defaultRealmURL if Matrix hasn’t yet loaded so realms aren’t known?
+
+      // Previously
+      //         ? 'stack'
+      //   : url.href === defaultRealmURL
+      //   ? 'index'
+      //   : 'card';
+
+      (e as any).loadType = params.operatorModeEnabled ? 'stack' : 'card';
       (e as any).operatorModeState = params.operatorModeState;
       throw e;
     }
@@ -118,7 +122,7 @@ export default class RenderCard extends Route<Model | null> {
     // so users will be redirected to operator mode.
     // We can update the codes below after we have a clear idea on how to implement authentication in guest mode.
     let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
-      new URL(defaultRealmURL),
+      new URL(this.realm.userDefaultRealm.path),
     );
     if (
       !isPublicReadableRealm &&
@@ -126,8 +130,8 @@ export default class RenderCard extends Route<Model | null> {
     ) {
       let path = transition.to?.params?.path ?? '';
       let url = path
-        ? new URL(`/${path}`, defaultRealmURL)
-        : new URL('./', defaultRealmURL);
+        ? new URL(`/${path}`, this.realm.userDefaultRealm.path)
+        : new URL('./', this.realm.userDefaultRealm.path);
       await this.router.replaceWith(`card`, {
         queryParams: {
           operatorModeEnabled: 'true',
