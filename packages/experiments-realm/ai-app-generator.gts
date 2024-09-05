@@ -53,7 +53,7 @@ class HowToSidebar extends GlimmerComponent {
         </p>
       </div>
     </aside>
-    <style scoped>
+    <style>
       h3,
       p {
         margin-top: 0;

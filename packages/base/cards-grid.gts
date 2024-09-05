@@ -95,7 +95,7 @@ class Isolated extends Component<typeof CardsGrid> {
       </div>
     </div>
 
-    <style scoped>
+    <style>
       :global(:root) {
         --cards-grid-padding-top: var(--boxel-sp-lg);
       }

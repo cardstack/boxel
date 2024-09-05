@@ -94,7 +94,7 @@ export default class ButtonComponent extends Component<Signature> {
         </LinkTo>
       {{/if}}
     {{/let}}
-    <style scoped>
+    <style>
       @layer {
         /* Button */
         .boxel-button {
