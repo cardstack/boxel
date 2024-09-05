@@ -18,7 +18,7 @@
     "inlineSourceMap": true,
     "inlineSources": true,
     "baseUrl": ".",
-    "module": "CommonJS",
+    "module": "es2020",
     "esModuleInterop": true,
     "experimentalDecorators": true,
     "skipLibCheck": true,
