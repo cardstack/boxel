@@ -1,6 +1,12 @@
 import window from 'ember-window-mock';
 
-import { ExtendedMatrixSDK } from '@cardstack/host/services/matrix-sdk-loader';
+import type {
+  ExtendedClient,
+  ExtendedMatrixSDK,
+  MessageOptions,
+} from '@cardstack/host/services/matrix-sdk-loader';
+
+import { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
 import { createJWT } from './index';
 
@@ -81,18 +87,17 @@ class ServerState {
   }
 }
 
-class MockSDK implements ExtendedMatrixSDK {
+// without this, using a class as an interface forces you to have the same
+// private and protected methods too
+type PublicAPI<T> = { [K in keyof T]: T[K] };
+
+class MockSDK implements PublicAPI<ExtendedMatrixSDK> {
   private serverState = new ServerState();
 
   constructor(private sdkOpts: Options) {}
 
   createClient(clientOpts: MatrixSDK.ICreateClientOpts) {
-    return new MockClient(
-      this,
-      this.serverState,
-      clientOpts,
-      this.sdkOpts,
-    ) as unknown as MatrixSDK.MatrixClient;
+    return new MockClient(this, this.serverState, clientOpts, this.sdkOpts);
   }
 
   RoomEvent = {
@@ -116,25 +121,7 @@ class MockSDK implements ExtendedMatrixSDK {
   } as ExtendedMatrixSDK['ClientEvent'];
 }
 
-class MockClient
-  implements
-    Pick<
-      MatrixSDK.MatrixClient,
-      | 'isLoggedIn'
-      | 'getUserId'
-      | 'getProfileInfo'
-      | 'getThreePids'
-      | 'createRoom'
-      | 'setPowerLevel'
-      | 'on'
-      | 'off'
-      | 'startClient'
-      | 'getJoinedRooms'
-      | 'decryptEventIfNeeded'
-      | 'getRoom'
-      | 'sendEvent'
-    >
-{
+class MockClient implements ExtendedClient {
   private listeners = new Map();
 
   constructor(
@@ -144,11 +131,168 @@ class MockClient
     private sdkOpts: Options,
   ) {}
 
-  async sendEvent(
+  addThreePidOnly(_data: MatrixSDK.IAddThreePidOnlyBody): Promise<{}> {
+    throw new Error('Method not implemented.');
+  }
+
+  get credentials(): { userId: string | null } {
+    throw new Error('Method not implemented.');
+  }
+
+  deleteThreePid(
+    _medium: string,
+    _address: string,
+  ): Promise<{ id_server_unbind_result: MatrixSDK.IdServerUnbindResult }> {
+    throw new Error('Method not implemented.');
+  }
+
+  fetchRoomEvent(
+    _roomId: string,
+    _eventId: string,
+  ): Promise<Partial<MatrixSDK.IEvent>> {
+    throw new Error('Method not implemented.');
+  }
+
+  forget(_roomId: string, _deleteRoom?: boolean | undefined): Promise<{}> {
+    throw new Error('Method not implemented.');
+  }
+
+  isUsernameAvailable(_username: string): Promise<boolean> {
+    throw new Error('Method not implemented.');
+  }
+
+  leave(_roomId: string): Promise<{}> {
+    throw new Error('Method not implemented.');
+  }
+
+  registerRequest(
+    _data: MatrixSDK.RegisterRequest,
+    _kind?: string | undefined,
+  ): Promise<MatrixSDK.RegisterResponse> {
+    throw new Error('Method not implemented.');
+  }
+
+  requestPasswordEmailToken(
+    _email: string,
+    _clientSecret: string,
+    _sendAttempt: number,
+    _nextLink?: string | undefined,
+  ): Promise<MatrixSDK.IRequestTokenResponse> {
+    throw new Error('Method not implemented.');
+  }
+
+  scrollback(
+    _room: MatrixSDK.Room,
+    _limit?: number | undefined,
+  ): Promise<MatrixSDK.Room> {
+    throw new Error('Method not implemented.');
+  }
+
+  sendReadReceipt(
+    _event: MatrixSDK.MatrixEvent | null,
+    _receiptType?: MatrixSDK.ReceiptType | undefined,
+    _unthreaded?: boolean | undefined,
+  ): Promise<{} | undefined> {
+    throw new Error('Method not implemented.');
+  }
+
+  setPassword(
+    _authDict: MatrixSDK.AuthDict,
+    _newPassword: string,
+    _logoutDevices?: boolean | undefined,
+  ): Promise<{}> {
+    throw new Error('Method not implemented.');
+  }
+
+  setRoomName(
+    _roomId: string,
+    _name: string,
+  ): Promise<MatrixSDK.ISendEventResponse> {
+    throw new Error('Method not implemented.');
+  }
+
+  invite(
+    _roomId: string,
+    _userId: string,
+    _reason?: string | undefined,
+  ): Promise<{}> {
+    throw new Error('Method not implemented.');
+  }
+
+  joinRoom(
+    _roomIdOrAlias: string,
+    _opts?: MatrixSDK.IJoinRoomOpts | undefined,
+  ): Promise<MatrixSDK.Room> {
+    throw new Error('Method not implemented.');
+  }
+
+  loginWithPassword(
+    _user: string,
+    _password: string,
+  ): Promise<MatrixSDK.LoginResponse> {
+    throw new Error('Method not implemented.');
+  }
+
+  logout(_stopClient?: boolean | undefined): Promise<{}> {
+    throw new Error('Method not implemented.');
+  }
+
+  roomState(_roomId: string): Promise<MatrixSDK.IStateEventWithRoomId[]> {
+    throw new Error('Method not implemented.');
+  }
+
+  setDisplayName(_name: string): Promise<{}> {
+    throw new Error('Method not implemented.');
+  }
+
+  allRoomMessages(
+    _roomId: string,
+    _opts?: MessageOptions | undefined,
+  ): Promise<MatrixEvent[]> {
+    throw new Error('Method not implemented.');
+  }
+
+  requestEmailToken(
+    _type: 'registration' | 'threepid',
+    _email: string,
+    _clientSecret: string,
+    _sendAttempt: number,
+  ): Promise<MatrixSDK.IRequestTokenResponse> {
+    throw new Error('Method not implemented.');
+  }
+
+  loginWithEmail(
+    _email: string,
+    _password: string,
+  ): Promise<MatrixSDK.LoginResponse> {
+    throw new Error('Method not implemented.');
+  }
+
+  sendEvent(
     roomId: string,
     eventType: string,
     content: MatrixSDK.IContent,
-  ): Promise<MatrixSDK.ISendEventResponse> {
+    txnId?: string,
+  ): Promise<MatrixSDK.ISendEventResponse>;
+  sendEvent(
+    roomId: string,
+    threadId: string | null,
+    eventType: string,
+    content: MatrixSDK.IContent,
+    txnId?: string,
+  ): Promise<MatrixSDK.ISendEventResponse>;
+  async sendEvent(...args: any[]): Promise<MatrixSDK.ISendEventResponse> {
+    let roomId: string;
+
+    let eventType: string;
+    let content: MatrixSDK.IContent;
+
+    if (typeof args[2] === 'object') {
+      [roomId, eventType, content] = args;
+    } else {
+      [roomId, , eventType, content] = args;
+    }
+
     let roomEvent = {
       event_id: this.serverState.eventId(),
       room_id: roomId,
@@ -252,8 +396,8 @@ class MockClient
   }
 
   off<T extends MatrixSDK.EmittedEvents | MatrixSDK.EventEmitterEvents>(
-    event: T,
-    listener: MatrixSDK.Listener<
+    _event: T,
+    _listener: MatrixSDK.Listener<
       MatrixSDK.EmittedEvents,
       MatrixSDK.ClientEventHandlerMap,
       T
@@ -263,11 +407,13 @@ class MockClient
   }
 
   async setPowerLevel(
-    roomId: string,
-    userId: string | string[],
-    powerLevel: number | undefined,
-    event?: MatrixSDK.MatrixEvent | null | undefined,
-  ): Promise<MatrixSDK.ISendEventResponse> {}
+    _roomId: string,
+    _userId: string | string[],
+    _powerLevel: number | undefined,
+    _event?: MatrixSDK.MatrixEvent | null | undefined,
+  ): Promise<MatrixSDK.ISendEventResponse> {
+    return { event_id: this.serverState.eventId() };
+  }
 
   async createRoom(
     _options: MatrixSDK.ICreateRoomOpts,

@@ -1,7 +1,6 @@
 import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import Service, { service } from '@ember/service';
-import { isTesting } from '@embroider/macros';
 import { cached, tracked } from '@glimmer/tracking';
 
 import format from 'date-fns/format';
