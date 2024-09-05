@@ -38,7 +38,6 @@ import {
 } from '@cardstack/runtime-common/helpers/ai';
 
 import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
-import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
 import { currentRoomIdPersistenceKey } from '@cardstack/host/components/ai-assistant/panel';
 import { Submode } from '@cardstack/host/components/submode-switcher';
@@ -97,7 +96,6 @@ export default class MatrixService extends Service {
 
   @service declare router: RouterService;
   @tracked private _client: ExtendedClient | undefined;
-  private realmSessionTasks: Map<string, Promise<string>> = new Map(); // key: realmURL, value: promise for JWT
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
@@ -332,33 +330,7 @@ export default class MatrixService extends Service {
   }
 
   public async createRealmSession(realmURL: URL) {
-    await this.ready;
-
-    let inflightAuth = this.realmSessionTasks.get(realmURL.href);
-
-    if (inflightAuth) {
-      return inflightAuth;
-    }
-
-    let realmAuthClient = new RealmAuthClient(
-      realmURL,
-      this.client,
-      this.loaderService.loader.fetch,
-    );
-
-    let jwtPromise = realmAuthClient.getJWT();
-
-    this.realmSessionTasks.set(realmURL.href, jwtPromise);
-
-    jwtPromise
-      .then(() => {
-        this.realmSessionTasks.delete(realmURL.href);
-      })
-      .catch(() => {
-        this.realmSessionTasks.delete(realmURL.href);
-      });
-
-    return jwtPromise;
+    return this.client.createRealmSession(realmURL);
   }
 
   async createRoom(
