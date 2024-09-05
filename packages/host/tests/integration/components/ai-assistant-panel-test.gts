@@ -11,7 +11,6 @@ import { format, subMinutes } from 'date-fns';
 import { setupRenderingTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
-import { EventStatus } from 'matrix-js-sdk';
 import { module, test } from 'qunit';
 
 import { Deferred, baseRealm } from '@cardstack/runtime-common';
@@ -1265,7 +1264,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
           age: 105,
           transaction_id: '1',
         },
-        status: EventStatus.SENDING,
+        status: 'sending',
       };
       await addRoomEvent(this, event);
     };
@@ -1286,7 +1285,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let newEvent = {
       ...event,
       event_id: 'updated-event-id',
-      status: EventStatus.SENT,
+      status: 'sent',
     };
     await updateRoomEvent(matrixService, newEvent, event.event_id);
     await waitUntil(
@@ -1343,7 +1342,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
           age: 105,
           transaction_id: '1',
         },
-        status: EventStatus.SENDING,
+        status: 'sending',
       };
       await addRoomEvent(this, event);
     };
@@ -1363,7 +1362,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let newEvent = {
       ...event,
       event_id: 'updated-event-id',
-      status: EventStatus.NOT_SENT,
+      status: 'not_sent',
     };
     await updateRoomEvent(matrixService, newEvent, event.event_id);
     await waitUntil(

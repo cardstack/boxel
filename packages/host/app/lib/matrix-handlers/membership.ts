@@ -1,4 +1,4 @@
-import debounce from 'lodash/debounce';
+import { debounce } from '@ember/runloop';
 
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
@@ -18,9 +18,9 @@ export function onMembership(MatrixService: MatrixService) {
 
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 
-const debouncedMembershipDrain = debounce((MatrixService: MatrixService) => {
-  drainMembership(MatrixService);
-}, eventDebounceMs);
+function debouncedMembershipDrain(MatrixService: MatrixService) {
+  debounce(null, drainMembership, MatrixService, eventDebounceMs);
+}
 
 async function drainMembership(MatrixService: MatrixService) {
   await MatrixService.flushMembership;

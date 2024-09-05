@@ -50,7 +50,41 @@ export class ExtendedMatrixSDK {
   }
 }
 
-export type ExtendedClient = MatrixSDK.MatrixClient & {
+export type ExtendedClient = Pick<
+  MatrixSDK.MatrixClient,
+  | 'addThreePidOnly'
+  | 'createRoom'
+  | 'credentials'
+  | 'decryptEventIfNeeded'
+  | 'deleteThreePid'
+  | 'fetchRoomEvent'
+  | 'forget'
+  | 'getJoinedRooms'
+  | 'getProfileInfo'
+  | 'getRoom'
+  | 'getThreePids'
+  | 'getUserId'
+  | 'invite'
+  | 'isLoggedIn'
+  | 'isUsernameAvailable'
+  | 'joinRoom'
+  | 'leave'
+  | 'loginWithPassword'
+  | 'logout'
+  | 'off'
+  | 'on'
+  | 'registerRequest'
+  | 'requestPasswordEmailToken'
+  | 'roomState'
+  | 'scrollback'
+  | 'sendEvent'
+  | 'sendReadReceipt'
+  | 'setDisplayName'
+  | 'setPassword'
+  | 'setPowerLevel'
+  | 'setRoomName'
+  | 'startClient'
+> & {
   allRoomMessages(
     roomId: string,
     opts?: MessageOptions,
@@ -183,7 +217,7 @@ function extendedClient(client: MatrixSDK.MatrixClient): ExtendedClient {
   }) as unknown as ExtendedClient;
 }
 
-interface MessageOptions {
+export interface MessageOptions {
   direction?: 'forward' | 'backward';
   onMessages?: (messages: DiscreteMatrixEvent[]) => Promise<void>;
   pageSize: number;
