@@ -117,12 +117,11 @@ export class CurrentRun {
 
     current.#batch = await current.#indexWriter.createBatch(current.realmURL);
     let mtimes = await current.batch.getModifiedTimes();
-    await current.discoverInvalidations(current.realmURL, mtimes);
-    let invalidations = current.batch.invalidations.map(
-      (href) => new URL(href),
-    );
-
+    let invalidations: URL[] | undefined;
     await current.whileIndexing(async () => {
+      await current.discoverInvalidations(current.realmURL, mtimes);
+      invalidations = current.batch.invalidations.map((href) => new URL(href));
+
       for (let invalidation of invalidations) {
         await current.tryToVisit(invalidation);
       }

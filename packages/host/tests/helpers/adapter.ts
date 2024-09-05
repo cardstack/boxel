@@ -130,7 +130,7 @@ export class TestRealmAdapter implements RealmAdapter {
         exp: number;
       } & TokenClaims;
       let expiration = claims.exp;
-      if (expiration > unixTime(Date.now())) {
+      if (expiration < unixTime(Date.now())) {
         throw new TokenExpiredError(`JWT token expired at ${expiration}`);
       }
       return claims;

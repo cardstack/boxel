@@ -1,7 +1,28 @@
 import { MatrixClient } from './matrix-client';
 import { RealmPermissions } from './realm';
 
-export default class RealmPermissionChecker {
+export interface RealmPermissionChecker {
+  for(username: string): Promise<('read' | 'write')[]>;
+  can(username: string, action: 'read' | 'write'): Promise<boolean>;
+}
+
+export interface RealmPermissionCheckerFactory {
+  create(
+    realmPermissions: RealmPermissions,
+    matrixClient: MatrixClient,
+  ): RealmPermissionChecker;
+}
+
+export class MatrixRealmPermissionCheckerFactory {
+  static create(
+    realmPermissions: RealmPermissions,
+    matrixClient: MatrixClient,
+  ): RealmPermissionChecker {
+    return new MatrixRealmPermissionChecker(realmPermissions, matrixClient);
+  }
+}
+
+export class MatrixRealmPermissionChecker {
   private realmPermissions: RealmPermissions = {};
   private matrixClient: MatrixClient;
 

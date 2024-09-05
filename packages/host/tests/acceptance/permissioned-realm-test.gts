@@ -26,7 +26,7 @@ module('Acceptance | permissioned realm tests', function (hooks) {
 
   hooks.beforeEach(async function () {
     let loader = lookupLoaderService().loader;
-    let { field, contains, CardDef, Component } = await loader.import<
+    let { field, contains, linksTo, CardDef, Component } = await loader.import<
       typeof import('https://cardstack.com/base/card-api')
     >(`${baseRealm.url}card-api`);
     let { default: StringField } = await loader.import<
@@ -46,6 +46,8 @@ module('Acceptance | permissioned realm tests', function (hooks) {
       };
     }
 
+    class Company extends CardDef {}
+
     class Person extends CardDef {
       @field firstName = contains(StringField);
       @field lastName = contains(StringField);
@@ -54,12 +56,15 @@ module('Acceptance | permissioned realm tests', function (hooks) {
           return [this.firstName, this.lastName].filter(Boolean).join(' ');
         },
       });
+      @field company = linksTo(Company);
+
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <div data-test-person>
             <p>First name: <@fields.firstName /></p>
             <p>Last name: <@fields.lastName /></p>
             <p>Title: <@fields.title /></p>
+            <p>Company: <@fields.company.title /></p>
           </div>
           <style>
             div {
@@ -89,8 +94,41 @@ module('Acceptance | permissioned realm tests', function (hooks) {
           firstName: 'Hassan',
           lastName: 'Abdel-Rahman',
         }),
+        'Person/2.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'John',
+              lastName: 'Doe',
+            },
+            relationships: {
+              company: {
+                links: {
+                  self: 'http://test-realm2/test/Company/1',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://test-realm/test/person',
+                name: 'Person',
+              },
+            },
+          },
+        },
       },
       permissions: { users: ['read', 'write'] },
+      realmURL: testRealmURL,
+    });
+
+    await setupAcceptanceTestRealm({
+      contents: {
+        'Company/1.json': new Company({
+          title: 'Acme Inc.',
+        }),
+      },
+      realmURL: `http://test-realm2/test/`,
+      unknownToUser: true,
     });
   });
 
@@ -121,5 +159,13 @@ module('Acceptance | permissioned realm tests', function (hooks) {
       ctrlKey: true,
     });
     assert.dom('[data-test-stack-card="http://test-realm/test/"]').exists();
+  });
+
+  test('accessing a card with a linksTo for a lesser-known realm', async function (assert) {
+    await visit('/test/Person/2');
+    assert
+      .dom('[data-test-stack-card="http://test-realm/test/Person/2"]')
+      .exists();
+    assert.dom('[data-test-stack-card]').containsText('Company: Acme Inc.');
   });
 });
