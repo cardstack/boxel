@@ -1024,6 +1024,9 @@ importers:
       ember-modifier:
         specifier: ^4.1.0
         version: 4.1.0(ember-source@5.4.1)
+      ember-template-lint:
+        specifier: ^5.11.2
+        version: 5.11.2
       tracked-built-ins:
         specifier: ^3.3.0
         version: 3.3.0
