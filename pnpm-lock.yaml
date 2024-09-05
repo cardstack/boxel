@@ -1859,6 +1859,9 @@ importers:
       ember-template-lint:
         specifier: '*'
         version: 5.11.2
+      ember-template-recast:
+        specifier: ^6.1.5
+        version: 6.1.5
 
   vendor/ember-concurrency-async-plugin:
     dependencies:
@@ -13048,7 +13051,7 @@ packages:
       ci-info: 3.9.0
       date-fns: 2.30.0
       ember-template-imports: 3.4.2
-      ember-template-recast: 6.1.4
+      ember-template-recast: 6.1.5
       eslint-formatter-kakoune: 1.0.0
       find-up: 6.3.0
       fuse.js: 6.6.2
@@ -13086,6 +13089,26 @@ packages:
 
   /ember-template-recast@6.1.4:
     resolution: {integrity: sha512-fCh+rOK6z+/tsdkTbOE+e7f84P6ObnIRQrCCrnu21E4X05hPeradikIkRMhJdxn4NWrxitfZskQDd37TR/lsNQ==}
+    engines: {node: 12.* || 14.* || >= 16.*}
+    hasBin: true
+    dependencies:
+      '@glimmer/reference': 0.84.3
+      '@glimmer/syntax': 0.84.3
+      '@glimmer/validator': 0.84.3
+      async-promise-queue: 1.0.5
+      colors: 1.4.0
+      commander: 8.3.0
+      globby: 11.1.0
+      ora: 5.4.1
+      slash: 3.0.0
+      tmp: 0.2.1
+      workerpool: 6.5.1
+    transitivePeerDependencies:
+      - supports-color
+    dev: true
+
+  /ember-template-recast@6.1.5:
+    resolution: {integrity: sha512-VnRN8FzEHQnw/5rCv6Wnq8MVYXbGQbFY+rEufvWV+FO/IsxMahGEud4MYWtTA2q8iG+qJFrDQefNvQ//7MI7Qw==}
     engines: {node: 12.* || 14.* || >= 16.*}
     hasBin: true
     dependencies:
