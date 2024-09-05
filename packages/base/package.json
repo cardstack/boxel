@@ -27,7 +27,9 @@
     "ember-source": "~5.4.0"
   },
   "scripts": {
-    "lint:hbs": "ember-template-lint ."
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
+    "lint:hbs": "ember-template-lint .",
+    "lint:hbs:fix": "ember-template-lint . --fix"
   },
   "volta": {
     "extends": "../../package.json"
