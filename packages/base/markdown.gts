@@ -7,6 +7,7 @@ import { markdownToHtml } from '@cardstack/runtime-common';
 class View extends Component<typeof MarkdownField> {
   <template>
     <div>
+      {{! template-lint-disable no-triple-curlies }}
       {{{markdownToHtml @model}}}
     </div>
   </template>
