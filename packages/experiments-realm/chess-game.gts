@@ -10,7 +10,6 @@ import {
 import Component from '@glimmer/component';
 import StringCard from 'https://cardstack.com/base/string';
 import { contains, field } from 'https://cardstack.com/base/card-api';
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { not } from '@cardstack/boxel-ui/helpers';
