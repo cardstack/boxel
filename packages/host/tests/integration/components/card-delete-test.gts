@@ -509,6 +509,12 @@ module('Integration | card-delete', function (hooks) {
       realm,
       expectedEvents,
       callback: async () => {
+        await click(
+          `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+        );
+        await click(
+          `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
+        );
         await triggerEvent(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
           'mouseenter',
@@ -570,6 +576,12 @@ module('Integration | card-delete', function (hooks) {
       realm,
       expectedEvents,
       callback: async () => {
+        await click(
+          `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+        );
+        await click(
+          `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
+        );
         await waitFor(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
         );
@@ -650,6 +662,9 @@ module('Integration | card-delete', function (hooks) {
       realm,
       expectedEvents,
       callback: async () => {
+        await click(
+          `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+        );
         await waitFor(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
         );
@@ -717,6 +732,9 @@ module('Integration | card-delete', function (hooks) {
       realm,
       expectedEvents,
       callback: async () => {
+        await click(
+          `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+        );
         await triggerEvent(
           `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
           'mouseenter',
