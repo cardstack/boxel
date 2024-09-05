@@ -151,7 +151,7 @@ export default class MatrixService extends Service {
     await this.cardAPIModule.loaded;
     // The matrix SDK is VERY big so we only load it when we need it
     this.#matrixSDK = await this.matrixSdkLoader.load();
-    this._client = await this.matrixSDK.createClient({
+    this._client = this.matrixSDK.createClient({
       baseUrl: matrixURL,
     });
 
@@ -174,8 +174,8 @@ export default class MatrixService extends Service {
         async (e) => {
           if (e.event.type == 'com.cardstack.boxel.realms') {
             this.cardService.setRealms(e.event.content.realms);
-            this.accountDataProcessed.fulfill();
             await this.loginToRealms();
+            this.accountDataProcessed.fulfill();
           }
         },
       ],
@@ -301,7 +301,6 @@ export default class MatrixService extends Service {
       try {
         await this._client.startClient();
         await this.accountDataProcessed.promise;
-        await this.loginToRealms();
         await this.initializeRooms();
       } catch (e) {
         console.log('Error starting Matrix client', e);

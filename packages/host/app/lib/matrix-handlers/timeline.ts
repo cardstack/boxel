@@ -1,4 +1,5 @@
-import debounce from 'lodash/debounce';
+import { debounce } from '@ember/runloop';
+
 import { Room, type MatrixEvent } from 'matrix-js-sdk';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -45,9 +46,9 @@ export function onUpdateEventStatus(MatrixService: MatrixService) {
   };
 }
 
-const debouncedTimelineDrain = debounce((MatrixService: MatrixService) => {
-  drainTimeline(MatrixService);
-}, eventDebounceMs);
+function debouncedTimelineDrain(MatrixService: MatrixService) {
+  debounce(null, drainTimeline, MatrixService, eventDebounceMs);
+}
 
 async function drainTimeline(MatrixService: MatrixService) {
   await MatrixService.flushTimeline;

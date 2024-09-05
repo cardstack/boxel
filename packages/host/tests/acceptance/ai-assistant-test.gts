@@ -1,4 +1,4 @@
-import { click, fillIn, waitFor } from '@ember/test-helpers';
+import { click, fillIn } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
 
@@ -28,11 +28,10 @@ import {
   StringField,
 } from '../helpers/base-realm';
 
-import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../helpers/mock-matrix';
 
 async function selectCardFromCatalog(cardId: string) {
   await click('[data-test-choose-card-btn]');
-  await waitFor(`[data-test-select="${cardId}"]`);
   await click(`[data-test-select="${cardId}"]`);
   await click('[data-test-card-catalog-go-button]');
 }
@@ -61,7 +60,7 @@ async function assertMessages(
       assert
         .dom(`[data-test-message-idx="${index}"] [data-test-message-cards]`)
         .exists({ count: 1 });
-      await assert
+      assert
         .dom(`[data-test-message-idx="${index}"] [data-test-attached-card]`)
         .exists({ count: cards.length });
       cards.map(async (card) => {
@@ -80,7 +79,7 @@ async function assertMessages(
         }
 
         if (card.realmIconUrl) {
-          await assert
+          assert
             .dom(
               `[data-test-message-idx="${index}"] [data-test-attached-card="${card.id}"] [data-test-realm-icon-url="${card.realmIconUrl}"]`,
             )
@@ -88,7 +87,7 @@ async function assertMessages(
         }
       });
     } else {
-      await assert
+      assert
         .dom(`[data-test-message-idx="${index}"] [data-test-message-cards]`)
         .doesNotExist();
     }
@@ -97,12 +96,15 @@ async function assertMessages(
 
 module('Acceptance | AI Assistant tests', function (hooks) {
   setupApplicationTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [testRealmURL],
+  });
+  setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
     class Pet extends CardDef {
@@ -225,7 +227,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     const testCard = `${testRealmURL}Person/hassan`;
 
     for (let i = 1; i <= 3; i++) {
-      await waitFor('[data-test-message-field]');
       await fillIn('[data-test-message-field]', `Message - ${i}`);
       await selectCardFromCatalog(testCard);
       await click('[data-test-send-message-btn]');
@@ -252,9 +253,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     //Test the scenario where there is an update to the card
     await click(
       `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testCard}"]`,
-    );
-    await waitFor(
-      `[data-test-stack-card="${testCard}"] [data-test-edit-button]`,
     );
 
     await click(`[data-test-stack-card="${testCard}"] [data-test-edit-button]`);
