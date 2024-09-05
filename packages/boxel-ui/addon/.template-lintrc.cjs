@@ -1,7 +1,8 @@
 'use strict';
 
 module.exports = {
-  extends: 'recommended',
+  extends: ['recommended', '@cardstack/template-lint:recommended'],
+  plugins: ['../../template-lint/plugin'],
   rules: {
     'require-button-type': false,
   },
