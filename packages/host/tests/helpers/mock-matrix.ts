@@ -10,6 +10,7 @@ import type {
   MessageOptions,
 } from '@cardstack/host/services/matrix-sdk-loader';
 
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import RealmService from '@cardstack/host/services/realm';
 
 import { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
@@ -22,6 +23,7 @@ export interface Config {
   activeRealms?: string[];
   realmPermissions?: Record<string, string[]>;
   expiresInSec?: number;
+  autostart?: boolean;
 }
 
 class MockUtils {
@@ -45,7 +47,7 @@ export function setupMockMatrix(
   opts: Config = {},
 ): MockUtils {
   let ownerContainer: Owner[] = [];
-  hooks.beforeEach(function () {
+  hooks.beforeEach(async function () {
     ownerContainer[0] = this.owner;
     let sdk = new MockSDK(opts);
     const { loggedInAs } = opts;
@@ -70,6 +72,13 @@ export function setupMockMatrix(
         instantiate: false,
       },
     );
+    if (opts.autostart) {
+      let matrixService = this.owner.lookup(
+        'service:matrix-service',
+      ) as MatrixService;
+      await matrixService.ready;
+      await matrixService.start();
+    }
   });
   return new MockUtils(opts, ownerContainer);
 }
