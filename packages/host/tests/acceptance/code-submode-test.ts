@@ -37,7 +37,7 @@ import {
   waitForCodeEditor,
   type TestContextWithSSE,
 } from '../helpers';
-import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../helpers/mock-matrix';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -412,7 +412,10 @@ module('Acceptance | code submode tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [testRealmURL],
+  });
 
   hooks.beforeEach(async function () {
     monacoService = this.owner.lookup(
