@@ -194,6 +194,9 @@ importers:
       '@types/lodash':
         specifier: ^4.14.182
         version: 4.14.182
+      concurrently:
+        specifier: ^8.0.1
+        version: 8.2.2
       ember-cli-htmlbars:
         specifier: ^6.3.0
         version: 6.3.0
@@ -1018,6 +1021,9 @@ importers:
       chess.js:
         specifier: 1.0.0-beta.8
         version: 1.0.0-beta.8
+      concurrently:
+        specifier: ^8.0.1
+        version: 8.2.2
       ember-concurrency:
         specifier: ^4.0.2
         version: 4.0.2(@babel/core@7.24.3)(@glimmer/tracking@1.1.2)(@glint/template@1.3.0)(ember-source@5.4.1)
