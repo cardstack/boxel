@@ -105,8 +105,7 @@ class Isolated extends Component<typeof CardsGrid> {
         --grid-card-width: 11.125rem;
         --grid-card-height: 15.125rem;
 
-        padding: var(--cards-grid-padding-top) 0 var(--cards-grid-padding-top)
-          var(--boxel-sp-sm);
+        padding: var(--cards-grid-padding-top) 0 0 var(--boxel-sp-sm);
 
         display: flex;
         gap: var(--boxel-sp-xl);
@@ -121,7 +120,7 @@ class Isolated extends Component<typeof CardsGrid> {
         top: var(--cards-grid-padding-top);
         padding-right: var(--boxel-sp-sm);
         height: 100%;
-        overflow-y: scroll;
+        overflow-y: auto;
       }
       :deep(.filter-list__button:first-child) {
         margin-bottom: var(--boxel-sp-xl);
@@ -132,7 +131,7 @@ class Isolated extends Component<typeof CardsGrid> {
         gap: var(--boxel-sp-lg);
         width: 100%;
         position: relative; /* Do not change this */
-        overflow: scroll;
+        overflow-y: auto;
         padding-right: var(--boxel-sp-sm);
       }
       .headline {
@@ -144,11 +143,8 @@ class Isolated extends Component<typeof CardsGrid> {
         list-style-type: none;
         margin: 0;
         padding: 0;
-        display: grid;
-        grid-template-columns: repeat(
-          auto-fit,
-          minmax(var(--grid-card-width), 1fr)
-        );
+        display: flex;
+        flex-wrap: wrap;
         gap: var(--boxel-sp);
         justify-items: center;
         flex-grow: 1;

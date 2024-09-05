@@ -49,7 +49,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
       this.errorMessage = 'ModuleId is not available.';
       return;
     }
-    let loader: Loader = (import.meta as any).loader;
+    let loader: Loader = (require as any).loader;
     let module;
     try {
       module = await loader.import(this.args.model.moduleId);
