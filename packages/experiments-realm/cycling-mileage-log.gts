@@ -124,9 +124,9 @@ export class CyclingMileageLog extends CardDef {
           <canvas
             id='progress-chart'
             {{ProgressChartModifier
-              total=this.args.model.total
-              target=this.args.model.target
-              unit=this.args.model.unit
+              total=@model.total
+              target=@model.target
+              unit=@model.unit
             }}
           />
         </div>

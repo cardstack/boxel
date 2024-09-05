@@ -278,7 +278,10 @@ class InvoiceTemplate extends Component<typeof InvoicePacket> {
                     {{#each @model.alternatePayment as |payment|}}
                       <div class='payment-method__item'>{{#if
                           payment.logoHref
-                        }}<img src={{payment.logoHref}} />{{/if}}
+                        }}<img
+                            src={{payment.logoHref}}
+                            aria-hidden='true'
+                          />{{/if}}
                         {{payment.symbol}}</div>
                       <div class='payment-methods__bal'>{{balanceInCurrency
                           @model.balanceDue

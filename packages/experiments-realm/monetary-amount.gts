@@ -88,7 +88,7 @@ class Edit extends Component<typeof MonetaryAmount> {
       class='input-selectable-currency-amount'
     >
       <:before as |Accessories|>
-        <Accessories.Text>{{this.args.model.currency.sign}}</Accessories.Text>
+        <Accessories.Text>{{@model.currency.sign}}</Accessories.Text>
       </:before>
       <:after as |Accessories|>
         <Accessories.Select
@@ -111,7 +111,7 @@ class Edit extends Component<typeof MonetaryAmount> {
                 src={{item.logoURL}}
                 class='boxel-selectable-currency-icon__icon'
                 loading='lazy'
-                role='presentation'
+                aria-hidden='true'
               />
             {{/if}}
             {{item.symbol}}
@@ -169,7 +169,7 @@ export class MonetaryAmountEmbedded extends GlimmerComponent<MonetaryAmountEmbed
           src={{@model.currency.logoURL}}
           class='icon'
           loading='lazy'
-          role='presentation'
+          aria-hidden='true'
         />
       {{/if}}
     </div>

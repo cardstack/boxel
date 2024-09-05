@@ -31,7 +31,12 @@ export class Asset extends CardDef {
     <template>
       <div class='asset-card'>
         {{#if @model.logoURL}}
-          <img src={{@model.logoHref}} width='20' height='20' />
+          <img
+            src={{@model.logoHref}}
+            width='20'
+            height='20'
+            aria-hidden='true'
+          />
         {{/if}}
         <div class='currency'><@fields.symbol /></div>
       </div>
@@ -53,7 +58,12 @@ export class Asset extends CardDef {
     <template>
       <span>
         {{#if @model.logoURL}}
-          <img src={{@model.logoHref}} width='20' height='20' />
+          <img
+            src={{@model.logoHref}}
+            width='20'
+            height='20'
+            aria-hidden='true'
+          />
         {{/if}}
         {{@model.title}}
       </span>
@@ -89,7 +99,12 @@ class AssetField extends FieldDef {
     <template>
       <div class='asset-card'>
         {{#if @model.logoURL}}
-          <img src={{@model.logoHref}} width='20' height='20' />
+          <img
+            src={{@model.logoHref}}
+            width='20'
+            height='20'
+            aria-hidden='true'
+          />
         {{/if}}
         <div class='currency'><@fields.symbol /></div>
       </div>
