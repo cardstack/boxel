@@ -649,6 +649,9 @@ export class Realm {
     request: Request,
     isLocal: boolean,
   ): Promise<ResponseWithNodeStream> {
+    if (isLocal) {
+      console.log('Treating request as local', request.url);
+    }
     let redirectResponse = this.rootRealmRedirect(request);
     if (redirectResponse) {
       return redirectResponse;

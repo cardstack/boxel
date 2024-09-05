@@ -9,8 +9,10 @@ export function authorizationMiddleware(
   tokenSource: TokenSource,
 ): FetcherMiddlewareHandler {
   return async function (req, next) {
+    console.log('authorizationMiddleware', req.url);
     let token = tokenSource.token(req.url);
     if (token) {
+      console.log('authorizationMiddleware token', req.url, token);
       req.headers.set('Authorization', token);
     }
     let response = await next(req);
@@ -21,6 +23,7 @@ export function authorizationMiddleware(
         response.status === 401 &&
         !req.url.startsWith(`${realmURL}_session`)
       ) {
+        console.log('authorizationMiddleware - reauthenticate', realmURL);
         token = await tokenSource.reauthenticate(realmURL);
         if (token) {
           req.headers.set('Authorization', token);
