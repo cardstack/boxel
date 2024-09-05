@@ -569,6 +569,39 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
   });
 
+  test('open workspace chooser when boxel icon is clicked', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    assert
+      .dom('[data-test-stack-card="http://test-realm/test/Person/fadhlan"]')
+      .exists();
+    assert.dom('[data-test-submode-layout-title]').doesNotExist();
+    assert.dom('[data-test-workspace-chooser]').doesNotExist();
+    let url = currentURL().split('?')[1].replace(/^\/\?/, '') ?? '';
+    let urlParameters = new URLSearchParams(url);
+    assert.false(Boolean(urlParameters.get('workspaceChooserOpened')));
+
+    await click('[data-test-submode-layout-boxel-icon-button]');
+
+    assert.dom('[data-test-submode-layout-title]').exists();
+    assert.dom('[data-test-workspace-chooser]').exists();
+    assert
+      .dom(`[data-test-stack-card="http://test-realm/test/Person/fadhlan"]`)
+      .doesNotExist();
+    url = currentURL().split('?')[1].replace(/^\/\?/, '') ?? '';
+    urlParameters = new URLSearchParams(url);
+    assert.true(Boolean(urlParameters.get('workspaceChooserOpened')));
+  });
+
   module('2 stacks', function () {
     test('Toggling submode will open code submode and toggling back will restore the stack', async function (assert) {
       await visitOperatorMode({

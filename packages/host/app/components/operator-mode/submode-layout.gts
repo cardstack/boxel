@@ -1,6 +1,8 @@
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { getOwner } from '@ember/owner';
+import Owner from '@ember/owner';
 import { inject as service } from '@ember/service';
 
 import Component from '@glimmer/component';
@@ -70,17 +72,29 @@ export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSettingsOpened = false;
   @tracked private profileSummaryOpened = false;
-  @tracked private workspaceChooserOpened = false;
   private panelWidths: PanelWidths = {
     submodePanel: 500,
     aiAssistantPanel: 200,
   };
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
+  private cardController: { workspaceChooserOpened: boolean };
 
   private searchElement: HTMLElement | null = null;
   private suppressSearchClose = false;
   private declare doSearch: (term: string) => void;
+
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
+
+    let cardController = getOwner(this)!.lookup('controller:card') as any;
+    if (!cardController) {
+      throw new Error(
+        'SubmodeLayout must be used in the context of a CardController',
+      );
+    }
+    this.cardController = cardController;
+  }
 
   private get aiAssistantVisibilityClass() {
     return this.isAiAssistantVisible
@@ -150,8 +164,13 @@ export default class SubmodeLayout extends Component<Signature> {
     this.closeSearchSheet();
   }
 
+  private get workspaceChooserOpened() {
+    return this.cardController.workspaceChooserOpened;
+  }
+
   @action private toggleWorkspaceChooser() {
-    this.workspaceChooserOpened = !this.workspaceChooserOpened;
+    this.cardController.workspaceChooserOpened =
+      !this.cardController.workspaceChooserOpened;
   }
 
   @action private toggleProfileSettings() {
