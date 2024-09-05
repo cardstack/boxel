@@ -29,7 +29,7 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
   }
 
   <template>
-    <style>
+    <style scoped>
       .profile-popover {
         width: 280px;
         height: 280px;
@@ -101,7 +101,7 @@ export class ProfileInfo extends Component<ProfileInfoSignature> {
         {{this.matrixService.userId}}
       </div>
     </div>
-    <style>
+    <style scoped>
       .profile-popover-body {
         margin: auto;
         display: flex;

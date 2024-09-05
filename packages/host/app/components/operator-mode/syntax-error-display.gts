@@ -12,7 +12,7 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
     return syntaxErrors.replace(/\/\/# sourceMappingURL=.*/g, '');
   }
   <template>
-    <style>
+    <style scoped>
       .syntax-error-container {
         background: var(--boxel-100);
         padding: var(--boxel-sp);

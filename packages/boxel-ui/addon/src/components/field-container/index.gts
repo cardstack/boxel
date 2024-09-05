@@ -52,7 +52,7 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
       {{/if}}
     </Tag>
   {{/let}}
-  <style>
+  <style scoped>
     .boxel-field {
       --boxel-field-label-align: normal;
       --boxel-field-label-padding-top: 0;

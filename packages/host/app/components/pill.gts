@@ -25,7 +25,7 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
     </Tag>
   {{/let}}
 
-  <style>
+  <style scoped>
     @layer {
       .pill {
         display: inline-flex;

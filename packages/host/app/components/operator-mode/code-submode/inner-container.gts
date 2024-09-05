@@ -26,7 +26,7 @@ class InnerContainerContent extends Component<ContentSignature> {
     >
       {{yield}}
     </section>
-    <style>
+    <style scoped>
       .inner-container__content {
         position: relative;
         padding: var(--boxel-sp-xxs) var(--boxel-sp-xs) var(--boxel-sp-sm);
@@ -80,7 +80,7 @@ const InnerContainerHeader: TemplateOnlyComponent<HeaderSignature> = <template>
   <header class='inner-container__header' ...attributes>
     {{yield}}
   </header>
-  <style>
+  <style scoped>
     .inner-container__header {
       padding: var(--boxel-sp-sm) var(--boxel-sp-xs);
       font: 700 var(--boxel-font);
@@ -101,7 +101,7 @@ const CodeSubmodeInnerContainer: TemplateOnlyComponent<Signature> = <template>
   <div class='inner-container' ...attributes>
     {{yield (component InnerContainerContent) (component InnerContainerHeader)}}
   </div>
-  <style>
+  <style scoped>
     .inner-container {
       height: 100%;
       position: relative;

@@ -58,7 +58,7 @@ const ContextMenuButton: TemplateOnlyComponent<Signature> = <template>
     </:content>
   </BoxelDropdown>
 
-  <style>
+  <style scoped>
     :global(.context-menu) {
       width: 13.5rem;
     }

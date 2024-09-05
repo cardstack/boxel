@@ -9,7 +9,7 @@ interface Signature {
 export default class CircleSpinner extends Component<Signature> {
   <template>
     <IconCircle class='circle-spinner' ...attributes />
-    <style>
+    <style scoped>
       .circle-spinner {
         animation: rotate 1.5s ease-in-out infinite;
       }

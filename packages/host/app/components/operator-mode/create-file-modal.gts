@@ -263,7 +263,7 @@ export default class CreateFileModal extends Component<Signature> {
       </:default>
       <:loading></:loading>
     </WithKnownRealmsLoaded>
-    <style>
+    <style scoped>
       .create-file-modal > :deep(.boxel-modal__inner) {
         display: flex;
       }
@@ -791,7 +791,7 @@ class SelectedTypePill extends Component<SelectedTypePillSignature> {
         {{@entry.title}}
       </:default>
     </Pill>
-    <style>
+    <style scoped>
       .selected-type {
         padding: var(--boxel-sp-xxxs);
         gap: var(--boxel-sp-xxxs);

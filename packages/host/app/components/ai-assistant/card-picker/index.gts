@@ -87,7 +87,7 @@ export default class AiAssistantCardPicker extends Component<Signature> {
         </AddButton>
       {{/if}}
     </div>
-    <style>
+    <style scoped>
       .card-picker {
         background-color: var(--boxel-light);
         color: var(--boxel-dark);

@@ -171,7 +171,7 @@ export class LeafletGtfs extends CardDef {
         {{/if}}
       </ul>
 
-      <style>
+      <style scoped>
         figure.map {
           margin: 0;
           width: 100%;
@@ -205,6 +205,7 @@ export class LeafletGtfs extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
   */
 }
 

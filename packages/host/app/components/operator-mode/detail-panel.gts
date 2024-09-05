@@ -541,7 +541,7 @@ export default class DetailPanel extends Component<Signature> {
         {{/if}}
       {{/if}}
     </div>
-    <style>
+    <style scoped>
       .header {
         --boxel-header-padding: var(--boxel-sp-xs);
         --boxel-header-text-font: var(--boxel-font-size-xs);

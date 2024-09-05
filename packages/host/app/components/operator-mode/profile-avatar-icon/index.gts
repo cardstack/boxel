@@ -50,7 +50,7 @@ interface ProfileAvatarIconVisualSignature {
 
 const ProfileAvatarIconVisual: TemplateOnlyComponent<ProfileAvatarIconVisualSignature> =
   <template>
-    <style>
+    <style scoped>
       .profile-icon {
         background: var(--profile-avatar-icon-background);
         border-radius: var(--profile-avatar-icon-size, 40px);

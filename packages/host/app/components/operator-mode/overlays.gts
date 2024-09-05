@@ -181,7 +181,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
         {{/if}}
       {{/let}}
     {{/each}}
-    <style>
+    <style scoped>
       :global(:root) {
         --overlay-fitted-card-header-height: 2.5rem;
       }

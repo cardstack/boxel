@@ -62,7 +62,7 @@ interface Signature {
 
 export default class CardSchemaEditor extends Component<Signature> {
   <template>
-    <style>
+    <style scoped>
       .schema-editor-container {
         margin-top: var(--boxel-sp);
       }
