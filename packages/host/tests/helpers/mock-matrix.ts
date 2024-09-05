@@ -2,6 +2,8 @@ import window from 'ember-window-mock';
 
 import { ExtendedMatrixSDK } from '@cardstack/host/services/matrix-sdk-loader';
 
+import { createJWT } from './index';
+
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 export interface Options {
@@ -10,17 +12,39 @@ export interface Options {
   activeRealms?: string[];
 }
 
+// When also using setupBaseRealm, this must come before setupBastRealm so it
+// can pre-fill the local storage mock before services start initializing.
 export function setupMockMatrix(hooks: NestedHooks, opts: Options = {}) {
   hooks.beforeEach(function () {
     let sdk = new MockSDK(opts);
-    if (opts.loggedInAs) {
+    const { loggedInAs } = opts;
+    if (loggedInAs) {
       window.localStorage.setItem(
         'auth',
         JSON.stringify({
           access_token: 'mock-access-token',
           device_id: 'mock-device-id',
-          user_id: opts.loggedInAs,
+          user_id: loggedInAs,
         }),
+      );
+      window.localStorage.setItem(
+        'boxel-session',
+        JSON.stringify(
+          Object.fromEntries(
+            (opts.activeRealms ?? []).map((realmURL) => [
+              realmURL,
+              createJWT(
+                {
+                  user: loggedInAs,
+                  realm: realmURL,
+                  permissions: ['read', 'write'],
+                },
+                '1h',
+                'xxx',
+              ),
+            ]),
+          ),
+        ),
       );
     }
     this.owner.register(

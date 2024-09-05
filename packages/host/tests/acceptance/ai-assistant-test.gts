@@ -97,7 +97,6 @@ async function assertMessages(
 
 module('Acceptance | AI Assistant tests', function (hooks) {
   setupApplicationTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
@@ -106,6 +105,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     loggedInAs: '@testuser:staging',
     activeRealms: [testRealmURL],
   });
+  setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
     class Pet extends CardDef {

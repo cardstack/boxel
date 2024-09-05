@@ -175,15 +175,7 @@ export default class MatrixService extends Service {
         async (e) => {
           if (e.event.type == 'com.cardstack.boxel.realms') {
             this.cardService.setRealms(e.event.content.realms);
-            // It would be better to not have this special exception for tests,
-            // but we don't have the ability to mock the Realm server's matrix
-            // client yet, so this would fail under test.
-            //
-            // Previously this entire service was unused in tests, so we're at
-            // least using *more* of it, even if we're skipping this part.
-            if (!isTesting()) {
-              await this.loginToRealms();
-            }
+            await this.loginToRealms();
             this.accountDataProcessed.fulfill();
           }
         },
