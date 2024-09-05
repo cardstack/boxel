@@ -208,6 +208,7 @@ module('Integration | card-delete', function (hooks) {
     let fileRef = await adapter.openFile('Pet/mango.json');
     assert.ok(fileRef, 'card instance exists in file system');
     assert.dom('[data-test-delete-modal-container]').doesNotExist();
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await triggerEvent(
       `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
       'mouseenter',
@@ -253,6 +254,7 @@ module('Integration | card-delete', function (hooks) {
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
     assert.ok(fileRef, 'card instance exists in file system');
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await triggerEvent(
       `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
       'mouseenter',

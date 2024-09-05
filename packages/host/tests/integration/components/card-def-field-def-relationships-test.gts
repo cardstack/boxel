@@ -458,6 +458,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     });
 
     await renderComponent(OperatorModeComponent);
+    await this.pauseTest();
     await setCardInOperatorModeState(`${testRealmURL}Tx/1`, 'edit');
 
     assert

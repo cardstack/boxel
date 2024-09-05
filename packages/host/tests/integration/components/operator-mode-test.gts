@@ -566,6 +566,7 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await waitFor(`[data-test-cards-grid-item]`);
 
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
@@ -653,7 +654,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await waitFor(`[data-test-stack-card-index]`);
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
-
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
 
@@ -1202,6 +1203,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
     await waitFor(`[data-test-stack-card-index="1"]`);

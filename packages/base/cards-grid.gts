@@ -22,7 +22,6 @@ import {
   catalogEntryRef,
   baseRealm,
   isCardInstance,
-  loaderFor,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
@@ -106,10 +105,13 @@ class Isolated extends Component<typeof CardsGrid> {
         --grid-card-width: 11.125rem;
         --grid-card-height: 15.125rem;
 
-        padding: var(--cards-grid-padding-top) var(--boxel-sp-sm);
+        padding: var(--cards-grid-padding-top) 0 var(--cards-grid-padding-top)
+          var(--boxel-sp-sm);
 
         display: flex;
         gap: var(--boxel-sp-xl);
+        height: 100%;
+        overflow: hidden;
       }
       .sidebar {
         position: relative;
@@ -117,6 +119,9 @@ class Isolated extends Component<typeof CardsGrid> {
       :deep(.filter-list) {
         position: sticky;
         top: var(--cards-grid-padding-top);
+        padding-right: var(--boxel-sp-sm);
+        height: 100%;
+        overflow-y: scroll;
       }
       :deep(.filter-list__button:first-child) {
         margin-bottom: var(--boxel-sp-xl);
@@ -127,6 +132,8 @@ class Isolated extends Component<typeof CardsGrid> {
         gap: var(--boxel-sp-lg);
         width: 100%;
         position: relative; /* Do not change this */
+        overflow: scroll;
+        padding-right: var(--boxel-sp-sm);
       }
       .headline {
         font: bold var(--boxel-font-lg);
@@ -144,7 +151,7 @@ class Isolated extends Component<typeof CardsGrid> {
         );
         gap: var(--boxel-sp);
         justify-items: center;
-        height: 100%;
+        flex-grow: 1;
       }
       .card {
         width: var(--grid-card-width);
@@ -266,8 +273,7 @@ class Isolated extends Component<typeof CardsGrid> {
   });
 
   private loadFilterList = restartableTask(async () => {
-    let loader = loaderFor(this.args.model as CardDef);
-    let response = await loader.fetch(`${this.realms[0]}_types`, {
+    let response = await fetch(`${this.realms[0]}_types`, {
       headers: {
         Accept: SupportedMimeType.CardTypeSummary,
       },

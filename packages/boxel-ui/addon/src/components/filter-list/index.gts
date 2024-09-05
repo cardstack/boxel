@@ -30,6 +30,7 @@ export default class FilterList extends Component<Signature> {
         <button
           class={{cn 'filter-list__button' selected=(eq @activeFilter filter)}}
           {{on 'click' (fn this.onChanged filter)}}
+          data-test-boxel-filter-list-button={{filter.displayName}}
         >{{filter.displayName}}</button>
       {{/each}}
     </div>
