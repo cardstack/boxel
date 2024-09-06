@@ -18,7 +18,7 @@ export default class PillUsage extends Component {
   @tracked kind: BoxelPillKind = this.pillKindDefault;
 
   @cssVariable({ cssClassName: 'header-freestyle-container' })
-  declare pillColor: CSSVariableInfo;
+  declare pillFontColor: CSSVariableInfo;
   @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare pillBackgroundColor: CSSVariableInfo;
   @cssVariable({ cssClassName: 'header-freestyle-container' })
@@ -32,7 +32,7 @@ export default class PillUsage extends Component {
     <div
       class='header-freestyle-container'
       style={{cssVar
-        pill-color=this.pillColor.value
+        pill-font-color=this.pillFontColor.value
         pill-background-color=this.pillBackgroundColor.value
         pill-padding=this.pillPadding.value
         pill-gap=this.pillGap.value
@@ -67,12 +67,12 @@ export default class PillUsage extends Component {
         </:api>
         <:cssVars as |Css|>
           <Css.Basic
-            @name='pill-color'
+            @name='pill-font-color'
             @type='color'
             @description='Color of the pill'
             @defaultValue='#000'
-            @value={{this.pillColor.value}}
-            @onInput={{this.pillColor.update}}
+            @value={{this.pillFontColor.value}}
+            @onInput={{this.pillFontColor.update}}
           />
           <Css.Basic
             @name='pill-background-color'
