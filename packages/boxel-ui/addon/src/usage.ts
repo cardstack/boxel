@@ -10,7 +10,7 @@ import CircleSpinnerUsage from './components/circle-spinner/usage.gts';
 import DropdownTriggerUsage from './components/dropdown/trigger/usage.gts';
 import DropdownUsage from './components/dropdown/usage.gts';
 import FieldContainerUsage from './components/field-container/usage.gts';
-import FilterList from './components/filter-list/usage.gts';
+import FilterListUsage from './components/filter-list/usage.gts';
 import GridContainerUsage from './components/grid-container/usage.gts';
 import HeaderUsage from './components/header/usage.gts';
 import IconButtonUsage from './components/icon-button/usage.gts';
@@ -37,7 +37,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['DropdownTrigger', DropdownTriggerUsage],
   ['Dropdown', DropdownUsage],
   ['FieldContainer', FieldContainerUsage],
-  ['FilterList', FilterList],
+  ['FilterList', FilterListUsage],
   ['GridContainer', GridContainerUsage],
   ['Header', HeaderUsage],
   ['IconButton', IconButtonUsage],
