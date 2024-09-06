@@ -159,7 +159,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
         {{/if}}
       </div>
     </section>
-    <style scoped>
+    <style>
       .app-card {
         position: relative;
         min-height: 100%;
@@ -442,7 +442,7 @@ export class CardsGrid extends GlimmerComponent<{
         </li>
       {{/each}}
     </ul>
-    <style scoped>
+    <style>
       .cards-grid {
         --grid-card-width: 10.25rem; /* 164px */
         --grid-card-height: 14rem; /* 224px */

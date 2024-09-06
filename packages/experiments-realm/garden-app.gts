@@ -20,7 +20,5 @@ export class GardenAppCard extends AppCard {
     <template></template>
   }
 
-
-
   */
 }
