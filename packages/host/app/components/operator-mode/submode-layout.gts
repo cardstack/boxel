@@ -328,7 +328,7 @@ export default class SubmodeLayout extends Component<Signature> {
       />
     {{/if}}
 
-    <style>
+    <style scoped>
       .submode-layout {
         display: flex;
         height: 100%;

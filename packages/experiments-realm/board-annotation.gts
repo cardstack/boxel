@@ -50,7 +50,7 @@ class BodyBalance extends FieldDef {
           </item.component>
         </RadioInput>
       </div>
-      <style></style>
+      <style scoped></style>
     </template>
 
     private radioGroup = `__boxel_body_balance${groupNumber++}__`;
@@ -177,7 +177,7 @@ export class BoardAnnotation extends FieldDef {
       {{#if @model.comment}}
         <div class='comment'>{{@model.comment}}</div>
       {{/if}}
-      <style>
+      <style scoped>
         .comment {
           font-size: 13px;
           max-width: 60px;

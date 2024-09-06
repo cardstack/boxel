@@ -160,7 +160,7 @@ export default class InputGroup extends Component<Signature> {
         {{/if}}
       </div>
     {{/let}}
-    <style>
+    <style scoped>
       .container {
         display: flex;
         flex-direction: column;

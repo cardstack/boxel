@@ -76,7 +76,7 @@ export default class RealmDropdown extends Component<Signature> {
         />
       </:content>
     </BoxelDropdown>
-    <style>
+    <style scoped>
       .realm-dropdown-trigger {
         width: var(--realm-dropdown-width, auto);
         display: flex;

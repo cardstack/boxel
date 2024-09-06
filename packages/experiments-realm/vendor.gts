@@ -115,7 +115,7 @@ export class Vendor extends CardDef {
         </div>
         <img src={{@model.vendor.logoHref}} />
       </div>
-      <style>
+      <style scoped>
         .vendor-card--embedded {
           display: grid;
           grid-template-columns: 1fr auto;
@@ -157,7 +157,7 @@ export class Vendor extends CardDef {
           {{/if}}
         </section>
       </VendorContainer>
-      <style>
+      <style scoped>
         .container {
           padding: var(--boxel-sp-xl);
         }
@@ -192,7 +192,7 @@ export class Vendor extends CardDef {
           <@fields.alternatePaymentMethod />
         </section>
       </VendorContainer>
-      <style>
+      <style scoped>
         .container {
           padding: var(--boxel-sp-xl) var(--boxel-sp-xxl) var(--boxel-sp-xl)
             var(--boxel-sp-xl);
@@ -214,7 +214,7 @@ class VendorContainer extends GlimmerComponent<Signature> {
     <div class='vendor' ...attributes>
       {{yield}}
     </div>
-    <style>
+    <style scoped>
       .vendor :deep(.boxel-field + .boxel-field) {
         margin-top: var(--boxel-sp);
       }

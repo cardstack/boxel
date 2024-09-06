@@ -139,7 +139,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
         </details>
       </div>
     </section>
-    <style>
+    <style scoped>
       .prd {
         padding: var(--boxel-sp) var(--boxel-sp-xxl);
       }

@@ -72,14 +72,12 @@ import {
   ReadOnlyField,
 } from '../../helpers/base-realm';
 import { mango } from '../../helpers/image-fixture';
-import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderCard } from '../../helpers/render-component';
 
 let loader: Loader;
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
-  setupMatrixServiceMock(hooks, { autostart: true });
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
@@ -1445,7 +1443,7 @@ module('Integration | card-basics', function (hooks) {
               <@fields.firstName />
               <@fields.age />
             </div>
-            <style>
+            <style scoped>
               .name {
                 color: red;
                 font-weight: bold;
@@ -2759,7 +2757,7 @@ function fittedViewDriver() {
           </div>
         </div>
 
-        <style>
+        <style scoped>
           .card {
             /* this is how a border would appear around a card.
              note that a card is not supposed to draw its own border

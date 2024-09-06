@@ -59,7 +59,7 @@ export default class AiAssistantToast extends Component<Signature> {
         View in chat
       </BoxelButton>
     </div>
-    <style>
+    <style scoped>
       .ai-assistant-toast {
         display: flex;
         flex-direction: column;

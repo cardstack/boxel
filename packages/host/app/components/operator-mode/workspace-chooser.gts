@@ -21,7 +21,7 @@ export default class WorkspaceChooser extends Component<Signature> {
       {{! TODO: [CS-7031] Implement list workspaces that user has access to }}
       <span class='workspace-chooser__title'>Community Catalogs</span>
     </div>
-    <style>
+    <style scoped>
       @keyframes fadeIn {
         from {
           opacity: 0;

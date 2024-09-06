@@ -79,7 +79,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
         {{/if}}
       </div>
     </PermissionsConsumer>
-    <style>
+    <style scoped>
       .contains-many-editor {
         --remove-icon-size: var(--boxel-icon-lg);
       }
@@ -220,7 +220,7 @@ export function getContainsManyComponent({
           {{/let}}
         {{/if}}
       </DefaultFormatsConsumer>
-      <style>
+      <style scoped>
         .containsMany-field.edit-format {
           padding: var(--boxel-sp-sm);
           background-color: var(--boxel-100);

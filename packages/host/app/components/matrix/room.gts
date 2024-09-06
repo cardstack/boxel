@@ -102,7 +102,7 @@ export default class Room extends Component<Signature> {
       </section>
     {{/if}}
 
-    <style>
+    <style scoped>
       .room {
         display: grid;
         grid-template-rows: 1fr auto;

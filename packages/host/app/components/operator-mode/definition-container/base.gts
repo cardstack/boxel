@@ -74,7 +74,7 @@ class BaseDefinitionContainer extends Component<BaseSignature> {
       </div>
     </CardContainer>
 
-    <style>
+    <style scoped>
       .card-container {
         overflow: hidden;
         overflow-wrap: anywhere;
@@ -159,7 +159,7 @@ const Active: TemplateOnlyComponent<ActiveSignature> = <template>
       <div class='message'>{{@infoText}}</div>
     </div>
   </div>
-  <style>
+  <style scoped>
     .action-buttons {
       display: grid;
       grid-auto-columns: max-content;

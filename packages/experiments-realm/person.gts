@@ -27,7 +27,7 @@ class FittedTemplate extends Component<typeof Person> {
         <div data-test-empty-field class='empty-field'></div>
       {{/if}}
     </div>
-    <style>
+    <style scoped>
       .fitted-template {
         display: flex;
         flex-direction: column;
@@ -152,7 +152,7 @@ export class Person extends CardDef {
         {{#if @model.pet}}<@fields.pet />{{/if}}
         <@fields.trips />
       </GridContainer>
-      <style>
+      <style scoped>
         .container {
           padding: var(--boxel-sp-xl);
         }

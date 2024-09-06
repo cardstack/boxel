@@ -35,7 +35,7 @@ export class Clickable extends Component<ClickableSignature> {
     >
       {{yield}}
     </button>
-    <style>
+    <style scoped>
       .clickable-button {
         background: none;
         border: none;
