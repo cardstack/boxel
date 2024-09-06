@@ -63,12 +63,6 @@ if (!REALM_SERVER_MATRIX_USERNAME) {
 
 const MATRIX_REGISTRATION_SHARED_SECRET =
   process.env.MATRIX_REGISTRATION_SHARED_SECRET;
-if (!MATRIX_REGISTRATION_SHARED_SECRET) {
-  console.error(
-    `The MATRIX_REGISTRATION_SHARED_SECRET environment variable is not set. Please make sure this env var has a value`,
-  );
-  process.exit(-1);
-}
 
 if (process.env.DISABLE_MODULE_CACHING === 'true') {
   console.warn(
@@ -86,6 +80,7 @@ let {
   fromUrl: fromUrls,
   toUrl: toUrls,
   username: usernames,
+  matrixRegistrationSecretFile,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
   .options({
@@ -133,6 +128,11 @@ let {
       demandOption: true,
       type: 'array',
     },
+    matrixRegistrationSecretFile: {
+      description:
+        "The path to a file that contains the matrix registration secret (used for matrix tests where the registration secret changes during the realm server's lifespan)",
+      type: 'string',
+    },
   })
   .parseSync();
 
@@ -152,6 +152,13 @@ if (fromUrls.length < paths.length) {
 if (paths.length !== usernames.length) {
   console.error(
     `not enough usernames were provided to satisfy the paths provided. There must be at least one --username set for each --path parameter`,
+  );
+  process.exit(-1);
+}
+
+if (!matrixRegistrationSecretFile && !MATRIX_REGISTRATION_SHARED_SECRET) {
+  console.error(
+    `The MATRIX_REGISTRATION_SHARED_SECRET environment variable is not set. Please make sure this env var has a value (or specify --matrixRegistrationSecretFile)`,
   );
   process.exit(-1);
 }
@@ -234,6 +241,7 @@ let dist: URL = new URL(distURL);
     getIndexHTML,
     serverURL: new URL(serverURL),
     matrixRegistrationSecret: MATRIX_REGISTRATION_SHARED_SECRET,
+    matrixRegistrationSecretFile,
   });
 
   server.listen(port);

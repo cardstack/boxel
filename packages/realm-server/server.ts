@@ -11,7 +11,7 @@ import {
   type DBAdapter,
   type Queue,
 } from '@cardstack/runtime-common';
-import { ensureDirSync, writeJSONSync } from 'fs-extra';
+import { ensureDirSync, writeJSONSync, readFileSync } from 'fs-extra';
 import { setupCloseHandler } from './node-realm';
 import {
   livenessCheck,
@@ -39,6 +39,7 @@ import {
   Utils,
 } from '@cardstack/runtime-common/matrix-backend-authentication';
 import jwt from 'jsonwebtoken';
+import { existsSync } from 'fs';
 
 export class RealmServer {
   private log = logger('realm:requests');
@@ -52,7 +53,8 @@ export class RealmServer {
   private assetsURL: URL;
   private getIndexHTML: () => Promise<string>;
   private serverURL: URL;
-  private matrixRegistrationSecret: string;
+  private matrixRegistrationSecret: string | undefined;
+  private matrixRegistrationSecretFile: string | undefined;
 
   constructor({
     serverURL,
@@ -66,6 +68,7 @@ export class RealmServer {
     assetsURL,
     getIndexHTML,
     matrixRegistrationSecret,
+    matrixRegistrationSecretFile,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -77,9 +80,16 @@ export class RealmServer {
     queue: Queue;
     assetsURL: URL;
     getIndexHTML: () => Promise<string>;
-    matrixRegistrationSecret: string;
+    matrixRegistrationSecret?: string;
+    matrixRegistrationSecretFile?: string;
   }) {
     detectRealmCollision(realms);
+
+    if (!matrixRegistrationSecret && !matrixRegistrationSecretFile) {
+      throw new Error(
+        `'matrixRegistrationSecret' or 'matrixRegistrationSecretFile' must be specified`,
+      );
+    }
 
     this.serverURL = serverURL;
     this.realms = realms;
@@ -92,6 +102,7 @@ export class RealmServer {
     this.assetsURL = assetsURL;
     this.getIndexHTML = getIndexHTML;
     this.matrixRegistrationSecret = matrixRegistrationSecret;
+    this.matrixRegistrationSecretFile = matrixRegistrationSecretFile;
   }
 
   @Memoize()
@@ -257,7 +268,7 @@ export class RealmServer {
       displayname: username,
       username,
       password: await passwordFromSeed(username, this.secretSeed),
-      registrationSecret: this.matrixRegistrationSecret,
+      registrationSecret: this.getMatrixRegistrationSecret(),
     });
 
     await insertPermissions(this.dbAdapter, new URL(url), {
@@ -284,6 +295,27 @@ export class RealmServer {
     this.realms.push(realm);
     this.virtualNetwork.mount(realm.handle);
     return realm;
+  }
+
+  private getMatrixRegistrationSecret() {
+    if (
+      this.matrixRegistrationSecretFile &&
+      existsSync(this.matrixRegistrationSecretFile)
+    ) {
+      let secret = readFileSync(this.matrixRegistrationSecretFile, 'utf8');
+      if (!secret) {
+        throw new Error(
+          `The matrix registration secret file '${this.matrixRegistrationSecretFile}' is empty`,
+        );
+      }
+      return secret;
+    }
+
+    if (this.matrixRegistrationSecret) {
+      return this.matrixRegistrationSecret;
+    }
+
+    throw new Error('Can not determine the matrix registration secret');
   }
 }
 

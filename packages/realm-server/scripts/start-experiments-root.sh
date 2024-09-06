@@ -19,6 +19,7 @@ NODE_NO_WARNINGS=1 \
   --port=4204 \
   --matrixURL='http://localhost:8008' \
   --realmsRootPath='./realms' \
+  --matrixRegistrationSecretFile='../matrix/registration_secret.txt' \
   \
   --path='../experiments-realm/' \
   --username='experiments_realm' \

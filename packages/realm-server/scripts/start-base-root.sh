@@ -20,6 +20,7 @@ NODE_ENV=development \
   --port=4203 \
   --matrixURL='http://localhost:8008' \
   --realmsRootPath='./realms' \
+  --matrixRegistrationSecretFile='../matrix/registration_secret.txt' \
   \
   --path='../base' \
   --username='base_realm' \

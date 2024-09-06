@@ -21,6 +21,7 @@ NODE_ENV=test \
   --port=4202 \
   --matrixURL='http://localhost:8008' \
   --realmsRootPath='./realms' \
+  --matrixRegistrationSecretFile='../matrix/registration_secret.txt' \
   \
   --path='./tests/cards' \
   --username='node-test_realm' \
