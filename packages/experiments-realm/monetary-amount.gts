@@ -119,7 +119,7 @@ class Edit extends Component<typeof MonetaryAmount> {
         </Accessories.Select>
       </:after>
     </BoxelInputGroup>
-    <style>
+    <style scoped>
       .input-selectable-currency-amount {
         --input-selectable-currency-amount-input-font-size: var(
           --boxel-font-size
@@ -173,7 +173,7 @@ export class MonetaryAmountEmbedded extends GlimmerComponent<MonetaryAmountEmbed
         />
       {{/if}}
     </div>
-    <style>
+    <style scoped>
       .monetary-amount {
         font: var(--boxel-font-lg);
       }

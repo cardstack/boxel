@@ -568,8 +568,8 @@ importers:
         specifier: ^8.0.1
         version: 8.1.1(eslint@8.57.0)
       glimmer-scoped-css:
-        specifier: ^0.5.0
-        version: 0.5.0
+        specifier: ^0.6.0
+        version: 0.6.0
       loader.js:
         specifier: ^4.7.0
         version: 4.7.0
@@ -761,8 +761,8 @@ importers:
         specifier: ^3.2.0
         version: 3.2.0(@typescript-eslint/parser@7.16.1)(eslint@8.57.0)(typescript@5.1.6)
       glimmer-scoped-css:
-        specifier: ^0.5.0
-        version: 0.5.0
+        specifier: ^0.6.0
+        version: 0.6.0
       prettier:
         specifier: github:cardstack/prettier#glimmer-style-tag-in-template-support
         version: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
@@ -1361,8 +1361,8 @@ importers:
         specifier: ^5.0.2
         version: 5.0.2
       glimmer-scoped-css:
-        specifier: ^0.5.0
-        version: 0.5.0
+        specifier: ^0.6.0
+        version: 0.6.0
       ignore:
         specifier: ^5.2.0
         version: 5.2.0
@@ -1775,8 +1775,8 @@ importers:
         specifier: ^5.0.2
         version: 5.0.2
       glimmer-scoped-css:
-        specifier: ^0.5.0
-        version: 0.5.0
+        specifier: ^0.6.0
+        version: 0.6.0
       http-status-codes:
         specifier: ^2.2.0
         version: 2.2.0
@@ -15441,8 +15441,8 @@ packages:
       through: 2.2.7
     dev: true
 
-  /glimmer-scoped-css@0.5.0:
-    resolution: {integrity: sha512-LR9AbkJBtMXdeHxcda3Jjr0QH3MrwWW8K5hJIMEKRSjCnddOpyOgzyjsviC85+HL7nK6jkB6XdIxLuHNTY/BsA==}
+  /glimmer-scoped-css@0.6.0:
+    resolution: {integrity: sha512-gC8k7BKOF9Z0ZFptEH99XAklAcZc/vkF9Ms0dDGdUWGtHxRepQI+72xaQ92zIZStj0CwhfGVl5Qs13n1Qwgrnw==}
     dependencies:
       '@embroider/addon-shim': 1.8.9
       js-string-escape: 1.0.1

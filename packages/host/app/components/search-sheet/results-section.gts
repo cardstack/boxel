@@ -61,7 +61,7 @@ class SearchResult extends Component<SearchResultSignature> {
         <div class='realm-name' data-test-realm-name>{{realmInfo.name}}</div>
       {{/let}}
     </div>
-    <style>
+    <style scoped>
       .container {
         display: flex;
         flex-direction: column;
@@ -119,7 +119,7 @@ let ResultsSection: TemplateOnlyComponent<Signature> = <template>
       </div>
     </div>
   </div>
-  <style>
+  <style scoped>
     .section {
       display: flex;
       flex-direction: column;

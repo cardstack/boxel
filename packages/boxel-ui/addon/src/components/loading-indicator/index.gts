@@ -21,7 +21,7 @@ const LoadingIndicator: TemplateOnlyComponent<Signature> = <template>
       role='presentation'
     />
   </div>
-  <style>
+  <style scoped>
     /* zero specificity default sizing */
     :where(.boxel-loading-indicator) {
       width: var(--boxel-icon-sm);

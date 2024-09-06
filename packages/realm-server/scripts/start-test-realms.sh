@@ -32,6 +32,4 @@ NODE_ENV=test \
   --fromUrl='/test/' \
   --toUrl='/test/' \
   --fromUrl='https://cardstack.com/base/' \
-  --toUrl='http://localhost:4201/base/' \
-  \
-  --useTestingDomain
+  --toUrl='http://localhost:4201/base/'

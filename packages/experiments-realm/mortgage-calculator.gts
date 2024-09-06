@@ -417,7 +417,7 @@ export class MortgageCalculator extends CardDef {
           </div>
         </div>
       </div>
-      <style>
+      <style scoped>
         .wrapper {
           max-width: 940px;
           display: grid;
@@ -596,6 +596,7 @@ export class MortgageCalculator extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
 
   */
 }

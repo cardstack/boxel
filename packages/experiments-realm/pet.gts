@@ -35,7 +35,7 @@ class FittedTemplate extends Component<typeof Pet> {
         <div data-test-empty-field class='empty-field'></div>
       {{/if}}
     </div>
-    <style>
+    <style scoped>
       .fitted-template {
         display: flex;
         flex-direction: column;
@@ -174,7 +174,7 @@ export class Pet extends CardDef {
           <div>Cuteness Rating: <@fields.cutenessRating /></div>
         </div>
       </GridContainer>
-      <style>
+      <style scoped>
         .container {
           padding: var(--boxel-sp-xl);
         }

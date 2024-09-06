@@ -1708,7 +1708,7 @@ module('Realm Server', function (hooks) {
               <template>
                 Embedded Card Person: <@fields.firstName/>
 
-                <style>
+                <style scoped>
                   .border {
                     border: 1px solid red;
                   }
@@ -1729,7 +1729,7 @@ module('Realm Server', function (hooks) {
               <template>
                 Embedded Card FancyPerson: <@fields.firstName/>
 
-                <style>
+                <style scoped>
                   .fancy-border {
                     border: 1px solid pink;
                   }
@@ -1943,6 +1943,46 @@ module('Realm Server', function (hooks) {
           'one prerendered card instance is returned in the filtered search results',
         );
         assert.strictEqual(json.data[0].id, 'http://127.0.0.1:4444/jimmy.json');
+      });
+
+      test('can use cardUrls to filter prerendered instances', async function (assert) {
+        let query: Query & {
+          prerenderedHtmlFormat: string;
+          cardUrls: string[];
+        } = {
+          prerenderedHtmlFormat: 'embedded',
+          cardUrls: [`${testRealmHref}jimmy.json`],
+        };
+        let response = await request
+          .get(`/_search-prerendered?${stringify(query)}`)
+          .set('Accept', 'application/vnd.card+json');
+
+        let json = response.body;
+
+        assert.strictEqual(
+          json.data.length,
+          1,
+          'one prerendered card instance is returned in the filtered search results',
+        );
+        assert.strictEqual(json.data[0].id, 'http://127.0.0.1:4444/jimmy.json');
+
+        query = {
+          prerenderedHtmlFormat: 'embedded',
+          cardUrls: [`${testRealmHref}jimmy.json`, `${testRealmHref}jane.json`],
+        };
+        response = await request
+          .get(`/_search-prerendered?${stringify(query)}`)
+          .set('Accept', 'application/vnd.card+json');
+
+        json = response.body;
+
+        assert.strictEqual(
+          json.data.length,
+          2,
+          '2 prerendered card instances are returned in the filtered search results',
+        );
+        assert.strictEqual(json.data[0].id, 'http://127.0.0.1:4444/jane.json');
+        assert.strictEqual(json.data[1].id, 'http://127.0.0.1:4444/jimmy.json');
       });
 
       test('can sort prerendered instances', async function (assert) {
@@ -2524,6 +2564,34 @@ module('Realm Server', function (hooks) {
         response.headers['x-boxel-realm-public-readable'],
         'true',
       );
+    });
+
+    test('can fetch card type summary', async function (assert) {
+      let response = await request
+        .get('/_types')
+        .set('Accept', 'application/json');
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.deepEqual(response.body, {
+        data: [
+          {
+            type: 'card-type-summary',
+            id: `${testRealm.url}home/Home`,
+            attributes: {
+              displayName: 'Home',
+              total: 1,
+            },
+          },
+          {
+            type: 'card-type-summary',
+            id: `${testRealm.url}person/Person`,
+            attributes: {
+              displayName: 'Person',
+              total: 3,
+            },
+          },
+        ],
+      });
     });
   });
 

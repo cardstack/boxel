@@ -192,7 +192,7 @@ export default class CardCatalogModal extends Component<Signature> {
         </ModalContainer>
       {{/if}}
     {{/if}}
-    <style>
+    <style scoped>
       .card-catalog-modal > :deep(.boxel-modal__inner) {
         max-height: 80vh;
       }

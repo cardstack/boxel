@@ -32,7 +32,7 @@ const ToggleButton: TemplateOnlyComponent<ToggleButtonSignature> = <template>
   >
     {{yield}}
   </Button>
-  <style>
+  <style scoped>
     .toggle-button {
       --boxel-button-border: 1px solid var(--boxel-400);
       --boxel-button-font: 700 var(--boxel-font-xs);
@@ -150,7 +150,7 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
       </InnerContainerContent>
     </InnerContainer>
 
-    <style>
+    <style scoped>
       .header {
         display: flex;
         gap: var(--boxel-sp-xs);

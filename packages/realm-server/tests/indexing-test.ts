@@ -77,7 +77,7 @@ module('indexing', function (hooks) {
                 <template>
                   <h1> Embedded Card Person: <@fields.firstName/></h1>
 
-                  <style>
+                  <style scoped>
                     h1 { color: red }
                   </style>
                 </template>
@@ -86,7 +86,7 @@ module('indexing', function (hooks) {
                 <template>
                   <h1> Fitted Card Person: <@fields.firstName/></h1>
 
-                  <style>
+                  <style scoped>
                     h1 { color: red }
                   </style>
                 </template>
@@ -113,7 +113,7 @@ module('indexing', function (hooks) {
                 <template>
                   <h1> Embedded Card Fancy Person: <@fields.firstName/></h1>
 
-                  <style>
+                  <style scoped>
                     h1 { color: pink }
                   </style>
                 </template>

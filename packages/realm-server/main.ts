@@ -85,7 +85,6 @@ let {
   path: paths,
   fromUrl: fromUrls,
   toUrl: toUrls,
-  useTestingDomain,
   username: usernames,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
@@ -123,11 +122,6 @@ let {
       description:
         'the URL of a deployed host app. (This can be provided instead of the --distPath)',
       type: 'string',
-    },
-    useTestingDomain: {
-      description:
-        'relaxes document domain rules so that cross origin scripting can be used for test assertions across iframe boundaries',
-      type: 'boolean',
     },
     matrixURL: {
       description: 'The matrix homeserver for the realm',
@@ -216,11 +210,6 @@ let dist: URL = new URL(distURL);
       {
         ...(process.env.DISABLE_MODULE_CACHING === 'true'
           ? { disableModuleCaching: true }
-          : {}),
-        ...(useTestingDomain
-          ? {
-              useTestingDomain,
-            }
           : {}),
       },
     );

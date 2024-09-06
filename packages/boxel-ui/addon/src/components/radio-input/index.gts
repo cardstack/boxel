@@ -37,7 +37,7 @@ export default class RadioInput extends Component<Signature> {
     super(owner, args);
   }
   <template>
-    <style>
+    <style scoped>
       .boxel-radio-fieldset {
         border: 0;
         padding: 0.01em 0 0;

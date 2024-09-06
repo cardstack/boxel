@@ -33,7 +33,7 @@ export default class FilterList extends Component<Signature> {
         >{{filter.displayName}}</button>
       {{/each}}
     </div>
-    <style>
+    <style scoped>
       .filter-list {
         display: flex;
         flex-direction: column;

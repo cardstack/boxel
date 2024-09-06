@@ -267,7 +267,7 @@ export default class SearchSheet extends Component<Signature> {
         </div>
       </div>
     </div>
-    <style>
+    <style scoped>
       :global(:root) {
         --search-sheet-closed-height: 3.5rem;
         --search-sheet-closed-width: 10.75rem;

@@ -81,7 +81,7 @@ class EditPaymentMethod extends Component<typeof PaymentMethod> {
         {{! <@fields.wireTransfer/> }}
       {{/if}}
     </div>
-    <style>
+    <style scoped>
       .payment-method-card {
         padding: var(--boxel-sp-xl);
       }

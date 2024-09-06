@@ -74,7 +74,7 @@ class Details extends FieldDef {
           @label='Memo'
         ><@fields.memo /></FieldContainer>
       </DetailsContainer>
-      <style>
+      <style scoped>
         .edit {
           padding: var(--boxel-sp);
         }
@@ -95,7 +95,7 @@ class DetailsContainer extends GlimmerComponent<GenericContainerSignature> {
     <div class='details' ...attributes>
       {{yield}}
     </div>
-    <style>
+    <style scoped>
       .details {
         --boxel-field-label-size: 35%;
         --boxel-field-label-align: center;
@@ -112,7 +112,7 @@ class DetailsFieldsContainer extends GlimmerComponent<GenericContainerSignature>
     <div class='fields' ...attributes>
       {{yield}}
     </div>
-    <style>
+    <style scoped>
       .fields {
         display: grid;
         grid-gap: var(--boxel-sp) 0;
@@ -140,7 +140,7 @@ class LineItem extends FieldDef {
           <strong>{{formatUSD @model.amount}}</strong>
         </div>
       </div>
-      <style>
+      <style scoped>
         .line-item {
           display: grid;
           grid-template-columns: 3fr 1fr 2fr;
@@ -183,7 +183,7 @@ class LineItem extends FieldDef {
           @vertical={{true}}
         ><@fields.description /></FieldContainer>
       </div>
-      <style>
+      <style scoped>
         .edit {
           display: grid;
           gap: var(--boxel-sp-sm);
@@ -306,7 +306,7 @@ class InvoiceTemplate extends Component<typeof InvoicePacket> {
         {{/if}}
       </:extras>
     </InvoiceContainer>
-    <style>
+    <style scoped>
       .container {
         padding: var(--boxel-sp-xl);
       }
@@ -428,7 +428,7 @@ class InvoiceContainer extends GlimmerComponent<InvoiceContainerSignature> {
       </section>
       {{yield to='extras'}}
     </div>
-    <style>
+    <style scoped>
       .invoice-template {
         max-width: 50rem;
         font: var(--boxel-font-sm);
@@ -456,7 +456,7 @@ class PaymentMethodsContainer extends GlimmerComponent<GenericContainerSignature
     <div class='payment-methods'>
       {{yield}}
     </div>
-    <style>
+    <style scoped>
       .payment-methods {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -480,7 +480,7 @@ class BalanceDue extends GlimmerComponent<BalanceDueSignature> {
         {{formatUSD @balanceDue}}
       </span>
     </FieldContainer>
-    <style>
+    <style scoped>
       .balance-due {
         justify-items: end;
         text-align: right;

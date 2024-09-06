@@ -52,7 +52,7 @@ export class StarRating extends GlimmerComponent<StarRatingSignature> {
         >{{if star.full '★' '☆'}}</button>
       {{/each}}
     </div>
-    <style>
+    <style scoped>
       .star {
         color: inherit;
         border: 0;
@@ -69,7 +69,7 @@ class View extends Component<typeof RatingsSummary> {
     <span class='reviews-count'>
       ({{formatNumber @model.count}})
     </span>
-    <style>
+    <style scoped>
       .star-rating {
         display: inline-block;
       }

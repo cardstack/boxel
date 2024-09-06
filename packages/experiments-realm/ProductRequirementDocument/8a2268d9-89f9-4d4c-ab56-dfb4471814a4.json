@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "appTitle": "ToDo List",
+      "shortDescription": null,
+      "thumbnail": {
+        "altText": null,
+        "size": "actual",
+        "height": null,
+        "width": null,
+        "base64": null
+      },
+      "prompt": "I want to make a ToDo list tailored for a personal use that has these features: tracks task status",
+      "overview": "The Personal Use ToDo List Application is an intuitive and straightforward platform designed to help individuals manage their daily tasks effectively. The application offers seamless task tracking, allowing users to mark tasks as \"To Do,\" \"In Progress,\" or \"Completed,\" ensuring clear visibility of their progress.\n\nWith a focus on simplicity and ease of use, the app incorporates reminders and due dates while maintaining a clean and minimalist interface. Tailored specifically for personal use, this app aims to boost individual productivity by enabling users to organize their tasks efficiently.",
+      "schema": "1. **User:**\n- Username\n- Password\n- Email\n2. **Task:**\n- Task ID\n- Title\n- Description\n- Status (To Do, In Progress, Completed)\n- Due Date\n- Priority Level\n3. **Category:**\n- Category ID\n- Name\n- Color",
+      "layoutAndNavigation": "- **Home:** Shows a dashboard with all tasks categorized by status (To Do, In Progress, Completed).\n- **Tasks:** A screen to add, edit, or delete tasks with fields for title, description, due date, priority, and status.\n- **Categories:** Allows users to create and manage categories, assigning tasks to specific categories for better organization.\n- **Settings:** Offers user settings such as profile management, notifications, and application preferences.",
+      "moduleURL": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product-requirement-document",
+        "name": "ProductRequirementDocument"
+      }
+    }
+  }
+}
