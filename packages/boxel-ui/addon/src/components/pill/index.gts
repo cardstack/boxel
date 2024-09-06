@@ -26,7 +26,7 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
     </Tag>
   {{/let}}
 
-  <style>
+  <style scoped>
     @layer {
       .pill {
         display: inline-flex;
@@ -38,7 +38,7 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
             var(--boxel-sp-5xs)
         );
         background-color: var(--pill-background-color, var(--boxel-light));
-        color: var(--pill-color, var(--boxel-dark));
+        color: var(--pill-font-color, var(--boxel-dark));
         border: 1px solid var(--boxel-400);
         border-radius: var(--boxel-border-radius-sm);
         font: 700 var(--boxel-font-sm);
