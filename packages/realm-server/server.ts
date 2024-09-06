@@ -215,7 +215,7 @@ export class RealmServer {
   // TODO make this method private after we have provided an HTTP interface for
   // this capability
   async createRealm(
-    ownerUserId: string, // note matrix userID's look like @mango:boxel.ai
+    ownerUserId: string, // note matrix userIDs look like "@mango:boxel.ai"
     realmName: string,
   ): Promise<Realm> {
     if (
