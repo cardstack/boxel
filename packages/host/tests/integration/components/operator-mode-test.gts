@@ -421,6 +421,12 @@ module('Integration | operator-mode', function (hooks) {
         ...Object.fromEntries(personCards),
       },
     }));
+
+    // FIXME Should this be part of setupIntegrationTestRealm? Does it make sense?
+    let testRealm = await (
+      this.owner.lookup('service:realm') as Realm
+    )?.getOrCreateRealmResource('http://test-realm/test/');
+    await testRealm.login();
   });
 
   async function setCardInOperatorModeState(
