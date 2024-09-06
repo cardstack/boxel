@@ -3,14 +3,18 @@ import { readFileSync } from 'fs-extra';
 import { resolve, join } from 'path';
 import { createHmac } from 'crypto';
 import yaml from 'yaml';
+import { existsSync } from 'fs';
 
 const homeserverFile = resolve(
   join(__dirname, '..', 'matrix', 'synapse-data', 'homeserver.yaml'),
 );
 
 export function getLocalConfig() {
-  let homeserverYml = readFileSync(homeserverFile, 'utf8');
-  return yaml.parse(homeserverYml) as Record<string, any>;
+  if (existsSync(homeserverFile)) {
+    let homeserverYml = readFileSync(homeserverFile, 'utf8');
+    return yaml.parse(homeserverYml) as Record<string, any>;
+  }
+  return undefined;
 }
 
 export async function registerUser({

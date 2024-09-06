@@ -45,7 +45,7 @@ export const realmServerTestMatrix: MatrixConfig = {
 };
 export const secretSeed = `shhh! it's a secret`;
 export const matrixRegistrationSecret: string =
-  getSynapseConfig().registration_shared_secret;
+  getSynapseConfig()!.registration_shared_secret; // this will always exist for realm server tests specifically
 
 let basePath = resolve(join(__dirname, '..', '..', '..', 'base'));
 
