@@ -1,0 +1,198 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Invoice Generator",
+      "detail": "Helps you generate invoices.",
+      "publishDate": "2024-08-30",
+      "examples": [
+        {
+          "info": "Product 1",
+          "contains": {}
+        },
+        {
+          "info": "Product 2",
+          "contains": {}
+        }
+      ],
+      "basePrice": {
+        "summary": null,
+        "basePrice": {
+          "amount": null
+        },
+        "type": "one-time",
+        "interval": null,
+        "value": {
+          "amount": 10
+        },
+        "percentDiscount": null
+      },
+      "priceOptions": [
+        {
+          "summary": "One-time payment",
+          "basePrice": {
+            "amount": null
+          },
+          "type": "one-time",
+          "interval": null,
+          "value": {
+            "amount": 10
+          },
+          "percentDiscount": null
+        },
+        {
+          "summary": "Subscription",
+          "basePrice": {
+            "amount": null
+          },
+          "type": "subscription",
+          "interval": "month",
+          "value": {
+            "amount": 1
+          },
+          "percentDiscount": null
+        },
+        {
+          "summary": "Discount",
+          "basePrice": {
+            "amount": 10
+          },
+          "type": "discount",
+          "interval": null,
+          "value": {
+            "amount": null
+          },
+          "percentDiscount": 6
+        }
+      ],
+      "quantityAvailable": 100,
+      "quantitySold": 5,
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "spec": {
+        "links": {
+          "self": null
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/3047bd3e-0ef5-4fad-8008-6376ee128d1f"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/2b5012c6-572f-465f-9a67-ff86d840ae63"
+        }
+      },
+      "primaryCategory": {
+        "links": {
+          "self": "../Category/22bdc3a7-7aa5-4fb6-bd4f-4e253e7c4ce1"
+        }
+      },
+      "secondaryCategory": {
+        "links": {
+          "self": "../Category/e127d6fc-40fc-4139-8c1b-88288304c30b"
+        }
+      },
+      "examples.0.linksTo": {
+        "links": {
+          "self": "../Product/92df64d3-65b7-48a6-9a4c-e7b13a9b0ec5"
+        }
+      },
+      "examples.1.linksTo": {
+        "links": {
+          "self": "../Product/8e84d4ff-5528-4872-8734-491774c40a47"
+        }
+      },
+      "images.0": {
+        "links": {
+          "self": "../Base64ImageCard/b98032eb-61cc-4bc5-ac0a-48d8673e3412"
+        }
+      },
+      "images.1": {
+        "links": {
+          "self": "../Base64ImageCard/5ae6c2b7-4814-4d83-a08f-6cfc02b83d10"
+        }
+      },
+      "images.2": {
+        "links": {
+          "self": "../Base64ImageCard/684500ca-134c-45f5-b9cd-14f96e28c5b7"
+        }
+      },
+      "images.3": {
+        "links": {
+          "self": "../Base64ImageCard/f752e6aa-9332-44f0-9db8-9e3ee49b3eac"
+        }
+      },
+      "bundles": {
+        "links": {
+          "self": null
+        }
+      },
+      "basePrice.basePrice.currency": {
+        "links": {
+          "self": null
+        }
+      },
+      "basePrice.value.currency": {
+        "links": {
+          "self": "http://localhost:4201/experiments/Currency/1"
+        }
+      },
+      "priceOptions.0.basePrice.currency": {
+        "links": {
+          "self": null
+        }
+      },
+      "priceOptions.0.value.currency": {
+        "links": {
+          "self": "http://localhost:4201/experiments/Currency/1"
+        }
+      },
+      "priceOptions.1.basePrice.currency": {
+        "links": {
+          "self": null
+        }
+      },
+      "priceOptions.1.value.currency": {
+        "links": {
+          "self": "http://localhost:4201/experiments/Currency/1"
+        }
+      },
+      "priceOptions.2.basePrice.currency": {
+        "links": {
+          "self": "http://localhost:4201/experiments/Currency/1"
+        }
+      },
+      "priceOptions.2.value.currency": {
+        "links": {
+          "self": null
+        }
+      },
+      "offers.0": {
+        "links": {
+          "self": "../Offer/1ade066d-7201-4aaf-ac49-29d138433dcf"
+        }
+      },
+      "offers.1": {
+        "links": {
+          "self": "../Offer/1bfb8e3d-59d8-4c84-9816-7d100c831608"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../commerce/app-listing",
+        "name": "AppListing"
+      }
+    }
+  }
+}

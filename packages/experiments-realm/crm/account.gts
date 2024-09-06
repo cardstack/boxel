@@ -4,6 +4,7 @@ import {
   CardDef,
   linksTo,
   linksToMany,
+  FieldDef,
 } from 'https://cardstack.com/base/card-api';
 
 import NumberField from 'https://cardstack.com/base/number';
@@ -12,7 +13,7 @@ import TextArea from 'https://cardstack.com/base/text-area';
 import { Address } from '../address';
 
 class CrmUser extends CardDef {}
-class Contact extends CardDef {}
+export class Contact extends CardDef {}
 class Company extends CardDef {}
 
 export class CrmAccount extends CardDef {
@@ -39,3 +40,8 @@ export class CrmAccount extends CardDef {
     },
   });
 }
+
+// class LeadStatus extends StringField {
+//   statuses = ['converted', 'met'];
+//   @field value = contains(StringField);
+// }

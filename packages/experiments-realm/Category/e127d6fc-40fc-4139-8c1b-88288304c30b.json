@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Accounting & Finance",
+      "code": "1",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "parent": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../commerce/listing",
+        "name": "Category"
+      }
+    }
+  }
+}

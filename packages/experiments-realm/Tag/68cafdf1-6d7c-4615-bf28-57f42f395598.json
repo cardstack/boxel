@@ -1,0 +1,18 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "kind": "device",
+      "value": "Mobile",
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../commerce/listing",
+        "name": "Tag"
+      }
+    }
+  }
+}

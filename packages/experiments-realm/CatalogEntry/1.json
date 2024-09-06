@@ -2,18 +2,22 @@
   "data": {
     "type": "card",
     "attributes": {
+      "ref": {
+        "name": "Person",
+        "module": "../person"
+      },
+      "name": null,
+      "tagLine": null,
+      "readme": null,
+      "type": "card",
       "title": "Person",
       "description": "Catalog entry for Person card",
-      "isField": false,
-      "ref": {
-        "module": "../person",
-        "name": "Person"
-      }
+      "thumbnailURL": null
     },
     "relationships": {
-      "demo.pet": {
+      "icon": {
         "links": {
-          "self": "../Pet/1"
+          "self": "../IconCard/479350fd-f0ec-4129-a426-dce3b0e91889"
         }
       }
     },

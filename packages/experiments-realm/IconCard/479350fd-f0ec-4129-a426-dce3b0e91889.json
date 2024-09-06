@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Icon X",
+      "keywords": [],
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "icon": {
+        "links": {
+          "self": "../Base64ImageCard/475142c1-66ea-47b2-b393-297a88fce379"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "IconCard"
+      }
+    }
+  }
+}

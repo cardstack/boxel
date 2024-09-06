@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Tax management",
+      "code": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "parent": {
+        "links": {
+          "self": "./e127d6fc-40fc-4139-8c1b-88288304c30b"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../commerce/listing",
+        "name": "Category"
+      }
+    }
+  }
+}

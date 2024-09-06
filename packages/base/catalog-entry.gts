@@ -3,24 +3,47 @@ import {
   field,
   Component,
   CardDef,
-  FieldDef,
   relativeTo,
   realmInfo,
+  FieldDef,
+  containsMany,
+  linksTo,
 } from './card-api';
 import StringField from './string';
-import BooleanField from './boolean';
 import CodeRef from './code-ref';
 
-import { FieldContainer } from '@cardstack/boxel-ui/components';
 import GlimmerComponent from '@glimmer/component';
+import MarkdownField from './markdown';
+import { Base64ImageCard } from './base64-image-card';
+import BooleanField from './boolean';
+
+class BoxelSpecType extends StringField {
+  types = ['card', 'field', 'command', 'component'];
+}
+
+// The point of this is so we can search for icon card
+export class IconCard extends CardDef {
+  @field name = contains(StringField);
+  @field icon = linksTo(Base64ImageCard);
+  @field keywords = containsMany(StringField); //so i can search via keyword
+
+  static fitted = class Fitted extends Component<typeof this> {
+    <template>
+      {{@model.name}}
+      {{@fields.icon}}
+    </template>
+  };
+}
 
 export class CatalogEntry extends CardDef {
   static displayName = 'Catalog Entry';
-  @field title = contains(StringField);
-  @field description = contains(StringField);
   @field ref = contains(CodeRef);
 
-  // If it's not a field, then it's a card
+  @field name = contains(StringField);
+  @field tagLine = contains(StringField);
+  @field readme = contains(MarkdownField);
+
+  @field type = contains(BoxelSpecType);
   @field isField = contains(BooleanField);
 
   @field moduleHref = contains(StringField, {
@@ -28,46 +51,12 @@ export class CatalogEntry extends CardDef {
       return new URL(this.ref.module, this[relativeTo]).href;
     },
   });
-  @field demo = contains(FieldDef);
   @field realmName = contains(StringField, {
     computeVia: function (this: CatalogEntry) {
       return this[realmInfo]?.name;
     },
   });
-  @field thumbnailURL = contains(StringField, { computeVia: () => null }); // remove this if we want card type entries to have images
-
-  get showDemo() {
-    return !this.isField;
-  }
-
-  // An explicit edit template is provided since computed isPrimitive bool
-  // field (which renders in the embedded format) looks a little wonky
-  // right now in the edit view.
-  static edit = class Edit extends Component<typeof this> {
-    <template>
-      <CatalogEntryContainer>
-        <FieldContainer @tag='label' @label='Title' data-test-field='title'>
-          <@fields.title />
-        </FieldContainer>
-        <FieldContainer
-          @tag='label'
-          @label='Description'
-          data-test-field='description'
-        >
-          <@fields.description />
-        </FieldContainer>
-        <FieldContainer @label='Ref' data-test-field='ref'>
-          <@fields.ref />
-        </FieldContainer>
-        <FieldContainer @label='Workspace Name' data-test-field='realmName'>
-          <@fields.realmName />
-        </FieldContainer>
-        <FieldContainer @vertical={{true}} @label='Demo' data-test-field='demo'>
-          <@fields.demo />
-        </FieldContainer>
-      </CatalogEntryContainer>
-    </template>
-  };
+  @field icon = linksTo(IconCard);
 
   static fitted = class Fitted extends Component<typeof this> {
     <template>
@@ -114,9 +103,6 @@ export class CatalogEntry extends CardDef {
           in
           <@fields.realmName />
         </div>
-        {{#if @model.showDemo}}
-          <div data-test-demo><@fields.demo /></div>
-        {{/if}}
       </CatalogEntryContainer>
       <style scoped>
         .container {

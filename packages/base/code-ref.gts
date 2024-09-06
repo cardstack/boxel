@@ -14,6 +14,8 @@ import {
   type JSONAPISingleResourceDocument,
 } from './card-api';
 import { ResolvedCodeRef } from '@cardstack/runtime-common';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { action } from '@ember/object';
 
 class BaseView extends Component<typeof CodeRefField> {
   <template>
@@ -22,6 +24,22 @@ class BaseView extends Component<typeof CodeRefField> {
       {{@model.module}}
       Name:
       {{@model.name}}
+    </div>
+  </template>
+}
+class Edit extends Component<typeof CodeRefField> {
+  @action setModule(m: string) {
+    let codeRef = { ...this.args.model, module: m };
+    this.args.set(codeRef);
+  }
+  @action setName(m: string) {
+    let codeRef = { ...this.args.model, name: m };
+    this.args.set(codeRef);
+  }
+  <template>
+    <div>
+      <BoxelInput @value={{@model.module}} @onInput={{this.setModule}} />
+      <BoxelInput @value={{@model.name}} @onInput={{this.setName}} />
     </div>
   </template>
 }
@@ -60,7 +78,8 @@ export default class CodeRefField extends FieldDef {
 
   static embedded = class Embedded extends BaseView {};
   // The edit template is meant to be read-only, this field card is not mutable
-  static edit = class Edit extends BaseView {};
+  // static edit = class Edit extends BaseView {};
+  static edit = Edit;
 }
 
 function maybeSerializeCodeRef(

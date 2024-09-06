@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cta": null,
+      "price": {
+        "value": {
+          "amount": 5
+        }
+      },
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "price.value.currency": {
+        "links": {
+          "self": "http://localhost:4201/experiments/Currency/2"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../commerce/offer",
+        "name": "Offer"
+      }
+    }
+  }
+}
