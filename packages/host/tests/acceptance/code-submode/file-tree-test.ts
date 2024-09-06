@@ -64,7 +64,7 @@ const personCardSource = `
           <p>Address List: <@fields.address /></p>
           <p>Friends: <@fields.friends /></p>
         </div>
-        <style>
+        <style scoped>
           div {
             color: green;
             content: '';
@@ -169,7 +169,7 @@ const friendCardSource = `
           <p>Last name: <@fields.lastName /></p>
           <p>Title: <@fields.title /></p>
         </div>
-        <style>
+        <style scoped>
           div {
             color: green;
             content: '';

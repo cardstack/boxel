@@ -29,7 +29,7 @@ class TravelGoal extends FieldDef {
           <@fields.alternateTrips />
         </FieldContainer>
       </CardContainer>
-      <style>
+      <style scoped>
         .container {
           padding: 20px;
           background-color: whitesmoke;
@@ -73,7 +73,7 @@ class Traveler extends FieldDef {
           <@fields.nextTravelGoal />
         </FieldContainer>
       </div>
-      <style>
+      <style scoped>
         .traveler {
           display: grid;
           gap: 20px;
@@ -109,5 +109,6 @@ export class TripInfo extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
   */
 }

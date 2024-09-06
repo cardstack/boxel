@@ -105,10 +105,10 @@ export class EmbeddedViewDriver extends CardDef {
         </div>
       </div>
 
-      <style>
+      <style scoped>
         .card {
           /* this is how a border would appear around a card.
-             note that a card is not supposed to draw its own border 
+             note that a card is not supposed to draw its own border
           */
           box-shadow: 0 0 0 1px var(--boxel-light-500);
           overflow: hidden;

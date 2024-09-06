@@ -114,7 +114,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       async function renderResizablePanelGroup(
         renderController: RenderController,
       ) {
-        // Putting this in <style> causes syntax highlighting to break
+        // Putting this in <style scoped> causes syntax highlighting to break
         let testContainerStyles = `
             #test-container {
               ${orientationProperties.perpendicularDimension}: 100px;
@@ -125,7 +125,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
 
         await render(<template>
           {{! template-lint-disable no-inline-styles }}
-          <style>{{testContainerStyles}}</style>
+          <style scoped>{{testContainerStyles}}</style>
           <div style={{htmlSafe renderController.containerStyle}}>
             <ResizablePanelGroup
               @orientation={{orientationProperties.orientation}}

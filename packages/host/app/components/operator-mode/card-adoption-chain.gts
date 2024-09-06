@@ -30,7 +30,7 @@ interface Signature {
 
 export default class CardAdoptionChain extends Component<Signature> {
   <template>
-    <style>
+    <style scoped>
       .card-adoption-chain {
         background-color: var(--boxel-200);
         min-height: 100%;

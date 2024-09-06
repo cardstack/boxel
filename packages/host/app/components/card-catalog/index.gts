@@ -93,7 +93,7 @@ export default class CardCatalog extends Component<Signature> {
       {{/each}}
     </div>
 
-    <style>
+    <style scoped>
       .card-catalog {
         display: grid;
         gap: var(--boxel-sp-xl);

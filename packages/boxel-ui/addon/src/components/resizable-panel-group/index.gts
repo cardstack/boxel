@@ -78,7 +78,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
         }}
       {{/if}}
     </div>
-    <style>
+    <style scoped>
       .boxel-panel-group {
         display: flex;
         flex-shrink: 0;

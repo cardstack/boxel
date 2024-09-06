@@ -1725,7 +1725,7 @@ module('Realm Server', function (hooks) {
               <template>
                 Embedded Card Person: <@fields.firstName/>
 
-                <style>
+                <style scoped>
                   .border {
                     border: 1px solid red;
                   }
@@ -1746,7 +1746,7 @@ module('Realm Server', function (hooks) {
               <template>
                 Embedded Card FancyPerson: <@fields.firstName/>
 
-                <style>
+                <style scoped>
                   .fancy-border {
                     border: 1px solid pink;
                   }

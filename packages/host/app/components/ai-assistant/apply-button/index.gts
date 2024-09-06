@@ -37,7 +37,7 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       {{/if}}
     </div>
   {{/if}}
-  <style>
+  <style scoped>
     .apply-button {
       --boxel-button-font: 700 var(--boxel-font-xs);
       --boxel-button-min-height: 1.5rem;

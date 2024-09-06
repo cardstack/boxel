@@ -52,7 +52,7 @@ export default class AiAssistantApplyButtonUsage extends Component {
       </:api>
     </FreestyleUsage>
 
-    <style>
+    <style scoped>
       .example-container {
         background: var(--boxel-ai-purple);
         overflow: hidden;

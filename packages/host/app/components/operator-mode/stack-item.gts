@@ -566,7 +566,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         {{/if}}
       </CardContainer>
     </div>
-    <style>
+    <style scoped>
       :global(:root) {
         --stack-card-footer-height: 6rem;
         --stack-item-header-area-height: 3.5rem;

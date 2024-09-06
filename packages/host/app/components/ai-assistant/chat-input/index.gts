@@ -51,7 +51,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
         data-test-send-message-btn
       />
     </div>
-    <style>
+    <style scoped>
       .chat-input-container {
         display: grid;
         grid-template-columns: 1fr auto;

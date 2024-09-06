@@ -30,7 +30,7 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
       {{yield to='content'}}
     </div>
   </div>
-  <style>
+  <style scoped>
     .accordion-item {
       --accordion-item-closed-height: 2.75rem;
       --accordion-item-open-height: 8rem;

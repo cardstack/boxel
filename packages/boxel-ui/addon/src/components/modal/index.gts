@@ -68,7 +68,7 @@ export default class Modal extends Component<Signature> {
         </dialog>
       </div>
     {{/if}}
-    <style>
+    <style scoped>
       dialog {
         /* Unit is required to be used on calc */
         --boxel-modal-offset-top: 0px;
