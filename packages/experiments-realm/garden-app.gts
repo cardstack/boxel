@@ -1,4 +1,4 @@
-import { AppCard } from 'https://cardstack.com/base/app-card';
+import { AppCard } from './app-card';
 // import { Component } from 'https://cardstack.com/base/card-api';
 export class GardenAppCard extends AppCard {
   static displayName = 'Garden App Card';

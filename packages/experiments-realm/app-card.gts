@@ -1,6 +1,6 @@
-import BooleanField from './boolean';
-import CodeRefField from './code-ref';
-import { Base64ImageField } from './base64-image';
+import BooleanField from 'https://cardstack.com/base/boolean';
+import CodeRefField from 'https://cardstack.com/base/code-ref';
+import { Base64ImageField } from 'https://cardstack.com/base/base64-image';
 import {
   CardDef,
   field,
@@ -11,7 +11,7 @@ import {
   realmURL,
   StringField,
   type CardContext,
-} from './card-api';
+} from 'https://cardstack.com/base/card-api';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -49,7 +49,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
       this.errorMessage = 'ModuleId is not available.';
       return;
     }
-    let loader: Loader = (require as any).loader;
+    let loader: Loader = (import.meta as any).loader;
     let module;
     try {
       module = await loader.import(this.args.model.moduleId);
@@ -157,7 +157,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
         {{/if}}
       </div>
     </section>
-    <style>
+    <style scoped>
       .app-card {
         position: relative;
         min-height: 100%;
@@ -440,7 +440,7 @@ export class CardsGrid extends GlimmerComponent<{
         </li>
       {{/each}}
     </ul>
-    <style>
+    <style scoped>
       .cards-grid {
         --grid-card-width: 10.25rem; /* 164px */
         --grid-card-height: 14rem; /* 224px */

@@ -10,6 +10,7 @@ export function authorizationMiddleware(
 ): FetcherMiddlewareHandler {
   return async function (req, next) {
     let token = tokenSource.token(req.url);
+    console.log(token);
     if (token) {
       req.headers.set('Authorization', token);
     }

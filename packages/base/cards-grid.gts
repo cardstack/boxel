@@ -9,6 +9,7 @@ import {
   realmInfo,
   realmURL,
   type BaseDef,
+  linksToMany,
 } from './card-api';
 import {
   AddButton,
@@ -31,6 +32,7 @@ import cssUrl from 'ember-css-url';
 import { type CatalogEntry } from './catalog-entry';
 import StringField from './string';
 import { TrackedArray } from 'tracked-built-ins';
+import { not } from '@cardstack/boxel-ui/helpers';
 
 class Isolated extends Component<typeof CardsGrid> {
   <template>
@@ -45,41 +47,45 @@ class Isolated extends Component<typeof CardsGrid> {
       <div class='content'>
         <span class='headline'>{{this.activeFilter.displayName}}</span>
         <ul class='cards' data-test-cards-grid-cards>
-          {{#let
-            (component @context.prerenderedCardSearchComponent)
-            as |PrerenderedCardSearch|
-          }}
-            <PrerenderedCardSearch
-              @query={{this.activeFilter.query}}
-              @format='fitted'
-              @realms={{this.realms}}
-            >
+          {{#if (not this.hideCards)}}
+            {{#let
+              (component @context.prerenderedCardSearchComponent)
+              as |PrerenderedCardSearch|
+            }}
+              <PrerenderedCardSearch
+                @query={{this.activeFilter.query}}
+                @format='fitted'
+                @realms={{this.realms}}
+              >
 
-              <:loading>
-                Loading...
-              </:loading>
-              <:response as |cards|>
-                {{measureLoadTime}}
-                {{#each cards as |card|}}
-                  <CardContainer class='card'>
-                    <li
-                      {{@context.cardComponentModifier
-                        cardId=card.url
-                        format='data'
-                        fieldType=undefined
-                        fieldName=undefined
-                      }}
-                      data-test-cards-grid-item={{removeFileExtension card.url}}
-                      {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
-                      data-cards-grid-item={{removeFileExtension card.url}}
-                    >
-                      {{card.component}}
-                    </li>
-                  </CardContainer>
-                {{/each}}
-              </:response>
-            </PrerenderedCardSearch>
-          {{/let}}
+                <:loading>
+                  Loading...
+                </:loading>
+                <:response as |cards|>
+                  {{measureLoadTime}}
+                  {{#each cards as |card|}}
+                    <CardContainer class='card'>
+                      <li
+                        {{@context.cardComponentModifier
+                          cardId=card.url
+                          format='data'
+                          fieldType=undefined
+                          fieldName=undefined
+                        }}
+                        data-test-cards-grid-item={{removeFileExtension
+                          card.url
+                        }}
+                        {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
+                        data-cards-grid-item={{removeFileExtension card.url}}
+                      >
+                        {{card.component}}
+                      </li>
+                    </CardContainer>
+                  {{/each}}
+                </:response>
+              </PrerenderedCardSearch>
+            {{/let}}
+          {{/if}}
         </ul>
 
         {{#if @context.actions.createCard}}
@@ -177,15 +183,15 @@ class Isolated extends Component<typeof CardsGrid> {
     this.loadFilterList.perform();
   }
 
-  filters = new TrackedArray([
+  filters: { displayName: string; query: any }[] = new TrackedArray([
     {
-      displayName: 'All Apps',
+      displayName: 'Favourites',
       query: {
         filter: {
-          type: {
-            module: `${baseRealm.url}app-card`,
-            name: 'AppCard',
-          },
+          any:
+            this.args.model['favourites']?.map((card) => {
+              return { eq: { id: card.id } } ?? {};
+            }) ?? [],
         },
         sort: [
           {
@@ -324,6 +330,14 @@ class Isolated extends Component<typeof CardsGrid> {
       });
     });
   });
+
+  private get hideCards() {
+    return (
+      this.activeFilter.displayName === 'Favourites' &&
+      (!this.args.model['favourites'] ||
+        this.args.model['favourites'].length === 0)
+    );
+  }
 }
 
 export class CardsGrid extends CardDef {
@@ -340,6 +354,7 @@ export class CardsGrid extends CardDef {
       return this.realmName;
     },
   });
+  @field favourites = linksToMany(CardDef);
 
   static getDisplayName(instance: BaseDef) {
     if (isCardInstance(instance)) {

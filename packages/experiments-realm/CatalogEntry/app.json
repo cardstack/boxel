@@ -6,7 +6,7 @@
       "description": "Catalog entry for AppCard",
       "isField": false,
       "ref": {
-        "module": "https://cardstack.com/base/app-card",
+        "module": "../app-card",
         "name": "AppCard"
       }
     },
