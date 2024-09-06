@@ -101,11 +101,11 @@ export interface FileRef {
 export interface TokenClaims {
   user: string;
   realm: string;
-  permissions: ('read' | 'write')[];
+  permissions: ('read' | 'write' | 'realm-owner')[];
 }
 
 export interface RealmPermissions {
-  [username: string]: ('read' | 'write')[];
+  [username: string]: ('read' | 'write' | 'realm-owner')[];
 }
 
 export interface RealmAdapter {

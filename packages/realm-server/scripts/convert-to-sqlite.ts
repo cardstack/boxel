@@ -107,6 +107,15 @@ function createColumns(
         case 'constraint_primary_key':
           column.push('PRIMARY KEY');
           break;
+        case 'constraint_default':
+          if ('value' in constraint.expr) {
+            column.push('DEFAULT', String(constraint.expr.value));
+            break;
+          } else {
+            throw new Error(
+              `Don't know how to serialize default value constraint for expression type '${constraint.expr.type}'`,
+            );
+          }
         default:
           throw new Error(
             `Don't know how to serialize constraint ${constraint.type} for column '${item.name.name}'`,

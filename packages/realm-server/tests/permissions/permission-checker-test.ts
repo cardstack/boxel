@@ -8,6 +8,10 @@ let mockMatrixClient = {
     return matrixUserProfile;
   },
 } as MatrixClient;
+
+// TODO add realm-owner tests. the permission currently does not enable any
+// special behavior yet, but we just want to make sure it can be captured
+
 module('realm-user-permissions', function (_hooks) {
   module('world-readable realm', function () {
     let permissionsChecker = new RealmPermissionChecker(

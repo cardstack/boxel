@@ -6,8 +6,12 @@ import {
   Realm,
   logger,
   SupportedMimeType,
+  insertPermissions,
   type VirtualNetwork,
+  type DBAdapter,
+  type Queue,
 } from '@cardstack/runtime-common';
+import { ensureDirSync, writeJSONSync } from 'fs-extra';
 import { setupCloseHandler } from './node-realm';
 import {
   livenessCheck,
@@ -18,12 +22,18 @@ import {
   setContextResponse,
   fetchRequestFromContext,
 } from './middleware';
+import { registerUser } from './synapse';
 import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp';
+import { NodeAdapter } from './node-realm';
+import { resolve, join } from 'path';
 
 import './lib/externals';
 import { extractSupportedMimeType } from '@cardstack/runtime-common/router';
 import * as Sentry from '@sentry/node';
-import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import {
+  MatrixClient,
+  passwordFromSeed,
+} from '@cardstack/runtime-common/matrix-client';
 import {
   MatrixBackendAuthentication,
   Utils,
@@ -32,15 +42,56 @@ import jwt from 'jsonwebtoken';
 
 export class RealmServer {
   private log = logger('realm:requests');
+  private realms: Realm[];
+  private virtualNetwork: VirtualNetwork;
+  private matrixClient: MatrixClient;
+  private secretSeed: string;
+  private realmsRootPath: string;
+  private dbAdapter: DBAdapter;
+  private queue: Queue;
+  private assetsURL: URL;
+  private getIndexHTML: () => Promise<string>;
+  private serverURL: URL;
+  private matrixRegistrationSecret: string;
 
-  constructor(
-    private realms: Realm[],
-    private virtualNetwork: VirtualNetwork,
-    private matrixClient: MatrixClient,
-    private secretSeed: string,
-  ) {
+  constructor({
+    serverURL,
+    realms,
+    virtualNetwork,
+    matrixClient,
+    secretSeed,
+    realmsRootPath,
+    dbAdapter,
+    queue,
+    assetsURL,
+    getIndexHTML,
+    matrixRegistrationSecret,
+  }: {
+    serverURL: URL;
+    realms: Realm[];
+    virtualNetwork: VirtualNetwork;
+    matrixClient: MatrixClient;
+    secretSeed: string;
+    realmsRootPath: string;
+    dbAdapter: DBAdapter;
+    queue: Queue;
+    assetsURL: URL;
+    getIndexHTML: () => Promise<string>;
+    matrixRegistrationSecret: string;
+  }) {
     detectRealmCollision(realms);
+
+    this.serverURL = serverURL;
     this.realms = realms;
+    this.virtualNetwork = virtualNetwork;
+    this.matrixClient = matrixClient;
+    this.secretSeed = secretSeed;
+    this.realmsRootPath = realmsRootPath;
+    this.dbAdapter = dbAdapter;
+    this.queue = queue;
+    this.assetsURL = assetsURL;
+    this.getIndexHTML = getIndexHTML;
+    this.matrixRegistrationSecret = matrixRegistrationSecret;
   }
 
   @Memoize()
@@ -160,6 +211,79 @@ export class RealmServer {
 
     await setContextResponse(ctxt, realmResponse);
   };
+
+  // TODO make this method private after we have provided an HTTP interface for
+  // this capability
+  async createRealm(
+    ownerUserId: string, // note matrix userID's are prefixed with '@' and include ':home-server' suffix
+    realmName: string,
+  ): Promise<Realm> {
+    if (
+      this.realms.find(
+        (r) => new URL(r.url).href.replace(/\/$/, '') === new URL(r.url).origin,
+      )
+    ) {
+      throw new Error(
+        `Cannot create a realm: a realm is already mounted at the origin of this server`,
+      );
+    }
+    if (!realmName.match(/^[a-z0-9-]+$/)) {
+      throw new Error(`realm name '${realmName}' contains invalid characters`);
+    }
+
+    let ownerUsername = ownerUserId.replace(/^@/, '').replace(/:.*$/, '');
+    let url = new URL(
+      `${this.serverURL.pathname.replace(
+        /\/$/,
+        '',
+      )}/${ownerUsername}/${realmName}/`,
+      this.serverURL,
+    ).href;
+
+    let existingRealmURLs = this.realms.map((r) => r.url);
+    if (existingRealmURLs.includes(url)) {
+      throw new Error(`realm '${url}' already exists on this server`);
+    }
+
+    let realmPath = resolve(
+      join(this.realmsRootPath, ownerUsername, realmName),
+    );
+    ensureDirSync(realmPath);
+    let adapter = new NodeAdapter(resolve(String(realmPath)));
+
+    let username = `realm/${ownerUsername}_${realmName}`;
+    await registerUser({
+      matrixURL: this.matrixClient.matrixURL,
+      displayname: username,
+      username,
+      password: await passwordFromSeed(username, this.secretSeed),
+      registrationSecret: this.matrixRegistrationSecret,
+    });
+
+    await insertPermissions(this.dbAdapter, new URL(url), {
+      [ownerUserId]: ['read', 'write', 'realm-owner'],
+    });
+
+    writeJSONSync(join(realmPath, '.realm.json'), { name: realmName });
+
+    let realm = new Realm({
+      url,
+      adapter,
+      getIndexHTML: this.getIndexHTML,
+      realmSecretSeed: this.secretSeed,
+      virtualNetwork: this.virtualNetwork,
+      dbAdapter: this.dbAdapter,
+      queue: this.queue,
+      assetsURL: this.assetsURL,
+      matrix: {
+        url: this.matrixClient.matrixURL,
+        username,
+      },
+    });
+    this.realms.push(realm);
+    this.virtualNetwork.mount(realm.handle);
+    return realm;
+  }
 }
 
 function detectRealmCollision(realms: Realm[]): void {

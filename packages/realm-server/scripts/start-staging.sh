@@ -9,6 +9,8 @@ NODE_NO_WARNINGS=1 \
   --transpileOnly main \
   --port=3000 \
   --matrixURL='https://matrix-staging.stack.cards' \
+  --realmsRootPath='/persistent/realms' \
+  --serverURL='https://realms-staging.stack.cards' \
   \
   --path='/persistent/base' \
   --username='base_realm' \

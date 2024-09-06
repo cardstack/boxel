@@ -18,6 +18,16 @@ import { registerUser, createRegistrationToken } from '../docker/synapse';
 
 const REGISTRATION_TOKEN = 'abc123';
 
+// TODO after we start creating realms as part of user creation we'll need to
+// figure out how to perform better isolation for these tests. Creating a user
+// will result in DB and filesystem state changes that will bleed into the other
+// matrix tests. Since playwright is running on the server we could perform
+// realm server isolation by using randomly generated DB names's like we do in
+// the realm server tests along with resetting the underlying filesystem and
+// restarting the realm server in between tests that we expect to mutate realm
+// state. These would be rather expensive tests so we should be prudent around
+// the realm server isolation.
+
 test.describe('User Registration w/ Token', () => {
   let synapse: SynapseInstance;
 
@@ -94,6 +104,18 @@ test.describe('User Registration w/ Token', () => {
     // assert that the registration mode state is cleared properly
     await logout(page);
     await assertLoggedOut(page);
+  });
+
+  test.skip('it shows an error when the username starts with "realm/" prefix', async ({
+    page: _page,
+  }) => {
+    // TODO
+  });
+
+  test.skip('it shows an error when the username starts with "_" prefix', async ({
+    page: _page,
+  }) => {
+    // TODO
   });
 
   test('it shows an error when the username is already taken', async ({

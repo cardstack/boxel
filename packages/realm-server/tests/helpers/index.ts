@@ -18,6 +18,8 @@ import {
   type Queue,
   type IndexRunner,
 } from '@cardstack/runtime-common';
+import { dirSync } from 'tmp';
+import { getLocalConfig as getSynapseConfig } from '../../synapse';
 import { makeFastBootIndexRunner } from '../../fastboot';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { RealmServer } from '../../server';
@@ -41,7 +43,9 @@ export const realmServerTestMatrix: MatrixConfig = {
   url: matrixURL,
   username: 'node-test_realm-server',
 };
-export const realmSecretSeed = `shhh! it's a secret`;
+export const secretSeed = `shhh! it's a secret`;
+export const matrixRegistrationSecret: string =
+  getSynapseConfig().registration_shared_secret;
 
 let basePath = resolve(join(__dirname, '..', '..', '..', 'base'));
 
@@ -143,7 +147,7 @@ export function setupDB(
   }
 }
 
-async function getFastbootState() {
+export async function getFastbootState() {
   if (!fastbootState) {
     fastbootState = await makeFastBootIndexRunner(
       new URL(process.env.HOST_URL ?? 'http://localhost:4200/'),
@@ -199,7 +203,7 @@ export async function createRealm({
       indexRunner,
       virtualNetwork,
       matrixURL: matrixConfig.url,
-      secretSeed: realmSecretSeed,
+      secretSeed: secretSeed,
     });
   }
   let realm = new Realm({
@@ -207,7 +211,7 @@ export async function createRealm({
     adapter,
     getIndexHTML,
     matrix: matrixConfig,
-    realmSecretSeed: realmSecretSeed,
+    realmSecretSeed: secretSeed,
     virtualNetwork,
     dbAdapter,
     queue,
@@ -228,11 +232,13 @@ export function setupBaseRealmServer(
   let baseRealmServer: Server;
   setupDB(hooks, {
     before: async (dbAdapter, queue) => {
+      let dir = dirSync();
       baseRealmServer = await runBaseRealmServer(
         virtualNetwork,
         queue,
         dbAdapter,
         matrixURL,
+        dir.name,
       );
     },
     after: async () => {
@@ -246,12 +252,13 @@ export async function runBaseRealmServer(
   queue: Queue,
   dbAdapter: PgAdapter,
   matrixURL: URL,
+  realmsRootPath: string,
   permissions: RealmPermissions = { '*': ['read'] },
 ) {
   let localBaseRealmURL = new URL(localBaseRealm);
   virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
 
-  let indexRunner = (await getFastbootState()).getRunner;
+  let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue,
@@ -259,7 +266,7 @@ export async function runBaseRealmServer(
     indexRunner,
     virtualNetwork,
     matrixURL,
-    secretSeed: realmSecretSeed,
+    secretSeed: secretSeed,
   });
   let testBaseRealm = await createRealm({
     dir: basePath,
@@ -276,19 +283,27 @@ export async function runBaseRealmServer(
   let matrixClient = new MatrixClient({
     matrixURL: realmServerTestMatrix.url,
     username: realmServerTestMatrix.username,
-    seed: realmSecretSeed,
+    seed: secretSeed,
   });
-  let testBaseRealmServer = new RealmServer(
-    [testBaseRealm],
+  let testBaseRealmServer = new RealmServer({
+    realms: [testBaseRealm],
     virtualNetwork,
     matrixClient,
-    realmSecretSeed,
-  );
+    secretSeed,
+    matrixRegistrationSecret,
+    realmsRootPath,
+    dbAdapter,
+    queue,
+    getIndexHTML,
+    serverURL: new URL(localBaseRealmURL.origin),
+    assetsURL: new URL(`http://example.com/notional-assets-host/`),
+  });
   return testBaseRealmServer.listen(parseInt(localBaseRealmURL.port));
 }
 
 export async function runTestRealmServer({
-  dir,
+  testRealmDir,
+  realmsRootPath,
   fileSystem,
   realmURL,
   virtualNetwork,
@@ -298,7 +313,8 @@ export async function runTestRealmServer({
   matrixURL,
   permissions = { '*': ['read'] },
 }: {
-  dir: string;
+  testRealmDir: string;
+  realmsRootPath: string;
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
   realmURL: URL;
   permissions?: RealmPermissions;
@@ -308,12 +324,12 @@ export async function runTestRealmServer({
   matrixURL: URL;
   matrixConfig?: MatrixConfig;
 }) {
-  // the worker needs a special privileged network that has the interior
+  // the test worker needs a special privileged network that has the interior
   // Realm.maybeHandle mounted--this prevents the worker from having to
   // authenticate with itself when talking to the realm whose credentials its
   // using
   let privateNetwork = createVirtualNetwork();
-  let indexRunner = (await getFastbootState()).getRunner;
+  let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue,
@@ -321,10 +337,10 @@ export async function runTestRealmServer({
     indexRunner,
     virtualNetwork: privateNetwork,
     matrixURL,
-    secretSeed: realmSecretSeed,
+    secretSeed: secretSeed,
   });
   let testRealm = await createRealm({
-    dir,
+    dir: testRealmDir,
     fileSystem,
     realmURL: realmURL.href,
     permissions,
@@ -340,17 +356,27 @@ export async function runTestRealmServer({
   let matrixClient = new MatrixClient({
     matrixURL: realmServerTestMatrix.url,
     username: realmServerTestMatrix.username,
-    seed: realmSecretSeed,
+    seed: secretSeed,
   });
-  let testRealmServer = new RealmServer(
-    [testRealm],
+  let testRealmServer = new RealmServer({
+    realms: [testRealm],
     virtualNetwork,
     matrixClient,
-    realmSecretSeed,
-  ).listen(parseInt(realmURL.port));
+    secretSeed,
+    matrixRegistrationSecret,
+    realmsRootPath,
+    dbAdapter,
+    queue,
+    getIndexHTML,
+    serverURL: new URL(realmURL.origin),
+    assetsURL: new URL(`http://example.com/notional-assets-host/`),
+  });
+  let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
   return {
     testRealm,
     testRealmServer,
+    testRealmHttpServer,
+    workerVirtualNetwork: privateNetwork,
   };
 }
 

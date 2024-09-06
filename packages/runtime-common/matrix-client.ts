@@ -8,9 +8,9 @@ export interface MatrixAccess {
 }
 
 export class MatrixClient {
+  readonly matrixURL: URL;
+  readonly username: string;
   private access: MatrixAccess | undefined;
-  private matrixURL: URL;
-  private username: string;
   private password?: string;
   private seed?: string;
 
@@ -70,10 +70,7 @@ export class MatrixClient {
     if (this.password) {
       password = this.password;
     } else if (this.seed) {
-      let hash = new Sha256();
-      hash.update(this.username);
-      hash.update(this.seed);
-      password = uint8ArrayToHex(await hash.digest());
+      password = await passwordFromSeed(this.username, this.seed);
     } else {
       throw new Error(
         'bug: should never be here, we ensure password or seed exists in constructor',
@@ -279,6 +276,14 @@ export class MatrixClient {
       msgtype: 'm.text',
     });
   }
+}
+
+export async function passwordFromSeed(username: string, seed: string) {
+  let hash = new Sha256();
+  let cleanUsername = username.replace(/^@/, '').replace(/:.*$/, '');
+  hash.update(cleanUsername);
+  hash.update(seed);
+  return uint8ArrayToHex(await hash.digest());
 }
 
 export async function waitForMatrixMessage(

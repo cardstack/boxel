@@ -61,6 +61,15 @@ if (!REALM_SERVER_MATRIX_USERNAME) {
   process.exit(-1);
 }
 
+const MATRIX_REGISTRATION_SHARED_SECRET =
+  process.env.MATRIX_REGISTRATION_SHARED_SECRET;
+if (!MATRIX_REGISTRATION_SHARED_SECRET) {
+  console.error(
+    `The MATRIX_REGISTRATION_SHARED_SECRET environment variable is not set. Please make sure this env var has a value`,
+  );
+  process.exit(-1);
+}
+
 if (process.env.DISABLE_MODULE_CACHING === 'true') {
   console.warn(
     `module caching has been disabled, module executables will be served directly from the filesystem`,
@@ -70,6 +79,8 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
 let {
   port,
   matrixURL,
+  realmsRootPath,
+  serverURL = `http://localhost:${port}`,
   distURL = process.env.HOST_URL ?? 'http://localhost:4200',
   path: paths,
   fromUrl: fromUrls,
@@ -93,6 +104,15 @@ let {
       description: 'the target of the realm URL proxy',
       demandOption: true,
       type: 'array',
+    },
+    realmsRootPath: {
+      description: 'the path in which dynamically created realms are created',
+      demandOption: true,
+      type: 'string',
+    },
+    serverURL: {
+      description: 'the unresolved URL of the realm server',
+      type: 'string',
     },
     path: {
       description: 'realm directory path',
@@ -168,6 +188,7 @@ let dist: URL = new URL(distURL);
 
   await startWorker();
 
+  // TODO also include realms from realms json files on the filesystem
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
 
@@ -212,12 +233,19 @@ let dist: URL = new URL(distURL);
     username: REALM_SERVER_MATRIX_USERNAME,
     seed: REALM_SECRET_SEED,
   });
-  let server = new RealmServer(
+  let server = new RealmServer({
     realms,
     virtualNetwork,
     matrixClient,
-    REALM_SECRET_SEED,
-  );
+    realmsRootPath,
+    secretSeed: REALM_SECRET_SEED,
+    dbAdapter,
+    queue,
+    assetsURL: dist,
+    getIndexHTML,
+    serverURL: new URL(serverURL),
+    matrixRegistrationSecret: MATRIX_REGISTRATION_SHARED_SECRET,
+  });
 
   server.listen(port);
 
