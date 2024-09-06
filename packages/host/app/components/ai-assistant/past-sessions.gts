@@ -49,7 +49,7 @@ const AiAssistantPastSessionsList: TemplateOnlyComponent<Signature> = <template>
     </:body>
   </AiAssistantPanelPopover>
 
-  <style>
+  <style scoped>
     .past-sessions {
       list-style-type: none;
       padding: 0;

@@ -157,7 +157,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
         {{/if}}
       </div>
     </section>
-    <style>
+    <style scoped>
       .app-card {
         position: relative;
         min-height: 100%;
@@ -408,6 +408,11 @@ export class AppCard extends CardDef {
   @field headerIcon = contains(Base64ImageField);
   @field moduleId = contains(StringField);
   static isolated = AppCardIsolated;
+    static atom = class Atom extends Component<typeof this> {
+    <template>
+ Justin
+    </template>
+  };
 }
 
 export class CardsGrid extends GlimmerComponent<{
@@ -440,7 +445,7 @@ export class CardsGrid extends GlimmerComponent<{
         </li>
       {{/each}}
     </ul>
-    <style>
+    <style scoped>
       .cards-grid {
         --grid-card-width: 10.25rem; /* 164px */
         --grid-card-height: 14rem; /* 224px */

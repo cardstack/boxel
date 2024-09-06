@@ -25,7 +25,7 @@ class Edit extends Component<typeof DropdownField> {
         <Menu @closeMenu={{dd.close}} @items={{this.menuItems}} />
       </:content>
     </BoxelDropdown>
-    <style>
+    <style scoped>
       .dropdown-trigger {
         padding: 0 15px;
         min-width: 160px;
@@ -126,6 +126,7 @@ export class PlantInfo extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
 
   */
 }

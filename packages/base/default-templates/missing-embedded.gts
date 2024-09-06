@@ -33,7 +33,7 @@ export default class MissingEmbeddedTemplate extends GlimmerComponent<{
         </span>
       {{/if}}
     </div>
-    <style>
+    <style scoped>
       .missing-embedded-template {
         display: flex;
         flex-direction: column;

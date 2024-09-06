@@ -92,7 +92,7 @@ class DiagramType extends FieldDef {
           </item.component>
         </RadioInput>
       </div>
-      <style></style>
+      <style scoped></style>
     </template>
 
     private radioGroup = `__boxel_carving_turn_diagram_type${groupNumber++}__`;
@@ -241,7 +241,7 @@ class IsolatedView extends Component<typeof CarvingTurnDiagram> {
       {{/if}}
     </div>
 
-    <style>
+    <style scoped>
       .title {
         width: 500px;
         margin: 2rem 2rem 0;

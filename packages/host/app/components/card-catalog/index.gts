@@ -91,12 +91,11 @@ export default class CardCatalog extends Component<Signature> {
       {{/if}}
     </div>
 
-    <style>
+    <style scoped>
       .catalog-item.selected {
         border-color: var(--boxel-highlight);
         box-shadow: 0 0 0 1px var(--boxel-highlight);
       }
-
       .card-catalog {
         display: grid;
         gap: var(--boxel-sp-xl);

@@ -82,7 +82,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
         {{/if}}
       </div>
     </PermissionsConsumer>
-    <style>
+    <style scoped>
       .links-to-editor {
         --remove-icon-size: var(--boxel-icon-lg);
         position: relative;

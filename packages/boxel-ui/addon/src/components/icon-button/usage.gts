@@ -154,7 +154,7 @@ export default class IconButtonUsage extends Component {
         </section>
       </:example>
     </FreestyleUsage>
-    <style>
+    <style scoped>
       .checkbox-label {
         display: flex;
         align-items: center;

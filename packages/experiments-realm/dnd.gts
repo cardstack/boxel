@@ -126,7 +126,7 @@ export class Spell extends CardDef {
         {{/if}}
       </div>
 
-      <style>
+      <style scoped>
         .spell-card {
           font-family: 'Papyrus', fantasy;
           border: 2px solid #6b4226;
@@ -286,7 +286,7 @@ export class CharacterSheet extends CardDef {
       </div>
 
       <!-- CSS Styling -->
-      <style>
+      <style scoped>
         body {
           font-family: 'Cinzel', serif; /* Classic fantasy font */
           background-color: #f5ecd3; /* Parchment background */

@@ -76,7 +76,7 @@ class Isolated extends Component<typeof GardenDesign> {
         </ul>
       </div>
     </section>
-    <style>
+    <style scoped>
       .garden-design {
         width: 100%;
         height: 100%;

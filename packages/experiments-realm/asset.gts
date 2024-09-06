@@ -35,7 +35,7 @@ export class Asset extends CardDef {
         {{/if}}
         <div class='currency'><@fields.symbol /></div>
       </div>
-      <style>
+      <style scoped>
         .asset-card {
           display: inline-grid;
           grid-template-columns: var(--boxel-sp) 1fr;
@@ -57,7 +57,7 @@ export class Asset extends CardDef {
         {{/if}}
         {{@model.title}}
       </span>
-      <style>
+      <style scoped>
         img {
           vertical-align: middle;
           margin-right: var(--boxel-sp-xxxs);
@@ -93,7 +93,7 @@ class AssetField extends FieldDef {
         {{/if}}
         <div class='currency'><@fields.symbol /></div>
       </div>
-      <style>
+      <style scoped>
         .asset-card {
           display: inline-grid;
           grid-template-columns: var(--boxel-sp) 1fr;

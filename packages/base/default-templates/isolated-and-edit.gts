@@ -25,7 +25,7 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
         {{/unless}}
       {{/each-in}}
     </div>
-    <style>
+    <style scoped>
       .default-card-template {
         display: grid;
         gap: var(--boxel-sp-lg);

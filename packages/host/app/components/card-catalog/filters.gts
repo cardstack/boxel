@@ -74,7 +74,7 @@ export default class CardCatalogFilters extends Component<Signature> {
       </div>
     </div>
 
-    <style>
+    <style scoped>
       .filter-container {
         --filter-height: 30px;
         display: flex;

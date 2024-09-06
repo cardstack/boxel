@@ -79,7 +79,7 @@ export class CatalogEntry extends CardDef {
           <@fields.description />
         </p>
       </CatalogEntryContainer>
-      <style>
+      <style scoped>
         .fitted > * {
           white-space: nowrap;
           overflow: hidden;
@@ -118,7 +118,7 @@ export class CatalogEntry extends CardDef {
           <div data-test-demo><@fields.demo /></div>
         {{/if}}
       </CatalogEntryContainer>
-      <style>
+      <style scoped>
         .container {
           padding: var(--boxel-sp);
         }
@@ -143,7 +143,7 @@ class CatalogEntryContainer extends GlimmerComponent<Signature> {
     <div class='entry' ...attributes>
       {{yield}}
     </div>
-    <style>
+    <style scoped>
       .entry {
         display: grid;
         gap: 3px;

@@ -933,7 +933,7 @@ export default class CodeSubmode extends Component<Signature> {
       <FromElseWhere @name='schema-editor-modal' />
     </SubmodeLayout>
 
-    <style>
+    <style scoped>
       :global(:root) {
         --code-mode-padding-top: calc(
           var(--submode-switcher-trigger-height) + (2 * (var(--boxel-sp)))

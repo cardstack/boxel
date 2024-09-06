@@ -313,7 +313,7 @@ export default class CodeEditor extends Component<Signature> {
       </div>
     {{/if}}
 
-    <style>
+    <style scoped>
       .monaco-container {
         height: 100%;
         min-height: 100%;
