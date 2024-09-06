@@ -2578,6 +2578,40 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-plural-view-item="2"]`).hasText('Jackie');
   });
 
+  test('can add cards to favourites list', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    assert.dom(`[data-test-cards-grid-item]`).doesNotExist();
+    await click('[data-test-edit-button]');
+
+    await click('[data-test-add-new]');
+    await click(`[data-test-select="${testRealmURL}Person/1"]`);
+    await click(`[data-test-card-catalog-go-button]`);
+
+    await click('[data-test-add-new]');
+    await click(`[data-test-select="${testRealmURL}Person/10"]`);
+    await click(`[data-test-card-catalog-go-button]`);
+
+    await click('[data-test-edit-button]');
+    assert.dom(`[data-test-cards-grid-item]`).exists({ count: 2 });
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}Person/1"]`)
+      .exists();
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}Person/10"]`)
+      .exists();
+  });
+
   test('open workspace chooser when boxel icon is clicked', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
 
