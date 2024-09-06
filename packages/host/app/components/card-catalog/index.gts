@@ -2,14 +2,11 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
-import Owner from '@ember/owner';
 import Component from '@glimmer/component';
-
-import { tracked } from '@glimmer/tracking';
 
 import { Button } from '@cardstack/boxel-ui/components';
 
-import { cn, eq, gt } from '@cardstack/boxel-ui/helpers';
+import { add, cn, eq, gt, lt, subtract } from '@cardstack/boxel-ui/helpers';
 
 import type { RealmInfo } from '@cardstack/runtime-common';
 
@@ -23,6 +20,7 @@ interface PrerenderedCard {
   component: HTMLComponent;
   url: string;
   realmUrl: string;
+  realmInfo?: RealmInfo;
 }
 
 interface Signature {
@@ -30,7 +28,7 @@ interface Signature {
     cards: PrerenderedCard[];
     select: (cardUrl?: string, ev?: KeyboardEvent | MouseEvent) => void;
     selectedCardUrl?: string;
-    realmInfos: Record<string, RealmInfo>;
+    realmInfos?: Record<string, RealmInfo>;
   };
 }
 
@@ -38,7 +36,7 @@ export default class CardCatalog extends Component<Signature> {
   <template>
     <div class='card-catalog' data-test-card-catalog>
       {{#if @realmInfos}}
-        {{#each this.cardsGroupedByRealm as |realmData|}}
+        {{#each-in this.groupedCardsByRealm as |_realmUrl realmData|}}
           <section
             class='card-catalog__realm'
             data-test-realm={{realmData.realmInfo.name}}
@@ -49,45 +47,57 @@ export default class CardCatalog extends Component<Signature> {
             />
 
             <ul class='card-catalog__group'>
-              {{#each realmData.cardsShown as |card|}}
-                {{#let (eq @selectedCardUrl card.url) as |isSelected|}}
-                  <li class={{cn 'item' selected=isSelected}}>
-                    <button
-                      class='catalog-item {{if isSelected "selected"}}'
-                      {{on 'click' (fn @select card.url)}}
-                      {{on 'dblclick' (fn @select card.url)}}
-                      {{on 'keydown' (fn this.handleEnterKey card.url)}}
-                      data-test-select={{removeFileExtension card.url}}
-                      aria-label='Select'
-                      data-test-card-catalog-item={{removeFileExtension
-                        card.url
-                      }}
-                      data-test-card-catalog-item-selected={{isSelected}}
-                    >
-                      {{card.component}}
-                    </button>
-                  </li>
-                {{/let}}
+              {{#each realmData.cards as |card index|}}
+                {{#if (lt index realmData.displayedCardsCount)}}
+                  {{#let (eq @selectedCardUrl card.url) as |isSelected|}}
+                    <li class={{cn 'item' selected=isSelected}}>
+                      <button
+                        class='catalog-item {{if isSelected "selected"}}'
+                        {{on 'click' (fn @select card.url)}}
+                        {{on 'dblclick' (fn @select card.url)}}
+                        {{on 'keydown' (fn this.handleEnterKey card.url)}}
+                        data-test-select={{removeFileExtension card.url}}
+                        aria-label='Select'
+                        data-test-card-catalog-item={{removeFileExtension
+                          card.url
+                        }}
+                        data-test-card-catalog-item-selected={{isSelected}}
+                      >
+                        {{card.component}}
+                      </button>
+                    </li>
+                  {{/let}}
+                {{/if}}
               {{/each}}
             </ul>
 
-            {{#if (gt realmData.cardsTotal realmData.cardsShown.length)}}
+            {{#if (gt realmData.cardsTotal realmData.displayedCardsCount)}}
               <Button
-                {{on 'click' (fn this.revealMoreCards realmData)}}
+                {{on
+                  'click'
+                  (fn
+                    (mut realmData.displayedCardsCount)
+                    (add realmData.displayedCardsCount this.pageSize)
+                  )
+                }}
                 @kind='secondary-light'
                 @size='small'
                 data-test-show-more-cards
               >
                 Show
                 {{this.pageSize}}
-                more cards ({{this.remainingCardsCount realmData.realmUrl}}
+                more cards ({{subtract
+                  realmData.cardsTotal
+                  realmData.displayedCardsCount
+                }}
                 not shown)
               </Button>
             {{/if}}
           </section>
+
         {{else}}
           <p>No cards available</p>
-        {{/each}}
+        {{/each-in}}
       {{/if}}
     </div>
 
@@ -156,84 +166,57 @@ export default class CardCatalog extends Component<Signature> {
     </style>
   </template>
 
-  @tracked private cardsGroupedByRealm: {
-    realmUrl: string;
-    realmInfo: RealmInfo;
-    cardsShown: PrerenderedCard[];
-    cardsHidden: PrerenderedCard[];
-    cardsTotal: number;
-  }[] = [];
-
-  constructor(owner: Owner, args: Signature['Args']) {
-    super(owner, args);
-
-    let { cards, realmInfos } = args;
+  get groupedCardsByRealm(): Record<
+    string,
+    {
+      cards: PrerenderedCard[];
+      cardsTotal: number;
+      displayedCardsCount: number;
+      realmInfo: RealmInfo;
+    }
+  > {
+    let cards = this.args.cards;
+    let pageSize = this.pageSize;
 
     let groupedCards = cards.reduce(
       (acc, card) => {
         let realmUrl = card.realmUrl;
         if (!acc[realmUrl]) {
           acc[realmUrl] = {
-            cardsShown: [],
-            cardsHidden: [],
+            cards: [],
+            realmInfo: this.args.realmInfos![realmUrl],
             cardsTotal: 0,
-            realmInfo: realmInfos[realmUrl],
+            displayedCardsCount: 0,
           };
         }
-        if (acc[realmUrl].cardsShown.length < this.pageSize) {
-          acc[realmUrl].cardsShown.push(card);
-        } else {
-          acc[realmUrl].cardsHidden.push(card);
-        }
-        acc[realmUrl].cardsTotal++;
+        acc[realmUrl].cards.push(card);
         return acc;
       },
       {} as Record<
         string,
         {
-          cardsShown: PrerenderedCard[];
-          cardsHidden: PrerenderedCard[];
+          cards: PrerenderedCard[];
           realmInfo: RealmInfo;
           cardsTotal: number;
+          displayedCardsCount: number;
         }
       >,
     );
 
-    let cardsGroupedByRealm = Object.keys(groupedCards).map((realmUrl) => {
-      return {
-        realmUrl,
+    Object.keys(groupedCards).forEach((realmUrl) => {
+      let totalCards = groupedCards[realmUrl].cards.length;
+      groupedCards[realmUrl] = {
+        ...groupedCards[realmUrl],
+        cardsTotal: totalCards,
+        displayedCardsCount: pageSize,
         realmInfo: groupedCards[realmUrl].realmInfo,
-        cardsShown: groupedCards[realmUrl].cardsShown,
-        cardsHidden: groupedCards[realmUrl].cardsHidden,
-        cardsTotal: groupedCards[realmUrl].cardsTotal,
       };
     });
 
-    this.cardsGroupedByRealm = cardsGroupedByRealm;
+    return groupedCards;
   }
 
   pageSize = 5;
-
-  @action remainingCardsCount(realmUrl: string) {
-    let realmData = this.cardsGroupedByRealm.find(
-      (realmData: any) => realmData.realmUrl === realmUrl,
-    );
-    return realmData!.cardsTotal - realmData!.cardsShown.length;
-  }
-
-  @action revealMoreCards(realmData: any) {
-    let realmDataIndex = this.cardsGroupedByRealm.findIndex(
-      (realmData: any) => realmData.realmUrl === realmData.realmUrl,
-    );
-
-    let newRealmData = { ...realmData };
-    let cardsToReveal = newRealmData.cardsHidden.slice(0, this.pageSize);
-    newRealmData.cardsShown = [...newRealmData.cardsShown, ...cardsToReveal];
-    newRealmData.cardsHidden = newRealmData.cardsHidden.slice(this.pageSize);
-
-    this.cardsGroupedByRealm[realmDataIndex] = newRealmData;
-    this.cardsGroupedByRealm = [...this.cardsGroupedByRealm]; // Reassigning the array to itself is necessary to trigger a re-render
-  }
 
   @action
   handleEnterKey(cardUrl: string, event: KeyboardEvent) {

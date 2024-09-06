@@ -141,14 +141,12 @@ export default class CardCatalogModal extends Component<Signature> {
                 Loading...
               </:loading>
               <:response as |cards|>
-                {{#if this.availableRealms}}
-                  <CardCatalog
-                    @cards={{cards}}
-                    @realmInfos={{this.availableRealms}}
-                    @select={{this.selectCard}}
-                    @selectedCardUrl={{this.state.selectedCardUrl}}
-                  />
-                {{/if}}
+                <CardCatalog
+                  @cards={{cards}}
+                  @realmInfos={{this.availableRealms}}
+                  @select={{this.selectCard}}
+                  @selectedCardUrl={{this.state.selectedCardUrl}}
+                />
               </:response>
             </PrerenderedCardSearch>
           </:content>
