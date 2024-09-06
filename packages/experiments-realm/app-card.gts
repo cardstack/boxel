@@ -408,6 +408,11 @@ export class AppCard extends CardDef {
   @field headerIcon = contains(Base64ImageField);
   @field moduleId = contains(StringField);
   static isolated = AppCardIsolated;
+    static atom = class Atom extends Component<typeof this> {
+    <template>
+ Justin
+    </template>
+  };
 }
 
 export class CardsGrid extends GlimmerComponent<{

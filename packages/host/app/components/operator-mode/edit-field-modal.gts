@@ -18,6 +18,7 @@ import {
   BoxelInput,
   FieldContainer,
   RadioInput,
+  Pill,
 } from '@cardstack/boxel-ui/components';
 import { bool, cssVar } from '@cardstack/boxel-ui/helpers';
 
@@ -32,7 +33,6 @@ import {
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
-import Pill from '@cardstack/host/components/pill';
 import { FieldOfType, Type } from '@cardstack/host/resources/card-type';
 
 import { Ready } from '@cardstack/host/resources/file';
