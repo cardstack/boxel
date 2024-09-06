@@ -203,7 +203,7 @@ export async function createRealm({
       indexRunner,
       virtualNetwork,
       matrixURL: matrixConfig.url,
-      secretSeed: secretSeed,
+      secretSeed,
     });
   }
   let realm = new Realm({
@@ -211,7 +211,7 @@ export async function createRealm({
     adapter,
     getIndexHTML,
     matrix: matrixConfig,
-    realmSecretSeed: secretSeed,
+    secretSeed,
     virtualNetwork,
     dbAdapter,
     queue,
@@ -325,7 +325,7 @@ export async function runTestRealmServer({
   matrixConfig?: MatrixConfig;
 }) {
   // the test worker needs a special privileged network that has the interior
-  // Realm.maybeHandle mounted--this prevents the worker from having to
+  // Realm.maybeHandle mounted--this prevents the test worker from having to
   // authenticate with itself when talking to the realm whose credentials its
   // using
   let privateNetwork = createVirtualNetwork();
@@ -337,7 +337,7 @@ export async function runTestRealmServer({
     indexRunner,
     virtualNetwork: privateNetwork,
     matrixURL,
-    secretSeed: secretSeed,
+    secretSeed,
   });
   let testRealm = await createRealm({
     dir: testRealmDir,

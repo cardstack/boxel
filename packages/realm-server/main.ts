@@ -201,7 +201,7 @@ let dist: URL = new URL(distURL);
         adapter: realmAdapter,
         getIndexHTML,
         matrix: { url: new URL(matrixURL), username },
-        realmSecretSeed: REALM_SECRET_SEED,
+        secretSeed: REALM_SECRET_SEED,
         virtualNetwork,
         dbAdapter,
         queue,

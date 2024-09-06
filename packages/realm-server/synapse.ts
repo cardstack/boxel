@@ -10,7 +10,7 @@ const homeserverFile = resolve(
 
 export function getLocalConfig() {
   let homeserverYml = readFileSync(homeserverFile, 'utf8');
-  return yaml.parse(homeserverYml);
+  return yaml.parse(homeserverYml) as Record<string, any>;
 }
 
 export async function registerUser({

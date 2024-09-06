@@ -2156,7 +2156,7 @@ module('Realm Server', function (hooks) {
         realmName,
       );
       // the test worker needs a special privileged network that has the interior
-      // Realm.maybeHandle mounted--this prevents the worker from having to
+      // Realm.maybeHandle mounted--this prevents the test worker from having to
       // authenticate with itself when talking to the realm whose credentials its
       // using
       workerVirtualNetwork.mount(realm.maybeHandle);

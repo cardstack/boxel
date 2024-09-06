@@ -215,7 +215,7 @@ export class RealmServer {
   // TODO make this method private after we have provided an HTTP interface for
   // this capability
   async createRealm(
-    ownerUserId: string, // note matrix userID's are prefixed with '@' and include ':home-server' suffix
+    ownerUserId: string, // note matrix userID's look like @mango:boxel.ai
     realmName: string,
   ): Promise<Realm> {
     if (
@@ -261,6 +261,7 @@ export class RealmServer {
     });
 
     await insertPermissions(this.dbAdapter, new URL(url), {
+      // TODO confirm that we store matrix userID's in this table and not usernames
       [ownerUserId]: ['read', 'write', 'realm-owner'],
     });
 
@@ -270,7 +271,7 @@ export class RealmServer {
       url,
       adapter,
       getIndexHTML: this.getIndexHTML,
-      realmSecretSeed: this.secretSeed,
+      secretSeed: this.secretSeed,
       virtualNetwork: this.virtualNetwork,
       dbAdapter: this.dbAdapter,
       queue: this.queue,

@@ -522,7 +522,7 @@ async function setupTestRealm({
     getIndexHTML: async () =>
       `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
     matrix: testMatrix,
-    realmSecretSeed: testRealmSecretSeed,
+    secretSeed: testRealmSecretSeed,
     virtualNetwork,
     dbAdapter,
     queue,
