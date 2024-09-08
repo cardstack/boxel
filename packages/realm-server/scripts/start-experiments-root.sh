@@ -14,11 +14,10 @@ NODE_NO_WARNINGS=1 \
   ts-node \
   --transpileOnly main \
   --port=4204 \
+  --matrixURL='http://localhost:8008' \
   \
   --path='../experiments-realm/' \
-  --matrixURL='http://localhost:8008' \
   --username='experiments_realm' \
-  --password='password' \
   --toUrl='/' \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl='http://localhost:4201/base/'

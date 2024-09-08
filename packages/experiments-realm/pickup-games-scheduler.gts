@@ -51,7 +51,7 @@ export class GameSlot extends CardDef {
           {{/each}}
         </ul>
       </div>
-      <style>
+      <style scoped>
         h3 {
           margin-top: 0;
         }

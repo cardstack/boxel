@@ -157,9 +157,6 @@ test.describe('Login', () => {
         )`,
     });
 
-    await openRoot(page);
-    await toggleOperatorMode(page);
-
     await assertLoggedOut(page);
   });
 });

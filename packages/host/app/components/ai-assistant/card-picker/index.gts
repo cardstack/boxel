@@ -7,13 +7,12 @@ import { restartableTask } from 'ember-concurrency';
 
 import { TrackedSet } from 'tracked-built-ins';
 
-import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
+import { AddButton, Tooltip, Pill } from '@cardstack/boxel-ui/components';
 import { and, cn, gt, not } from '@cardstack/boxel-ui/helpers';
 
 import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
 
 import CardPill from '@cardstack/host/components/card-pill';
-import Pill from '@cardstack/host/components/pill';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -87,7 +86,7 @@ export default class AiAssistantCardPicker extends Component<Signature> {
         </AddButton>
       {{/if}}
     </div>
-    <style>
+    <style scoped>
       .card-picker {
         background-color: var(--boxel-light);
         color: var(--boxel-dark);

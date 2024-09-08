@@ -38,6 +38,8 @@ module.exports = function (environment) {
     loginMessageTimeoutMs: 1000,
     minSaveTaskDurationMs: 1000,
 
+    testRealmURLs: [],
+
     // the fields below may be rewritten by the realm server
     ownRealmURL:
       environment === 'test'
@@ -86,6 +88,11 @@ module.exports = function (environment) {
     ENV.loginMessageTimeoutMs = 0;
     ENV.minSaveTaskDurationMs = 0;
     ENV.sqlSchema = sqlSchema;
+
+    ENV.testRealmURLs = [
+      'http://test-realm/test/',
+      'https://cardstack.com/base/',
+    ];
   }
 
   if (environment === 'production') {

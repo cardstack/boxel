@@ -12,7 +12,7 @@ interface Signature {
 }
 
 const AiAssistantPanelPopover: TemplateOnlyComponent<Signature> = <template>
-  <style>
+  <style scoped>
     .panel-popover {
       position: absolute;
       top: 0;

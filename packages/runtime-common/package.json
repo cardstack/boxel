@@ -35,7 +35,7 @@
     "ember-concurrency-async-plugin": "workspace:*",
     "ember-source": "~5.4.0",
     "flat": "^5.0.2",
-    "glimmer-scoped-css": "^0.4.1",
+    "glimmer-scoped-css": "^0.6.0",
     "http-status-codes": "^2.2.0",
     "ignore": "^5.2.0",
     "js-string-escape": "^1.0.1",

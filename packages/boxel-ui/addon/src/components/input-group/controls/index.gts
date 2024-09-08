@@ -33,7 +33,7 @@ export const Input: TemplateOnlyComponent<InputSignature> = <template>
     {{on 'blur' (optional @onBlur)}}
     ...attributes
   />
-  <style>
+  <style scoped>
     .form-control {
       -moz-appearance: none;
       -webkit-appearance: none;
@@ -71,7 +71,7 @@ interface TextareaSignature {
 
 export const Textarea: TemplateOnlyComponent<TextareaSignature> = <template>
   <textarea class='form-control' ...attributes></textarea>
-  <style>
+  <style scoped>
     .form-control {
       -moz-appearance: none;
       -webkit-appearance: none;

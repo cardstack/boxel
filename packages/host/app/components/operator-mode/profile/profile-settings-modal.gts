@@ -174,7 +174,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
       </:footer>
     </ModalContainer>
 
-    <style>
+    <style scoped>
       .buttons {
         display: flex;
         justify-content: center;

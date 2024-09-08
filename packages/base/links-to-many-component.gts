@@ -203,7 +203,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         </AddButton>
       {{/if}}
     </PermissionsConsumer>
-    <style>
+    <style scoped>
       .list {
         list-style: none;
         padding: 0;
@@ -317,7 +317,7 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
         {{@field.card.displayName}}
       </AddButton>
     </div>
-    <style>
+    <style scoped>
       .boxel-pills {
         display: flex;
         flex-wrap: wrap;
@@ -441,7 +441,7 @@ export function getLinksToManyComponent({
           {{/let}}
         {{/if}}
       </DefaultFormatsConsumer>
-      <style>
+      <style scoped>
         .linksToMany-field.fitted-effectiveFormat
           > .linksToMany-item
           + .linksToMany-item {

@@ -13,6 +13,7 @@ declare const config: {
   APP: Record<string, unknown>;
   ownRealmURL: string;
   otherRealmURLs: string[];
+  testRealmURLs: string[];
   matrixURL: string;
   matrixServerName: string;
   experimentalAIEnabled: boolean;

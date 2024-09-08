@@ -284,7 +284,7 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
       </div>
 
     </div>
-    <style>
+    <style scoped>
       .content {
         display: flex;
         flex-direction: column;
@@ -334,7 +334,7 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
       href='https://cdn.jsdelivr.net/npm/cm-chessboard@8.7.3/assets/extensions/markers/markers.css'
     />
     {{! This is absolutely needed so piece doesn't diapplear when dragging }}
-    <style unscoped>
+    <style>
       .cm-chessboard-draggable-piece {
         z-index: 100;
       }
@@ -456,7 +456,7 @@ class Isolated extends BoxelComponent<typeof Chess> {
         @analysis={{this.args.model.analysis}}
       />
     </div>
-    <style>
+    <style scoped>
       .main {
         display: flex;
         flex-direction: column;

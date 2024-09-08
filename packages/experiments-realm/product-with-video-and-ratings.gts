@@ -56,7 +56,7 @@ class Isolated extends Component<typeof ProductWithVideoAndRatings> {
         </button>
       </div>
     </div>
-    <style>
+    <style scoped>
       .product {
         display: grid;
         grid-template-columns: 50% 50%;

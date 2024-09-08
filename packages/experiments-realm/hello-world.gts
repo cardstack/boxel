@@ -31,7 +31,7 @@ export class HelloWorld extends CardDef {
           <@fields.bio />
         </div>
       </div>
-      <style>
+      <style scoped>
         @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&display=swap');
         .container {
           padding: var(--boxel-sp-xl);

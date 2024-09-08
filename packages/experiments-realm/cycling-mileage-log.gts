@@ -69,7 +69,7 @@ class CyclingLogEntry extends FieldDef {
         <span>Routes: <@fields.origin /> - <@fields.destination /></span>
         <span>Distance: <@fields.distance /> KM</span>
       </div>
-      <style>
+      <style scoped>
         .entry {
           display: flex;
           flex-direction: column;
@@ -134,7 +134,7 @@ export class CyclingMileageLog extends CardDef {
           <@fields.entries />
         </div>
       </div>
-      <style>
+      <style scoped>
         .summary {
           display: flex;
           justify-content: center;

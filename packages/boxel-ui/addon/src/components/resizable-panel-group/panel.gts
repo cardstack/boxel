@@ -51,7 +51,7 @@ export default class Panel extends Component<Signature> {
     >
       {{yield}}
     </div>
-    <style>
+    <style scoped>
       .boxel-panel {
         --resizable-panel-length: '300px;';
       }
