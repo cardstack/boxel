@@ -1776,7 +1776,7 @@ export class Realm {
       chunkArr.push(`"${item}": ${JSON.stringify((data as any)[item])}`);
     }
     let chunk = sseToChunkData(type, `{${chunkArr.join(', ')}}`, id);
-    await Promise.all(
+    await Promise.allSettled(
       this.listeningClients.map((client) => writeToStream(client, chunk)),
     );
   }
