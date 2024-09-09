@@ -7,6 +7,8 @@ import { module, test } from 'qunit';
 
 import { GridContainer } from '@cardstack/boxel-ui/components';
 
+import { baseRealm } from '@cardstack/runtime-common';
+
 import {
   setupLocalIndexing,
   setupServerSentEvents,
@@ -102,7 +104,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
   setupWindowMock(hooks);
   setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
-    activeRealms: [testRealmURL],
+    activeRealms: [baseRealm.url, testRealmURL],
   });
   setupBaseRealm(hooks);
 
