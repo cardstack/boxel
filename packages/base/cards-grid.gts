@@ -103,7 +103,7 @@ class Isolated extends Component<typeof CardsGrid> {
       </div>
     </div>
 
-    <style scoped>
+    <style>
       :global(:root) {
         --cards-grid-padding-top: var(--boxel-sp-lg);
       }
@@ -185,11 +185,11 @@ class Isolated extends Component<typeof CardsGrid> {
 
   filters: { displayName: string; query: any }[] = new TrackedArray([
     {
-      displayName: 'Favourites',
+      displayName: 'Favorites',
       query: {
         filter: {
           any:
-            this.args.model['favourites']?.map((card) => {
+            this.args.model['favorites']?.map((card) => {
               return { eq: { id: card.id } } ?? {};
             }) ?? [],
         },
@@ -333,9 +333,9 @@ class Isolated extends Component<typeof CardsGrid> {
 
   private get hideCards() {
     return (
-      this.activeFilter.displayName === 'Favourites' &&
-      (!this.args.model['favourites'] ||
-        this.args.model['favourites'].length === 0)
+      this.activeFilter.displayName === 'Favorites' &&
+      (!this.args.model['favorites'] ||
+        this.args.model['favorites'].length === 0)
     );
   }
 }
@@ -354,7 +354,7 @@ export class CardsGrid extends CardDef {
       return this.realmName;
     },
   });
-  @field favourites = linksToMany(CardDef);
+  @field favorites = linksToMany(CardDef);
 
   static getDisplayName(instance: BaseDef) {
     if (isCardInstance(instance)) {
