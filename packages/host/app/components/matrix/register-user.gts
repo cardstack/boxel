@@ -204,7 +204,7 @@ export default class RegisterUser extends Component<Signature> {
         >Login with an existing account</Button>
       </div>
     {{/if}}
-    <style>
+    <style scoped>
       .title {
         font: 700 var(--boxel-font-med);
         margin-bottom: var(--boxel-sp-sm);

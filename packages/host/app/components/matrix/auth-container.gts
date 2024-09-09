@@ -30,7 +30,7 @@ const AuthContainer: TemplateOnlyComponent<Signature> = <template>
     </div>
   </div>
 
-  <style>
+  <style scoped>
     .auth {
       height: 100%;
       overflow: auto;

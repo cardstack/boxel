@@ -1,0 +1,19 @@
+{
+  "name": "@cardstack/template-lint",
+  "version": "0.0.0",
+  "private": true,
+  "description": "ember-template-lint rules for Cardstack",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "devDependencies": {
+    "ember-template-lint": "*",
+    "ember-template-recast": "^6.1.5"
+  },
+  "author": "",
+  "license": "MIT",
+  "volta": {
+    "extends": "../../package.json"
+  }
+}

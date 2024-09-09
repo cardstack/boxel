@@ -241,7 +241,7 @@ export default class ButtonUsage extends Component {
         </div>
       </:example>
     </FreestyleUsage>
-    <style>
+    <style scoped>
       .usage-button-container {
         display: flex;
         flex-wrap: wrap;

@@ -29,7 +29,7 @@ const FormatPicker: TemplateOnlyComponent<Signature> = <template>
       </button>
     {{/each}}
   </div>
-  <style>
+  <style scoped>
     .format-picker {
       margin-bottom: var(--boxel-sp);
     }

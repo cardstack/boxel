@@ -75,7 +75,7 @@ export default class SubmodeSwitcher extends Component<Signature> {
         </:content>
       </BoxelDropdown>
     </div>
-    <style>
+    <style scoped>
       :global(:root) {
         --submode-switcher-trigger-height: 2.5rem;
         --submode-switcher-dropdown-content-border-radius: 0 0

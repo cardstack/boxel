@@ -211,7 +211,7 @@ export default class BoxelInput extends Component<Signature> {
         {{/if}}
       {{/let}}
     </div>
-    <style>
+    <style scoped>
       .input-container {
         --icon-size: var(--boxel-icon-sm);
         --icon-space: var(--boxel-sp-xs);

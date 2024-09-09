@@ -54,7 +54,7 @@ export default class CardEditor extends Component<Signature> {
         >Save</Button>
       {{/if}}
     </div>
-    <style>
+    <style scoped>
       .buttons {
         margin-top: var(--boxel-sp);
         text-align: right;

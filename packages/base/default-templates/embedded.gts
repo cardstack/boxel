@@ -43,7 +43,7 @@ export default class DefaultEmbeddedTemplate extends GlimmerComponent<{
         <div data-test-empty-field class='empty-field'></div>
       {{/if}}
     </div>
-    <style>
+    <style scoped>
       .embedded-template {
         width: 100%;
         height: 100%;

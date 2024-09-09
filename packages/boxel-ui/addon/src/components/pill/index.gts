@@ -1,10 +1,11 @@
+import { cn, element, eq } from '@cardstack/boxel-ui/helpers';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import { element, cn, eq } from '@cardstack/boxel-ui/helpers';
+export type BoxelPillKind = 'button' | 'default';
 
 export interface PillSignature {
   Args: {
-    kind?: 'button' | 'default';
+    kind?: BoxelPillKind;
   };
   Blocks: {
     default: [];
@@ -25,7 +26,7 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
     </Tag>
   {{/let}}
 
-  <style>
+  <style scoped>
     @layer {
       .pill {
         display: inline-flex;
@@ -36,8 +37,8 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
           var(--boxel-sp-5xs) var(--boxel-sp-xxxs) var(--boxel-sp-5xs)
             var(--boxel-sp-5xs)
         );
-        background-color: var(--boxel-light);
-        color: var(--boxel-dark);
+        background-color: var(--pill-background-color, var(--boxel-light));
+        color: var(--pill-font-color, var(--boxel-dark));
         border: 1px solid var(--boxel-400);
         border-radius: var(--boxel-border-radius-sm);
         font: 700 var(--boxel-font-sm);
@@ -45,7 +46,7 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
       }
 
       .button-pill:not(:disabled):hover {
-        background-color: var(--boxel-100);
+        background-color: var(--pill-background-color-hover, var(--boxel-100));
       }
 
       .icon {

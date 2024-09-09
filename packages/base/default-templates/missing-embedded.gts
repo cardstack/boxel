@@ -5,6 +5,7 @@ import cssUrl from 'ember-css-url';
 import { identifyCard, isCardDef, moduleFrom } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { Button } from '@cardstack/boxel-ui/components';
 
 export default class MissingEmbeddedTemplate extends GlimmerComponent<{
   Args: {
@@ -24,16 +25,18 @@ export default class MissingEmbeddedTemplate extends GlimmerComponent<{
         {{if (isCardDef @cardOrField) 'CardDef' 'FieldDef'}}:
         {{@cardOrField.displayName}}</span>
       {{#if @context.actions.changeSubmode}}
-        <span
+        <Button
           class='open-code-submode'
+          @kind='text-only'
+          @size='small'
           {{on 'click' this.openCodeSubmode}}
           data-test-open-code-submode
         >
           Open In Code Mode
-        </span>
+        </Button>
       {{/if}}
     </div>
-    <style>
+    <style scoped>
       .missing-embedded-template {
         display: flex;
         flex-direction: column;
@@ -58,10 +61,6 @@ export default class MissingEmbeddedTemplate extends GlimmerComponent<{
       .field {
         width: 100%;
         margin: 0;
-      }
-      .open-code-submode {
-        cursor: pointer;
-        color: var(--boxel-highlight);
       }
       .open-code-submode:hover {
         text-decoration: underline;

@@ -53,7 +53,7 @@ class HowToSidebar extends GlimmerComponent {
         </p>
       </div>
     </aside>
-    <style>
+    <style scoped>
       h3,
       p {
         margin-top: 0;
@@ -118,7 +118,7 @@ class CardListSidebar extends GlimmerComponent<{
         @context={{@context}}
       />
     </aside>
-    <style>
+    <style scoped>
       .sidebar {
         width: 300px;
       }
@@ -188,7 +188,7 @@ class PromptContainer extends GlimmerComponent<{
         </Button>
       </section>
     </CardContainer>
-    <style>
+    <style scoped>
       .prompt-container {
         padding: var(--boxel-sp-lg) var(--boxel-sp-xl) var(--boxel-sp-xl);
       }
@@ -316,7 +316,7 @@ class Isolated extends AppCard.isolated {
         {{/if}}
       </div>
     </section>
-    <style>
+    <style scoped>
       .app {
         position: relative;
         min-height: 100%;

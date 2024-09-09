@@ -25,7 +25,7 @@ export default class FieldDefEditTemplate extends GlimmerComponent<{
         {{/unless}}
       {{/each-in}}
     </div>
-    <style>
+    <style scoped>
       .field-def-edit-template {
         display: grid;
         gap: var(--boxel-sp-lg);
