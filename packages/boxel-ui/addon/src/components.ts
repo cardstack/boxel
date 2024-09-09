@@ -27,6 +27,7 @@ import Menu from './components/menu/index.gts';
 import BoxelMessage from './components/message/index.gts';
 import Message from './components/message/index.gts';
 import Modal from './components/modal/index.gts';
+import Pill from './components/pill/index.gts';
 import RadioInput from './components/radio-input/index.gts';
 import ResizablePanelGroup, {
   ResizablePanel,
@@ -66,6 +67,7 @@ export {
   Menu,
   Message,
   Modal,
+  Pill,
   RadioInput,
   ResizablePanel,
   ResizablePanelGroup,

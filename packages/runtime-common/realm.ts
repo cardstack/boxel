@@ -1,5 +1,6 @@
 import { Deferred } from './deferred';
 import {
+  makeCardTypeSummaryDoc,
   transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
 } from './card-document';
@@ -21,18 +22,19 @@ import {
   isNode,
   isSingleCardDocument,
   logger,
+  fetchUserPermissions,
+  maybeHandleScopedCSSRequest,
+  authorizationMiddleware,
+  internalKeyFor,
+  isValidPrerenderedHtmlFormat,
   type CodeRef,
   type LooseSingleCardDocument,
   type ResourceObjectWithId,
   type DirectoryEntryRelationship,
   type DBAdapter,
   type Queue,
-  type IndexWriter,
-  fetchUserPermissions,
-  maybeHandleScopedCSSRequest,
-  authorizationMiddleware,
-  internalKeyFor,
-  isValidPrerenderedHtmlFormat,
+  type FileMeta,
+  type DirectoryMeta,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -117,6 +119,8 @@ export interface RealmAdapter {
 
   openFile(path: LocalPath): Promise<FileRef | undefined>;
 
+  // this should return unix time as it's the finest resolution that we can rely
+  // on across all envs
   lastModified(path: LocalPath): Promise<number | undefined>;
 
   exists(path: LocalPath): Promise<boolean>;
@@ -151,7 +155,6 @@ export interface RealmAdapter {
 }
 
 interface Options {
-  useTestingDomain?: true;
   disableModuleCaching?: true;
 }
 
@@ -226,7 +229,6 @@ export class Realm {
   #realmIndexQueryEngine: RealmIndexQueryEngine;
   #adapter: RealmAdapter;
   #router: Router;
-  #useTestingDomain = false;
   #log = logger('realm');
   #perfLog = logger('perf');
   #startTime = Date.now();
@@ -277,7 +279,6 @@ export class Realm {
       dbAdapter,
       queue,
       virtualNetwork,
-      withIndexWriter,
       assetsURL,
     }: {
       url: string;
@@ -288,7 +289,6 @@ export class Realm {
       dbAdapter: DBAdapter;
       queue: Queue;
       virtualNetwork: VirtualNetwork;
-      withIndexWriter?: (indexWriter: IndexWriter, loader: Loader) => void;
       assetsURL: URL;
     },
     opts?: Options,
@@ -302,7 +302,6 @@ export class Realm {
       seed: realmSecretSeed,
     });
     this.#getIndexHTML = getIndexHTML;
-    this.#useTestingDomain = Boolean(opts?.useTestingDomain);
     this.#assetsURL = assetsURL;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
 
@@ -335,7 +334,6 @@ export class Realm {
       realm: this,
       dbAdapter,
       queue,
-      withIndexWriter,
     });
     this.#realmIndexQueryEngine = new RealmIndexQueryEngine({
       realm: this,
@@ -357,6 +355,11 @@ export class Realm {
         '/_search-prerendered',
         SupportedMimeType.CardJson,
         this.searchPrerendered.bind(this),
+      )
+      .get(
+        '/_types',
+        SupportedMimeType.CardTypeSummary,
+        this.fetchCardTypeSummary.bind(this),
       )
       .post(
         '/_session',
@@ -429,6 +432,10 @@ export class Realm {
     });
   }
 
+  async indexing() {
+    return this.#realmIndexUpdater.indexing();
+  }
+
   async start() {
     this.#startedUp.fulfill((() => this.#startup())());
     await this.#startedUp.promise;
@@ -451,6 +458,7 @@ export class Realm {
     contents: string,
     clientRequestId?: string | null,
   ): Promise<WriteResult> {
+    await this.indexing();
     await this.trackOwnWrite(path);
     let results = await this.#adapter.write(path, contents);
     await this.#realmIndexUpdater.update(this.paths.fileURL(path), {
@@ -647,20 +655,22 @@ export class Realm {
     try {
       // local requests are allowed to query the realm as the index is being built up
       if (!isLocal) {
-        let timeout = await Promise.race<void | Error>([
-          this.#startedUp.promise,
-          new Promise((resolve) =>
-            setTimeout(() => {
-              resolve(
-                new Error(
-                  `Timeout waiting for realm ${this.url} to become ready`,
-                ),
-              );
-            }, 60 * 1000),
-          ),
-        ]);
-        if (timeout) {
-          return new Response(timeout.message, { status: 500 });
+        if (!request.headers.get('X-Boxel-Building-Index')) {
+          let timeout = await Promise.race<void | Error>([
+            this.#startedUp.promise,
+            new Promise((resolve) =>
+              setTimeout(() => {
+                resolve(
+                  new Error(
+                    `Timeout waiting for realm ${this.url} to become ready`,
+                  ),
+                );
+              }, 60 * 1000),
+            ),
+          ]);
+          if (timeout) {
+            return new Response(timeout.message, { status: 500 });
+          }
         }
 
         let isWrite = ['PUT', 'PATCH', 'POST', 'DELETE'].includes(
@@ -729,7 +739,7 @@ export class Realm {
 
     if (!this.#disableModuleCaching) {
       let useWorkInProgressIndex = Boolean(
-        request.headers.get('X-Boxel-Use-WIP-Index'),
+        request.headers.get('X-Boxel-Building-Index'),
       );
       let module = await this.#realmIndexQueryEngine.module(url, {
         useWorkInProgressIndex,
@@ -822,69 +832,6 @@ export class Realm {
         /(src|href)="\//g,
         `$1="${this.#assetsURL.href}`,
       );
-
-      // this installs an event listener to allow a test driver to introspect
-      // the DOM from a different localhost:4205 origin (the test driver's
-      // origin)
-      if (this.#useTestingDomain) {
-        indexHTML = `
-          ${indexHTML}
-          <script>
-            window.addEventListener('message', (event) => {
-              console.log('received event in realm index HTML', event);
-              if ([
-                  'http://localhost:4205',
-                  'http://localhost:7357',
-                  'http://127.0.0.1:4205',
-                  'http://127.0.0.1:7357'
-                ].includes(event.origin)) {
-                if (event.data === 'location') {
-                  event.source.postMessage(document.location.href, event.origin);
-                  return;
-                }
-
-                let { data: { querySelector, querySelectorAll, click, fillInput, uuid } } = event;
-                let response;
-                if (querySelector) {
-                  let element = document.querySelector(querySelector);
-                  response = element ? element.outerHTML : null;
-                } else if (querySelectorAll) {
-                  response = [...document.querySelectorAll(querySelectorAll)].map(el => el.outerHTML);
-                } else if (click) {
-                  let el = document.querySelector(click);
-                  if (el) {
-                    el.click();
-                    response = null;
-                  } else {
-                    response = "cannot click on element: could not find '" + click + "'";
-                  }
-                } else if (fillInput) {
-                  let [ target, text ] = fillInput;
-                  let el = document.querySelector(target);
-                  if (el && text != undefined) {
-                    el.value = text;
-                    el.dispatchEvent(new Event('input'));
-                    response = null;
-                  } else if (text == undefined) {
-                    response = "Must provide '" + text + "' when calling 'fillIn'.)";
-                  } else {
-                    response =
-                      "Element not found when calling 'fillInput(" + target + ")'.";
-                  }
-                } else if (uuid) {
-                  // this can be ignored
-                  response = null
-                } else {
-                  response = 'Do not know how to handle event data: ' + JSON.stringify(event.data);
-                }
-                console.log('event response:', response);
-                event.source.postMessage(response, event.origin);
-              }
-            });
-          </script>
-          </
-        `;
-      }
     }
     return indexHTML;
   }
@@ -893,6 +840,12 @@ export class Realm {
     ref: FileRef,
     requestContext: RequestContext,
   ): Promise<ResponseWithNodeStream> {
+    let headers = {
+      'last-modified': formatRFC7231(ref.lastModified * 1000),
+      ...(Symbol.for('shimmed-module') in ref
+        ? { 'X-Boxel-Shimmed-Module': 'true' }
+        : {}),
+    };
     if (
       ref.content instanceof ReadableStream ||
       ref.content instanceof Uint8Array ||
@@ -900,11 +853,7 @@ export class Realm {
     ) {
       return createResponse({
         body: ref.content,
-        init: {
-          headers: {
-            'last-modified': formatRFC7231(ref.lastModified),
-          },
-        },
+        init: { headers },
         requestContext,
       });
     }
@@ -916,11 +865,7 @@ export class Realm {
     // add the node stream to the response which will get special handling in the node env
     let response = createResponse({
       body: null,
-      init: {
-        headers: {
-          'last-modified': formatRFC7231(ref.lastModified),
-        },
-      },
+      init: { headers },
       requestContext,
     }) as ResponseWithNodeStream;
 
@@ -1003,7 +948,7 @@ export class Realm {
       body: null,
       init: {
         status: 204,
-        headers: { 'last-modified': formatRFC7231(lastModified) },
+        headers: { 'last-modified': formatRFC7231(lastModified * 1000) },
       },
       requestContext,
     });
@@ -1013,32 +958,34 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<ResponseWithNodeStream> {
-    let indexedSource = await this.getSourceFromIndex(new URL(request.url));
-    if (indexedSource) {
-      let { canonicalURL, lastModified, source } = indexedSource;
-      if (request.url !== canonicalURL.href) {
+    if (!request.headers.get('X-Boxel-Building-Index')) {
+      let indexedSource = await this.getSourceFromIndex(new URL(request.url));
+      if (indexedSource) {
+        let { canonicalURL, lastModified, source } = indexedSource;
+        if (request.url !== canonicalURL.href) {
+          return createResponse({
+            body: null,
+            init: {
+              status: 302,
+              headers: {
+                Location: `${new URL(this.url).pathname}${this.paths.local(
+                  canonicalURL,
+                )}`,
+              },
+            },
+            requestContext,
+          });
+        }
         return createResponse({
-          body: null,
+          body: source,
           init: {
-            status: 302,
             headers: {
-              Location: `${new URL(this.url).pathname}${this.paths.local(
-                canonicalURL,
-              )}`,
+              'last-modified': formatRFC7231(lastModified * 1000),
             },
           },
           requestContext,
         });
       }
-      return createResponse({
-        body: source,
-        init: {
-          headers: {
-            'last-modified': formatRFC7231(lastModified),
-          },
-        },
-        requestContext,
-      });
     }
 
     // fallback to file system if there is an error document or this is the
@@ -1404,7 +1351,7 @@ export class Realm {
     }
 
     let useWorkInProgressIndex = Boolean(
-      request.headers.get('X-Boxel-Use-WIP-Index'),
+      request.headers.get('X-Boxel-Building-Index'),
     );
 
     let url = this.paths.fileURL(localPath.replace(/\.json$/, ''));
@@ -1526,6 +1473,18 @@ export class Realm {
       `/${join(dir, a.name)}`.localeCompare(`/${join(dir, b.name)}`),
     );
     for (let entry of entries) {
+      let meta: FileMeta | DirectoryMeta;
+      if (entry.kind === 'file') {
+        let innerPath = this.paths.local(
+          new URL(`${this.paths.directoryURL(dir).href}${entry.name}`),
+        );
+        meta = {
+          kind: 'file',
+          lastModified: (await this.#adapter.lastModified(innerPath)) ?? null,
+        };
+      } else {
+        meta = { kind: 'directory' };
+      }
       let relationship: DirectoryEntryRelationship = {
         links: {
           related:
@@ -1533,9 +1492,7 @@ export class Realm {
               ? this.paths.directoryURL(join(dir, entry.name)).href
               : this.paths.fileURL(join(dir, entry.name)).href,
         },
-        meta: {
-          kind: entry.kind as 'directory' | 'file',
-        },
+        meta,
       };
 
       data.relationships![
@@ -1572,7 +1529,7 @@ export class Realm {
     requestContext: RequestContext,
   ): Promise<Response> {
     let useWorkInProgressIndex = Boolean(
-      request.headers.get('X-Boxel-Use-WIP-Index'),
+      request.headers.get('X-Boxel-Building-Index'),
     );
 
     let cardsQuery = qs.parse(new URL(request.url).search.slice(1));
@@ -1596,11 +1553,13 @@ export class Realm {
     requestContext: RequestContext,
   ): Promise<Response> {
     let useWorkInProgressIndex = Boolean(
-      request.headers.get('X-Boxel-Use-WIP-Index'),
+      request.headers.get('X-Boxel-Building-Index'),
     );
 
     let parsedQueryString = qs.parse(new URL(request.url).search.slice(1));
     let htmlFormat = parsedQueryString.prerenderedHtmlFormat as string;
+    let cardUrls = parsedQueryString.cardUrls as string[];
+
     if (!isValidPrerenderedHtmlFormat(htmlFormat)) {
       return badRequest(
         JSON.stringify({
@@ -1611,8 +1570,9 @@ export class Realm {
         requestContext,
       );
     }
-    // prerenederedHtmlFormat is a special parameter only for this endpoint so don't include it in our Query for card search
+    // prerenderedHtmlFormat and cardUrls are special parameters only for this endpoint so don't include it in our Query for standard card search
     delete parsedQueryString.prerenderedHtmlFormat;
+    delete parsedQueryString.cardUrls;
 
     let cardsQuery = parsedQueryString;
     assertQuery(parsedQueryString);
@@ -1622,10 +1582,28 @@ export class Realm {
       {
         useWorkInProgressIndex,
         htmlFormat,
+        cardUrls,
       },
     );
 
     let doc = transformResultsToPrerenderedCardsDoc(results);
+
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: { 'content-type': SupportedMimeType.CardJson },
+      },
+      requestContext,
+    });
+  }
+
+  private async fetchCardTypeSummary(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let results = await this.#realmIndexQueryEngine.fetchCardTypeSummary();
+
+    let doc = makeCardTypeSummaryDoc(results);
 
     return createResponse({
       body: JSON.stringify(doc, null, 2),
@@ -1814,7 +1792,6 @@ export class Realm {
       init: {
         headers: { 'content-type': 'text/html' },
       },
-      relaxDocumentDomain: this.#useTestingDomain,
       requestContext,
     });
   }
@@ -1850,7 +1827,7 @@ function lastModifiedHeader(
 ): {} | { 'last-modified': string } {
   return (
     card.data.meta.lastModified != null
-      ? { 'last-modified': formatRFC7231(card.data.meta.lastModified) }
+      ? { 'last-modified': formatRFC7231(card.data.meta.lastModified * 1000) }
       : {}
   ) as {} | { 'last-modified': string };
 }

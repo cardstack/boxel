@@ -31,7 +31,7 @@ class LineItemEmbedded extends Component<typeof LineItem> {
         <@fields.total @format='atom' />
       </div>
     </div>
-    <style>
+    <style scoped>
       .row {
         display: grid;
         grid-template-columns: 1fr 60px 120px 120px;
@@ -167,7 +167,7 @@ class ShoppingCartIsolated extends Component<typeof ShoppingCart> {
         </div>
       </div>
     </div>
-    <style>
+    <style scoped>
       .header-container {
         background-image: url(https://i.imgur.com/PQuDAEo.jpg);
         color: white;

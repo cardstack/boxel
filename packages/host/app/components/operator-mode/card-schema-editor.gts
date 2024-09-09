@@ -8,7 +8,7 @@ import { tracked } from '@glimmer/tracking';
 
 import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 
-import { Tooltip } from '@cardstack/boxel-ui/components';
+import { Tooltip, Pill } from '@cardstack/boxel-ui/components';
 import { and, bool, gt } from '@cardstack/boxel-ui/helpers';
 
 import { ArrowTopLeft, IconLink, IconPlus } from '@cardstack/boxel-ui/icons';
@@ -21,7 +21,6 @@ import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import EditFieldModal from '@cardstack/host/components/operator-mode/edit-field-modal';
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RemoveFieldModal from '@cardstack/host/components/operator-mode/remove-field-modal';
-import Pill from '@cardstack/host/components/pill';
 import {
   type Type,
   type CodeRefType,
@@ -62,7 +61,7 @@ interface Signature {
 
 export default class CardSchemaEditor extends Component<Signature> {
   <template>
-    <style>
+    <style scoped>
       .schema-editor-container {
         margin-top: var(--boxel-sp);
       }

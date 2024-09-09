@@ -23,7 +23,7 @@ export class Employee extends Person {
         <div><@fields.isHuman /></div>
         <div>Department: <@fields.department /></div>
       </div>
-      <style>
+      <style scoped>
         .container {
           padding: var(--boxel-sp-xl);
         }

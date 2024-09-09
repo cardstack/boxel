@@ -16,6 +16,7 @@ import perform from 'ember-concurrency/helpers/perform';
 import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 
 import { provide } from 'ember-provide-consume-context';
+import window from 'ember-window-mock';
 
 import { Accordion } from '@cardstack/boxel-ui/components';
 
@@ -160,14 +161,14 @@ export default class CodeSubmode extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.operatorModeStateService.subscribeToOpenFileStateChanges(this);
-    this.panelWidths = localStorage.getItem(CodeModePanelWidths)
+    this.panelWidths = window.localStorage.getItem(CodeModePanelWidths)
       ? // @ts-ignore Type 'null' is not assignable to type 'string'
-        JSON.parse(localStorage.getItem(CodeModePanelWidths))
+        JSON.parse(window.localStorage.getItem(CodeModePanelWidths))
       : {};
 
-    this.panelHeights = localStorage.getItem(CodeModePanelHeights)
+    this.panelHeights = window.localStorage.getItem(CodeModePanelHeights)
       ? // @ts-ignore Type 'null' is not assignable to type 'string'
-        JSON.parse(localStorage.getItem(CodeModePanelHeights))
+        JSON.parse(window.localStorage.getItem(CodeModePanelHeights))
       : {};
 
     registerDestructor(this, () => {
@@ -504,7 +505,10 @@ export default class CodeSubmode extends Component<Signature> {
     this.panelWidths.codeEditorPanel = panels[1]?.lengthPx;
     this.panelWidths.rightPanel = panels[2]?.lengthPx;
 
-    localStorage.setItem(CodeModePanelWidths, JSON.stringify(this.panelWidths));
+    window.localStorage.setItem(
+      CodeModePanelWidths,
+      JSON.stringify(this.panelWidths),
+    );
   }
 
   @action
@@ -512,7 +516,7 @@ export default class CodeSubmode extends Component<Signature> {
     this.panelHeights.filePanel = panels[0]?.lengthPx;
     this.panelHeights.recentPanel = panels[1]?.lengthPx;
 
-    localStorage.setItem(
+    window.localStorage.setItem(
       CodeModePanelHeights,
       JSON.stringify(this.panelHeights),
     );
@@ -929,7 +933,7 @@ export default class CodeSubmode extends Component<Signature> {
       <FromElseWhere @name='schema-editor-modal' />
     </SubmodeLayout>
 
-    <style>
+    <style scoped>
       :global(:root) {
         --code-mode-padding-top: calc(
           var(--submode-switcher-trigger-height) + (2 * (var(--boxel-sp)))

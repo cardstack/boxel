@@ -10,6 +10,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { not } from '@cardstack/boxel-ui/helpers';
 
+import { unixTime } from '@cardstack/runtime-common';
+
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
@@ -100,7 +102,7 @@ export default class Room extends Component<Signature> {
       </section>
     {{/if}}
 
-    <style>
+    <style scoped>
       .room {
         display: grid;
         grid-template-rows: 1fr auto;
@@ -150,7 +152,17 @@ export default class Room extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
+
+    this.loadRoomSkills.perform();
   }
+
+  private loadRoomSkills = restartableTask(async () => {
+    await this.roomResource.loading;
+    let defaultSkills = await this.matrixService.loadDefaultSkills();
+    if (this.roomResource.room) {
+      this.roomResource.room.skills = defaultSkills;
+    }
+  });
 
   maybeRetryAction = (messageIndex: number, message: Message) => {
     if (this.isLastMessage(messageIndex) && message.isRetryable) {
@@ -163,7 +175,11 @@ export default class Room extends Component<Signature> {
     return (
       !message.isStreamingFinished &&
       this.isLastMessage(messageIndex) &&
-      (new Date().getTime() - message.created.getTime()) / 1000 < 60 // Older events do not come with isStreamingFinished property so we have no other way to determine if the message is done streaming other than checking if they are old messages (older than 60 seconds as an arbitrary threshold)
+      // Older events do not come with isStreamingFinished property so we have
+      // no other way to determine if the message is done streaming other than
+      // checking if they are old messages (older than 60 seconds as an arbitrary
+      // threshold)
+      unixTime(new Date().getTime() - message.created.getTime()) < 60
     );
   }
 

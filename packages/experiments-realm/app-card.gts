@@ -23,17 +23,14 @@ import { restartableTask } from 'ember-concurrency';
 import {
   AddButton,
   Tooltip,
-  FieldContainer,
-  BoxelButton,
-  BoxelInput,
   TabbedHeader,
 } from '@cardstack/boxel-ui/components';
 
 import {
   getLiveCards,
   codeRefWithAbsoluteURL,
-  type Loader,
   type Query,
+  type Loader,
   LooseSingleCardDocument,
   isSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -46,24 +43,16 @@ export class Tab extends FieldDef {
 }
 
 class AppCardIsolated extends Component<typeof AppCard> {
-  @tracked moduleName = '';
-  @action updateModuleName(val: string) {
+  async setupInitialTabs() {
     this.errorMessage = '';
-    this.moduleName = val;
-  }
-  @action async setupInitialTabs() {
-    if (!this.moduleName) {
-      this.errorMessage = 'Module name is required';
-      return;
-    }
-    if (!this.currentRealm) {
-      this.errorMessage = 'Current realm is not available';
+    if (!this.args.model.moduleId) {
+      this.errorMessage = 'ModuleId is not available.';
       return;
     }
     let loader: Loader = (import.meta as any).loader;
     let module;
     try {
-      module = await loader.import(this.currentRealm.href + this.moduleName);
+      module = await loader.import(this.args.model.moduleId);
     } catch (e) {
       console.error(e);
       this.errorMessage =
@@ -74,7 +63,8 @@ class AppCardIsolated extends Component<typeof AppCard> {
       ([_, declaration]) =>
         declaration &&
         typeof declaration === 'function' &&
-        'isCardDef' in declaration,
+        'isCardDef' in declaration &&
+        !AppCard.isPrototypeOf(declaration),
     );
     let tabs = [];
     for (let [name, _declaration] of exportedCards) {
@@ -84,7 +74,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
           tabId: name,
           ref: {
             name,
-            module: this.moduleName,
+            module: this.args.model.moduleId,
           },
           isTable: false,
         }),
@@ -93,7 +83,6 @@ class AppCardIsolated extends Component<typeof AppCard> {
 
     this.args.model.tabs = tabs;
     this.setActiveTab(0);
-    this.moduleName = '';
   }
 
   <template>
@@ -165,36 +154,10 @@ class AppCardIsolated extends Component<typeof AppCard> {
               </Tooltip>
             </div>
           {{/if}}
-        {{else}}
-          <p>
-            It looks like this app hasn't been setup yet. For a quick setup,
-            enter the module name and click create.
-          </p>
-          <div class='module-input-group'>
-            <FieldContainer
-              @label='Module Name'
-              @vertical={{true}}
-              @tag='label'
-            >
-              <BoxelInput
-                @value={{this.moduleName}}
-                @onInput={{this.updateModuleName}}
-                @state={{if this.errorMessage 'invalid' 'initial'}}
-                @errorMessage={{this.errorMessage}}
-              />
-            </FieldContainer>
-            <BoxelButton
-              @kind='primary'
-              @size='touch'
-              {{on 'click' this.setupInitialTabs}}
-            >
-              Create
-            </BoxelButton>
-          </div>
         {{/if}}
       </div>
     </section>
-    <style>
+    <style scoped>
       .app-card {
         position: relative;
         min-height: 100%;
@@ -285,6 +248,10 @@ class AppCardIsolated extends Component<typeof AppCard> {
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
+    if (!this.tabs?.length) {
+      this.setupInitialTabs();
+      return;
+    }
     this.setTab();
     this.setSearch();
   }
@@ -439,6 +406,7 @@ export class AppCard extends CardDef {
   static headerColor = '#ffffff';
   @field tabs = containsMany(Tab);
   @field headerIcon = contains(Base64ImageField);
+  @field moduleId = contains(StringField);
   static isolated = AppCardIsolated;
 }
 
@@ -472,7 +440,7 @@ export class CardsGrid extends GlimmerComponent<{
         </li>
       {{/each}}
     </ul>
-    <style>
+    <style scoped>
       .cards-grid {
         --grid-card-width: 10.25rem; /* 164px */
         --grid-card-height: 14rem; /* 224px */

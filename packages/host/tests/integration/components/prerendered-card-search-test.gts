@@ -95,7 +95,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
               {{@model.author.lastName}}
             </span>
           </div>
-          <style>
+          <style scoped>
             .book {
               background: yellow;
             }

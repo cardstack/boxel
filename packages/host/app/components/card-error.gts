@@ -25,7 +25,7 @@ const CardError: TemplateOnlyComponent<Signature> = <template>
       <pre class='error'>Operator mode state: {{@operatorModeState}}</pre>
     {{/if}}
   </div>
-  <style>
+  <style scoped>
     .container {
       margin: 5em;
     }

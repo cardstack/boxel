@@ -19,19 +19,16 @@ NODE_ENV=test \
   ts-node \
   --transpileOnly main \
   --port=4202 \
+  --matrixURL='http://localhost:8008' \
   \
   --path='./tests/cards' \
-  --matrixURL='http://localhost:8008' \
   --username='node-test_realm' \
   --fromUrl='/node-test/' \
   --toUrl='/node-test/' \
   \
   --path='../host/tests/cards' \
-  --matrixURL='http://localhost:8008' \
   --username='test_realm' \
   --fromUrl='/test/' \
   --toUrl='/test/' \
   --fromUrl='https://cardstack.com/base/' \
-  --toUrl='http://localhost:4201/base/' \
-  \
-  --useTestingDomain
+  --toUrl='http://localhost:4201/base/'

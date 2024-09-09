@@ -11,7 +11,6 @@ import { format, subMinutes } from 'date-fns';
 import { setupRenderingTest } from 'ember-qunit';
 import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
-import { EventStatus } from 'matrix-js-sdk';
 import { module, test } from 'qunit';
 
 import { Deferred, baseRealm } from '@cardstack/runtime-common';
@@ -556,6 +555,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-command-apply]').doesNotExist();
     assert.dom('[data-test-person]').hasText('Fadhlan');
 
+    await triggerEvent(
+      `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-field-component-card][data-test-card-format="fitted"]`,
+      'mouseenter',
+    );
     await waitFor('[data-test-overlay-card] [data-test-overlay-more-options]');
     await percySnapshot(
       'Integration | ai-assistant-panel | it only applies changes from the chat if the stack contains a card with that ID | error',
@@ -574,12 +577,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-command-apply]').doesNotExist();
     assert.dom('[data-test-ai-bot-retry-button]').doesNotExist();
 
-    await waitUntil(
-      () =>
-        document.querySelectorAll(
-          '[data-test-overlay-card] [data-test-overlay-more-options]',
-        ).length === 2,
+    await triggerEvent(
+      `[data-test-stack-card="${testRealmURL}Person/burcu"] [data-test-plural-view="linksToMany"] [data-test-plural-view-item="0"]`,
+      'mouseenter',
     );
+    assert
+      .dom('[data-test-overlay-card] [data-test-overlay-more-options]')
+      .exists();
     await percySnapshot(
       'Integration | ai-assistant-panel | it only applies changes from the chat if the stack contains a card with that ID | error fixed',
     );
@@ -1047,7 +1051,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
           <OperatorMode @onClose={{noop}} />
           <CardPrerender />
           <div class='invisible' data-test-throw-room-error />
-          <style>
+          <style scoped>
             .invisible {
               display: none;
             }
@@ -1077,61 +1081,67 @@ module('Integration | ai-assistant-panel', function (hooks) {
   });
 
   test('when opening ai panel it opens the most recent room', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Pet/mango`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-
-    await matrixService.createAndJoinRoom('test1', 'test room 1');
-    const room2Id = await matrixService.createAndJoinRoom(
-      'test2',
-      'test room 2',
-    );
-    const room3Id = await matrixService.createAndJoinRoom(
-      'test3',
-      'test room 3',
-    );
-
-    await openAiAssistant();
-    await waitFor(`[data-room-settled]`);
-
-    assert
-      .dom(`[data-test-room="${room3Id}"]`)
-      .exists(
-        "test room 3 is the most recently created room and it's opened initially",
+    try {
+      await setCardInOperatorModeState(`${testRealmURL}Pet/mango`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
       );
 
-    await click('[data-test-past-sessions-button]');
-    await click(`[data-test-enter-room="${room2Id}"]`);
+      let now = Date.now();
 
-    await click('[data-test-close-ai-assistant]');
-    await click('[data-test-open-ai-assistant]');
-    await waitFor(`[data-room-settled]`);
-    assert
-      .dom(`[data-test-room="${room2Id}"]`)
-      .exists(
-        "test room 2 is the most recently selected room and it's opened initially",
+      await matrixService.createAndJoinRoom('test1', 'test room 1', now - 2);
+      const room2Id = await matrixService.createAndJoinRoom(
+        'test2',
+        'test room 2',
+        now - 1,
+      );
+      const room3Id = await matrixService.createAndJoinRoom(
+        'test3',
+        'test room 3',
+        now,
       );
 
-    await click('[data-test-close-ai-assistant]');
-    window.localStorage.setItem(
-      currentRoomIdPersistenceKey,
-      "room-id-that-doesn't-exist-and-should-not-break-the-implementation",
-    );
-    await click('[data-test-open-ai-assistant]');
-    await waitFor(`[data-room-settled]`);
-    assert
-      .dom(`[data-test-room="${room3Id}"]`)
-      .exists(
-        "test room 3 is the most recently created room and it's opened initially",
-      );
+      await openAiAssistant();
+      await waitFor(`[data-room-settled]`);
 
-    window.localStorage.removeItem(currentRoomIdPersistenceKey); // Cleanup
+      assert
+        .dom(`[data-test-room="${room3Id}"]`)
+        .exists(
+          "test room 3 is the most recently created room and it's opened initially",
+        );
+
+      await click('[data-test-past-sessions-button]');
+      await click(`[data-test-enter-room="${room2Id}"]`);
+
+      await click('[data-test-close-ai-assistant]');
+      await click('[data-test-open-ai-assistant]');
+      await waitFor(`[data-room-settled]`);
+      assert
+        .dom(`[data-test-room="${room2Id}"]`)
+        .exists(
+          "test room 2 is the most recently selected room and it's opened initially",
+        );
+
+      await click('[data-test-close-ai-assistant]');
+      window.localStorage.setItem(
+        currentRoomIdPersistenceKey,
+        "room-id-that-doesn't-exist-and-should-not-break-the-implementation",
+      );
+      await click('[data-test-open-ai-assistant]');
+      await waitFor(`[data-room-settled]`);
+      assert
+        .dom(`[data-test-room="${room3Id}"]`)
+        .exists(
+          "test room 3 is the most recently created room and it's opened initially",
+        );
+    } finally {
+      window.localStorage.removeItem(currentRoomIdPersistenceKey); // Cleanup
+    }
   });
 
   test('can close past-sessions list on outside click', async function (assert) {
@@ -1254,7 +1264,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
           age: 105,
           transaction_id: '1',
         },
-        status: EventStatus.SENDING,
+        status: 'sending',
       };
       await addRoomEvent(this, event);
     };
@@ -1275,7 +1285,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let newEvent = {
       ...event,
       event_id: 'updated-event-id',
-      status: EventStatus.SENT,
+      status: 'sent',
     };
     await updateRoomEvent(matrixService, newEvent, event.event_id);
     await waitUntil(
@@ -1332,7 +1342,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
           age: 105,
           transaction_id: '1',
         },
-        status: EventStatus.SENDING,
+        status: 'sending',
       };
       await addRoomEvent(this, event);
     };
@@ -1352,7 +1362,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let newEvent = {
       ...event,
       event_id: 'updated-event-id',
-      status: EventStatus.NOT_SENT,
+      status: 'not_sent',
     };
     await updateRoomEvent(matrixService, newEvent, event.event_id);
     await waitUntil(
@@ -1486,7 +1496,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     // Create a new room with some activity (this could happen when we will have a feature that interacts with AI outside of the AI pannel, i.e. "commands")
 
-    let anotherRoomId = await matrixService.createAndJoinRoom('Another Room');
+    let anotherRoomId = await matrixService.createAndJoinRoom(
+      'Another Room',
+      'Another Room',
+    );
 
     await addRoomEvent(matrixService, {
       event_id: 'event2',
@@ -1624,7 +1637,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       )
       .doesNotExist();
 
-    let anotherRoomId = await matrixService.createAndJoinRoom('Another Room');
+    let anotherRoomId = await matrixService.createAndJoinRoom(
+      'Another Room',
+      'Another Room',
+    );
 
     await addRoomEvent(matrixService, {
       event_id: 'botevent2',
@@ -2038,7 +2054,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await click('[data-test-close-ai-assistant]');
 
     // Create a new room with some activity
-    let anotherRoomId = await matrixService.createAndJoinRoom('Another Room');
+    let anotherRoomId = await matrixService.createAndJoinRoom(
+      'Another Room',
+      'Another Room',
+    );
 
     // A message that hasn't been seen and was sent more than fifteen minutes ago must not be shown in the toast.
     let sixteenMinutesAgo = subMinutes(new Date(), 16);
@@ -2384,7 +2403,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom('[data-test-toggle-show-button]')
       .containsText('Show 3 more results');
     await click('[data-test-toggle-show-button]');
-    await waitFor('[data-test-result-card-idx="7"]');
+
+    await waitFor('[data-test-result-card-idx]', { count: 8 });
     assert.dom('[data-test-toggle-show-button]').containsText('See Less');
     assert.dom('[data-test-result-card-idx="0"]').containsText('0. Buck');
     assert.dom('[data-test-result-card-idx="1"]').containsText('1. Burcu');

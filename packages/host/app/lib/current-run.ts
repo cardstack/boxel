@@ -20,6 +20,7 @@ import {
   moduleFrom,
   isCardDef,
   IndexWriter,
+  unixTime,
   type Batch,
   type LooseCardResource,
   type InstanceEntry,
@@ -58,6 +59,7 @@ const log = logger('current-run');
 interface CardType {
   refURL: string;
   codeRef: CodeRef;
+  displayName: string;
 }
 type TypesWithErrors =
   | {
@@ -225,25 +227,24 @@ export class CurrentRun {
     url: URL,
     mtimes: LastModifiedTimes,
   ): Promise<void> {
-    let ignorePatterns = await this.#reader.readFileAsText(
-      this.#realmPaths.local(new URL('.gitignore', url)),
+    log.debug(`discovering invalidations in dir ${url.href}`);
+    let ignorePatterns = await this.#reader.readFile(
+      new URL('.gitignore', url),
     );
     if (ignorePatterns && ignorePatterns.content) {
       this.ignoreMap.set(url.href, ignore().add(ignorePatterns.content));
       this.#ignoreData[url.href] = ignorePatterns.content;
     }
 
-    for await (let { path: innerPath, kind } of this.#reader.readdir(
-      this.#realmPaths.local(url),
-    )) {
-      let innerURL = this.#realmPaths.fileURL(innerPath);
+    let entries = await this.#reader.directoryListing(url);
+    for (let { url, kind, lastModified } of entries) {
+      let innerURL = new URL(url);
       if (isIgnored(this.#realmURL, this.ignoreMap, innerURL)) {
         continue;
       }
 
       if (kind === 'directory') {
-        let directoryURL = this.#realmPaths.directoryURL(innerPath);
-        await this.discoverInvalidations(directoryURL, mtimes);
+        await this.discoverInvalidations(innerURL, mtimes);
       } else {
         let indexEntry = mtimes.get(innerURL.href);
         if (
@@ -255,8 +256,6 @@ export class CurrentRun {
           continue;
         }
 
-        let localPath = this.#realmPaths.local(innerURL);
-        let lastModified = await this.#reader.lastModified(localPath);
         if (lastModified !== indexEntry.lastModified) {
           await this.batch.invalidate(innerURL);
         }
@@ -286,9 +285,9 @@ export class CurrentRun {
       return;
     }
 
-    let fileRef = await this.#reader.readFileAsText(localPath);
+    let fileRef = await this.#reader.readFile(url);
     if (!fileRef) {
-      fileRef = await this.#reader.readFileAsText(encodeURI(localPath));
+      fileRef = await this.#reader.readFile(new URL(encodeURI(localPath), url));
     }
     if (!fileRef) {
       let error = new CardError(`missing file ${url.href}`, { status: 404 });
@@ -318,6 +317,12 @@ export class CurrentRun {
         }
 
         if (resource && isCardResource(resource)) {
+          if (lastModified == null) {
+            log.warn(
+              `No lastModified date available for ${url.href}, using current time`,
+            );
+            lastModified = unixTime(Date.now());
+          }
           await this.indexCard({
             path: localPath,
             source: content,
@@ -479,7 +484,7 @@ export class CurrentRun {
         data: {
           id: instanceURL.href,
           meta: {
-            lastModified: lastModified,
+            lastModified,
             realmInfo: this.#realmInfo,
             realmURL: this.realmURL.href,
           },
@@ -496,11 +501,7 @@ export class CurrentRun {
       // Add a "pseudo field" to the search doc for the card type. We use the
       // "_" prefix to make a decent attempt to not pollute the userland
       // namespace for cards
-      if (cardType.displayName === 'Card') {
-        searchData._cardType = cardType.name;
-      } else {
-        searchData._cardType = cardType.displayName;
-      }
+      searchData._cardType = getDisplayName(cardType);
     } catch (err: any) {
       uncaughtError = err;
     }
@@ -538,6 +539,9 @@ export class CurrentRun {
         fittedHtml,
         lastModified,
         types: typesMaybeError.types.map(({ refURL }) => refURL),
+        displayNames: typesMaybeError.types.map(
+          ({ displayName }) => displayName,
+        ),
         deps: new Set([
           moduleURL,
           ...(await this.loaderService.loader.getConsumedModules(moduleURL)),
@@ -648,6 +652,7 @@ export class CurrentRun {
       types.push({
         refURL: internalKeyFor(loadedCardRef, undefined),
         codeRef: loadedCardRef,
+        displayName: getDisplayName(loadedCard),
       });
       if (!isEqual(loadedCardRef, baseCardRef)) {
         fullRef = {
@@ -686,4 +691,12 @@ function unwrap(html: string): string {
     .replace(/^<!---->/, '')
     .replace(/<\/div>$/, '')
     .trim();
+}
+
+function getDisplayName(card: typeof CardDef) {
+  if (card.displayName === 'Card') {
+    return card.name;
+  } else {
+    return card.displayName;
+  }
 }

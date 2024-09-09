@@ -121,7 +121,7 @@ export default class AiAssistantMessage extends Component<Signature> {
       </div>
     </div>
 
-    <style>
+    <style scoped>
       .ai-assistant-message {
         --ai-bot-message-background-color: #3b394b;
         --ai-assistant-message-avatar-size: 1.25rem; /* 20px. */
@@ -295,7 +295,7 @@ const AiAssistantConversation: TemplateOnlyComponent<AiAssistantConversationSign
     <div class='ai-assistant-conversation'>
       {{yield}}
     </div>
-    <style>
+    <style scoped>
       .ai-assistant-conversation {
         display: flex;
         flex-direction: column;

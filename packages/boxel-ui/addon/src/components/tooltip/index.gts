@@ -70,7 +70,7 @@ export default class Tooltip extends Component<Signature> {
       {{/if}}
     </Velcro>
 
-    <style>
+    <style scoped>
       .trigger {
         width: max-content;
       }

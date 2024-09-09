@@ -206,7 +206,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       {{/let}}
     {{/if}}
 
-    <style>
+    <style scoped>
       .ai-assistant-panel {
         display: grid;
         grid-template-rows: auto 1fr;
@@ -427,6 +427,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         window.localStorage.setItem(newSessionIdPersistenceKey, newRoomId);
         this.enterRoom(newRoomId);
       } catch (e) {
+        console.log(e);
         this.displayRoomError = true;
         this.currentRoomId = undefined;
       }

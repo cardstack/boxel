@@ -166,7 +166,7 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
         </div>
       </div>
     </div>
-    <style>
+    <style scoped>
       .command-result {
         color: black;
         background-color: var(--boxel-light);

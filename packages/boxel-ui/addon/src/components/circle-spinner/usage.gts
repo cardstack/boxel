@@ -35,7 +35,7 @@ export default class CircleSpinnerUsage extends Component {
         />
       </:cssVars>
     </FreestyleUsage>
-    <style>
+    <style scoped>
       .example-container {
         display: flex;
         justify-content: center;

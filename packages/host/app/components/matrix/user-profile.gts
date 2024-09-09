@@ -40,7 +40,7 @@ export default class UserProfile extends Component {
         </div>
       </FieldContainer>
     </div>
-    <style>
+    <style scoped>
       .wrapper {
         padding: 0 var(--boxel-sp);
         margin: var(--boxel-sp) 0;

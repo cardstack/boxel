@@ -105,7 +105,7 @@ export default class InputGroup extends Component<Signature> {
           ...attributes
         >
           {{yield Accessories this.inputGroupBlockArg to='before'}}
-          {{#if (has-block 'default')}}
+          {{#if (has-block)}}
             {{yield Controls Accessories this.inputGroupBlockArg}}
           {{else}}
             <InputControl
@@ -160,7 +160,7 @@ export default class InputGroup extends Component<Signature> {
         {{/if}}
       </div>
     {{/let}}
-    <style>
+    <style scoped>
       .container {
         display: flex;
         flex-direction: column;

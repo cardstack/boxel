@@ -64,7 +64,7 @@ const personCardSource = `
           <p>Address List: <@fields.address /></p>
           <p>Friends: <@fields.friends /></p>
         </div>
-        <style>
+        <style scoped>
           div {
             color: green;
             content: '';
@@ -169,7 +169,7 @@ const friendCardSource = `
           <p>Last name: <@fields.lastName /></p>
           <p>Title: <@fields.title /></p>
         </div>
-        <style>
+        <style scoped>
           div {
             color: green;
             content: '';
@@ -743,15 +743,23 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       ],
       submode: 'code',
       fileView: 'browser',
-      codePath: `${testRealmURL}person-entry.json`,
+
+      // this was picked because it's way out in the middle of a long list of
+      // files. So it will get scrolled to the middle of the visible window,
+      // such that it's following entry (z80) is always on-screen.
+      //
+      // If instead we picked a file whose neighbor may hang off the bottom of
+      // the screen, choosing that neighbor would intentionally cause scroll and
+      // fail our test.
+      codePath: `${testRealmURL}z79.json`,
     });
 
-    await waitFor('[data-test-file="person.gts"]');
+    await waitFor('[data-test-file="z80.json"]');
 
     let scrollablePanel = find('[data-test-togglable-left-panel]');
     let currentScrollTop = scrollablePanel?.scrollTop;
 
-    await click('[data-test-file="person.gts"]');
+    await click('[data-test-file="z80.json"]');
 
     let newScrollTop = scrollablePanel?.scrollTop;
 

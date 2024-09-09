@@ -110,6 +110,7 @@ export interface RenderedCardForOverlayActions {
   fieldName: string | undefined;
   format: Format | 'data';
   stackItem: StackItem;
+  overlayZIndexStyle?: SafeString;
 }
 
 export default class OperatorModeStackItem extends Component<Signature> {
@@ -560,13 +561,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
               @publicAPI={{@publicAPI}}
               @toggleSelect={{this.toggleSelect}}
               @selectedCards={{this.selectedCards}}
-              class={{if @item.isWideFormat 'delay'}}
             />
           </div>
         {{/if}}
       </CardContainer>
     </div>
-    <style>
+    <style scoped>
       :global(:root) {
         --stack-card-footer-height: 6rem;
         --stack-item-header-area-height: 3.5rem;
@@ -734,9 +734,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
         display: flex;
         justify: center;
         align-items: center;
-      }
-      .delay {
-        transition: all var(--boxel-transition);
       }
     </style>
   </template>

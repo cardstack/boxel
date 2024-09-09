@@ -77,7 +77,7 @@ export default class FileTree extends Component<Signature> {
       </nav>
     </WithLoadedRealm>
 
-    <style>
+    <style scoped>
       .mask {
         position: absolute;
         top: 0;
