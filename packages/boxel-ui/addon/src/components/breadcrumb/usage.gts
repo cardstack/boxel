@@ -175,26 +175,28 @@ export default class BreadcrumbUsage extends Component {
               All
             </BreadcrumbItem>
             <BreadcrumbSeparator @variant={{this.separatorVariant}} />
-            <BoxelDropdown>
-              <:trigger as |bindings|>
-                <BreadcrumbItem {{bindings}}>
-                  ...
-                </BreadcrumbItem>
-              </:trigger>
-              <:content as |dd|>
-                <BoxelMenu
-                  @closeMenu={{dd.close}}
-                  @items={{array
-                    (menuItem
-                      'Youtube' (fn this.goToRoute 'https://www.youtube.com')
-                    )
-                    (menuItem
-                      'Google' (fn this.goToRoute 'https://www.google.com/')
-                    )
-                  }}
-                />
-              </:content>
-            </BoxelDropdown>
+            <BreadcrumbItem>
+              <BoxelDropdown>
+                <:trigger as |bindings|>
+                  <BreadcrumbItem {{bindings}}>
+                    ...
+                  </BreadcrumbItem>
+                </:trigger>
+                <:content as |dd|>
+                  <BoxelMenu
+                    @closeMenu={{dd.close}}
+                    @items={{array
+                      (menuItem
+                        'Youtube' (fn this.goToRoute 'https://www.youtube.com')
+                      )
+                      (menuItem
+                        'Google' (fn this.goToRoute 'https://www.google.com/')
+                      )
+                    }}
+                  />
+                </:content>
+              </BoxelDropdown>
+            </BreadcrumbItem>
             <BreadcrumbSeparator @variant={{this.separatorVariant}} />
             <BreadcrumbItem
               class={{if
