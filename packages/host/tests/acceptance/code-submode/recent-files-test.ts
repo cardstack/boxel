@@ -8,9 +8,7 @@ import {
 
 import { waitUntil } from '@ember/test-helpers';
 
-import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -24,6 +22,7 @@ import {
   waitForCodeEditor,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
+import { setupApplicationTest } from '../../helpers/setup';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -183,7 +182,6 @@ const friendCardSource = `
 module('Acceptance | code submode | recent files tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupWindowMock(hooks);
   setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
     activeRealms: [baseRealm.url, testRealmURL],

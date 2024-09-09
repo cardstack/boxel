@@ -8,9 +8,8 @@ import {
 import GlimmerComponent from '@glimmer/component';
 
 import { format, subMinutes } from 'date-fns';
-import { setupRenderingTest } from 'ember-qunit';
+
 import window from 'ember-window-mock';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { Deferred, baseRealm } from '@cardstack/runtime-common';
@@ -48,6 +47,7 @@ import {
   MockMatrixService,
 } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
+import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | ai-assistant-panel', function (hooks) {
   const realmName = 'Operator Mode Workspace';
@@ -71,7 +71,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
   setupServerSentEvents(hooks);
   setupMatrixServiceMock(hooks, { autostart: true });
 
-  setupWindowMock(hooks);
   let noop = () => {};
 
   hooks.beforeEach(async function () {

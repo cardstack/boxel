@@ -2,7 +2,6 @@ import { fillIn, RenderingTestContext } from '@ember/test-helpers';
 
 import parseISO from 'date-fns/parseISO';
 
-import { setupRenderingTest } from 'ember-qunit';
 import { isAddress } from 'ethers';
 import { module, test } from 'qunit';
 
@@ -57,6 +56,7 @@ import {
 } from '../../helpers/base-realm';
 
 import { renderCard } from '../../helpers/render-component';
+import { setupRenderingTest } from '../../helpers/setup';
 
 let loader: Loader;
 

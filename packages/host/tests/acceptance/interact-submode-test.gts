@@ -7,10 +7,7 @@ import {
 
 import { triggerEvent } from '@ember/test-helpers';
 
-import { setupApplicationTest } from 'ember-qunit';
-
 import window from 'ember-window-mock';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
 
@@ -41,6 +38,7 @@ import {
   lookupLoaderService,
 } from '../helpers';
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
+import { setupApplicationTest } from '../helpers/setup';
 
 const testRealm2URL = `http://test-realm/test2/`;
 
@@ -51,7 +49,6 @@ module('Acceptance | interact submode tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  setupWindowMock(hooks);
   let { setRealmPermissions } = setupMatrixServiceMock(hooks);
 
   hooks.beforeEach(async function () {
