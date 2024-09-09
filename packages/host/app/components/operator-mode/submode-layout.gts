@@ -84,15 +84,17 @@ export default class SubmodeLayout extends Component<Signature> {
   private suppressSearchClose = false;
   private declare doSearch: (term: string) => void;
 
-  constructor(owner: Owner, args: Signature['Args']) {
-    super(owner, args);
-
-    let cardController = getOwner(this)!.lookup('controller:card') as any;
-    if (!cardController) {
-      throw new Error(
-        'SubmodeLayout must be used in the context of a CardController',
-      );
+  get cardController(): CardController {
+    if (!this._cardController) {
+      this._cardController = getOwner(this)!.lookup('controller:card') as any;
+      if (!this._cardController) {
+        throw new Error(
+          'SubmodeLayout must be used in the context of a CardController',
+        );
+      }
     }
+    return this_cardController;
+    let cardController = getOwner(this)!.lookup('controller:card') as any;
     this.cardController = cardController;
   }
 
