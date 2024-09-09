@@ -15,7 +15,7 @@ const AiAssistantButton: TemplateOnlyComponent<Signature> = <template>
     data-test-open-ai-assistant
     ...attributes
   />
-  <style>
+  <style scoped>
     .ai-assistant-button {
       width: var(--container-button-size);
       height: var(--container-button-size);

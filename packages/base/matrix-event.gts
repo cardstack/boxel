@@ -1,5 +1,5 @@
 import { LooseSingleCardDocument } from '@cardstack/runtime-common';
-import { EventStatus, MatrixError } from 'matrix-js-sdk';
+import type { EventStatus, MatrixError } from 'matrix-js-sdk';
 import {
   FunctionToolCall,
   type Schema,

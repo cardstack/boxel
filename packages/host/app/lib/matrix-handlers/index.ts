@@ -1,13 +1,7 @@
-import {
-  type MatrixEvent,
-  type RoomMember,
-  type MatrixClient,
-  type IEvent,
-} from 'matrix-js-sdk';
+import { type IEvent } from 'matrix-js-sdk';
 
 import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type {
   CommandEvent,
   CommandResultEvent,
@@ -15,6 +9,7 @@ import type {
   ReactionEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
+import type MatrixService from '../../services/matrix-service';
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 export * as Membership from './membership';
@@ -39,34 +34,7 @@ export type Event = Partial<IEvent> & {
   error?: MatrixSDK.MatrixError;
 };
 
-export interface EventSendingContext {
-  setRoom: (roomId: string, room: RoomState) => void;
-  // Note: Notice our implementation looks completely synchronous but bcos of the way we process our matrix event as a subscriber. getRoom is inherently asynchronous
-  // getRoom is async because subscribe handlers should be synchronous and we should handle asynchrony outside of the handler code, otherwise, handler/queues will become confused
-  // If you look around the codebase, you will see instances of await getRoom which is the correct pattern to use although the types do not reflect so
-  // The reason why the types are locked in as synchronous is because we don't have a good way to react or access .events which hides behind this promise
-  // If we await getRoom before accessing .events, we lose trackedness
-  // TODO: Resolve matrix async types with this https://linear.app/cardstack/issue/CS-6987/get-room-resource-to-register-with-matrix-event-handler
-  getRoom: (roomId: string) => RoomState | undefined;
-  cardAPI: typeof CardAPI;
-}
-
-export interface Context extends EventSendingContext {
-  flushTimeline: Promise<void> | undefined;
-  flushMembership: Promise<void> | undefined;
-  roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[];
-  timelineQueue: { event: MatrixEvent; oldEventId?: string }[];
-  client: MatrixClient | undefined;
-  matrixSDK: typeof MatrixSDK | undefined;
-  handleMessage?: (
-    context: Context,
-    event: Event,
-    roomId: string,
-  ) => Promise<void>;
-  addEventReadReceipt(eventId: string, receipt: { readAt: Date }): void;
-}
-
-export async function addRoomEvent(context: EventSendingContext, event: Event) {
+export async function addRoomEvent(context: MatrixService, event: Event) {
   let { event_id: eventId, room_id: roomId, state_key: stateKey } = event;
   // If we are receiving an event which contains
   // a data field, we need to parse it
@@ -100,6 +68,7 @@ export async function addRoomEvent(context: EventSendingContext, event: Event) {
     room = new RoomState();
     context.setRoom(roomId, room);
   }
+
   // duplicate events may be emitted from matrix, as well as the resolved room card might already contain this event
   if (!room.events.find((e) => e.event_id === eventId)) {
     room.events = [
@@ -110,7 +79,7 @@ export async function addRoomEvent(context: EventSendingContext, event: Event) {
 }
 
 export async function updateRoomEvent(
-  context: EventSendingContext,
+  context: MatrixService,
   event: Event,
   oldEventId: string,
 ) {
@@ -143,7 +112,7 @@ export async function updateRoomEvent(
 }
 
 export async function getRoomEvents(
-  context: EventSendingContext,
+  context: MatrixService,
   roomId: string,
 ): Promise<DiscreteMatrixEvent[]> {
   if (!roomId) {
@@ -156,7 +125,7 @@ export async function getRoomEvents(
 }
 
 export async function getCommandResultEvents(
-  context: EventSendingContext,
+  context: MatrixService,
   roomId: string,
 ): Promise<CommandResultEvent[]> {
   let events = await getRoomEvents(context, roomId);
@@ -164,7 +133,7 @@ export async function getCommandResultEvents(
 }
 
 export async function getCommandReactionEvents(
-  context: EventSendingContext,
+  context: MatrixService,
   roomId: string,
 ): Promise<ReactionEvent[]> {
   let events = await getRoomEvents(context, roomId);

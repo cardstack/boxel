@@ -1,5 +1,8 @@
-import debounce from 'lodash/debounce';
+import { debounce } from '@ember/runloop';
+
 import { Room, type MatrixEvent } from 'matrix-js-sdk';
+
+import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import {
   type CardMessageContent,
@@ -9,60 +12,55 @@ import {
 
 import { eventDebounceMs } from '../matrix-utils';
 
-import {
-  type Context,
-  type Event,
-  addRoomEvent,
-  updateRoomEvent,
-} from './index';
+import { type Event, addRoomEvent, updateRoomEvent } from './index';
 
-export function onReceipt(context: Context) {
+export function onReceipt(MatrixService: MatrixService) {
   return async (e: MatrixEvent) => {
-    let userId = context.client?.credentials.userId;
+    let userId = MatrixService.client?.credentials.userId;
     if (userId) {
       let eventIds = Object.keys(e.getContent());
       for (let eventId of eventIds) {
         let receipt = e.getContent()[eventId]['m.read'][userId];
         if (receipt) {
-          context.addEventReadReceipt(eventId, { readAt: receipt.ts });
+          MatrixService.addEventReadReceipt(eventId, { readAt: receipt.ts });
         }
       }
     }
   };
 }
 
-export function onTimeline(context: Context) {
+export function onTimeline(MatrixService: MatrixService) {
   return (e: MatrixEvent) => {
-    context.timelineQueue.push({ event: e });
-    debouncedTimelineDrain(context);
+    MatrixService.timelineQueue.push({ event: e });
+    debouncedTimelineDrain(MatrixService);
   };
 }
 
-export function onUpdateEventStatus(context: Context) {
+export function onUpdateEventStatus(MatrixService: MatrixService) {
   return (e: MatrixEvent, _room: Room, maybeOldEventId?: unknown) => {
     if (typeof maybeOldEventId !== 'string') {
       return;
     }
-    context.timelineQueue.push({ event: e, oldEventId: maybeOldEventId });
-    debouncedTimelineDrain(context);
+    MatrixService.timelineQueue.push({ event: e, oldEventId: maybeOldEventId });
+    debouncedTimelineDrain(MatrixService);
   };
 }
 
-const debouncedTimelineDrain = debounce((context: Context) => {
-  drainTimeline(context);
-}, eventDebounceMs);
+function debouncedTimelineDrain(MatrixService: MatrixService) {
+  debounce(null, drainTimeline, MatrixService, eventDebounceMs);
+}
 
-async function drainTimeline(context: Context) {
-  await context.flushTimeline;
+async function drainTimeline(MatrixService: MatrixService) {
+  await MatrixService.flushTimeline;
 
   let eventsDrained: () => void;
-  context.flushTimeline = new Promise((res) => (eventsDrained = res));
-  let events = [...context.timelineQueue];
-  context.timelineQueue = [];
+  MatrixService.flushTimeline = new Promise((res) => (eventsDrained = res));
+  let events = [...MatrixService.timelineQueue];
+  MatrixService.timelineQueue = [];
   for (let { event, oldEventId } of events) {
-    await context.client?.decryptEventIfNeeded(event);
+    await MatrixService.client?.decryptEventIfNeeded(event);
     await processDecryptedEvent(
-      context,
+      MatrixService,
       {
         ...event.event,
         status: event.status,
@@ -76,7 +74,7 @@ async function drainTimeline(context: Context) {
 }
 
 async function processDecryptedEvent(
-  context: Context,
+  MatrixService: MatrixService,
   event: Event,
   oldEventId?: string,
 ) {
@@ -86,14 +84,14 @@ async function processDecryptedEvent(
       `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
     );
   }
-  let room = context.client?.getRoom(roomId);
+  let room = MatrixService.client?.getRoom(roomId);
   if (!room) {
     throw new Error(
       `bug: should never get here--matrix sdk returned a null room for ${roomId}`,
     );
   }
 
-  let userId = context.client?.getUserId();
+  let userId = MatrixService.client?.getUserId();
   if (!userId) {
     throw new Error(
       `bug: userId is required for event ${JSON.stringify(event, null, 2)}`,
@@ -106,7 +104,7 @@ async function processDecryptedEvent(
     return;
   }
 
-  let roomState = context.getRoom(roomId);
+  let roomState = MatrixService.getRoom(roomId);
   // patch in any missing room events--this will support dealing with local
   // echoes, migrating older histories as well as handle any matrix syncing gaps
   // that might occur
@@ -133,7 +131,7 @@ async function processDecryptedEvent(
           );
           let fragmentData: CardFragmentContent['data'];
           if (!fragmentEvent) {
-            fragmentEvent = (await context.client?.fetchRoomEvent(
+            fragmentEvent = (await MatrixService.client?.fetchRoomEvent(
               roomId,
               currentFragmentId ?? '',
             )) as DiscreteMatrixEvent;
@@ -147,7 +145,10 @@ async function processDecryptedEvent(
                 )}`,
               );
             }
-            await addRoomEvent(context, { ...fragmentEvent, status: null });
+            await addRoomEvent(MatrixService, {
+              ...fragmentEvent,
+              status: null,
+            });
             fragmentData = (
               typeof fragmentEvent.content.data === 'string'
                 ? JSON.parse((fragmentEvent.content as any).data)
@@ -172,13 +173,13 @@ async function processDecryptedEvent(
     }
   }
   if (oldEventId) {
-    await updateRoomEvent(context, event, oldEventId);
+    await updateRoomEvent(MatrixService, event, oldEventId);
   } else {
-    await addRoomEvent(context, event);
+    await addRoomEvent(MatrixService, event);
   }
 
   if (room.oldState.paginationToken != null) {
     // we need to scroll back to capture any room events fired before this one
-    await context.client?.scrollback(room);
+    await MatrixService.client?.scrollback(room);
   }
 }

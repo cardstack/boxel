@@ -79,7 +79,7 @@ export default class ModalContainer extends Component<Signature> {
         {{/if}}
       </CardContainer>
     </Modal>
-    <style>
+    <style scoped>
       .dialog-box {
         height: 100%;
         display: grid;

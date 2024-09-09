@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   checks: write
@@ -38,7 +39,7 @@ jobs:
         run: pnpm npx wait-for-localhost 4200
         working-directory: packages/host
       - name: Start realm servers
-        run: pnpm start:all &
+        run: pnpm start:all &> /tmp/server.log &
         working-directory: packages/realm-server
       - name: create realm users
         run: pnpm register-realm-users
@@ -57,6 +58,13 @@ jobs:
         with:
           name: host-test-report-${{ matrix.shardIndex }}
           path: junit/host-${{ matrix.shardIndex }}.xml
+          retention-days: 30
+      - name: Upload realm server log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: realm-server-log-${{ matrix.shardIndex }}
+          path: /tmp/server.log
           retention-days: 30
 
   host-merge-reports-and-publish:

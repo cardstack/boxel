@@ -32,7 +32,7 @@ const CardCatalogResultsHeader: TemplateOnlyComponent<Signature> = <template>
     </span>
   </header>
 
-  <style>
+  <style scoped>
     .catalog-results-header {
       --realm-icon-size: 1.25rem;
       display: flex;

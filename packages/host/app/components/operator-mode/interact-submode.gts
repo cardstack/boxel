@@ -705,7 +705,7 @@ export default class InteractSubmode extends Component<Signature> {
       </div>
     </SubmodeLayout>
 
-    <style>
+    <style scoped>
       .operator-mode__main {
         display: flex;
         justify-content: center;

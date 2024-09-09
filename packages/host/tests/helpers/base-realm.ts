@@ -8,6 +8,7 @@ import type * as Base64ImageFieldModule from 'https://cardstack.com/base/base64-
 import type * as BigIntegerModule from 'https://cardstack.com/base/big-integer';
 import type * as BooleanFieldModule from 'https://cardstack.com/base/boolean';
 import type * as CardAPIModule from 'https://cardstack.com/base/card-api';
+import type * as CardsGridModule from 'https://cardstack.com/base/cards-grid';
 import type * as CodeRefModule from 'https://cardstack.com/base/code-ref';
 import type * as DateFieldModule from 'https://cardstack.com/base/date';
 import type * as DatetimeFieldModule from 'https://cardstack.com/base/datetime';
@@ -49,6 +50,9 @@ let MarkdownField: MarkdownField;
 
 type TextAreaField = (typeof TextAreaFieldModule)['default'];
 let TextAreaField: TextAreaField;
+
+type CardsGrid = (typeof CardsGridModule)['CardsGrid'];
+let CardsGrid: CardsGrid;
 
 let field: (typeof CardAPIModule)['field'];
 let CardDef: (typeof CardAPIModule)['CardDef'];
@@ -125,6 +129,10 @@ async function initialize() {
     await loader.import<typeof TextAreaFieldModule>(`${baseRealm.url}text-area`)
   ).default;
 
+  CardsGrid = (
+    await loader.import<typeof CardsGridModule>(`${baseRealm.url}cards-grid`)
+  ).CardsGrid;
+
   let cardAPI = await loader.import<typeof CardAPIModule>(
     `${baseRealm.url}card-api`,
   );
@@ -171,6 +179,7 @@ export {
   BooleanField,
   MarkdownField,
   TextAreaField,
+  CardsGrid,
   field,
   CardDef,
   Component,

@@ -1,4 +1,4 @@
-import { click, fillIn, waitFor } from '@ember/test-helpers';
+import { click, fillIn } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
 
@@ -16,13 +16,24 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
-  lookupLoaderService,
 } from '../helpers';
-import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
+
+import {
+  CardDef,
+  Component,
+  CardsGrid,
+  contains,
+  linksTo,
+  linksToMany,
+  field,
+  setupBaseRealm,
+  StringField,
+} from '../helpers/base-realm';
+
+import { setupMockMatrix } from '../helpers/mock-matrix';
 
 async function selectCardFromCatalog(cardId: string) {
   await click('[data-test-choose-card-btn]');
-  await waitFor(`[data-test-select="${cardId}"]`);
   await click(`[data-test-select="${cardId}"]`);
   await click('[data-test-card-catalog-go-button]');
 }
@@ -91,21 +102,13 @@ module('Acceptance | AI Assistant tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [baseRealm.url, testRealmURL],
+  });
+  setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
-    let loader = lookupLoaderService().loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    string = await loader.import(`${baseRealm.url}string`);
-    cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
-
-    let { field, contains, linksTo, linksToMany, CardDef, Component } = cardApi;
-    let { default: StringField } = string;
-    let { CardsGrid } = cardsGrid;
-
     class Pet extends CardDef {
       static displayName = 'Pet';
       @field name = contains(StringField);
@@ -226,7 +229,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     const testCard = `${testRealmURL}Person/hassan`;
 
     for (let i = 1; i <= 3; i++) {
-      await waitFor('[data-test-message-field]');
       await fillIn('[data-test-message-field]', `Message - ${i}`);
       await selectCardFromCatalog(testCard);
       await click('[data-test-send-message-btn]');
@@ -249,13 +251,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         cards: [{ id: testCard, title: 'Hassan' }],
       },
     ]);
-
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     //Test the scenario where there is an update to the card
     await click(
       `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testCard}"]`,
-    );
-    await waitFor(
-      `[data-test-stack-card="${testCard}"] [data-test-edit-button]`,
     );
 
     await click(`[data-test-stack-card="${testCard}"] [data-test-edit-button]`);

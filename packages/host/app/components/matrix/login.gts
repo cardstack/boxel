@@ -87,7 +87,7 @@ export default class Login extends Component<Signature> {
       {{on 'click' (fn @setMode 'register')}}
     >Create a new Boxel account</Button>
 
-    <style>
+    <style scoped>
       form {
         display: flex;
         flex-direction: column;

@@ -58,7 +58,7 @@ export default class OperatorModeStack extends Component<Signature> {
       </div>
     </div>
 
-    <style>
+    <style scoped>
       :global(:root) {
         --stack-padding-top: calc(
           var(--submode-switcher-trigger-height) + (2 * (var(--boxel-sp)))

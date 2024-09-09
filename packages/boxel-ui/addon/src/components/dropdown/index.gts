@@ -99,7 +99,7 @@ class BoxelDropdown extends Component<Signature> {
         {{yield (hash close=dd.actions.close) to='content'}}
       </dd.Content>
     </BasicDropdown>
-    <style>
+    <style scoped>
       @layer {
         .boxel-dropdown__content {
           --boxel-dropdown-content-border-radius: var(--boxel-border-radius);

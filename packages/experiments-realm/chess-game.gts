@@ -10,7 +10,6 @@ import {
 import Component from '@glimmer/component';
 import StringCard from 'https://cardstack.com/base/string';
 import { contains, field } from 'https://cardstack.com/base/card-api';
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { not } from '@cardstack/boxel-ui/helpers';
@@ -254,11 +253,11 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
         </div>
       </div>
       <div class='actions'>
-        <button {{on 'click' (fn this.prevMove)}}>Prev Move</button>
-        <button {{on 'click' (fn this.nextMove)}}>Next Move</button>
-        <button {{on 'click' (fn this.backToPosition)}}>Back To Game Position</button>
-        {{#if (not this.args.analysis)}}
-          <button {{on 'click' (fn this.reset)}}>Reset</button>
+        <button {{on 'click' this.prevMove}}>Prev Move</button>
+        <button {{on 'click' this.nextMove}}>Next Move</button>
+        <button {{on 'click' this.backToPosition}}>Back To Game Position</button>
+        {{#if (not @analysis)}}
+          <button {{on 'click' this.reset}}>Reset</button>
         {{/if}}
       </div>
 
@@ -284,7 +283,7 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
       </div>
 
     </div>
-    <style>
+    <style scoped>
       .content {
         display: flex;
         flex-direction: column;
@@ -334,7 +333,8 @@ class ChessGameComponent extends Component<ChessGameComponentSignature> {
       href='https://cdn.jsdelivr.net/npm/cm-chessboard@8.7.3/assets/extensions/markers/markers.css'
     />
     {{! This is absolutely needed so piece doesn't diapplear when dragging }}
-    <style unscoped>
+    {{! template-lint-disable require-scoped-style }}
+    <style>
       .cm-chessboard-draggable-piece {
         z-index: 100;
       }
@@ -445,18 +445,18 @@ class Isolated extends BoxelComponent<typeof Chess> {
 
   <template>
     <div class='main'>
-      <div class={{cn analysis=this.args.model.analysis}}>
+      <div class={{cn analysis=@model.analysis}}>
         <h1>
           {{this.mode}}
         </h1>
       </div>
       <ChessGameComponent
-        @pgn={{this.args.model.pgn}}
+        @pgn={{@model.pgn}}
         @updatePgn={{this.updatePgn}}
-        @analysis={{this.args.model.analysis}}
+        @analysis={{@model.analysis}}
       />
     </div>
-    <style>
+    <style scoped>
       .main {
         display: flex;
         flex-direction: column;
