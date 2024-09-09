@@ -309,8 +309,9 @@ export default class RealmService extends Service {
   get defaultReadableRealm(): { path: string; info: RealmInfo } {
     let realm = this.defaultWritableRealm;
 
+    // FIXME hard to read!
     if (!realm && Object.keys(this.allRealmsMeta).length > 0) {
-      let realmURL = Object.keys(this.allRealmsMeta[0])[0];
+      let realmURL = Object.keys(this.allRealmsMeta)[0];
       let firstMeta = this.allRealmsMeta[realmURL];
       realm = { path: realmURL, info: firstMeta.info };
     } else {
