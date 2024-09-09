@@ -102,7 +102,7 @@ export default class Room extends Component<Signature> {
       </section>
     {{/if}}
 
-    <style>
+    <style scoped>
       .room {
         display: grid;
         grid-template-rows: 1fr auto;
@@ -152,7 +152,17 @@ export default class Room extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
+
+    this.loadRoomSkills.perform();
   }
+
+  private loadRoomSkills = restartableTask(async () => {
+    await this.roomResource.loading;
+    let defaultSkills = await this.matrixService.loadDefaultSkills();
+    if (this.roomResource.room) {
+      this.roomResource.room.skills = defaultSkills;
+    }
+  });
 
   maybeRetryAction = (messageIndex: number, message: Message) => {
     if (this.isLastMessage(messageIndex) && message.isRetryable) {

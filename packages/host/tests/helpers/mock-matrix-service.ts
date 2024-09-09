@@ -129,11 +129,16 @@ function generateMockMatrixService(
     cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
     failedCommandState: TrackedMap<string, Error> = new TrackedMap();
     cardHashes: Map<string, string> = new Map(); // hashes <> event id
+    skillCardHashes: Map<string, string> = new Map(); // hashes <> event id
     currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
       new TrackedMap();
 
     async start(_auth?: any) {
       await this.loginToRealms();
+    }
+
+    async loadDefaultSkills() {
+      return [];
     }
 
     private async loginToRealms() {
@@ -281,7 +286,7 @@ function generateMockMatrixService(
           transaction_id: '1',
         },
       };
-      await addRoomEvent(this, roomEvent);
+      await addRoomEvent(this as unknown as MatrixService, roomEvent);
       return roomEvent;
     }
 
@@ -325,6 +330,7 @@ function generateMockMatrixService(
       roomId: string,
       body: string | undefined,
       attachedCards: CardDef[],
+      skillCards: CardDef[] = [],
       clientGeneratedId: string,
       _context?: OperatorModeContext,
     ) {
@@ -334,6 +340,12 @@ function generateMockMatrixService(
         roomId,
         this.cardHashes,
       );
+      let attachedSkillEventIds = await this.getCardEventIds(
+        skillCards,
+        roomId,
+        this.skillCardHashes,
+        { includeComputeds: true, maybeRelativeURL: null },
+      );
       let content = {
         body,
         msgtype: 'org.boxel.message',
@@ -342,6 +354,7 @@ function generateMockMatrixService(
         clientGeneratedId,
         data: {
           attachedCardsEventIds,
+          attachedSkillEventIds,
         },
       };
       await this.sendEvent(roomId, 'm.room.message', content);
@@ -400,7 +413,7 @@ function generateMockMatrixService(
       name: string,
       timestamp = Date.now(),
     ) {
-      await addRoomEvent(this, {
+      await addRoomEvent(this as unknown as MatrixService, {
         event_id: 'eventname',
         room_id: roomId,
         type: 'm.room.name',
@@ -408,7 +421,7 @@ function generateMockMatrixService(
         status: null,
       });
 
-      await addRoomEvent(this, {
+      await addRoomEvent(this as unknown as MatrixService, {
         event_id: 'eventcreate',
         room_id: roomId,
         type: 'm.room.create',
@@ -420,7 +433,7 @@ function generateMockMatrixService(
         status: null,
       });
 
-      await addRoomEvent(this, {
+      await addRoomEvent(this as unknown as MatrixService, {
         event_id: 'eventjoin',
         room_id: roomId,
         type: 'm.room.member',
@@ -436,7 +449,7 @@ function generateMockMatrixService(
         status: null,
       });
 
-      await addRoomEvent(this, {
+      await addRoomEvent(this as unknown as MatrixService, {
         event_id: 'eventinvite',
         room_id: roomId,
         type: 'm.room.member',

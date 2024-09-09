@@ -76,7 +76,7 @@ export default class CardURLBar extends Component<Signature> {
       {{/if}}
 
     </div>
-    <style>
+    <style scoped>
       :global(:root) {
         --card-url-bar-width: 100%;
         --card-url-bar-height: var(--boxel-form-control-height);

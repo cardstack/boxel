@@ -81,7 +81,7 @@ export class Transaction extends CardDef {
 
         <FieldContainer @label='Memo'><@fields.memo /></FieldContainer>
       </GridContainer>
-      <style>
+      <style scoped>
         .container {
           padding: var(--boxel-sp-xl);
         }

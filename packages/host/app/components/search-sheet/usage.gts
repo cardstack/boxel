@@ -85,7 +85,7 @@ export default class SearchSheetUsage extends Component {
         />
       </:api>
     </FreestyleUsage>
-    <style>
+    <style scoped>
       .example-container {
         background: #494559;
         min-height: 300px;

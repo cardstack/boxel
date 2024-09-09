@@ -295,7 +295,7 @@ export function getBoxComponent(
         </DefaultFormatsConsumer>
       </PermissionsConsumer>
     </CardContextConsumer>
-    <style>
+    <style scoped>
       .field-component-card.isolated-format {
         height: 100%;
       }

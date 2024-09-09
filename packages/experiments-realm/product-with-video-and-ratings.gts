@@ -46,6 +46,7 @@ class Isolated extends Component<typeof ProductWithVideoAndRatings> {
           /></div>
         {{#if @model.videoUrl}}
           <div class='video-container'>
+            {{! template-lint-disable require-media-caption}}
             <video controls aria-label='Product video' aria-hidden='false'>
               <source src={{@model.videoUrl}} type='video/mp4' />
             </video>
@@ -56,7 +57,7 @@ class Isolated extends Component<typeof ProductWithVideoAndRatings> {
         </button>
       </div>
     </div>
-    <style>
+    <style scoped>
       .product {
         display: grid;
         grid-template-columns: 50% 50%;

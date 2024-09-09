@@ -44,7 +44,7 @@ export class PetPerson extends CardDef {
         Friend:
         <@fields.friend />
       </GridContainer>
-      <style>
+      <style scoped>
         .container {
           padding: var(--boxel-sp-xl);
         }

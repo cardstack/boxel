@@ -59,7 +59,7 @@ export default class TabbedHeader extends Component<Signature> {
         </ul>
       </nav>
     </header>
-    <style>
+    <style scoped>
       .app-header {
         padding: 0 var(--boxel-sp-lg);
         background-color: var(--header-background-color, var(--boxel-light));

@@ -46,7 +46,7 @@ export default class CardCatalogItem extends Component<Signature> {
       </div>
     </div>
 
-    <style>
+    <style scoped>
       .catalog-item {
         --catalog-item-thumbnail-size: 2.5rem;
         --catalog-item-height: 3.75rem;

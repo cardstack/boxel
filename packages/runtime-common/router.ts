@@ -25,6 +25,7 @@ export enum SupportedMimeType {
   EventStream = 'text/event-stream',
   HTML = 'text/html',
   JSONAPI = 'application/vnd.api+json',
+  CardTypeSummary = 'application/json',
   All = '*/*',
 }
 

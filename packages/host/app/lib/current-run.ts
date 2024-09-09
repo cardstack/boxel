@@ -59,6 +59,7 @@ const log = logger('current-run');
 interface CardType {
   refURL: string;
   codeRef: CodeRef;
+  displayName: string;
 }
 type TypesWithErrors =
   | {
@@ -499,11 +500,7 @@ export class CurrentRun {
       // Add a "pseudo field" to the search doc for the card type. We use the
       // "_" prefix to make a decent attempt to not pollute the userland
       // namespace for cards
-      if (cardType.displayName === 'Card') {
-        searchData._cardType = cardType.name;
-      } else {
-        searchData._cardType = cardType.displayName;
-      }
+      searchData._cardType = getDisplayName(cardType);
     } catch (err: any) {
       uncaughtError = err;
     }
@@ -541,6 +538,9 @@ export class CurrentRun {
         fittedHtml,
         lastModified,
         types: typesMaybeError.types.map(({ refURL }) => refURL),
+        displayNames: typesMaybeError.types.map(
+          ({ displayName }) => displayName,
+        ),
         deps: new Set([
           moduleURL,
           ...(await this.loaderService.loader.getConsumedModules(moduleURL)),
@@ -651,6 +651,7 @@ export class CurrentRun {
       types.push({
         refURL: internalKeyFor(loadedCardRef, undefined),
         codeRef: loadedCardRef,
+        displayName: getDisplayName(loadedCard),
       });
       if (!isEqual(loadedCardRef, baseCardRef)) {
         fullRef = {
@@ -689,4 +690,12 @@ function unwrap(html: string): string {
     .replace(/^<!---->/, '')
     .replace(/<\/div>$/, '')
     .trim();
+}
+
+function getDisplayName(card: typeof CardDef) {
+  if (card.displayName === 'Card') {
+    return card.name;
+  } else {
+    return card.displayName;
+  }
 }

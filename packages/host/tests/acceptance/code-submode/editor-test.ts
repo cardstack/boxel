@@ -11,6 +11,7 @@ import stringify from 'safe-stable-stringify';
 import {
   type LooseSingleCardDocument,
   Deferred,
+  baseRealm,
 } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 
@@ -32,7 +33,7 @@ import {
   type TestContextWithSave,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
-import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 
 module('Acceptance | code submode | editor tests', function (hooks) {
   let realm: Realm;
@@ -44,7 +45,10 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   setupWindowMock(hooks);
-  let { setRealmPermissions } = setupMatrixServiceMock(hooks);
+  let { setRealmPermissions } = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [baseRealm.url, testRealmURL],
+  });
 
   hooks.beforeEach(async function () {
     setRealmPermissions({ [testRealmURL]: ['read', 'write'] });
