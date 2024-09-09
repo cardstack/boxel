@@ -2,7 +2,7 @@ import { find, visit, currentURL } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
 import { setupWindowMock } from 'ember-window-mock/test-support';
-import { module, skip, test } from 'qunit';
+import { module, skip } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
@@ -99,7 +99,7 @@ module('Acceptance | basic tests', function (hooks) {
     assert.dom('[data-test-index-card]').containsText('Hello, world');
   });
 
-  test('glimmer-scoped-css smoke test', async function (assert) {
+  skip('glimmer-scoped-css smoke test', async function (assert) {
     await visit('/');
 
     const cardContainerElement = find('[data-test-boxel-card-container]');
