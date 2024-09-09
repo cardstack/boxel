@@ -2,7 +2,6 @@ import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { getOwner } from '@ember/owner';
-import Owner from '@ember/owner';
 import { inject as service } from '@ember/service';
 
 import Component from '@glimmer/component';
@@ -27,6 +26,7 @@ import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profi
 import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 import ENV from '@cardstack/host/config/environment';
+import CardController from '@cardstack/host/controllers/card';
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -78,7 +78,7 @@ export default class SubmodeLayout extends Component<Signature> {
   };
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
-  private cardController: { workspaceChooserOpened: boolean };
+  private _cardController: CardController | null = null;
 
   private searchElement: HTMLElement | null = null;
   private suppressSearchClose = false;
@@ -86,16 +86,21 @@ export default class SubmodeLayout extends Component<Signature> {
 
   get cardController(): CardController {
     if (!this._cardController) {
-      this._cardController = getOwner(this)!.lookup('controller:card') as any;
+      // Calling function to set _cardController to avoid 'ember/no-side-effects' error
+      this.setCardController(
+        getOwner(this)!.lookup('controller:card') as CardController,
+      );
       if (!this._cardController) {
         throw new Error(
           'SubmodeLayout must be used in the context of a CardController',
         );
       }
     }
-    return this_cardController;
-    let cardController = getOwner(this)!.lookup('controller:card') as any;
-    this.cardController = cardController;
+    return this._cardController;
+  }
+
+  private setCardController(cardController: CardController) {
+    this._cardController = cardController;
   }
 
   private get aiAssistantVisibilityClass() {
@@ -170,9 +175,12 @@ export default class SubmodeLayout extends Component<Signature> {
     return this.cardController.workspaceChooserOpened;
   }
 
+  private set workspaceChooserOpened(workspaceChooserOpened: boolean) {
+    this.cardController.workspaceChooserOpened = workspaceChooserOpened;
+  }
+
   @action private toggleWorkspaceChooser() {
-    this.cardController.workspaceChooserOpened =
-      !this.cardController.workspaceChooserOpened;
+    this.workspaceChooserOpened = !this.workspaceChooserOpened;
   }
 
   @action private toggleProfileSettings() {
