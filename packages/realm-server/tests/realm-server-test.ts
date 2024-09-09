@@ -130,7 +130,8 @@ module('Realm Server', function (hooks) {
   }
 
   let testRealm: Realm;
-  let testRealmServer: Server;
+  let testRealmServer: RealmServer;
+  let testRealmHttpServer: Server;
   let request: SuperTest<Test>;
   let dir: DirResult;
 
@@ -150,7 +151,7 @@ module('Realm Server', function (hooks) {
         }
         let virtualNetwork = createVirtualNetwork();
 
-        ({ testRealm, testRealmHttpServer: testRealmServer } =
+        ({ testRealm, testRealmHttpServer, testRealmServer } =
           await runTestRealmServer({
             virtualNetwork,
             testRealmDir,
@@ -163,7 +164,7 @@ module('Realm Server', function (hooks) {
             fileSystem,
           }));
 
-        request = supertest(testRealmServer);
+        request = supertest(testRealmHttpServer);
       },
     });
   }
@@ -183,7 +184,7 @@ module('Realm Server', function (hooks) {
   });
 
   hooks.afterEach(async function () {
-    await closeServer(testRealmServer);
+    await closeServer(testRealmHttpServer);
   });
 
   module('card GET request', function (_hooks) {
@@ -2379,9 +2380,32 @@ module('Realm Server', function (hooks) {
       );
     });
 
-    // TODO test that for a server where a realm is mounted at the root, we throw when trying to create a new realm on that server
-    // TODO test that cannot create new realm that collides with existing realm
-    // TODO test that cannot create realm with invalid chars
+    test('cannot create a realm on a realm server that has a realm mounted at the origin', async function (assert) {
+      assert.rejects(
+        testRealmServer.createRealm('@mango:boxel.ai', 'mango-realm'),
+        /a realm is already mounted at the origin of this server/,
+      );
+    });
+
+    test('cannot create a new realm that collides with an existing realm', async function (assert) {
+      let realmName = `test-realm-${uuidv4()}`;
+      await testRealmServer2.createRealm('@mango:boxel.ai', realmName);
+      assert.rejects(
+        testRealmServer2.createRealm('@mango:boxel.ai', realmName),
+        'already exists on this server',
+      );
+    });
+
+    test('cannot create a realm with invalid characters', async function (assert) {
+      assert.rejects(
+        testRealmServer2.createRealm('@mango:boxel.ai', 'invalid_realm_name'),
+        'contains invalid characters',
+      );
+      assert.rejects(
+        testRealmServer2.createRealm('@mango:boxel.ai', 'invalid realm name'),
+        'contains invalid characters',
+      );
+    });
 
     test('can dynamically load a card definition from own realm', async function (assert) {
       let ref = {
