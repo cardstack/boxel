@@ -19,6 +19,7 @@ interface Signature<ItemT = any> {
 }
 
 const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
+  {{! template-lint-disable no-autofocus-attribute }}
   <PowerSelect
     class='boxel-select'
     @options={{@options}}

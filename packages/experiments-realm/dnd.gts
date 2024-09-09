@@ -223,14 +223,14 @@ export class CharacterSheet extends CardDef {
   @field inventory = linksToMany(InventoryItem);
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <!-- Character Header Section -->
+      {{! Character Header Section }}
       <div class='character-header'>
         <h1>{{@model.name}}</h1>
         <h3>{{@model.title}}</h3>
         <p>{{@model.description}}</p>
       </div>
 
-      <!-- Character Basic Information Section -->
+      {{! Character Basic Information Section }}
       <div class='character-info'>
         <div>
           <strong>Level:</strong>
@@ -250,7 +250,7 @@ export class CharacterSheet extends CardDef {
         </div>
       </div>
 
-      <!-- Character Attributes Section -->
+      {{! Character Attributes Section }}
       <div class='character-attributes'>
         <h2>Attributes</h2>
         <div class='attribute-grid'>
@@ -263,17 +263,17 @@ export class CharacterSheet extends CardDef {
         </div>
       </div>
 
-      <!-- Character Spells Section -->
+      {{! Character Spells Section }}
       <div class='character-spells'>
         <h2>Spells</h2>
         <ul>
-          {{#each @fields.spells as |spell|}}
-            <li> <spell /> </li>
+          {{#each @fields.spells as |SpellComponent|}}
+            <li> <SpellComponent /> </li>
           {{/each}}
         </ul>
       </div>
 
-      <!-- Character Inventory Section -->
+      {{! Character Inventory Section }}
       <div class='character-inventory'>
         <h2>Inventory</h2>
         <ul>
@@ -285,7 +285,7 @@ export class CharacterSheet extends CardDef {
         </ul>
       </div>
 
-      <!-- CSS Styling -->
+      {{! CSS Styling }}
       <style scoped>
         body {
           font-family: 'Cinzel', serif; /* Classic fantasy font */

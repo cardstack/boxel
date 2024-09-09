@@ -150,7 +150,8 @@ export class BoardAnnotation extends FieldDef {
           {{#if this.hasEdgeAngle}}
             <div class='edge-angle'>
               <div class='angle'>
-                <div class='ray' style='{{this.edgeRayStyle}}'></div>
+                {{! template-lint-disable no-inline-styles }}
+                <div class='ray' style={{this.edgeRayStyle}}></div>
               </div>
               <div class='degrees'>{{this.edgeAngleDegrees}}° Edge</div>
             </div>
@@ -166,7 +167,8 @@ export class BoardAnnotation extends FieldDef {
             </div>
           {{/if}}
           {{#if this.hasBodyPosition}}
-            <div class='body-position' style='{{this.positionStyle}}'><div
+            {{! template-lint-disable no-inline-styles }}
+            <div class='body-position' style={{this.positionStyle}}><div
                 class='position-value'
               >{{this.positionDegrees}}°</div>
               <div class='arrow'></div>
