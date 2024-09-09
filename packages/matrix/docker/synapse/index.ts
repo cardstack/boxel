@@ -101,6 +101,7 @@ interface StartOptions {
   template?: string;
   dataDir?: string;
   containerName?: string;
+  suppressRegistrationSecretFile?: true;
 }
 export async function synapseStart(
   opts?: StartOptions,
@@ -166,7 +167,17 @@ export async function synapseStart(
 
   const synapse: SynapseInstance = { synapseId, ...synCfg };
   synapses.set(synapseId, synapse);
-  fse.writeFileSync(registrationSecretFile, synapse.registrationSecret);
+
+  function cleanupRegistrationSecret() {
+    fse.removeSync(registrationSecretFile);
+  }
+
+  cleanupRegistrationSecret();
+  if (!opts?.suppressRegistrationSecretFile) {
+    fse.writeFileSync(registrationSecretFile, synapse.registrationSecret);
+    process.on('exit', cleanupRegistrationSecret);
+    process.on('SIGINT', cleanupRegistrationSecret);
+  }
   return synapse;
 }
 
@@ -188,7 +199,6 @@ export async function synapseStop(id: string): Promise<void> {
     containerId: id,
   });
 
-  fse.remove(registrationSecretFile);
   await fse.remove(synCfg.configDir);
   synapses.delete(id);
   console.log(`Stopped synapse id ${id}.`);
