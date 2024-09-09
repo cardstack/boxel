@@ -298,6 +298,8 @@ export default class RealmService extends Service {
           )
           .join(', ')}`,
       );
+
+      return null;
     }
 
     return { path: first[0], info: first[1].info };
