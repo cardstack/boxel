@@ -77,7 +77,15 @@ export default class CommandService extends Service {
           instances.map((c) => this.cardService.serializeCard(c)),
         );
       } else if (command.name === 'generateAppModule') {
-        let realmURL = this.realm.userDefaultRealm.path;
+        let defaultWritableRealm = this.realm.defaultWritableRealm;
+
+        if (!defaultWritableRealm) {
+          throw new Error(
+            `Cannot generate app module without a writable realm`,
+          );
+        }
+
+        let realmURL = defaultWritableRealm.path;
         let timestamp = Date.now();
         let fileName =
           (payload.appTitle as string)?.replace(/ /g, '-').toLowerCase() ??

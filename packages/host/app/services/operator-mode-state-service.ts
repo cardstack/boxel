@@ -508,7 +508,7 @@ export default class OperatorModeStateService extends Service {
       return this.cachedRealmURL;
     }
 
-    return new URL(this.realm.userDefaultRealm.path);
+    return new URL(this.realm.defaultReadableRealm.path);
   }
 
   subscribeToOpenFileStateChanges(subscriber: OpenFileSubscriber) {

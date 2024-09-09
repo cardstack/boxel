@@ -21,6 +21,8 @@ import {
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 
+import ENV from '@cardstack/host/config/environment';
+
 import type LoaderService from './loader-service';
 import type MatrixService from './matrix-service';
 
@@ -277,7 +279,7 @@ export default class RealmService extends Service {
   // until then default to the realm serving the host app if it is writable,
   // otherwise default to the first writable realm lexically
   @cached
-  get userDefaultRealm(): { path: string; info: RealmInfo } {
+  get defaultWritableRealm(): { path: string; info: RealmInfo } | null {
     let writeableRealms = Object.entries(this.allRealmsMeta)
       .filter(([, i]) => i.canWrite)
       .sort(([, i], [, j]) => i.info.name.localeCompare(j.info.name));
@@ -298,6 +300,24 @@ export default class RealmService extends Service {
     }
 
     return { path: first[0], info: first[1].info };
+  }
+
+  @cached
+  get defaultReadableRealm(): { path: string; info: RealmInfo } {
+    let realm = this.defaultWritableRealm;
+
+    if (!realm && Object.keys(this.allRealmsMeta).length > 0) {
+      let realmURL = Object.keys(this.allRealmsMeta[0])[0];
+      let firstMeta = this.allRealmsMeta[realmURL];
+      realm = { path: realmURL, info: firstMeta.info };
+    } else {
+      realm = {
+        path: ENV.resolvedBaseRealmURL,
+        info: this.info(ENV.resolvedBaseRealmURL),
+      };
+    }
+
+    return realm;
   }
 
   token = (url: string): string | undefined => {

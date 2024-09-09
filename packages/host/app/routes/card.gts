@@ -134,7 +134,7 @@ export default class RenderCard extends Route<Model | null> {
     // so users will be redirected to operator mode.
     // We can update the codes below after we have a clear idea on how to implement authentication in guest mode.
     let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
-      new URL(this.realm.userDefaultRealm.path),
+      new URL(this.realm.defaultReadableRealm.path),
     );
     if (
       !isPublicReadableRealm &&
@@ -142,8 +142,8 @@ export default class RenderCard extends Route<Model | null> {
     ) {
       let path = transition.to?.params?.path ?? '';
       let url = path
-        ? new URL(`/${path}`, this.realm.userDefaultRealm.path)
-        : new URL('./', this.realm.userDefaultRealm.path);
+        ? new URL(`/${path}`, this.realm.defaultReadableRealm.path)
+        : new URL('./', this.realm.defaultReadableRealm.path);
       await this.router.replaceWith(`card`, {
         queryParams: {
           operatorModeEnabled: 'true',

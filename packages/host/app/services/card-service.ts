@@ -81,6 +81,16 @@ export default class CardService extends Service {
     this.subscriber = undefined;
   }
 
+  get searchRealms() {
+    return this.unresolvedRealmURLs;
+  }
+
+  get userRealms() {
+    return this.unresolvedRealmURLs.filter(
+      (realmURL) => realmURL != baseRealm.url,
+    );
+  }
+
   setRealms(realms: string[]) {
     realms.forEach((realm) => {
       if (!this.unresolvedRealmURLs.includes(realm)) {
@@ -356,16 +366,13 @@ export default class CardService extends Service {
 
   private async saveCardDocument(
     doc: LooseSingleCardDocument,
-    realmUrl?: URL,
+    realmUrl: URL,
   ): Promise<SingleCardDocument> {
     let isSaved = !!doc.data.id;
-    let json = await this.fetchJSON(
-      doc.data.id ?? realmUrl ?? this.realm.userDefaultRealm.path,
-      {
-        method: isSaved ? 'PATCH' : 'POST',
-        body: JSON.stringify(doc, null, 2),
-      },
-    );
+    let json = await this.fetchJSON(doc.data.id ?? realmUrl, {
+      method: isSaved ? 'PATCH' : 'POST',
+      body: JSON.stringify(doc, null, 2),
+    });
     if (!isSingleCardDocument(json)) {
       throw new Error(
         `bug: arg is not a card document:
@@ -465,7 +472,7 @@ export default class CardService extends Service {
     let api = await this.getAPI();
     // in the case where we get no realm URL from the card, we are dealing with
     // a new card instance that does not have a realm URL yet.
-    return card[api.realmURL] ?? new URL(this.realm.userDefaultRealm.path);
+    return card[api.realmURL] ?? new URL(this.realm.defaultReadableRealm.path);
   }
 
   async cardsSettled() {

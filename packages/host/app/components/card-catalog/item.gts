@@ -95,7 +95,11 @@ export default class CardCatalogItem extends Component<Signature> {
     if (!path) {
       return undefined;
     }
-    let realmPath = new RealmPaths(new URL(this.realm.userDefaultRealm.path));
+
+    // FIXME this is incorrect, remove this getter and use @thumbnailURL directly, it should use a helper to resolve relative thumbnail paths as shown below
+    let realmPath = new RealmPaths(
+      new URL(this.realm.defaultReadableRealm.path),
+    );
 
     if (/^(\.\.\/)+/.test(path)) {
       let localPath = new URL(path, realmPath.url).pathname.replace(/^\//, '');

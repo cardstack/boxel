@@ -129,7 +129,7 @@ class CardRouteComponent extends Component<CardRouteSignature> {
     // Users are not allowed to open guest mode
     // if realm is not publicly readable
     let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
-      new URL(this.realm.userDefaultRealm.path),
+      new URL(this.realm.defaultReadableRealm.path),
     );
     if (!isPublicReadableRealm && this.args.controller.operatorModeEnabled) {
       return;
@@ -171,7 +171,7 @@ class CardRouteComponent extends Component<CardRouteSignature> {
     this,
     async () =>
       await this.realmInfoService.isPublicReadable(
-        new URL(this.realm.userDefaultRealm.path),
+        new URL(this.realm.defaultReadableRealm.path),
       ),
   );
 
