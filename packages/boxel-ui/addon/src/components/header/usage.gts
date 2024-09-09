@@ -186,7 +186,7 @@ export default class HeaderUsage extends Component {
         </:example>
       </FreestyleUsage>
     </div>
-    <style>
+    <style scoped>
       .definition-container {
         --boxel-header-text-transform: uppercase;
         --boxel-header-text-color: var(--boxel-450);
@@ -197,7 +197,7 @@ export default class HeaderUsage extends Component {
         --boxel-label-font: 500 var(--boxel-font-xs);
       }
     </style>
-    <style>
+    <style scoped>
       :global(.header-freestyle-container) {
         --boxel-header-text-transform: none;
       }

@@ -130,7 +130,7 @@ export default class FittedFormatGallery extends Component<Signature> {
       </div>
     </div>
 
-    <style>
+    <style scoped>
       .item {
         position: relative;
         padding: var(--boxel-sp);

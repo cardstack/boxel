@@ -291,11 +291,12 @@ test.describe('Room messages', () => {
     expect(serializeCard.data.attributes.picture).toBeUndefined();
   });
 
-  test(`it does include command tools (patch, search) in message event when top-most card is writable and context is shared`, async ({
+  test(`it does include command tools (patch, search, generateAppModule) in message event when top-most card is writable and context is shared`, async ({
     page,
   }) => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomId(page);
+    await page.locator(`[data-test-boxel-filter-list-button="All Cards"]`).click();
     await page
       .locator(
         `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${testHost}/mango"]`,
@@ -385,6 +386,37 @@ test.describe('Room messages', () => {
         },
         type: 'function',
       },
+      {
+        type: 'function',
+        function: {
+          name: 'generateAppModule',
+          description: `Propose a post request to generate a new app module. Insert the module code in the 'moduleCode' property of the payload and the title for the module in the 'appTitle' property. Ensure the description explains what change you are making.`,
+          parameters: {
+            type: 'object',
+            properties: {
+              attached_card_id: {
+                type: 'string',
+                const: `${testHost}/mango`,
+              },
+              description: {
+                type: 'string',
+              },
+              appTitle: {
+                type: 'string',
+              },
+              moduleCode: {
+                type: 'string',
+              },
+            },
+            required: [
+              'attached_card_id',
+              'description',
+              'appTitle',
+              'moduleCode',
+            ],
+          },
+        },
+      },
     ]);
   });
 
@@ -393,6 +425,7 @@ test.describe('Room messages', () => {
   }) => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomId(page);
+    await page.locator(`[data-test-boxel-filter-list-button="All Cards"]`).click();
     await page
       .locator(
         `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${testHost}/mango"]`,
@@ -419,6 +452,7 @@ test.describe('Room messages', () => {
     // the base realm is a read-only realm
     await login(page, 'user1', 'pass', { url: `http://localhost:4201/base` });
     let room1 = await getRoomId(page);
+    await page.locator(`[data-test-boxel-filter-list-button="All Cards"]`).click();
     await page
       .locator(
         '[data-test-stack-card="https://cardstack.com/base/index"] [data-test-cards-grid-item="https://cardstack.com/base/fields/boolean-field"]',
@@ -646,6 +680,7 @@ test.describe('Room messages', () => {
     test.beforeEach(async ({ page }) => {
       await login(page, 'user1', 'pass');
       await getRoomId(page);
+      await page.locator(`[data-test-boxel-filter-list-button="All Cards"]`).click();
     });
 
     test('displays auto-attached card (1 stack)', async ({ page }) => {
@@ -720,6 +755,7 @@ test.describe('Room messages', () => {
     }) => {
       const testCard1 = `${testHost}/jersey`;
       const embeddedCard = `${testHost}/justin`;
+      await page.locator(`[data-test-boxel-filter-list-button="All Cards"]`).click();
       await page
         .locator(
           `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
@@ -936,6 +972,7 @@ test.describe('Room messages', () => {
 
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
+    await page.locator(`[data-test-boxel-filter-list-button="All Cards"]`).click();
 
     for (let i = 1; i <= 3; i++) {
       await page.locator('[data-test-message-field]').fill(`Message - ${i}`);
@@ -1020,6 +1057,7 @@ test.describe('Room messages', () => {
       }),
     };
 
+    await page.locator(`[data-test-boxel-filter-list-button="All Cards"]`).click();
     await page
       .locator(
         `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${card_id}"]`,
@@ -1066,6 +1104,7 @@ test.describe('Room messages', () => {
       }),
     };
 
+    await page.locator(`[data-test-boxel-filter-list-button="All Cards"]`).click();
     await page
       .locator(
         `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${card_id}"]`,

@@ -11,7 +11,7 @@ const CardContentContainer: TemplateOnlyComponent<Signature> = <template>
   <div class='card-content-container' ...attributes>
     {{yield}}
   </div>
-  <style>
+  <style scoped>
     .card-content-container {
       padding: 10px;
     }

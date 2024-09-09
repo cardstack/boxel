@@ -72,7 +72,7 @@ export default class AccordionUsage extends Component {
         />
       </:cssVars>
     </FreestyleUsage>
-    <style>
+    <style scoped>
       p {
         padding-left: var(--boxel-sp-sm);
       }
