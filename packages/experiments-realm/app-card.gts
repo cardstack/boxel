@@ -12,9 +12,10 @@ import {
   StringField,
   type CardContext,
 } from 'https://cardstack.com/base/card-api';
-import { cn } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { fn } from '@ember/helper';
 import type Owner from '@ember/owner';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -41,7 +42,7 @@ import {
   PrerenderedCard,
 } from '@cardstack/runtime-common';
 import { AnyFilter } from '@cardstack/runtime-common/query';
-import { fn } from '@ember/helper';
+import { TrackedMap } from 'tracked-built-ins';
 
 // import { CardsGridComponent } from './cards-grid-component';
 
@@ -52,7 +53,13 @@ export class Tab extends FieldDef {
   @field isTable = contains(BooleanField);
 }
 
-interface PillFilter {
+interface PillItem {
+  id: string;
+  selected: boolean;
+  label: string;
+}
+
+interface PillFilter extends PillItem {
   kind: string;
   value: string;
 }
@@ -101,11 +108,23 @@ class AppCardIsolated extends Component<typeof AppCard> {
   }
 
   leftNavFilters: LeftNavFilter[] = [];
-  pillFilters: PillFilter[] = [];
   @tracked activeCategory: LeftNavFilter | undefined = this.leftNavFilters[0];
+  pillFilterMap = new TrackedMap<string, PillFilter>();
 
   @action onCategoryChanged(leftNavFilter: LeftNavFilter) {
     this.activeCategory = leftNavFilter;
+  }
+
+  @action onPillSelect(id: string) {
+    // debugger;
+    let pillFilter = this.pillFilterMap.get(id);
+    if (!pillFilter) {
+      return;
+    }
+    this.pillFilterMap.set(id, {
+      ...pillFilter,
+      selected: !pillFilter.selected,
+    });
   }
 
   get queryDisplay() {
@@ -217,17 +236,10 @@ class AppCardIsolated extends Component<typeof AppCard> {
             {{#if this.loadTagFilterList.isRunning}}
               Loading...
             {{else}}
-              {{#each this.pillFilters as |pillFilter|}}
-                <Pill
-                  @kind='button'
-                  {{on 'click' (fn this.onPillClick pillFilter)}}
-                >
-                  <:default>
-                    {{pillFilter.value}}
-                  </:default>
-                </Pill>
-
-              {{/each}}
+              <PillPicker
+                @items={{this.pillFilters}}
+                @onSelect={{this.onPillSelect}}
+              />
             {{/if}}
           </div>
         </aside>
@@ -453,15 +465,21 @@ class AppCardIsolated extends Component<typeof AppCard> {
     this.activeCategory = this.leftNavFilters[0];
   });
 
+  get pillFilters() {
+    return Array.from(this.pillFilterMap.values());
+  }
+
   private loadTagFilterList = restartableTask(async () => {
     let query = this.tagQuery;
     let queryString = buildQueryString(query); //has ? in front of it
     let searchResults = await this.search(queryString);
-    console.log(searchResults);
     searchResults.forEach((json: any) => {
-      this.pillFilters.push({
+      this.pillFilterMap.set(json.id, {
+        id: json.id,
         kind: json.attributes.kind,
         value: json.attributes.value,
+        label: json.attributes.value,
+        selected: false,
       });
     });
   });
@@ -522,6 +540,29 @@ class AppCardIsolated extends Component<typeof AppCard> {
   }
 }
 
+class PillPicker extends GlimmerComponent<{
+  Args: {
+    items: PillItem[];
+    onSelect: (id: string) => void;
+  };
+}> {
+  <template>
+    {{#each @items as |item|}}
+      <Pill
+        @kind='button'
+        class={{cn selected=(eq item.selected true)}}
+        {{on 'click' (fn @onSelect item.id)}}
+      >
+        <:default>{{item.label}}</:default>
+      </Pill>
+    {{/each}}
+    <style>
+      .selected {
+        --pill-background-color: var(--boxel-highlight);
+      }
+    </style>
+  </template>
+}
 export class AppCard extends CardDef {
   static displayName = 'App Card';
   static prefersWideFormat = true;
