@@ -1,3 +1,5 @@
+import { waitForPromise } from '@ember/test-waiters';
+
 import {
   sqlite3Worker1Promiser,
   type SQLiteWorker,
@@ -37,7 +39,7 @@ export default class SQLiteAdapter implements DBAdapter {
     const promisedWorker = sqlite3Worker1Promiser({
       onready: () => ready.fulfill(promisedWorker),
     });
-    this._sqlite = await ready.promise;
+    this._sqlite = await waitForPromise(ready.promise, 'sqlite startup');
 
     let response = await this.sqlite('open', {
       // It is possible to write to the local
@@ -125,13 +127,16 @@ export default class SQLiteAdapter implements DBAdapter {
     return result.map((row) => row.name) as string[];
   }
 
-  private get sqlite() {
-    if (!this._sqlite) {
+  private get sqlite(): typeof SQLiteWorker {
+    const worker = this._sqlite;
+    if (!worker) {
       throw new Error(
         `could not get sqlite worker--has createClient() been run?`,
       );
     }
-    return this._sqlite;
+    return (async (...args: Parameters<typeof SQLiteWorker>) => {
+      return await waitForPromise(worker(...args), 'sqlite running');
+    }) as typeof SQLiteWorker;
   }
 
   private get dbId() {

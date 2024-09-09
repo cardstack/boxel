@@ -81,13 +81,6 @@ class CardRouteComponent extends Component<CardRouteSignature> {
     });
   }
 
-  openPath(newPath: string | undefined) {
-    if (newPath) {
-      let fileUrl = new URL(this.cardService.defaultURL + newPath);
-      this.operatorModeStateService.updateCodePath(fileUrl);
-    }
-  }
-
   getCards(query: Query, realms?: string[]): Search {
     return getSearchResults(this, query, realms);
   }
@@ -195,7 +188,7 @@ class CardRouteComponent extends Component<CardRouteSignature> {
       style='position: fixed; left: -100px; opacity: 0;'
       {{on 'click' this.toggleOperatorMode}}
     >Operator mode</button>
-    <style>
+    <style scoped>
       .card-isolated-component {
         padding: var(--boxel-sp-lg);
       }

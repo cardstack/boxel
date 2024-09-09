@@ -156,6 +156,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       'indexer stats are correct',
     );
 
+    // the lastModified resolution is 1 second, so need to
+    // wait at least that long to see a difference
+    await new Promise((r) => setTimeout(r, 1000));
     await adapter.write(
       'test2.json',
       JSON.stringify({
@@ -650,9 +653,14 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             <h1><@fields.firstName /></h1>
           </template>
         };
-        static embedded = class Isolated extends Component<typeof this> {
+        static embedded = class Embedded extends Component<typeof this> {
           <template>
             <h1> Person Embedded Card: <@fields.firstName /></h1>
+          </template>
+        };
+        static fitted = class Fitted extends Component<typeof this> {
+          <template>
+            <h1> Person Fitted Card: <@fields.firstName /></h1>
           </template>
         };
       }
@@ -724,7 +732,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         );
         if (entry?.type === 'doc') {
           assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
-          let { isolatedHtml, embeddedHtml } =
+          let { isolatedHtml, embeddedHtml, fittedHtml } =
             (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
           assert.strictEqual(
             cleanWhiteSpace(stripScopedCSSAttributes(isolatedHtml!)),
@@ -737,6 +745,14 @@ module(`Integration | realm indexing and querying`, function (hooks) {
               ),
             ),
             cleanWhiteSpace(`<h1> Person Embedded Card: Van Gogh </h1>`),
+          );
+          assert.strictEqual(
+            cleanWhiteSpace(
+              stripScopedCSSAttributes(
+                fittedHtml![`${testRealmURL}person/Person`],
+              ),
+            ),
+            cleanWhiteSpace(`<h1> Person Fitted Card: Van Gogh </h1>`),
           );
         } else {
           assert.ok(
@@ -753,7 +769,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         );
         if (entry?.type === 'doc') {
           assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
-          let { isolatedHtml, embeddedHtml } =
+          let { isolatedHtml, embeddedHtml, fittedHtml } =
             (await getInstance(realm, new URL(`${testRealmURL}vangogh`))) ?? {};
           assert.strictEqual(
             cleanWhiteSpace(stripScopedCSSAttributes(isolatedHtml!)),
@@ -766,6 +782,14 @@ module(`Integration | realm indexing and querying`, function (hooks) {
               ),
             ),
             cleanWhiteSpace(`<h1> Person Embedded Card: Van Gogh </h1>`),
+          );
+          assert.strictEqual(
+            cleanWhiteSpace(
+              stripScopedCSSAttributes(
+                fittedHtml![`${testRealmURL}person/Person`],
+              ),
+            ),
+            cleanWhiteSpace(`<h1> Person Fitted Card: Van Gogh </h1>`),
           );
         } else {
           assert.ok(
@@ -808,9 +832,14 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           <h1><@fields.firstName /></h1>
         </template>
       };
-      static embedded = class Isolated extends Component<typeof this> {
+      static embedded = class Embedded extends Component<typeof this> {
         <template>
           <h1> Person Embedded Card: <@fields.firstName /></h1>
+        </template>
+      };
+      static fitted = class Fitted extends Component<typeof this> {
+        <template>
+          <h1> Person Fitted Card: <@fields.firstName /></h1>
         </template>
       };
     }
@@ -871,7 +900,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     );
     if (entry?.type === 'doc') {
       assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
-      let { isolatedHtml, embeddedHtml } =
+      let { isolatedHtml, embeddedHtml, fittedHtml } =
         (await getInstance(
           realm,
           new URL(`${testRealmURL}working-van-gogh`),
@@ -887,6 +916,12 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           ),
         ),
         cleanWhiteSpace(`<h1> Person Embedded Card: Van Gogh </h1>`),
+      );
+      assert.strictEqual(
+        cleanWhiteSpace(
+          stripScopedCSSAttributes(fittedHtml![`${testRealmURL}person/Person`]),
+        ),
+        cleanWhiteSpace(`<h1> Person Fitted Card: Van Gogh </h1>`),
       );
     } else {
       assert.ok(
@@ -931,9 +966,14 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           <h1><@fields.firstName /></h1>
         </template>
       };
-      static embedded = class Isolated extends Component<typeof this> {
+      static embedded = class Embedded extends Component<typeof this> {
         <template>
           <h1> Person Embedded Card: <@fields.firstName /></h1>
+        </template>
+      };
+      static fitted = class Fitted extends Component<typeof this> {
+        <template>
+          <h1> Person Fitted Card: <@fields.firstName /></h1>
         </template>
       };
     }
@@ -996,7 +1036,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     );
     if (entry?.type === 'doc') {
       assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
-      let { isolatedHtml, embeddedHtml } =
+      let { isolatedHtml, embeddedHtml, fittedHtml } =
         (await getInstance(realm, new URL(`${testRealmURL}working-vangogh`))) ??
         {};
       assert.strictEqual(
@@ -1017,9 +1057,20 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         cleanWhiteSpace(`<h1> Person Embedded Card: Van Gogh </h1>`),
       );
       assert.strictEqual(
+        cleanWhiteSpace(
+          stripScopedCSSAttributes(fittedHtml![`${testRealmURL}person/Person`]),
+        ),
+        cleanWhiteSpace(`<h1> Person Fitted Card: Van Gogh </h1>`),
+      );
+      assert.strictEqual(
         false,
         Object.values(embeddedHtml!).join('').includes('id="ember'),
         `embeddedHtml HTML does not include ember ID's`,
+      );
+      assert.strictEqual(
+        false,
+        Object.values(fittedHtml!).join('').includes('id="ember'),
+        `fittedHtml HTML does not include ember ID's`,
       );
     } else {
       assert.ok(
@@ -1081,7 +1132,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     class Person extends CardDef {
       static displayName = 'Person';
       @field firstName = contains(StringField);
-      static embedded = class Isolated extends Component<typeof this> {
+      static embedded = class Embedded extends Component<typeof this> {
         <template>
           <h1> Person Embedded Card: <@fields.firstName /></h1>
         </template>
@@ -1091,7 +1142,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     class FancyPerson extends Person {
       static displayName = 'Fancy Person';
       @field favoriteColor = contains(StringField);
-      static embedded = class Isolated extends Component<typeof this> {
+      static embedded = class Embedded extends Component<typeof this> {
         <template>
           <h1>
             Fancy Person Embedded Card:
@@ -1130,7 +1181,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     assert.strictEqual(
       false,
       Object.values(embeddedHtml!).join('').includes('id="ember'),
-      `HTML does not include ember ID's`,
+      `Embedded HTML does not include ember ID's`,
     );
     assert.strictEqual(
       cleanWhiteSpace(
@@ -1167,13 +1218,14 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       embeddedHtml![`${testRealmURL}person/Person`].includes('id="ember'),
       `${testRealmURL}person/Person embedded HTML does not include ember ID's`,
     );
+
     assert.strictEqual(
       cleanWhiteSpace(stripScopedCSSAttributes(embeddedHtml![cardDefRefURL])),
       cleanWhiteSpace(`
           <div class="embedded-template">
             <div class="thumbnail-section">
               <div class="card-thumbnail">
-                <div class="card-thumbnail-text" data-test-card-thumbnail-text>Fancy Person</div>
+                <div class="card-thumbnail-placeholder" data-test-card-thumbnail-placeholder></div>
               </div>
             </div>
             <div class="info-section">
@@ -1191,7 +1243,126 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     assert.strictEqual(
       false,
       embeddedHtml![cardDefRefURL].includes('id="ember'),
-      `${cardDefRefURL} embedded HTML does not include ember ID's`,
+      `${cardDefRefURL} fitted HTML does not include ember ID's`,
+    );
+  });
+
+  test(`can generate fitted HTML for instance's card class hierarchy`, async function (assert) {
+    class Person extends CardDef {
+      static displayName = 'Person';
+      @field firstName = contains(StringField);
+      static fitted = class Fitted extends Component<typeof this> {
+        <template>
+          <h1> Person Fitted Card: <@fields.firstName /></h1>
+        </template>
+      };
+    }
+
+    class FancyPerson extends Person {
+      static displayName = 'Fancy Person';
+      @field favoriteColor = contains(StringField);
+      static fitted = class Fitted extends Component<typeof this> {
+        <template>
+          <h1>
+            Fancy Person Fitted Card:
+            <@fields.firstName />
+            -
+            <@fields.favoriteColor /></h1>
+        </template>
+      };
+    }
+
+    let { realm } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'person.gts': { Person },
+        'fancy-person.gts': { FancyPerson },
+        'germaine.json': {
+          data: {
+            attributes: {
+              firstName: 'Germaine',
+              favoriteColor: 'hot pink',
+              description: 'Fancy Germaine',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './fancy-person',
+                name: 'FancyPerson',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let { fittedHtml } =
+      (await getInstance(realm, new URL(`${testRealmURL}germaine`))) ?? {};
+    assert.strictEqual(
+      false,
+      Object.values(fittedHtml!).join('').includes('id="ember'),
+      `Fitted HTML does not include ember ID's`,
+    );
+    assert.strictEqual(
+      cleanWhiteSpace(
+        stripScopedCSSAttributes(
+          fittedHtml![`${testRealmURL}fancy-person/FancyPerson`],
+        ),
+      ),
+      cleanWhiteSpace(
+        `<h1> Fancy Person Fitted Card: Germaine - hot pink </h1>`,
+      ),
+      'default fitted HTML is correct',
+    );
+
+    let cardDefRefURL = internalKeyFor(baseCardRef, undefined);
+    assert.deepEqual(
+      Object.keys(fittedHtml!),
+      [
+        `${testRealmURL}fancy-person/FancyPerson`,
+        `${testRealmURL}person/Person`,
+        cardDefRefURL,
+      ],
+      'fitted class hierarchy is correct',
+    );
+
+    assert.strictEqual(
+      cleanWhiteSpace(
+        stripScopedCSSAttributes(fittedHtml![`${testRealmURL}person/Person`]),
+      ),
+      cleanWhiteSpace(`<h1> Person Fitted Card: Germaine </h1>`),
+      `${testRealmURL}person/Person fitted HTML is correct`,
+    );
+    assert.strictEqual(
+      false,
+      fittedHtml![`${testRealmURL}person/Person`].includes('id="ember'),
+      `${testRealmURL}person/Person fitted HTML does not include ember ID's`,
+    );
+
+    assert.strictEqual(
+      cleanWhiteSpace(stripScopedCSSAttributes(fittedHtml![cardDefRefURL])),
+      cleanWhiteSpace(`
+          <div class="fitted-template">
+            <div class="thumbnail-section">
+              <div class="card-thumbnail">
+                <div class="card-thumbnail-placeholder" data-test-card-thumbnail-placeholder></div>
+              </div>
+            </div>
+            <div class="info-section">
+              <h3 class="card-title" data-test-card-title></h3>
+              <h4 class="card-display-name" data-test-card-display-name>
+                Fancy Person
+              </h4>
+            </div>
+            <div class="card-description" data-test-card-description>Fancy Germaine</div>
+          </div>
+      `),
+      `${cardDefRefURL} embedded HTML is correct`,
+    );
+
+    assert.strictEqual(
+      false,
+      fittedHtml![cardDefRefURL].includes('id="ember'),
+      `${cardDefRefURL} fitted HTML does not include ember ID's`,
     );
   });
 
@@ -2884,8 +3055,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
                 { id: mangoID },
                 {
                   id: vanGoghID,
-                  firstName: 'Van Gogh',
-                  friends: [{ id: hassanID }],
                 },
               ],
             },
@@ -3051,6 +3220,12 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         'http://localhost:4202/test/person',
         'https://cardstack.com/base/card-api',
         'https://cardstack.com/base/contains-many-component',
+        'https://cardstack.com/base/default-templates/atom',
+        'https://cardstack.com/base/default-templates/embedded',
+        'https://cardstack.com/base/default-templates/field-edit',
+        'https://cardstack.com/base/default-templates/fitted',
+        'https://cardstack.com/base/default-templates/isolated-and-edit',
+        'https://cardstack.com/base/default-templates/missing-embedded',
         'https://cardstack.com/base/field-component',
         'https://cardstack.com/base/links-to-editor',
         'https://cardstack.com/base/links-to-many-component',

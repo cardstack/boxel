@@ -112,7 +112,7 @@ export default class PillMenu extends Component<Signature> {
         {{/if}}
       {{/if}}
     </div>
-    <style>
+    <style scoped>
       .pill-menu {
         --pill-menu-spacing: var(--boxel-pill-menu-spacing, var(--boxel-sp-xs));
         --boxel-header-padding: 0 0 0 var(--pill-menu-spacing);

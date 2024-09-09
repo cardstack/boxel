@@ -45,7 +45,7 @@ In order to run the ember-cli hosted app:
 1. `pnpm build` in the boxel-ui/addon workspace to build the boxel-ui addon.
 2. `pnpm build` in the boxel-motion/addon workspace to build the boxel-motion addon.
 3. `pnpm start` in the host/ workspace to serve the ember app. Note that this script includes the environment variable `OWN_REALM_URL=http://localhost:4201/experiments/` which configures the host to point to the experiments realm's cards realm by default.
-4. `pnpm start:all` in the realm-server/ to serve the base and experiments realms -- this will also allow you to switch between the app and the tests without having to restart servers)
+4. `pnpm start:all` in the realm-server/ to serve the base and experiments realms -- this will also allow you to switch between the app and the tests without having to restart servers). This expects the Ember application to be running at `http://localhost:4200`, if you’re running it elsewhere you can specify it with `HOST_URL=http://localhost:5200 pnpm start:all`.
 
 The app is available at http://localhost:4200. It will serve the experiments realm (configurable with OWN_REALM_URL, as mentioned above). You can open the base and experiments cards workspace directly by entering http://localhost:4201/base or http://localhost:4201/experiments in the browser.
 
@@ -79,7 +79,6 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 | :4202 | `/test` host test realm, `/node-test` node test realm     | ✅                  | 🚫                   |
 | :4203 | `root (/)` base realm                                     | ✅                  | 🚫                   |
 | :4204 | `root (/)` experiments realm                              | ✅                  | 🚫                   |
-| :4205 | qunit server mounting realms in iframes for testing       | ✅                  | 🚫                   |
 | :5001 | Mail user interface for viewing emails sent to local SMTP | ✅                  | 🚫                   |
 | :5435 | Postgres DB                                               | ✅                  | 🚫                   |
 | :8008 | Matrix synapse server                                     | ✅                  | 🚫                   |
@@ -248,14 +247,6 @@ To run the `packages/realm-server/` workspace tests start:
 
 1. `pnpm start:all` in the `packages/realm-server/` to serve _both_ the base realm and the realm that serves the test cards for node.
 2. Run `pnpm test` in the `packages/realm-server/` workspace to run the realm node tests
-
-### Realm Server DOM tests
-
-This test suite contains acceptance tests for asserting that the Realm server is capable of hosting its own app. To run these tests in the browser execute the following in the `packages/realm-server` workspace:
-
-1. `pnpm start:all`
-
-Visit `http://localhost:4205` after the realms have finished starting up
 
 ### Boxel UI
 

@@ -50,7 +50,7 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
     />
   {{/if}}
 
-  <style>
+  <style scoped>
     .add-button {
       --icon-bg: var(--boxel-light-100);
       --icon-border: var(--icon-bg);

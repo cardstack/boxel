@@ -70,7 +70,7 @@ const SchemaEditorTitle: TemplateOnlyComponent<TitleSignature> = <template>
     </div>
   {{/if}}
 
-  <style>
+  <style scoped>
     .syntax-error {
       margin-left: auto;
       color: var(--boxel-400);
@@ -134,7 +134,7 @@ export default class SchemaEditor extends Component<Signature> {
   }
 
   <template>
-    <style>
+    <style scoped>
       .loading {
         display: flex;
         justify-content: center;

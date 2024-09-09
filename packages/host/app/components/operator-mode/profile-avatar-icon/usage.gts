@@ -81,7 +81,7 @@ export default class ProfileAvatarIconVisualUsage extends Component {
         />
       </:cssVars>
     </FreestyleUsage>
-    <style>
+    <style scoped>
       .example-container {
         background: var(--boxel-400);
         display: flex;

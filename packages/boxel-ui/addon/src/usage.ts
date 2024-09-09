@@ -5,10 +5,12 @@ import AccordionUsage from './components/accordion/usage.gts';
 import AddButtonUsage from './components/add-button/usage.gts';
 import ButtonUsage from './components/button/usage.gts';
 import CardContainerUsage from './components/card-container/usage.gts';
+import CardContentContainerUsage from './components/card-content-container/usage.gts';
 import CircleSpinnerUsage from './components/circle-spinner/usage.gts';
 import DropdownTriggerUsage from './components/dropdown/trigger/usage.gts';
 import DropdownUsage from './components/dropdown/usage.gts';
 import FieldContainerUsage from './components/field-container/usage.gts';
+import FilterListUsage from './components/filter-list/usage.gts';
 import GridContainerUsage from './components/grid-container/usage.gts';
 import HeaderUsage from './components/header/usage.gts';
 import IconButtonUsage from './components/icon-button/usage.gts';
@@ -18,6 +20,7 @@ import LoadingIndicatorUsage from './components/loading-indicator/usage.gts';
 import MenuUsage from './components/menu/usage.gts';
 import MessageUsage from './components/message/usage.gts';
 import ModalUsage from './components/modal/usage.gts';
+import PillUsage from './components/pill/usage.gts';
 import RadioInputUsage from './components/radio-input/usage.gts';
 import ResizablePanelGroupUsage from './components/resizable-panel-group/usage.gts';
 import SelectUsage from './components/select/usage.gts';
@@ -29,10 +32,12 @@ export const ALL_USAGE_COMPONENTS = [
   ['AddButton', AddButtonUsage],
   ['Button', ButtonUsage],
   ['CardContainer', CardContainerUsage],
+  ['CardContentContainer', CardContentContainerUsage],
   ['CircleSpinner', CircleSpinnerUsage],
   ['DropdownTrigger', DropdownTriggerUsage],
   ['Dropdown', DropdownUsage],
   ['FieldContainer', FieldContainerUsage],
+  ['FilterList', FilterListUsage],
   ['GridContainer', GridContainerUsage],
   ['Header', HeaderUsage],
   ['IconButton', IconButtonUsage],
@@ -42,6 +47,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['Menu', MenuUsage],
   ['Message', MessageUsage],
   ['Modal', ModalUsage],
+  ['Pill', PillUsage],
   ['RadioInput', RadioInputUsage],
   ['ResizablePanelGroup', ResizablePanelGroupUsage],
   ['Select', SelectUsage],

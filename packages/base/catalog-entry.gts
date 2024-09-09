@@ -69,9 +69,9 @@ export class CatalogEntry extends CardDef {
     </template>
   };
 
-  static embedded = class Embedded extends Component<typeof this> {
+  static fitted = class Fitted extends Component<typeof this> {
     <template>
-      <CatalogEntryContainer class='embedded'>
+      <CatalogEntryContainer class='fitted'>
         <header class='title'>
           <@fields.title />
         </header>
@@ -79,8 +79,8 @@ export class CatalogEntry extends CardDef {
           <@fields.description />
         </p>
       </CatalogEntryContainer>
-      <style>
-        .embedded > * {
+      <style scoped>
+        .fitted > * {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -118,7 +118,7 @@ export class CatalogEntry extends CardDef {
           <div data-test-demo><@fields.demo /></div>
         {{/if}}
       </CatalogEntryContainer>
-      <style>
+      <style scoped>
         .container {
           padding: var(--boxel-sp);
         }
@@ -143,7 +143,7 @@ class CatalogEntryContainer extends GlimmerComponent<Signature> {
     <div class='entry' ...attributes>
       {{yield}}
     </div>
-    <style>
+    <style scoped>
       .entry {
         display: grid;
         gap: 3px;

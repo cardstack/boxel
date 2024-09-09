@@ -1,18 +1,14 @@
 import Modifier from 'ember-modifier';
-import { action } from '@ember/object';
 import GlimmerComponent from '@glimmer/component';
-// @ts-ignore no types
-import cssUrl from 'ember-css-url';
-import { flatMap, merge, isEqual, startCase } from 'lodash';
+import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
-import { BoxelInput, FieldContainer } from '@cardstack/boxel-ui/components';
-import { cn, eq, not } from '@cardstack/boxel-ui/helpers';
-import { on } from '@ember/modifier';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { not } from '@cardstack/boxel-ui/helpers';
 import {
   getBoxComponent,
   type BoxComponent,
-  DefaultFormatConsumer,
+  DefaultFormatsConsumer,
 } from './field-component';
 import { getContainsManyComponent } from './contains-many-component';
 import { LinksToEditor } from './links-to-editor';
@@ -27,19 +23,16 @@ import {
   isNotLoadedError,
   CardError,
   CardContextName,
-  cardTypeDisplayName,
   NotLoaded,
   getField,
   isField,
   primitive,
   identifyCard,
-  isCardDef,
   isCardInstance as _isCardInstance,
   loadCard,
   humanReadable,
   maybeURL,
   maybeRelativeURL,
-  moduleFrom,
   trackCard,
   type Meta,
   type CardFields,
@@ -54,6 +47,12 @@ import {
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
+import DefaultFittedTemplate from './default-templates/fitted';
+import DefaultEmbeddedTemplate from './default-templates/embedded';
+import DefaultCardDefTemplate from './default-templates/isolated-and-edit';
+import DefaultAtomViewTemplate from './default-templates/atom';
+import MissingEmbeddedTemplate from './default-templates/missing-embedded';
+import FieldDefEditTemplate from './default-templates/field-edit';
 
 export { primitive, isField, type BoxComponent };
 export const serialize = Symbol.for('cardstack-serialize');
@@ -89,10 +88,19 @@ export type FieldsTypeFor<T extends BaseDef> = {
       ? FieldsTypeFor<T[Field]>
       : unknown);
 };
-export const formats: Format[] = ['isolated', 'embedded', 'edit', 'atom'];
-export type Format = 'isolated' | 'embedded' | 'edit' | 'atom';
+export const formats: Format[] = [
+  'isolated',
+  'embedded',
+  'fitted',
+  'edit',
+  'atom',
+];
+export type Format = 'isolated' | 'embedded' | 'fitted' | 'edit' | 'atom';
 export type FieldType = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
-
+export type FieldFormats = {
+  ['fieldDef']: Format;
+  ['cardDef']: Format;
+};
 type Setter = (value: any) => void;
 
 interface Options {
@@ -116,13 +124,15 @@ export interface CardContext {
   cardComponentModifier?: typeof Modifier<{
     Args: {
       Named: {
-        card: CardDef;
+        card?: CardDef;
+        cardId?: string;
         format: Format | 'data';
         fieldType: FieldType | undefined;
         fieldName: string | undefined;
       };
     };
   }>;
+  prerenderedCardSearchComponent: any;
 }
 
 function isNotLoadedValue(val: any): val is NotLoadedValue {
@@ -1074,22 +1084,28 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       return (format ?? defaultFormat) === 'edit' && !isComputed;
     }
     return class LinksToComponent extends GlimmerComponent<{
+      Element: HTMLElement;
       Args: { Named: { format?: Format; displayContainer?: boolean } };
       Blocks: {};
     }> {
       <template>
-        <DefaultFormatConsumer as |defaultFormat|>
-          {{#if (shouldRenderEditor @format defaultFormat isComputed)}}
-            <LinksToEditor @model={{(getInnerModel)}} @field={{linksToField}} />
+        <DefaultFormatsConsumer as |defaultFormats|>
+          {{#if (shouldRenderEditor @format defaultFormats.cardDef isComputed)}}
+            <LinksToEditor
+              @model={{(getInnerModel)}}
+              @field={{linksToField}}
+              ...attributes
+            />
           {{else}}
             {{#let (fieldComponent linksToField model) as |FieldComponent|}}
               <FieldComponent
                 @format={{@format}}
                 @displayContainer={{@displayContainer}}
+                ...attributes
               />
             {{/let}}
           {{/if}}
-        </DefaultFormatConsumer>
+        </DefaultFormatsConsumer>
       </template>
     };
   }
@@ -1757,505 +1773,6 @@ export function isCompoundField(card: any) {
   );
 }
 
-class DefaultCardDefTemplate extends GlimmerComponent<{
-  Args: {
-    model: CardDef;
-    fields: Record<string, new () => GlimmerComponent>;
-    format: Format;
-  };
-}> {
-  <template>
-    <div class={{cn 'default-card-template' @format}}>
-      {{#each-in @fields as |key Field|}}
-        {{#unless (eq key 'id')}}
-          <FieldContainer
-            {{! @glint-ignore (glint is arriving at an incorrect type signature for 'startCase') }}
-            @label={{startCase key}}
-            data-test-field={{key}}
-          >
-            <Field />
-          </FieldContainer>
-        {{/unless}}
-      {{/each-in}}
-    </div>
-    <style>
-      .default-card-template {
-        display: grid;
-        gap: var(--boxel-sp-lg);
-        padding: var(--boxel-sp-xl);
-      }
-      /* this aligns edit fields with containsMany, linksTo, and linksToMany fields */
-      .default-card-template.edit
-        > .boxel-field
-        > :deep(
-          *:nth-child(2):not(.links-to-many-editor):not(
-              .contains-many-editor
-            ):not(.links-to-editor)
-        ) {
-        padding-right: var(--boxel-icon-lg);
-      }
-    </style>
-  </template>
-}
-
-class DefaultEmbeddedTemplate extends GlimmerComponent<{
-  Args: {
-    cardOrField: typeof BaseDef;
-    model: CardDef;
-    fields: Record<string, new () => GlimmerComponent>;
-    context?: CardContext;
-  };
-}> {
-  <template>
-    <div class='embedded-template'>
-      {{#if @model}}
-        <div class='thumbnail-section'>
-          <div
-            class='card-thumbnail'
-            style={{cssUrl 'background-image' @model.thumbnailURL}}
-          >
-            {{#unless @model.thumbnailURL}}
-              <div
-                class='card-thumbnail-text'
-                data-test-card-thumbnail-text
-              >{{cardTypeDisplayName @model}}</div>
-            {{/unless}}
-          </div>
-        </div>
-        <div class='info-section'>
-          <h3 class='card-title' data-test-card-title>{{@model.title}}</h3>
-          <h4 class='card-display-name' data-test-card-display-name>
-            {{cardTypeDisplayName @model}}
-          </h4>
-        </div>
-        <div
-          class='card-description'
-          data-test-card-description
-        >{{@model.description}}</div>
-      {{else}}
-        {{! empty links-to field }}
-        <div data-test-empty-field class='empty-field'></div>
-      {{/if}}
-    </div>
-    <style>
-      .embedded-template {
-        width: 100%;
-        height: 100%;
-        display: flex;
-      }
-
-      /* Aspect Ratio <= 1.0 */
-
-      @container embedded-card (aspect-ratio <= 1.0) {
-        .embedded-template {
-          align-content: flex-start;
-          justify-content: center;
-          padding: 10px;
-          flex-wrap: wrap;
-        }
-        .card-title {
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-          text-align: center;
-          margin: 10px 0 0 0;
-        }
-        .card-display-name {
-          text-align: center;
-          margin: var(--boxel-sp-xxs) 0 0 0;
-        }
-        .card-description {
-          display: none;
-        }
-        .thumbnail-section {
-          width: 100%;
-        }
-        .info-section {
-          width: 100%;
-        }
-      }
-      @container embedded-card (0.75 < aspect-ratio <= 1.0) {
-        .thumbnail-section {
-          /* 
-             64.35px is the computed height for the info section--at this particular
-             aspect ratio break-point the height is the dominant axis for which to
-             base the dimensions of the thumbnail
-          */
-          height: calc(100% - 64.35px);
-        }
-        .card-thumbnail {
-          height: 100%;
-        }
-      }
-      @container embedded-card (aspect-ratio <= 0.75) {
-        .card-thumbnail {
-          width: 100%;
-        }
-      }
-      @container embedded-card (aspect-ratio <= 1.0) and ((width < 150px) or (height < 150px)) {
-        .card-title {
-          font: 500 var(--boxel-font-xs);
-          line-height: 1.27;
-          letter-spacing: 0.11px;
-        }
-      }
-      @container embedded-card (aspect-ratio <= 1.0) and (150px <= width) and (150px <= height) {
-        .card-title {
-          font: 500 var(--boxel-font-sm);
-          line-height: 1.23;
-          letter-spacing: 0.13px;
-        }
-      }
-      @container embedded-card (aspect-ratio <= 1.0) and (118px < height) {
-        .thumbnail-section {
-          display: flex;
-        }
-      }
-      @container embedded-card (aspect-ratio <= 1.0) and (height <= 118px) {
-        .thumbnail-section {
-          display: none;
-        }
-      }
-
-      /* 1.0 < Aspect Ratio */
-
-      @container embedded-card (1.0 < aspect-ratio) and (77px < height) {
-        .card-title {
-          -webkit-line-clamp: 2;
-        }
-      }
-      @container embedded-card (1.0 < aspect-ratio) and (height <= 77px) {
-        .card-title {
-          -webkit-line-clamp: 1;
-        }
-      }
-      @container embedded-card (1.0 < aspect-ratio) and (width < 200px) {
-        .thumbnail-section {
-          display: none;
-        }
-        .card-title {
-          margin: 0;
-        }
-      }
-      @container embedded-card (1.0 < aspect-ratio) and (200px <= width) {
-        .card-title {
-          margin: 10px 0 0 0;
-        }
-      }
-
-      /* 1.0 < Aspect Ratio <= 2.0 */
-
-      @container embedded-card (1.0 < aspect-ratio <= 2.0) {
-        .embedded-template {
-          align-content: flex-start;
-          justify-content: center;
-          padding: 10px;
-          column-gap: 10px;
-        }
-        .card-title {
-          display: -webkit-box;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-          line-height: 1.25;
-          letter-spacing: 0.16px;
-        }
-        .card-display-name {
-          margin: var(--boxel-sp-xxs) 0 0 0;
-        }
-      }
-      @container embedded-card (1.0 < aspect-ratio <= 2.0) and (width < 200px) {
-        .thumbnail-section {
-          display: none;
-        }
-        .card-title {
-          margin: 0;
-          font: 500 var(--boxel-font-size-sm);
-        }
-      }
-      @container embedded-card (1.0 < aspect-ratio <= 2.0) and (200px <= width) {
-        .card-title {
-          margin: 10px 0 0 0;
-          font: 500 var(--boxel-font-size-med);
-        }
-      }
-      @container embedded-card (1.67 < aspect-ratio <= 2.0) {
-        .embedded-template {
-          flex-wrap: nowrap;
-        }
-        .thumbnail-section {
-          width: 100%;
-          height: 100%;
-        }
-        .info-section {
-          width: 100%;
-        }
-        .card-description {
-          display: none;
-        }
-        .card-thumbnail {
-          /* at this breakpoint, the dominant axis is the height for 
-             thumbnail 1:1 aspect ratio calculations 
-          */
-          height: 100%;
-        }
-      }
-      @container embedded-card (1.0 < aspect-ratio <= 1.67) {
-        .embedded-template {
-          flex-wrap: wrap;
-        }
-        .thumbnail-section {
-          flex: 1 auto;
-          max-width: 50%;
-          /* 24px is the computed height for the card description */
-          height: calc(100% - 24px);
-        }
-        .info-section {
-          flex: 1 auto;
-          max-width: 50%;
-        }
-        .card-description {
-          display: -webkit-box;
-          flex: 1 100%;
-        }
-        .card-thumbnail {
-          /* at this breakpoint, the dominant axis is the width for 
-             thumbnail 1:1 aspect ratio calculations 
-          */
-          width: 100%;
-        }
-      }
-
-      /* Aspect Ratio < 2.0 */
-
-      @container embedded-card (2.0 < aspect-ratio) {
-        .embedded-template {
-          justify-content: center;
-          padding: 10px;
-          column-gap: 10px;
-          flex-wrap: nowrap;
-        }
-        .card-title {
-          display: -webkit-box;
-          -webkit-box-orient: vertical;
-          -webkit-line-clamp: 1;
-          overflow: hidden;
-          line-height: 1.25;
-          letter-spacing: 0.16px;
-          font: 500 var(--boxel-font-size-med);
-          margin: 0;
-        }
-        .card-display-name {
-          margin: var(--boxel-sp-4xs) 0 0 0;
-        }
-        .thumbnail-section {
-          flex: 1;
-        }
-        .info-section {
-          flex: 4;
-        }
-        .card-description {
-          display: none;
-        }
-      }
-      @container embedded-card (2.0 < aspect-ratio) and (height <= 57px) {
-        .embedded-template {
-          padding: 6px;
-        }
-        .thumbnail-section {
-          display: none;
-        }
-        .card-title {
-          margin: 0;
-        }
-        .card-display-name {
-          display: none;
-        }
-      }
-
-      .default-embedded-template > *,
-      .card-thumbnail-text {
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-      }
-      .card-thumbnail {
-        display: flex;
-        aspect-ratio: 1 / 1;
-        align-items: center;
-        justify-content: center;
-        background-color: var(--boxel-teal);
-        background-position: center;
-        background-size: cover;
-        background-repeat: no-repeat;
-        color: var(--boxel-light);
-        font: 700 var(--boxel-font);
-        letter-spacing: var(--boxel-lsp);
-        border-radius: 6px;
-      }
-      .card-title {
-        text-overflow: ellipsis;
-      }
-      .card-display-name {
-        font: 500 var(--boxel-font-xs);
-        color: var(--boxel-450);
-        line-height: 1.27;
-        letter-spacing: 0.11px;
-        text-overflow: ellipsis;
-      }
-      .card-description {
-        margin: var(--boxel-sp-xxs) 0 0 0;
-        font: 500 var(--boxel-font-xs);
-        line-height: 1.27;
-        letter-spacing: 0.11px;
-        text-overflow: ellipsis;
-        -webkit-line-clamp: 1;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-      }
-      .thumbnail-section {
-        justify-content: center;
-      }
-    </style>
-  </template>
-}
-
-class MissingEmbeddedTemplate extends GlimmerComponent<{
-  Args: {
-    cardOrField: typeof BaseDef;
-    model: CardDef;
-    fields: Record<string, new () => GlimmerComponent>;
-    context?: CardContext;
-  };
-}> {
-  <template>
-    <div
-      class='missing-embedded-template
-        {{if (isCardDef @cardOrField) "card" "field"}}'
-    >
-      <span data-test-missing-embedded-template-text>Missing embedded component
-        for
-        {{if (isCardDef @cardOrField) 'CardDef' 'FieldDef'}}:
-        {{@cardOrField.displayName}}</span>
-      {{#if @context.actions.changeSubmode}}
-        <span
-          class='open-code-submode'
-          {{on 'click' this.openCodeSubmode}}
-          data-test-open-code-submode
-        >
-          Open In Code Mode
-        </span>
-      {{/if}}
-    </div>
-    <style>
-      .missing-embedded-template {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        gap: var(--boxel-sp-5xs);
-        box-sizing: border-box;
-        min-height: 3.75rem;
-        padding: var(--boxel-sp);
-        background-color: var(--boxel-100);
-        border: none;
-        border-radius: var(--boxel-form-control-border-radius);
-        color: var(--boxel-dark);
-        font: 700 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
-        transition: background-color var(--boxel-transition);
-      }
-      .card {
-        width: calc(100% + calc(2 * var(--boxel-sp)));
-        margin: calc(-1 * var(--boxel-sp));
-      }
-      .field {
-        width: 100%;
-        margin: 0;
-      }
-      .open-code-submode {
-        cursor: pointer;
-        color: var(--boxel-highlight);
-      }
-      .open-code-submode:hover {
-        text-decoration: underline;
-      }
-    </style>
-  </template>
-
-  @action
-  openCodeSubmode() {
-    let ref = identifyCard(this.args.cardOrField);
-    if (!ref) {
-      return;
-    }
-    let moduleId = moduleFrom(ref);
-    this.args.context?.actions?.changeSubmode(new URL(moduleId), 'code');
-  }
-}
-
-class DefaultAtomViewTemplate extends GlimmerComponent<{
-  Args: {
-    model: CardDef;
-    fields: Record<string, new () => GlimmerComponent>;
-  };
-}> {
-  get text() {
-    let title =
-      typeof this.args.model.title === 'string'
-        ? this.args.model.title.trim()
-        : null;
-
-    return title
-      ? title
-      : `Untitled ${this.args.model.constructor.displayName}`;
-  }
-  <template>
-    {{this.text}}
-  </template>
-}
-
-class FieldDefEditTemplate extends GlimmerComponent<{
-  Args: {
-    model: FieldDef;
-    fields: Record<string, new () => GlimmerComponent>;
-  };
-}> {
-  <template>
-    <div class='field-def-edit-template'>
-      {{#each-in @fields as |key Field|}}
-        {{#unless (eq key 'id')}}
-          <FieldContainer
-            {{! @glint-ignore (glint is arriving at an incorrect type signature for 'startCase') }}
-            @label={{startCase key}}
-            @vertical={{true}}
-            data-test-field={{key}}
-          >
-            <Field />
-          </FieldContainer>
-        {{/unless}}
-      {{/each-in}}
-    </div>
-    <style>
-      .field-def-edit-template {
-        display: grid;
-        gap: var(--boxel-sp-lg);
-      }
-      .field-def-edit-template :deep(.containsMany-field) {
-        padding: var(--boxel-sp-xs);
-        border: 1px solid var(--boxel-form-control-border-color);
-        border-radius: var(--boxel-form-control-border-radius);
-      }
-      .field-def-edit-template :deep(.containsMany-field.empty::after) {
-        display: block;
-        content: 'None';
-        color: var(--boxel-450);
-      }
-    </style>
-  </template>
-}
-
 export class Component<
   CardT extends BaseDefConstructor,
 > extends GlimmerComponent<SignatureFor<CardT>> {}
@@ -2378,6 +1895,7 @@ export class CardDef extends BaseDef {
   }
 
   static embedded: BaseDefComponent = DefaultEmbeddedTemplate;
+  static fitted: BaseDefComponent = DefaultFittedTemplate;
   static isolated: BaseDefComponent = DefaultCardDefTemplate;
   static edit: BaseDefComponent = DefaultCardDefTemplate;
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
@@ -3079,7 +2597,11 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
   return instance;
 }
 
-export function setCardAsSavedForTest(instance: CardDef): void {
+export function setCardAsSavedForTest(instance: CardDef, id?: string): void {
+  if (id != null) {
+    let deserialized = getDataBucket(instance);
+    deserialized.set('id', id);
+  }
   instance[isSavedInstance] = true;
 }
 

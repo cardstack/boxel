@@ -44,7 +44,7 @@ export default class Handle extends Component<Signature> {
         data-test-resize-handle
       ><div class={{this.arrowResizeHandleClass}} /></button>
     </div>
-    <style>
+    <style scoped>
       .separator-horizontal {
         display: flex;
         align-items: center;

@@ -12,25 +12,23 @@ NODE_ENV=test \
   PGDATABASE=boxel_test \
   NODE_NO_WARNINGS=1 \
   REALM_SECRET_SEED="shhh! it's a secret" \
+  MATRIX_URL=http://localhost:8008 \
+  REALM_SERVER_MATRIX_USERNAME=realm_server \
+  REALM_SERVER_MATRIX_PASSWORD=password \
   PGPORT="5435" \
   ts-node \
   --transpileOnly main \
   --port=4202 \
+  --matrixURL='http://localhost:8008' \
   \
   --path='./tests/cards' \
-  --matrixURL='http://localhost:8008' \
   --username='node-test_realm' \
-  --password='password' \
   --fromUrl='/node-test/' \
   --toUrl='/node-test/' \
   \
   --path='../host/tests/cards' \
-  --matrixURL='http://localhost:8008' \
   --username='test_realm' \
-  --password='password' \
   --fromUrl='/test/' \
   --toUrl='/test/' \
   --fromUrl='https://cardstack.com/base/' \
-  --toUrl='http://localhost:4201/base/' \
-  \
-  --useTestingDomain
+  --toUrl='http://localhost:4201/base/'

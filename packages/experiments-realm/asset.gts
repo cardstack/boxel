@@ -31,11 +31,16 @@ export class Asset extends CardDef {
     <template>
       <div class='asset-card'>
         {{#if @model.logoURL}}
-          <img src={{@model.logoHref}} width='20' height='20' />
+          <img
+            src={{@model.logoHref}}
+            width='20'
+            height='20'
+            aria-hidden='true'
+          />
         {{/if}}
         <div class='currency'><@fields.symbol /></div>
       </div>
-      <style>
+      <style scoped>
         .asset-card {
           display: inline-grid;
           grid-template-columns: var(--boxel-sp) 1fr;
@@ -53,11 +58,16 @@ export class Asset extends CardDef {
     <template>
       <span>
         {{#if @model.logoURL}}
-          <img src={{@model.logoHref}} width='20' height='20' />
+          <img
+            src={{@model.logoHref}}
+            width='20'
+            height='20'
+            aria-hidden='true'
+          />
         {{/if}}
         {{@model.title}}
       </span>
-      <style>
+      <style scoped>
         img {
           vertical-align: middle;
           margin-right: var(--boxel-sp-xxxs);
@@ -89,11 +99,16 @@ class AssetField extends FieldDef {
     <template>
       <div class='asset-card'>
         {{#if @model.logoURL}}
-          <img src={{@model.logoHref}} width='20' height='20' />
+          <img
+            src={{@model.logoHref}}
+            width='20'
+            height='20'
+            aria-hidden='true'
+          />
         {{/if}}
         <div class='currency'><@fields.symbol /></div>
       </div>
-      <style>
+      <style scoped>
         .asset-card {
           display: inline-grid;
           grid-template-columns: var(--boxel-sp) 1fr;

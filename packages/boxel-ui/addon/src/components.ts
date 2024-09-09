@@ -3,9 +3,13 @@ import AddButton from './components/add-button/index.gts';
 import Button from './components/button/index.gts';
 import BoxelButton from './components/button/index.gts';
 import CardContainer from './components/card-container/index.gts';
+import CardContentContainer from './components/card-content-container/index.gts';
 import CircleSpinner from './components/circle-spinner/index.gts';
-import BoxelDropdown from './components/dropdown/index.gts';
+import BoxelDropdown, {
+  type DropdownAPI as BoxelDropdownAPI,
+} from './components/dropdown/index.gts';
 import FieldContainer from './components/field-container/index.gts';
+import FilterList, { type Filter } from './components/filter-list/index.gts';
 import GridContainer from './components/grid-container/index.gts';
 import BoxelHeader from './components/header/index.gts';
 import Header from './components/header/index.gts';
@@ -23,6 +27,7 @@ import Menu from './components/menu/index.gts';
 import BoxelMessage from './components/message/index.gts';
 import Message from './components/message/index.gts';
 import Modal from './components/modal/index.gts';
+import Pill from './components/pill/index.gts';
 import RadioInput from './components/radio-input/index.gts';
 import ResizablePanelGroup, {
   ResizablePanel,
@@ -37,6 +42,7 @@ export {
   AddButton,
   BoxelButton,
   BoxelDropdown,
+  BoxelDropdownAPI,
   BoxelHeader,
   BoxelInput,
   BoxelInputBottomTreatment,
@@ -48,8 +54,11 @@ export {
   BoxelSelect,
   Button,
   CardContainer,
+  CardContentContainer,
   CircleSpinner,
   FieldContainer,
+  Filter,
+  FilterList,
   GridContainer,
   Header,
   IconButton,
@@ -58,6 +67,7 @@ export {
   Menu,
   Message,
   Modal,
+  Pill,
   RadioInput,
   ResizablePanel,
   ResizablePanelGroup,

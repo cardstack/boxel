@@ -2,10 +2,10 @@ import Service, { service } from '@ember/service';
 
 import { stringify } from 'qs';
 
+import { TrackedArray } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
-  baseRealm,
   SupportedMimeType,
   type LooseCardResource,
   isSingleCardDocument,
@@ -33,7 +33,7 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
-import { trackCard, getCard } from '../resources/card-resource';
+import { trackCard } from '../resources/card-resource';
 
 import type LoaderService from './loader-service';
 
@@ -42,7 +42,7 @@ export type CardSaveSubscriber = (
   content: SingleCardDocument | string,
 ) => void;
 
-const { ownRealmURL, otherRealmURLs, environment } = ENV;
+const { ownRealmURL, testRealmURLs, environment } = ENV;
 
 export default class CardService extends Service {
   @service private declare loaderService: LoaderService;
@@ -67,9 +67,8 @@ export default class CardService extends Service {
     return this.loaderToCardAPILoadingCache.get(loader)!;
   }
 
-  // This is temporary until we have a better way of discovering the realms that
-  // are available for a user // unresolved URLs
-  realmURLs = [...new Set([ownRealmURL, baseRealm.url, ...otherRealmURLs])];
+  // TODO remove in a followup PR for CS-7036
+  realmURLs = new TrackedArray<string>(testRealmURLs);
 
   // Note that this should be the unresolved URL and that we need to rely on our
   // fetch to do any URL resolution.
@@ -83,6 +82,20 @@ export default class CardService extends Service {
 
   unregisterSaveSubscriber() {
     this.subscriber = undefined;
+  }
+
+  setRealms(realms: string[]) {
+    realms.forEach((realm) => {
+      if (!this.realmURLs.includes(realm)) {
+        this.realmURLs.push(realm);
+      }
+    });
+
+    this.realmURLs.forEach((realm) => {
+      if (!realms.includes(realm)) {
+        this.realmURLs.splice(this.realmURLs.indexOf(realm), 1);
+      }
+    });
   }
 
   async fetchJSON(
@@ -282,12 +295,23 @@ export default class CardService extends Service {
       return;
     }
     let id = rel.links.self;
-    let cardResource = getCard(this, () => new URL(id, relativeTo).href);
-    await cardResource.loaded;
-    if (!cardResource.card && cardResource.cardError) {
-      throw cardResource.cardError;
+    let card = await this.getCard(new URL(id, relativeTo).href);
+    return card;
+  }
+
+  async getCard(url: URL | string): Promise<CardDef | undefined> {
+    if (typeof url === 'string') {
+      url = new URL(url);
     }
-    return cardResource.card;
+    let json = await this.fetchJSON(url);
+    if (!isSingleCardDocument(json)) {
+      throw new Error(
+        `bug: server returned a non card document for ${url}:
+      ${JSON.stringify(json, null, 2)}`,
+      );
+    }
+    let card = await this.createFromSerialized(json.data, json, url);
+    return card;
   }
 
   private async loadPatchedCards(

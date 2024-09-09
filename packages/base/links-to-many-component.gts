@@ -13,7 +13,7 @@ import {
 } from './card-api';
 import {
   BoxComponentSignature,
-  DefaultFormatConsumer,
+  DefaultFormatsConsumer,
   PermissionsConsumer,
   getBoxComponent,
 } from './field-component';
@@ -41,6 +41,7 @@ import {
 import { action } from '@ember/object';
 
 interface Signature {
+  Element: HTMLElement;
   Args: {
     model: Box<CardDef>;
     arrayField: Box<CardDef[]>;
@@ -49,7 +50,7 @@ interface Signature {
       field: Field<typeof BaseDef>,
       boxedElement: Box<BaseDef>,
     ): typeof BaseDef;
-    childFormat: 'atom' | 'embedded';
+    childFormat: 'atom' | 'fitted';
   };
 }
 
@@ -66,6 +67,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
           @cardTypeFor={{@cardTypeFor}}
           @add={{this.add}}
           @remove={{this.remove}}
+          ...attributes
         />
       {{else}}
         <LinksToManyStandardEditor
@@ -75,6 +77,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
           @cardTypeFor={{@cardTypeFor}}
           @add={{this.add}}
           @remove={{this.remove}}
+          ...attributes
         />
       {{/if}}
     </div>
@@ -113,6 +116,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
 }
 
 interface LinksToManyStandardEditorSignature {
+  Element: HTMLElement;
   Args: {
     model: Box<CardDef>;
     arrayField: Box<CardDef[]>;
@@ -137,7 +141,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
   <template>
     <PermissionsConsumer as |permissions|>
       {{#if @arrayField.children.length}}
-        <ul class='list' {{sortableGroup onChange=(fn this.setItems)}}>
+        <ul class='list' {{sortableGroup onChange=this.setItems}} ...attributes>
           {{#each @arrayField.children as |boxedElement i|}}
             <li
               class='editor'
@@ -170,13 +174,11 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
               {{/if}}
               {{#let
                 (getBoxComponent
-                  (this.args.cardTypeFor @field boxedElement)
-                  boxedElement
-                  @field
+                  (@cardTypeFor @field boxedElement) boxedElement @field
                 )
                 as |Item|
               }}
-                <Item @format='embedded' />
+                <Item @format='fitted' />
               {{/let}}
             </li>
           {{/each}}
@@ -195,7 +197,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         </AddButton>
       {{/if}}
     </PermissionsConsumer>
-    <style>
+    <style scoped>
       .list {
         list-style: none;
         padding: 0;
@@ -209,7 +211,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         display: grid;
         grid-template-columns: 1fr var(--boxel-icon-lg);
       }
-      .editor > :deep(.boxel-card-container.embedded-format) {
+      .editor > :deep(.boxel-card-container.fitted-format) {
         order: -1;
       }
       .remove {
@@ -222,8 +224,8 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         --icon-bg: var(--boxel-dark);
         --icon-border: var(--boxel-dark);
       }
-      .remove:focus + :deep(.boxel-card-container.embedded-format),
-      .remove:hover + :deep(.boxel-card-container.embedded-format) {
+      .remove:focus + :deep(.boxel-card-container.fitted-format),
+      .remove:hover + :deep(.boxel-card-container.fitted-format) {
         box-shadow:
           0 0 0 1px var(--boxel-light-500),
           var(--boxel-box-shadow-hover);
@@ -254,6 +256,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
 }
 
 interface LinksToManyCompactEditorSignature {
+  Element: HTMLElement;
   Args: {
     model: Box<CardDef>;
     arrayField: Box<CardDef[]>;
@@ -270,11 +273,11 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
   @consume(CardContextName) declare cardContext: CardContext;
 
   <template>
-    <div class='boxel-pills' data-test-pills>
+    <div class='boxel-pills' data-test-pills ...attributes>
       {{#each @arrayField.children as |boxedElement i|}}
         {{#let
           (getBoxComponent
-            (this.args.cardTypeFor @field boxedElement) boxedElement @field
+            (@cardTypeFor @field boxedElement) boxedElement @field
           )
           as |Item|
         }}
@@ -308,7 +311,7 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
         {{@field.card.displayName}}
       </AddButton>
     </div>
-    <style>
+    <style scoped>
       .boxel-pills {
         display: flex;
         flex-wrap: wrap;
@@ -358,7 +361,7 @@ function getEditorChildFormat(
   ) {
     return 'atom';
   }
-  return 'embedded';
+  return 'fitted';
 }
 
 function coalesce<T>(arg1: T | undefined, arg2: T): T {
@@ -394,35 +397,48 @@ export function getLinksToManyComponent({
   let isComputed = !!field.computeVia;
   let linksToManyComponent = class LinksToManyComponent extends GlimmerComponent<BoxComponentSignature> {
     <template>
-      <DefaultFormatConsumer as |defaultFormat|>
-        {{#if (shouldRenderEditor @format defaultFormat isComputed)}}
+      <DefaultFormatsConsumer as |defaultFormats|>
+        {{#if (shouldRenderEditor @format defaultFormats.cardDef isComputed)}}
           <LinksToManyEditor
             @model={{model}}
             @arrayField={{arrayField}}
             @field={{field}}
             @cardTypeFor={{cardTypeFor}}
-            @childFormat={{getEditorChildFormat @format defaultFormat model}}
+            @childFormat={{getEditorChildFormat
+              @format
+              defaultFormats.cardDef
+              model
+            }}
+            ...attributes
           />
         {{else}}
-          {{#let (coalesce @format defaultFormat) as |effectiveFormat|}}
+          {{#let
+            (coalesce @format defaultFormats.cardDef)
+            as |effectiveFormat|
+          }}
             <div
               class='plural-field linksToMany-field
                 {{effectiveFormat}}-effectiveFormat
                 {{unless arrayField.children.length "empty"}}'
               data-test-plural-view={{field.fieldType}}
               data-test-plural-view-format={{effectiveFormat}}
+              ...attributes
             >
               {{#each (getComponents) as |Item i|}}
-                <div data-test-plural-view-item={{i}}>
-                  <Item @format={{effectiveFormat}} />
-                </div>
+                <Item
+                  @format={{effectiveFormat}}
+                  class='linksToMany-item'
+                  data-test-plural-view-item={{i}}
+                />
               {{/each}}
             </div>
           {{/let}}
         {{/if}}
-      </DefaultFormatConsumer>
-      <style>
-        .linksToMany-field.embedded-effectiveFormat > div + div {
+      </DefaultFormatsConsumer>
+      <style scoped>
+        .linksToMany-field.fitted-effectiveFormat
+          > .linksToMany-item
+          + .linksToMany-item {
           margin-top: var(--boxel-sp);
         }
         .linksToMany-field.atom-effectiveFormat {

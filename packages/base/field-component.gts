@@ -11,10 +11,11 @@ import {
   isCard,
   isCompoundField,
   formats,
+  FieldFormats,
 } from './card-api';
 import {
   CardContextName,
-  DefaultFormatContextName,
+  DefaultFormatsContextName,
   PermissionsContextName,
   getField,
   Loader,
@@ -31,6 +32,7 @@ import { consume, provide } from 'ember-provide-consume-context';
 import Component from '@glimmer/component';
 
 export interface BoxComponentSignature {
+  Element: HTMLElement; // This may not be true for some field components, but it's true more often than not
   Args: { Named: { format?: Format; displayContainer?: boolean } };
   Blocks: {};
 }
@@ -65,29 +67,31 @@ export class CardContextConsumer extends Component<CardContextConsumerSignature>
 }
 
 interface DefaultFormatConsumerSignature {
-  Blocks: { default: [Format] };
+  Blocks: { default: [FieldFormats] };
 }
 
-export class DefaultFormatConsumer extends Component<DefaultFormatConsumerSignature> {
-  @consume(DefaultFormatContextName) declare defaultFormat: Format | undefined;
+export class DefaultFormatsConsumer extends Component<DefaultFormatConsumerSignature> {
+  @consume(DefaultFormatsContextName) declare defaultFormats:
+    | FieldFormats
+    | undefined;
 
-  get effectiveDefaultFormat(): Format {
-    return this.defaultFormat ?? 'isolated';
+  get effectiveDefaultFormats(): FieldFormats {
+    return this.defaultFormats ?? { cardDef: 'isolated', fieldDef: 'embedded' };
   }
 
   <template>
-    {{yield this.effectiveDefaultFormat}}
+    {{yield this.effectiveDefaultFormats}}
   </template>
 }
 
-interface DefaultFormatProviderSignature {
-  Args: { value: Format };
+interface DefaultFormatsProviderSignature {
+  Args: { value: FieldFormats };
   Blocks: { default: [] };
 }
 
-export class DefaultFormatProvider extends Component<DefaultFormatProviderSignature> {
-  @provide(DefaultFormatContextName)
-  get defaultFormat() {
+export class DefaultFormatsProvider extends Component<DefaultFormatsProviderSignature> {
+  @provide(DefaultFormatsContextName)
+  get defaultFormats() {
     return this.args.value;
   }
 }
@@ -121,26 +125,29 @@ export function getBoxComponent(
   if (stable) {
     return stable;
   }
-  function determineFormat(
+  function determineFormats(
     userFormat: Format | undefined,
-    defaultFormat: Format,
-  ): Format {
-    let format: Format;
+    defaultFormats: FieldFormats,
+  ): FieldFormats {
+    let result: FieldFormats;
     let availableFormats = formats;
-    let effectiveDefaultFormat = defaultFormat;
+    let effectiveDefaultFormats = { ...defaultFormats };
     if (field?.computeVia) {
       availableFormats = formats.filter(
         (f) => !['isolated', 'edit'].includes(f),
       );
-      if (!availableFormats.includes(effectiveDefaultFormat)) {
-        effectiveDefaultFormat = 'embedded';
+      if (!availableFormats.includes(effectiveDefaultFormats.fieldDef)) {
+        effectiveDefaultFormats.fieldDef = 'embedded';
+      }
+      if (!availableFormats.includes(effectiveDefaultFormats.cardDef)) {
+        effectiveDefaultFormats.cardDef = 'fitted';
       }
     }
-    format =
+    result =
       userFormat && availableFormats.includes(userFormat)
-        ? userFormat
-        : effectiveDefaultFormat;
-    return format;
+        ? { fieldDef: userFormat, cardDef: userFormat }
+        : effectiveDefaultFormats;
+    return result;
   }
 
   let internalFieldsCache:
@@ -189,50 +196,67 @@ export function getBoxComponent(
   }
 
   let component: TemplateOnlyComponent<{
+    Element: HTMLElement;
     Args: { format?: Format; displayContainer?: boolean };
   }> = <template>
     <CardContextConsumer as |context|>
       <PermissionsConsumer as |permissions|>
-        <DefaultFormatConsumer as |defaultFormat|>
-          {{#let (determineFormat @format defaultFormat) as |effectiveFormat|}}
+        <DefaultFormatsConsumer as |defaultFormats|>
+          {{#let
+            (determineFormats @format defaultFormats)
+            as |effectiveFormats|
+          }}
             {{#let
-              (lookupComponents effectiveFormat)
+              (lookupComponents
+                (if
+                  (isCard model.value)
+                  effectiveFormats.cardDef
+                  effectiveFormats.fieldDef
+                )
+              )
               (if (eq @displayContainer false) false true)
               as |c displayContainer|
             }}
-              <DefaultFormatProvider
-                @value={{defaultFieldFormat effectiveFormat}}
-              >
-                {{#if (isCard model.value)}}
-                  <CardContainer
-                    @displayBoundaries={{displayContainer}}
-                    class='field-component-card
-                      {{effectiveFormat}}-format display-container-{{displayContainer}}'
-                    {{context.cardComponentModifier
-                      card=model.value
-                      format=effectiveFormat
-                      fieldType=field.fieldType
-                      fieldName=field.name
-                    }}
-                    data-test-card-format={{effectiveFormat}}
-                    data-test-field-component-card
-                    {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
-                    ...attributes
+              {{#if (isCard model.value)}}
+                {{#let model.value as |card|}}
+                  <DefaultFormatsProvider
+                    @value={{defaultFieldFormats effectiveFormats.cardDef}}
                   >
-                    <c.CardOrFieldFormatComponent
-                      @cardOrField={{cardOrField}}
-                      @model={{model.value}}
-                      @fields={{c.fields}}
-                      @format={{effectiveFormat}}
-                      @set={{model.set}}
-                      @fieldName={{model.name}}
-                      @context={{context}}
-                      @canEdit={{permissions.canWrite}}
-                    />
-                  </CardContainer>
-                {{else if (isCompoundField model.value)}}
+                    <CardContainer
+                      @displayBoundaries={{displayContainer}}
+                      class='field-component-card
+                        {{effectiveFormats.cardDef}}-format display-container-{{displayContainer}}'
+                      {{context.cardComponentModifier
+                        card=card
+                        format=effectiveFormats.cardDef
+                        fieldType=field.fieldType
+                        fieldName=field.name
+                      }}
+                      data-test-card={{card.id}}
+                      data-test-card-format={{effectiveFormats.cardDef}}
+                      data-test-field-component-card
+                      {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
+                      ...attributes
+                    >
+                      <c.CardOrFieldFormatComponent
+                        @cardOrField={{cardOrField}}
+                        @model={{card}}
+                        @fields={{c.fields}}
+                        @format={{effectiveFormats.cardDef}}
+                        @set={{model.set}}
+                        @fieldName={{model.name}}
+                        @context={{context}}
+                        @canEdit={{permissions.canWrite}}
+                      />
+                    </CardContainer>
+                  </DefaultFormatsProvider>
+                {{/let}}
+              {{else if (isCompoundField model.value)}}
+                <DefaultFormatsProvider
+                  @value={{defaultFieldFormats effectiveFormats.fieldDef}}
+                >
                   <div
-                    data-test-compound-field-format={{effectiveFormat}}
+                    data-test-compound-field-format={{effectiveFormats.fieldDef}}
                     data-test-compound-field-component
                     {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
                     ...attributes
@@ -241,55 +265,72 @@ export function getBoxComponent(
                       @cardOrField={{cardOrField}}
                       @model={{model.value}}
                       @fields={{c.fields}}
-                      @format={{effectiveFormat}}
+                      @format={{effectiveFormats.fieldDef}}
                       @set={{model.set}}
                       @fieldName={{model.name}}
                       @context={{context}}
                       @canEdit={{permissions.canWrite}}
                     />
                   </div>
-                {{else}}
+                </DefaultFormatsProvider>
+              {{else}}
+                <DefaultFormatsProvider
+                  @value={{defaultFieldFormats effectiveFormats.fieldDef}}
+                >
                   <c.CardOrFieldFormatComponent
                     @cardOrField={{cardOrField}}
                     @model={{model.value}}
                     @fields={{c.fields}}
-                    @format={{effectiveFormat}}
+                    @format={{effectiveFormats.fieldDef}}
                     @set={{model.set}}
                     @fieldName={{model.name}}
                     @context={{context}}
                     @canEdit={{permissions.canWrite}}
+                    ...attributes
                   />
-                {{/if}}
-              </DefaultFormatProvider>
+                </DefaultFormatsProvider>
+              {{/if}}
             {{/let}}
           {{/let}}
-        </DefaultFormatConsumer>
+        </DefaultFormatsConsumer>
       </PermissionsConsumer>
     </CardContextConsumer>
-    <style>
+    <style scoped>
       .field-component-card.isolated-format {
         height: 100%;
       }
 
-      .field-component-card.embedded-format {
+      .field-component-card.fitted-format {
         /*
           The cards themselves need to be in charge of the styles within the card boundary
-          in order for the container queries to make sense--otherwise we need to do style 
-          math to figure out what the actual breakpoints are. please resist the urge to add 
+          in order for the container queries to make sense--otherwise we need to do style
+          math to figure out what the actual breakpoints are. please resist the urge to add
           padding or anything that alters the geometry inside of the card boundary.
 
           we need to use height 100% because the container query for embedded cards only
           works if we use up all the space horizontally and vertically that is available
           to the card since some of our queries are height queries
         */
-        height: 100%;
-        container-name: embedded-card;
+        height: 58px;
+        container-name: fitted-card;
         container-type: size;
         overflow: hidden;
       }
 
-      /* 
-        TODO: regarding the atom format styling below, we probably want to refactor to move 
+      .field-component-card.embedded-format {
+        /*
+          The cards themselves need to be in charge of the styles within the card boundary
+          in order for the container queries to make sense--otherwise we need to do style
+          math to figure out what the actual breakpoints are. please resist the urge to add
+          padding or anything that alters the geometry inside of the card boundary.
+        */
+        container-name: embedded-card;
+        container-type: inline-size;
+        overflow: hidden;
+      }
+
+      /*
+        TODO: regarding the atom format styling below, we probably want to refactor to move
         any styles that effect the inside of the card boundary into the CardDef's atom template
       */
       .field-component-card.atom-format {
@@ -319,15 +360,16 @@ export function getBoxComponent(
   return stable;
 }
 
-function defaultFieldFormat(format: Format): Format {
-  switch (format) {
+function defaultFieldFormats(containingFormat: Format): FieldFormats {
+  switch (containingFormat) {
     case 'edit':
-      return 'edit';
+      return { fieldDef: 'edit', cardDef: 'edit' };
     case 'isolated':
+    case 'fitted':
     case 'embedded':
-      return 'embedded';
+      return { fieldDef: 'embedded', cardDef: 'fitted' };
     case 'atom':
-      return 'atom';
+      return { fieldDef: 'atom', cardDef: 'atom' };
   }
 }
 

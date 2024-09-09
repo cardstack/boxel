@@ -25,12 +25,18 @@ export function fetcher(
       urlOrRequest instanceof Request
         ? urlOrRequest
         : new Request(urlOrRequest, init);
-    return buildNext(middlewareStack)(request);
+
+    let token = beginAsync();
+    try {
+      return responseWithWaiters(await buildNext(middlewareStack)(request));
+    } finally {
+      endAsync(token);
+    }
   };
   return instance;
 }
 
-export async function simulateNetworkBehaviors(
+async function simulateNetworkBehaviors(
   request: Request,
   result: Response,
   fetchImplementation: typeof fetch, // argument purposively not named `fetch` to avoid shadowing the global fetch
@@ -60,4 +66,52 @@ export async function simulateNetworkBehaviors(
     }
   }
   return result;
+}
+
+const asyncMethods = ['text', 'json', 'arrayBuffer', 'blob', 'formData'];
+
+function responseWithWaiters(response: Response): Response {
+  return new Proxy(response, {
+    get(target, key) {
+      let value = Reflect.get(target, key);
+      if (typeof key === 'string' && typeof value === 'function') {
+        // the Response methods are picky about their `this`, it cannot be
+        // the Proxy.
+        value = value.bind(target);
+      }
+      if (typeof key === 'string' && asyncMethods.includes(key)) {
+        return async (...args: unknown[]) => {
+          return waitForPromise(value(...args), 'fetcher-body');
+        };
+      }
+      return value;
+    },
+  });
+}
+
+let waitForPromise: Waiters['waitForPromise'] = (p) => {
+  return p;
+};
+
+let beginAsync = (): unknown => {
+  return 'token';
+};
+
+let endAsync = (_token: unknown): void => {
+  // pass
+};
+
+export interface Waiters {
+  buildWaiter(label: string): {
+    beginAsync(): unknown;
+    endAsync(token: unknown): void;
+  };
+  waitForPromise<T>(promise: Promise<T>, label?: string): Promise<T>;
+}
+
+export function useTestWaiters(w: Waiters) {
+  ({ waitForPromise } = w);
+  let waiter = w.buildWaiter('fetcher');
+  beginAsync = waiter.beginAsync.bind(waiter);
+  endAsync = waiter.endAsync.bind(waiter);
 }

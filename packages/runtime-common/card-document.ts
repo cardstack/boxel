@@ -1,6 +1,7 @@
 import { type CodeRef, isCodeRef } from './code-ref';
 import { RealmInfo } from './realm';
 import { QueryResultsMeta, PrerenderedCard } from './index-query-engine';
+import { type CardTypeSummary } from './index-structure';
 
 export type Saved = string;
 export type Unsaved = string | undefined;
@@ -51,6 +52,11 @@ export interface SingleCardDocument<Identity extends Unsaved = Saved> {
 export interface CardCollectionDocument<Identity extends Unsaved = Saved> {
   data: CardResource<Identity>[];
   included?: CardResource<Saved>[];
+}
+
+export interface PrerenderedCardCollectionDocument {
+  data: PrerenderedCardResource[];
+  meta: QueryResultsMeta & { scopedCssUrls?: string[] };
 }
 
 export type CardDocument = SingleCardDocument | CardCollectionDocument;
@@ -243,6 +249,57 @@ export function isCardCollectionDocument(
   return data.every((resource) => isCardResource(resource));
 }
 
+export function isPrerenderedCardCollectionDocument(
+  doc: any,
+): doc is PrerenderedCardCollectionDocument {
+  if (typeof doc !== 'object' || doc == null) {
+    return false;
+  }
+  if (!('data' in doc) || !('meta' in doc)) {
+    return false;
+  }
+  let { data } = doc;
+  if (!Array.isArray(data)) {
+    return false;
+  }
+  return data.every((resource) => isPrerenderedCardResource(resource));
+}
+
+export interface PrerenderedCardResource {
+  id: string;
+  type: 'prerendered-card';
+  attributes: {
+    html: string;
+  };
+  relationships: {
+    'prerendered-card-css': {
+      data: { id: string }[];
+    };
+  };
+  meta: Meta & {};
+  links?: {
+    self?: string;
+  };
+}
+
+export function isPrerenderedCardResource(
+  resource: any,
+): resource is PrerenderedCardResource {
+  if (typeof resource !== 'object' || resource == null) {
+    return false;
+  }
+  if ('id' in resource && typeof resource.id !== 'string') {
+    return false;
+  }
+  if ('type' in resource && resource.type !== 'prerendered-card') {
+    return false;
+  }
+  if ('attributes' in resource && typeof resource.attributes !== 'object') {
+    return false;
+  }
+  return true;
+}
+
 function isIncluded(included: any): included is CardResource<Saved>[] {
   if (!Array.isArray(included)) {
     return false;
@@ -282,4 +339,17 @@ export function transformResultsToPrerenderedCardsDoc(results: {
     data,
     meta,
   };
+}
+
+export function makeCardTypeSummaryDoc(summaries: CardTypeSummary[]) {
+  let data = summaries.map((summary) => ({
+    type: 'card-type-summary',
+    id: summary.code_ref,
+    attributes: {
+      displayName: summary.display_name,
+      total: summary.total,
+    },
+  }));
+
+  return { data };
 }

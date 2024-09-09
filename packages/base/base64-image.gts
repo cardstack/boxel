@@ -139,7 +139,7 @@ class Edit extends Component<typeof Base64ImageField> {
       </FieldContainer>
     </div>
 
-    <style>
+    <style scoped>
       .base64-edit {
         display: grid;
         gap: var(--boxel-sp-lg);
@@ -232,7 +232,7 @@ class ImageSizeField extends FieldDef {
           </item.component>
         </RadioInput>
       </div>
-      <style></style>
+      <style scoped></style>
     </template>
 
     private radioGroup = `__cardstack_img_size${groupNumber++}__`;
@@ -272,7 +272,7 @@ function getConstrainedImageSize(maxHeight: number) {
         >
         </div>
       {{/if}}
-      <style>
+      <style scoped>
         .preview {
           background-repeat: no-repeat;
           background-position: center;
@@ -324,7 +324,7 @@ export class Base64ImageField extends FieldDef {
           </div>
         {{/if}}
       {{/if}}
-      <style>
+      <style scoped>
         .preview {
           background-repeat: no-repeat;
           background-position: center;

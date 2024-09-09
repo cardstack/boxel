@@ -6,10 +6,14 @@ import {
   type SynapseInstance,
   sync,
 } from '../docker/synapse';
+import { realmPassword } from './realm-credentials';
 import { registerUser } from '../docker/synapse';
+
 export const testHost = 'http://localhost:4202/test';
 export const mailHost = 'http://localhost:5001';
 export const initialRoomName = 'New AI Assistant Chat';
+
+const realmSecretSeed = "shhh! it's a secret";
 
 interface ProfileAssertions {
   userId?: string;
@@ -24,10 +28,26 @@ interface LoginOptions {
 }
 
 export async function registerRealmUsers(synapse: SynapseInstance) {
-  await registerUser(synapse, 'base_realm', 'password');
-  await registerUser(synapse, 'experiments_realm', 'password');
-  await registerUser(synapse, 'test_realm', 'password');
-  await registerUser(synapse, 'node-test_realm', 'password');
+  await registerUser(
+    synapse,
+    'base_realm',
+    await realmPassword('base_realm', realmSecretSeed),
+  );
+  await registerUser(
+    synapse,
+    'experiments_realm',
+    await realmPassword('experiments_realm', realmSecretSeed),
+  );
+  await registerUser(
+    synapse,
+    'test_realm',
+    await realmPassword('test_realm', realmSecretSeed),
+  );
+  await registerUser(
+    synapse,
+    'node-test_realm',
+    await realmPassword('node-test_realm', realmSecretSeed),
+  );
 }
 
 export async function reloadAndOpenAiAssistant(page: Page) {
@@ -308,6 +328,7 @@ export async function openRoom(page: Page, roomId: string) {
 
 export async function openRenameMenu(page: Page, roomId: string) {
   await page.locator(`[data-test-past-sessions-button]`).click();
+  await page.waitForTimeout(500); // without this, the click on the options button result in the menu staying open
   await page
     .locator(`[data-test-past-session-options-button="${roomId}"]`)
     .click();

@@ -101,7 +101,7 @@ class PasswordModal extends Component<PasswordModalSignature> {
         </div>
       </:footer>
     </ModalContainer>
-    <style>
+    <style scoped>
       .password-modal :deep(.boxel-modal__inner) {
         height: 21rem;
         margin-top: calc((100vh - 21rem) / 2);
@@ -170,7 +170,7 @@ class EmailWrapper extends Component<EmailWrapperSignature> {
       {{/if}}
     </div>
 
-    <style>
+    <style scoped>
       .email-wrapper {
         display: flex;
         flex-direction: column;
@@ -316,7 +316,7 @@ export default class ProfileEmail extends Component<Signature> {
       />
     {{/if}}
 
-    <style>
+    <style scoped>
       .buttons {
         margin-left: auto;
         margin-top: auto;

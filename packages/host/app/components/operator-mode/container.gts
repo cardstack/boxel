@@ -155,13 +155,13 @@ export default class OperatorModeContainer extends Component<Signature> {
       {{/if}}
     </Modal>
 
-    <style>
+    <style scoped>
       :global(:root) {
         --operator-mode-bg-color: #686283;
         --boxel-modal-max-width: 100%;
         --container-button-size: var(--boxel-icon-lg);
         --operator-mode-min-width: 20.5rem;
-        --operator-mode-left-column: 14rem;
+        --operator-mode-left-column: 16rem;
       }
       :global(button:focus:not(:disabled)) {
         outline-color: var(--boxel-header-text-color, var(--boxel-highlight));

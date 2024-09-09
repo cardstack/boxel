@@ -1,7 +1,6 @@
 import './setup-logger'; // This should be first
 import {
   Realm,
-  Worker,
   VirtualNetwork,
   logger,
   RunnerOptionsManager,
@@ -12,12 +11,15 @@ import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
 import { RealmServer } from './server';
 import { resolve } from 'path';
+import { spawn } from 'child_process';
 import { makeFastBootIndexRunner } from './fastboot';
 import { shimExternals } from './lib/externals';
 import * as Sentry from '@sentry/node';
 import { setErrorReporter } from '@cardstack/runtime-common/realm';
 import PgAdapter from './pg-adapter';
 import PgQueue from './pg-queue';
+import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import flattenDeep from 'lodash/flattenDeep';
 
 let log = logger('main');
 
@@ -43,6 +45,22 @@ if (!REALM_SECRET_SEED) {
   process.exit(-1);
 }
 
+const MATRIX_URL = process.env.MATRIX_URL;
+if (!MATRIX_URL) {
+  console.error(
+    `The MATRIX_URL environment variable is not set. Please make sure this env var has a value`,
+  );
+  process.exit(-1);
+}
+
+const REALM_SERVER_MATRIX_USERNAME = process.env.REALM_SERVER_MATRIX_USERNAME;
+if (!REALM_SERVER_MATRIX_USERNAME) {
+  console.error(
+    `The REALM_SERVER_MATRIX_USERNAME environment variable is not set. Please make sure this env var has a value`,
+  );
+  process.exit(-1);
+}
+
 if (process.env.DISABLE_MODULE_CACHING === 'true') {
   console.warn(
     `module caching has been disabled, module executables will be served directly from the filesystem`,
@@ -51,14 +69,12 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
 
 let {
   port,
-  distURL = 'http://localhost:4200',
+  matrixURL,
+  distURL = process.env.HOST_URL ?? 'http://localhost:4200',
   path: paths,
   fromUrl: fromUrls,
   toUrl: toUrls,
-  useTestingDomain,
   username: usernames,
-  password: passwords,
-  matrixURL: matrixURLs,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
   .options({
@@ -87,23 +103,13 @@ let {
         'the URL of a deployed host app. (This can be provided instead of the --distPath)',
       type: 'string',
     },
-    useTestingDomain: {
-      description:
-        'relaxes document domain rules so that cross origin scripting can be used for test assertions across iframe boundaries',
-      type: 'boolean',
-    },
     matrixURL: {
       description: 'The matrix homeserver for the realm',
       demandOption: true,
-      type: 'array',
+      type: 'string',
     },
     username: {
       description: 'The matrix username for the realm user',
-      demandOption: true,
-      type: 'array',
-    },
-    password: {
-      description: 'The matrix password for the realm user',
       demandOption: true,
       type: 'array',
     },
@@ -123,13 +129,9 @@ if (fromUrls.length < paths.length) {
   process.exit(-1);
 }
 
-if (
-  paths.length !== usernames.length ||
-  usernames.length !== passwords.length ||
-  paths.length !== matrixURLs.length
-) {
+if (paths.length !== usernames.length) {
   console.error(
-    `not enough username/password pairs were provided to satisfy the paths provided. There must be at least one --username/--password/--matrixURL set for each --path parameter`,
+    `not enough usernames were provided to satisfy the paths provided. There must be at least one --username set for each --path parameter`,
   );
   process.exit(-1);
 }
@@ -152,33 +154,24 @@ let dist: URL = new URL(distURL);
   let realms: Realm[] = [];
   let dbAdapter = new PgAdapter();
   let queue = new PgQueue(dbAdapter);
+  let manager = new RunnerOptionsManager();
+  let { getIndexHTML } = await makeFastBootIndexRunner(
+    dist,
+    manager.getOptions.bind(manager),
+  );
 
-  let workers: Worker[] = [];
+  await startWorker();
+
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
 
     await seedRealmPermissions(dbAdapter, new URL(url));
 
-    let manager = new RunnerOptionsManager();
-    let matrixURL = String(matrixURLs[i]);
-    if (matrixURL.length === 0) {
-      console.error(`missing matrix URL for realm ${url}`);
-      process.exit(-1);
-    }
     let username = String(usernames[i]);
     if (username.length === 0) {
       console.error(`missing username for realm ${url}`);
       process.exit(-1);
     }
-    let password = String(passwords[i]);
-    if (password.length === 0) {
-      console.error(`missing password for realm ${url}`);
-      process.exit(-1);
-    }
-    let { getRunner, getIndexHTML } = await makeFastBootIndexRunner(
-      dist,
-      manager.getOptions.bind(manager),
-    );
 
     let realmAdapter = new NodeAdapter(resolve(String(path)));
     let realm = new Realm(
@@ -186,39 +179,16 @@ let dist: URL = new URL(distURL);
         url,
         adapter: realmAdapter,
         getIndexHTML,
-        matrix: { url: new URL(matrixURL), username, password },
+        matrix: { url: new URL(matrixURL), username },
         realmSecretSeed: REALM_SECRET_SEED,
         virtualNetwork,
         dbAdapter,
         queue,
-        withIndexWriter: (indexWriter, loader) => {
-          // Note for future: we are taking advantage of the fact that the realm
-          // does not need to auth with itself and are passing in the realm's
-          // loader which includes a url handler for internal requests that
-          // bypasses auth. when workers are moved outside of the realm server
-          // they will need to provide realm authentication credentials when
-          // indexing.
-          let worker = new Worker({
-            realmURL: new URL(url),
-            indexWriter,
-            queue,
-            realmAdapter,
-            runnerOptsManager: manager,
-            loader,
-            indexRunner: getRunner,
-          });
-          workers.push(worker);
-        },
         assetsURL: dist,
       },
       {
         ...(process.env.DISABLE_MODULE_CACHING === 'true'
           ? { disableModuleCaching: true }
-          : {}),
-        ...(useTestingDomain
-          ? {
-              useTestingDomain,
-            }
           : {}),
       },
     );
@@ -226,11 +196,19 @@ let dist: URL = new URL(distURL);
     virtualNetwork.mount(realm.handle);
   }
 
-  let server = new RealmServer(realms, virtualNetwork);
+  let matrixClient = new MatrixClient({
+    matrixURL: new URL(MATRIX_URL),
+    username: REALM_SERVER_MATRIX_USERNAME,
+    seed: REALM_SECRET_SEED,
+  });
+  let server = new RealmServer(
+    realms,
+    virtualNetwork,
+    matrixClient,
+    REALM_SECRET_SEED,
+  );
 
   server.listen(port);
-
-  await Promise.all(workers.map((worker) => worker.run()));
 
   for (let realm of realms) {
     await realm.start();
@@ -254,8 +232,56 @@ let dist: URL = new URL(distURL);
     `Unexpected error encountered starting realm, stopping server`,
     e,
   );
-  process.exit(1);
+  process.exit(-3);
 });
+
+async function startWorker() {
+  let worker = spawn(
+    'ts-node',
+    [
+      '--transpileOnly',
+      'worker',
+      `--port=${port}`,
+      `--matrixURL='${matrixURL}'`,
+      `--distURL='${distURL}'`,
+      ...flattenDeep(
+        urlMappings.map(([from, to]) => [
+          `--fromUrl='${from}'`,
+          `--toUrl='${to}'`,
+        ]),
+      ),
+    ],
+    {
+      stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+    },
+  );
+
+  if (worker.stdout) {
+    worker.stdout.on('data', (data: Buffer) =>
+      log.info(`worker: ${data.toString()}`),
+    );
+  }
+  if (worker.stderr) {
+    worker.stderr.on('data', (data: Buffer) =>
+      console.error(`worker: ${data.toString()}`),
+    );
+  }
+
+  let timeout = await Promise.race([
+    new Promise<void>((r) => {
+      worker.on('message', (message) => {
+        if (message === 'ready') {
+          r();
+        }
+      });
+    }),
+    new Promise<true>((r) => setTimeout(() => r(true), 30_000)),
+  ]);
+  if (timeout) {
+    console.error(`timed-out waiting for worker to start. Stopping server`);
+    process.exit(-2);
+  }
+}
 
 // In case there are no permissions in the database, seed the realm with default permissions:
 // Base realm: read permissions for everyone

@@ -67,7 +67,7 @@ export class Chain extends CardDef {
           <a href={{@model.blockExplorer}}>{{@model.blockExplorer}}</a>
         </FieldContainer>
       </div>
-      <style>
+      <style scoped>
         .container {
           padding: var(--boxel-sp-xl);
         }

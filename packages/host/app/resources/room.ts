@@ -12,6 +12,8 @@ import { CommandStatus } from 'https://cardstack.com/base/command';
 import type {
   CardFragmentContent,
   CardMessageContent,
+  CommandEvent,
+  CommandResultEvent,
   ReactionEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
@@ -34,6 +36,7 @@ import { RoomState } from '../lib/matrix-classes/room';
 import type { Skill } from '../components/ai-assistant/skill-menu';
 
 import type CardService from '../services/card-service';
+import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
 
 interface Args {
@@ -55,6 +58,7 @@ export class RoomResource extends Resource<Args> {
   @tracked room: RoomState | undefined;
   @tracked loading: Promise<void> | undefined;
   @service private declare matrixService: MatrixService;
+  @service private declare commandService: CommandService;
   @service private declare cardService: CardService;
   _roomId: string | undefined;
 
@@ -184,10 +188,14 @@ export class RoomResource extends Resource<Args> {
       }
       let event_id = event.event_id;
       let update = false;
-      if (event.content['m.relates_to']?.rel_type === 'm.replace') {
-        event_id = event.content['m.relates_to'].event_id;
+      if (event.content['m.relates_to']?.rel_type == 'm.annotation') {
+        // we have to trigger a message field update if there is a reaction event so apply button state reliably updates
+        // otherwise, the message field (may) still but it occurs only accidentally because of a ..thinking event
+        // TOOD: Refactor having many if conditions to some variant of a strategy pattern
         update = true;
-      }
+      } else if (event.content['m.relates_to']?.rel_type === 'm.replace')
+        event_id = event.content['m.relates_to'].event_id;
+      update = true;
       if (this._messageCache.has(event_id) && !update) {
         continue;
       }
@@ -226,6 +234,9 @@ export class RoomResource extends Resource<Args> {
         if (!this._fragmentCache.has(event_id)) {
           this._fragmentCache.set(event_id, event.content);
         }
+      } else if (event.content.msgtype === 'org.boxel.commandResult') {
+        //don't display command result in the room as a message
+        // TOOD: Refactor having many if conditions to some variant of a strategy pattern
       } else if (event.content.msgtype === 'org.boxel.message') {
         // Safely skip over cases that don't have attached cards or a data type
         let cardDocs = event.content.data?.attachedCardsEventIds
@@ -247,9 +258,13 @@ export class RoomResource extends Resource<Args> {
           ...messageArgs,
           attachedCardIds,
         });
-      } else if (event.content.msgtype === 'org.boxel.command') {
+      } else if (
+        event.content.msgtype === 'org.boxel.command' &&
+        event.content.data.toolCall
+      ) {
         // We only handle patches for now
-        let command = event.content.data.command;
+        let commandEvent = event as CommandEvent;
+        let command = event.content.data.toolCall;
         let annotation = this.events.find(
           (e) =>
             e.type === 'm.reaction' &&
@@ -257,23 +272,45 @@ export class RoomResource extends Resource<Args> {
             e.content['m.relates_to']?.event_id ===
               // If the message is a replacement message, eventId in command payload will be undefined.
               // Because it will not refer to any other events, so we can use event_id of the message itself.
-              (command.eventId ?? event_id),
+              (commandEvent.content.data.eventId ?? event_id),
         ) as ReactionEvent | undefined;
+
+        let commandResultEvent = this.events.find(
+          (e) =>
+            e.type === 'm.room.message' &&
+            e.content.msgtype === 'org.boxel.commandResult' &&
+            e.content['m.relates_to']?.rel_type === 'm.annotation' &&
+            e.content['m.relates_to'].event_id ===
+              commandEvent.content.data.eventId,
+        ) as CommandResultEvent;
+        let r = commandResultEvent?.content?.result
+          ? await this.commandService.createCommandResultArgs(
+              commandEvent,
+              commandResultEvent,
+            )
+          : undefined;
+
         let status: CommandStatus =
           annotation?.content['m.relates_to'].key === 'applied'
             ? annotation?.content['m.relates_to'].key
             : 'ready';
 
-        let commandField = await this.matrixService.createCommandField({
+        let commandFieldArgs = {
+          toolCallId: command.id,
           eventId: event_id,
-          commandType: command.type,
-          payload: command,
-          status: status,
-        });
+          name: command.name,
+          payload: command.arguments,
+          status,
+          result: r,
+        };
+
+        let commandField = await this.commandService.createCommand(
+          commandFieldArgs,
+        );
 
         messageField = new Message({
           ...messageArgs,
-          formattedMessage: `<p class="patch-message">${event.content.formatted_body}</p>`,
+          formattedMessage: `<p data-test-command-message class="command-message">${event.content.formatted_body}</p>`,
           command: commandField,
           isStreamingFinished: true,
         });

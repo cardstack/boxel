@@ -66,7 +66,7 @@ const Message: TemplateOnlyComponent<Signature> = <template>
       {{yield}}
     </div>
   </div>
-  <style>
+  <style scoped>
     .boxel-message {
       /* Note: avatar size should not be set to be larger than 60px or smaller than 20px. */
       --boxel-message-avatar-size: 2.5rem; /* 40px. */

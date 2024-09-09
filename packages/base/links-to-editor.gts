@@ -5,7 +5,7 @@ import {
   type EncapsulatedTaskDescriptor as Descriptor,
 } from 'ember-concurrency';
 import {
-  DefaultFormatProvider,
+  DefaultFormatsProvider,
   PermissionsConsumer,
   getBoxComponent,
 } from './field-component';
@@ -25,8 +25,10 @@ import {
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
 import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
 import { consume } from 'ember-provide-consume-context';
+import { hash } from '@ember/helper';
 
 interface Signature {
+  Element: HTMLElement;
   Args: {
     model: Box<CardDef | null>;
     field: Field<typeof CardDef>;
@@ -38,7 +40,11 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
 
   <template>
     <PermissionsConsumer as |permissions|>
-      <div class='links-to-editor' data-test-links-to-editor={{@field.name}}>
+      <div
+        class='links-to-editor'
+        data-test-links-to-editor={{@field.name}}
+        ...attributes
+      >
         {{#if this.isEmpty}}
           {{#if permissions.canWrite}}
             <AddButton
@@ -55,6 +61,11 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
             - Empty -
           {{/if}}
         {{else}}
+          <DefaultFormatsProvider
+            @value={{hash cardDef='fitted' fieldDef='embedded'}}
+          >
+            <this.linkedCard />
+          </DefaultFormatsProvider>
           {{#if permissions.canWrite}}
             <IconButton
               @variant='primary'
@@ -68,13 +79,10 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
               data-test-remove-card
             />
           {{/if}}
-          <DefaultFormatProvider @value='embedded'>
-            <this.linkedCard />
-          </DefaultFormatProvider>
         {{/if}}
       </div>
     </PermissionsConsumer>
-    <style>
+    <style scoped>
       .links-to-editor {
         --remove-icon-size: var(--boxel-icon-lg);
         position: relative;

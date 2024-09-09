@@ -18,6 +18,19 @@ module.exports = function (defaults) {
     },
     'ember-cli-babel': {
       enableTypeScriptTransform: true,
+      disableDecoratorTransforms: true,
+    },
+    babel: {
+      plugins: [
+        [
+          require.resolve('decorator-transforms'),
+          {
+            runtime: {
+              import: require.resolve('decorator-transforms/runtime'),
+            },
+          },
+        ],
+      ],
     },
   });
   return compatBuild(app, Webpack, {
@@ -50,6 +63,10 @@ module.exports = function (defaults) {
               },
               {
                 test: /\.webp$/,
+                type: 'asset',
+              },
+              {
+                test: /\.otf$/,
                 type: 'asset',
               },
             ],

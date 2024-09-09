@@ -13,9 +13,12 @@ import {
   loaderFor,
   LooseSingleCardDocument,
   splitStringIntoChunks,
+  baseRealm,
+  unixTime,
+  ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
-import { baseRealm, LooseCardResource } from '@cardstack/runtime-common';
+import { LooseCardResource } from '@cardstack/runtime-common';
 
 import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
@@ -30,16 +33,14 @@ import { OperatorModeContext } from '@cardstack/host/services/matrix-service';
 import RealmService from '@cardstack/host/services/realm';
 
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import { PatchField } from 'https://cardstack.com/base/command';
 import type {
   CardFragmentContent,
+  CommandResultContent,
   ReactionEventContent,
 } from 'https://cardstack.com/base/matrix-event';
-
 const waiter = buildWaiter('mock-matrix-service');
-
 const MAX_CARD_SIZE_KB = 60;
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -48,7 +49,11 @@ let nonce = 0;
 export type MockMatrixService = MatrixService & {
   sendReactionDeferred: Deferred<void>; // used to assert applying state in apply button
   cardAPI: typeof cardApi;
-  createAndJoinRoom(roomId: string, roomName?: string): Promise<string>;
+  createAndJoinRoom(
+    roomId: string,
+    roomName: string,
+    timestamp?: number,
+  ): Promise<string>;
 };
 
 class MockClient {
@@ -124,11 +129,16 @@ function generateMockMatrixService(
     cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
     failedCommandState: TrackedMap<string, Error> = new TrackedMap();
     cardHashes: Map<string, string> = new Map(); // hashes <> event id
+    skillCardHashes: Map<string, string> = new Map(); // hashes <> event id
     currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
       new TrackedMap();
 
     async start(_auth?: any) {
       await this.loginToRealms();
+    }
+
+    async loadDefaultSkills() {
+      return [];
     }
 
     private async loginToRealms() {
@@ -163,7 +173,7 @@ function generateMockMatrixService(
 
     async createRealmSession(realmURL: URL) {
       let secret = "shhh! it's a secret";
-      let nowInSeconds = Math.floor(Date.now() / 1000);
+      let nowInSeconds = unixTime(Date.now());
       let expires = nowInSeconds + (expiresInSec?.() ?? 60 * 60);
       let header = { alg: 'none', typ: 'JWT' };
       let payload = {
@@ -198,7 +208,7 @@ function generateMockMatrixService(
       if (document.querySelector('[data-test-throw-room-error]')) {
         throw new Error('Intentional error thrown');
       }
-      return await this.createAndJoinRoom(name);
+      return await this.createAndJoinRoom(name, name);
     }
 
     async sendReactionEvent(roomId: string, eventId: string, status: string) {
@@ -212,6 +222,35 @@ function generateMockMatrixService(
       try {
         await this.sendReactionDeferred?.promise;
         return await this.sendEvent(roomId, 'm.reaction', content);
+      } catch (e) {
+        throw new Error(
+          `Error sending reaction event: ${
+            'message' in (e as Error) ? (e as Error).message : e
+          }`,
+        );
+      }
+    }
+
+    async sendCommandResultMessage(
+      roomId: string,
+      eventId: string,
+      result: Record<string, any>,
+    ) {
+      let body = `Command Results from command event ${eventId}`;
+      let html = body;
+      let content: CommandResultContent = {
+        'm.relates_to': {
+          event_id: eventId,
+          rel_type: 'm.annotation',
+          key: 'applied', //this is aggregated key. All annotations must have one. This identifies the reaction event.
+        },
+        body,
+        formatted_body: html,
+        msgtype: 'org.boxel.commandResult',
+        result,
+      };
+      try {
+        return await this.sendEvent(roomId, 'm.room.message', content);
       } catch (e) {
         throw new Error(
           `Error sending reaction event: ${
@@ -247,7 +286,7 @@ function generateMockMatrixService(
           transaction_id: '1',
         },
       };
-      await addRoomEvent(this, roomEvent);
+      await addRoomEvent(this as unknown as MatrixService, roomEvent);
       return roomEvent;
     }
 
@@ -291,6 +330,7 @@ function generateMockMatrixService(
       roomId: string,
       body: string | undefined,
       attachedCards: CardDef[],
+      skillCards: CardDef[] = [],
       clientGeneratedId: string,
       _context?: OperatorModeContext,
     ) {
@@ -300,6 +340,12 @@ function generateMockMatrixService(
         roomId,
         this.cardHashes,
       );
+      let attachedSkillEventIds = await this.getCardEventIds(
+        skillCards,
+        roomId,
+        this.skillCardHashes,
+        { includeComputeds: true, maybeRelativeURL: null },
+      );
       let content = {
         body,
         msgtype: 'org.boxel.message',
@@ -308,6 +354,7 @@ function generateMockMatrixService(
         clientGeneratedId,
         data: {
           attachedCardsEventIds,
+          attachedSkillEventIds,
         },
       };
       await this.sendEvent(roomId, 'm.room.message', content);
@@ -361,8 +408,12 @@ function generateMockMatrixService(
       await this.profile.load.perform();
     }
 
-    async createAndJoinRoom(roomId: string, name?: string) {
-      await addRoomEvent(this, {
+    async createAndJoinRoom(
+      roomId: string,
+      name: string,
+      timestamp = Date.now(),
+    ) {
+      await addRoomEvent(this as unknown as MatrixService, {
         event_id: 'eventname',
         room_id: roomId,
         type: 'm.room.name',
@@ -370,11 +421,11 @@ function generateMockMatrixService(
         status: null,
       });
 
-      await addRoomEvent(this, {
+      await addRoomEvent(this as unknown as MatrixService, {
         event_id: 'eventcreate',
         room_id: roomId,
         type: 'm.room.create',
-        origin_server_ts: Date.now(),
+        origin_server_ts: timestamp,
         content: {
           creator: '@testuser:staging',
           room_version: '0',
@@ -382,23 +433,23 @@ function generateMockMatrixService(
         status: null,
       });
 
-      await addRoomEvent(this, {
+      await addRoomEvent(this as unknown as MatrixService, {
         event_id: 'eventjoin',
         room_id: roomId,
         type: 'm.room.member',
         sender: '@testuser:staging',
         state_key: '@testuser:staging',
-        origin_server_ts: Date.now(),
+        origin_server_ts: timestamp,
         content: {
           displayname: 'testuser',
           membership: 'join',
-          membershipTs: Date.now(),
+          membershipTs: timestamp,
           membershipInitiator: '@testuser:staging',
         },
         status: null,
       });
 
-      await addRoomEvent(this, {
+      await addRoomEvent(this as unknown as MatrixService, {
         event_id: 'eventinvite',
         room_id: roomId,
         type: 'm.room.member',
@@ -449,19 +500,19 @@ function generateMockMatrixService(
       return resources;
     }
 
-    async createCommandField(attr: Record<string, any>): Promise<PatchField> {
+    async createCard<T extends typeof BaseDef>(
+      codeRef: ResolvedCodeRef,
+      attr: Record<string, any>,
+    ) {
       let data: LooseCardResource = {
         meta: {
-          adoptsFrom: {
-            name: 'PatchField',
-            module: `${baseRealm.url}command`,
-          },
+          adoptsFrom: codeRef,
         },
         attributes: {
           ...attr,
         },
       };
-      let card = this.cardAPI.createFromSerialized<typeof PatchField>(
+      let card = await this.cardAPI.createFromSerialized<T>(
         data,
         { data },
         undefined,
