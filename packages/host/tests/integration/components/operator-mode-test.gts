@@ -1366,7 +1366,9 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-realm-name]`).exists({ count: 4 });
     assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
     assert
-      .dom(`[data-test-realm-name]`)
+      .dom(
+        `[data-test-search-result="${testRealmURL}Pet/mango"] + [data-test-realm-name]`,
+      )
       .containsText('Operator Mode Workspace');
     assert
       .dom(`[data-test-search-result="${testRealmURL}Author/mark"]`)
