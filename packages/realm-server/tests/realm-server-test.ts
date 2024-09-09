@@ -1,4 +1,3 @@
-//
 import { module, test } from 'qunit';
 import supertest, { Test, SuperTest } from 'supertest';
 import { join, resolve } from 'path';
@@ -28,9 +27,9 @@ import {
   RealmPermissions,
   fetchUserPermissions,
   baseCardRef,
+  type Queue,
   type LooseSingleCardDocument,
   type VirtualNetwork,
-  type DBAdapter,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
 import { stringify } from 'qs';
@@ -60,6 +59,7 @@ import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/s
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import jwt from 'jsonwebtoken';
 import { type CardCollectionDocument } from '@cardstack/runtime-common/card-document';
+import type PgAdapter from '../pg-adapter';
 
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
@@ -2103,8 +2103,10 @@ module('Realm Server', function (hooks) {
     let testRealmServer2: RealmServer;
     let testRealm2: Realm;
     let workerVirtualNetwork: VirtualNetwork;
-    let testDbAdapter: DBAdapter;
+    let dbAdapter: PgAdapter;
+    let queue: Queue;
     let request2: SuperTest<Test>;
+    let testRealmDir: string;
 
     hooks.beforeEach(async function () {
       shimExternals(virtualNetwork);
@@ -2114,31 +2116,35 @@ module('Realm Server', function (hooks) {
       '*': ['read', 'write'],
     });
 
+    async function startRealmServer(dbAdapter: PgAdapter, queue: Queue) {
+      if (testRealm2) {
+        virtualNetwork.unmount(testRealm2.handle);
+      }
+      ({
+        testRealm: testRealm2,
+        testRealmServer: testRealmServer2,
+        testRealmHttpServer: testRealmHttpServer2,
+        workerVirtualNetwork,
+      } = await runTestRealmServer({
+        virtualNetwork,
+        testRealmDir,
+        realmsRootPath: join(dir.name, 'realm_server_2'),
+        realmURL: testRealm2URL,
+        dbAdapter,
+        queue,
+        matrixURL,
+      }));
+      request2 = supertest(testRealmHttpServer2);
+    }
+
     setupDB(hooks, {
-      beforeEach: async (dbAdapter, queue) => {
-        testDbAdapter = dbAdapter;
-        let testRealmDir = join(dir.name, 'realm_server_2', 'test');
+      beforeEach: async (_dbAdapter, _queue) => {
+        dbAdapter = _dbAdapter;
+        queue = _queue;
+        testRealmDir = join(dir.name, 'realm_server_2', 'test');
         ensureDirSync(testRealmDir);
         copySync(join(__dirname, 'cards'), testRealmDir);
-
-        if (testRealm2) {
-          virtualNetwork.unmount(testRealm2.handle);
-        }
-        ({
-          testRealm: testRealm2,
-          testRealmServer: testRealmServer2,
-          testRealmHttpServer: testRealmHttpServer2,
-          workerVirtualNetwork,
-        } = await runTestRealmServer({
-          virtualNetwork,
-          testRealmDir,
-          realmsRootPath: join(dir.name, 'realm_server_2'),
-          realmURL: testRealm2URL,
-          dbAdapter,
-          queue,
-          matrixURL,
-        }));
-        request2 = supertest(testRealmHttpServer2);
+        await startRealmServer(dbAdapter, queue);
       },
       afterEach: async () => {
         await closeServer(testRealmHttpServer2);
@@ -2172,7 +2178,7 @@ module('Realm Server', function (hooks) {
       );
 
       let permissions = await fetchUserPermissions(
-        testDbAdapter,
+        dbAdapter,
         new URL(realm.url),
       );
       assert.deepEqual(permissions, {
@@ -2305,7 +2311,74 @@ module('Realm Server', function (hooks) {
       assert.strictEqual(response.status, 403, 'HTTP 403 status');
     });
 
-    // TODO can restart a realm that was created dynamically
+    test('can restart a realm that was created dynamically', async function (assert) {
+      let realmName = `test-realm-${uuidv4()}`;
+      let realm = await testRealmServer2.createRealm(
+        '@mango:boxel.ai',
+        realmName,
+      );
+      workerVirtualNetwork.mount(realm.maybeHandle);
+      await realm.start();
+
+      let response = await request2
+        .post(`/mango/${realmName}/`)
+        .send({
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Test Card',
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/card-api',
+                name: 'CardDef',
+              },
+            },
+          },
+        })
+        .set('Accept', 'application/vnd.card+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(realm, '@mango:boxel.ai', [
+            'read',
+            'write',
+            'realm-owner',
+          ])}`,
+        );
+
+      assert.strictEqual(response.status, 201, 'HTTP 201 status');
+      let doc = response.body as SingleCardDocument;
+
+      // Stop and restart the server
+      testRealmServer2.testingOnlyUnmountRealms();
+      await closeServer(testRealmHttpServer2);
+      await startRealmServer(dbAdapter, queue);
+      await testRealmServer2.start();
+
+      realm = testRealmServer2.testingOnlyRealms.find(
+        (r) => `${r.url.endsWith(realmName)}/`,
+      )!;
+      response = await request2
+        .get(new URL(doc.data.id).pathname)
+        .set('Accept', 'application/vnd.card+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(realm, '@mango:boxel.ai', [
+            'read',
+            'write',
+            'realm-owner',
+          ])}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      doc = response.body as SingleCardDocument;
+      assert.strictEqual(
+        doc.data.attributes?.title,
+        'Test Card',
+        'instance data is correct',
+      );
+    });
+
     // TODO test that for a server where a realm is mounted at the root, we throw when trying to create a new realm on that server
     // TODO test that cannot create new realm that collides with existing realm
     // TODO test that cannot create realm with invalid chars

@@ -189,7 +189,6 @@ let dist: URL = new URL(distURL);
 
   await startWorker();
 
-  // TODO also include realms from realms json files on the filesystem
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
 
@@ -246,9 +245,7 @@ let dist: URL = new URL(distURL);
 
   server.listen(port);
 
-  for (let realm of realms) {
-    await realm.start();
-  }
+  await server.start();
 
   log.info(`Realm server listening on port ${port} is serving realms:`);
   let additionalMappings = hrefs.slice(paths.length);

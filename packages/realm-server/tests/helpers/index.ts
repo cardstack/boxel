@@ -349,10 +349,8 @@ export async function runTestRealmServer({
     queue,
     dbAdapter,
   });
-  privateNetwork.mount(testRealm.maybeHandle);
   virtualNetwork.mount(testRealm.handle);
   await worker.run();
-  await testRealm.start();
   let matrixClient = new MatrixClient({
     matrixURL: realmServerTestMatrix.url,
     username: realmServerTestMatrix.username,
@@ -370,8 +368,10 @@ export async function runTestRealmServer({
     getIndexHTML,
     serverURL: new URL(realmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
+    onRealmStart: (realm) => privateNetwork.mount(realm.maybeHandle),
   });
   let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
+  await testRealmServer.start();
   return {
     testRealm,
     testRealmServer,

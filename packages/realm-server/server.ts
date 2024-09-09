@@ -11,7 +11,13 @@ import {
   type DBAdapter,
   type Queue,
 } from '@cardstack/runtime-common';
-import { ensureDirSync, writeJSONSync, readFileSync } from 'fs-extra';
+import {
+  ensureDirSync,
+  writeJSONSync,
+  readFileSync,
+  existsSync,
+  readdirSync,
+} from 'fs-extra';
 import { setupCloseHandler } from './node-realm';
 import {
   livenessCheck,
@@ -39,7 +45,6 @@ import {
   Utils,
 } from '@cardstack/runtime-common/matrix-backend-authentication';
 import jwt from 'jsonwebtoken';
-import { existsSync } from 'fs';
 
 export class RealmServer {
   private log = logger('realm:requests');
@@ -69,6 +74,7 @@ export class RealmServer {
     getIndexHTML,
     matrixRegistrationSecret,
     matrixRegistrationSecretFile,
+    onRealmStart,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -82,17 +88,19 @@ export class RealmServer {
     getIndexHTML: () => Promise<string>;
     matrixRegistrationSecret?: string;
     matrixRegistrationSecretFile?: string;
+    // this is a special callback for our tests that allows the test worker to
+    // mount the realm in its private network
+    onRealmStart?: (realm: Realm) => void;
   }) {
-    detectRealmCollision(realms);
-
     if (!matrixRegistrationSecret && !matrixRegistrationSecretFile) {
       throw new Error(
         `'matrixRegistrationSecret' or 'matrixRegistrationSecretFile' must be specified`,
       );
     }
+    detectRealmCollision(realms);
+    ensureDirSync(realmsRootPath);
 
     this.serverURL = serverURL;
-    this.realms = realms;
     this.virtualNetwork = virtualNetwork;
     this.matrixClient = matrixClient;
     this.secretSeed = secretSeed;
@@ -103,6 +111,13 @@ export class RealmServer {
     this.getIndexHTML = getIndexHTML;
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.matrixRegistrationSecretFile = matrixRegistrationSecretFile;
+    this.realms = [...realms, ...this.loadRealms()];
+
+    if (onRealmStart) {
+      for (let realm of this.realms) {
+        onRealmStart(realm);
+      }
+    }
   }
 
   @Memoize()
@@ -158,6 +173,25 @@ export class RealmServer {
     let instance = this.app.listen(port);
     this.log.info(`Realm server listening on port %s\n`, port);
     return instance;
+  }
+
+  async start() {
+    // ideally we'd like to use a Promise.all to start these and the ordering
+    // will just fall out naturally from cross realm invalidation. Until we have
+    // that we should start the realms in order.
+    for (let realm of this.realms) {
+      await realm.start();
+    }
+  }
+
+  get testingOnlyRealms() {
+    return [...this.realms];
+  }
+
+  testingOnlyUnmountRealms() {
+    for (let realm of this.realms) {
+      this.virtualNetwork.unmount(realm.handle);
+    }
   }
 
   private createSession(): (
@@ -295,6 +329,56 @@ export class RealmServer {
     this.realms.push(realm);
     this.virtualNetwork.mount(realm.handle);
     return realm;
+  }
+
+  private loadRealms() {
+    let realms: Realm[] = [];
+    for (let maybeUsername of readdirSync(this.realmsRootPath, {
+      withFileTypes: true,
+    })) {
+      if (!maybeUsername.isDirectory()) {
+        continue;
+      }
+      let owner = maybeUsername.name;
+      for (let maybeRealm of readdirSync(join(this.realmsRootPath, owner), {
+        withFileTypes: true,
+      })) {
+        if (!maybeRealm.isDirectory()) {
+          continue;
+        }
+        let realmName = maybeRealm.name;
+        let realmPath = join(this.realmsRootPath, owner, realmName);
+        let maybeRealmContents = readdirSync(realmPath);
+        if (maybeRealmContents.includes('.realm.json')) {
+          let url = new URL(
+            `${this.serverURL.pathname.replace(
+              /\/$/,
+              '',
+            )}/${owner}/${realmName}/`,
+            this.serverURL,
+          ).href;
+          let adapter = new NodeAdapter(realmPath);
+          let username = `realm/${owner}_${realmName}`;
+          let realm = new Realm({
+            url,
+            adapter,
+            getIndexHTML: this.getIndexHTML,
+            secretSeed: this.secretSeed,
+            virtualNetwork: this.virtualNetwork,
+            dbAdapter: this.dbAdapter,
+            queue: this.queue,
+            assetsURL: this.assetsURL,
+            matrix: {
+              url: this.matrixClient.matrixURL,
+              username,
+            },
+          });
+          this.virtualNetwork.mount(realm.handle);
+          realms.push(realm);
+        }
+      }
+    }
+    return realms;
   }
 
   private getMatrixRegistrationSecret() {
