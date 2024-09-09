@@ -16,12 +16,17 @@ import {
   FilterList,
   Tooltip,
   type Filter,
+  BoxelDropdown,
+  Menu as BoxelMenu,
+  BoxelButton,
 } from '@cardstack/boxel-ui/components';
+import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import {
   chooseCard,
   catalogEntryRef,
-  baseRealm,
   isCardInstance,
+  Query,
+  baseRealm,
 } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
 
@@ -29,6 +34,37 @@ import { tracked } from '@glimmer/tracking';
 import cssUrl from 'ember-css-url';
 import { type CatalogEntry } from './catalog-entry';
 import StringField from './string';
+import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
+
+interface SortOption {
+  displayName: string;
+  sort: Query['sort'];
+}
+
+let availableSortOptions: SortOption[] = [
+  {
+    displayName: 'A-Z',
+    sort: [
+      {
+        on: {
+          module: `${baseRealm.url}card-api`,
+          name: 'CardDef',
+        },
+        by: 'title',
+        direction: 'asc',
+      },
+    ],
+  },
+  {
+    displayName: 'Updated at',
+    sort: [
+      {
+        by: 'updatedAt',
+        direction: 'desc',
+      },
+    ],
+  },
+];
 
 class Isolated extends Component<typeof CardsGrid> {
   <template>
@@ -41,7 +77,31 @@ class Isolated extends Component<typeof CardsGrid> {
         />
       </div>
       <div class='content'>
-        <span class='headline'>{{this.activeFilter.displayName}}</span>
+        <div class='settings'>
+          <div class='title'>
+            {{this.activeFilter.displayName}}
+          </div>
+          <div class='sorting'>
+            <span>
+              Sort by:
+            </span>
+
+            <BoxelDropdown>
+              <:trigger as |bindings|>
+                <BoxelButton {{bindings}}>
+                  {{this.selectedSortOption.displayName}}
+                  <DropdownArrowDown width='12px' height='12px' />
+                </BoxelButton>
+              </:trigger>
+              <:content as |dd|>
+                <BoxelMenu
+                  @closeMenu={{dd.close}}
+                  @items={{this.sortMenuOptions}}
+                />
+              </:content>
+            </BoxelDropdown>
+          </div>
+        </div>
         <ul class='cards' data-test-cards-grid-cards>
           {{#let
             (component @context.prerenderedCardSearchComponent)
@@ -99,6 +159,15 @@ class Isolated extends Component<typeof CardsGrid> {
       :global(:root) {
         --cards-grid-padding-top: var(--boxel-sp-lg);
       }
+
+      .settings {
+        display: flex;
+      }
+
+      .sorting {
+        margin-left: auto;
+      }
+
       .cards-grid {
         --grid-card-width: 11.125rem;
         --grid-card-height: 15.125rem;
@@ -166,6 +235,22 @@ class Isolated extends Component<typeof CardsGrid> {
     </style>
   </template>
 
+  private get sortMenuOptions() {
+    return availableSortOptions.map((option) => {
+      return new MenuItem(option.displayName, 'action', {
+        action: () => {
+          this.setSelectedSortOption(option);
+        },
+      });
+    });
+  }
+
+  @tracked private selectedSortOption: SortOption = availableSortOptions[0];
+
+  @action setSelectedSortOption(option: SortOption) {
+    this.selectedSortOption = option;
+  }
+
   private filters: Filter[] = [
     {
       displayName: 'All Apps',
@@ -227,25 +312,8 @@ class Isolated extends Component<typeof CardsGrid> {
           },
         },
       },
-      // sorting by title so that we can maintain stability in
-      // the ordering of the search results (server sorts results
-      // by order indexed by default)
-      sort: [
-        {
-          on: {
-            module: `${baseRealm.url}card-api`,
-            name: 'CardDef',
-          },
-          by: '_cardType',
-        },
-        {
-          on: {
-            module: `${baseRealm.url}card-api`,
-            name: 'CardDef',
-          },
-          by: 'title',
-        },
-      ],
+
+      sort: this.selectedSortOption.sort,
     };
   }
 
