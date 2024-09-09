@@ -9,9 +9,6 @@ let mockMatrixClient = {
   },
 } as MatrixClient;
 
-// TODO add realm-owner tests. the permission currently does not enable any
-// special behavior yet, but we just want to make sure it can be captured
-
 module('realm-user-permissions', function (_hooks) {
   module('world-readable realm', function () {
     let permissionsChecker = new RealmPermissionChecker(
@@ -98,7 +95,7 @@ module('realm-user-permissions', function (_hooks) {
     let permissionsChecker = new RealmPermissionChecker(
       {
         '*': ['read'],
-        '@matic:boxel-ai': ['read', 'write'],
+        '@matic:boxel-ai': ['read', 'write', 'realm-owner'],
       },
       mockMatrixClient,
     );
@@ -110,9 +107,13 @@ module('realm-user-permissions', function (_hooks) {
       assert.ok(await permissionsChecker.can('@matic:boxel-ai', 'write'));
       assert.notOk(await permissionsChecker.can('anyone', 'write'));
 
+      assert.ok(await permissionsChecker.can('@matic:boxel-ai', 'realm-owner'));
+      assert.notOk(await permissionsChecker.can('anyone', 'realm-owner'));
+
       assert.deepEqual(await permissionsChecker.for('@matic:boxel-ai'), [
         'read',
         'write',
+        'realm-owner',
       ]);
 
       assert.deepEqual(await permissionsChecker.for('anyone'), ['read']);
