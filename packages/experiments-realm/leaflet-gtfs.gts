@@ -158,8 +158,9 @@ export class LeafletGtfs extends CardDef {
 
       <ul class='routes'>
         {{#if @model.routes}}
-          Route to view:
+          <label for='route-select'>Route to view:</label>
           <select
+            id='route-select'
             value={{@model.activeRouteId}}
             {{on 'change' (optional @model.handleRouteSelect)}}
           >
@@ -205,6 +206,9 @@ export class LeafletGtfs extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+
+
 
   */
 }

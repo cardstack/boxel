@@ -8,10 +8,12 @@ export default class CardController extends Controller {
     // `sid` and `clientSecret` come from email verification process to reset password
     'sid',
     'clientSecret',
+    'workspaceChooserOpened',
   ];
 
   @tracked operatorModeEnabled = false;
   @tracked operatorModeState: string | null = null;
   @tracked sid: string | null = null;
   @tracked clientSecret: string | null = null;
+  @tracked workspaceChooserOpened = false;
 }

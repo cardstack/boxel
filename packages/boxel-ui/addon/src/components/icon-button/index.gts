@@ -39,6 +39,7 @@ class IconButton extends Component<Signature> {
       ...attributes
     >
       {{! Using inline style attribute because targeting the svg using <style scoped> does not work - css scoping works incorrectly }}
+      {{! template-lint-disable no-inline-styles }}
       {{#if @icon}}
         <@icon
           width={{if @width @width '16px'}}

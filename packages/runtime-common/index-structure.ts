@@ -61,4 +61,5 @@ export const coerceTypes = Object.freeze({
   is_deleted: 'BOOLEAN',
   last_modified: 'VARCHAR',
   indexed_at: 'VARCHAR',
+  value: 'JSON',
 });

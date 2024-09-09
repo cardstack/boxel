@@ -7,6 +7,8 @@ import { module, test } from 'qunit';
 
 import { GridContainer } from '@cardstack/boxel-ui/components';
 
+import { baseRealm } from '@cardstack/runtime-common';
+
 import {
   setupLocalIndexing,
   setupServerSentEvents,
@@ -102,7 +104,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
   setupWindowMock(hooks);
   setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
-    activeRealms: [testRealmURL],
+    activeRealms: [baseRealm.url, testRealmURL],
   });
   setupBaseRealm(hooks);
 
@@ -249,7 +251,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         cards: [{ id: testCard, title: 'Hassan' }],
       },
     ]);
-
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     //Test the scenario where there is an update to the card
     await click(
       `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testCard}"]`,
