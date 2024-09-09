@@ -45,6 +45,7 @@ import { renderComponent } from '../../helpers/render-component';
 
 module('Integration | operator-mode', function (hooks) {
   setupRenderingTest(hooks);
+  setupWindowMock(hooks);
 
   const realmName = 'Operator Mode Workspace';
   let loader: Loader;
@@ -67,10 +68,9 @@ module('Integration | operator-mode', function (hooks) {
   setupServerSentEvents(hooks);
   setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
-    activeRealms: [baseRealm.url, testRealmURL],
+    activeRealms: [testRealmURL],
     autostart: true,
   });
-  setupWindowMock(hooks);
   let noop = () => {};
 
   hooks.beforeEach(async function () {
@@ -425,12 +425,6 @@ module('Integration | operator-mode', function (hooks) {
         ...Object.fromEntries(personCards),
       },
     }));
-
-    // FIXME Should this be part of setupIntegrationTestRealm? Does it make sense?
-    let testRealm = await (
-      this.owner.lookup('service:realm') as Realm
-    )?.getOrCreateRealmResource('http://test-realm/test/');
-    await testRealm.login();
   });
 
   async function setCardInOperatorModeState(

@@ -40,8 +40,6 @@ class MockUtils {
   };
 }
 
-// When also using setupBaseRealm, this must come before setupBastRealm so it
-// can pre-fill the local storage mock before services start initializing.
 export function setupMockMatrix(
   hooks: NestedHooks,
   opts: Config = {},
