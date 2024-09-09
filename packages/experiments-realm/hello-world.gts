@@ -19,11 +19,15 @@ export class HelloWorld extends CardDef {
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <div class='container'>
-        <img class='hero' src={{@model.heroUrl}} />
+        <img class='hero' src={{@model.heroUrl}} aria-hidden='true' />
 
         <h1>About Me</h1>
         <div>
-          <img class='headshot' src={{@model.headshotUrl}} />
+          <img
+            class='headshot'
+            src={{@model.headshotUrl}}
+            alt='A headshot of {{@model.fullName}}'
+          />
           <h2>About {{@model.fullName}}</h2>
           <blockquote>
             &ldquo;{{@model.quote}}&rdquo;

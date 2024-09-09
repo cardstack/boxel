@@ -113,7 +113,7 @@ export class Vendor extends CardDef {
           <@fields.mailingAddress />
           <@fields.vendor.email />
         </div>
-        <img src={{@model.vendor.logoHref}} />
+        <img src={{@model.vendor.logoHref}} aria-hidden='true' />
       </div>
       <style scoped>
         .vendor-card--embedded {

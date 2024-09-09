@@ -173,14 +173,14 @@ export default class BoxelInputGroupUsage extends Component {
           @name='validIcon'
           @description='Override the default valid icon'
           @options={{validIconDescriptions}}
-          @onInput={{fn this.onChooseValidIcon}}
+          @onInput={{this.onChooseValidIcon}}
           @value={{this.validIconDescription}}
         />
         <Args.String
           @name='invalidIcon'
           @description='Override the default invalid icon'
           @options={{invalidIconDescriptions}}
-          @onInput={{fn this.onChooseInvalidIcon}}
+          @onInput={{this.onChooseInvalidIcon}}
           @value={{this.invalidIconDescription}}
         />
         <Args.String
