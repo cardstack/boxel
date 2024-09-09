@@ -159,7 +159,9 @@ export default class Room extends Component<Signature> {
   private loadRoomSkills = restartableTask(async () => {
     await this.roomResource.loading;
     let defaultSkills = await this.matrixService.loadDefaultSkills();
-    this.roomResource.room!.skills = defaultSkills;
+    if (this.roomResource.room) {
+      this.roomResource.room.skills = defaultSkills;
+    }
   });
 
   maybeRetryAction = (messageIndex: number, message: Message) => {
