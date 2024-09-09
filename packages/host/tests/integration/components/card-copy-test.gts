@@ -273,7 +273,7 @@ module('Integration | card-copy', function (hooks) {
 
   setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
-    activeRealms: [baseRealm.url, testRealmURL],
+    activeRealms: [baseRealm.url, testRealmURL, testRealm2URL],
     autostart: true,
   });
 
@@ -377,6 +377,7 @@ module('Integration | card-copy', function (hooks) {
     assert
       .dom('[data-test-copy-button]')
       .doesNotExist('copy button does not exist');
+    await this.pauseTest();
   });
 
   test('copy button does not appear when right and left stacks are both the same index card', async function (assert) {
