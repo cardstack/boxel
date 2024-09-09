@@ -84,7 +84,9 @@ export class RoomResource extends Resource<Args> {
 
   private load = restartableTask(async (roomId: string) => {
     try {
-      this.room = roomId ? this.matrixService.getRoom(roomId) : undefined; //look at the note in the EventSendingContext interface for why this is awaited
+      // TODO: figure out why the line below requires await despite not being a promise. Probably related to e-concurrency
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      this.room = roomId ? await this.matrixService.getRoom(roomId) : undefined; //look at the note in the EventSendingContext interface for why this is awaited
       if (this.room) {
         await this.loadRoomMembers(roomId);
         await this.loadRoomMessages(roomId);
