@@ -32,7 +32,6 @@ import cssUrl from 'ember-css-url';
 import { type CatalogEntry } from './catalog-entry';
 import StringField from './string';
 import { TrackedArray } from 'tracked-built-ins';
-import { not } from '@cardstack/boxel-ui/helpers';
 
 class Isolated extends Component<typeof CardsGrid> {
   <template>
@@ -47,7 +46,7 @@ class Isolated extends Component<typeof CardsGrid> {
       <div class='content'>
         <span class='headline'>{{this.activeFilter.displayName}}</span>
         <ul class='cards' data-test-cards-grid-cards>
-          {{#if (not this.hideCards)}}
+          {{#if this.isShowingCards}}
             {{#let
               (component @context.prerenderedCardSearchComponent)
               as |PrerenderedCardSearch|
@@ -331,11 +330,10 @@ class Isolated extends Component<typeof CardsGrid> {
     });
   });
 
-  private get hideCards() {
+  private get isShowingCards() {
     return (
-      this.activeFilter.displayName === 'Favorites' &&
-      (!this.args.model['favorites'] ||
-        this.args.model['favorites'].length === 0)
+      this.activeFilter.displayName !== 'Favorites' ||
+      (this.args.model.favorites && this.args.model.favorites.length > 0)
     );
   }
 }
