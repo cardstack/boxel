@@ -306,7 +306,6 @@ export class RealmServer {
     });
 
     await insertPermissions(this.dbAdapter, new URL(url), {
-      // TODO confirm that we store matrix userID's in this table and not usernames
       [ownerUserId]: ['read', 'write', 'realm-owner'],
     });
 
@@ -381,6 +380,10 @@ export class RealmServer {
     return realms;
   }
 
+  // we use a function to get the matrix registration secret because matrix
+  // client tests leverage a synapse instance that changes multiple times per
+  // realm lifespan, and each new synapse instance has a unique registration
+  // secret
   private getMatrixRegistrationSecret() {
     if (
       this.matrixRegistrationSecretFile &&

@@ -45,7 +45,7 @@ export const realmServerTestMatrix: MatrixConfig = {
 };
 export const secretSeed = `shhh! it's a secret`;
 export const matrixRegistrationSecret: string =
-  getSynapseConfig()!.registration_shared_secret; // this will always exist for realm server tests specifically
+  getSynapseConfig()!.registration_shared_secret; // as long as synapse has been started at least once, this will always exist
 
 let basePath = resolve(join(__dirname, '..', '..', '..', 'base'));
 
@@ -266,7 +266,7 @@ export async function runBaseRealmServer(
     indexRunner,
     virtualNetwork,
     matrixURL,
-    secretSeed: secretSeed,
+    secretSeed,
   });
   let testBaseRealm = await createRealm({
     dir: basePath,
