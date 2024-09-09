@@ -377,7 +377,6 @@ module('Integration | card-copy', function (hooks) {
     assert
       .dom('[data-test-copy-button]')
       .doesNotExist('copy button does not exist');
-    await this.pauseTest();
   });
 
   test('copy button does not appear when right and left stacks are both the same index card', async function (assert) {
