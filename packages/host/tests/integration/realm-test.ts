@@ -1,6 +1,5 @@
 import { RenderingTestContext } from '@ember/test-helpers';
 
-import { setupRenderingTest } from 'ember-qunit';
 import { stringify } from 'qs';
 import { module, test } from 'qunit';
 
@@ -37,6 +36,7 @@ import {
   StringField,
   field,
 } from '../helpers/base-realm';
+import { setupRenderingTest } from '../helpers/setup';
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
