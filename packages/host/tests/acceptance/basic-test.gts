@@ -93,7 +93,6 @@ module('Acceptance | basic tests', function (hooks) {
   // if so, maybe a query parameter with the full URL for a card
   skip('visiting realm root', async function (assert) {
     await visit('/test/');
-    await this.pauseTest();
 
     assert.strictEqual(currentURL(), '/test/');
     assert.dom('[data-test-index-card]').containsText('Hello, world');
