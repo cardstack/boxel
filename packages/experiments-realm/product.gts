@@ -115,14 +115,16 @@ interface ProductImagesSignature {
 export class ProductImages extends GlimmerComponent<ProductImagesSignature> {
   <template>
     <div ...attributes>
-      <img class='main' src={{@activeImage}} />
+      <img class='main' src={{@activeImage}} aria-hidden='true' />
       <div class='thumbnails'>
         {{#each @images as |image|}}
-          <img
-            src={{image}}
-            class={{cn active=(eq image @activeImage)}}
-            {{on 'click' (fn @onSelectImage image)}}
-          />
+          <button {{on 'click' (fn @onSelectImage image)}}>
+            <img
+              src={{image}}
+              class={{cn active=(eq image @activeImage)}}
+              aria-hidden='true'
+            />
+          </button>
         {{/each}}
       </div>
     </div>

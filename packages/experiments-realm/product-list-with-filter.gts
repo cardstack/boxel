@@ -25,11 +25,9 @@ interface FeaturedProductComponentSignature {
 class FeaturedProductComponent extends GlimmerComponent<FeaturedProductComponentSignature> {
   <template>
     <div class='product'>
-      <img
-        {{on 'click' (fn @viewProduct @model)}}
-        src={{@model.thumbnailURL}}
-        alt={{@model.title}}
-      />
+      <button {{on 'click' (fn @viewProduct @model)}}>
+        <img src={{@model.thumbnailURL}} alt={{@model.title}} />
+      </button>
       <div>
         <div class='seller'>
           {{@model.seller.title}}
@@ -218,6 +216,9 @@ export class ProductList extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+
+
 
 
 
