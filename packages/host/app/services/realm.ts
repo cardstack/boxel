@@ -287,7 +287,8 @@ export default class RealmService extends Service {
     let first = writeableRealms[0];
 
     if (!first) {
-      throw new Error(
+      // FIXME debug logging maybe?
+      console.log(
         `No writable realms found, known realms and writability: ${Object.keys(
           this.allRealmsMeta,
         )
