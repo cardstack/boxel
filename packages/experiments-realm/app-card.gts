@@ -24,22 +24,37 @@ import {
   AddButton,
   Tooltip,
   TabbedHeader,
+  FilterList,
+  type Filter as LeftNavFilter,
+  Pill,
 } from '@cardstack/boxel-ui/components';
 
 import {
-  getLiveCards,
   codeRefWithAbsoluteURL,
   type Query,
   type Loader,
   LooseSingleCardDocument,
   isSingleCardDocument,
+  SupportedMimeType,
+  buildQueryString,
+  assertQuery,
+  PrerenderedCard,
 } from '@cardstack/runtime-common';
+import { AnyFilter } from '@cardstack/runtime-common/query';
+import { fn } from '@ember/helper';
+
+// import { CardsGridComponent } from './cards-grid-component';
 
 export class Tab extends FieldDef {
   @field displayName = contains(StringField);
   @field tabId = contains(StringField);
   @field ref = contains(CodeRefField);
   @field isTable = contains(BooleanField);
+}
+
+interface PillFilter {
+  kind: string;
+  value: string;
 }
 
 class AppCardIsolated extends Component<typeof AppCard> {
@@ -85,8 +100,89 @@ class AppCardIsolated extends Component<typeof AppCard> {
     this.setActiveTab(0);
   }
 
+  leftNavFilters: LeftNavFilter[] = [];
+  pillFilters: PillFilter[] = [];
+  @tracked activeCategory: LeftNavFilter | undefined = this.leftNavFilters[0];
+
+  @action onCategoryChanged(leftNavFilter: LeftNavFilter) {
+    this.activeCategory = leftNavFilter;
+  }
+
+  get queryDisplay() {
+    return JSON.stringify(this.query, null, 2);
+  }
+
+  get query(): Query {
+    let categoryFilter = this.categoryFilter ? [this.categoryFilter] : [];
+    let q = {
+      filter: {
+        on: this.activeTabRef,
+        every: [...categoryFilter],
+      },
+    };
+    assertQuery(q);
+    return q;
+  }
+
+  //==== codeRef stuff
+  get categoryCodeRef() {
+    return {
+      module: 'http://localhost:4201/experiments/commerce/listing',
+      name: 'Category',
+    };
+  }
+
+  get tagCodeRef() {
+    return {
+      module: 'http://localhost:4201/experiments/commerce/listing',
+      name: 'Tag',
+    };
+  }
+
+  //==== query stuff
+  get categoryQuery() {
+    return {
+      filter: {
+        type: this.categoryCodeRef,
+      },
+    };
+  }
+
+  get tagQuery() {
+    return {
+      filter: {
+        type: this.tagCodeRef,
+      },
+    };
+  }
+
+  get categoryFilter() {
+    if (this.activeCategory === undefined) {
+      return { any: [] } as AnyFilter;
+    }
+    return {
+      any: [
+        {
+          // on: this.activeTabRef,
+          eq: { 'primaryCategory.name': this.activeCategory.displayName },
+        },
+        {
+          // on: this.activeTabRef,
+          eq: { 'secondaryCategory.name': this.activeCategory.displayName },
+        },
+      ],
+    } as AnyFilter;
+  }
+
+  get realms(): string[] {
+    return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
+  }
+
   <template>
     <section class='app-card'>
+      <div>
+        {{this.queryDisplay}}
+      </div>
       <TabbedHeader
         @title={{@model.title}}
         @tabs={{this.tabs}}
@@ -100,62 +196,73 @@ class AppCardIsolated extends Component<typeof AppCard> {
           {{/if}}
         </:headerIcon>
       </TabbedHeader>
-      <div class='app-card-content'>
-        {{#if this.activeTab}}
-          {{#if this.activeTab.isTable}}
-            <div class='table'>
-              {{#if this.liveQuery.isLoading}}
-                Loading...
-              {{else}}
-                <table class='styled-table'>
-                  <thead>
-                    <tr>
-                      {{#each this.tableData.headers as |header|}}
-                        <th class='table-header'>{{header}}</th>
-                      {{/each}}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {{#each this.tableData.rows as |row|}}
-                      <tr>
-                        {{#each row as |cell|}}
-                          <td class='table-cell'>
-                            <div class='cell-content'>{{cell}}</div>
-                          </td>
-                        {{/each}}
-                      </tr>
-                    {{/each}}
-                  </tbody>
-                </table>
-              {{/if}}
-            </div>
-          {{else}}
-            {{#if this.instances.length}}
-              <CardsGrid @instances={{this.instances}} @context={{@context}} />
+
+      <section class='app-card-layout'>
+        <aside class='app-card-filter sidebar'>
+
+          <div class='card-box'>
+            <h5>Categories</h5>
+            {{#if this.loadCategoryFilterList.isRunning}}
+              Loading...
             {{else}}
-              {{#if this.liveQuery.isLoading}}
-                Loading...
-              {{else if this.errorMessage}}
-                <p class='error'>{{this.errorMessage}}</p>
-              {{else}}
-                <p>No cards available</p>
-              {{/if}}
+              <FilterList
+                @filters={{this.leftNavFilters}}
+                @activeFilter={{this.activeCategory}}
+                @onChanged={{this.onCategoryChanged}}
+              />
+            {{/if}}
+          </div>
+          <div class='card-box'>
+            <h5>Filters</h5>
+            {{#if this.loadTagFilterList.isRunning}}
+              Loading...
+            {{else}}
+              {{#each this.pillFilters as |pillFilter|}}
+                <Pill
+                  @kind='button'
+                  {{on 'click' (fn this.onPillClick pillFilter)}}
+                >
+                  <:default>
+                    {{pillFilter.value}}
+                  </:default>
+                </Pill>
+
+              {{/each}}
+            {{/if}}
+          </div>
+        </aside>
+        <main class='app-card-content'>
+          {{#if this.activeTab}}
+
+            {{!  Cards grid logic here }}
+            <ConfigurableCardsGrid
+              @query={{this.query}}
+              @context={{@context}}
+            />
+
+            {{#if @context.actions.createCard}}
+              <div class='add-card-button'>
+                <Tooltip @placement='left' @offset={{6}}>
+                  <:trigger>
+                    <AddButton {{on 'click' this.createNew}} />
+                  </:trigger>
+                  <:content>
+                    Add a new card to this collection
+                  </:content>
+                </Tooltip>
+              </div>
             {{/if}}
           {{/if}}
-          {{#if @context.actions.createCard}}
-            <div class='add-card-button'>
-              <Tooltip @placement='left' @offset={{6}}>
-                <:trigger>
-                  <AddButton {{on 'click' this.createNew}} />
-                </:trigger>
-                <:content>
-                  Add a new card to this collection
-                </:content>
-              </Tooltip>
-            </div>
-          {{/if}}
-        {{/if}}
-      </div>
+        </main>
+        <aside class='app-card-related-sidebar sidebar'>
+          <div class='card-box'>
+            <h5>Parent Listing</h5>
+          </div>
+          <div class='card-box'>
+            <h5>Related Apps</h5>
+          </div>
+        </aside>
+      </section>
     </section>
     <style scoped>
       .app-card {
@@ -168,11 +275,32 @@ class AppCardIsolated extends Component<typeof AppCard> {
         font: var(--boxel-font);
         letter-spacing: var(--boxel-lsp);
       }
-      .app-card-content {
+      .app-card-layout {
+        display: grid;
+        grid-template-columns: 1fr 600px 1fr;
+        background: var(--boxel-100);
+        gap: var(--boxel-sp);
+        padding: var(--boxel-sp);
+      }
+
+      main.app-card-content {
+        background: var(--boxel-light);
+        border: 1px solid var(--boxel-200);
+        border-radius: var(--boxel-border-radius);
         width: 100%;
         max-width: 70rem;
         margin: 0 auto;
         padding: var(--boxel-sp-xl) var(--boxel-sp-xl) var(--boxel-sp-xxl);
+      }
+
+      aside.sidebar {
+        padding: 0 var(--boxel-sp);
+      }
+      aside.sidebar > * + * {
+        margin-top: var(--boxel-sp-lg);
+      }
+      aside.sidebar h5 {
+        margin-top: 0;
       }
 
       .table {
@@ -240,10 +368,6 @@ class AppCardIsolated extends Component<typeof AppCard> {
 
   @tracked tabs = this.args.model.tabs;
   @tracked activeTabIndex = 0;
-  @tracked private declare liveQuery: {
-    instances: CardDef[];
-    isLoading: boolean;
-  };
   @tracked errorMessage = '';
 
   constructor(owner: Owner, args: any) {
@@ -253,7 +377,8 @@ class AppCardIsolated extends Component<typeof AppCard> {
       return;
     }
     this.setTab();
-    this.setSearch();
+    this.setCategories();
+    this.setTags();
   }
 
   setTab() {
@@ -298,77 +423,69 @@ class AppCardIsolated extends Component<typeof AppCard> {
     );
   }
 
-  get tableData() {
-    if (!this.instances) {
-      return;
-    }
-    let exampleCard = this.instances[0];
-    let headers: string[] = [];
-    for (let fieldName in exampleCard) {
-      if (
-        fieldName !== 'title' &&
-        fieldName !== 'description' &&
-        fieldName !== 'thumbnailURL' &&
-        fieldName !== 'id'
-      ) {
-        headers.push(fieldName);
-      }
-    }
-    headers.sort();
-
-    let rows = this.instances.map((card) => {
-      let row: string[] = [];
-      for (let header of headers) {
-        row.push((card as any)[header]);
-      }
-      return row;
-    });
-    return {
-      headers,
-      rows,
-    };
-  }
-
   @action setActiveTab(index: number) {
     this.activeTabIndex = index;
-    this.setSearch();
   }
 
-  setSearch(query?: Query) {
+  setCategories() {
     if (!this.currentRealm) {
       return;
     }
-    if (!query) {
-      if (!this.activeTabRef) {
-        return;
-      }
-      query = {
-        filter: {
-          every: [
-            { type: this.activeTabRef },
-            { not: { eq: { id: this.args.model.id! } } },
-          ],
-        },
-      };
-    }
-    this.liveQuery = getLiveCards(
-      query,
-      [this.currentRealm.href], // we're only searching in the current realm
-      async (ready: Promise<void> | undefined) => {
-        if (this.args.context?.actions) {
-          this.args.context.actions.doWithStableScroll(
-            this.args.model as CardDef,
-            async () => {
-              await ready;
-            },
-          );
-        }
-      },
-    );
+    this.loadCategoryFilterList.perform();
   }
 
-  get instances() {
-    return this.liveQuery?.instances;
+  setTags() {
+    if (!this.currentRealm) {
+      return;
+    }
+    this.loadTagFilterList.perform();
+  }
+
+  private loadCategoryFilterList = restartableTask(async () => {
+    let query = this.categoryQuery;
+    let queryString = buildQueryString(query); //has ? in front of it
+    let searchResults = await this.search(queryString);
+    searchResults.forEach((json: any) => {
+      this.leftNavFilters.push({
+        displayName: json.attributes.title,
+      });
+    });
+    this.activeCategory = this.leftNavFilters[0];
+  });
+
+  private loadTagFilterList = restartableTask(async () => {
+    let query = this.tagQuery;
+    let queryString = buildQueryString(query); //has ? in front of it
+    let searchResults = await this.search(queryString);
+    console.log(searchResults);
+    searchResults.forEach((json: any) => {
+      this.pillFilters.push({
+        kind: json.attributes.kind,
+        value: json.attributes.value,
+      });
+    });
+  });
+
+  async search(queryString: string) {
+    let response = await fetch(`${this.realms[0]}_search${queryString}`, {
+      headers: {
+        Accept: SupportedMimeType.CardJson,
+      },
+    });
+
+    if (!response.ok) {
+      let responseText = await response.text();
+      let err = new Error(
+        `status: ${response.status} -
+          ${response.statusText}. ${responseText}`,
+      ) as any;
+
+      err.status = response.status;
+      err.responseText = responseText;
+
+      throw err;
+    }
+    return (await response.json()).data;
   }
 
   @action createNew(value: unknown) {
@@ -398,6 +515,11 @@ class AppCardIsolated extends Component<typeof AppCard> {
       }
     },
   );
+
+  @action onPillClick(pillFilter: PillFilter) {
+    console.log('Pill clicked:', pillFilter);
+    // Handle pill click event here
+  }
 }
 
 export class AppCard extends CardDef {
@@ -408,16 +530,80 @@ export class AppCard extends CardDef {
   @field headerIcon = contains(Base64ImageField);
   @field moduleId = contains(StringField);
   static isolated = AppCardIsolated;
-    static atom = class Atom extends Component<typeof this> {
-    <template>
- Justin
-    </template>
+}
+
+export class ConfigurableCardsGrid extends GlimmerComponent<{
+  Args: {
+    context?: CardContext;
+    query?: Query;
+    isListFormat?: boolean;
   };
+  Element: HTMLElement;
+}> {
+  <template>
+    {{#let
+      (component @context.prerenderedCardSearchComponent)
+      as |PrerenderedCardSearch|
+    }}
+      <PrerenderedCardSearch
+        @query={{@query}}
+        @format='fitted'
+        @realms={{this.realms}}
+      >
+        <:loading>
+          Loading...
+        </:loading>
+        <:response as |cards|>
+          {{#if cards.length}}
+            <CardsGrid @cards={{cards}} @context={{@context}} />
+          {{else}}
+            <div class='no-cards-message'>No Cards Available</div>
+          {{/if}}
+        </:response>
+      </PrerenderedCardSearch>
+    {{/let}}
+    <style scoped>
+      .cards-grid {
+        --grid-card-width: 10.25rem; /* 164px */
+        --grid-card-height: 14rem; /* 224px */
+        list-style-type: none;
+        margin: 0;
+        padding: var(--cards-grid-padding, 0);
+        display: grid;
+        grid-template-columns: repeat(auto-fill, var(--grid-card-width));
+        grid-auto-rows: max-content;
+        gap: var(--boxel-sp-xl) var(--boxel-sp-lg);
+      }
+      .cards-grid.list-format {
+        --grid-card-width: 18.75rem; /* 300px */
+        --grid-card-height: 12rem; /* 192px */
+        grid-template-columns: 1fr;
+        gap: var(--boxel-sp);
+      }
+      .cards-grid-item {
+        width: var(--grid-card-width);
+        height: var(--grid-card-height);
+      }
+      .cards-grid-item > :deep(.field-component-card.fitted-format) {
+        --overlay-fitted-card-header-height: 0;
+      }
+      .no-cards-message {
+        font-size: 1.2rem;
+        color: var(--boxel-dark);
+        text-align: center;
+        padding: var(--boxel-sp-xl);
+      }
+    </style>
+  </template>
+
+  get realms() {
+    return ['http://localhost:4201/experiments/'];
+  }
 }
 
 export class CardsGrid extends GlimmerComponent<{
   Args: {
-    instances: CardDef[] | [];
+    cards: PrerenderedCard[] | [];
     context?: CardContext;
     isListFormat?: boolean;
   };
@@ -425,23 +611,19 @@ export class CardsGrid extends GlimmerComponent<{
 }> {
   <template>
     <ul class={{cn 'cards-grid' list-format=@isListFormat}} ...attributes>
-      {{! use "key" to keep the list stable between refreshes }}
-      {{#each @instances key='id' as |card|}}
+      {{#each @cards as |card|}}
         <li
-          class='cards-grid-item'
-          {{! In order to support scrolling cards into view
-            we use a selector that is not pruned out in production builds }}
-          data-cards-grid-item={{card.id}}
           {{@context.cardComponentModifier
-            card=card
+            cardId=card.url
             format='data'
             fieldType=undefined
             fieldName=undefined
           }}
+          data-test-cards-grid-item={{removeFileExtension card.url}}
+          {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
+          data-cards-grid-item={{removeFileExtension card.url}}
         >
-          {{#let (this.getComponent card) as |Card|}}
-            <Card />
-          {{/let}}
+          {{card.component}}
         </li>
       {{/each}}
     </ul>
@@ -474,4 +656,8 @@ export class CardsGrid extends GlimmerComponent<{
   </template>
 
   getComponent = (card: CardDef) => card.constructor.getComponent(card);
+}
+
+function removeFileExtension(cardUrl: string) {
+  return cardUrl.replace(/\.[^/.]+$/, '');
 }
