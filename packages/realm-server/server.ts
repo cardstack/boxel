@@ -332,10 +332,11 @@ export class RealmServer {
 
   // TODO consider refactoring this into main.ts after createRealm() becomes
   // private and realm creation happens as part of user creation. Then the
-  // testing would likely move to the matrix client. Currently createRealm() is
-  // more easily tested because the loadRealms() happens in the realm
-  // server--there is no easy way to test main.ts outside of running the entire
-  // stack.
+  // testing would likely move to the matrix client. Currently testing this
+  // method is only possible by having this function in the RealmServer which is
+  // within our testing boundary. main.ts is outside of our testing boundary.
+  // The only real way to test thru main.ts is with a full stack, a la matrix
+  // client tests.
   private loadRealms() {
     let realms: Realm[] = [];
     for (let maybeUsername of readdirSync(this.realmsRootPath, {
