@@ -28,7 +28,7 @@ interface Signature {
     cards: PrerenderedCard[];
     select: (cardUrl?: string, ev?: KeyboardEvent | MouseEvent) => void;
     selectedCardUrl?: string;
-    realmInfos?: Record<string, RealmInfo>;
+    realmInfos: Record<string, RealmInfo>;
   };
 }
 
@@ -182,7 +182,7 @@ export default class CardCatalog extends Component<Signature> {
         if (!acc[realmUrl]) {
           acc[realmUrl] = {
             cards: [],
-            realmInfo: this.args.realmInfos![realmUrl],
+            realmInfo: this.args.realmInfos[realmUrl],
             cardsTotal: 0,
             displayedCardsCount: 0,
           };
