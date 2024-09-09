@@ -9,7 +9,6 @@ import {
 } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
-import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
 import {
@@ -38,6 +37,7 @@ import {
   lookupLoaderService,
 } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
+import { setupRenderingTest } from '../../helpers/setup';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 

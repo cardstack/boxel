@@ -9,9 +9,7 @@ import {
   visit,
 } from '@ember/test-helpers';
 
-import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 
@@ -43,6 +41,7 @@ import {
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
+import { setupApplicationTest } from '../../helpers/setup';
 
 const testRealmURL2 = 'http://test-realm/test2/';
 const realmAFiles: Record<string, any> = {
@@ -402,7 +401,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  setupWindowMock(hooks);
   let { setRealmPermissions } = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
     activeRealms: [testRealmURL, testRealmURL2],
