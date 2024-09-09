@@ -44,7 +44,7 @@ export class Post extends CardDef {
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <div class='container'>
-        <h1><@fields.title /><img src='{{imageURL}}' /></h1>
+        <h1><@fields.title /><img src='{{imageURL}}' aria-hidden='true' /></h1>
         <h3>by <@fields.author.firstName /> <@fields.author.lastName /></h3>
         <p><@fields.body /></p>
       </div>

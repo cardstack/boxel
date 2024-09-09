@@ -46,8 +46,8 @@ export class GameSlot extends CardDef {
           {{#unless @fields.players.length}}
             <li><em>Nobody yet</em></li>
           {{/unless}}
-          {{#each @fields.players as |player|}}
-            <li><player /></li>
+          {{#each @fields.players as |Player|}}
+            <li><Player /></li>
           {{/each}}
         </ul>
       </div>

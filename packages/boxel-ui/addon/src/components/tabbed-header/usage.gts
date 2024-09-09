@@ -53,7 +53,7 @@ export default class TabbedHeaderUsage extends Component {
         <TabbedHeader
           @title={{this.title}}
           @tabs={{this.tabs}}
-          @onSetActiveTab={{fn this.onSetActiveTab}}
+          @onSetActiveTab={{this.onSetActiveTab}}
           @activeTabIndex={{this.activeTabIndex}}
           @headerBackgroundColor={{this.headerColor}}
         >
