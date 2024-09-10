@@ -1,4 +1,5 @@
 import { action } from '@ember/object';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { restartableTask } from 'ember-concurrency';
 import {
@@ -15,9 +16,12 @@ import {
   AddButton,
   CardContainer,
   FilterList,
+  IconButton,
   Tooltip,
   type Filter,
 } from '@cardstack/boxel-ui/components';
+import { IconList, IconTable } from '@cardstack/boxel-ui/icons';
+import { eq, cn } from '@cardstack/boxel-ui/helpers';
 import {
   chooseCard,
   catalogEntryRef,
@@ -35,7 +39,7 @@ import { TrackedArray } from 'tracked-built-ins';
 
 class Isolated extends Component<typeof CardsGrid> {
   <template>
-    <div class='cards-grid'>
+    <div class={{cn 'cards-grid' list-view=(eq this.viewSize 'list')}}>
       <div class='sidebar'>
         <FilterList
           @filters={{this.filters}}
@@ -44,7 +48,32 @@ class Isolated extends Component<typeof CardsGrid> {
         />
       </div>
       <div class='content'>
-        <span class='headline'>{{this.activeFilter.displayName}}</span>
+        <div class='header'>
+          <span class='headline'>{{this.activeFilter.displayName}}</span>
+          <div class='view-as-menu'>
+            <span>View as</span>
+            <IconButton
+              @icon={{IconList}}
+              @width='20px'
+              @height='20px'
+              class={{cn
+                'list-view-button'
+                is-view-selected=(eq this.viewSize 'list')
+              }}
+              {{on 'click' (fn (mut this.viewSize) 'list')}}
+            />
+            <IconButton
+              @icon={{IconTable}}
+              @width='25px'
+              @height='25px'
+              class={{cn
+                'table-view-button'
+                is-view-selected=(eq this.viewSize 'table')
+              }}
+              {{on 'click' (fn (mut this.viewSize) 'table')}}
+            />
+          </div>
+        </div>
         <ul class='cards' data-test-cards-grid-cards>
           {{#if this.isShowingCards}}
             {{#let
@@ -117,6 +146,13 @@ class Isolated extends Component<typeof CardsGrid> {
         height: 100%;
         overflow: hidden;
       }
+      .list-view {
+        --grid-card-width: 100%;
+        --grid-card-height: 11.125rem;
+      }
+      .list-view .cards {
+        flex-direction: column;
+      }
       .sidebar {
         position: relative;
       }
@@ -139,10 +175,38 @@ class Isolated extends Component<typeof CardsGrid> {
         overflow-y: auto;
         padding-right: var(--boxel-sp-sm);
       }
+      .header {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+      }
       .headline {
         font: bold var(--boxel-font-lg);
         line-height: 1.58;
         letter-spacing: 0.21px;
+      }
+      .view-as-menu {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+      }
+      .view-as-menu span {
+        font: 500 var(--boxel-font-sm);
+        line-height: 1.23;
+        letter-spacing: 0.13px;
+        margin-right: var(--boxel-sp-xs);
+      }
+      .list-view-button {
+        --boxel-icon-button-width: 20px;
+        --boxel-icon-button-height: 20px;
+        --icon-color: var(--boxel-450);
+      }
+      .table-view-button {
+        --boxel-icon-button-width: 25px;
+        --boxel-icon-button-height: 25px;
+        --icon-color: var(--boxel-450);
+      }
+      .is-view-selected {
+        --icon-color: var(--boxel-dark);
       }
       .cards {
         list-style-type: none;
@@ -243,6 +307,7 @@ class Isolated extends Component<typeof CardsGrid> {
     },
   ]);
   @tracked activeFilter = this.filters[0];
+  @tracked viewSize: 'table' | 'list' = 'table';
 
   @action onFilterChanged(filter: Filter) {
     this.activeFilter = filter;

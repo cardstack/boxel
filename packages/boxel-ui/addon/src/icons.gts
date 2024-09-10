@@ -27,6 +27,7 @@ import IconCode from './icons/icon-code.gts';
 import IconGlobe from './icons/icon-globe.gts';
 import IconInherit from './icons/icon-inherit.gts';
 import IconLink from './icons/icon-link.gts';
+import IconList from './icons/icon-list.gts';
 import IconMinusCircle from './icons/icon-minus-circle.gts';
 import IconPencil from './icons/icon-pencil.gts';
 import IconPencilCrossedOut from './icons/icon-pencil-crossed-out.gts';
@@ -34,6 +35,7 @@ import IconPencilNotCrossedOut from './icons/icon-pencil-not-crossed-out.gts';
 import IconPlus from './icons/icon-plus.gts';
 import IconPlusCircle from './icons/icon-plus-circle.gts';
 import IconSearch from './icons/icon-search.gts';
+import IconTable from './icons/icon-table.gts';
 import IconTrash from './icons/icon-trash.gts';
 import IconTurnDownRight from './icons/icon-turn-down-right.gts';
 import IconX from './icons/icon-x.gts';
@@ -73,6 +75,7 @@ export const ALL_ICON_COMPONENTS = [
   IconGlobe,
   IconInherit,
   IconLink,
+  IconList,
   IconMinusCircle,
   IconPencil,
   IconPencilCrossedOut,
@@ -80,6 +83,7 @@ export const ALL_ICON_COMPONENTS = [
   IconPlus,
   IconPlusCircle,
   IconSearch,
+  IconTable,
   IconTrash,
   IconTurnDownRight,
   IconX,
@@ -120,6 +124,7 @@ export {
   IconGlobe,
   IconInherit,
   IconLink,
+  IconList,
   IconMinusCircle,
   IconPencil,
   IconPencilCrossedOut,
@@ -127,6 +132,7 @@ export {
   IconPlus,
   IconPlusCircle,
   IconSearch,
+  IconTable,
   IconTrash,
   IconTurnDownRight,
   IconX,

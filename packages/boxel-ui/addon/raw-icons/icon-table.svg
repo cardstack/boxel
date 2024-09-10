@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="22.5" height="15.448" viewBox="0 0 22.5 15.448">
+    <g data-name="icon_Table (stoke)" transform="translate(.75 .75)">
+        <rect data-name="Rectangle 1865" width="21" height="13.948" rx=".5"
+            style="fill:none;stroke:var(--icon-color, #000);stroke-width:1.5px" />
+        <path data-name="Path 7389" d="M9994.706 15015.1v14.2" transform="translate(-9988 -15014.99)"
+            style="fill:none;stroke:var(--icon-color, #000);stroke-width:1.5px" />
+        <path data-name="Path 7392" d="M9994.706 15015.1v14.2" transform="translate(-9981 -15014.99)"
+            style="fill:none;stroke:var(--icon-color, #000);stroke-width:1.5px" />
+        <path data-name="Path 7390" d="M0 0v20.644" transform="rotate(-90 2.566 2.209)"
+            style="fill:none;stroke:var(--icon-color, #000);stroke-width:1.5px" />
+        <path data-name="Path 7391" d="M0 0v20.644" transform="rotate(-90 4.891 4.534)"
+            style="fill:none;stroke:var(--icon-color, #000);stroke-width:1.5px" />
+    </g>
+</svg>
