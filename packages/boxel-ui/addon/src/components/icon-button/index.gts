@@ -38,7 +38,8 @@ class IconButton extends Component<Signature> {
       {{on 'mouseleave' this.onMouseLeaveButton}}
       ...attributes
     >
-      {{! Using inline style attribute because targeting the svg using <style> does not work - css scoping works incorrectly }}
+      {{! Using inline style attribute because targeting the svg using <style scoped> does not work - css scoping works incorrectly }}
+      {{! template-lint-disable no-inline-styles }}
       {{#if @icon}}
         <@icon
           width={{if @width @width '16px'}}
@@ -47,7 +48,7 @@ class IconButton extends Component<Signature> {
         />
       {{/if}}
     </button>
-    <style>
+    <style scoped>
       button {
         --boxel-icon-button-width: 40px;
         --boxel-icon-button-height: 40px;

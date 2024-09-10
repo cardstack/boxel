@@ -1725,7 +1725,7 @@ module('Realm Server', function (hooks) {
               <template>
                 Embedded Card Person: <@fields.firstName/>
 
-                <style>
+                <style scoped>
                   .border {
                     border: 1px solid red;
                   }
@@ -1746,7 +1746,7 @@ module('Realm Server', function (hooks) {
               <template>
                 Embedded Card FancyPerson: <@fields.firstName/>
 
-                <style>
+                <style scoped>
                   .fancy-border {
                     border: 1px solid pink;
                   }
@@ -2397,6 +2397,34 @@ module('Realm Server', function (hooks) {
         response.headers['x-boxel-realm-public-readable'],
         'true',
       );
+    });
+
+    test('can fetch card type summary', async function (assert) {
+      let response = await request
+        .get('/_types')
+        .set('Accept', 'application/json');
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.deepEqual(response.body, {
+        data: [
+          {
+            type: 'card-type-summary',
+            id: `${testRealm.url}home/Home`,
+            attributes: {
+              displayName: 'Home',
+              total: 1,
+            },
+          },
+          {
+            type: 'card-type-summary',
+            id: `${testRealm.url}person/Person`,
+            attributes: {
+              displayName: 'Person',
+              total: 3,
+            },
+          },
+        ],
+      });
     });
   });
 

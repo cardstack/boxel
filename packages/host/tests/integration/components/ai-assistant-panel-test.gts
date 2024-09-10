@@ -8,10 +8,8 @@ import {
 import GlimmerComponent from '@glimmer/component';
 
 import { format, subMinutes } from 'date-fns';
-import { setupRenderingTest } from 'ember-qunit';
+
 import window from 'ember-window-mock';
-import { setupWindowMock } from 'ember-window-mock/test-support';
-import { EventStatus } from 'matrix-js-sdk';
 import { module, test } from 'qunit';
 
 import { Deferred, baseRealm } from '@cardstack/runtime-common';
@@ -49,6 +47,7 @@ import {
   MockMatrixService,
 } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
+import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | ai-assistant-panel', function (hooks) {
   const realmName = 'Operator Mode Workspace';
@@ -72,7 +71,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
   setupServerSentEvents(hooks);
   setupMatrixServiceMock(hooks, { autostart: true });
 
-  setupWindowMock(hooks);
   let noop = () => {};
 
   hooks.beforeEach(async function () {
@@ -1052,7 +1050,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
           <OperatorMode @onClose={{noop}} />
           <CardPrerender />
           <div class='invisible' data-test-throw-room-error />
-          <style>
+          <style scoped>
             .invisible {
               display: none;
             }
@@ -1265,7 +1263,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
           age: 105,
           transaction_id: '1',
         },
-        status: EventStatus.SENDING,
+        status: 'sending',
       };
       await addRoomEvent(this, event);
     };
@@ -1286,7 +1284,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let newEvent = {
       ...event,
       event_id: 'updated-event-id',
-      status: EventStatus.SENT,
+      status: 'sent',
     };
     await updateRoomEvent(matrixService, newEvent, event.event_id);
     await waitUntil(
@@ -1343,7 +1341,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
           age: 105,
           transaction_id: '1',
         },
-        status: EventStatus.SENDING,
+        status: 'sending',
       };
       await addRoomEvent(this, event);
     };
@@ -1363,7 +1361,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let newEvent = {
       ...event,
       event_id: 'updated-event-id',
-      status: EventStatus.NOT_SENT,
+      status: 'not_sent',
     };
     await updateRoomEvent(matrixService, newEvent, event.event_id);
     await waitUntil(

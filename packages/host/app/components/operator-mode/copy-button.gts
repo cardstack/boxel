@@ -85,7 +85,7 @@ export default class CopyButton extends Component<Signature> {
         </BoxelButton>
       {{/if}}
     {{/if}}
-    <style>
+    <style scoped>
       .copy-button {
         position: absolute;
         left: calc(50% - var(--boxel-button-min-width, 5rem));

@@ -1,7 +1,6 @@
 import { find, visit, currentURL } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -17,7 +16,6 @@ module('Acceptance | basic tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
-  setupWindowMock(hooks);
 
   hooks.beforeEach(async function () {
     let loaderService = lookupLoaderService();
@@ -57,7 +55,7 @@ module('Acceptance | basic tests', function (hooks) {
             <p>Last name: <@fields.lastName /></p>
             <p>Title: <@fields.title /></p>
           </div>
-          <style>
+          <style scoped>
             div {
               color: green;
               content: '';

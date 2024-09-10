@@ -8,10 +8,7 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 
-import { setupApplicationTest } from 'ember-qunit';
-
 import window from 'ember-window-mock';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
@@ -38,13 +35,13 @@ import {
   MockMatrixService,
   setupMatrixServiceMock,
 } from '../helpers/mock-matrix-service';
+import { setupApplicationTest } from '../helpers/setup';
 
 module('Acceptance | operator mode tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  setupWindowMock(hooks);
   let { setExpiresInSec } = setupMatrixServiceMock(hooks);
 
   hooks.beforeEach(async function () {
@@ -394,6 +391,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     await waitFor('[data-test-operator-mode-stack]');
     assert.dom('[data-test-operator-mode-stack]').exists();
     assert.dom('[data-test-stack-card-index="0"]').exists(); // Index card opens in the stack
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
 
     await waitFor(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`);
 
@@ -567,6 +565,39 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}address-with-no-embedded-template.gts`,
     });
+  });
+
+  test('open workspace chooser when boxel icon is clicked', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    assert
+      .dom('[data-test-stack-card="http://test-realm/test/Person/fadhlan"]')
+      .exists();
+    assert.dom('[data-test-submode-layout-title]').doesNotExist();
+    assert.dom('[data-test-workspace-chooser]').doesNotExist();
+    let url = currentURL().split('?')[1].replace(/^\/\?/, '') ?? '';
+    let urlParameters = new URLSearchParams(url);
+    assert.false(Boolean(urlParameters.get('workspaceChooserOpened')));
+
+    await click('[data-test-submode-layout-boxel-icon-button]');
+
+    assert.dom('[data-test-submode-layout-title]').exists();
+    assert.dom('[data-test-workspace-chooser]').exists();
+    assert
+      .dom(`[data-test-stack-card="http://test-realm/test/Person/fadhlan"]`)
+      .doesNotExist();
+    url = currentURL().split('?')[1].replace(/^\/\?/, '') ?? '';
+    urlParameters = new URLSearchParams(url);
+    assert.true(Boolean(urlParameters.get('workspaceChooserOpened')));
   });
 
   module('2 stacks', function () {

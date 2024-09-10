@@ -7,10 +7,7 @@ import {
 
 import { triggerEvent } from '@ember/test-helpers';
 
-import { setupApplicationTest } from 'ember-qunit';
-
 import window from 'ember-window-mock';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
 
@@ -41,6 +38,7 @@ import {
   lookupLoaderService,
 } from '../helpers';
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
+import { setupApplicationTest } from '../helpers/setup';
 
 const testRealm2URL = `http://test-realm/test2/`;
 
@@ -51,7 +49,6 @@ module('Acceptance | interact submode tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  setupWindowMock(hooks);
   let { setRealmPermissions } = setupMatrixServiceMock(hooks);
 
   hooks.beforeEach(async function () {
@@ -792,6 +789,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         ],
       });
 
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
       // Simulate simultaneous clicks for spam-clicking
       await Promise.all([
         click(
@@ -1199,6 +1197,12 @@ module('Acceptance | interact submode tests', function (hooks) {
         )
         .doesNotExist('"..." menu does not exist');
 
+      await click(
+        '[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]',
+      );
+      await click(
+        '[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]',
+      );
       await triggerEvent(
         `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/ringo"]`,
         'mouseenter',

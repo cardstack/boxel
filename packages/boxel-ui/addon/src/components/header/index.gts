@@ -66,7 +66,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       </div>
     {{/if}}
   </header>
-  <style>
+  <style scoped>
     @layer {
       header {
         --default-header-padding: 0 var(--boxel-sp-xxxs) 0 var(--boxel-sp-sm);

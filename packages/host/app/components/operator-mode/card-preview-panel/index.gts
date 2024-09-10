@@ -201,7 +201,7 @@ export default class CardPreviewPanel extends Component<Signature> {
       </div>
     </div>
 
-    <style>
+    <style scoped>
       .preview-header {
         background: white;
         border-top-left-radius: var(--boxel-border-radius);

@@ -194,7 +194,7 @@ export default class Selector extends Component<Signature> {
         {{/each}}
       {{/if}}
     </ul>
-    <style>
+    <style scoped>
       @layer {
         .boxel-selector {
           --boxel-selector-border-radius: var(--boxel-border-radius);

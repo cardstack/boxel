@@ -1,6 +1,5 @@
 import { RenderingTestContext } from '@ember/test-helpers';
 
-import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
 import { Loader, Query, baseRealm } from '@cardstack/runtime-common';
@@ -17,6 +16,7 @@ import {
   testRealmURL,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
+import { setupRenderingTest } from '../../helpers/setup';
 
 module(`Integration | search resource`, function (hooks) {
   let loader: Loader;

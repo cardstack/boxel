@@ -28,7 +28,7 @@ export default class EmbeddedPreview extends Component<Signature> {
       <this.renderedCard @displayContainer={{true}} class='card' />
     </div>
 
-    <style>
+    <style scoped>
       .wrapper {
         margin: 20px;
       }

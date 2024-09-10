@@ -10,7 +10,7 @@ import {
   contains,
   CardDef,
   linksTo,
-  StringField
+  StringField,
 } from 'https://cardstack.com/base/card-api';
 import TextAreaCard from '../base/text-area';
 import { FieldContainer, BoxelSelect } from '@cardstack/boxel-ui/components';
@@ -71,7 +71,7 @@ class Edit extends Component<typeof Event> {
         </FieldContainer>
       </div>
     </div>
-    <style>
+    <style scoped>
       .row {
         display: flex;
         flex-direction: row;
@@ -137,7 +137,7 @@ class Isolated extends Component<typeof Event> {
         </FieldContainer>
       </div>
     </div>
-    <style>
+    <style scoped>
       .row {
         display: flex;
         flex-direction: row;

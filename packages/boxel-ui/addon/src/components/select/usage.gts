@@ -45,14 +45,13 @@ export default class BoxelSelectUsage extends Component {
   }
 
   <template>
-    <style
-      unscoped
-    >
-          .boxel-select-usage {
-            --boxel-select-current-color: {{this.boxelSelectCurrentColor.value}};
-            --boxel-select-selected-color: {{this.boxelSelectSelectedColor.value}};
-          }
-        </style>
+    {{! template-lint-disable require-scoped-style }}
+    <style>
+      .boxel-select-usage {
+        --boxel-select-current-color: {{this.boxelSelectCurrentColor.value}};
+        --boxel-select-selected-color: {{this.boxelSelectSelectedColor.value}};
+      }
+    </style>
     <FreestyleUsage @name='Select'>
       <:example>
 

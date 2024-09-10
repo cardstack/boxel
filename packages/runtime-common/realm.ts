@@ -1,5 +1,6 @@
 import { Deferred } from './deferred';
 import {
+  makeCardTypeSummaryDoc,
   transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
 } from './card-document';
@@ -154,7 +155,6 @@ export interface RealmAdapter {
 }
 
 interface Options {
-  useTestingDomain?: true;
   disableModuleCaching?: true;
 }
 
@@ -229,7 +229,6 @@ export class Realm {
   #realmIndexQueryEngine: RealmIndexQueryEngine;
   #adapter: RealmAdapter;
   #router: Router;
-  #useTestingDomain = false;
   #log = logger('realm');
   #perfLog = logger('perf');
   #startTime = Date.now();
@@ -303,7 +302,6 @@ export class Realm {
       seed: realmSecretSeed,
     });
     this.#getIndexHTML = getIndexHTML;
-    this.#useTestingDomain = Boolean(opts?.useTestingDomain);
     this.#assetsURL = assetsURL;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
 
@@ -357,6 +355,11 @@ export class Realm {
         '/_search-prerendered',
         SupportedMimeType.CardJson,
         this.searchPrerendered.bind(this),
+      )
+      .get(
+        '/_types',
+        SupportedMimeType.CardTypeSummary,
+        this.fetchCardTypeSummary.bind(this),
       )
       .post(
         '/_session',
@@ -829,69 +832,6 @@ export class Realm {
         /(src|href)="\//g,
         `$1="${this.#assetsURL.href}`,
       );
-
-      // this installs an event listener to allow a test driver to introspect
-      // the DOM from a different localhost:4205 origin (the test driver's
-      // origin)
-      if (this.#useTestingDomain) {
-        indexHTML = `
-          ${indexHTML}
-          <script>
-            window.addEventListener('message', (event) => {
-              console.log('received event in realm index HTML', event);
-              if ([
-                  'http://localhost:4205',
-                  'http://localhost:7357',
-                  'http://127.0.0.1:4205',
-                  'http://127.0.0.1:7357'
-                ].includes(event.origin)) {
-                if (event.data === 'location') {
-                  event.source.postMessage(document.location.href, event.origin);
-                  return;
-                }
-
-                let { data: { querySelector, querySelectorAll, click, fillInput, uuid } } = event;
-                let response;
-                if (querySelector) {
-                  let element = document.querySelector(querySelector);
-                  response = element ? element.outerHTML : null;
-                } else if (querySelectorAll) {
-                  response = [...document.querySelectorAll(querySelectorAll)].map(el => el.outerHTML);
-                } else if (click) {
-                  let el = document.querySelector(click);
-                  if (el) {
-                    el.click();
-                    response = null;
-                  } else {
-                    response = "cannot click on element: could not find '" + click + "'";
-                  }
-                } else if (fillInput) {
-                  let [ target, text ] = fillInput;
-                  let el = document.querySelector(target);
-                  if (el && text != undefined) {
-                    el.value = text;
-                    el.dispatchEvent(new Event('input'));
-                    response = null;
-                  } else if (text == undefined) {
-                    response = "Must provide '" + text + "' when calling 'fillIn'.)";
-                  } else {
-                    response =
-                      "Element not found when calling 'fillInput(" + target + ")'.";
-                  }
-                } else if (uuid) {
-                  // this can be ignored
-                  response = null
-                } else {
-                  response = 'Do not know how to handle event data: ' + JSON.stringify(event.data);
-                }
-                console.log('event response:', response);
-                event.source.postMessage(response, event.origin);
-              }
-            });
-          </script>
-          </
-        `;
-      }
     }
     return indexHTML;
   }
@@ -1657,6 +1597,23 @@ export class Realm {
     });
   }
 
+  private async fetchCardTypeSummary(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let results = await this.#realmIndexQueryEngine.fetchCardTypeSummary();
+
+    let doc = makeCardTypeSummaryDoc(results);
+
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: { 'content-type': SupportedMimeType.CardJson },
+      },
+      requestContext,
+    });
+  }
+
   private async realmInfo(
     _request: Request,
     requestContext: RequestContext,
@@ -1821,7 +1778,7 @@ export class Realm {
       chunkArr.push(`"${item}": ${JSON.stringify((data as any)[item])}`);
     }
     let chunk = sseToChunkData(type, `{${chunkArr.join(', ')}}`, id);
-    await Promise.all(
+    await Promise.allSettled(
       this.listeningClients.map((client) => writeToStream(client, chunk)),
     );
   }
@@ -1835,7 +1792,6 @@ export class Realm {
       init: {
         headers: { 'content-type': 'text/html' },
       },
-      relaxDocumentDomain: this.#useTestingDomain,
       requestContext,
     });
   }

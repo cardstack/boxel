@@ -90,7 +90,7 @@ export default class RemoveFieldModal extends Component<Signature> {
       </section>
     </Modal>
 
-    <style>
+    <style scoped>
       .header {
         font: 700 var(--boxel-font);
         letter-spacing: var(--boxel-lsp-xs);

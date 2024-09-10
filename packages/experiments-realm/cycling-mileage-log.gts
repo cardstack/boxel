@@ -69,7 +69,7 @@ class CyclingLogEntry extends FieldDef {
         <span>Routes: <@fields.origin /> - <@fields.destination /></span>
         <span>Distance: <@fields.distance /> KM</span>
       </div>
-      <style>
+      <style scoped>
         .entry {
           display: flex;
           flex-direction: column;
@@ -124,9 +124,9 @@ export class CyclingMileageLog extends CardDef {
           <canvas
             id='progress-chart'
             {{ProgressChartModifier
-              total=this.args.model.total
-              target=this.args.model.target
-              unit=this.args.model.unit
+              total=@model.total
+              target=@model.target
+              unit=@model.unit
             }}
           />
         </div>
@@ -134,7 +134,7 @@ export class CyclingMileageLog extends CardDef {
           <@fields.entries />
         </div>
       </div>
-      <style>
+      <style scoped>
         .summary {
           display: flex;
           justify-content: center;

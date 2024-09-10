@@ -9,6 +9,7 @@ import {
   realmInfo,
   realmURL,
   type BaseDef,
+  linksToMany,
 } from './card-api';
 import {
   AddButton,
@@ -22,6 +23,7 @@ import {
   catalogEntryRef,
   baseRealm,
   isCardInstance,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
 
@@ -29,6 +31,7 @@ import { tracked } from '@glimmer/tracking';
 import cssUrl from 'ember-css-url';
 import { type CatalogEntry } from './catalog-entry';
 import StringField from './string';
+import { TrackedArray } from 'tracked-built-ins';
 
 class Isolated extends Component<typeof CardsGrid> {
   <template>
@@ -43,41 +46,45 @@ class Isolated extends Component<typeof CardsGrid> {
       <div class='content'>
         <span class='headline'>{{this.activeFilter.displayName}}</span>
         <ul class='cards' data-test-cards-grid-cards>
-          {{#let
-            (component @context.prerenderedCardSearchComponent)
-            as |PrerenderedCardSearch|
-          }}
-            <PrerenderedCardSearch
-              @query={{this.query}}
-              @format='fitted'
-              @realms={{this.realms}}
-            >
+          {{#if this.isShowingCards}}
+            {{#let
+              (component @context.prerenderedCardSearchComponent)
+              as |PrerenderedCardSearch|
+            }}
+              <PrerenderedCardSearch
+                @query={{this.activeFilter.query}}
+                @format='fitted'
+                @realms={{this.realms}}
+              >
 
-              <:loading>
-                Loading...
-              </:loading>
-              <:response as |cards|>
-                {{measureLoadTime}}
-                {{#each cards as |card|}}
-                  <CardContainer class='card'>
-                    <li
-                      {{@context.cardComponentModifier
-                        cardId=card.url
-                        format='data'
-                        fieldType=undefined
-                        fieldName=undefined
-                      }}
-                      data-test-cards-grid-item={{removeFileExtension card.url}}
-                      {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
-                      data-cards-grid-item={{removeFileExtension card.url}}
-                    >
-                      {{card.component}}
-                    </li>
-                  </CardContainer>
-                {{/each}}
-              </:response>
-            </PrerenderedCardSearch>
-          {{/let}}
+                <:loading>
+                  Loading...
+                </:loading>
+                <:response as |cards|>
+                  {{measureLoadTime}}
+                  {{#each cards as |card|}}
+                    <CardContainer class='card'>
+                      <li
+                        {{@context.cardComponentModifier
+                          cardId=card.url
+                          format='data'
+                          fieldType=undefined
+                          fieldName=undefined
+                        }}
+                        data-test-cards-grid-item={{removeFileExtension
+                          card.url
+                        }}
+                        {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
+                        data-cards-grid-item={{removeFileExtension card.url}}
+                      >
+                        {{card.component}}
+                      </li>
+                    </CardContainer>
+                  {{/each}}
+                </:response>
+              </PrerenderedCardSearch>
+            {{/let}}
+          {{/if}}
         </ul>
 
         {{#if @context.actions.createCard}}
@@ -95,7 +102,7 @@ class Isolated extends Component<typeof CardsGrid> {
       </div>
     </div>
 
-    <style>
+    <style scoped>
       :global(:root) {
         --cards-grid-padding-top: var(--boxel-sp-lg);
       }
@@ -103,10 +110,12 @@ class Isolated extends Component<typeof CardsGrid> {
         --grid-card-width: 11.125rem;
         --grid-card-height: 15.125rem;
 
-        padding: var(--cards-grid-padding-top) var(--boxel-sp-sm);
+        padding: var(--cards-grid-padding-top) 0 0 var(--boxel-sp-sm);
 
         display: flex;
         gap: var(--boxel-sp-xl);
+        height: 100%;
+        overflow: hidden;
       }
       .sidebar {
         position: relative;
@@ -114,6 +123,9 @@ class Isolated extends Component<typeof CardsGrid> {
       :deep(.filter-list) {
         position: sticky;
         top: var(--cards-grid-padding-top);
+        padding-right: var(--boxel-sp-sm);
+        height: 100%;
+        overflow-y: auto;
       }
       :deep(.filter-list__button:first-child) {
         margin-bottom: var(--boxel-sp-xl);
@@ -124,6 +136,8 @@ class Isolated extends Component<typeof CardsGrid> {
         gap: var(--boxel-sp-lg);
         width: 100%;
         position: relative; /* Do not change this */
+        overflow-y: auto;
+        padding-right: var(--boxel-sp-sm);
       }
       .headline {
         font: bold var(--boxel-font-lg);
@@ -134,14 +148,11 @@ class Isolated extends Component<typeof CardsGrid> {
         list-style-type: none;
         margin: 0;
         padding: 0;
-        display: grid;
-        grid-template-columns: repeat(
-          auto-fit,
-          minmax(var(--grid-card-width), 1fr)
-        );
+        display: flex;
+        flex-wrap: wrap;
         gap: var(--boxel-sp);
         justify-items: center;
-        height: 100%;
+        flex-grow: 1;
       }
       .card {
         width: var(--grid-card-width);
@@ -166,48 +177,71 @@ class Isolated extends Component<typeof CardsGrid> {
     </style>
   </template>
 
-  private filters: Filter[] = [
+  constructor(owner: any, args: any) {
+    super(owner, args);
+    this.loadFilterList.perform();
+  }
+
+  filters: { displayName: string; query: any }[] = new TrackedArray([
     {
-      displayName: 'All Apps',
+      displayName: 'Favorites',
       query: {
         filter: {
-          eq: {
-            _cardType: 'Apps',
-          },
+          any:
+            this.args.model['favorites']?.map((card) => {
+              return { eq: { id: card.id } } ?? {};
+            }) ?? [],
         },
+        sort: [
+          {
+            on: {
+              module: `${baseRealm.url}card-api`,
+              name: 'CardDef',
+            },
+            by: '_cardType',
+          },
+          {
+            on: {
+              module: `${baseRealm.url}card-api`,
+              name: 'CardDef',
+            },
+            by: 'title',
+          },
+        ],
       },
     },
     {
       displayName: 'All Cards',
       query: {
         filter: {
-          eq: {
-            _cardType: 'Card',
+          not: {
+            eq: {
+              _cardType: 'Cards Grid',
+            },
           },
         },
-      },
-    },
-    {
-      displayName: 'Person',
-      query: {
-        filter: {
-          eq: {
-            _cardType: 'Person',
+        // sorting by title so that we can maintain stability in
+        // the ordering of the search results (server sorts results
+        // by order indexed by default)
+        sort: [
+          {
+            on: {
+              module: `${baseRealm.url}card-api`,
+              name: 'CardDef',
+            },
+            by: '_cardType',
           },
-        },
-      },
-    },
-    {
-      displayName: 'Pet',
-      query: {
-        filter: {
-          eq: {
-            _cardType: 'Pet',
+          {
+            on: {
+              module: `${baseRealm.url}card-api`,
+              name: 'CardDef',
+            },
+            by: 'title',
           },
-        },
+        ],
       },
     },
-  ];
+  ]);
   @tracked activeFilter = this.filters[0];
 
   @action onFilterChanged(filter: Filter) {
@@ -216,37 +250,6 @@ class Isolated extends Component<typeof CardsGrid> {
 
   get realms(): string[] {
     return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
-  }
-
-  get query() {
-    return {
-      filter: {
-        not: {
-          eq: {
-            _cardType: 'Cards Grid',
-          },
-        },
-      },
-      // sorting by title so that we can maintain stability in
-      // the ordering of the search results (server sorts results
-      // by order indexed by default)
-      sort: [
-        {
-          on: {
-            module: `${baseRealm.url}card-api`,
-            name: 'CardDef',
-          },
-          by: '_cardType',
-        },
-        {
-          on: {
-            module: `${baseRealm.url}card-api`,
-            name: 'CardDef',
-          },
-          by: 'title',
-        },
-      ],
-    };
   }
 
   @action
@@ -269,6 +272,70 @@ class Isolated extends Component<typeof CardsGrid> {
       realmURL: this.args.model[realmURL],
     });
   });
+
+  private loadFilterList = restartableTask(async () => {
+    let response = await fetch(`${this.realms[0]}_types`, {
+      headers: {
+        Accept: SupportedMimeType.CardTypeSummary,
+      },
+    });
+    if (!response.ok) {
+      let responseText = await response.text();
+      let err = new Error(
+        `status: ${response.status} -
+          ${response.statusText}. ${responseText}`,
+      ) as any;
+
+      err.status = response.status;
+      err.responseText = responseText;
+
+      throw err;
+    }
+    let cardTypeSummaries = (await response.json()).data as {
+      id: string;
+      attributes: { displayName: string; total: number };
+    }[];
+    cardTypeSummaries.forEach((summary) => {
+      if (summary.attributes.displayName === 'Cards Grid') {
+        return;
+      }
+      const lastIndex = summary.id.lastIndexOf('/');
+      this.filters.push({
+        displayName: summary.attributes.displayName,
+        query: {
+          filter: {
+            type: {
+              module: summary.id.substring(0, lastIndex),
+              name: summary.id.substring(lastIndex + 1),
+            },
+          },
+          sort: [
+            {
+              on: {
+                module: `${baseRealm.url}card-api`,
+                name: 'CardDef',
+              },
+              by: '_cardType',
+            },
+            {
+              on: {
+                module: `${baseRealm.url}card-api`,
+                name: 'CardDef',
+              },
+              by: 'title',
+            },
+          ],
+        },
+      });
+    });
+  });
+
+  private get isShowingCards() {
+    return (
+      this.activeFilter.displayName !== 'Favorites' ||
+      (this.args.model.favorites && this.args.model.favorites.length > 0)
+    );
+  }
 }
 
 export class CardsGrid extends CardDef {
@@ -285,6 +352,7 @@ export class CardsGrid extends CardDef {
       return this.realmName;
     },
   });
+  @field favorites = linksToMany(CardDef);
 
   static getDisplayName(instance: BaseDef) {
     if (isCardInstance(instance)) {

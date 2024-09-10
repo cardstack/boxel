@@ -75,7 +75,7 @@ export default class Directory extends Component<Args> {
         {{/let}}
       </div>
     {{/each}}
-    <style>
+    <style scoped>
       .level {
         --icon-length: 14px;
         --icon-margin: 4px;

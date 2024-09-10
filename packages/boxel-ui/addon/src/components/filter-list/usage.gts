@@ -74,7 +74,7 @@ export default class FilterListUsage extends Component {
         />
       </:api>
     </FreestyleUsage>
-    <style>
+    <style scoped>
       .filter-usage {
         display: flex;
         gap: var(--boxel-sp-sm);

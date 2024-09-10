@@ -1,6 +1,5 @@
 import { click, waitFor, triggerEvent } from '@ember/test-helpers';
 
-import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
 import {
@@ -38,6 +37,7 @@ import {
 } from '../../helpers/base-realm';
 import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
 import { renderComponent, renderCard } from '../../helpers/render-component';
+import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   let loader: Loader;
@@ -411,7 +411,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
             -
             <@fields.currencyName />
           </div>
-          <style>
+          <style scoped>
             .currency {
               display: flex;
               font-weight: bold;
