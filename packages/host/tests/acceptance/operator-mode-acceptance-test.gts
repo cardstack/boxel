@@ -8,10 +8,7 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 
-import { setupApplicationTest } from 'ember-qunit';
-
 import window from 'ember-window-mock';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
@@ -38,13 +35,13 @@ import {
   MockMatrixService,
   setupMatrixServiceMock,
 } from '../helpers/mock-matrix-service';
+import { setupApplicationTest } from '../helpers/setup';
 
 module('Acceptance | operator mode tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  setupWindowMock(hooks);
   let { setExpiresInSec } = setupMatrixServiceMock(hooks);
 
   hooks.beforeEach(async function () {

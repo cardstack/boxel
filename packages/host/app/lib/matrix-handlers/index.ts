@@ -10,6 +10,7 @@ import type {
 } from 'https://cardstack.com/base/matrix-event';
 
 import type MatrixService from '../../services/matrix-service';
+
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 export * as Membership from './membership';
@@ -68,12 +69,11 @@ export async function addRoomEvent(context: MatrixService, event: Event) {
     room = new RoomState();
     context.setRoom(roomId, room);
   }
-  let resolvedRoom = await room; //look at the note in the MatrixService interface for why this is awaited
 
   // duplicate events may be emitted from matrix, as well as the resolved room card might already contain this event
-  if (!resolvedRoom.events.find((e) => e.event_id === eventId)) {
-    resolvedRoom.events = [
-      ...(resolvedRoom.events ?? []),
+  if (!room.events.find((e) => e.event_id === eventId)) {
+    room.events = [
+      ...(room.events ?? []),
       event as unknown as DiscreteMatrixEvent,
     ];
   }
@@ -99,20 +99,17 @@ export async function updateRoomEvent(
       `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
     );
   }
+
   let room = context.getRoom(roomId);
   if (!room) {
     throw new Error(
       `bug: unknown room for event ${JSON.stringify(event, null, 2)}`,
     );
   }
-  let resolvedRoom = await room; //look at the note in the MatrixService interface for why this is awaited
-  let oldEventIndex = resolvedRoom.events.findIndex(
-    (e) => e.event_id === oldEventId,
-  );
+  let oldEventIndex = room.events.findIndex((e) => e.event_id === oldEventId);
   if (oldEventIndex >= 0) {
-    resolvedRoom.events[oldEventIndex] =
-      event as unknown as DiscreteMatrixEvent;
-    resolvedRoom.events = [...resolvedRoom.events];
+    room.events[oldEventIndex] = event as unknown as DiscreteMatrixEvent;
+    room.events = [...room.events];
   }
 }
 

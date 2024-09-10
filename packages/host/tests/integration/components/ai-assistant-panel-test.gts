@@ -8,9 +8,8 @@ import {
 import GlimmerComponent from '@glimmer/component';
 
 import { format, subMinutes } from 'date-fns';
-import { setupRenderingTest } from 'ember-qunit';
+
 import window from 'ember-window-mock';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { Deferred, baseRealm } from '@cardstack/runtime-common';
@@ -48,6 +47,7 @@ import {
   MockMatrixService,
 } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
+import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | ai-assistant-panel', function (hooks) {
   const realmName = 'Operator Mode Workspace';
@@ -71,7 +71,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
   setupServerSentEvents(hooks);
   setupMatrixServiceMock(hooks, { autostart: true });
 
-  setupWindowMock(hooks);
   let noop = () => {};
 
   hooks.beforeEach(async function () {
@@ -2336,7 +2335,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
     await waitFor('[data-test-command-result]');
-    await waitFor('[data-test-result-card-idx="1"]');
+    await waitFor('.result-list li:nth-child(2)');
     let commandResultEvents = await getCommandResultEvents(
       matrixService,
       roomId,
@@ -2353,8 +2352,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom('[data-test-comand-result-header]')
       .containsText('Search Results 2 results');
 
-    assert.dom('[data-test-result-card-idx="0"]').containsText('0. Jackie');
-    assert.dom('[data-test-result-card-idx="1"]').containsText('1. Mango');
+    assert.dom('.result-list li:nth-child(1)').containsText('Jackie');
+    assert.dom('.result-list li:nth-child(2)').containsText('Mango');
     assert.dom('[data-test-toggle-show-button]').doesNotExist();
   });
 
@@ -2397,29 +2396,29 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
     await waitFor('[data-test-command-result]');
-    await waitFor('[data-test-result-card-idx="4"]');
-    assert.dom('[data-test-result-card-idx="5"]').doesNotExist();
+    await waitFor('.result-list li:nth-child(5)');
+    assert.dom('.result-list li:nth-child(6)').doesNotExist();
     assert
       .dom('[data-test-toggle-show-button]')
       .containsText('Show 3 more results');
     await click('[data-test-toggle-show-button]');
 
-    await waitFor('[data-test-result-card-idx]', { count: 8 });
+    await waitFor('.result-list li', { count: 8 });
     assert.dom('[data-test-toggle-show-button]').containsText('See Less');
-    assert.dom('[data-test-result-card-idx="0"]').containsText('0. Buck');
-    assert.dom('[data-test-result-card-idx="1"]').containsText('1. Burcu');
-    assert.dom('[data-test-result-card-idx="2"]').containsText('2. Fadhlan');
-    assert.dom('[data-test-result-card-idx="3"]').containsText('3. Hassan');
-    assert.dom('[data-test-result-card-idx="4"]').containsText('4. Ian');
-    assert.dom('[data-test-result-card-idx="5"]').containsText('5. Justin');
-    assert.dom('[data-test-result-card-idx="6"]').containsText('6. Matic');
-    assert.dom('[data-test-result-card-idx="7"]').containsText('7. Mickey');
+    assert.dom('.result-list li:nth-child(1)').containsText('Buck');
+    assert.dom('.result-list li:nth-child(2)').containsText('Burcu');
+    assert.dom('.result-list li:nth-child(3)').containsText('Fadhlan');
+    assert.dom('.result-list li:nth-child(4)').containsText('Hassan');
+    assert.dom('.result-list li:nth-child(5)').containsText('Ian');
+    assert.dom('.result-list li:nth-child(6)').containsText('Justin');
+    assert.dom('.result-list li:nth-child(7)').containsText('Matic');
+    assert.dom('.result-list li:nth-child(8)').containsText('Mickey');
     await click('[data-test-toggle-show-button]');
-    assert.dom('[data-test-result-card-idx="0"]').containsText('0. Buck');
-    assert.dom('[data-test-result-card-idx="1"]').containsText('1. Burcu');
-    assert.dom('[data-test-result-card-idx="2"]').containsText('2. Fadhlan');
-    assert.dom('[data-test-result-card-idx="3"]').containsText('3. Hassan');
-    assert.dom('[data-test-result-card-idx="4"]').containsText('4. Ian');
-    assert.dom('[data-test-result-card-idx="5"]').doesNotExist();
+    assert.dom('.result-list li:nth-child(1)').containsText('Buck');
+    assert.dom('.result-list li:nth-child(2)').containsText('Burcu');
+    assert.dom('.result-list li:nth-child(3)').containsText('Fadhlan');
+    assert.dom('.result-list li:nth-child(4)').containsText('Hassan');
+    assert.dom('.result-list li:nth-child(5)').containsText('Ian');
+    assert.dom('.result-list li:nth-child(6)').doesNotExist();
   });
 });

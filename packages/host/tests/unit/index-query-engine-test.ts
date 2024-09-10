@@ -579,4 +579,13 @@ module('Unit | query', function (hooks) {
       testCards,
     });
   });
+
+  test('can sort using a general field that is not an attribute of a card', async function (assert) {
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      dbAdapter,
+      loader,
+      testCards,
+    });
+  });
 });

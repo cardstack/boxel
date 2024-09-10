@@ -13,7 +13,6 @@ import percySnapshot from '@percy/ember';
 import format from 'date-fns/format';
 import parseISO from 'date-fns/parseISO';
 
-import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
 import { BoxelInput } from '@cardstack/boxel-ui/components';
@@ -73,6 +72,7 @@ import {
 } from '../../helpers/base-realm';
 import { mango } from '../../helpers/image-fixture';
 import { renderCard } from '../../helpers/render-component';
+import { setupRenderingTest } from '../../helpers/setup';
 
 let loader: Loader;
 

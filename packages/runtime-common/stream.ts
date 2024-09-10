@@ -124,6 +124,9 @@ export async function writeToStream(
       throw new Error(`cannot handle node-streams when not in node`);
     }
     return new Promise<void>((resolve, reject) => {
+      if ((stream as any).destroyed) {
+        reject(new Error('stream was destroyed'));
+      }
       (stream as any).write(chunk, null, (err: unknown) => {
         if (err) {
           reject(err);

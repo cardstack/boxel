@@ -7,8 +7,6 @@ import {
 } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
-import { setupRenderingTest } from 'ember-qunit';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -37,6 +35,7 @@ import {
 import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
+import { setupRenderingTest } from '../../helpers/setup';
 
 let loader: Loader;
 let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -84,7 +83,6 @@ module('Integration | card-delete', function (hooks) {
     activeRealms: [baseRealm.url, testRealmURL],
     autostart: true,
   });
-  setupWindowMock(hooks);
 
   hooks.beforeEach(async function () {
     setCardInOperatorModeState = async (

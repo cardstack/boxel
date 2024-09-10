@@ -21,9 +21,11 @@ import MenuUsage from './components/menu/usage.gts';
 import MessageUsage from './components/message/usage.gts';
 import ModalUsage from './components/modal/usage.gts';
 import PillUsage from './components/pill/usage.gts';
+import ProgressBarUsage from './components/progress-bar/usage.gts';
 import RadioInputUsage from './components/radio-input/usage.gts';
 import ResizablePanelGroupUsage from './components/resizable-panel-group/usage.gts';
 import SelectUsage from './components/select/usage.gts';
+import SwitchUsage from './components/switch/usage.gts';
 import TabbedHeaderUsage from './components/tabbed-header/usage.gts';
 import TooltipUsage from './components/tooltip/usage.gts';
 
@@ -48,9 +50,11 @@ export const ALL_USAGE_COMPONENTS = [
   ['Message', MessageUsage],
   ['Modal', ModalUsage],
   ['Pill', PillUsage],
+  ['ProgressBar', ProgressBarUsage],
   ['RadioInput', RadioInputUsage],
   ['ResizablePanelGroup', ResizablePanelGroupUsage],
   ['Select', SelectUsage],
+  ['Switch', SwitchUsage],
   ['TabbedHeader', TabbedHeaderUsage],
   ['Tooltip', TooltipUsage],
 ];

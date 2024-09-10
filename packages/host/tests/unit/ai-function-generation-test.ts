@@ -1,7 +1,5 @@
 import { RenderingTestContext } from '@ember/test-helpers';
 
-import { setupRenderingTest } from 'ember-qunit';
-
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -24,6 +22,7 @@ import {
   setupCardLogs,
   lookupLoaderService,
 } from '../helpers';
+import { setupRenderingTest } from '../helpers/setup';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');

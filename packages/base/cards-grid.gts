@@ -19,6 +19,9 @@ import {
   IconButton,
   Tooltip,
   type Filter,
+  BoxelDropdown,
+  Menu as BoxelMenu,
+  BoxelButton,
 } from '@cardstack/boxel-ui/components';
 import { IconList, IconGrid } from '@cardstack/boxel-ui/icons';
 import { eq, cn } from '@cardstack/boxel-ui/helpers';
@@ -28,14 +31,46 @@ import {
   baseRealm,
   isCardInstance,
   SupportedMimeType,
+  Query,
 } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
-
+import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 // @ts-ignore no types
 import cssUrl from 'ember-css-url';
 import { type CatalogEntry } from './catalog-entry';
 import StringField from './string';
 import { TrackedArray } from 'tracked-built-ins';
+import { MenuItem } from '@cardstack/boxel-ui/helpers';
+
+interface SortOption {
+  displayName: string;
+  sort: Query['sort'];
+}
+
+let availableSortOptions: SortOption[] = [
+  {
+    displayName: 'A-Z',
+    sort: [
+      {
+        on: {
+          module: `${baseRealm.url}card-api`,
+          name: 'CardDef',
+        },
+        by: 'title',
+        direction: 'asc',
+      },
+    ],
+  },
+  {
+    displayName: 'Updated at',
+    sort: [
+      {
+        by: 'lastModified',
+        direction: 'desc',
+      },
+    ],
+  },
+];
 
 class Isolated extends Component<typeof CardsGrid> {
   <template>
@@ -48,16 +83,18 @@ class Isolated extends Component<typeof CardsGrid> {
         />
       </div>
       <div class='content'>
-        <div class='header'>
-          <span class='headline'>{{this.activeFilter.displayName}}</span>
-          <div class='view-as-menu'>
+        <div class='top-bar'>
+          <div class='title'>
+            {{this.activeFilter.displayName}}
+          </div>
+          <div class='view-as'>
             <span>View as</span>
             <IconButton
               @icon={{IconList}}
               @width='20px'
               @height='20px'
               class={{cn
-                'view-as-menu__button'
+                'view-as__button'
                 is-selected-view=(eq this.viewSize 'list')
               }}
               {{on 'click' (fn (mut this.viewSize) 'list')}}
@@ -67,13 +104,34 @@ class Isolated extends Component<typeof CardsGrid> {
               @width='20px'
               @height='20px'
               class={{cn
-                'view-as-menu__button'
+                'view-as__button'
                 is-selected-view=(eq this.viewSize 'grid')
               }}
               {{on 'click' (fn (mut this.viewSize) 'grid')}}
             />
           </div>
+          <div class='sorting'>
+            <span>
+              Sort by
+            </span>
+
+            <BoxelDropdown>
+              <:trigger as |bindings|>
+                <BoxelButton class='sort-button' {{bindings}}>
+                  {{this.selectedSortOption.displayName}}
+                  <DropdownArrowDown width='12px' height='12px' />
+                </BoxelButton>
+              </:trigger>
+              <:content as |dd|>
+                <BoxelMenu
+                  @closeMenu={{dd.close}}
+                  @items={{this.sortMenuOptions}}
+                />
+              </:content>
+            </BoxelDropdown>
+          </div>
         </div>
+
         <ul class='cards' data-test-cards-grid-cards>
           {{#if this.isShowingCards}}
             {{#let
@@ -81,7 +139,7 @@ class Isolated extends Component<typeof CardsGrid> {
               as |PrerenderedCardSearch|
             }}
               <PrerenderedCardSearch
-                @query={{this.activeFilter.query}}
+                @query={{this.query}}
                 @format='fitted'
                 @realms={{this.realms}}
               >
@@ -135,6 +193,34 @@ class Isolated extends Component<typeof CardsGrid> {
       :global(:root) {
         --cards-grid-padding-top: var(--boxel-sp-lg);
       }
+      .top-bar {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        padding-right: var(--boxel-sp);
+        gap: var(--boxel-sp-xxxl);
+      }
+      .sort-button {
+        border-radius: var(--boxel-border-radius);
+        min-width: 200px;
+        justify-content: flex-start;
+        padding-left: var(--boxel-sp-sm);
+        padding-right: var(--boxel-sp-sm);
+      }
+
+      .sort-button > svg {
+        margin-left: auto;
+      }
+      .sorting {
+        margin-left: auto;
+      }
+      .sorting > span {
+        margin-right: var(--boxel-sp-xs);
+      }
+      .title {
+        font: bold var(--boxel-font-lg);
+        line-height: 1.58;
+        letter-spacing: 0.21px;
+      }
       .cards-grid {
         --grid-card-width: 11.125rem;
         --grid-card-height: 15.125rem;
@@ -175,27 +261,15 @@ class Isolated extends Component<typeof CardsGrid> {
         overflow-y: auto;
         padding-right: var(--boxel-sp-sm);
       }
-      .header {
-        display: grid;
-        grid-template-columns: 1fr auto auto;
-      }
-      .headline {
-        font: bold var(--boxel-font-lg);
-        line-height: 1.58;
-        letter-spacing: 0.21px;
-      }
-      .view-as-menu {
+      .view-as {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-sm);
       }
-      .view-as-menu span {
-        font: 500 var(--boxel-font-sm);
-        line-height: 1.23;
-        letter-spacing: 0.13px;
+      .view-as > span {
         margin-right: var(--boxel-sp-xs);
       }
-      .view-as-menu__button {
+      .view-as__button {
         --boxel-icon-button-width: 20px;
         --boxel-icon-button-height: 20px;
         --icon-color: var(--boxel-450);
@@ -236,11 +310,6 @@ class Isolated extends Component<typeof CardsGrid> {
     </style>
   </template>
 
-  constructor(owner: any, args: any) {
-    super(owner, args);
-    this.loadFilterList.perform();
-  }
-
   filters: { displayName: string; query: any }[] = new TrackedArray([
     {
       displayName: 'Favorites',
@@ -251,22 +320,6 @@ class Isolated extends Component<typeof CardsGrid> {
               return { eq: { id: card.id } } ?? {};
             }) ?? [],
         },
-        sort: [
-          {
-            on: {
-              module: `${baseRealm.url}card-api`,
-              name: 'CardDef',
-            },
-            by: '_cardType',
-          },
-          {
-            on: {
-              module: `${baseRealm.url}card-api`,
-              name: 'CardDef',
-            },
-            by: 'title',
-          },
-        ],
       },
     },
     {
@@ -279,37 +332,21 @@ class Isolated extends Component<typeof CardsGrid> {
             },
           },
         },
-        // sorting by title so that we can maintain stability in
-        // the ordering of the search results (server sorts results
-        // by order indexed by default)
-        sort: [
-          {
-            on: {
-              module: `${baseRealm.url}card-api`,
-              name: 'CardDef',
-            },
-            by: '_cardType',
-          },
-          {
-            on: {
-              module: `${baseRealm.url}card-api`,
-              name: 'CardDef',
-            },
-            by: 'title',
-          },
-        ],
       },
     },
   ]);
+
+  @tracked private selectedSortOption: SortOption = availableSortOptions[0];
   @tracked activeFilter = this.filters[0];
   @tracked viewSize: 'grid' | 'list' = 'grid';
 
-  @action onFilterChanged(filter: Filter) {
-    this.activeFilter = filter;
+  @action setSelectedSortOption(option: SortOption) {
+    this.selectedSortOption = option;
+    this.activeFilter = this.activeFilter;
   }
 
-  get realms(): string[] {
-    return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
+  @action onFilterChanged(filter: Filter) {
+    this.activeFilter = filter;
   }
 
   @action
@@ -317,11 +354,41 @@ class Isolated extends Component<typeof CardsGrid> {
     this.createCard.perform();
   }
 
+  constructor(owner: any, args: any) {
+    super(owner, args);
+    this.loadFilterList.perform();
+  }
+
+  private get sortMenuOptions() {
+    return availableSortOptions.map((option) => {
+      return new MenuItem(option.displayName, 'action', {
+        action: () => {
+          this.setSelectedSortOption(option);
+        },
+      });
+    });
+  }
+
+  private get realms(): string[] {
+    return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
+  }
+
+  private get query() {
+    return { ...this.activeFilter.query, sort: this.selectedSortOption.sort };
+  }
+
+  private get isShowingCards() {
+    return (
+      this.activeFilter.displayName !== 'Favorites' ||
+      (this.args.model.favorites && this.args.model.favorites.length > 0)
+    );
+  }
+
   private createCard = restartableTask(async () => {
     let card = await chooseCard<CatalogEntry>({
       filter: {
         on: catalogEntryRef,
-        eq: { isField: false },
+        every: [{ eq: { isField: false } }],
       },
     });
     if (!card) {
@@ -369,33 +436,10 @@ class Isolated extends Component<typeof CardsGrid> {
               name: summary.id.substring(lastIndex + 1),
             },
           },
-          sort: [
-            {
-              on: {
-                module: `${baseRealm.url}card-api`,
-                name: 'CardDef',
-              },
-              by: '_cardType',
-            },
-            {
-              on: {
-                module: `${baseRealm.url}card-api`,
-                name: 'CardDef',
-              },
-              by: 'title',
-            },
-          ],
         },
       });
     });
   });
-
-  private get isShowingCards() {
-    return (
-      this.activeFilter.displayName !== 'Favorites' ||
-      (this.args.model.favorites && this.args.model.favorites.length > 0)
-    );
-  }
 }
 
 export class CardsGrid extends CardDef {

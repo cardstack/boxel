@@ -7,10 +7,7 @@ import {
 
 import { triggerEvent } from '@ember/test-helpers';
 
-import { setupApplicationTest } from 'ember-qunit';
-
 import window from 'ember-window-mock';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
 
@@ -41,6 +38,7 @@ import {
   lookupLoaderService,
 } from '../helpers';
 import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
+import { setupApplicationTest } from '../helpers/setup';
 
 const testRealm2URL = `http://test-realm/test2/`;
 
@@ -51,7 +49,6 @@ module('Acceptance | interact submode tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  setupWindowMock(hooks);
   let { setRealmPermissions } = setupMatrixServiceMock(hooks);
 
   hooks.beforeEach(async function () {
@@ -356,9 +353,8 @@ module('Acceptance | interact submode tests', function (hooks) {
       );
 
       assert
-        .dom(`[data-test-card-catalog-item="${testRealmURL}index"]`)
+        .dom(`[data-test-card-catalog-item="${testRealmURL}index"] .card-title`)
         .hasText('Test Workspace B');
-
       await click(`[data-test-select="${testRealmURL}index"]`);
       await click('[data-test-card-catalog-go-button]');
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
@@ -378,22 +374,22 @@ module('Acceptance | interact submode tests', function (hooks) {
         wrongURL,
       );
 
-      assert
-        .dom('[data-test-boxel-input-error-message]')
-        .hasText(`Could not find card at ${wrongURL}`);
-      assert.dom('[data-test-boxel-input-validation-state="invalid"]').exists();
-
       await fillIn(
         '[data-test-card-catalog-modal] [data-test-search-field]',
         baseRealm.url.slice(0, -1),
       );
-      assert.dom('[data-test-card-catalog-item]').hasText('Base Workspace');
+
+      assert
+        .dom('[data-test-card-catalog-item] .card-title')
+        .hasText('Base Workspace');
 
       await fillIn(
         '[data-test-card-catalog-modal] [data-test-search-field]',
         testRealmURL,
       );
-      assert.dom('[data-test-card-catalog-item]').hasText('Test Workspace B');
+      assert
+        .dom('[data-test-card-catalog-item] .card-title')
+        .hasText('Test Workspace B');
       assert.dom('[data-test-boxel-input-error-message]').doesNotExist();
       assert
         .dom('[data-test-boxel-input-validation-state="invalid"]')
