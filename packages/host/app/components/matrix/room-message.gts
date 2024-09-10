@@ -200,10 +200,6 @@ export default class RoomMessage extends Component<Signature> {
               data-test-command-apply={{this.applyButtonState}}
             />
           </div>
-
-          {{#let this.getComponent as |Component|}}
-            <Component @format='embedded' />
-          {{/let}}
           {{#if this.isDisplayingCode}}
             <div class='preview-code'>
               <Button
@@ -238,6 +234,9 @@ export default class RoomMessage extends Component<Signature> {
               />
             </div>
           {{/if}}
+          {{#let this.getComponent as |Component|}}
+            <Component @format='embedded' />
+          {{/let}}
         {{/if}}
       </AiAssistantMessage>
     {{/if}}
@@ -273,7 +272,7 @@ export default class RoomMessage extends Component<Signature> {
         --fill-container-spacing: calc(
           -1 * var(--ai-assistant-message-padding)
         );
-        margin: var(--boxel-sp) var(--fill-container-spacing)
+        margin: var(--boxel-sp) var(--fill-container-spacing) 0
           var(--fill-container-spacing);
         padding: var(--spacing) 0;
         background-color: var(--boxel-dark);
