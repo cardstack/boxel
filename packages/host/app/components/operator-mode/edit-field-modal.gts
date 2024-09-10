@@ -174,11 +174,7 @@ export default class EditFieldModal extends Component<Signature> {
   private chooseCardTask = restartableTask(async () => {
     let chosenCatalogEntry = await chooseCard<CatalogEntry>({
       filter: {
-        any: [
-          {
-            type: catalogEntryRef,
-          },
-        ],
+        type: catalogEntryRef,
       },
     });
 

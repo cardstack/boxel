@@ -531,11 +531,12 @@ export default class CreateFileModal extends Component<Signature> {
   private chooseType = restartableTask(async () => {
     this.clearSaveError();
     let isField = this.fileType.id === 'field-definition';
+
     this.selectedCatalogEntry = await chooseCard({
       filter: {
         on: catalogEntryRef,
         // REMEMBER ME
-        eq: { isField },
+        every: [{ eq: { isField } }],
       },
     });
   });
