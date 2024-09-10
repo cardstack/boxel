@@ -24,6 +24,7 @@ import PillUsage from './components/pill/usage.gts';
 import RadioInputUsage from './components/radio-input/usage.gts';
 import ResizablePanelGroupUsage from './components/resizable-panel-group/usage.gts';
 import SelectUsage from './components/select/usage.gts';
+import SwitchUsage from './components/switch/usage.gts';
 import TabbedHeaderUsage from './components/tabbed-header/usage.gts';
 import TooltipUsage from './components/tooltip/usage.gts';
 
@@ -51,6 +52,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['RadioInput', RadioInputUsage],
   ['ResizablePanelGroup', ResizablePanelGroupUsage],
   ['Select', SelectUsage],
+  ['Switch', SwitchUsage],
   ['TabbedHeader', TabbedHeaderUsage],
   ['Tooltip', TooltipUsage],
 ];
