@@ -21,6 +21,7 @@ import BoxelInput, {
   InputValidationStates as BoxelInputValidationStates,
 } from './components/input/index.gts';
 import BoxelInputGroup from './components/input-group/index.gts';
+import BoxelSelect from './components/select/index.gts';
 import Label from './components/label/index.gts';
 import LoadingIndicator from './components/loading-indicator/index.gts';
 import Menu from './components/menu/index.gts';
@@ -33,7 +34,7 @@ import ResizablePanelGroup, {
   ResizablePanel,
   ResizeHandle,
 } from './components/resizable-panel-group/index.gts';
-import BoxelSelect from './components/select/index.gts';
+import Switch from './components/switch/index.gts';
 import TabbedHeader from './components/tabbed-header/index.gts';
 import Tooltip from './components/tooltip/index.gts';
 
@@ -72,6 +73,7 @@ export {
   ResizablePanel,
   ResizablePanelGroup,
   ResizeHandle,
+  Switch,
   TabbedHeader,
   Tooltip,
 };
