@@ -230,6 +230,7 @@ class Isolated extends Component<typeof CardsGrid> {
         display: flex;
         gap: var(--boxel-sp-xl);
         height: 100%;
+        max-height: 100vh;
         overflow: hidden;
       }
       .list-view {
@@ -267,6 +268,7 @@ class Isolated extends Component<typeof CardsGrid> {
         gap: var(--boxel-sp-sm);
       }
       .view-as > span {
+        text-wrap: nowrap;
         margin-right: var(--boxel-sp-xs);
       }
       .view-as__button {
@@ -316,7 +318,7 @@ class Isolated extends Component<typeof CardsGrid> {
       query: {
         filter: {
           any:
-            this.args.model['favorites']?.map((card) => {
+            this.args.model.favorites?.map((card) => {
               return { eq: { id: card.id } } ?? {};
             }) ?? [],
         },
