@@ -38,6 +38,9 @@ class MockUtils {
   setExpiresInSec = (sec: number) => {
     this.opts.expiresInSec = sec;
   };
+  setActiveRealms = (realmURLs: string[]) => {
+    this.opts.activeRealms = realmURLs;
+  };
 }
 
 // When also using setupBaseRealm, this must come before setupBastRealm so it
