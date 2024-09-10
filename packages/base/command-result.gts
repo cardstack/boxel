@@ -218,6 +218,9 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
         padding-left: var(--boxel-sp);
         margin-block-end: 0;
       }
+      .result-list li {
+        margin-bottom: var(--boxel-sp-xxs);
+      }
     </style>
   </template>
 }
