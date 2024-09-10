@@ -19,7 +19,6 @@ import {
 } from '@cardstack/boxel-ui/icons';
 import { Button, Header, IconButton } from '@cardstack/boxel-ui/components';
 import { on } from '@ember/modifier';
-import helper from '@ember/component/helper';
 
 type AttachedCardResource = {
   card: CardDef | undefined;
