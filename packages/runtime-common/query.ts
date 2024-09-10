@@ -3,7 +3,7 @@ import isEqual from 'lodash/isEqual';
 import { assertJSONValue, assertJSONPrimitive } from './json-validation';
 import qs from 'qs';
 
-import { type CodeRef, isCodeRef } from './index';
+import { type CodeRef, isCodeRef, generalSortFields } from './index';
 
 export interface Query {
   filter?: Filter;
@@ -29,11 +29,20 @@ export interface TypedFilter {
   on?: CodeRef;
 }
 
-interface SortExpression {
+type GeneralSortField = keyof typeof generalSortFields;
+
+type SortExpressionWithoutCodeRef = {
+  by: GeneralSortField;
+  direction?: 'asc' | 'desc';
+};
+
+type SortExpressionWithCodeRef = {
   by: string;
   on: CodeRef;
   direction?: 'asc' | 'desc';
-}
+};
+
+type SortExpression = SortExpressionWithoutCodeRef | SortExpressionWithCodeRef;
 
 export type Sort = SortExpression[];
 
@@ -164,6 +173,9 @@ function assertSortExpression(
     );
   }
   if (!('on' in sort)) {
+    if (Object.keys(generalSortFields).includes(sort.by)) {
+      return;
+    }
     throw new Error(
       `${pointer.concat('on').join('/') || '/'}: missing on object`,
     );

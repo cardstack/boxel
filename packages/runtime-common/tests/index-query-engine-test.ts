@@ -2472,6 +2472,94 @@ const tests = Object.freeze({
       `'null' is not a permitted value in a 'range' filter`,
     );
   },
+  'can sort using a general field that is not an attribute of a card': async (
+    assert,
+    { indexQueryEngine, dbAdapter, loader },
+  ) => {
+    await setupIndex(dbAdapter, [
+      {
+        url: `${testRealmURL}vangogh.json`,
+        file_alias: `${testRealmURL}vangogh`,
+        type: 'instance',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        deps: [],
+        last_modified: '1',
+      },
+      {
+        url: `${testRealmURL}jimmy.json`,
+        file_alias: `${testRealmURL}jimmy`,
+        type: 'instance',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        deps: [],
+        last_modified: '3',
+      },
+      {
+        url: `${testRealmURL}donald.json`,
+        file_alias: `${testRealmURL}donald`,
+        type: 'instance',
+        realm_version: 1,
+        realm_url: testRealmURL,
+        deps: [],
+        last_modified: '2',
+      },
+    ]);
+
+    let { prerenderedCards: results } =
+      await indexQueryEngine.searchPrerendered(
+        new URL(testRealmURL),
+        {
+          sort: [
+            {
+              by: 'lastModified',
+              direction: 'desc',
+            },
+          ],
+        },
+        loader,
+        {
+          htmlFormat: 'embedded',
+        },
+      );
+
+    assert.deepEqual(
+      results.map((r: { url: string }) => r.url),
+      [
+        `${testRealmURL}jimmy.json`,
+        `${testRealmURL}donald.json`,
+        `${testRealmURL}vangogh.json`,
+      ],
+      'results are correct',
+    );
+
+    let { prerenderedCards: results2 } =
+      await indexQueryEngine.searchPrerendered(
+        new URL(testRealmURL),
+        {
+          sort: [
+            {
+              by: 'lastModified',
+              direction: 'asc',
+            },
+          ],
+        },
+        loader,
+        {
+          htmlFormat: 'embedded',
+        },
+      );
+
+    assert.deepEqual(
+      results2.map((r: { url: string }) => r.url),
+      [
+        `${testRealmURL}vangogh.json`,
+        `${testRealmURL}donald.json`,
+        `${testRealmURL}jimmy.json`,
+      ],
+      'results are correct',
+    );
+  },
   'can get prerendered cards from the indexer': async (
     assert,
     { indexQueryEngine, dbAdapter, loader },
