@@ -19,7 +19,6 @@ import {
 } from '@cardstack/boxel-ui/icons';
 import { Button, Header, IconButton } from '@cardstack/boxel-ui/components';
 import { on } from '@ember/modifier';
-import helper from '@ember/component/helper';
 
 type AttachedCardResource = {
   card: CardDef | undefined;
@@ -119,32 +118,23 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
         </:actions>
       </Header>
       <div class='body'>
-        {{#each this.attachedResources as |cardResource i|}}
-          {{#if cardResource.cardError}}
-            <div
-              data-test-card-error={{cardResource.cardError.id}}
-              class='error'
-            >
-              Error: cannot render card
-              {{cardResource.cardError.id}}:
-              {{cardResource.cardError.error.message}}
-            </div>
-          {{else if cardResource.card}}
-            {{#let (add i 1) as |idx|}}
-              <div
-                class='card-item'
-                data-test-result-card={{cardResource.card.id}}
-                data-test-result-card-idx={{idx}}
-              >
+        <ol class='result-list'>
+          {{#each this.attachedResources as |cardResource|}}
+            {{#if cardResource.cardError}}
+              <li data-test-card-error={{cardResource.cardError.id}}>
+                Error: cannot render card
+                {{cardResource.cardError.id}}:
+                {{cardResource.cardError.error.message}}
+              </li>
+            {{else if cardResource.card}}
+              <li data-test-result-card={{cardResource.card.id}}>
                 {{#let (getComponent cardResource.card) as |Component|}}
-                  {{idx}}.
                   <Component @format='atom' @displayContainer={{false}} />
                 {{/let}}
-              </div>
-            {{/let}}
-          {{/if}}
-
-        {{/each}}
+              </li>
+            {{/if}}
+          {{/each}}
+        </ol>
         <div class='footer'>
           {{#if this.numberOfCardsGreaterThanPaginateSize}}
             <Button
@@ -177,10 +167,6 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
         border-radius: var(--boxel-border-radius);
         --left-padding: var(--boxel-sp-xs);
       }
-      .card-item {
-        display: flex;
-        gap: var(--boxel-sp-xxs);
-      }
       .search-icon {
         --icon-stroke-width: 3.5;
       }
@@ -201,9 +187,7 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
         display: flex;
         flex-direction: column;
         font-weight: bold;
-        padding: var(--boxel-sp-sm) var(--boxel-sp-xs) var(--boxel-sp-xxs)
-          var(--boxel-sp);
-        gap: var(--boxel-sp-xxxs);
+        padding: 0 var(--boxel-sp-sm) 0 var(--boxel-sp-sm);
       }
 
       .footer {
@@ -222,12 +206,15 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
         gap: var(--boxel-sp-xxxs);
         border: none;
       }
+      .result-list {
+        padding-left: var(--boxel-sp);
+        margin-block-end: 0;
+      }
+      .result-list li {
+        margin-bottom: var(--boxel-sp-xxs);
+      }
     </style>
   </template>
-}
-
-export function add(value1: number, value2: number) {
-  return value1 + value2;
 }
 
 type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
