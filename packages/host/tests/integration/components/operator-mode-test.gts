@@ -44,7 +44,6 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | operator-mode', function (hooks) {
   setupRenderingTest(hooks);
-  setupWindowMock(hooks);
 
   const realmName = 'Operator Mode Workspace';
   let loader: Loader;
