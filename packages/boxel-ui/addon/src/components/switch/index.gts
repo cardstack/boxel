@@ -6,6 +6,7 @@ interface SwitchArgs {
   disabled?: boolean;
   isEnabled: boolean;
   onChange: () => void;
+  label: string;
 }
 
 export default class Switch extends Component<SwitchArgs> {
@@ -14,6 +15,7 @@ export default class Switch extends Component<SwitchArgs> {
       class={{cn 'switch' checked=@isEnabled disabled=@disabled}}
       data-test-switch-checked={{if @isEnabled 'on' 'off'}}
     >
+      <span class='boxel-sr-only'>{{@label}}</span>
       <input
         {{on 'click' @onChange}}
         {{on 'keypress' @onChange}}
@@ -23,7 +25,7 @@ export default class Switch extends Component<SwitchArgs> {
         disabled={{@disabled}}
         aria-checked={{@isEnabled}}
         role='switch'
-        aria-label='Switch'
+        aria-label={{@label}}
       />
     </label>
 
