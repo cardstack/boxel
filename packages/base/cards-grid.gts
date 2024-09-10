@@ -20,7 +20,7 @@ import {
   Tooltip,
   type Filter,
 } from '@cardstack/boxel-ui/components';
-import { IconList, IconTable } from '@cardstack/boxel-ui/icons';
+import { IconList, IconGrid } from '@cardstack/boxel-ui/icons';
 import { eq, cn } from '@cardstack/boxel-ui/helpers';
 import {
   chooseCard,
@@ -57,20 +57,20 @@ class Isolated extends Component<typeof CardsGrid> {
               @width='20px'
               @height='20px'
               class={{cn
-                'list-view-button'
-                is-view-selected=(eq this.viewSize 'list')
+                'view-as-menu__button'
+                is-selected-view=(eq this.viewSize 'list')
               }}
               {{on 'click' (fn (mut this.viewSize) 'list')}}
             />
             <IconButton
-              @icon={{IconTable}}
-              @width='25px'
-              @height='25px'
+              @icon={{IconGrid}}
+              @width='20px'
+              @height='20px'
               class={{cn
-                'table-view-button'
-                is-view-selected=(eq this.viewSize 'table')
+                'view-as-menu__button'
+                is-selected-view=(eq this.viewSize 'grid')
               }}
-              {{on 'click' (fn (mut this.viewSize) 'table')}}
+              {{on 'click' (fn (mut this.viewSize) 'grid')}}
             />
           </div>
         </div>
@@ -195,17 +195,12 @@ class Isolated extends Component<typeof CardsGrid> {
         letter-spacing: 0.13px;
         margin-right: var(--boxel-sp-xs);
       }
-      .list-view-button {
+      .view-as-menu__button {
         --boxel-icon-button-width: 20px;
         --boxel-icon-button-height: 20px;
         --icon-color: var(--boxel-450);
       }
-      .table-view-button {
-        --boxel-icon-button-width: 25px;
-        --boxel-icon-button-height: 25px;
-        --icon-color: var(--boxel-450);
-      }
-      .is-view-selected {
+      .is-selected-view {
         --icon-color: var(--boxel-dark);
       }
       .cards {
@@ -307,7 +302,7 @@ class Isolated extends Component<typeof CardsGrid> {
     },
   ]);
   @tracked activeFilter = this.filters[0];
-  @tracked viewSize: 'table' | 'list' = 'table';
+  @tracked viewSize: 'grid' | 'list' = 'grid';
 
   @action onFilterChanged(filter: Filter) {
     this.activeFilter = filter;
