@@ -315,21 +315,21 @@ export default class RealmService extends Service {
 
   @cached
   get defaultReadableRealm(): { path: string; info: RealmInfo } {
-    let realm = this.defaultWritableRealm;
-
-    // FIXME hard to read!
-    if (!realm && Object.keys(this.allRealmsMeta).length > 0) {
-      let realmURL = Object.keys(this.allRealmsMeta)[0];
-      let firstMeta = this.allRealmsMeta[realmURL];
-      realm = { path: realmURL, info: firstMeta.info };
-    } else {
-      realm = {
-        path: ENV.resolvedBaseRealmURL,
-        info: this.info(ENV.resolvedBaseRealmURL),
-      };
+    if (this.defaultWritableRealm) {
+      return this.defaultWritableRealm;
     }
 
-    return realm;
+    let allRealmsMetaEntries = Object.entries(this.allRealmsMeta);
+
+    if (allRealmsMetaEntries.length > 0) {
+      let firstMeta = allRealmsMetaEntries[0];
+      return { path: firstMeta[0], info: firstMeta[1].info };
+    }
+
+    return {
+      path: ENV.resolvedBaseRealmURL,
+      info: this.info(ENV.resolvedBaseRealmURL),
+    };
   }
 
   token = (url: string): string | undefined => {
