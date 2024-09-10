@@ -51,6 +51,10 @@ class RealmResource {
     this.token = token;
   }
 
+  get url(): string {
+    return this.realmURL;
+  }
+
   get token(): string | undefined {
     if (this.auth.type === 'logged-in') {
       return this.auth.token;
@@ -240,6 +244,10 @@ export default class RealmService extends Service {
 
   canWrite = (url: string): boolean => {
     return this.knownRealm(url)?.canWrite ?? false;
+  };
+
+  url = (url: string): string | undefined => {
+    return this.knownRealm(url)?.url;
   };
 
   permissions = (url: string): Permissions => {

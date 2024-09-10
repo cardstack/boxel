@@ -55,7 +55,11 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import type {
+  CardDef,
+  Format,
+  realmURL,
+} from 'https://cardstack.com/base/card-api';
 
 import FileTree from '../editor/file-tree';
 
@@ -607,16 +611,24 @@ export default class CodeSubmode extends Component<Signature> {
         throw new Error(`bug: CreateFileModal not instantiated`);
       }
 
-      let defaultWritableRealm = this.realm.defaultWritableRealm;
+      let destinationRealm: string | undefined;
 
-      if (!defaultWritableRealm) {
+      if (sourceInstance && this.realm.canWrite(sourceInstance.id)) {
+        destinationRealm = this.realm.url(sourceInstance.id);
+      }
+
+      if (!destinationRealm && this.realm.defaultWritableRealm) {
+        destinationRealm = this.realm.defaultWritableRealm.path;
+      }
+
+      if (!destinationRealm) {
         throw new Error('No writable realm found');
       }
 
       this.isCreateModalOpen = true;
       let url = await this.createFileModal.createNewFile(
         fileType,
-        new URL(defaultWritableRealm.path),
+        new URL(destinationRealm),
         definitionClass,
         sourceInstance,
       );
