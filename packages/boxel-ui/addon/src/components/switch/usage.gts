@@ -35,6 +35,7 @@ export default class SwitchUsage extends Component {
         </:description>
         <:example>
           <Switch
+            @label={{'Switch'}}
             @isEnabled={{this.isEnabled}}
             @onChange={{this.handleChange}}
             @disabled={{this.isDisabled}}
