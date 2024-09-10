@@ -2,6 +2,10 @@ import { cn } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
+interface SwitchSiganture {
+  Element: HTMLLabelElement;
+  Args: SwitchArgs;
+}
 interface SwitchArgs {
   disabled?: boolean;
   isEnabled: boolean;
@@ -9,11 +13,12 @@ interface SwitchArgs {
   onChange: () => void;
 }
 
-export default class Switch extends Component<SwitchArgs> {
+export default class Switch extends Component<SwitchSiganture> {
   <template>
     <label
       class={{cn 'switch' checked=@isEnabled disabled=@disabled}}
       data-test-switch-checked={{if @isEnabled 'on' 'off'}}
+      ...attributes
     >
       <span class='boxel-sr-only'>{{@label}}</span>
       <input
