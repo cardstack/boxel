@@ -79,7 +79,7 @@
       },
       "publisher": {
         "links": {
-          "self": null
+          "self": "../Author/1"
         }
       },
       "tags.0": {

@@ -21,6 +21,7 @@ import { getCard, trackCard } from '@cardstack/host/resources/card-resource';
 
 import {
   getLiveSearchResults,
+  getLiveSearchResults2,
   getSearchResults,
   type Search,
 } from '@cardstack/host/resources/search';
@@ -91,6 +92,20 @@ export default class OperatorModeContainer extends Component<Signature> {
     doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
   ): Search {
     return getLiveSearchResults(
+      this,
+      query,
+      realms,
+      doWhileRefreshing ? () => doWhileRefreshing : undefined,
+    );
+  }
+
+  @action
+  getLiveCards2(
+    query: () => Query,
+    realms?: string[],
+    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
+  ): Search {
+    return getLiveSearchResults2(
       this,
       query,
       realms,

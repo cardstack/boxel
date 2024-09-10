@@ -5,6 +5,7 @@
       "title": "AppCard",
       "description": "Catalog entry for AppCard",
       "isField": false,
+      "type": "card",
       "ref": {
         "module": "../app-card",
         "name": "AppCard"

@@ -85,6 +85,12 @@ export class Tag extends CardDef {
   @field kind = contains(StringField); //color, language
   @field value = contains(StringField); //red, english
   // @field offers = linksToMany(Offer);// this is here bcos we want to apply offer to everything in a tag, but we need query based relationships
+
+  @field title = contains(StringField, {
+    computeVia: function (this: Tag) {
+      return this.value;
+    },
+  });
 }
 
 export class Listing extends CardDef {

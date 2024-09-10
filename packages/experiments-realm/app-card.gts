@@ -133,10 +133,14 @@ class AppCardIsolated extends Component<typeof AppCard> {
 
   get query(): Query {
     let categoryFilter = this.categoryFilter ? [this.categoryFilter] : [];
+    let pillFilter = this.pillFilter ? [this.pillFilter] : [];
+    console.log('===');
+    console.log(categoryFilter);
+    console.log(pillFilter);
     let q = {
       filter: {
         on: this.activeTabRef,
-        every: [...categoryFilter],
+        every: [...categoryFilter, ...pillFilter],
       },
     };
     assertQuery(q);
@@ -191,6 +195,24 @@ class AppCardIsolated extends Component<typeof AppCard> {
         },
       ],
     } as AnyFilter;
+  }
+
+  get pillFilter() {
+    let selectedPills = this.pillFilters
+      .filter((pill) => pill.selected)
+      .map((pill) => {
+        return {
+          eq: {
+            'tags.value': pill.value,
+          },
+        };
+      });
+    if (selectedPills.length === 0) {
+      return {};
+    }
+    return {
+      any: selectedPills,
+    };
   }
 
   get realms(): string[] {

@@ -3679,7 +3679,7 @@ posts/ignore-me.json
           relationships: {
             friend: {
               links: {
-                self: null,
+                self: `${paths.url}friend1`,
               },
             },
           },
@@ -4037,6 +4037,31 @@ posts/ignore-me.json
       );
     });
 
+    test('can search for cards by using a linksTo field2', async function (assert) {
+      let { data: matching } = await queryEngine.search({
+        filter: {
+          on: { module: `${testModuleRealm}friend`, name: 'Friend' },
+          every: [
+            {
+              any: [
+                {
+                  eq: { 'friend.firstName': 'Hassan' },
+                },
+                {
+                  eq: { 'friend.firstName': 'Mango' },
+                },
+              ],
+            },
+          ],
+        },
+      });
+      console.log(matching);
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${paths.url}friend1`],
+      );
+    });
+
     test(`can search for cards that have custom queryableValue`, async function (assert) {
       let { data: matching } = await queryEngine.search({
         filter: {
@@ -4071,6 +4096,53 @@ posts/ignore-me.json
           ],
         },
       });
+      assert.strictEqual(matching.length, 1);
+      assert.strictEqual(matching[0]?.id, `${testRealmURL}cards/1`);
+    });
+
+    test('can combine multiple filters2', async function (assert) {
+      let { data: matching } = await queryEngine.search({
+        filter: {
+          // on: {
+          //   module: `${testModuleRealm}post`,
+          //   name: 'Post',
+          // },
+
+          on: {
+            module: `${testModuleRealm}post`,
+            name: 'Post',
+          },
+          every: [
+            {
+              // any: [
+              //   {
+              //     on: {
+              //       module: `${testModuleRealm}book`,
+              //       name: 'Book',
+              //     },
+              //     eq: { 'author.lastName': 'Jones' },
+              //   },
+              //   {
+              //     on: {
+              //       module: `${testModuleRealm}post`,
+              //       name: 'Post',
+              //     },
+              //     eq: { 'author.lastName': 'Stackington Jr. III' },
+              //   },
+              // ],
+              any: [
+                {
+                  eq: { 'author.lastName': 'Stack' },
+                },
+                // {
+                //   eq: { 'author.lastName': 'Stackington Jr. III' },
+                // },
+              ],
+            },
+          ],
+        },
+      });
+      console.log(matching);
       assert.strictEqual(matching.length, 1);
       assert.strictEqual(matching[0]?.id, `${testRealmURL}cards/1`);
     });

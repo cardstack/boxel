@@ -1,0 +1,44 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "tabs": [
+        {
+          "displayName": "AppListing",
+          "tabId": "AppListing",
+          "ref": {
+            "name": "AppListing",
+            "module": "./commerce/app-listing"
+          },
+          "isTable": false
+        },
+        {
+          "displayName": "Listing",
+          "tabId": "Listing",
+          "ref": {
+            "module": "./commerce/listing",
+            "name": "Listing"
+          },
+          "isTable": false
+        }
+      ],
+      "headerIcon": {
+        "altText": null,
+        "size": "actual",
+        "height": null,
+        "width": null,
+        "base64": null
+      },
+      "moduleId": null,
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../app-card",
+        "name": "AppCard"
+      }
+    }
+  }
+}

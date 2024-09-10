@@ -130,7 +130,7 @@ export function fieldQuery(
 ): FieldQuery {
   return {
     type,
-    path,
+    path: cleanPath(path),
     useJsonBValue,
     errorHint,
     kind: 'field-query',
@@ -145,7 +145,7 @@ export function fieldValue(
 ): FieldValue {
   return {
     type,
-    path,
+    path: cleanPath(path),
     value,
     errorHint,
     kind: 'field-value',
@@ -169,7 +169,7 @@ export function fieldArity({
 }): FieldArity {
   return {
     type,
-    path,
+    path: cleanPath(path),
     value,
     errorHint,
     usePluralContainer,
@@ -395,4 +395,14 @@ function replace(text: string, placeholder: string, replacement: string) {
 
 function assertNever(value: never) {
   return new Error(`should never happen ${value}`);
+}
+
+// Add this function near the top of the file, after the imports
+function cleanPath(path: string): string {
+  // Check if the path is enclosed in square brackets
+  if (path.startsWith('[') && path.endsWith(']')) {
+    // Remove the brackets and trim any whitespace
+    return path.slice(1, -1).trim();
+  }
+  return path;
 }
