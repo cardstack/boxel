@@ -2353,8 +2353,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom('[data-test-comand-result-header]')
       .containsText('Search Results 2 results');
 
-    assert.dom('[data-test-result-card-idx="1"]').containsText('1. Jackie');
-    assert.dom('[data-test-result-card-idx="2"]').containsText('2. Mango');
+    assert.dom('[data-test-result-card-idx="1"]').containsText('Jackie');
+    assert.dom('[data-test-result-card-idx="2"]').containsText('Mango');
     assert.dom('[data-test-toggle-show-button]').doesNotExist();
   });
 
@@ -2406,20 +2406,20 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await waitFor('[data-test-result-card-idx]', { count: 8 });
     assert.dom('[data-test-toggle-show-button]').containsText('See Less');
-    assert.dom('[data-test-result-card-idx="1"]').containsText('0. Buck');
-    assert.dom('[data-test-result-card-idx="2"]').containsText('1. Burcu');
-    assert.dom('[data-test-result-card-idx="3"]').containsText('2. Fadhlan');
-    assert.dom('[data-test-result-card-idx="4"]').containsText('3. Hassan');
-    assert.dom('[data-test-result-card-idx="5"]').containsText('4. Ian');
-    assert.dom('[data-test-result-card-idx="6"]').containsText('5. Justin');
-    assert.dom('[data-test-result-card-idx="7"]').containsText('6. Matic');
-    assert.dom('[data-test-result-card-idx="8"]').containsText('7. Mickey');
+    assert.dom('[data-test-result-card-idx="1"]').containsText('Buck');
+    assert.dom('[data-test-result-card-idx="2"]').containsText('Burcu');
+    assert.dom('[data-test-result-card-idx="3"]').containsText('Fadhlan');
+    assert.dom('[data-test-result-card-idx="4"]').containsText('Hassan');
+    assert.dom('[data-test-result-card-idx="5"]').containsText('Ian');
+    assert.dom('[data-test-result-card-idx="6"]').containsText('Justin');
+    assert.dom('[data-test-result-card-idx="7"]').containsText('Matic');
+    assert.dom('[data-test-result-card-idx="8"]').containsText('Mickey');
     await click('[data-test-toggle-show-button]');
-    assert.dom('[data-test-result-card-idx="1"]').containsText('0. Buck');
-    assert.dom('[data-test-result-card-idx="2"]').containsText('1. Burcu');
-    assert.dom('[data-test-result-card-idx="3"]').containsText('2. Fadhlan');
-    assert.dom('[data-test-result-card-idx="4"]').containsText('3. Hassan');
-    assert.dom('[data-test-result-card-idx="5"]').containsText('4. Ian');
+    assert.dom('[data-test-result-card-idx="1"]').containsText('Buck');
+    assert.dom('[data-test-result-card-idx="2"]').containsText('Burcu');
+    assert.dom('[data-test-result-card-idx="3"]').containsText('Fadhlan');
+    assert.dom('[data-test-result-card-idx="4"]').containsText('Hassan');
+    assert.dom('[data-test-result-card-idx="5"]').containsText('Ian');
     assert.dom('[data-test-result-card-idx="6"]').doesNotExist();
   });
 });
