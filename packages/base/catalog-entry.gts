@@ -148,6 +148,9 @@ class CatalogEntryContainer extends GlimmerComponent<Signature> {
         display: grid;
         gap: 3px;
         font: var(--boxel-font-sm);
+        margin-top: auto;
+        margin-bottom: auto;
+        margin-left: var(--boxel-sp-xs);
       }
     </style>
   </template>

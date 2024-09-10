@@ -1,8 +1,5 @@
 import { click, fillIn } from '@ember/test-helpers';
 
-import { setupApplicationTest } from 'ember-qunit';
-
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { GridContainer } from '@cardstack/boxel-ui/components';
@@ -31,6 +28,7 @@ import {
 } from '../helpers/base-realm';
 
 import { setupMockMatrix } from '../helpers/mock-matrix';
+import { setupApplicationTest } from '../helpers/setup';
 
 async function selectCardFromCatalog(cardId: string) {
   await click('[data-test-choose-card-btn]');
@@ -101,7 +99,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  setupWindowMock(hooks);
   setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
     activeRealms: [baseRealm.url, testRealmURL],

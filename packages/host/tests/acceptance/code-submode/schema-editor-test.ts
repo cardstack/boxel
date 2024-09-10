@@ -6,8 +6,6 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 
-import { setupApplicationTest } from 'ember-qunit';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
@@ -27,6 +25,7 @@ import {
   type TestContextWithSave,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
+import { setupApplicationTest } from '../../helpers/setup';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 const indexCardSource = `
@@ -227,7 +226,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
   setupServerSentEvents(hooks);
-  setupWindowMock(hooks);
   setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
     activeRealms: [baseRealm.url, testRealmURL],

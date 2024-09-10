@@ -1,8 +1,6 @@
 import { waitFor, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
-import { setupRenderingTest } from 'ember-qunit';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm, Loader, type Realm } from '@cardstack/runtime-common';
@@ -35,6 +33,7 @@ import {
   MockMatrixService,
 } from '../../helpers/mock-matrix-service';
 import { renderComponent } from '../../helpers/render-component';
+import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | create app module via ai-assistant', function (hooks) {
   const noop = () => {};
@@ -57,7 +56,6 @@ module('Integration | create app module via ai-assistant', function (hooks) {
 
   setupServerSentEvents(hooks);
   setupMatrixServiceMock(hooks, { autostart: true });
-  setupWindowMock(hooks);
 
   hooks.beforeEach(async function () {
     cardApi = await loader.import(`${baseRealm.url}card-api`);

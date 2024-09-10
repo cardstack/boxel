@@ -1,6 +1,5 @@
 import { RenderingTestContext } from '@ember/test-helpers';
 
-import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
 import {
@@ -34,6 +33,7 @@ import {
   linksToMany,
 } from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
+import { setupRenderingTest } from '../../helpers/setup';
 
 let loader: Loader;
 

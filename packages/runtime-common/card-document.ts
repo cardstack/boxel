@@ -56,7 +56,10 @@ export interface CardCollectionDocument<Identity extends Unsaved = Saved> {
 
 export interface PrerenderedCardCollectionDocument {
   data: PrerenderedCardResource[];
-  meta: QueryResultsMeta & { scopedCssUrls?: string[] };
+  meta: QueryResultsMeta & {
+    scopedCssUrls?: string[];
+    realmInfo?: RealmInfo;
+  };
 }
 
 export type CardDocument = SingleCardDocument | CardCollectionDocument;
@@ -321,7 +324,7 @@ function isIncluded(included: any): included is CardResource<Saved>[] {
 export function transformResultsToPrerenderedCardsDoc(results: {
   prerenderedCards: PrerenderedCard[];
   scopedCssUrls: string[];
-  meta: QueryResultsMeta & { scopedCssUrls?: string[] };
+  meta: QueryResultsMeta & { scopedCssUrls?: string[]; realmInfo?: RealmInfo };
 }) {
   let { prerenderedCards, scopedCssUrls, meta } = results;
 
