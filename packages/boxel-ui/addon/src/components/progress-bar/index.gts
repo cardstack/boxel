@@ -5,9 +5,9 @@ export type BoxelProgressBarPosition = 'start' | 'center' | 'end';
 
 interface Signature {
   Args: {
+    label?: string;
     max: number;
     position?: BoxelProgressBarPosition;
-    label?: string;
     value: number;
   };
   Element: HTMLDivElement;
