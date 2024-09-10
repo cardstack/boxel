@@ -3,8 +3,8 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
 interface SwitchSiganture {
-  Element: HTMLLabelElement;
   Args: SwitchArgs;
+  Element: HTMLLabelElement;
 }
 interface SwitchArgs {
   disabled?: boolean;
