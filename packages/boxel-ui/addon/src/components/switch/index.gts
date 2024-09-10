@@ -70,8 +70,9 @@ export default class Switch extends Component<SwitchArgs> {
       .switch.disabled {
         opacity: 0.5;
       }
+      .switch.disabled,
       .switch.disabled .switch-input {
-        cursor: not-allowed;
+        cursor: default;
       }
     </style>
   </template>
