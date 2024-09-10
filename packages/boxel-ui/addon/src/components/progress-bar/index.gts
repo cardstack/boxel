@@ -46,7 +46,7 @@ export default class ProgressBar extends Component<Signature> {
 
     </div>
 
-    <style>
+    <style scoped>
       @layer {
         .boxel-progress-bar {
           --progress-bar-background-color: var(
