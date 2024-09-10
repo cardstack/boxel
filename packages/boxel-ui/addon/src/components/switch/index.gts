@@ -5,8 +5,8 @@ import Component from '@glimmer/component';
 interface SwitchArgs {
   disabled?: boolean;
   isEnabled: boolean;
-  onChange: () => void;
   label: string;
+  onChange: () => void;
 }
 
 export default class Switch extends Component<SwitchArgs> {
@@ -25,11 +25,10 @@ export default class Switch extends Component<SwitchArgs> {
         disabled={{@disabled}}
         aria-checked={{@isEnabled}}
         role='switch'
-        aria-label={{@label}}
       />
     </label>
 
-    <style>
+    <style scoped>
       .switch {
         width: 22px;
         height: 12px;
