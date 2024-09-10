@@ -9,11 +9,11 @@ import { stringify } from 'qs';
 
 import { TrackedSet } from 'tracked-built-ins';
 
+import { Query } from '@cardstack/runtime-common';
 import {
-  PrerenderedCard as PrerenderedCardData,
-  Query,
-} from '@cardstack/runtime-common';
-import { isPrerenderedCardCollectionDocument } from '@cardstack/runtime-common/card-document';
+  PrerenderedCardCollectionDocument,
+  isPrerenderedCardCollectionDocument,
+} from '@cardstack/runtime-common/card-document';
 
 import { type Format } from 'https://cardstack.com/base/card-api';
 
@@ -25,6 +25,12 @@ import type LoaderService from '../services/loader-service';
 
 const waiter = buildWaiter('prerendered-card-search:waiter');
 
+export interface PrerenderedCardData {
+  url: string;
+  realmUrl: string;
+  html: string;
+}
+
 class PrerenderedCard {
   component: HTMLComponent;
   constructor(private data: PrerenderedCardData) {
@@ -33,6 +39,9 @@ class PrerenderedCard {
   get url() {
     return this.data.url;
   }
+  get realmUrl(): string {
+    return this.data.realmUrl;
+  }
 }
 
 interface Signature {
@@ -40,6 +49,7 @@ interface Signature {
   Args: {
     query: Query;
     format: Format;
+    cardUrls?: string[];
     realms: string[];
   };
   Blocks: {
@@ -53,6 +63,7 @@ export default class PrerenderedCardSearch extends Component<Signature> {
   @service declare loaderService: LoaderService;
   _lastSearchQuery: Query | null = null;
   _lastSearchResults: PrerenderedCard[] | undefined;
+  _lastRealms: string[] | undefined;
   realmsNeedingRefresh = new TrackedSet<string>();
 
   constructor(owner: unknown, args: Signature['Args']) {
@@ -65,14 +76,16 @@ export default class PrerenderedCardSearch extends Component<Signature> {
   async searchPrerendered(
     query: Query,
     format: Format,
+    cardUrls: string[],
     realmURL: string,
   ): Promise<PrerenderedCard[]> {
-    let json = await this.cardService.fetchJSON(
+    let json = (await this.cardService.fetchJSON(
       `${realmURL}_search-prerendered?${stringify({
         ...query,
         prerenderedHtmlFormat: format,
+        cardUrls,
       })}`,
-    );
+    )) as unknown as PrerenderedCardCollectionDocument;
     if (!isPrerenderedCardCollectionDocument(json)) {
       throw new Error(
         `The realm search response was not a prerendered-card collection document:
@@ -85,20 +98,35 @@ export default class PrerenderedCardSearch extends Component<Signature> {
         this.loaderService.loader.import(cssModuleUrl),
       ),
     );
+
     return json.data.filter(Boolean).map((r) => {
       return new PrerenderedCard({
         url: r.id,
+        realmUrl: realmURL,
         html: r.attributes?.html,
       });
     });
   }
 
   private runSearch = trackedFunction(this, async () => {
-    let { query, format } = this.args;
+    let { query, format, cardUrls, realms } = this.args;
 
-    if (query && format && this.realmsNeedingRefresh.size > 0) {
+    let realmsChanged = !isEqual(realms, this._lastRealms);
+    if (realmsChanged) {
+      this._lastSearchResults = this._lastSearchResults?.filter((r) =>
+        realms.includes(r.realmUrl),
+      );
+      this.realmsNeedingRefresh = new TrackedSet(realms);
+    }
+    this._lastRealms = realms;
+
+    if (
+      query &&
+      format &&
+      (realmsChanged || this.realmsNeedingRefresh.size > 0)
+    ) {
       try {
-        await this.runSearchTask.perform();
+        await this.runSearchTask.perform(query, format, cardUrls);
       } catch (e) {
         if (!didCancel(e)) {
           // re-throw the non-cancelation error
@@ -106,6 +134,7 @@ export default class PrerenderedCardSearch extends Component<Signature> {
         }
       }
     }
+
     return (
       this.runSearchTask.lastSuccessful?.value ?? {
         instances: [],
@@ -114,8 +143,7 @@ export default class PrerenderedCardSearch extends Component<Signature> {
     );
   });
 
-  runSearchTask = restartableTask(async () => {
-    let { query, format } = this.args;
+  runSearchTask = restartableTask(async (query, format, cardUrls) => {
     if (!isEqual(query, this._lastSearchQuery)) {
       this._lastSearchResults = undefined;
       this._lastSearchQuery = query;
@@ -127,16 +155,29 @@ export default class PrerenderedCardSearch extends Component<Signature> {
       for (let realmNeedingRefresh of realmsNeedingRefresh) {
         results = results.filter((r) => !r.url.startsWith(realmNeedingRefresh));
       }
-      results.push(
-        ...flatMap(
-          await Promise.all(
-            Array.from(realmsNeedingRefresh).map(
-              async (realm) =>
-                await this.searchPrerendered(query, format, realm),
-            ),
-          ),
-        ),
+
+      let searchPromises = Array.from(realmsNeedingRefresh).map(
+        async (realm) => {
+          try {
+            return await this.searchPrerendered(
+              query,
+              format,
+              cardUrls ?? [],
+              realm,
+            );
+          } catch (error) {
+            console.error(
+              `Failed to search prerendered for realm ${realm}:`,
+              error,
+            );
+            return [];
+          }
+        },
       );
+
+      const searchResults = await Promise.all(searchPromises);
+      results.push(...flatMap(searchResults));
+
       this._lastSearchResults = results;
       return { instances: results, isLoading: false };
     } finally {
