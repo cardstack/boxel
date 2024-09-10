@@ -119,28 +119,20 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
       </Header>
       <div class='body'>
         <ol class='result-list'>
-          {{#each this.attachedResources as |cardResource index|}}
-            {{#let (add index 1) as |i|}}
-              {{#if cardResource.cardError}}
-                <li
-                  data-test-card-error={{cardResource.cardError.id}}
-                  data-test-result-card-idx={{i}}
-                >
-                  Error: cannot render card
-                  {{cardResource.cardError.id}}:
-                  {{cardResource.cardError.error.message}}
-                </li>
-              {{else if cardResource.card}}
-                <li
-                  data-test-result-card={{cardResource.card.id}}
-                  data-test-result-card-idx={{i}}
-                >
-                  {{#let (getComponent cardResource.card) as |Component|}}
-                    <Component @format='atom' @displayContainer={{false}} />
-                  {{/let}}
-                </li>
-              {{/if}}
-            {{/let}}
+          {{#each this.attachedResources as |cardResource|}}
+            {{#if cardResource.cardError}}
+              <li data-test-card-error={{cardResource.cardError.id}}>
+                Error: cannot render card
+                {{cardResource.cardError.id}}:
+                {{cardResource.cardError.error.message}}
+              </li>
+            {{else if cardResource.card}}
+              <li data-test-result-card={{cardResource.card.id}}>
+                {{#let (getComponent cardResource.card) as |Component|}}
+                  <Component @format='atom' @displayContainer={{false}} />
+                {{/let}}
+              </li>
+            {{/if}}
           {{/each}}
         </ol>
         <div class='footer'>
@@ -223,10 +215,6 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
       }
     </style>
   </template>
-}
-
-function add(value1: number, value2: number) {
-  return value1 + value2;
 }
 
 type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
