@@ -39,12 +39,17 @@ import {
   isSingleCardDocument,
   SupportedMimeType,
   buildQueryString,
+  assertQuery,
   PrerenderedCard,
 } from '@cardstack/runtime-common';
 import { AnyFilter } from '@cardstack/runtime-common/query';
 import { TrackedMap } from 'tracked-built-ins';
 
 // import { CardsGridComponent } from './cards-grid-component';
+
+const CONFIG = {
+  displayQuery: false,
+};
 
 export class Tab extends FieldDef {
   @field displayName = contains(StringField);
@@ -128,21 +133,22 @@ class AppCardIsolated extends Component<typeof AppCard> {
   }
 
   get queryDisplay() {
+    if (!CONFIG.displayQuery) {
+      return;
+    }
     return JSON.stringify(this.query, null, 2);
   }
 
   get query(): Query {
     let categoryFilter = this.categoryFilter ? [this.categoryFilter] : [];
     let pillFilter = this.pillFilter ? [this.pillFilter] : [];
-    // console.log('===');
-    // console.log(categoryFilter);
-    // console.log(pillFilter);
     let q = {
       filter: {
         on: this.activeTabRef,
         every: [...categoryFilter, ...pillFilter],
       },
     };
+    assertQuery(q);
     return q;
   }
 
@@ -256,9 +262,11 @@ class AppCardIsolated extends Component<typeof AppCard> {
 
   <template>
     <section class='app-card'>
-      <div>
-        {{this.queryDisplay}}
-      </div>
+      {{#if this.displayQuery}}
+        <div>
+          {{this.queryDisplay}}
+        </div>
+      {{/if}}
       <TabbedHeader
         @title={{@model.title}}
         @tabs={{this.tabs}}

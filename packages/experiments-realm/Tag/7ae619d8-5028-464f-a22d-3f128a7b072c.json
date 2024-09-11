@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "kind": null,
-      "value": null,
+      "kind": "intergration",
+      "value": "Evernote",
       "title": null,
       "description": null,
       "thumbnailURL": null

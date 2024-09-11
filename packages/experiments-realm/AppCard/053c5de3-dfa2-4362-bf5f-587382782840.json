@@ -30,9 +30,9 @@
         "base64": null
       },
       "moduleId": null,
-      "title": null,
-      "description": null,
-      "thumbnailURL": null
+      "title": "Catalog App",
+      "description": "A commerce application that display catalog of listing.",
+      "thumbnailURL": "https://i.ibb.co/P9YC8ms/p.webp"
     },
     "meta": {
       "adoptsFrom": {
