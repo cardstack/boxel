@@ -180,6 +180,7 @@ export class Worker {
     });
     let fetch = fetcher(this.#virtualNetwork.fetch, [
       async (req, next) => {
+        //TODO: check to see if this is needed, OR if we can remove the current-run "whileIndexing" stuff
         req.headers.set('X-Boxel-Building-Index', 'true');
         return next(req);
       },

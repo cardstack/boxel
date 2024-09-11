@@ -57,6 +57,11 @@ import { TestRealmAdapter } from './adapter';
 import percySnapshot from './percy-snapshot';
 import { renderComponent } from './render-component';
 import visitOperatorMode from './visit-operator-mode';
+import {
+  RealmPermissionChecker,
+  RealmPermissionCheckerFactory,
+} from '@cardstack/runtime-common/realm-permission-checker';
+import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
 export { visitOperatorMode, testRealmURL, testRealmInfo, percySnapshot };
 export * from '@cardstack/runtime-common/helpers';
@@ -429,31 +434,37 @@ export async function setupAcceptanceTestRealm({
   contents,
   realmURL,
   permissions,
+  unknownToUser,
 }: {
   contents: RealmContents;
   realmURL?: string;
   permissions?: RealmPermissions;
+  unknownToUser?: boolean;
 }) {
   return await setupTestRealm({
     contents,
     realmURL,
     isAcceptanceTest: true,
     permissions,
+    unknownToUser,
   });
 }
 
 export async function setupIntegrationTestRealm({
   contents,
   realmURL,
+  unknownToUser,
 }: {
   loader: Loader;
   contents: RealmContents;
   realmURL?: string;
+  unknownToUser?: boolean;
 }) {
   return await setupTestRealm({
     contents,
     realmURL,
     isAcceptanceTest: false,
+    unknownToUser,
   });
 }
 
@@ -468,11 +479,13 @@ async function setupTestRealm({
   realmURL,
   isAcceptanceTest,
   permissions = { '*': ['read', 'write'] },
+  unknownToUser = false,
 }: {
   contents: RealmContents;
   realmURL?: string;
   isAcceptanceTest?: boolean;
   permissions?: RealmPermissions;
+  unknownToUser?: boolean;
 }) {
   let owner = (getContext() as TestContext).owner;
   let { virtualNetwork } = lookupLoaderService();
@@ -480,9 +493,11 @@ async function setupTestRealm({
 
   realmURL = realmURL ?? testRealmURL;
 
-  let cardService = owner.lookup('service:card-service') as CardService;
-  if (!cardService.realmURLs.includes(realmURL)) {
-    cardService.realmURLs.push(realmURL);
+  if (!unknownToUser) {
+    let cardService = owner.lookup('service:card-service') as CardService;
+    if (!cardService.realmURLs.includes(realmURL)) {
+      cardService.realmURLs.push(realmURL);
+    }
   }
 
   if (isAcceptanceTest) {
@@ -522,13 +537,33 @@ async function setupTestRealm({
     getIndexHTML: async () =>
       `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
     matrix: testMatrix,
+    realmPermissionCheckerFactory: {
+      create(
+        realmPermissions: RealmPermissions,
+        _matrixClient: MatrixClient,
+      ): RealmPermissionChecker {
+        return {
+          async for(username: string): Promise<('read' | 'write')[]> {
+            return (
+              realmPermissions[username] ?? realmPermissions['users'] ?? []
+            );
+          },
+          async can(
+            username: string,
+            action: 'read' | 'write',
+          ): Promise<boolean> {
+            return (await this.for(username)).includes(action);
+          },
+        };
+      },
+    },
     realmSecretSeed: testRealmSecretSeed,
     virtualNetwork,
     dbAdapter,
     queue,
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
   });
-  virtualNetwork.mount(realm.maybeHandle);
+  virtualNetwork.mount(realm.handle);
   await adapter.ready;
   await worker.run();
   await realm.start();

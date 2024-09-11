@@ -67,7 +67,10 @@ import { mergeRelationships } from './merge-relationships';
 import { MatrixClient } from './matrix-client';
 
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
-import RealmPermissionChecker from './realm-permission-checker';
+import {
+  type RealmPermissionCheckerFactory,
+  MatrixRealmPermissionCheckerFactory,
+} from './realm-permission-checker';
 import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
 
 import { RealmAuthDataSource } from './realm-auth-data-source';
@@ -227,6 +230,8 @@ export class Realm {
   #matrixClient: MatrixClient;
   #realmIndexUpdater: RealmIndexUpdater;
   #realmIndexQueryEngine: RealmIndexQueryEngine;
+  #realmPermissionCheckerFactory: RealmPermissionCheckerFactory =
+    MatrixRealmPermissionCheckerFactory;
   #adapter: RealmAdapter;
   #router: Router;
   #log = logger('realm');
@@ -275,6 +280,7 @@ export class Realm {
       adapter,
       getIndexHTML,
       matrix,
+      realmPermissionCheckerFactory,
       realmSecretSeed,
       dbAdapter,
       queue,
@@ -285,6 +291,7 @@ export class Realm {
       adapter: RealmAdapter;
       getIndexHTML: () => Promise<string>;
       matrix: MatrixConfig;
+      realmPermissionCheckerFactory: RealmPermissionCheckerFactory;
       realmSecretSeed: string;
       dbAdapter: DBAdapter;
       queue: Queue;
@@ -301,6 +308,7 @@ export class Realm {
       username,
       seed: realmSecretSeed,
     });
+    this.#realmPermissionCheckerFactory = realmPermissionCheckerFactory;
     this.#getIndexHTML = getIndexHTML;
     this.#assetsURL = assetsURL;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
@@ -620,10 +628,9 @@ export class Realm {
         createJWT: async (user: string) => {
           let permissions = requestContext.permissions;
 
-          let userPermissions = await new RealmPermissionChecker(
-            permissions,
-            this.#matrixClient,
-          ).for(user);
+          let userPermissions = await this.#realmPermissionCheckerFactory
+            .create(permissions, this.#matrixClient)
+            .for(user);
 
           return this.#adapter.createJWT(
             {
@@ -645,6 +652,9 @@ export class Realm {
     request: Request,
     isLocal: boolean,
   ): Promise<ResponseWithNodeStream> {
+    if (isLocal) {
+      console.log('Treating request as local', request.url);
+    }
     let redirectResponse = this.rootRealmRedirect(request);
     if (redirectResponse) {
       return redirectResponse;
@@ -903,7 +913,7 @@ export class Realm {
     try {
       token = this.#adapter.verifyJWT(tokenString, this.#realmSecretSeed);
 
-      let realmPermissionChecker = new RealmPermissionChecker(
+      let realmPermissionChecker = this.#realmPermissionCheckerFactory.create(
         realmPermissions,
         this.#matrixClient,
       );
