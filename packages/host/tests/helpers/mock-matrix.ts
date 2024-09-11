@@ -172,6 +172,7 @@ class ServerState {
     this.addRoomEvent(sender, {
       room_id: roomId,
       type: 'm.room.member',
+      state_key: '@aibot:localhost',
       content: {
         displayname: 'aibot',
         membership: 'invite',
@@ -202,8 +203,12 @@ class ServerState {
       unsigned: { age: 0 },
       sender,
       status: 'sent' as MatrixSDK.EventStatus.SENT,
-      state_key: sender,
     };
+
+    // FIXME this is needed for the invitation event where the bot joins the room
+    if (!matrixEvent.state_key) {
+      matrixEvent.state_key = sender;
+    }
 
     room.events.push(matrixEvent);
     this.#listeners.forEach((listener) => listener(matrixEvent));
