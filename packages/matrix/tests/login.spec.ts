@@ -59,7 +59,7 @@ test.describe('Login', () => {
     let claims = jwt.verify(token, REALM_SECRET_SEED) as {
       user: string;
       realm: string;
-      permissions: ('read' | 'write')[];
+      permissions: ('read' | 'write' | 'realm-owner')[];
     };
     expect(claims.user).toStrictEqual('@user1:localhost');
     expect(claims.realm).toStrictEqual(`${testHost}/`);

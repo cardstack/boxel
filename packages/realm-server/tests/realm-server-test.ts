@@ -7,6 +7,7 @@ import { validate as uuidValidate } from 'uuid';
 import {
   copySync,
   existsSync,
+  ensureDirSync,
   readFileSync,
   readJSONSync,
   removeSync,
@@ -24,9 +25,15 @@ import {
   RealmPaths,
   Realm,
   RealmPermissions,
+  fetchUserPermissions,
+  baseCardRef,
+  type Queue,
   type LooseSingleCardDocument,
+  type VirtualNetwork,
+  type SingleCardDocument,
 } from '@cardstack/runtime-common';
 import { stringify } from 'qs';
+import { v4 as uuidv4 } from 'uuid';
 import { Query } from '@cardstack/runtime-common/query';
 import {
   setupCardLogs,
@@ -35,11 +42,13 @@ import {
   setupDB,
   createRealm,
   realmServerTestMatrix,
-  realmSecretSeed,
+  secretSeed,
   createVirtualNetwork,
   createVirtualNetworkAndLoader,
   matrixURL,
   closeServer,
+  getFastbootState,
+  matrixRegistrationSecret,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
@@ -49,10 +58,12 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import jwt from 'jsonwebtoken';
+import { type CardCollectionDocument } from '@cardstack/runtime-common/card-document';
+import type PgAdapter from '../pg-adapter';
 
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
-const testRealm2URL = new URL('http://127.0.0.1:4445/');
+const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
 const testRealmHref = testRealmURL.href;
 const testRealm2Href = testRealm2URL.href;
 const distDir = resolve(join(__dirname, '..', '..', 'host', 'dist'));
@@ -61,10 +72,9 @@ console.log(`using host dist dir: ${distDir}`);
 let createJWT = (
   realm: Realm,
   user: string,
-  realmUrl: string,
   permissions: RealmPermissions['user'] = [],
 ) => {
-  return realm.createJWT({ user, realm: realmUrl, permissions }, '7d');
+  return realm.createJWT({ user, realm: realm.url, permissions }, '7d');
 };
 
 module('Realm Server', function (hooks) {
@@ -120,7 +130,8 @@ module('Realm Server', function (hooks) {
   }
 
   let testRealm: Realm;
-  let testRealmServer: Server;
+  let testRealmServer: RealmServer;
+  let testRealmHttpServer: Server;
   let request: SuperTest<Test>;
   let dir: DirResult;
 
@@ -132,24 +143,28 @@ module('Realm Server', function (hooks) {
     setupDB(hooks, {
       beforeEach: async (dbAdapter, queue) => {
         dir = dirSync();
+        let testRealmDir = join(dir.name, 'realm_server_1', 'test');
+        ensureDirSync(testRealmDir);
         // If a fileSystem is provided, use it to populate the test realm, otherwise copy the default cards
         if (!fileSystem) {
-          copySync(join(__dirname, 'cards'), dir.name);
+          copySync(join(__dirname, 'cards'), testRealmDir);
         }
         let virtualNetwork = createVirtualNetwork();
 
-        ({ testRealm, testRealmServer } = await runTestRealmServer({
-          virtualNetwork,
-          dir: dir.name,
-          realmURL: testRealmURL,
-          permissions,
-          dbAdapter,
-          queue,
-          matrixURL,
-          fileSystem,
-        }));
+        ({ testRealm, testRealmHttpServer, testRealmServer } =
+          await runTestRealmServer({
+            virtualNetwork,
+            testRealmDir,
+            realmsRootPath: join(dir.name, 'realm_server_1'),
+            realmURL: testRealmURL,
+            permissions,
+            dbAdapter,
+            queue,
+            matrixURL,
+            fileSystem,
+          }));
 
-        request = supertest(testRealmServer);
+        request = supertest(testRealmHttpServer);
       },
     });
   }
@@ -169,7 +184,7 @@ module('Realm Server', function (hooks) {
   });
 
   hooks.afterEach(async function () {
-    await closeServer(testRealmServer);
+    await closeServer(testRealmHttpServer);
   });
 
   module('card GET request', function (_hooks) {
@@ -263,10 +278,7 @@ module('Realm Server', function (hooks) {
         let response = await request
           .get('/person-1')
           .set('Accept', 'application/vnd.card+json')
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'not-john', testRealmHref)}`,
-          );
+          .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
 
         assert.strictEqual(response.status, 403, 'HTTP 403 status');
         assert.strictEqual(
@@ -282,7 +294,7 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.card+json')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', testRealmHref, ['read'])}`,
+            `Bearer ${createJWT(testRealm, 'john', ['read'])}`,
           );
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -365,7 +377,13 @@ module('Realm Server', function (hooks) {
             'the id is correct',
           );
           assert.ok(json.data.meta.lastModified, 'lastModified is populated');
-          let cardFile = join(dir.name, 'CardDef', `${id}.json`);
+          let cardFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'CardDef',
+            `${id}.json`,
+          );
           assert.ok(existsSync(cardFile), 'card json exists');
           let card = readJSONSync(cardFile);
           assert.deepEqual(
@@ -425,7 +443,7 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.card+json')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', testRealmHref, ['read'])}`,
+            `Bearer ${createJWT(testRealm, 'john', ['read'])}`,
           );
 
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
@@ -436,10 +454,7 @@ module('Realm Server', function (hooks) {
           .post('/')
           .send({})
           .set('Accept', 'application/vnd.card+json')
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'not-john', testRealmHref)}`,
-          );
+          .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
 
         assert.strictEqual(response.status, 403, 'HTTP 403 status');
       });
@@ -462,10 +477,7 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.card+json')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', testRealmHref, [
-              'read',
-              'write',
-            ])}`,
+            `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
           );
 
         assert.strictEqual(response.status, 201, 'HTTP 201 status');
@@ -534,7 +546,7 @@ module('Realm Server', function (hooks) {
           );
           assert.ok(json.data.meta.lastModified, 'lastModified is populated');
           delete json.data.meta.lastModified;
-          let cardFile = join(dir.name, entry);
+          let cardFile = join(dir.name, 'realm_server_1', 'test', entry);
           assert.ok(existsSync(cardFile), 'card json exists');
           let card = readJSONSync(cardFile);
           assert.deepEqual(
@@ -615,10 +627,7 @@ module('Realm Server', function (hooks) {
             },
           })
           .set('Accept', 'application/vnd.card+json')
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'not-john', testRealmHref)}`,
-          );
+          .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
 
         assert.strictEqual(response.status, 403, 'HTTP 403 status');
       });
@@ -643,10 +652,7 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.card+json')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', testRealmHref, [
-              'read',
-              'write',
-            ])}`,
+            `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
           );
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -747,10 +753,7 @@ module('Realm Server', function (hooks) {
         let response = await request
           .delete('/person-1')
           .set('Accept', 'application/vnd.card+json')
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'not-john', testRealmHref)}`,
-          );
+          .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
 
         assert.strictEqual(response.status, 403, 'HTTP 403 status');
       });
@@ -761,10 +764,7 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.card+json')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', testRealmHref, [
-              'read',
-              'write',
-            ])}`,
+            `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
           );
 
         assert.strictEqual(response.status, 204, 'HTTP 204 status');
@@ -915,10 +915,7 @@ module('Realm Server', function (hooks) {
         let response = await request
           .get('/person.gts')
           .set('Accept', 'application/vnd.card+source')
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'not-john', testRealmHref)}`,
-          );
+          .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
 
         assert.strictEqual(response.status, 403, 'HTTP 403 status');
       });
@@ -929,7 +926,7 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.card+source')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', testRealmHref, ['read'])}`,
+            `Bearer ${createJWT(testRealm, 'john', ['read'])}`,
           );
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -1028,10 +1025,7 @@ module('Realm Server', function (hooks) {
         let response = await request
           .delete('/unused-card.gts')
           .set('Accept', 'application/vnd.card+source')
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'not-john', testRealmHref)}`,
-          );
+          .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
 
         assert.strictEqual(response.status, 403, 'HTTP 403 status');
       });
@@ -1042,10 +1036,7 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.card+source')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', testRealmHref, [
-              'read',
-              'write',
-            ])}`,
+            `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
           );
 
         assert.strictEqual(response.status, 204, 'HTTP 204 status');
@@ -1091,7 +1082,7 @@ module('Realm Server', function (hooks) {
           'realm is public readable',
         );
 
-        let srcFile = join(dir.name, entry);
+        let srcFile = join(dir.name, 'realm_server_1', 'test', entry);
         assert.ok(existsSync(srcFile), 'card src exists');
         let src = readFileSync(srcFile, { encoding: 'utf8' });
         assert.codeEqual(
@@ -1274,7 +1265,12 @@ module('Realm Server', function (hooks) {
         // verify file serialization is correct
         {
           let localPath = new RealmPaths(testRealmURL).local(new URL(id));
-          let jsonFile = `${join(dir.name, localPath)}.json`;
+          let jsonFile = `${join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            localPath,
+          )}.json`;
           let doc = JSON.parse(
             readFileSync(jsonFile, { encoding: 'utf8' }),
           ) as LooseSingleCardDocument;
@@ -1350,10 +1346,7 @@ module('Realm Server', function (hooks) {
           .post('/unused-card.gts')
           .set('Accept', 'application/vnd.card+source')
           .send(`//TEST UPDATE\n${cardSrc}`)
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'not-john', testRealmHref)}`,
-          );
+          .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
 
         assert.strictEqual(response.status, 403, 'HTTP 403 status');
       });
@@ -1365,10 +1358,7 @@ module('Realm Server', function (hooks) {
           .send(`//TEST UPDATE\n${cardSrc}`)
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', testRealmHref, [
-              'read',
-              'write',
-            ])}`,
+            `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
           );
 
         assert.strictEqual(response.status, 204, 'HTTP 204 status');
@@ -1467,10 +1457,7 @@ module('Realm Server', function (hooks) {
         let response = await request
           .get('/dir/')
           .set('Accept', 'application/vnd.api+json')
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'not-john', testRealmHref)}`,
-          );
+          .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
 
         assert.strictEqual(response.status, 403, 'HTTP 403 status');
       });
@@ -1481,7 +1468,7 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.api+json')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', testRealmHref, ['read'])}`,
+            `Bearer ${createJWT(testRealm, 'john', ['read'])}`,
           );
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -1562,10 +1549,7 @@ module('Realm Server', function (hooks) {
         let response = await request
           .get(`/_search?${stringify(query)}`)
           .set('Accept', 'application/vnd.card+json')
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'not-john', testRealmHref)}`,
-          );
+          .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
 
         assert.strictEqual(response.status, 403, 'HTTP 403 status');
       });
@@ -1576,7 +1560,7 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.card+json')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', testRealmHref, ['read'])}`,
+            `Bearer ${createJWT(testRealm, 'john', ['read'])}`,
           );
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -2096,10 +2080,7 @@ module('Realm Server', function (hooks) {
         let response = await request
           .get(`/_info`)
           .set('Accept', 'application/vnd.api+json')
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'not-john', testRealmHref)}`,
-          );
+          .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
 
         assert.strictEqual(response.status, 403, 'HTTP 403 status');
       });
@@ -2110,16 +2091,23 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.api+json')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', testRealmHref, ['read'])}`,
+            `Bearer ${createJWT(testRealm, 'john', ['read'])}`,
           );
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
       });
     });
   });
+
   module('various other realm tests', function (hooks) {
-    let testRealmServer2: Server;
+    let testRealmHttpServer2: Server;
+    let testRealmServer2: RealmServer;
     let testRealm2: Realm;
+    let workerVirtualNetwork: VirtualNetwork;
+    let dbAdapter: PgAdapter;
+    let queue: Queue;
+    let request2: SuperTest<Test>;
+    let testRealmDir: string;
 
     hooks.beforeEach(async function () {
       shimExternals(virtualNetwork);
@@ -2129,24 +2117,294 @@ module('Realm Server', function (hooks) {
       '*': ['read', 'write'],
     });
 
+    async function startRealmServer(dbAdapter: PgAdapter, queue: Queue) {
+      if (testRealm2) {
+        virtualNetwork.unmount(testRealm2.handle);
+      }
+      ({
+        testRealm: testRealm2,
+        testRealmServer: testRealmServer2,
+        testRealmHttpServer: testRealmHttpServer2,
+        workerVirtualNetwork,
+      } = await runTestRealmServer({
+        virtualNetwork,
+        testRealmDir,
+        realmsRootPath: join(dir.name, 'realm_server_2'),
+        realmURL: testRealm2URL,
+        dbAdapter,
+        queue,
+        matrixURL,
+      }));
+      request2 = supertest(testRealmHttpServer2);
+    }
+
     setupDB(hooks, {
-      beforeEach: async (dbAdapter, queue) => {
-        if (testRealm2) {
-          virtualNetwork.unmount(testRealm2.handle);
-        }
-        ({ testRealm: testRealm2, testRealmServer: testRealmServer2 } =
-          await runTestRealmServer({
-            virtualNetwork,
-            dir: dir.name,
-            realmURL: testRealm2URL,
-            dbAdapter,
-            queue,
-            matrixURL,
-          }));
+      beforeEach: async (_dbAdapter, _queue) => {
+        dbAdapter = _dbAdapter;
+        queue = _queue;
+        testRealmDir = join(dir.name, 'realm_server_2', 'test');
+        ensureDirSync(testRealmDir);
+        copySync(join(__dirname, 'cards'), testRealmDir);
+        await startRealmServer(dbAdapter, queue);
       },
       afterEach: async () => {
-        await closeServer(testRealmServer2);
+        await closeServer(testRealmHttpServer2);
       },
+    });
+
+    // TODO this test will move to an HTTP API test with various permissions
+    // configurations after we implement the HTTP API for creating a realm
+    test('can call RealmServer.createRealm()', async function (assert) {
+      // we randomize the realm name so that we can isolate matrix test
+      // state--there is no "delete user" matrix API
+      let realmName = `test-realm-${uuidv4()}`;
+      let realm = await testRealmServer2.createRealm(
+        '@mango:boxel.ai',
+        realmName,
+      );
+      // the test worker needs a special privileged network that has the interior
+      // Realm.maybeHandle mounted--this prevents the test worker from having to
+      // authenticate with itself when talking to the realm whose credentials its
+      // using
+      workerVirtualNetwork.mount(realm.maybeHandle);
+      await realm.start();
+
+      let realmJSON = readJSONSync(
+        join(dir.name, 'realm_server_2', 'mango', realmName, '.realm.json'),
+      );
+      assert.deepEqual(
+        realmJSON,
+        { name: realmName },
+        '.realm.json is correct',
+      );
+
+      let permissions = await fetchUserPermissions(
+        dbAdapter,
+        new URL(realm.url),
+      );
+      assert.deepEqual(permissions, {
+        '@mango:boxel.ai': ['read', 'write', 'realm-owner'],
+      });
+
+      // owner can create an instance
+      let response = await request2
+        .post(`/mango/${realmName}/`)
+        .send({
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Test Card',
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/card-api',
+                name: 'CardDef',
+              },
+            },
+          },
+        })
+        .set('Accept', 'application/vnd.card+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(realm, '@mango:boxel.ai', [
+            'read',
+            'write',
+            'realm-owner',
+          ])}`,
+        );
+
+      assert.strictEqual(response.status, 201, 'HTTP 201 status');
+      let doc = response.body as SingleCardDocument;
+
+      // owner can get an instance
+      response = await request2
+        .get(new URL(doc.data.id).pathname)
+        .set('Accept', 'application/vnd.card+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(realm, '@mango:boxel.ai', [
+            'read',
+            'write',
+            'realm-owner',
+          ])}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      doc = response.body as SingleCardDocument;
+      assert.strictEqual(
+        doc.data.attributes?.title,
+        'Test Card',
+        'instance data is correct',
+      );
+
+      // owner can search in the realm
+      response = await request2
+        .get(
+          `${new URL(realm.url).pathname}_search?${stringify({
+            filter: {
+              on: baseCardRef,
+              eq: {
+                title: 'Test Card',
+              },
+            },
+          } as Query)}`,
+        )
+        .set('Accept', 'application/vnd.card+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(realm, '@mango:boxel.ai', [
+            'read',
+            'write',
+            'realm-owner',
+          ])}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let results = response.body as CardCollectionDocument;
+      assert.strictEqual(results.data.length, 1),
+        'correct number of search results';
+    });
+
+    test('dynamically created realms are not publicly readable or writable', async function (assert) {
+      let realmName = `test-realm-${uuidv4()}`;
+      let realm = await testRealmServer2.createRealm(
+        '@mango:boxel.ai',
+        realmName,
+      );
+      workerVirtualNetwork.mount(realm.maybeHandle);
+      await realm.start();
+
+      let response = await request2
+        .get(
+          `${new URL(realm.url).pathname}_search?${stringify({
+            filter: {
+              on: baseCardRef,
+              eq: {
+                title: 'Test Card',
+              },
+            },
+          } as Query)}`,
+        )
+        .set('Accept', 'application/vnd.card+json')
+        .set('Authorization', `Bearer ${createJWT(realm, 'rando')}`);
+
+      assert.strictEqual(response.status, 403, 'HTTP 403 status');
+
+      response = await request2
+        .post(`/mango/${realmName}/`)
+        .send({
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Test Card',
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/card-api',
+                name: 'CardDef',
+              },
+            },
+          },
+        })
+        .set('Accept', 'application/vnd.card+json')
+        .set('Authorization', `Bearer ${createJWT(realm, 'rando')}`);
+
+      assert.strictEqual(response.status, 403, 'HTTP 403 status');
+    });
+
+    test('can restart a realm that was created dynamically', async function (assert) {
+      let realmName = `test-realm-${uuidv4()}`;
+      let realm = await testRealmServer2.createRealm(
+        '@mango:boxel.ai',
+        realmName,
+      );
+      workerVirtualNetwork.mount(realm.maybeHandle);
+      await realm.start();
+
+      let response = await request2
+        .post(`/mango/${realmName}/`)
+        .send({
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Test Card',
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/card-api',
+                name: 'CardDef',
+              },
+            },
+          },
+        })
+        .set('Accept', 'application/vnd.card+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(realm, '@mango:boxel.ai', [
+            'read',
+            'write',
+            'realm-owner',
+          ])}`,
+        );
+
+      assert.strictEqual(response.status, 201, 'HTTP 201 status');
+      let doc = response.body as SingleCardDocument;
+
+      // Stop and restart the server
+      testRealmServer2.testingOnlyUnmountRealms();
+      await closeServer(testRealmHttpServer2);
+      await startRealmServer(dbAdapter, queue);
+      await testRealmServer2.start();
+
+      realm = testRealmServer2.testingOnlyRealms.find(
+        (r) => `${r.url.endsWith(realmName)}/`,
+      )!;
+      response = await request2
+        .get(new URL(doc.data.id).pathname)
+        .set('Accept', 'application/vnd.card+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(realm, '@mango:boxel.ai', [
+            'read',
+            'write',
+            'realm-owner',
+          ])}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      doc = response.body as SingleCardDocument;
+      assert.strictEqual(
+        doc.data.attributes?.title,
+        'Test Card',
+        'instance data is correct',
+      );
+    });
+
+    test('cannot create a realm on a realm server that has a realm mounted at the origin', async function (assert) {
+      assert.rejects(
+        testRealmServer.createRealm('@mango:boxel.ai', 'mango-realm'),
+        /a realm is already mounted at the origin of this server/,
+      );
+    });
+
+    test('cannot create a new realm that collides with an existing realm', async function (assert) {
+      let realmName = `test-realm-${uuidv4()}`;
+      await testRealmServer2.createRealm('@mango:boxel.ai', realmName);
+      assert.rejects(
+        testRealmServer2.createRealm('@mango:boxel.ai', realmName),
+        'already exists on this server',
+      );
+    });
+
+    test('cannot create a realm with invalid characters', async function (assert) {
+      assert.rejects(
+        testRealmServer2.createRealm('@mango:boxel.ai', 'invalid_realm_name'),
+        'contains invalid characters',
+      );
+      assert.rejects(
+        testRealmServer2.createRealm('@mango:boxel.ai', 'invalid realm name'),
+        'contains invalid characters',
+      );
     });
 
     test('can dynamically load a card definition from own realm', async function (assert) {
@@ -2236,19 +2494,22 @@ module('Realm Server', function (hooks) {
         assert,
         expected,
         callback: async () => {
-          writeJSONSync(join(dir.name, 'new-card.json'), {
-            data: {
-              attributes: {
-                firstName: 'Mango',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: './person',
-                  name: 'Person',
+          writeJSONSync(
+            join(dir.name, 'realm_server_1', 'test', 'new-card.json'),
+            {
+              data: {
+                attributes: {
+                  firstName: 'Mango',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person',
+                    name: 'Person',
+                  },
                 },
               },
-            },
-          } as LooseSingleCardDocument);
+            } as LooseSingleCardDocument,
+          );
         },
       });
 
@@ -2323,20 +2584,23 @@ module('Realm Server', function (hooks) {
         assert,
         expected,
         callback: async () => {
-          writeJSONSync(join(dir.name, 'person-1.json'), {
-            data: {
-              type: 'card',
-              attributes: {
-                firstName: 'Van Gogh',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: './person.gts',
-                  name: 'Person',
+          writeJSONSync(
+            join(dir.name, 'realm_server_1', 'test', 'person-1.json'),
+            {
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Van Gogh',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person.gts',
+                    name: 'Person',
+                  },
                 },
               },
-            },
-          } as LooseSingleCardDocument);
+            } as LooseSingleCardDocument,
+          );
         },
       });
 
@@ -2371,7 +2635,7 @@ module('Realm Server', function (hooks) {
         assert,
         expected,
         callback: async () => {
-          removeSync(join(dir.name, 'person-1.json'));
+          removeSync(join(dir.name, 'realm_server_1', 'test', 'person-1.json'));
         },
       });
 
@@ -2498,21 +2762,24 @@ module('Realm Server serving from root', function (hooks) {
 
   hooks.beforeEach(async function () {
     dir = dirSync();
-    copySync(join(__dirname, 'cards'), dir.name);
   });
 
   setupDB(hooks, {
     beforeEach: async (dbAdapter, queue) => {
+      let testRealmDir = join(dir.name, 'realm_server_3', 'test');
+      ensureDirSync(testRealmDir);
+      copySync(join(__dirname, 'cards'), testRealmDir);
       testRealmServer = (
         await runTestRealmServer({
           virtualNetwork,
-          dir: dir.name,
+          testRealmDir,
+          realmsRootPath: join(dir.name, 'realm_server_3'),
           realmURL: testRealmURL,
           dbAdapter,
           queue,
           matrixURL,
         })
-      ).testRealmServer;
+      ).testRealmHttpServer;
       request = supertest(testRealmServer);
     },
     afterEach: async () => {
@@ -2709,7 +2976,8 @@ module('Realm server serving multiple realms', function (hooks) {
 
   hooks.beforeEach(async function () {
     dir = dirSync();
-    copySync(join(__dirname, 'cards'), dir.name);
+    ensureDirSync(join(dir.name, 'demo'));
+    copySync(join(__dirname, 'cards'), join(dir.name, 'demo'));
   });
 
   setupDB(hooks, {
@@ -2730,7 +2998,7 @@ module('Realm server serving multiple realms', function (hooks) {
 
       testRealm = await createRealm({
         withWorker: true,
-        dir: dir.name,
+        dir: join(dir.name, 'demo'),
         virtualNetwork,
         realmURL: 'http://127.0.0.1:4446/demo/',
         queue,
@@ -2742,14 +3010,22 @@ module('Realm server serving multiple realms', function (hooks) {
       let matrixClient = new MatrixClient({
         matrixURL: realmServerTestMatrix.url,
         username: realmServerTestMatrix.username,
-        seed: realmSecretSeed,
+        seed: secretSeed,
       });
-      testRealmServer = new RealmServer(
-        [base, testRealm],
+      let getIndexHTML = (await getFastbootState()).getIndexHTML;
+      testRealmServer = new RealmServer({
+        realms: [base, testRealm],
         virtualNetwork,
         matrixClient,
-        realmSecretSeed,
-      ).listen(parseInt(localBaseRealmURL.port));
+        secretSeed,
+        matrixRegistrationSecret,
+        realmsRootPath: dir.name,
+        dbAdapter,
+        queue,
+        getIndexHTML,
+        serverURL: new URL('http://127.0.0.1:4446'),
+        assetsURL: new URL(`http://example.com/notional-assets-host/`),
+      }).listen(parseInt(localBaseRealmURL.port));
       await base.start();
       await testRealm.start();
 
@@ -2813,21 +3089,25 @@ module('Realm Server serving from a subdirectory', function (hooks) {
 
   hooks.beforeEach(async function () {
     dir = dirSync();
-    copySync(join(__dirname, 'cards'), dir.name);
   });
 
   setupDB(hooks, {
     beforeEach: async (dbAdapter, queue) => {
+      dir = dirSync();
+      let testRealmDir = join(dir.name, 'realm_server_4', 'test');
+      ensureDirSync(testRealmDir);
+      copySync(join(__dirname, 'cards'), testRealmDir);
       testRealmServer = (
         await runTestRealmServer({
           virtualNetwork,
-          dir: dir.name,
+          testRealmDir,
+          realmsRootPath: join(dir.name, 'realm_server_4'),
           realmURL: new URL('http://127.0.0.1:4446/demo/'),
           dbAdapter,
           queue,
           matrixURL,
         })
-      ).testRealmServer;
+      ).testRealmHttpServer;
       request = supertest(testRealmServer);
     },
     afterEach: async () => {
@@ -2876,21 +3156,24 @@ module('Realm server authentication', function (hooks) {
 
   hooks.beforeEach(async function () {
     dir = dirSync();
-    copySync(join(__dirname, 'cards'), dir.name);
   });
 
   setupDB(hooks, {
     beforeEach: async (dbAdapter, queue) => {
+      let testRealmDir = join(dir.name, 'realm_server_5', 'test');
+      ensureDirSync(testRealmDir);
+      copySync(join(__dirname, 'cards'), testRealmDir);
       testRealmServer = (
         await runTestRealmServer({
           virtualNetwork,
-          dir: dir.name,
+          testRealmDir,
+          realmsRootPath: join(dir.name, 'realm_server_5'),
           realmURL: testRealmURL,
           dbAdapter,
           queue,
           matrixURL,
         })
-      ).testRealmServer;
+      ).testRealmHttpServer;
       request = supertest(testRealmServer);
     },
     afterEach: async () => {
@@ -2904,7 +3187,7 @@ module('Realm server authentication', function (hooks) {
       // it's a little awkward that we are hijacking a realm user to pretend to
       // act like a normal user, but that's what's happening here
       username: 'test_realm',
-      seed: realmSecretSeed,
+      seed: secretSeed,
     });
     await matrixClient.login();
     let userId = matrixClient.getUserId();
@@ -2936,7 +3219,7 @@ module('Realm server authentication', function (hooks) {
       .set('Content-Type', 'application/json');
     assert.strictEqual(response.status, 201, 'HTTP 201 status');
     let token = response.headers['authorization'];
-    let decoded = jwt.verify(token, realmSecretSeed) as { user: string };
+    let decoded = jwt.verify(token, secretSeed) as { user: string };
     assert.strictEqual(decoded.user, userId);
   });
 });

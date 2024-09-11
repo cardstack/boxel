@@ -811,9 +811,10 @@ module('permissioned realm', function (hooks) {
   ) {
     setupDB(hooks, {
       beforeEach: async (dbAdapter, queue) => {
-        ({ testRealmServer: testRealmServer1 } = await runTestRealmServer({
+        ({ testRealmHttpServer: testRealmServer1 } = await runTestRealmServer({
           virtualNetwork: await createVirtualNetwork(),
-          dir: dirSync().name,
+          testRealmDir: dirSync().name,
+          realmsRootPath: dirSync().name,
           realmURL: testRealm1URL,
           fileSystem: {
             'article.gts': `
@@ -834,10 +835,11 @@ module('permissioned realm', function (hooks) {
           queue,
         }));
 
-        ({ testRealmServer: testRealmServer2, testRealm: testRealm2 } =
+        ({ testRealmHttpServer: testRealmServer2, testRealm: testRealm2 } =
           await runTestRealmServer({
             virtualNetwork: await createVirtualNetwork(),
-            dir: dirSync().name,
+            testRealmDir: dirSync().name,
+            realmsRootPath: dirSync().name,
             realmURL: testRealm2URL,
             fileSystem: {
               'website.gts': `

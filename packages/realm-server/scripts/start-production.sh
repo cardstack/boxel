@@ -9,6 +9,8 @@ NODE_NO_WARNINGS=1 \
   --transpileOnly main \
   --port=3000 \
   --matrixURL='https://matrix.boxel.ai' \
+  --realmsRootPath='/persistent/realms' \
+  --serverURL='https://app.boxel.ai' \
   \
   --path='/persistent/base' \
   --username='base_realm' \

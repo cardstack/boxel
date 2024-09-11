@@ -14,6 +14,10 @@ import {
 export const SYNAPSE_IP_ADDRESS = '172.20.0.5';
 export const SYNAPSE_PORT = 8008;
 
+const registrationSecretFile = path.resolve(
+  path.join(__dirname, '..', '..', 'registration_secret.txt'),
+);
+
 interface SynapseConfig {
   configDir: string;
   registrationSecret: string;
@@ -97,6 +101,7 @@ interface StartOptions {
   template?: string;
   dataDir?: string;
   containerName?: string;
+  suppressRegistrationSecretFile?: true;
 }
 export async function synapseStart(
   opts?: StartOptions,
@@ -162,6 +167,17 @@ export async function synapseStart(
 
   const synapse: SynapseInstance = { synapseId, ...synCfg };
   synapses.set(synapseId, synapse);
+
+  function cleanupRegistrationSecret() {
+    fse.removeSync(registrationSecretFile);
+  }
+
+  cleanupRegistrationSecret();
+  if (!opts?.suppressRegistrationSecretFile) {
+    fse.writeFileSync(registrationSecretFile, synapse.registrationSecret);
+    process.on('exit', cleanupRegistrationSecret);
+    process.on('SIGINT', cleanupRegistrationSecret);
+  }
   return synapse;
 }
 

@@ -102,11 +102,11 @@ export interface FileRef {
 export interface TokenClaims {
   user: string;
   realm: string;
-  permissions: ('read' | 'write')[];
+  permissions: ('read' | 'write' | 'realm-owner')[];
 }
 
 export interface RealmPermissions {
-  [username: string]: ('read' | 'write')[];
+  [username: string]: ('read' | 'write' | 'realm-owner')[];
 }
 
 export interface RealmAdapter {
@@ -275,7 +275,7 @@ export class Realm {
       adapter,
       getIndexHTML,
       matrix,
-      realmSecretSeed,
+      secretSeed,
       dbAdapter,
       queue,
       virtualNetwork,
@@ -285,7 +285,7 @@ export class Realm {
       adapter: RealmAdapter;
       getIndexHTML: () => Promise<string>;
       matrix: MatrixConfig;
-      realmSecretSeed: string;
+      secretSeed: string;
       dbAdapter: DBAdapter;
       queue: Queue;
       virtualNetwork: VirtualNetwork;
@@ -295,11 +295,11 @@ export class Realm {
   ) {
     this.paths = new RealmPaths(new URL(url));
     let { username, url: matrixURL } = matrix;
-    this.#realmSecretSeed = realmSecretSeed;
+    this.#realmSecretSeed = secretSeed;
     this.#matrixClient = new MatrixClient({
       matrixURL,
       username,
-      seed: realmSecretSeed,
+      seed: secretSeed,
     });
     this.#getIndexHTML = getIndexHTML;
     this.#assetsURL = assetsURL;

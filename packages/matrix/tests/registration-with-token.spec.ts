@@ -18,6 +18,16 @@ import { registerUser, createRegistrationToken } from '../docker/synapse';
 
 const REGISTRATION_TOKEN = 'abc123';
 
+// TODO after we start creating realms as part of user creation we'll need to
+// figure out how to perform better isolation for these tests. Creating a user
+// will result in DB and filesystem state changes that will bleed into the other
+// matrix tests. One idea is that since playwright is running on the server we
+// could perform realm server isolation by using randomly generated DB names's
+// like we do in the realm server tests along with resetting the underlying
+// filesystem and restarting the realm server in between tests that we expect to
+// mutate realm state. These would be rather expensive tests so we should be
+// prudent around the realm server isolation.
+
 test.describe('User Registration w/ Token', () => {
   let synapse: SynapseInstance;
 
@@ -128,7 +138,7 @@ test.describe('User Registration w/ Token', () => {
       page.locator(
         '[data-test-username-field] ~ [data-test-boxel-input-group-error-message]',
       ),
-    ).toContainText('User Name is already taken');
+    ).toContainText('Username is already taken');
 
     await page.locator('[data-test-username-field]').fill('user2');
     await expect(
@@ -181,7 +191,60 @@ test.describe('User Registration w/ Token', () => {
       page.locator(
         '[data-test-username-field] ~ [data-test-boxel-input-group-error-message]',
       ),
-    ).toContainText('User Name cannot start with an underscore');
+    ).toContainText('Username cannot start with an underscore');
+
+    await page.locator('[data-test-username-field]').fill('user1');
+    await expect(
+      page.locator(
+        '[data-test-username-field] ~ [data-test-boxel-input-group-error-message]',
+      ),
+      'no error message is displayed',
+    ).toHaveCount(0);
+    await page.locator('[data-test-register-btn]').click();
+
+    await page.locator('[data-test-token-field]').fill('abc123');
+    await page.locator('[data-test-next-btn]').click();
+
+    await validateEmail(page, 'user1@example.com');
+
+    await assertLoggedIn(page, {
+      userId: '@user1:localhost',
+      displayName: 'Test User',
+    });
+  });
+
+  test('it shows an error when the username start with "realm/"', async ({
+    page,
+  }) => {
+    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
+    await registerRealmUsers(synapse);
+    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
+    await clearLocalStorage(page);
+
+    await gotoRegistration(page);
+
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-name-field]').fill('Test User');
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-email-field]').fill('user1@example.com');
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-username-field]').fill('realm/user');
+    await page.locator('[data-test-password-field]').fill('mypassword1!');
+    await page
+      .locator('[data-test-confirm-password-field]')
+      .fill('mypassword1!');
+
+    await expect(
+      page.locator(
+        '[data-test-username-field][data-test-boxel-input-group-validation-state="invalid"]',
+      ),
+      'username field displays invalid validation state',
+    ).toHaveCount(1);
+    await expect(
+      page.locator(
+        '[data-test-username-field] ~ [data-test-boxel-input-group-error-message]',
+      ),
+    ).toContainText('Username cannot start with "realm/"');
 
     await page.locator('[data-test-username-field]').fill('user1');
     await expect(

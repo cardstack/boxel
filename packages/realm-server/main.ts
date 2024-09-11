@@ -61,6 +61,9 @@ if (!REALM_SERVER_MATRIX_USERNAME) {
   process.exit(-1);
 }
 
+const MATRIX_REGISTRATION_SHARED_SECRET =
+  process.env.MATRIX_REGISTRATION_SHARED_SECRET;
+
 if (process.env.DISABLE_MODULE_CACHING === 'true') {
   console.warn(
     `module caching has been disabled, module executables will be served directly from the filesystem`,
@@ -70,11 +73,14 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
 let {
   port,
   matrixURL,
+  realmsRootPath,
+  serverURL = `http://localhost:${port}`,
   distURL = process.env.HOST_URL ?? 'http://localhost:4200',
   path: paths,
   fromUrl: fromUrls,
   toUrl: toUrls,
   username: usernames,
+  matrixRegistrationSecretFile,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
   .options({
@@ -92,6 +98,15 @@ let {
       description: 'the target of the realm URL proxy',
       demandOption: true,
       type: 'array',
+    },
+    realmsRootPath: {
+      description: 'the path in which dynamically created realms are created',
+      demandOption: true,
+      type: 'string',
+    },
+    serverURL: {
+      description: 'the unresolved URL of the realm server',
+      type: 'string',
     },
     path: {
       description: 'realm directory path',
@@ -113,6 +128,11 @@ let {
       demandOption: true,
       type: 'array',
     },
+    matrixRegistrationSecretFile: {
+      description:
+        "The path to a file that contains the matrix registration secret (used for matrix tests where the registration secret changes during the realm server's lifespan)",
+      type: 'string',
+    },
   })
   .parseSync();
 
@@ -132,6 +152,13 @@ if (fromUrls.length < paths.length) {
 if (paths.length !== usernames.length) {
   console.error(
     `not enough usernames were provided to satisfy the paths provided. There must be at least one --username set for each --path parameter`,
+  );
+  process.exit(-1);
+}
+
+if (!matrixRegistrationSecretFile && !MATRIX_REGISTRATION_SHARED_SECRET) {
+  console.error(
+    `The MATRIX_REGISTRATION_SHARED_SECRET environment variable is not set. Please make sure this env var has a value (or specify --matrixRegistrationSecretFile)`,
   );
   process.exit(-1);
 }
@@ -180,7 +207,7 @@ let dist: URL = new URL(distURL);
         adapter: realmAdapter,
         getIndexHTML,
         matrix: { url: new URL(matrixURL), username },
-        realmSecretSeed: REALM_SECRET_SEED,
+        secretSeed: REALM_SECRET_SEED,
         virtualNetwork,
         dbAdapter,
         queue,
@@ -201,18 +228,24 @@ let dist: URL = new URL(distURL);
     username: REALM_SERVER_MATRIX_USERNAME,
     seed: REALM_SECRET_SEED,
   });
-  let server = new RealmServer(
+  let server = new RealmServer({
     realms,
     virtualNetwork,
     matrixClient,
-    REALM_SECRET_SEED,
-  );
+    realmsRootPath,
+    secretSeed: REALM_SECRET_SEED,
+    dbAdapter,
+    queue,
+    assetsURL: dist,
+    getIndexHTML,
+    serverURL: new URL(serverURL),
+    matrixRegistrationSecret: MATRIX_REGISTRATION_SHARED_SECRET,
+    matrixRegistrationSecretFile,
+  });
 
   server.listen(port);
 
-  for (let realm of realms) {
-    await realm.start();
-  }
+  await server.start();
 
   log.info(`Realm server listening on port ${port} is serving realms:`);
   let additionalMappings = hrefs.slice(paths.length);
