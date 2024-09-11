@@ -3,6 +3,7 @@ import {
   type LooseSingleCardDocument,
   type CardResource,
 } from '@cardstack/runtime-common';
+import { getSearchTool } from '@cardstack/runtime-common/helpers/ai';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardFragmentContent,
@@ -241,60 +242,11 @@ export function getRelevantCards(
   };
 }
 
-const searchTool: Tool = {
-  type: 'function',
-  function: {
-    name: 'searchCard',
-    description:
-      'Propose a query to search for a card instance filtered by type. \
-  If a card was shared with you, always prioritise search based upon the card that was last shared. \
-  If you do not have information on card module and name, do the search using the `_cardType` attribute. \
-  For example, if a user asks you to search or find Pet cards, you can use this filter: \
-  { filter: { eq: { _cardType: "Pet" } } }\
-   Another example, if you need to find Person cards, and you do not know the module and name, you can use this filter:\
-  { filter: { eq: { _cardType: "Person" } } }',
-    parameters: {
-      type: 'object',
-      properties: {
-        description: {
-          type: 'string',
-        },
-        filter: {
-          type: 'object',
-          properties: {
-            type: {
-              type: 'object',
-              properties: {
-                module: {
-                  type: 'string',
-                  description: 'the absolute path of the module',
-                },
-                name: {
-                  type: 'string',
-                  description: 'the name of the module',
-                },
-              },
-              required: ['module', 'name'],
-            },
-            eq: {
-              type: 'object',
-              properties: {
-                _cardType: {
-                  type: 'string',
-                  description: 'name of the card type',
-                },
-              },
-              required: ['_cardType'],
-            },
-          },
-        },
-      },
-      required: ['filter', 'description'],
-    },
-  },
-};
-
-export function getTools(history: DiscreteMatrixEvent[], aiBotUserId: string) {
+export function getTools(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): Tool[] {
+  let searchTool = getSearchTool();
   let tools = [searchTool];
   // Just get the users messages
   const userMessages = history.filter((event) => event.sender !== aiBotUserId);

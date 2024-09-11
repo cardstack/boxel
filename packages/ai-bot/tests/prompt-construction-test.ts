@@ -721,7 +721,7 @@ module('getModifyPrompt', () => {
     );
   });
 
-  test('If there are no functions in the last message from the user, store none', () => {
+  test('If there are no functions in the last message from the user, store only searchTool', () => {
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -750,10 +750,11 @@ module('getModifyPrompt', () => {
       },
     ];
     const functions = getTools(history, '@aibot:localhost');
-    assert.equal(functions.length, 0);
+    assert.equal(functions.length, 1);
+    assert.deepEqual(functions[0], getSearchTool());
   });
 
-  test('If a user stops sharing their context then ignore function calls', () => {
+  test('If a user stops sharing their context then ignore function calls with exception of searchTool', () => {
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -811,7 +812,8 @@ module('getModifyPrompt', () => {
       },
     ];
     const functions = getTools(history, '@aibot:localhost');
-    assert.equal(functions.length, 0);
+    assert.equal(functions.length, 1);
+    assert.deepEqual(functions[0], getSearchTool());
   });
 
   test("Don't break when there is an older format type with open cards", () => {
@@ -1578,42 +1580,7 @@ module('getModifyPrompt', () => {
 
     const functions = getTools(history, '@aibot:localhost');
     assert.equal(functions.length, 1);
-    assert.deepEqual(functions[0], {
-      type: 'function',
-      function: {
-        name: 'searchCard',
-        description:
-          'Propose a query to search for a card instance filtered by type. Always prioritise search based upon the card that was last shared.',
-        parameters: {
-          type: 'object',
-          properties: {
-            description: {
-              type: 'string',
-            },
-            filter: {
-              type: 'object',
-              properties: {
-                type: {
-                  type: 'object',
-                  properties: {
-                    module: {
-                      type: 'string',
-                      description: 'the absolute path of the module',
-                    },
-                    name: {
-                      type: 'string',
-                      description: 'the name of the module',
-                    },
-                  },
-                  required: ['module', 'name'],
-                },
-              },
-            },
-          },
-          required: ['filter', 'description'],
-        },
-      },
-    });
+    assert.deepEqual(functions[0], getSearchTool());
   });
 
   test('Return host result of tool call back to open ai', () => {
@@ -1678,43 +1645,7 @@ module('getModifyPrompt', () => {
                     },
                   },
                 },
-                {
-                  type: 'function',
-                  function: {
-                    name: 'searchCard',
-                    description:
-                      'Propose a query to search for a card instance filtered by type. Always prioritise search based upon the card that was last shared.',
-                    parameters: {
-                      type: 'object',
-                      properties: {
-                        description: {
-                          type: 'string',
-                        },
-                        filter: {
-                          type: 'object',
-                          properties: {
-                            type: {
-                              type: 'object',
-                              properties: {
-                                module: {
-                                  type: 'string',
-                                  description:
-                                    'the absolute path of the module',
-                                },
-                                name: {
-                                  type: 'string',
-                                  description: 'the name of the module',
-                                },
-                              },
-                              required: ['module', 'name'],
-                            },
-                          },
-                        },
-                      },
-                      required: ['filter', 'description'],
-                    },
-                  },
-                },
+                getSearchTool(),
               ],
               submode: 'interact',
             },
@@ -1863,43 +1794,7 @@ module('getModifyPrompt', () => {
                     },
                   },
                 },
-                {
-                  type: 'function',
-                  function: {
-                    name: 'searchCard',
-                    description:
-                      'Propose a query to search for a card instance filtered by type. Always prioritise search based upon the card that was last shared.',
-                    parameters: {
-                      type: 'object',
-                      properties: {
-                        description: {
-                          type: 'string',
-                        },
-                        filter: {
-                          type: 'object',
-                          properties: {
-                            type: {
-                              type: 'object',
-                              properties: {
-                                module: {
-                                  type: 'string',
-                                  description:
-                                    'the absolute path of the module',
-                                },
-                                name: {
-                                  type: 'string',
-                                  description: 'the name of the module',
-                                },
-                              },
-                              required: ['module', 'name'],
-                            },
-                          },
-                        },
-                      },
-                      required: ['filter', 'description'],
-                    },
-                  },
-                },
+                getSearchTool(),
               ],
               submode: 'interact',
             },

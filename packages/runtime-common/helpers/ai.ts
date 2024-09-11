@@ -398,12 +398,15 @@ export function getPatchTool(
   };
 }
 
-export function getSearchTool() {
+export function getSearchTool(): Tool {
   return {
     type: 'function',
     function: {
       name: 'searchCard',
-      description: `Propose a query to search for a card instance filtered by type. Always prioritise search based upon the card that was last shared.`,
+      description:
+        'Propose a query to search for a card instance filtered by type. \
+  If a card was shared with you, always prioritise search based upon the card that was last shared. \
+  If you do not have information on card module and name, do the search using the `_cardType` attribute.',
       parameters: {
         type: 'object',
         properties: {
@@ -418,7 +421,7 @@ export function getSearchTool() {
                 properties: {
                   module: {
                     type: 'string',
-                    description: `the absolute path of the module`,
+                    description: 'the absolute path of the module',
                   },
                   name: {
                     type: 'string',
