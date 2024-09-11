@@ -63,31 +63,36 @@ export default class RenderCard extends Route<Model | null> {
 
     try {
       await this.loadMatrix.perform();
+      let defaultReadableRealm = this.realm.defaultReadableRealm.path;
+      let url = path
+        ? new URL(`/${path}`, defaultReadableRealm)
+        : new URL('./', defaultReadableRealm);
 
-      let externalURL = new URL(document.location.href);
-      let rootURL = ENV.rootURL;
+      // let externalURL = new URL(document.location.href);
 
-      let pathOnRoot = `${rootURL}${path}`;
-      let prospectiveCardURL = new URL(pathOnRoot, externalURL);
+      // if (isTesting()) {
+      //   externalURL.pathname = path;
+      // }
 
-      // FIXME this needs to be fully exercised with trailing / etc, should be like path.join
+      // let rootURL = ENV.rootURL;
 
-      let defaultRealmURL = ENV.resolvedBaseRealmURL;
+      // let pathOnRoot = `${rootURL}${path}`;
+      // let prospectiveCardURL = new URL(pathOnRoot, externalURL);
 
-      // FIXME use user default realm when logged in
-      // let defaultRealmURL = this.realm.c.path;
+      // // FIXME this needs to be fully exercised with trailing / etc, should be like path.join
+
+      // let defaultRealmURL = ENV.resolvedBaseRealmURL;
+
+      // // FIXME use user default realm when logged in
+      // // let defaultRealmURL = this.realm.c.path;
 
       let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
-        new URL(prospectiveCardURL),
+        new URL(url),
       );
       let model = null;
       if (!isPublicReadableRealm && !this.matrixService.isLoggedIn) {
         return model;
       }
-
-      let url = path
-        ? new URL(`/${path}`, defaultRealmURL)
-        : new URL('./', defaultRealmURL);
 
       let cardResource = getCard(this, () => url.href);
       await cardResource.loaded;

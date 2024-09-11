@@ -1,7 +1,7 @@
 import { find, visit, currentURL } from '@ember/test-helpers';
 
 import { setupApplicationTest } from 'ember-qunit';
-import { module, skip } from 'qunit';
+import { module, skip, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
@@ -10,12 +10,18 @@ import {
   setupServerSentEvents,
   setupAcceptanceTestRealm,
   lookupLoaderService,
+  testRealmURL,
 } from '../helpers';
+import { setupMockMatrix } from '../helpers/mock-matrix';
 
 module('Acceptance | basic tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
+  setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [testRealmURL],
+  });
 
   hooks.beforeEach(async function () {
     let loaderService = lookupLoaderService();
@@ -89,7 +95,7 @@ module('Acceptance | basic tests', function (hooks) {
 
   // this doesn't work for now, should we be able to visit a card when not logged in?
   // if so, maybe a query parameter with the full URL for a card
-  skip('visiting realm root', async function (assert) {
+  test('visiting realm root', async function (assert) {
     await visit('/test/');
 
     assert.strictEqual(currentURL(), '/test/');
