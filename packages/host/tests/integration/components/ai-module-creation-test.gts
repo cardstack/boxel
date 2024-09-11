@@ -32,7 +32,6 @@ module('Integration | create app module via ai-assistant', function (hooks) {
   const testCardsRealm = 'http://localhost:4202/test/';
   let loader: Loader;
   let operatorModeStateService: OperatorModeStateService;
-  let cardApi: typeof import('https://cardstack.com/base/card-api');
 
   setupRenderingTest(hooks);
 
