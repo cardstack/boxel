@@ -1,0 +1,100 @@
+{
+  "name": "vscode-boxelrealm",
+  "displayName": "BoxelRealm",
+  "description": "Access boxel realm data and code from your vscode workspace.",
+  "version": "0.0.6",
+  "publisher": "boxel",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cardstack/boxel/"
+  },
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onFileSystem:boxelrealm"
+  ],
+  "main": "./out/src/extension",
+  "contributes": {
+    "commands": [
+      {
+        "command": "boxelrealm.workspaceInit",
+        "title": "Setup Workspace",
+        "category": "boxelrealm"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "boxelrealm.workspaceInit",
+          "when": "workbenchState != workspace"
+        }
+      ]
+    },
+    "configuration": [
+      {
+        "title": "Realm URL",
+        "properties": {
+          "boxelrealm.realmUrl": {
+            "type": "string",
+            "description": "Realm URL"
+          }
+        }
+      },
+      {
+        "title": "Realm Password",
+        "properties": {
+          "boxelrealm.realmPassword": {
+            "type": "string",
+            "description": "Realm Password"
+          }
+        }
+      },
+      {
+        "title": "Realm Username",
+        "properties": {
+          "boxelrealm.realmUsername": {
+            "type": "string",
+            "description": "Realm Username"
+          }
+        }
+      },
+      {
+        "title": "Matrix URL",
+        "properties": {
+          "boxelrealm.matrixUrl": {
+            "type": "string",
+            "description": "Matrix URL"
+          }
+        }
+      }
+    ]
+  },
+  "volta": {
+    "npm": "10.8.3",
+    "node": "20.17.0"
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc --skipLibCheck -p ./",
+    "lint": "eslint \"src/**/*.ts\"",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "matrix-js-sdk": "^31.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.39",
+    "@types/vscode": "^1.73.0",
+    "@typescript-eslint/eslint-plugin": "^7.14.0",
+    "@typescript-eslint/parser": "^7.14.0",
+    "@vscode/vsce": "^3.1.0",
+    "eslint": "^8.26.0",
+    "typescript": "^5.5.2"
+  }
+}
