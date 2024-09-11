@@ -395,20 +395,20 @@ export function getPatchTool(attachedOpenCard: CardDef, patchSpec: any) {
 }
 
 const cardTypeFilterProperty = {
-    type: 'object',
-    properties: {
-      module: { type: 'string', description: `the absolute path of the module` },
-      name: { type: 'string', description: 'the name of the module' },
-    },
-    required: ['module', 'name'],
+  type: 'object',
+  properties: {
+    module: { type: 'string', description: `the absolute path of the module` },
+    name: { type: 'string', description: 'the name of the module' },
+  },
+  required: ['module', 'name'],
 };
 
 const containsFilterProperty = {
-    type: 'object',
-    properties: {
-      title: { type: 'string', description: 'title of the card' },
-    },
-    required: [ 'title' ]
+  type: 'object',
+  properties: {
+    title: { type: 'string', description: 'title of the card' },
+  },
+  required: ['title'],
 };
 
 export function getSearchTool() {
@@ -429,10 +429,18 @@ export function getSearchTool() {
               every: {
                 type: 'array',
                 items: {
-                  "anyOf": [
-                    {type: 'object', properties: {type: cardTypeFilterProperty}, required: ['type']},
-                    {type: 'object', properties: {contains: containsFilterProperty}, required: ['contains']}
-                  ]
+                  anyOf: [
+                    {
+                      type: 'object',
+                      properties: { type: cardTypeFilterProperty },
+                      required: ['type'],
+                    },
+                    {
+                      type: 'object',
+                      properties: { contains: containsFilterProperty },
+                      required: ['contains'],
+                    },
+                  ],
                 },
               },
             },
