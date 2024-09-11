@@ -8,8 +8,6 @@ import { baseRealm, Loader, type Realm } from '@cardstack/runtime-common';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
-
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type {

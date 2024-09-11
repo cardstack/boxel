@@ -112,10 +112,8 @@ export function setupMockMatrix(
 class ServerState {
   #roomCounter = 0;
   #eventCounter = 0;
-  #rooms: Map<
-    string,
-    { events: MatrixEvent[]; reactions: MatrixEvent[]; receipts: MatrixEvent[] }
-  > = new Map();
+  #rooms: Map<string, { events: MatrixEvent[]; receipts: MatrixEvent[] }> =
+    new Map();
   #listeners: ((event: MatrixEvent) => void)[] = [];
 
   onEvent(callback: (event: MatrixEvent) => void) {
@@ -137,7 +135,7 @@ class ServerState {
       throw new Error(`room ${id} already exists`);
     }
 
-    this.#rooms.set(id, { events: [], reactions: [], receipts: [] });
+    this.#rooms.set(id, { events: [], receipts: [] });
 
     return id;
   }
@@ -183,7 +181,7 @@ class ServerState {
       content,
     } as MatrixEvent;
 
-    room.reactions.push(reactionEvent);
+    room.events.push(reactionEvent);
     this.#listeners.forEach((listener) => listener(reactionEvent));
 
     return reactionEvent;
