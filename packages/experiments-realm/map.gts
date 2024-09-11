@@ -28,6 +28,7 @@ export class Map extends CardDef {
     <template>
       <div class='gmap_canvas'><iframe
           id='gmap_canvas'
+          title='Google Map'
           width={{or @model.mapWidth 600}}
           height={{or @model.mapHeight 400}}
           src={{@model.mapUrl}}
@@ -44,6 +45,7 @@ export class Map extends CardDef {
       <a
         href='https://www.google.com/maps/place/{{@model.address}}'
         target='_blank'
+        rel='noopener noreferrer'
       >📍 {{@model.address}}</a>
     </template>
   };

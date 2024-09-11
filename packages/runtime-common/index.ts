@@ -59,8 +59,7 @@ export interface RealmPrerenderedCards {
 }
 
 import { RealmPaths, type LocalPath } from './paths';
-import { Query } from './query';
-export { buildQueryString, assertQuery } from './query';
+import { CardTypeFilter, EveryFilter, Query } from './query';
 import { Loader } from './loader';
 export * from './constants';
 export * from './queue';
@@ -174,7 +173,7 @@ export type CreateNewCard = (
 
 export interface CardChooser {
   chooseCard<T extends BaseDef>(
-    query: Query,
+    query: CardCatalogQuery,
     opts?: {
       offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
       multiSelect?: boolean;
@@ -184,7 +183,7 @@ export interface CardChooser {
 }
 
 export async function chooseCard<T extends BaseDef>(
-  query: Query,
+  query: CardCatalogQuery,
   opts?: {
     offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
     multiSelect?: boolean;
@@ -228,14 +227,10 @@ export interface CardSearch {
     instances: CardDef[];
     isLoading: boolean;
   };
-  getLiveCards2(
-    query: () => Query,
-    realms?: string[],
-    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
-  ): {
-    instances: CardDef[];
-    isLoading: boolean;
-  };
+}
+
+export interface CardCatalogQuery extends Query {
+  filter?: CardTypeFilter | EveryFilter;
 }
 
 export function getCards(query: Query, realms?: string[]) {
@@ -281,15 +276,6 @@ export function getLiveCards(
   return finder?.getLiveCards(query, realms, doWhileRefreshing);
 }
 
-export function getLiveCards2(
-  query: () => Query,
-  realms?: string[],
-  doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
-) {
-  let here = globalThis as any;
-  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.getLiveCards2(query, realms, doWhileRefreshing);
-}
 export interface CardCreator {
   create<T extends CardDef>(
     ref: CodeRef,

@@ -1,6 +1,5 @@
 import { RenderingTestContext } from '@ember/test-helpers';
 
-import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -16,6 +15,7 @@ import {
   setupIntegrationTestRealm,
   lookupLoaderService,
 } from '../helpers';
+import { setupRenderingTest } from '../helpers/setup';
 
 let loader: Loader;
 

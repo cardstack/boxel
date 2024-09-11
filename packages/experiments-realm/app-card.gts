@@ -39,7 +39,6 @@ import {
   isSingleCardDocument,
   SupportedMimeType,
   buildQueryString,
-  assertQuery,
   PrerenderedCard,
 } from '@cardstack/runtime-common';
 import { AnyFilter } from '@cardstack/runtime-common/query';
@@ -144,7 +143,6 @@ class AppCardIsolated extends Component<typeof AppCard> {
         every: [...categoryFilter, ...pillFilter],
       },
     };
-    assertQuery(q);
     return q;
   }
 
@@ -713,28 +711,7 @@ export class ConfigurableCardsGrid extends GlimmerComponent<{
         </:loading>
         <:response as |cards|>
           {{#if cards.length}}
-            {{!-- <CardsGrid @cards={{cards}} @context={{@context}} /> --}}
-            <ul
-              class={{cn 'cards-grid' list-format=@isListFormat}}
-              ...attributes
-            >
-              {{#each cards as |card|}}
-                <li
-                  {{@context.cardComponentModifier
-                    cardId=card.url
-                    format='data'
-                    fieldType=undefined
-                    fieldName=undefined
-                  }}
-                  data-test-cards-grid-item={{removeFileExtension card.url}}
-                  {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
-                  data-cards-grid-item={{removeFileExtension card.url}}
-                  class='card-grid-item'
-                >
-                  {{card.component}}
-                </li>
-              {{/each}}
-            </ul>
+            <CardsGrid @cards={{cards}} @context={{@context}} />
           {{else}}
             <div class='no-cards-message'>No Cards Available</div>
           {{/if}}
@@ -744,10 +721,8 @@ export class ConfigurableCardsGrid extends GlimmerComponent<{
     <style scoped>
       .cards-grid {
         width: 100%;
-        /*--grid-card-width: 10.25rem; /* 164px */
-        /*--grid-card-height: 14rem; /* 224px */
-        --grid-card-width: 140px;
-        --grid-card-height: 148px;
+        --grid-card-width: 10.25rem; /* 164px */
+        --grid-card-height: 14rem; /* 224px */
         list-style-type: none;
         margin: 0;
         padding: var(--cards-grid-padding, 0);
@@ -762,7 +737,6 @@ export class ConfigurableCardsGrid extends GlimmerComponent<{
         grid-template-columns: 1fr;
         gap: var(--boxel-sp);
       }
-      li,
       .cards-grid-item {
         width: var(--grid-card-width);
         height: var(--grid-card-height);
@@ -778,8 +752,6 @@ export class ConfigurableCardsGrid extends GlimmerComponent<{
       }
     </style>
   </template>
-
-  getComponent = (card: CardDef) => card.constructor.getComponent(card);
 
   get realms() {
     return ['http://localhost:4201/experiments/'];
@@ -813,7 +785,29 @@ export class CardsGrid extends GlimmerComponent<{
         </li>
       {{/each}}
     </ul>
-    <style></style>
+    <style>
+      ul.cards-grid {
+        /*--grid-card-width: 10.25rem;
+        --grid-card-height: 14rem;*/
+        --grid-card-width: 100px;
+        --grid-card-height: 500px;
+        list-style-type: none;
+        margin: 0;
+        padding: var(--cards-grid-padding, 0);
+        display: grid;
+        grid-template-columns: repeat(auto-fill, var(--grid-card-width));
+        gap: var(--boxel-sp-xl) var(--boxel-sp-lg);
+      }
+      li {
+        width: var(--grid-card-width);
+        height: var(--grid-card-height);
+
+        box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.1);
+      }
+      li > :deep(.field-component-card.fitted-format) {
+        --overlay-fitted-card-header-height: 0;
+      }
+    </style>
   </template>
 
   getComponent = (card: CardDef) => card.constructor.getComponent(card);

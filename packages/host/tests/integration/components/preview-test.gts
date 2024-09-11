@@ -2,7 +2,6 @@ import Service from '@ember/service';
 import { waitFor } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
-import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -12,6 +11,7 @@ import Preview from '@cardstack/host/components/preview';
 
 import { lookupLoaderService, testRealmURL } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
+import { setupRenderingTest } from '../../helpers/setup';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');

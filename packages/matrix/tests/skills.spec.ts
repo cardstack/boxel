@@ -51,7 +51,7 @@ test.describe('Skills', () => {
     ).toHaveCount(1);
     await expect(
       page.locator(`[data-test-card-pill-toggle="${cardId}-on"]`),
-    ).toHaveClass('toggle checked');
+    ).toHaveClass('switch checked');
   }
 
   const defaultSkillCard = `https://cardstack.com/base/SkillCard/card-editing`;
@@ -117,7 +117,7 @@ test.describe('Skills', () => {
       .click();
     await expect(
       page.locator(`[data-test-card-pill-toggle="${skillCard1}-off"]`),
-    ).toHaveClass('toggle');
+    ).toHaveClass('switch');
     await expect(
       page.locator(`[data-test-card-pill-toggle="${skillCard1}-on"]`),
     ).toHaveCount(0);

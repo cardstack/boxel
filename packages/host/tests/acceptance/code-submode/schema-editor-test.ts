@@ -6,8 +6,6 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 
-import { setupApplicationTest } from 'ember-qunit';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
@@ -26,7 +24,8 @@ import {
   type TestContextWithSSE,
   type TestContextWithSave,
 } from '../../helpers';
-import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
+import { setupApplicationTest } from '../../helpers/setup';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 const indexCardSource = `
@@ -227,8 +226,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
   setupServerSentEvents(hooks);
-  setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [baseRealm.url, testRealmURL],
+  });
 
   hooks.beforeEach(async function () {
     // this seeds the loader used during index which obtains url mappings

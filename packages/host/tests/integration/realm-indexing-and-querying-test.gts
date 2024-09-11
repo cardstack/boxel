@@ -1,7 +1,6 @@
 import { RenderingTestContext } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
-import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
 import {
@@ -42,6 +41,7 @@ import {
   setupBaseRealm,
   StringField,
 } from '../helpers/base-realm';
+import { setupRenderingTest } from '../helpers/setup';
 
 const paths = new RealmPaths(new URL(testRealmURL));
 const testModuleRealm = 'http://localhost:4202/test/';

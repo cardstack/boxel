@@ -1,3 +1,5 @@
+import Owner from '@ember/owner';
+
 import window from 'ember-window-mock';
 
 import { unixTime } from '@cardstack/runtime-common';
@@ -8,20 +10,48 @@ import type {
   MessageOptions,
 } from '@cardstack/host/services/matrix-sdk-loader';
 
+import type MatrixService from '@cardstack/host/services/matrix-service';
+import RealmService from '@cardstack/host/services/realm';
+
 import { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
-export interface Options {
+export interface Config {
   loggedInAs?: string;
   displayName?: string;
   activeRealms?: string[];
+  realmPermissions?: Record<string, string[]>;
+  expiresInSec?: number;
+  autostart?: boolean;
+}
+
+class MockUtils {
+  constructor(
+    private opts: Config,
+    private owner: Owner[],
+  ) {}
+  setRealmPermissions = (permissions: Record<string, string[]>) => {
+    this.opts.realmPermissions = permissions;
+    (this.owner[0].lookup('service:realm') as RealmService).logout();
+  };
+  setExpiresInSec = (sec: number) => {
+    this.opts.expiresInSec = sec;
+  };
+  setActiveRealms = (realmURLs: string[]) => {
+    this.opts.activeRealms = realmURLs;
+  };
 }
 
 // When also using setupBaseRealm, this must come before setupBastRealm so it
 // can pre-fill the local storage mock before services start initializing.
-export function setupMockMatrix(hooks: NestedHooks, opts: Options = {}) {
-  hooks.beforeEach(function () {
+export function setupMockMatrix(
+  hooks: NestedHooks,
+  opts: Config = {},
+): MockUtils {
+  let ownerContainer: Owner[] = [];
+  hooks.beforeEach(async function () {
+    ownerContainer[0] = this.owner;
     let sdk = new MockSDK(opts);
     const { loggedInAs } = opts;
     if (loggedInAs) {
@@ -45,7 +75,15 @@ export function setupMockMatrix(hooks: NestedHooks, opts: Options = {}) {
         instantiate: false,
       },
     );
+    if (opts.autostart) {
+      let matrixService = this.owner.lookup(
+        'service:matrix-service',
+      ) as MatrixService;
+      await matrixService.ready;
+      await matrixService.start();
+    }
   });
+  return new MockUtils(opts, ownerContainer);
 }
 
 class ServerState {
@@ -75,7 +113,7 @@ type PublicAPI<T> = { [K in keyof T]: T[K] };
 class MockSDK implements PublicAPI<ExtendedMatrixSDK> {
   private serverState = new ServerState();
 
-  constructor(private sdkOpts: Options) {}
+  constructor(private sdkOpts: Config) {}
 
   createClient(clientOpts: MatrixSDK.ICreateClientOpts) {
     return new MockClient(this, this.serverState, clientOpts, this.sdkOpts);
@@ -103,8 +141,6 @@ class MockSDK implements PublicAPI<ExtendedMatrixSDK> {
 }
 
 let nonce = 0;
-let expiresInSec: any;
-let realmPermissions: any;
 
 class MockClient implements ExtendedClient {
   private listeners = new Map();
@@ -113,13 +149,13 @@ class MockClient implements ExtendedClient {
     private sdk: MockSDK,
     private serverState: ServerState,
     private clientOpts: MatrixSDK.ICreateClientOpts,
-    private sdkOpts: Options,
+    private sdkOpts: Config,
   ) {}
 
   async createRealmSession(realmURL: URL): Promise<string> {
     let secret = "shhh! it's a secret";
     let nowInSeconds = unixTime(Date.now());
-    let expires = nowInSeconds + (expiresInSec?.() ?? 60 * 60);
+    let expires = nowInSeconds + (this.sdkOpts.expiresInSec ?? 60 * 60);
     let header = { alg: 'none', typ: 'JWT' };
     let payload = {
       iat: nowInSeconds,
@@ -129,7 +165,10 @@ class MockClient implements ExtendedClient {
       // adding a nonce to the test token so that we can tell the difference
       // between different tokens created in the same second
       nonce: nonce++,
-      permissions: realmPermissions?.()[realmURL.href] ?? ['read', 'write'],
+      permissions: (this.sdkOpts.realmPermissions ?? {})[realmURL.href] ?? [
+        'read',
+        'write',
+      ],
     };
     let stringifiedHeader = JSON.stringify(header);
     let stringifiedPayload = JSON.stringify(payload);

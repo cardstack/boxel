@@ -119,6 +119,11 @@ export interface QueryResultsMeta {
   };
 }
 
+// A mapper for fields that can be sorted on but are not an attribute of a card
+export const generalSortFields: Record<string, string> = {
+  lastModified: 'last_modified',
+};
+
 export function isValidPrerenderedHtmlFormat(
   format: string | undefined,
 ): format is PrerenderedCardOptions['htmlFormat'] {
@@ -371,6 +376,15 @@ export class IndexQueryEngine {
     return { cards, meta };
   }
 
+  private generalFieldSortColumn(field: string) {
+    let mappedField = generalSortFields[field];
+    if (mappedField) {
+      return mappedField;
+    } else {
+      throw new Error(`Unknown sort field: ${field}`);
+    }
+  }
+
   private orderExpression(sort: Sort | undefined): CardExpression {
     if (!sort) {
       return ['ORDER BY url COLLATE "POSIX"'];
@@ -382,7 +396,9 @@ export class IndexQueryEngine {
           // intentionally not using field arity here--not sure what it means to
           // sort via a plural field
           'ANY_VALUE(',
-          fieldQuery(s.by, s.on, false, 'sort'),
+          'on' in s
+            ? fieldQuery(s.by, s.on, false, 'sort')
+            : this.generalFieldSortColumn(s.by),
           ')',
           s.direction ?? 'asc',
           'NULLS LAST',
@@ -479,7 +495,7 @@ export class IndexQueryEngine {
     let results = (await this.query([
       `SELECT value
        FROM realm_meta rm
-       INNER JOIN realm_versions rv 
+       INNER JOIN realm_versions rv
        ON rm.realm_url = rv.realm_url AND rm.realm_version = rv.current_version
        WHERE`,
       ...every([['rm.realm_url =', param(realmURL.href)]]),

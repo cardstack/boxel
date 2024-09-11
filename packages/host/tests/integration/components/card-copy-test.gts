@@ -3,8 +3,6 @@ import { waitUntil, waitFor, click, triggerEvent } from '@ember/test-helpers';
 import { buildWaiter } from '@ember/test-waiters';
 import GlimmerComponent from '@glimmer/component';
 
-import { setupRenderingTest } from 'ember-qunit';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import flatMap from 'lodash/flatMap';
 import { module, test } from 'qunit';
 import { validate as uuidValidate } from 'uuid';
@@ -34,8 +32,9 @@ import {
   setupIntegrationTestRealm,
   lookupLoaderService,
 } from '../../helpers';
-import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
+import { setupRenderingTest } from '../../helpers/setup';
 
 const testRealm2URL = `http://test-realm/test2/`;
 let loader: Loader;
@@ -62,7 +61,6 @@ module('Integration | card-copy', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
-  setupWindowMock(hooks);
 
   hooks.beforeEach(async function () {
     setCardInOperatorModeState = async (
@@ -271,7 +269,11 @@ module('Integration | card-copy', function (hooks) {
     );
   });
 
-  setupMatrixServiceMock(hooks, { autostart: true });
+  setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [baseRealm.url, testRealmURL, testRealm2URL],
+    autostart: true,
+  });
 
   test('copy button does not appear when there is 1 stack for single card item', async function (assert) {
     await setCardInOperatorModeState([
@@ -303,6 +305,7 @@ module('Integration | card-copy', function (hooks) {
         </template>
       },
     );
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(
       '[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]',
     );
@@ -332,6 +335,12 @@ module('Integration | card-copy', function (hooks) {
         </template>
       },
     );
+    await click(
+      `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await click(
+      `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
     await waitFor(
       '[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]',
     );
@@ -355,6 +364,12 @@ module('Integration | card-copy', function (hooks) {
           <CardPrerender />
         </template>
       },
+    );
+    await click(
+      `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await click(
+      `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
     );
     await triggerEvent(
       `[data-test-cards-grid-item="${testRealmURL}Person/hassan"]`,
@@ -388,6 +403,7 @@ module('Integration | card-copy', function (hooks) {
         </template>
       },
     );
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await triggerEvent(
       `[data-test-cards-grid-item="${testRealmURL}Person/hassan"]`,
       'mouseenter',
@@ -433,6 +449,7 @@ module('Integration | card-copy', function (hooks) {
         </template>
       },
     );
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await triggerEvent(
       `[data-test-cards-grid-item="${testRealmURL}Person/hassan"]`,
       'mouseenter',
@@ -458,6 +475,7 @@ module('Integration | card-copy', function (hooks) {
         </template>
       },
     );
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await triggerEvent(
       `[data-test-cards-grid-item="${testRealmURL}Person/hassan"]`,
       'mouseenter',
@@ -485,6 +503,12 @@ module('Integration | card-copy', function (hooks) {
           <CardPrerender />
         </template>
       },
+    );
+    await click(
+      `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await click(
+      `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
     );
     await triggerEvent(
       `[data-test-cards-grid-item="${testRealm2URL}Pet/paper"]`,
@@ -514,6 +538,7 @@ module('Integration | card-copy', function (hooks) {
         </template>
       },
     );
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await triggerEvent(
       `[data-test-cards-grid-item="${testRealmURL}Person/hassan"]`,
       'mouseenter',
@@ -557,6 +582,12 @@ module('Integration | card-copy', function (hooks) {
         </template>
       },
     );
+    await click(
+      `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await click(
+      `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
     await waitFor('[data-test-operator-mode-stack="0"] [data-test-person]');
     await waitFor(
       '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
@@ -582,6 +613,12 @@ module('Integration | card-copy', function (hooks) {
           <CardPrerender />
         </template>
       },
+    );
+    await click(
+      `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await click(
+      `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
     );
     await waitFor(
       '[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]',
@@ -642,6 +679,12 @@ module('Integration | card-copy', function (hooks) {
         }
       },
       callback: async () => {
+        await click(
+          `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+        );
+        await click(
+          `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
+        );
         await triggerEvent(
           `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
           'mouseenter',
@@ -740,6 +783,12 @@ module('Integration | card-copy', function (hooks) {
         );
       },
       callback: async () => {
+        await click(
+          `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+        );
+        await click(
+          `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
+        );
         await triggerEvent(
           `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
           'mouseenter',
@@ -875,6 +924,12 @@ module('Integration | card-copy', function (hooks) {
         }
       },
       callback: async () => {
+        await click(
+          `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+        );
+        await click(
+          `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
+        );
         await triggerEvent(
           `[data-test-cards-grid-item="${testRealmURL}Person/hassan"]`,
           'mouseenter',
@@ -1001,6 +1056,12 @@ module('Integration | card-copy', function (hooks) {
         }
       },
       callback: async () => {
+        await click(
+          `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+        );
+        await click(
+          `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
+        );
         await triggerEvent(
           `[data-test-cards-grid-item="${testRealmURL}Person/sakura"]`,
           'mouseenter',

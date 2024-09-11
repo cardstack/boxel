@@ -1618,10 +1618,7 @@ export class Realm {
     });
   }
 
-  private async realmInfo(
-    _request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
+  private async parseRealmInfo(): Promise<RealmInfo> {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
     let realmConfig = await this.readFileAsText(localPath, undefined);
@@ -1630,6 +1627,9 @@ export class Realm {
       backgroundURL: null,
       iconURL: null,
     };
+    if (!realmConfig) {
+      return realmInfo;
+    }
 
     if (realmConfig) {
       try {
@@ -1642,6 +1642,15 @@ export class Realm {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }
     }
+    return realmInfo;
+  }
+
+  private async realmInfo(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let realmInfo = await this.parseRealmInfo();
+
     let doc = {
       data: {
         id: this.url,
@@ -1782,7 +1791,7 @@ export class Realm {
       chunkArr.push(`"${item}": ${JSON.stringify((data as any)[item])}`);
     }
     let chunk = sseToChunkData(type, `{${chunkArr.join(', ')}}`, id);
-    await Promise.all(
+    await Promise.allSettled(
       this.listeningClients.map((client) => writeToStream(client, chunk)),
     );
   }

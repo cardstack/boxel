@@ -8,8 +8,6 @@ import {
   visit,
 } from '@ember/test-helpers';
 
-import { setupApplicationTest } from 'ember-qunit';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 
@@ -22,7 +20,6 @@ import {
 
 import { Realm } from '@cardstack/runtime-common/realm';
 
-import CardService from '@cardstack/host/services/card-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
@@ -37,7 +34,8 @@ import {
   waitForCodeEditor,
   type TestContextWithSSE,
 } from '../helpers';
-import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../helpers/mock-matrix';
+import { setupApplicationTest } from '../helpers/setup';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -411,8 +409,10 @@ module('Acceptance | code submode tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
-  setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks);
+  let { setActiveRealms } = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [baseRealm.url, testRealmURL],
+  });
 
   hooks.beforeEach(async function () {
     monacoService = this.owner.lookup(
@@ -778,36 +778,44 @@ module('Acceptance | code submode tests', function (hooks) {
       .dom('[data-test-card-url-bar-realm-info]')
       .containsText('in Test Workspace B');
   });
-
-  test('code submode handles binary files', async function (assert) {
-    let cardService = this.owner.lookup('service:card-service') as CardService;
-    cardService.realmURLs.push('http://localhost:4202/test/');
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `http://localhost:4202/test/mango.png`,
+  module('with connection to test realm', function (hooks) {
+    hooks.beforeEach(function () {
+      setActiveRealms([
+        baseRealm.url,
+        testRealmURL,
+        'http://localhost:4202/test/',
+      ]);
     });
+    test('code submode handles binary files', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `http://localhost:4202/test/mango.png`,
+      });
 
-    await waitFor('[data-test-binary-info]');
-    await waitFor('[data-test-definition-file-extension]');
-    assert.dom('[data-test-definition-file-extension]').hasText('.png');
-    await waitFor('[data-test-definition-realm-name]');
-    assert
-      .dom('[data-test-definition-realm-name]')
-      .hasText('in Test Workspace A');
-    assert.dom('[data-test-definition-info-text]').containsText('Last saved');
-    assert
-      .dom('[data-test-binary-info] [data-test-file-name]')
-      .hasText('mango.png');
-    assert.dom('[data-test-binary-info] [data-test-size]').hasText('114.71 kB');
-    assert
-      .dom('[data-test-binary-info] [data-test-last-modified]')
-      .containsText('Last modified');
-    assert
-      .dom('[data-test-file-incompatibility-message]')
-      .hasText(
-        'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
-      );
-    await percySnapshot(assert);
+      await waitFor('[data-test-binary-info]');
+      await waitFor('[data-test-definition-file-extension]');
+      assert.dom('[data-test-definition-file-extension]').hasText('.png');
+      await waitFor('[data-test-definition-realm-name]');
+      assert
+        .dom('[data-test-definition-realm-name]')
+        .hasText('in Test Workspace A');
+      assert.dom('[data-test-definition-info-text]').containsText('Last saved');
+      assert
+        .dom('[data-test-binary-info] [data-test-file-name]')
+        .hasText('mango.png');
+      assert
+        .dom('[data-test-binary-info] [data-test-size]')
+        .hasText('114.71 kB');
+      assert
+        .dom('[data-test-binary-info] [data-test-last-modified]')
+        .containsText('Last modified');
+      assert
+        .dom('[data-test-file-incompatibility-message]')
+        .hasText(
+          'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
+        );
+      await percySnapshot(assert);
+    });
   });
 
   test('can handle error when user puts unidentified domain in card URL bar', async function (assert) {

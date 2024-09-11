@@ -50,7 +50,7 @@ test.describe('Login', () => {
     await assertLoggedIn(page);
     let boxelSession = await page.evaluate(async () => {
       // playwright needs a beat before it get access local storage
-      await new Promise((res) => setTimeout(res, 1000));
+      await new Promise((res) => setTimeout(res, 1500));
       return window.localStorage.getItem('boxel-session');
     });
     let token = (JSON.parse(boxelSession!) as { [realmURL: string]: string })[
