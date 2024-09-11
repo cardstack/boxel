@@ -516,7 +516,7 @@ export default class MatrixService extends Service {
           mappings,
         );
         if (this.realm.canWrite(attachedOpenCard.id)) {
-          tools.push(getPatchTool(attachedOpenCard, patchSpec));
+          tools.push(getPatchTool(attachedOpenCard.id, patchSpec));
           tools.push(getSearchTool());
           tools.push(getGenerateAppModuleTool(attachedOpenCard.id));
         }

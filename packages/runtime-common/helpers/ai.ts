@@ -2,6 +2,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { primitive } from '../constants';
 import { Loader } from '../loader';
 import { CardDef } from 'https://cardstack.com/base/card-api';
+import type { Tool } from 'https://cardstack.com/base/matrix-event';
 
 type ArraySchema = {
   type: 'array';
@@ -370,7 +371,10 @@ export function generateCardPatchCallSpecification(
   }
 }
 
-export function getPatchTool(attachedOpenCard: CardDef, patchSpec: any) {
+export function getPatchTool(
+  attachedOpenCardId: CardDef['id'],
+  patchSpec: any,
+): Tool {
   return {
     type: 'function',
     function: {
@@ -381,7 +385,7 @@ export function getPatchTool(attachedOpenCard: CardDef, patchSpec: any) {
         properties: {
           card_id: {
             type: 'string',
-            const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
+            const: attachedOpenCardId, // Force the valid card_id to be the id of the card being patched
           },
           description: {
             type: 'string',

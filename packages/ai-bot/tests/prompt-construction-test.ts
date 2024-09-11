@@ -715,7 +715,9 @@ module('getModifyPrompt', () => {
     );
     assert.equal(
       mostRecentlyAttachedCard,
-      history[0].content.data.attachedCards[0]['data'],
+      (history[0].content as CardMessageContent).data.attachedCards?.[0][
+        'data'
+      ],
     );
   });
 
@@ -765,12 +767,9 @@ module('getModifyPrompt', () => {
             context: {
               openCardIds: ['http://localhost:4201/experiments/Friend/1'],
               tools: [
-                getPatchTool(
-                  { id: 'http://localhost:4201/experiments/Friend/1' },
-                  {
-                    firstName: { type: 'string' },
-                  },
-                ),
+                getPatchTool('http://localhost:4201/experiments/Friend/1', {
+                  firstName: { type: 'string' },
+                }),
               ],
               submode: 'interact',
             },
@@ -926,12 +925,9 @@ module('getModifyPrompt', () => {
             context: {
               openCardIds: ['http://localhost:4201/experiments/Friend/1'],
               tools: [
-                getPatchTool(
-                  { id: 'http://localhost:4201/experiments/Friend/1' } as any,
-                  {
-                    firstName: { type: 'string' },
-                  },
-                ),
+                getPatchTool('http://localhost:4201/experiments/Friend/1', {
+                  firstName: { type: 'string' },
+                }),
               ],
               submode: 'interact',
             },
@@ -990,12 +986,9 @@ module('getModifyPrompt', () => {
             context: {
               openCardIds: ['http://localhost:4201/experiments/Friend/1'],
               tools: [
-                getPatchTool(
-                  { id: 'http://localhost:4201/experiments/Friend/1' } as any,
-                  {
-                    firstName: { type: 'string' },
-                  },
-                ),
+                getPatchTool('http://localhost:4201/experiments/Friend/1', {
+                  firstName: { type: 'string' },
+                }),
               ],
               submode: 'interact',
             },
@@ -1022,12 +1015,9 @@ module('getModifyPrompt', () => {
             context: {
               openCardIds: ['http://localhost:4201/experiments/Meeting/2'],
               tools: [
-                getPatchTool(
-                  { id: 'http://localhost:4201/experiments/Meeting/2' },
-                  {
-                    location: { type: 'string' },
-                  },
-                ),
+                getPatchTool('http://localhost:4201/experiments/Meeting/2', {
+                  location: { type: 'string' },
+                }),
               ],
               submode: 'interact',
             },
