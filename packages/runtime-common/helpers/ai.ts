@@ -394,12 +394,29 @@ export function getPatchTool(attachedOpenCard: CardDef, patchSpec: any) {
   };
 }
 
+const cardTypeFilterProperty = {
+    type: 'object',
+    properties: {
+      module: { type: 'string', description: `the absolute path of the module` },
+      name: { type: 'string', description: 'the name of the module' },
+    },
+    required: ['module', 'name'],
+};
+
+const containsFilterProperty = {
+    type: 'object',
+    properties: {
+      title: { type: 'string', description: 'title of the card' },
+    },
+    required: [ 'title' ]
+};
+
 export function getSearchTool() {
   return {
     type: 'function',
     function: {
       name: 'searchCard',
-      description: `Propose a query to search for a card instance filtered by type. Always prioritise search based upon the card that was last shared.`,
+      description: `Propose a query to search for a card instance filtered by type and/or by title. Always prioritise search based upon the card that was last shared.`,
       parameters: {
         type: 'object',
         properties: {
@@ -409,21 +426,17 @@ export function getSearchTool() {
           filter: {
             type: 'object',
             properties: {
-              type: {
-                type: 'object',
-                properties: {
-                  module: {
-                    type: 'string',
-                    description: `the absolute path of the module`,
-                  },
-                  name: {
-                    type: 'string',
-                    description: 'the name of the module',
-                  },
+              every: {
+                type: 'array',
+                items: {
+                  "anyOf": [
+                    {type: 'object', properties: {type: cardTypeFilterProperty}, required: ['type']},
+                    {type: 'object', properties: {contains: containsFilterProperty}, required: ['contains']}
+                  ]
                 },
-                required: ['module', 'name'],
               },
             },
+            required: ['every'],
           },
         },
         required: ['filter', 'description'],
