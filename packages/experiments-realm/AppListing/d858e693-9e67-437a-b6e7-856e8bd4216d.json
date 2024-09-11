@@ -67,7 +67,6 @@
       ],
       "quantityAvailable": 100,
       "quantitySold": 5,
-      "title": null,
       "description": null,
       "thumbnailURL": null
     },
@@ -84,12 +83,7 @@
       },
       "tags.0": {
         "links": {
-          "self": "../Tag/3047bd3e-0ef5-4fad-8008-6376ee128d1f"
-        }
-      },
-      "tags.1": {
-        "links": {
-          "self": "../Tag/2b5012c6-572f-465f-9a67-ff86d840ae63"
+          "self": "../Tag/68cafdf1-6d7c-4615-bf28-57f42f395598"
         }
       },
       "primaryCategory": {

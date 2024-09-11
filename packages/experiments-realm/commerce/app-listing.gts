@@ -148,10 +148,12 @@ class Isolated extends Component<typeof AppListing> {
 
     <div class='app-listing'>
       <div class='app-listing-header'>
-        <img
-          style={{cssUrl 'background-image' @model.thumbnailURL}}
-          class='app-icon'
-        />
+        <div>
+          <img
+            style={{cssUrl 'background-image' @model.thumbnailURL}}
+            class='app-icon'
+          />
+        </div>
         <div class='app-info'>
           <h1 class='app-title'>{{@model.name}}</h1>
           {{!-- <p class='app-author'>by {{@model.spec.firstObject.displayName}}</p> --}}
@@ -237,7 +239,9 @@ class Fitted extends Component<typeof AppListing> {
           </:default>
         </Pill>
 
-        <img src={{cssUrl @model.thumbnailURL}} class='app-icon' />
+        <div class='app-icon'>
+          <img src={{cssUrl @model.thumbnailURL}} />
+        </div>
 
         <div class='app-info'>
           <div class='app-name'><@fields.name /></div>

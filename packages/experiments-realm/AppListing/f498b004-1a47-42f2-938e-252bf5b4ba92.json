@@ -67,7 +67,6 @@
       ],
       "quantityAvailable": 100,
       "quantitySold": 5,
-      "title": null,
       "description": null,
       "thumbnailURL": null
     },
@@ -84,22 +83,22 @@
       },
       "tags.0": {
         "links": {
-          "self": "../Tag/3047bd3e-0ef5-4fad-8008-6376ee128d1f"
+          "self": "../Tag/2b5012c6-572f-465f-9a67-ff86d840ae63"
         }
       },
       "tags.1": {
         "links": {
-          "self": "../Tag/2b5012c6-572f-465f-9a67-ff86d840ae63"
+          "self": "../Tag/68cafdf1-6d7c-4615-bf28-57f42f395598"
         }
       },
       "primaryCategory": {
         "links": {
-          "self": "../Category/22bdc3a7-7aa5-4fb6-bd4f-4e253e7c4ce1"
+          "self": "../Category/8e00b498-c9af-401c-b367-dea512891c2c"
         }
       },
       "secondaryCategory": {
         "links": {
-          "self": "../Category/e127d6fc-40fc-4139-8c1b-88288304c30b"
+          "self": "../Category/f6cd775e-33c2-4b06-83b4-1b7b0a9aaae6"
         }
       },
       "examples.0.linksTo": {
