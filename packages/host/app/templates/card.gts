@@ -77,12 +77,13 @@ class CardRouteComponent extends Component<CardRouteSignature> {
     // if that is a requirement or not. we can remove this if it is not.
     this.messageService.register();
 
-    if (
-      this.router.currentURL === '/' &&
-      !this.args.controller.operatorModeEnabled
-    ) {
-      this.toggleOperatorModeTask.perform();
-    }
+    // Probably remove
+    // if (
+    //   this.router.currentURL === '/' &&
+    //   !this.args.controller.operatorModeEnabled
+    // ) {
+    //   this.toggleOperatorModeTask.perform();
+    // }
 
     registerDestructor(this, () => {
       delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
