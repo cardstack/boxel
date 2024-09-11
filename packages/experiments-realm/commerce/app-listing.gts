@@ -52,7 +52,7 @@ class Isolated extends Component<typeof AppListing> {
         align-items: center;
         margin-bottom: 20px;
       }
-      .app-icon {
+      .app-icon img {
         width: 60px;
         height: 60px;
         background-color: #6666ff;

@@ -255,15 +255,6 @@ class AppCardIsolated extends Component<typeof AppCard> {
     this.searchKey = searchKey;
   }
 
-  @action private onSearchInputKeyDown(e: KeyboardEvent) {
-    // if (e.key === 'Escape') {
-    //   this.onCancel();
-    //   (e.target as HTMLInputElement)?.blur?.();
-    // }
-  }
-
-  //checkbox
-
   checkboxInputs: any = [
     { id: 'free', label: 'Free', value: false },
     { id: 'forMembers', label: 'For Members', value: false },
@@ -327,7 +318,6 @@ class AppCardIsolated extends Component<typeof AppCard> {
                   @placeholder='Filter by name or type'
                   @state='initial'
                   @onInput={{this.debouncedSetSearchKey}}
-                  {{on 'keydown' this.onSearchInputKeyDown}}
                   autocomplete='off'
                   data-test-search-field
                 />
@@ -428,8 +418,8 @@ class AppCardIsolated extends Component<typeof AppCard> {
       }
       .card {
         /*investigate why we need put variable to make it work */
-        --grid-card-width: 150px;
-        --grid-card-height: 58px;
+        --grid-card-width: 300px;
+        --grid-card-height: 300px;
         width: var(--grid-card-width);
         height: var(--grid-card-height);
         overflow: hidden;
@@ -726,11 +716,6 @@ class AppCardIsolated extends Component<typeof AppCard> {
       }
     },
   );
-
-  @action onPillClick(pillFilter: PillFilter) {
-    //console.log('Pill clicked:', pillFilter);
-    // Handle pill click event here
-  }
 }
 
 class PillPicker extends GlimmerComponent<{
