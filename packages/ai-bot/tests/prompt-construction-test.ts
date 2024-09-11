@@ -1626,7 +1626,7 @@ module('getModifyPrompt', () => {
     });
   });
 
-  test.only('Return host result of tool call back to open ai', () => {
+  test('Return host result of tool call back to open ai', () => {
     const history: IRoomEvent[] = [
       {
         type: 'm.room.message',
