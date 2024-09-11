@@ -20,6 +20,7 @@ import type Owner from '@ember/owner';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
+import { debounce } from '@ember/runloop';
 
 import {
   AddButton,
@@ -41,13 +42,12 @@ import {
   SupportedMimeType,
   buildQueryString,
   assertQuery,
-  PrerenderedCard,
 } from '@cardstack/runtime-common';
 import { AnyFilter } from '@cardstack/runtime-common/query';
 import { TrackedMap } from 'tracked-built-ins';
 
 const CONFIG = {
-  displayQuery: false,
+  displayQuery: true,
 };
 
 export class Tab extends FieldDef {
@@ -120,7 +120,6 @@ class AppCardIsolated extends Component<typeof AppCard> {
   }
 
   @action onPillSelect(id: string) {
-    // debugger;
     let pillFilter = this.pillFilterMap.get(id);
     if (!pillFilter) {
       return;
@@ -144,7 +143,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
     let q = {
       filter: {
         on: this.activeTabRef,
-        every: [...categoryFilter, ...pillFilter],
+        every: [...categoryFilter, ...pillFilter, { ...this.titleFilter }],
       },
     };
     assertQuery(q);
@@ -219,6 +218,17 @@ class AppCardIsolated extends Component<typeof AppCard> {
     };
   }
 
+  get titleFilter() {
+    if (!this.searchKey || this.searchKey === '') {
+      return {};
+    }
+    return {
+      contains: {
+        title: this.searchKey,
+      },
+    };
+  }
+
   get realms(): string[] {
     return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
   }
@@ -227,7 +237,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
   @tracked private searchKey = '';
 
   @action private debouncedSetSearchKey(searchKey: string) {
-    // debounce(this, this.setSearchKey, searchKey, 300);
+    debounce(this, this.setSearchKey, searchKey, 300);
   }
 
   @action
@@ -236,10 +246,10 @@ class AppCardIsolated extends Component<typeof AppCard> {
   }
 
   @action private onSearchInputKeyDown(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
-      // this.onCancel();
-      // (e.target as HTMLInputElement)?.blur?.();
-    }
+    // if (e.key === 'Escape') {
+    //   this.onCancel();
+    //   (e.target as HTMLInputElement)?.blur?.();
+    // }
   }
 
   //checkbox

@@ -16,6 +16,8 @@ import { BoxelSpec } from './listing';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import { Pill } from '@cardstack/boxel-ui/components';
 import { BoxelIcon } from '@cardstack/boxel-ui/icons';
+// @ts-ignore no types
+import cssUrl from 'ember-css-url';
 
 interface PriceOptionWithId {
   id: string;
@@ -146,11 +148,10 @@ class Isolated extends Component<typeof AppListing> {
 
     <div class='app-listing'>
       <div class='app-listing-header'>
-        <div class='app-icon'>
-          {{!-- {{#if @model.spec.firstObject.icon}}
-            <@fields.spec.firstObject.icon />
-          {{/if}} --}}
-        </div>
+        <img
+          style={{cssUrl 'background-image' @model.thumbnailURL}}
+          class='app-icon'
+        />
         <div class='app-info'>
           <h1 class='app-title'>{{@model.name}}</h1>
           {{!-- <p class='app-author'>by {{@model.spec.firstObject.displayName}}</p> --}}
@@ -236,7 +237,7 @@ class Fitted extends Component<typeof AppListing> {
           </:default>
         </Pill>
 
-        <img src='https://picsum.photos/200/20?random=1' class='app-icon' />
+        <img src={{cssUrl @model.thumbnailURL}} class='app-icon' />
 
         <div class='app-info'>
           <div class='app-name'><@fields.name /></div>

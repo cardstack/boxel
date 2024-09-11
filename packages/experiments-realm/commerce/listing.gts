@@ -95,6 +95,12 @@ export class Tag extends CardDef {
 
 export class Listing extends CardDef {
   static displayName = 'Listing Card';
+
+  @field title = contains(StringField, {
+    computeVia: function (this: Listing) {
+      return this.name;
+    },
+  });
   //==Listing info
   @field name = contains(StringField);
   @field detail = contains(StringField);
