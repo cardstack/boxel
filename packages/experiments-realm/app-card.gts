@@ -745,7 +745,3 @@ export class AppCard extends CardDef {
   @field moduleId = contains(StringField);
   static isolated = AppCardIsolated;
 }
-
-function removeFileExtension(cardUrl: string) {
-  return cardUrl.replace(/\.[^/.]+$/, '');
-}
