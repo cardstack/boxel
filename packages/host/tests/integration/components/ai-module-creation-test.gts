@@ -1,4 +1,4 @@
-import { waitFor, click } from '@ember/test-helpers';
+import { waitFor, click, findAll } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { module, test } from 'qunit';
@@ -8,10 +8,7 @@ import { baseRealm, Loader, type Realm } from '@cardstack/runtime-common';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import {
-  addRoomEvent,
-  getRoomEvents,
-} from '@cardstack/host/lib/matrix-handlers';
+import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -28,10 +25,7 @@ import {
   setupServerSentEvents,
   lookupLoaderService,
 } from '../../helpers';
-import {
-  setupMatrixServiceMock,
-  MockMatrixService,
-} from '../../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -39,11 +33,17 @@ module('Integration | create app module via ai-assistant', function (hooks) {
   const noop = () => {};
   const testCardsRealm = 'http://localhost:4202/test/';
   let loader: Loader;
-  let matrixService: MockMatrixService;
   let operatorModeStateService: OperatorModeStateService;
   let cardApi: typeof import('https://cardstack.com/base/card-api');
 
   setupRenderingTest(hooks);
+
+  let { getRoomEvents, simulateRemoteMessage } = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [testRealmURL],
+    autostart: true,
+  });
+
   hooks.beforeEach(function () {
     loader = lookupLoaderService().loader;
   });
@@ -55,14 +55,13 @@ module('Integration | create app module via ai-assistant', function (hooks) {
   );
 
   setupServerSentEvents(hooks);
-  setupMatrixServiceMock(hooks, { autostart: true });
 
   hooks.beforeEach(async function () {
     cardApi = await loader.import(`${baseRealm.url}card-api`);
-    matrixService = this.owner.lookup(
-      'service:matrixService',
-    ) as MockMatrixService;
-    matrixService.cardAPI = cardApi;
+    // matrixService = this.owner.lookup(
+    //   'service:matrixService',
+    // ) as MockMatrixService;
+    // matrixService.cardAPI = cardApi;
     operatorModeStateService = this.owner.lookup(
       'service:operator-mode-state-service',
     ) as OperatorModeStateService;
@@ -102,6 +101,7 @@ module('Integration | create app module via ai-assistant', function (hooks) {
       },
     );
     let roomId = await openAiAssistant();
+    console.log('room id  ', roomId);
     return roomId;
   }
 
@@ -156,17 +156,24 @@ module('Integration | create app module via ai-assistant', function (hooks) {
     const prdCardId = `${testRealmURL}PRD/1`;
     await renderAiAssistantPanel(prdCardId);
     const stackCard = `[data-test-stack-card="${prdCardId}"]`;
-    const roomId = 'New AI chat';
 
     assert.dom(stackCard).exists();
     await click('[data-test-create-module]');
     await click('[data-test-past-sessions-button]');
+    let newRoomButton = findAll('[data-test-enter-room]').filter((el) =>
+      el.textContent?.includes('New AI chat'),
+    )[0];
+
+    assert.ok(newRoomButton, 'new room button exists');
+
+    let roomId = newRoomButton.getAttribute('data-test-enter-room')!;
+
     await click(`[data-test-enter-room="${roomId}"]`);
 
     assert
       .dom(`[data-test-room-name="New AI chat"] [data-test-message-idx="0"]`)
       .containsText('Generate code');
-    let events = await getRoomEvents(matrixService, roomId);
+    let events = getRoomEvents(roomId);
     let lastEvContent = events[events.length - 1].content as CardMessageContent;
     assert.strictEqual(lastEvContent.body, 'Generate code');
     assert.strictEqual(lastEvContent.data.attachedSkillEventIds?.length, 1);
@@ -188,41 +195,33 @@ module('Integration | create app module via ai-assistant', function (hooks) {
     );
 
     const moduleCode = `import { Component, CardDef, FieldDef, linksTo, linksToMany, field, contains, containsMany } from 'https://cardstack.com/base/card-api';\nimport StringField from 'https://cardstack.com/base/string';\nimport BooleanField from 'https://cardstack.com/base/boolean';\nimport DateField from 'https://cardstack.com/base/date';\nimport DateTimeField from 'https://cardstack.com/base/datetime';\nimport NumberField from 'https://cardstack.com/base/number';\nimport MarkdownField from 'https://cardstack.com/base/markdown';\nimport { AppCard } from '${testCardsRealm}app-card';\n\nexport class Tour extends CardDef {\n  static displayName = 'Tour';\n\n  @field tourID = contains(StringField);\n  @field date = contains(DateField);\n  @field time = contains(DateTimeField);\n  @field parentNames = contains(StringField);\n  @field contactInformation = contains(StringField);\n  @field notes = contains(MarkdownField);\n\n  @field parents = linksToMany(() => Parent);\n}\n\nexport class Student extends CardDef {\n  static displayName = 'Student';\n\n  @field studentID = contains(StringField);\n  @field name = contains(StringField);\n  @field age = contains(NumberField);\n  @field enrollmentDate = contains(DateField);\n  @field parentInformation = contains(MarkdownField);\n  @field allergiesMedicalNotes = contains(MarkdownField);\n  @field attendanceRecords = containsMany(MarkdownField);\n  \n  @field parents = linksToMany(() => Parent);\n  @field classes = linksToMany(() => Class);\n}\n\nexport class Parent extends CardDef {\n  static displayName = 'Parent';\n\n  @field parentID = contains(StringField);\n  @field name = contains(StringField);\n  @field contactInformation = contains(StringField);\n  \n  @field students = linksToMany(Student);\n  @field tours = linksToMany(Tour);\n}\n\nexport class Staff extends CardDef {\n  static displayName = 'Staff';\n\n  @field staffID = contains(StringField);\n  @field name = contains(StringField);\n  @field role = contains(StringField);\n  @field contactInformation = contains(StringField);\n  @field schedule = contains(MarkdownField);\n}\n\nexport class Class extends CardDef {\n  static displayName = 'Class';\n\n  @field classID = contains(StringField);\n  @field name = contains(StringField);\n  @field schedule = contains(MarkdownField);\n  \n  @field instructor = linksTo(Staff);\n  @field enrolledStudents = linksToMany(Student);\n}\n\nexport class Communication extends CardDef {\n  static displayName = 'Communication';\n\n  @field communicationID = contains(StringField);\n  @field date = contains(DateField);\n  @field type = contains(StringField);\n  @field content = contains(MarkdownField);\n  @field followUpDate = contains(DateField);\n}\n\nexport class PreschoolCRMApp extends AppCard {\n  static displayName = 'Preschool CRM';\n\n  @field tours = containsMany(Tour);\n  @field students = containsMany(Student);\n  @field parents = containsMany(Parent);\n  @field staff = containsMany(Staff);\n  @field classes = containsMany(Class);\n  @field communications = containsMany(Communication);\n}\n`;
-    await addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: 1725046545971,
-      sender: '@aibot:localhost',
-      content: {
-        msgtype: 'org.boxel.command',
-        formatted_body:
-          'Generate code for Preschool CRM based on product requirement document.',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'generateAppModule',
-            arguments: {
-              attached_card_id: prdCardId,
-              description:
-                'Generate code for Preschool CRM based on product requirement document.',
-              appTitle: 'Preschool CRM',
-              moduleCode,
-            },
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: 'org.boxel.command',
+      body: 'Generate code for Preschool CRM based on product requirement document.',
+      formatted_body:
+        'Generate code for Preschool CRM based on product requirement document.',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'generateAppModule',
+          arguments: {
+            attached_card_id: prdCardId,
+            description:
+              'Generate code for Preschool CRM based on product requirement document.',
+            appTitle: 'Preschool CRM',
+            moduleCode,
           },
-          eventId: 'event1',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'event0',
         },
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: 'event0',
       },
-      status: null,
     });
 
     await waitFor('[data-test-command-apply="ready"]');
     await click('[data-test-command-apply="ready"]');
+
     assert.dom('[data-test-view-module]').exists();
     let moduleURL = (
       document.querySelector('[data-test-view-module]') as HTMLElement
