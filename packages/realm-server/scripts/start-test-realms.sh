@@ -1,11 +1,11 @@
 #! /bin/sh
-check_postgres_ready() {
-  docker exec boxel-pg pg_isready -U postgres >/dev/null 2>&1
-}
-while ! check_postgres_ready; do
-  printf '.'
-  sleep 1
-done
+SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPTS_DIR/wait-for-pg.sh"
+
+wait_for_postgres
+
+MATRIX_REGISTRATION_SHARED_SECRET=$(ts-node --transpileOnly "$SCRIPTS_DIR/matrix-registration-secret.ts")
+export MATRIX_REGISTRATION_SHARED_SECRET
 
 NODE_ENV=test \
   PGPORT=5435 \
@@ -20,6 +20,8 @@ NODE_ENV=test \
   --transpileOnly main \
   --port=4202 \
   --matrixURL='http://localhost:8008' \
+  --realmsRootPath='./realms' \
+  --matrixRegistrationSecretFile='../matrix/registration_secret.txt' \
   \
   --path='./tests/cards' \
   --username='node-test_realm' \

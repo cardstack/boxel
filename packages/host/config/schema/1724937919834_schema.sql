@@ -20,7 +20,17 @@
    last_modified,
    embedded_html BLOB,
    atom_html TEXT,
+   fitted_html BLOB,
+   display_names BLOB,
    PRIMARY KEY ( url, realm_version, realm_url, type ) 
+);
+
+ CREATE TABLE IF NOT EXISTS realm_meta (
+   realm_url TEXT NOT NULL,
+   realm_version INTEGER NOT NULL,
+   value BLOB NOT NULL,
+   indexed_at,
+   PRIMARY KEY ( realm_url, realm_version ) 
 );
 
  CREATE TABLE IF NOT EXISTS realm_user_permissions (
@@ -28,6 +38,7 @@
    username TEXT NOT NULL,
    read BOOLEAN NOT NULL,
    write BOOLEAN NOT NULL,
+   realm_owner BOOLEAN DEFAULT false NOT NULL,
    PRIMARY KEY ( realm_url, username ) 
 );
 

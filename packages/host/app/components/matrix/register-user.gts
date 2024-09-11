@@ -495,7 +495,7 @@ export default class RegisterUser extends Component<Signature> {
   @action
   private checkUsername() {
     if (!this.username) {
-      this.usernameError = 'User Name is missing';
+      this.usernameError = 'Username is missing';
     }
     this.checkUsernameAvailability.perform();
   }
@@ -503,14 +503,20 @@ export default class RegisterUser extends Component<Signature> {
   private checkUsernameAvailability = restartableTask(async () => {
     // Block usernames that may collide with realm or realm server API
     if (this.username.startsWith('_')) {
-      this.usernameError = 'User Name cannot start with an underscore';
+      this.usernameError = 'Username cannot start with an underscore';
+      return;
+    }
+
+    // Block usernames that may collide with realm users
+    if (this.username.startsWith('realm/')) {
+      this.usernameError = 'Username cannot start with "realm/"';
       return;
     }
 
     this.isUsernameAvailable =
       await this.matrixService.client.isUsernameAvailable(this.username);
     if (!this.isUsernameAvailable) {
-      this.usernameError = 'User Name is already taken';
+      this.usernameError = 'Username is already taken';
     }
   });
 
@@ -700,7 +706,7 @@ export default class RegisterUser extends Component<Signature> {
             `invalid state: cannot doRegistrationFlow() with errcode '${e.errcode}' in state ${this.state.type}`,
           );
         }
-        this.usernameError = 'User Name is already taken';
+        this.usernameError = 'Username is already taken';
         this.state = { type: 'initial' };
       }
 
