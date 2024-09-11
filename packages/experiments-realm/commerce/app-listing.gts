@@ -14,6 +14,8 @@ import { ImageLayout } from './image-gallery';
 import { Price } from './price';
 import { BoxelSpec } from './listing';
 import BooleanField from 'https://cardstack.com/base/boolean';
+import { Pill } from '@cardstack/boxel-ui/components';
+import { BoxelIcon } from '@cardstack/boxel-ui/icons';
 
 interface PriceOptionWithId {
   id: string;
@@ -213,6 +215,137 @@ class Isolated extends Component<typeof AppListing> {
   </template>
 }
 
+class Fitted extends Component<typeof AppListing> {
+  get publisher() {
+    return (
+      this.args.model.publisher?.firstName +
+        ' ' +
+        this.args.model.publisher?.lastName || ''
+    );
+  }
+
+  <template>
+    <div class='card-list'>
+      <div class='card-list-content'>
+        <Pill @kind='default' class='custom-pill'>
+          <:icon>
+            <BoxelIcon width='11px' height='11px' />
+          </:icon>
+          <:default>
+            500
+          </:default>
+        </Pill>
+
+        <img src='https://picsum.photos/200/20?random=1' class='app-icon' />
+
+        <div class='app-info'>
+          <div class='app-name'><@fields.name /></div>
+          <span class='app-publisher'>{{this.publisher}}</span>
+        </div>
+      </div>
+    </div>
+    <style scoped>
+      .card-list {
+        --boxel-app-icon-size: clamp(
+          30px,
+          calc(40px + 0.3cqw),
+          calc(50px + 0.5cqw)
+        );
+        --boxel-app-name-size: clamp(
+          14px,
+          calc(14px + 0.3cqw),
+          calc(40px + 0.3cqw)
+        );
+        --boxel-app-publisher-size: clamp(
+          12px,
+          calc(12px + 0.3cqw),
+          calc(12px + 0.4cqw)
+        );
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+      .card-list-content {
+        width: 100%;
+        height: 100%;
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: start;
+        gap: var(--boxel-sp-sm);
+        padding: var(--boxel-sp-xs);
+      }
+      .app-icon {
+        width: 100%;
+        max-width: var(--boxel-app-icon-size);
+        aspect-ratio: 1 / 1;
+        border-radius: var(--boxel-border-radius-sm);
+      }
+      .app-icon img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 8px;
+      }
+      .app-name {
+        margin: 0;
+        font-size: var(--boxel-app-name-size);
+        font-weight: bold;
+        color: var(--boxel-dark);
+        text-overflow: ellipsis;
+        line-height: var(--boxel-app-name-size);
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        word-break: break-word;
+        overflow: hidden;
+      }
+      .app-publisher {
+        font-size: var(--boxel-app-publisher-size);
+        line-height: var(--boxel-app-publisher-size);
+        color: var(--boxel-500);
+      }
+      .custom-pill {
+        --pill-font-color: var(--boxel-light);
+        --pill-background-color: var(--boxel-blue);
+        --pill-padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs);
+        --pill-gap: var(--boxel-sp-xxs);
+        --pill-icon-size: var(--boxel-icon-xs);
+        font-size: var(--boxel-font-size-xs);
+        position: absolute;
+        top: 0;
+        right: 0;
+        margin: var(--boxel-sp-4xs);
+      }
+      .custom-pill svg {
+        --icon-color: var(--boxel-light);
+      }
+
+      @container (aspect-ratio <= 1.0) {
+        .card-list-content {
+          flex-direction: column;
+          text-align: center;
+          justify-content: center;
+        }
+      }
+
+      @container (height < 115px) {
+        .custom-pill,
+        .app-publisher {
+          display: none;
+        }
+      }
+
+      @container (aspect-ratio > 2.5) {
+        .card-list-content {
+          flex-direction: row;
+          align-items: center;
+        }
+      }
+    </style>
+  </template>
+}
+
 interface PriceOptionsSignature {
   Args: {
     options: PriceOptionWithId[] | undefined;
@@ -301,10 +434,5 @@ export class AppListing extends Listing {
   @field spec = linksTo(AppBoxelSpec);
 
   // most likely, no other delegated render to fitted unless its an image
-  static fitted = class Fitted extends Component<typeof this> {
-    <template>
-      <@fields.name />
-      <@fields.publisher format='atom' />
-    </template>
-  };
+  static fitted = Fitted;
 }

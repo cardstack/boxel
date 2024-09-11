@@ -5,7 +5,6 @@ import {
   CardDef,
   relativeTo,
   realmInfo,
-  FieldDef,
   containsMany,
   linksTo,
 } from './card-api';

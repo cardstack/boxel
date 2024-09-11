@@ -28,6 +28,7 @@ import {
   FilterList,
   type Filter as LeftNavFilter,
   Pill,
+  BoxelInput,
 } from '@cardstack/boxel-ui/components';
 
 import {
@@ -134,9 +135,9 @@ class AppCardIsolated extends Component<typeof AppCard> {
   get query(): Query {
     let categoryFilter = this.categoryFilter ? [this.categoryFilter] : [];
     let pillFilter = this.pillFilter ? [this.pillFilter] : [];
-    console.log('===');
-    console.log(categoryFilter);
-    console.log(pillFilter);
+    // console.log('===');
+    // console.log(categoryFilter);
+    // console.log(pillFilter);
     let q = {
       filter: {
         on: this.activeTabRef,
@@ -219,6 +220,42 @@ class AppCardIsolated extends Component<typeof AppCard> {
     return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
   }
 
+  //search input
+  @tracked private searchKey = '';
+
+  @action private debouncedSetSearchKey(searchKey: string) {
+    // debounce(this, this.setSearchKey, searchKey, 300);
+  }
+
+  @action
+  private setSearchKey(searchKey: string) {
+    this.searchKey = searchKey;
+  }
+
+  @action private onSearchInputKeyDown(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+      // this.onCancel();
+      // (e.target as HTMLInputElement)?.blur?.();
+    }
+  }
+
+  //checkbox
+
+  checkboxInputs: any = [
+    { id: 'free', label: 'Free', value: false },
+    { id: 'forMembers', label: 'For Members', value: false },
+    { id: 'premium', label: 'Premium', value: false },
+  ];
+
+  @action
+  updateInputValue(id: string, event: Event) {
+    const target = event.target as HTMLInputElement;
+    const input = this.checkboxInputs.find((input: any) => input.id === id);
+    if (input) {
+      input.value = target.checked;
+    }
+  }
+
   <template>
     <section class='app-card'>
       <div>
@@ -258,10 +295,37 @@ class AppCardIsolated extends Component<typeof AppCard> {
             {{#if this.loadTagFilterList.isRunning}}
               Loading...
             {{else}}
-              <PillPicker
-                @items={{this.pillFilters}}
-                @onSelect={{this.onPillSelect}}
-              />
+              <div class='search-and-filter-group'>
+
+                <BoxelInput
+                  @type='search'
+                  @placeholder='Filter by name or type'
+                  @state='initial'
+                  @onInput={{this.debouncedSetSearchKey}}
+                  {{on 'keydown' this.onSearchInputKeyDown}}
+                  autocomplete='off'
+                  data-test-search-field
+                />
+
+                <PillPicker
+                  @items={{this.pillFilters}}
+                  @onSelect={{this.onPillSelect}}
+                />
+
+                <div class='checkbox-inputs'>
+                  {{#each this.checkboxInputs as |item|}}
+                    <label>
+                      <input
+                        type='checkbox'
+                        checked={{item.isSelected}}
+                        {{on 'change' (fn this.updateInputValue item.id)}}
+                      />
+                      <span>{{item.label}}</span>
+                    </label>
+                  {{/each}}
+                </div>
+
+              </div>
             {{/if}}
           </div>
         </aside>
@@ -288,14 +352,6 @@ class AppCardIsolated extends Component<typeof AppCard> {
             {{/if}}
           {{/if}}
         </main>
-        <aside class='app-card-related-sidebar sidebar'>
-          <div class='card-box'>
-            <h5>Parent Listing</h5>
-          </div>
-          <div class='card-box'>
-            <h5>Related Apps</h5>
-          </div>
-        </aside>
       </section>
     </section>
     <style scoped>
@@ -311,7 +367,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
       }
       .app-card-layout {
         display: grid;
-        grid-template-columns: 1fr 600px 1fr;
+        grid-template-columns: 300px 1fr;
         background: var(--boxel-100);
         gap: var(--boxel-sp);
         padding: var(--boxel-sp);
@@ -322,7 +378,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
         border: 1px solid var(--boxel-200);
         border-radius: var(--boxel-border-radius);
         width: 100%;
-        max-width: 70rem;
+        min-width: 600px;
         margin: 0 auto;
         padding: var(--boxel-sp-xl) var(--boxel-sp-xl) var(--boxel-sp-xxl);
       }
@@ -335,6 +391,37 @@ class AppCardIsolated extends Component<typeof AppCard> {
       }
       aside.sidebar h5 {
         margin-top: 0;
+      }
+
+      .search-and-filter-group {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp);
+      }
+
+      .search-and-filter-group .search {
+        background-color: var(--boxel-100);
+        color: var(--boxel-dark);
+        --boxel-form-control-border-color: var(--boxel-400);
+      }
+
+      .search-and-filter-group .search::placeholder {
+        color: var(--boxel-dark);
+        opacity: 0.6;
+      }
+
+      .checkbox-inputs {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xxs);
+      }
+      .checkbox-inputs label {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+        font-size: var(--boxel-font-size-sm);
+      }
+      .checkbox-inputs label span {
       }
 
       .table {
@@ -557,7 +644,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
   );
 
   @action onPillClick(pillFilter: PillFilter) {
-    console.log('Pill clicked:', pillFilter);
+    //console.log('Pill clicked:', pillFilter);
     // Handle pill click event here
   }
 }
@@ -569,16 +656,24 @@ class PillPicker extends GlimmerComponent<{
   };
 }> {
   <template>
-    {{#each @items as |item|}}
-      <Pill
-        @kind='button'
-        class={{cn selected=(eq item.selected true)}}
-        {{on 'click' (fn @onSelect item.id)}}
-      >
-        <:default>{{item.label}}</:default>
-      </Pill>
-    {{/each}}
+    <div class='pill-picker'>
+      {{#each @items as |item|}}
+        <Pill
+          @kind='button'
+          class={{cn selected=(eq item.selected true)}}
+          style='padding: var(--boxel-sp-4xs) var(--boxel-sp-xxs);'
+          {{on 'click' (fn @onSelect item.id)}}
+        >
+          <:default>{{item.label}}</:default>
+        </Pill>
+      {{/each}}
+    </div>
     <style>
+      .pill-picker {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-xxs);
+      }
       .selected {
         --pill-background-color: var(--boxel-highlight);
       }
@@ -618,7 +713,28 @@ export class ConfigurableCardsGrid extends GlimmerComponent<{
         </:loading>
         <:response as |cards|>
           {{#if cards.length}}
-            <CardsGrid @cards={{cards}} @context={{@context}} />
+            {{!-- <CardsGrid @cards={{cards}} @context={{@context}} /> --}}
+            <ul
+              class={{cn 'cards-grid' list-format=@isListFormat}}
+              ...attributes
+            >
+              {{#each cards as |card|}}
+                <li
+                  {{@context.cardComponentModifier
+                    cardId=card.url
+                    format='data'
+                    fieldType=undefined
+                    fieldName=undefined
+                  }}
+                  data-test-cards-grid-item={{removeFileExtension card.url}}
+                  {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
+                  data-cards-grid-item={{removeFileExtension card.url}}
+                  class='card-grid-item'
+                >
+                  {{card.component}}
+                </li>
+              {{/each}}
+            </ul>
           {{else}}
             <div class='no-cards-message'>No Cards Available</div>
           {{/if}}
@@ -627,8 +743,11 @@ export class ConfigurableCardsGrid extends GlimmerComponent<{
     {{/let}}
     <style scoped>
       .cards-grid {
-        --grid-card-width: 10.25rem; /* 164px */
-        --grid-card-height: 14rem; /* 224px */
+        width: 100%;
+        /*--grid-card-width: 10.25rem; /* 164px */
+        /*--grid-card-height: 14rem; /* 224px */
+        --grid-card-width: 140px;
+        --grid-card-height: 148px;
         list-style-type: none;
         margin: 0;
         padding: var(--cards-grid-padding, 0);
@@ -643,6 +762,7 @@ export class ConfigurableCardsGrid extends GlimmerComponent<{
         grid-template-columns: 1fr;
         gap: var(--boxel-sp);
       }
+      li,
       .cards-grid-item {
         width: var(--grid-card-width);
         height: var(--grid-card-height);
@@ -658,6 +778,8 @@ export class ConfigurableCardsGrid extends GlimmerComponent<{
       }
     </style>
   </template>
+
+  getComponent = (card: CardDef) => card.constructor.getComponent(card);
 
   get realms() {
     return ['http://localhost:4201/experiments/'];
@@ -685,37 +807,13 @@ export class CardsGrid extends GlimmerComponent<{
           data-test-cards-grid-item={{removeFileExtension card.url}}
           {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
           data-cards-grid-item={{removeFileExtension card.url}}
+          class='card-grid-item'
         >
           {{card.component}}
         </li>
       {{/each}}
     </ul>
-    <style scoped>
-      .cards-grid {
-        --grid-card-width: 10.25rem; /* 164px */
-        --grid-card-height: 14rem; /* 224px */
-        list-style-type: none;
-        margin: 0;
-        padding: var(--cards-grid-padding, 0);
-        display: grid;
-        grid-template-columns: repeat(auto-fill, var(--grid-card-width));
-        grid-auto-rows: max-content;
-        gap: var(--boxel-sp-xl) var(--boxel-sp-lg);
-      }
-      .cards-grid.list-format {
-        --grid-card-width: 18.75rem; /* 300px */
-        --grid-card-height: 12rem; /* 192px */
-        grid-template-columns: 1fr;
-        gap: var(--boxel-sp);
-      }
-      .cards-grid-item {
-        width: var(--grid-card-width);
-        height: var(--grid-card-height);
-      }
-      .cards-grid-item > :deep(.field-component-card.fitted-format) {
-        --overlay-fitted-card-header-height: 0;
-      }
-    </style>
+    <style></style>
   </template>
 
   getComponent = (card: CardDef) => card.constructor.getComponent(card);

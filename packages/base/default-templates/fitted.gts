@@ -14,7 +14,8 @@ export default class DefaultFittedTemplate extends GlimmerComponent<{
 }> {
   <template>
     <div class='fitted-template'>
-      {{#if @model}}
+      <div data-test-empty-field class='empty-field'></div>
+      {{!-- {{#if @model}}
         <div class='thumbnail-section'>
           <div
             class='card-thumbnail'
@@ -41,7 +42,7 @@ export default class DefaultFittedTemplate extends GlimmerComponent<{
       {{else}}
         {{! empty links-to field }}
         <div data-test-empty-field class='empty-field'></div>
-      {{/if}}
+      {{/if}} --}}
     </div>
     <style scoped>
       .fitted-template {
