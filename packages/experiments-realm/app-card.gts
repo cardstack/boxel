@@ -407,12 +407,16 @@ class AppCardIsolated extends Component<typeof AppCard> {
         flex-grow: 1;
       }
       .card {
+        /*investigate why we need put variable to make it work */
+        --grid-card-width: 150px;
+        --grid-card-height: 58px;
         width: var(--grid-card-width);
         height: var(--grid-card-height);
         overflow: hidden;
         cursor: pointer;
         container-name: fitted-card;
         container-type: size;
+        border: 1px solid var(--boxel-100);
       }
       /*==These are the cards grid styles*/
       .app-card {
