@@ -55,11 +55,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import type {
-  CardDef,
-  Format,
-  realmURL,
-} from 'https://cardstack.com/base/card-api';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import FileTree from '../editor/file-tree';
 
