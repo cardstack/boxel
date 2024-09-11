@@ -29,6 +29,7 @@ import {
   type Filter as LeftNavFilter,
   Pill,
   BoxelInput,
+  CardContainer,
 } from '@cardstack/boxel-ui/components';
 
 import {
@@ -44,8 +45,6 @@ import {
 } from '@cardstack/runtime-common';
 import { AnyFilter } from '@cardstack/runtime-common/query';
 import { TrackedMap } from 'tracked-built-ins';
-
-// import { CardsGridComponent } from './cards-grid-component';
 
 const CONFIG = {
   displayQuery: false,
@@ -262,7 +261,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
 
   <template>
     <section class='app-card'>
-      {{#if this.displayQuery}}
+      {{#if this.queryDisplay}}
         <div>
           {{this.queryDisplay}}
         </div>
@@ -338,11 +337,46 @@ class AppCardIsolated extends Component<typeof AppCard> {
         <main class='app-card-content'>
           {{#if this.activeTab}}
 
-            {{!  Cards grid logic here }}
-            <ConfigurableCardsGrid
-              @query={{this.query}}
-              @context={{@context}}
-            />
+            {{!==  Cards grid component is here (same as packages/base/cards-grid) }}
+            <ul class='cards' data-test-cards-grid-cards>
+              {{#let
+                (component @context.prerenderedCardSearchComponent)
+                as |PrerenderedCardSearch|
+              }}
+                <PrerenderedCardSearch
+                  @query={{this.query}}
+                  @format='fitted'
+                  @realms={{this.realms}}
+                >
+
+                  <:loading>
+                    Loading...
+                  </:loading>
+                  <:response as |cards|>
+                    {{#each cards as |card|}}
+                      <CardContainer class='card'>
+                        <li
+                          {{@context.cardComponentModifier
+                            cardId=card.url
+                            format='data'
+                            fieldType=undefined
+                            fieldName=undefined
+                          }}
+                          data-test-cards-grid-item={{removeFileExtension
+                            card.url
+                          }}
+                          {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
+                          data-cards-grid-item={{removeFileExtension card.url}}
+                        >
+                          {{card.component}}
+                        </li>
+                      </CardContainer>
+                    {{/each}}
+                  </:response>
+                </PrerenderedCardSearch>
+              {{/let}}
+            </ul>
+            {{!==  Cards grid component is here (same as packages/base/cards-grid) }}
 
             {{#if @context.actions.createCard}}
               <div class='add-card-button'>
@@ -361,6 +395,26 @@ class AppCardIsolated extends Component<typeof AppCard> {
       </section>
     </section>
     <style scoped>
+      /*==These are the cards grid styles*/
+      .cards {
+        list-style-type: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp);
+        justify-items: center;
+        flex-grow: 1;
+      }
+      .card {
+        width: var(--grid-card-width);
+        height: var(--grid-card-height);
+        overflow: hidden;
+        cursor: pointer;
+        container-name: fitted-card;
+        container-type: size;
+      }
+      /*==These are the cards grid styles*/
       .app-card {
         position: relative;
         min-height: 100%;
@@ -694,131 +748,6 @@ export class AppCard extends CardDef {
   @field headerIcon = contains(Base64ImageField);
   @field moduleId = contains(StringField);
   static isolated = AppCardIsolated;
-}
-
-export class ConfigurableCardsGrid extends GlimmerComponent<{
-  Args: {
-    context?: CardContext;
-    query?: Query;
-    isListFormat?: boolean;
-  };
-  Element: HTMLElement;
-}> {
-  <template>
-    {{#let
-      (component @context.prerenderedCardSearchComponent)
-      as |PrerenderedCardSearch|
-    }}
-      <PrerenderedCardSearch
-        @query={{@query}}
-        @format='fitted'
-        @realms={{this.realms}}
-      >
-        <:loading>
-          Loading...
-        </:loading>
-        <:response as |cards|>
-          {{#if cards.length}}
-            <CardsGrid @cards={{cards}} @context={{@context}} />
-          {{else}}
-            <div class='no-cards-message'>No Cards Available</div>
-          {{/if}}
-        </:response>
-      </PrerenderedCardSearch>
-    {{/let}}
-    <style scoped>
-      .cards-grid {
-        width: 100%;
-        --grid-card-width: 10.25rem; /* 164px */
-        --grid-card-height: 14rem; /* 224px */
-        list-style-type: none;
-        margin: 0;
-        padding: var(--cards-grid-padding, 0);
-        display: grid;
-        grid-template-columns: repeat(auto-fill, var(--grid-card-width));
-        grid-auto-rows: max-content;
-        gap: var(--boxel-sp-xl) var(--boxel-sp-lg);
-      }
-      .cards-grid.list-format {
-        --grid-card-width: 18.75rem; /* 300px */
-        --grid-card-height: 12rem; /* 192px */
-        grid-template-columns: 1fr;
-        gap: var(--boxel-sp);
-      }
-      .cards-grid-item {
-        width: var(--grid-card-width);
-        height: var(--grid-card-height);
-      }
-      .cards-grid-item > :deep(.field-component-card.fitted-format) {
-        --overlay-fitted-card-header-height: 0;
-      }
-      .no-cards-message {
-        font-size: 1.2rem;
-        color: var(--boxel-dark);
-        text-align: center;
-        padding: var(--boxel-sp-xl);
-      }
-    </style>
-  </template>
-
-  get realms() {
-    return ['http://localhost:4201/experiments/'];
-  }
-}
-
-export class CardsGrid extends GlimmerComponent<{
-  Args: {
-    cards: PrerenderedCard[] | [];
-    context?: CardContext;
-    isListFormat?: boolean;
-  };
-  Element: HTMLElement;
-}> {
-  <template>
-    <ul class={{cn 'cards-grid' list-format=@isListFormat}} ...attributes>
-      {{#each @cards as |card|}}
-        <li
-          {{@context.cardComponentModifier
-            cardId=card.url
-            format='data'
-            fieldType=undefined
-            fieldName=undefined
-          }}
-          data-test-cards-grid-item={{removeFileExtension card.url}}
-          {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
-          data-cards-grid-item={{removeFileExtension card.url}}
-          class='card-grid-item'
-        >
-          {{card.component}}
-        </li>
-      {{/each}}
-    </ul>
-    <style>
-      ul.cards-grid {
-        /*--grid-card-width: 10.25rem;
-        --grid-card-height: 14rem;*/
-        --grid-card-width: 100px;
-        --grid-card-height: 500px;
-        list-style-type: none;
-        margin: 0;
-        padding: var(--cards-grid-padding, 0);
-        display: grid;
-        grid-template-columns: repeat(auto-fill, var(--grid-card-width));
-        gap: var(--boxel-sp-xl) var(--boxel-sp-lg);
-      }
-      li {
-        width: var(--grid-card-width);
-        height: var(--grid-card-height);
-
-        box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.1);
-      }
-      li > :deep(.field-component-card.fitted-format) {
-        --overlay-fitted-card-header-height: 0;
-      }
-    </style>
-  </template>
-
-  getComponent = (card: CardDef) => card.constructor.getComponent(card);
 }
 
 function removeFileExtension(cardUrl: string) {
