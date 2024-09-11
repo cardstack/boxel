@@ -245,7 +245,7 @@ class Fitted extends Component<typeof AppListing> {
 
         <div class='app-info'>
           <div class='app-name'><@fields.name /></div>
-          <span class='app-publisher'>{{this.publisher}}</span>
+          <span class='app-publisher'>Publisher: {{this.publisher}}</span>
         </div>
       </div>
     </div>
