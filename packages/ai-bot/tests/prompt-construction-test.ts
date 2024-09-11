@@ -1588,12 +1588,12 @@ module('getModifyPrompt', () => {
 
     const functions = getTools(history, '@aibot:localhost');
     assert.equal(functions.length, 1);
-    assert.deepEqual(functions[0], {
+    let res = {
       type: 'function',
       function: {
         name: 'searchCard',
         description:
-          'Propose a query to search for a card instance filtered by type. Always prioritise search based upon the card that was last shared.',
+          'Propose a query to search for a card instance filtered by type and/or by title. Always prioritise search based upon the card that was last shared.',
         parameters: {
           type: 'object',
           properties: {
@@ -1603,27 +1603,58 @@ module('getModifyPrompt', () => {
             filter: {
               type: 'object',
               properties: {
-                type: {
-                  type: 'object',
-                  properties: {
-                    module: {
-                      type: 'string',
-                      description: 'the absolute path of the module',
-                    },
-                    name: {
-                      type: 'string',
-                      description: 'the name of the module',
-                    },
+                every: {
+                  type: 'array',
+                  items: {
+                    anyOf: [
+                      {
+                        type: 'object',
+                        properties: {
+                          type: {
+                            type: 'object',
+                            properties: {
+                              module: {
+                                type: 'string',
+                                description: 'the absolute path of the module',
+                              },
+                              name: {
+                                type: 'string',
+                                description: 'the name of the module',
+                              },
+                            },
+                            required: ['module', 'name'],
+                          },
+                        },
+                        required: ['type'],
+                      },
+                      {
+                        type: 'object',
+                        properties: {
+                          contains: {
+                            type: 'object',
+                            properties: {
+                              title: {
+                                type: 'string',
+                                description: 'title of the card',
+                              },
+                            },
+                            required: ['title'],
+                          },
+                        },
+                        required: ['contains'],
+                      },
+                    ],
                   },
-                  required: ['module', 'name'],
                 },
               },
+              required: ['every'],
             },
           },
           required: ['filter', 'description'],
         },
       },
-    });
+    };
+    assert.deepEqual(functions[0], res);
   });
 
   test.only('Return host result of tool call back to open ai', () => {
@@ -1693,7 +1724,7 @@ module('getModifyPrompt', () => {
                   function: {
                     name: 'searchCard',
                     description:
-                      'Propose a query to search for a card instance filtered by type. Always prioritise search based upon the card that was last shared.',
+                      'Propose a query to search for a card instance filtered by type and/or by title. Always prioritise search based upon the card that was last shared.',
                     parameters: {
                       type: 'object',
                       properties: {
@@ -1703,22 +1734,53 @@ module('getModifyPrompt', () => {
                         filter: {
                           type: 'object',
                           properties: {
-                            type: {
-                              type: 'object',
-                              properties: {
-                                module: {
-                                  type: 'string',
-                                  description:
-                                    'the absolute path of the module',
-                                },
-                                name: {
-                                  type: 'string',
-                                  description: 'the name of the module',
-                                },
+                            every: {
+                              type: 'array',
+                              items: {
+                                anyOf: [
+                                  {
+                                    type: 'object',
+                                    properties: {
+                                      type: {
+                                        type: 'object',
+                                        properties: {
+                                          module: {
+                                            type: 'string',
+                                            description:
+                                              'the absolute path of the module',
+                                          },
+                                          name: {
+                                            type: 'string',
+                                            description:
+                                              'the name of the module',
+                                          },
+                                        },
+                                        required: ['module', 'name'],
+                                      },
+                                    },
+                                    required: ['type'],
+                                  },
+                                  {
+                                    type: 'object',
+                                    properties: {
+                                      contains: {
+                                        type: 'object',
+                                        properties: {
+                                          title: {
+                                            type: 'string',
+                                            description: 'title of the card',
+                                          },
+                                        },
+                                        required: ['title'],
+                                      },
+                                    },
+                                    required: ['contains'],
+                                  },
+                                ],
                               },
-                              required: ['module', 'name'],
                             },
                           },
+                          required: ['every'],
                         },
                       },
                       required: ['filter', 'description'],
@@ -1878,7 +1940,7 @@ module('getModifyPrompt', () => {
                   function: {
                     name: 'searchCard',
                     description:
-                      'Propose a query to search for a card instance filtered by type. Always prioritise search based upon the card that was last shared.',
+                      'Propose a query to search for a card instance filtered by type and/or by title. Always prioritise search based upon the card that was last shared.',
                     parameters: {
                       type: 'object',
                       properties: {
@@ -1888,22 +1950,53 @@ module('getModifyPrompt', () => {
                         filter: {
                           type: 'object',
                           properties: {
-                            type: {
-                              type: 'object',
-                              properties: {
-                                module: {
-                                  type: 'string',
-                                  description:
-                                    'the absolute path of the module',
-                                },
-                                name: {
-                                  type: 'string',
-                                  description: 'the name of the module',
-                                },
+                            every: {
+                              type: 'array',
+                              items: {
+                                anyOf: [
+                                  {
+                                    type: 'object',
+                                    properties: {
+                                      type: {
+                                        type: 'object',
+                                        properties: {
+                                          module: {
+                                            type: 'string',
+                                            description:
+                                              'the absolute path of the module',
+                                          },
+                                          name: {
+                                            type: 'string',
+                                            description:
+                                              'the name of the module',
+                                          },
+                                        },
+                                        required: ['module', 'name'],
+                                      },
+                                    },
+                                    required: ['type'],
+                                  },
+                                  {
+                                    type: 'object',
+                                    properties: {
+                                      contains: {
+                                        type: 'object',
+                                        properties: {
+                                          title: {
+                                            type: 'string',
+                                            description: 'title of the card',
+                                          },
+                                        },
+                                        required: ['title'],
+                                      },
+                                    },
+                                    required: ['contains'],
+                                  },
+                                ],
                               },
-                              required: ['module', 'name'],
                             },
                           },
+                          required: ['every'],
                         },
                       },
                       required: ['filter', 'description'],

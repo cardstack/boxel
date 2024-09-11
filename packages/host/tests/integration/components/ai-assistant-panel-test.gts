@@ -2252,10 +2252,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
             arguments: {
               description: 'Searching for card',
               filter: {
-                type: {
-                  module: `${testRealmURL}pet`,
-                  name: 'Pet',
-                },
+                every: [
+                  {
+                    type: {
+                      module: `${testRealmURL}pet`,
+                      name: 'Pet',
+                    },
+                  },
+                ],
               },
             },
           },
@@ -2316,10 +2320,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
             arguments: {
               description: 'Searching for card',
               filter: {
-                type: {
-                  module: `${testRealmURL}pet`,
-                  name: 'Pet',
-                },
+                every: [
+                  {
+                    type: {
+                      module: `${testRealmURL}pet`,
+                      name: 'Pet',
+                    },
+                  },
+                ],
               },
             },
           },
@@ -2357,6 +2365,70 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-toggle-show-button]').doesNotExist();
   });
 
+  test('it can search for card instances based upon title of card', async function (assert) {
+    let id = `${testRealmURL}Pet/mango.json`;
+    let roomId = await renderAiAssistantPanel(id);
+
+    await addRoomEvent(matrixService, {
+      event_id: 'event1',
+      room_id: roomId,
+      state_key: 'state',
+      type: 'm.room.message',
+      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      sender: '@aibot:localhost',
+      content: {
+        msgtype: 'org.boxel.command',
+        formatted_body: 'Search for the following card',
+        format: 'org.matrix.custom.html',
+        data: JSON.stringify({
+          toolCall: {
+            name: 'searchCard',
+            arguments: {
+              description: 'Searching for card',
+              filter: {
+                every: [
+                  {
+                    contains: {
+                      title: 'Mango',
+                    },
+                  },
+                ],
+              },
+            },
+          },
+          eventId: 'search1',
+        }),
+        'm.relates_to': {
+          rel_type: 'm.replace',
+          event_id: 'search1',
+        },
+      },
+      status: null,
+    });
+    await waitFor('[data-test-command-apply]');
+    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+    await waitFor('[data-test-command-result]');
+    await waitFor('.result-list li:nth-child(1)');
+    let commandResultEvents = await getCommandResultEvents(
+      matrixService,
+      roomId,
+    );
+    assert.equal(
+      commandResultEvents[0].content.result.length,
+      1,
+      'number of search results',
+    );
+    assert
+      .dom('[data-test-command-message]')
+      .containsText('Search for the following card');
+    assert
+      .dom('[data-test-comand-result-header]')
+      .containsText('Search Results 1 results');
+
+    assert.dom('.result-list li:nth-child(1)').containsText('Mango');
+    assert.dom('[data-test-toggle-show-button]').doesNotExist();
+  });
+
   test('toggle more search results', async function (assert) {
     let id = `${testRealmURL}Person/fadhlan.json`;
     let roomId = await renderAiAssistantPanel(id);
@@ -2377,10 +2449,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
             arguments: {
               description: 'Searching for card',
               filter: {
-                type: {
-                  module: `${testRealmURL}person`,
-                  name: 'Person',
-                },
+                every: [
+                  {
+                    type: {
+                      module: `${testRealmURL}person`,
+                      name: 'Person',
+                    },
+                  },
+                ],
               },
             },
           },

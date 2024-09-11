@@ -296,7 +296,9 @@ test.describe('Room messages', () => {
   }) => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomId(page);
-    await page.locator(`[data-test-boxel-filter-list-button="All Cards"]`).click();
+    await page
+      .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
+      .click();
     await page
       .locator(
         `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${testHost}/mango"]`,
@@ -309,6 +311,7 @@ test.describe('Room messages', () => {
     let message = (await getRoomEvents()).pop()!;
     expect(message.content.msgtype).toStrictEqual('org.boxel.message');
     let boxelMessageData = JSON.parse(message.content.data);
+
     expect(boxelMessageData.context.tools).toMatchObject([
       {
         type: 'function',
@@ -352,39 +355,71 @@ test.describe('Room messages', () => {
         },
       },
       {
+        type: 'function',
         function: {
-          description: `Propose a query to search for a card instance filtered by type. Always prioritise search based upon the card that was last shared.`,
           name: 'searchCard',
+          description:
+            'Propose a query to search for a card instance filtered by type and/or by title. Always prioritise search based upon the card that was last shared.',
           parameters: {
+            type: 'object',
             properties: {
               description: {
                 type: 'string',
               },
               filter: {
+                type: 'object',
                 properties: {
-                  type: {
-                    properties: {
-                      module: {
-                        description: 'the absolute path of the module',
-                        type: 'string',
-                      },
-                      name: {
-                        description: 'the name of the module',
-                        type: 'string',
-                      },
+                  every: {
+                    type: 'array',
+                    items: {
+                      anyOf: [
+                        {
+                          type: 'object',
+                          properties: {
+                            type: {
+                              type: 'object',
+                              properties: {
+                                module: {
+                                  type: 'string',
+                                  description:
+                                    'the absolute path of the module',
+                                },
+                                name: {
+                                  type: 'string',
+                                  description: 'the name of the module',
+                                },
+                              },
+                              required: ['module', 'name'],
+                            },
+                          },
+                          required: ['type'],
+                        },
+                        {
+                          type: 'object',
+                          properties: {
+                            contains: {
+                              type: 'object',
+                              properties: {
+                                title: {
+                                  type: 'string',
+                                  description: 'title of the card',
+                                },
+                              },
+                              required: ['title'],
+                            },
+                          },
+                          required: ['contains'],
+                        },
+                      ],
                     },
-                    required: ['module', 'name'],
-                    type: 'object',
                   },
                 },
-                type: 'object',
+                required: ['every'],
               },
             },
             required: ['filter', 'description'],
-            type: 'object',
           },
         },
-        type: 'function',
       },
       {
         type: 'function',
@@ -425,7 +460,9 @@ test.describe('Room messages', () => {
   }) => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomId(page);
-    await page.locator(`[data-test-boxel-filter-list-button="All Cards"]`).click();
+    await page
+      .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
+      .click();
     await page
       .locator(
         `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${testHost}/mango"]`,
@@ -452,7 +489,9 @@ test.describe('Room messages', () => {
     // the base realm is a read-only realm
     await login(page, 'user1', 'pass', { url: `http://localhost:4201/base` });
     let room1 = await getRoomId(page);
-    await page.locator(`[data-test-boxel-filter-list-button="All Cards"]`).click();
+    await page
+      .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
+      .click();
     await page
       .locator(
         '[data-test-stack-card="https://cardstack.com/base/index"] [data-test-cards-grid-item="https://cardstack.com/base/fields/boolean-field"]',
@@ -680,7 +719,9 @@ test.describe('Room messages', () => {
     test.beforeEach(async ({ page }) => {
       await login(page, 'user1', 'pass');
       await getRoomId(page);
-      await page.locator(`[data-test-boxel-filter-list-button="All Cards"]`).click();
+      await page
+        .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
+        .click();
     });
 
     test('displays auto-attached card (1 stack)', async ({ page }) => {
@@ -755,7 +796,9 @@ test.describe('Room messages', () => {
     }) => {
       const testCard1 = `${testHost}/jersey`;
       const embeddedCard = `${testHost}/justin`;
-      await page.locator(`[data-test-boxel-filter-list-button="All Cards"]`).click();
+      await page
+        .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
+        .click();
       await page
         .locator(
           `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
@@ -972,7 +1015,9 @@ test.describe('Room messages', () => {
 
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
-    await page.locator(`[data-test-boxel-filter-list-button="All Cards"]`).click();
+    await page
+      .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
+      .click();
 
     for (let i = 1; i <= 3; i++) {
       await page.locator('[data-test-message-field]').fill(`Message - ${i}`);
@@ -1057,7 +1102,9 @@ test.describe('Room messages', () => {
       }),
     };
 
-    await page.locator(`[data-test-boxel-filter-list-button="All Cards"]`).click();
+    await page
+      .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
+      .click();
     await page
       .locator(
         `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${card_id}"]`,
@@ -1104,7 +1151,9 @@ test.describe('Room messages', () => {
       }),
     };
 
-    await page.locator(`[data-test-boxel-filter-list-button="All Cards"]`).click();
+    await page
+      .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
+      .click();
     await page
       .locator(
         `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${card_id}"]`,
