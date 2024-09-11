@@ -138,12 +138,22 @@ class AppCardIsolated extends Component<typeof AppCard> {
   }
 
   get query(): Query {
-    let categoryFilter = this.categoryFilter ? [this.categoryFilter] : [];
-    let pillFilter = this.pillFilter ? [this.pillFilter] : [];
-    let q = {
+    const hasCategoryFilter =
+      Object.keys(this.categoryFilter) &&
+      Object.keys(this.categoryFilter).length > 0;
+    const hasPillFilter =
+      Object.keys(this.pillFilter) && Object.keys(this.pillFilter).length > 0;
+    const hasTitleFilter =
+      Object.keys(this.titleFilter) && Object.keys(this.titleFilter).length > 0;
+
+    const categoryFilter = hasCategoryFilter ? [this.categoryFilter] : [];
+    const pillFilter = hasPillFilter ? [this.pillFilter] : [];
+    const titleFilter = hasTitleFilter ? [this.titleFilter] : [];
+
+    const q = {
       filter: {
         on: this.activeTabRef,
-        every: [...categoryFilter, ...pillFilter, { ...this.titleFilter }],
+        every: [...categoryFilter, ...pillFilter, ...titleFilter],
       },
     };
     assertQuery(q);
@@ -224,7 +234,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
     }
     return {
       contains: {
-        title: this.searchKey,
+        name: this.searchKey,
       },
     };
   }
