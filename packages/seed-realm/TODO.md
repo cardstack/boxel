@@ -1,0 +1,1 @@
+Make sure to lint for hbs when we add template files to this realm like we do in the experiments realm. Currently linting for hbs fails because there are no hbs files in this realm.

@@ -15,9 +15,7 @@
     "tracked-built-ins": "^3.3.0"
   },
   "scripts": {
-    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
-    "lint:hbs": "ember-template-lint .",
-    "lint:hbs:fix": "ember-template-lint . --fix"
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\""
   },
   "volta": {
     "extends": "../../package.json"
