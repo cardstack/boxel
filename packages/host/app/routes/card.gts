@@ -22,7 +22,7 @@ import { CardDef } from 'https://cardstack.com/base/card-api';
 
 import type CardService from '../services/card-service';
 
-const { loginMessageTimeoutMs } = ENV;
+const { hostsOwnAssets, loginMessageTimeoutMs, rootURL } = ENV;
 
 export type Model = CardDef | null;
 
@@ -77,10 +77,36 @@ export default class RenderCard extends Route<Model | null> {
         }
       }
 
-      let indexCardURL = new URL(this.realm.defaultReadableRealm.path);
-      let indexCardResource = getCard(this, () => indexCardURL.href);
-      await indexCardResource.loaded;
-      let model = indexCardResource.card;
+      console.log(
+        'hostsOwnAssets',
+        hostsOwnAssets,
+        'rootURL',
+        rootURL,
+        'path',
+        path,
+      );
+
+      let model = null;
+
+      if (!hostsOwnAssets) {
+        let externalURL = new URL(document.location.href);
+        let pathOnRoot = `${rootURL}${path}`;
+        let prospectiveCardURL = new URL(pathOnRoot, externalURL);
+
+        let resource = getCard(this, () => prospectiveCardURL.href);
+        await resource.loaded;
+
+        if (!resource.card) {
+          return null;
+        } else {
+          model = resource.card;
+        }
+      } else {
+        let indexCardURL = new URL(this.realm.defaultReadableRealm.path);
+        let indexCardResource = getCard(this, () => indexCardURL.href);
+        await indexCardResource.loaded;
+        model = indexCardResource.card;
+      }
 
       // let externalURL = new URL(document.location.href);
 
