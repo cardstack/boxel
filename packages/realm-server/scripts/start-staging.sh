@@ -1,6 +1,7 @@
 #! /bin/sh
 pnpm setup:base-in-deployment
 pnpm setup:experiments-in-deployment
+pnpm setup:seed-in-deployment
 NODE_NO_WARNINGS=1 \
   LOG_LEVELS='perf=debug' \
   MATRIX_URL=https://matrix-staging.stack.cards \
@@ -21,4 +22,9 @@ NODE_NO_WARNINGS=1 \
   --path='/persistent/experiments' \
   --username='experiments_realm' \
   --fromUrl='https://realms-staging.stack.cards/experiments/' \
-  --toUrl='https://realms-staging.stack.cards/experiments/'
+  --toUrl='https://realms-staging.stack.cards/experiments/' \
+  \
+  --path='../seed-realm' \
+  --username='seed_realm' \
+  --fromUrl='http://localhost:4201/seed/' \
+  --toUrl='http://localhost:4201/seed/'

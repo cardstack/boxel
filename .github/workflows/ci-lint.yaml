@@ -89,3 +89,7 @@ jobs:
         if: always()
         run: pnpm run lint
         working-directory: packages/experiments-realm
+      - name: Lint Seed Realm
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/seed-realm
