@@ -925,7 +925,7 @@ module('permissioned realm', function (hooks) {
           instancesIndexed: 0,
           moduleErrors: 1,
           modulesIndexed: 0,
-          totalIndexEntries: 2,
+          totalIndexEntries: 0,
         },
         'has a module error',
       );
