@@ -89,8 +89,7 @@ jobs:
         if: always()
         run: pnpm run lint
         working-directory: packages/experiments-realm
-      # uncomment this after there are linting scripts in seed realm
-      # (which require actual gts files to lint)
+      # uncomment this after there are actual gts files to lint in seed realm
       # - name: Lint Seed Realm
       #   if: always()
       #   run: pnpm run lint
