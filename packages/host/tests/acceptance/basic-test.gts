@@ -93,12 +93,10 @@ module('Acceptance | basic tests', function (hooks) {
     });
   });
 
-  // this doesn't work for now, should we be able to visit a card when not logged in?
-  // if so, maybe a query parameter with the full URL for a card
   test('visiting realm root', async function (assert) {
-    await visit('/test/');
+    await visit('/?card=http://test-realm/test/');
 
-    assert.strictEqual(currentURL(), '/test/');
+    assert.strictEqual(currentURL(), '/?card=http://test-realm/test/');
     assert.dom('[data-test-index-card]').containsText('Hello, world');
   });
 

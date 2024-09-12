@@ -55,6 +55,7 @@ export default class RenderCard extends Route<Model | null> {
   hasLoadMatrixBeenExecuted = false;
 
   async model(params: {
+    card?: string;
     path: string;
     operatorModeState: string;
     operatorModeEnabled: boolean;
@@ -64,6 +65,17 @@ export default class RenderCard extends Route<Model | null> {
 
     try {
       await this.loadMatrix.perform();
+
+      if (params.card) {
+        let directlyRequestedCardResource = getCard(this, () => params.card);
+        await directlyRequestedCardResource.loaded;
+
+        if (!directlyRequestedCardResource?.card) {
+          return null;
+        } else {
+          return directlyRequestedCardResource.card;
+        }
+      }
 
       let externalURL = new URL(document.location.href);
 
