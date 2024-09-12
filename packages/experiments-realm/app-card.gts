@@ -228,7 +228,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
     }
     return {
       contains: {
-        name: this.searchKey,
+        title: this.searchKey,
       },
     };
   }
