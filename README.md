@@ -76,7 +76,7 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 | ----- | --------------------------------------------------------- | ------------------- | -------------------- |
 | :4201 | `/base` base realm                                        | ✅                  | ✅                   |
 | :4201 | `/experiments` experiments realm                          | ✅                  | 🚫                   |
-| :4201 | `/seed` seed realm (requires realm permissions)           | ✅                  | 🚫                   |
+| :4201 | `/seed` seed realm                                        | ✅                  | 🚫                   |
 | :4202 | `/test` host test realm, `/node-test` node test realm     | ✅                  | 🚫                   |
 | :4203 | `root (/)` base realm                                     | ✅                  | 🚫                   |
 | :4204 | `root (/)` experiments realm                              | ✅                  | 🚫                   |
