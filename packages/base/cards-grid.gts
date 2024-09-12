@@ -151,6 +151,7 @@ class Isolated extends Component<typeof CardsGrid> {
                   {{measureLoadTime}}
                   {{#each cards as |card|}}
                     <li
+                      class='card'
                       {{@context.cardComponentModifier
                         cardId=card.url
                         format='data'
@@ -161,7 +162,7 @@ class Isolated extends Component<typeof CardsGrid> {
                       {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
                       data-cards-grid-item={{removeFileExtension card.url}}
                     >
-                      <CardContainer class='card'>
+                      <CardContainer>
                         {{card.component}}
                       </CardContainer>
                     </li>
