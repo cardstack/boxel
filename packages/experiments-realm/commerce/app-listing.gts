@@ -307,7 +307,7 @@ class Fitted extends Component<typeof AppListing> {
       }
       .app-publisher {
         font-size: var(--boxel-app-publisher-size);
-        line-height: var(--boxel-sp-xxs);
+        line-height: var(--boxel-app-publisher-size);
         color: var(--boxel-500);
       }
       .custom-pill {
