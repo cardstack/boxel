@@ -68,6 +68,10 @@ interface PillFilter extends PillItem {
 }
 
 class AppCardIsolated extends Component<typeof AppCard> {
+  leftNavFilters: LeftNavFilter[] = [];
+  @tracked activeCategory: LeftNavFilter = this.leftNavFilters[0]; //these types are wrong bcos [0] of empty shud return undefinec
+  pillFilterMap = new TrackedMap<string, PillFilter>();
+
   async setupInitialTabs() {
     this.errorMessage = '';
     if (!this.args.model.moduleId) {
@@ -110,10 +114,6 @@ class AppCardIsolated extends Component<typeof AppCard> {
     this.setActiveTab(0);
   }
 
-  leftNavFilters: LeftNavFilter[] = [];
-  @tracked activeCategory: LeftNavFilter | undefined = this.leftNavFilters[0];
-  pillFilterMap = new TrackedMap<string, PillFilter>();
-
   @action onCategoryChanged(leftNavFilter: LeftNavFilter) {
     this.activeCategory = leftNavFilter;
   }
@@ -137,17 +137,11 @@ class AppCardIsolated extends Component<typeof AppCard> {
   }
 
   get query(): Query {
-    const hasCategoryFilter =
-      Object.keys(this.categoryFilter) &&
-      Object.keys(this.categoryFilter).length > 0;
-    const hasPillFilter =
-      Object.keys(this.pillFilter) && Object.keys(this.pillFilter).length > 0;
-    const hasTitleFilter =
-      Object.keys(this.titleFilter) && Object.keys(this.titleFilter).length > 0;
-
-    const categoryFilter = hasCategoryFilter ? [this.categoryFilter] : [];
-    const pillFilter = hasPillFilter ? [this.pillFilter] : [];
-    const titleFilter = hasTitleFilter ? [this.titleFilter] : [];
+    const categoryFilter =
+      this.categoryFilter !== undefined ? [this.categoryFilter] : [];
+    const pillFilter = this.pillFilter !== undefined ? [this.pillFilter] : [];
+    const titleFilter =
+      this.titleFilter !== undefined ? [this.titleFilter] : [];
 
     const q = {
       filter: {
@@ -193,7 +187,8 @@ class AppCardIsolated extends Component<typeof AppCard> {
 
   get categoryFilter() {
     if (this.activeCategory === undefined) {
-      return { any: [] } as AnyFilter;
+      //types don't match here
+      return;
     }
     return {
       any: [
@@ -220,16 +215,16 @@ class AppCardIsolated extends Component<typeof AppCard> {
         };
       });
     if (selectedPills.length === 0) {
-      return {};
+      return;
     }
     return {
       any: selectedPills,
-    };
+    } as AnyFilter;
   }
 
   get titleFilter() {
     if (!this.searchKey || this.searchKey === '') {
-      return {};
+      return;
     }
     return {
       contains: {
