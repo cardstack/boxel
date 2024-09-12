@@ -252,6 +252,7 @@ export async function registerUser(
         'http://localhost:4202/test/',
         'http://localhost:4201/experiments/',
         'https://cardstack.com/base/',
+        // intentionally not including seed realm here
       ],
     }),
   );

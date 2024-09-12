@@ -31,4 +31,9 @@ NODE_ENV=development \
   --path='../experiments-realm' \
   --username='experiments_realm' \
   --fromUrl='http://localhost:4201/experiments/' \
-  --toUrl='http://localhost:4201/experiments/'
+  --toUrl='http://localhost:4201/experiments/' \
+  \
+  --path='../seed-realm' \
+  --username='seed_realm' \
+  --fromUrl='http://localhost:4201/seed/' \
+  --toUrl='http://localhost:4201/seed/'

@@ -1,4 +1,5 @@
 import { action } from '@ember/object';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { restartableTask } from 'ember-concurrency';
 import {
@@ -15,12 +16,15 @@ import {
   AddButton,
   CardContainer,
   FilterList,
+  IconButton,
   Tooltip,
   type Filter,
   BoxelDropdown,
   Menu as BoxelMenu,
   BoxelButton,
 } from '@cardstack/boxel-ui/components';
+import { IconList, IconGrid } from '@cardstack/boxel-ui/icons';
+import { eq, cn } from '@cardstack/boxel-ui/helpers';
 import {
   chooseCard,
   catalogEntryRef,
@@ -70,7 +74,7 @@ let availableSortOptions: SortOption[] = [
 
 class Isolated extends Component<typeof CardsGrid> {
   <template>
-    <div class='cards-grid'>
+    <div class={{cn 'cards-grid' list-view=(eq this.viewSize 'list')}}>
       <div class='sidebar'>
         <FilterList
           @filters={{this.filters}}
@@ -82,6 +86,29 @@ class Isolated extends Component<typeof CardsGrid> {
         <div class='top-bar'>
           <div class='title'>
             {{this.activeFilter.displayName}}
+          </div>
+          <div class='view-as'>
+            <span>View as</span>
+            <IconButton
+              @icon={{IconList}}
+              @width='20px'
+              @height='20px'
+              class={{cn
+                'view-as__button'
+                is-selected-view=(eq this.viewSize 'list')
+              }}
+              {{on 'click' (fn (mut this.viewSize) 'list')}}
+            />
+            <IconButton
+              @icon={{IconGrid}}
+              @width='20px'
+              @height='20px'
+              class={{cn
+                'view-as__button'
+                is-selected-view=(eq this.viewSize 'grid')
+              }}
+              {{on 'click' (fn (mut this.viewSize) 'grid')}}
+            />
           </div>
           <div class='sorting'>
             <span>
@@ -167,8 +194,10 @@ class Isolated extends Component<typeof CardsGrid> {
         --cards-grid-padding-top: var(--boxel-sp-lg);
       }
       .top-bar {
-        display: flex;
+        display: grid;
+        grid-template-columns: 1fr auto auto;
         padding-right: var(--boxel-sp);
+        gap: var(--boxel-sp-xxxl);
       }
       .sort-button {
         border-radius: var(--boxel-border-radius);
@@ -201,7 +230,15 @@ class Isolated extends Component<typeof CardsGrid> {
         display: flex;
         gap: var(--boxel-sp-xl);
         height: 100%;
+        max-height: 100vh;
         overflow: hidden;
+      }
+      .list-view {
+        --grid-card-width: 100%;
+        --grid-card-height: 11.125rem;
+      }
+      .list-view .cards {
+        flex-direction: column;
       }
       .sidebar {
         position: relative;
@@ -225,10 +262,22 @@ class Isolated extends Component<typeof CardsGrid> {
         overflow-y: auto;
         padding-right: var(--boxel-sp-sm);
       }
-      .headline {
-        font: bold var(--boxel-font-lg);
-        line-height: 1.58;
-        letter-spacing: 0.21px;
+      .view-as {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+      }
+      .view-as > span {
+        text-wrap: nowrap;
+        margin-right: var(--boxel-sp-xxs);
+      }
+      .view-as__button {
+        --boxel-icon-button-width: 20px;
+        --boxel-icon-button-height: 20px;
+        --icon-color: var(--boxel-450);
+      }
+      .is-selected-view {
+        --icon-color: var(--boxel-dark);
       }
       .cards {
         list-style-type: none;
@@ -269,7 +318,7 @@ class Isolated extends Component<typeof CardsGrid> {
       query: {
         filter: {
           any:
-            this.args.model['favorites']?.map((card) => {
+            this.args.model.favorites?.map((card) => {
               return { eq: { id: card.id } } ?? {};
             }) ?? [],
         },
@@ -291,6 +340,7 @@ class Isolated extends Component<typeof CardsGrid> {
 
   @tracked private selectedSortOption: SortOption = availableSortOptions[0];
   @tracked activeFilter = this.filters[0];
+  @tracked viewSize: 'grid' | 'list' = 'grid';
 
   @action setSelectedSortOption(option: SortOption) {
     this.selectedSortOption = option;
