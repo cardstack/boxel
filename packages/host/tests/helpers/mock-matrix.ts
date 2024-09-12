@@ -129,7 +129,7 @@ class ServerState {
 
   createRoom(sender: string, name?: string): string {
     let roomId = `mock_room_${this.#roomCounter++}`;
-    console.log('creating room ', roomId);
+    // console.log('creating room ', roomId);
     if (this.#rooms.has(roomId)) {
       throw new Error(`room ${roomId} already exists`);
     }
@@ -200,7 +200,7 @@ class ServerState {
     if (!room) {
       throw new Error(`room ${event.room_id} does not exist`);
     }
-    console.log('adding event to room', event.room_id, event.type, event);
+    // console.log('adding event to room', event.room_id, event.type, event);
     let matrixEvent: MatrixEvent = {
       ...event,
       // Don’t want to list out all the types from MatrixEvent union type
@@ -417,7 +417,7 @@ class MockClient implements ExtendedClient {
     let events = this.serverState.getRoomEvents(roomId);
     let event = events.find((e) => e.event_id === eventId);
 
-    console.log('fetchRoomEvent', roomId, eventId, event);
+    // console.log('fetchRoomEvent', roomId, eventId, event);
 
     if (!event) {
       throw new Error(`event ${eventId} not found in room ${roomId}`);
@@ -656,7 +656,7 @@ class MockClient implements ExtendedClient {
 
   private async emitEvent(event: MatrixEvent) {
     let handlers = this.listeners.get(this.eventHandlerType(event.type));
-    console.log('emitEvent', event);
+    // console.log('emitEvent', event);
     if (handlers) {
       for (let handler of handlers) {
         let result: any = { event };
