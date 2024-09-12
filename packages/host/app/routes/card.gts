@@ -77,52 +77,57 @@ export default class RenderCard extends Route<Model | null> {
         }
       }
 
-      let externalURL = new URL(document.location.href);
+      let indexCardURL = new URL(this.realm.defaultReadableRealm.path);
+      let indexCardResource = getCard(this, () => indexCardURL.href);
+      await indexCardResource.loaded;
+      let model = indexCardResource.card;
 
-      let rootURL = ENV.rootURL;
+      // let externalURL = new URL(document.location.href);
 
-      let pathOnRoot = `${rootURL}${path}`;
-      let prospectiveCardURL = new URL(pathOnRoot, externalURL);
+      // let rootURL = ENV.rootURL;
 
-      // FIXME this needs to be fully exercised with trailing / etc, should be like path.join
+      // let pathOnRoot = `${rootURL}${path}`;
+      // let prospectiveCardURL = new URL(pathOnRoot, externalURL);
 
-      // FIXME use user default realm when logged in
-      // let defaultRealmURL = this.realm.c.path;
+      // // FIXME this needs to be fully exercised with trailing / etc, should be like path.join
 
-      let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
-        new URL(prospectiveCardURL),
-      );
-      let model = null;
-      if (!isPublicReadableRealm && !this.matrixService.isLoggedIn) {
-        return model;
-      }
+      // // FIXME use user default realm when logged in
+      // // let defaultRealmURL = this.realm.c.path;
 
-      let url = path
-        ? new URL(`/${path}`, prospectiveCardURL)
-        : new URL('/', prospectiveCardURL);
+      // let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
+      //   new URL(prospectiveCardURL),
+      // );
+      // let model = null;
+      // if (!isPublicReadableRealm && !this.matrixService.isLoggedIn) {
+      //   return model;
+      // }
 
-      let cardResource = getCard(this, () => url.href);
-      await cardResource.loaded;
-      model = cardResource.card;
+      // let url = path
+      //   ? new URL(`/${path}`, prospectiveCardURL)
+      //   : new URL('/', prospectiveCardURL);
 
-      if (isTesting() && !model) {
-        console.log(`could not find ${url} in test mode, using test realm URL`);
-        externalURL = new URL('http://localhost:4202/test/');
+      // let cardResource = getCard(this, () => url.href);
+      // await cardResource.loaded;
+      // model = cardResource.card;
 
-        prospectiveCardURL = externalURL;
+      // if (isTesting() && !model) {
+      //   console.log(`could not find ${url} in test mode, using test realm URL`);
+      //   externalURL = new URL('http://localhost:4202/test/');
 
-        if (path != '') {
-          prospectiveCardURL.pathname += path;
-        }
+      //   prospectiveCardURL = externalURL;
 
-        cardResource = getCard(this, () => prospectiveCardURL.href);
-        await cardResource.loaded;
-        model = cardResource.card;
-      }
+      //   if (path != '') {
+      //     prospectiveCardURL.pathname += path;
+      //   }
 
-      if (!model) {
-        throw new Error(`Could not find ${url}`);
-      }
+      //   cardResource = getCard(this, () => prospectiveCardURL.href);
+      //   await cardResource.loaded;
+      //   model = cardResource.card;
+      // }
+
+      // if (!model) {
+      //   throw new Error(`Could not find ${url}`);
+      // }
 
       if (operatorModeEnabled) {
         let operatorModeStateObject = JSON.parse(operatorModeState);
