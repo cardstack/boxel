@@ -263,8 +263,8 @@ class Fitted extends Component<typeof AppListing> {
         );
         --boxel-app-publisher-size: clamp(
           12px,
-          calc(12px + 0.3cqw),
-          calc(12px + 0.4cqw)
+          calc(12px + 0.1cqw),
+          calc(12px + 0.2cqw)
         );
         width: 100%;
         height: 100%;
@@ -307,7 +307,7 @@ class Fitted extends Component<typeof AppListing> {
       }
       .app-publisher {
         font-size: var(--boxel-app-publisher-size);
-        line-height: var(--boxel-app-publisher-size);
+        line-height: var(--boxel-sp-xxs);
         color: var(--boxel-500);
       }
       .custom-pill {

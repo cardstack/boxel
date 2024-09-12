@@ -359,23 +359,23 @@ class AppCardIsolated extends Component<typeof AppCard> {
                   </:loading>
                   <:response as |cards|>
                     {{#each cards as |card|}}
-                      <CardContainer class='card'>
-                        <li
-                          {{@context.cardComponentModifier
-                            cardId=card.url
-                            format='data'
-                            fieldType=undefined
-                            fieldName=undefined
-                          }}
-                          data-test-cards-grid-item={{removeFileExtension
-                            card.url
-                          }}
-                          {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
-                          data-cards-grid-item={{removeFileExtension card.url}}
-                        >
+                      <li
+                        {{@context.cardComponentModifier
+                          cardId=card.url
+                          format='data'
+                          fieldType=undefined
+                          fieldName=undefined
+                        }}
+                        data-test-cards-grid-item={{removeFileExtension
+                          card.url
+                        }}
+                        {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
+                        data-cards-grid-item={{removeFileExtension card.url}}
+                      >
+                        <CardContainer @displayBoundaries={{true}}>
                           {{card.component}}
-                        </li>
-                      </CardContainer>
+                        </CardContainer>
+                      </li>
                     {{/each}}
                   </:response>
                 </PrerenderedCardSearch>
@@ -447,7 +447,6 @@ class AppCardIsolated extends Component<typeof AppCard> {
         border: 1px solid var(--boxel-200);
         border-radius: var(--boxel-border-radius);
         width: 100%;
-        min-width: 600px;
         margin: 0 auto;
         padding: var(--boxel-sp-xl) var(--boxel-sp-xl) var(--boxel-sp-xxl);
       }
