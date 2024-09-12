@@ -1,6 +1,5 @@
 import { find, visit, currentURL } from '@ember/test-helpers';
 
-import { setupApplicationTest } from 'ember-qunit';
 import { module, skip, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -13,6 +12,7 @@ import {
   testRealmURL,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
+import { setupApplicationTest } from '../helpers/setup';
 
 module('Acceptance | basic tests', function (hooks) {
   setupApplicationTest(hooks);
