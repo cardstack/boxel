@@ -30,6 +30,7 @@ import {
   type Filter as LeftNavFilter,
   Pill,
   BoxelInput,
+  CardContainer,
 } from '@cardstack/boxel-ui/components';
 
 import {
@@ -342,7 +343,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
           {{#if this.activeTab}}
 
             {{!==  Cards grid component is here (same as packages/base/cards-grid) }}
-            <div class='cards' data-test-cards-grid-cards>
+            <ul class='cards' data-test-cards-grid-cards>
               {{#let
                 (component @context.prerenderedCardSearchComponent)
                 as |PrerenderedCardSearch|
@@ -358,21 +359,28 @@ class AppCardIsolated extends Component<typeof AppCard> {
                   </:loading>
                   <:response as |cards|>
                     {{#each cards as |card|}}
-                      <div
-                        {{@context.cardComponentModifier
-                          cardId=card.url
-                          format='data'
-                          fieldType=undefined
-                          fieldName=undefined
-                        }}
-                      >
-                        {{card.component}}
-                      </div>
+                      <CardContainer class='card'>
+                        <li
+                          {{@context.cardComponentModifier
+                            cardId=card.url
+                            format='data'
+                            fieldType=undefined
+                            fieldName=undefined
+                          }}
+                          data-test-cards-grid-item={{removeFileExtension
+                            card.url
+                          }}
+                          {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
+                          data-cards-grid-item={{removeFileExtension card.url}}
+                        >
+                          {{card.component}}
+                        </li>
+                      </CardContainer>
                     {{/each}}
                   </:response>
                 </PrerenderedCardSearch>
               {{/let}}
-            </div>
+            </ul>
             {{!==  Cards grid component is here (same as packages/base/cards-grid) }}
 
             {{#if @context.actions.createCard}}
@@ -394,6 +402,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
     <style scoped>
       /*==These are the cards grid styles*/
       .cards {
+        list-style-type: none;
         margin: 0;
         padding: 0;
         display: flex;
@@ -404,6 +413,10 @@ class AppCardIsolated extends Component<typeof AppCard> {
       }
       .card {
         /*investigate why we need put variable to make it work */
+        --grid-card-width: 300px;
+        --grid-card-height: 300px;
+        width: var(--grid-card-width);
+        height: var(--grid-card-height);
         overflow: hidden;
         cursor: pointer;
         container-name: fitted-card;
