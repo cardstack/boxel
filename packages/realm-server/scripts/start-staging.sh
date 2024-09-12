@@ -26,5 +26,5 @@ NODE_NO_WARNINGS=1 \
   \
   --path='../seed-realm' \
   --username='seed_realm' \
-  --fromUrl='http://localhost:4201/seed/' \
-  --toUrl='http://localhost:4201/seed/'
+  --fromUrl='https://realms-staging.stack.cards/seed/' \
+  --toUrl='https://realms-staging.stack.cards/seed/'
