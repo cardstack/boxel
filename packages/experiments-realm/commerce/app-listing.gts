@@ -251,6 +251,21 @@ class Fitted extends Component<typeof AppListing> {
     </div>
     <style scoped>
       .card-list {
+        --boxel-app-icon-size: clamp(
+          30px,
+          calc(40px + 0.3cqw),
+          calc(50px + 0.5cqw)
+        );
+        --boxel-app-name-size: clamp(
+          14px,
+          calc(14px + 0.3cqw),
+          calc(40px + 0.3cqw)
+        );
+        --boxel-app-publisher-size: clamp(
+          12px,
+          calc(12px + 0.3cqw),
+          calc(12px + 0.4cqw)
+        );
         width: 100%;
         height: 100%;
         overflow: hidden;
