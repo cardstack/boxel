@@ -360,6 +360,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
                   <:response as |cards|>
                     {{#each cards as |card|}}
                       <li
+                        class='card'
                         {{@context.cardComponentModifier
                           cardId=card.url
                           format='data'
@@ -414,7 +415,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
       .card {
         /*investigate why we need put variable to make it work */
         --grid-card-width: 300px;
-        --grid-card-height: 300px;
+        --grid-card-height: 150px;
         width: var(--grid-card-width);
         height: var(--grid-card-height);
         overflow: hidden;
