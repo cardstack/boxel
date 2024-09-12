@@ -269,7 +269,7 @@ class Isolated extends Component<typeof CardsGrid> {
       }
       .view-as > span {
         text-wrap: nowrap;
-        margin-right: var(--boxel-sp-xs);
+        margin-right: var(--boxel-sp-xxs);
       }
       .view-as__button {
         --boxel-icon-button-width: 20px;
