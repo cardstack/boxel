@@ -2,6 +2,7 @@ import Route from '@ember/routing/route';
 import type RouterService from '@ember/routing/router-service';
 import Transition from '@ember/routing/transition';
 import { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 
 import { all, task, timeout } from 'ember-concurrency';
 import stringify from 'safe-stable-stringify';
@@ -91,6 +92,22 @@ export default class RenderCard extends Route<Model | null> {
       let cardResource = getCard(this, () => url.href);
       await cardResource.loaded;
       model = cardResource.card;
+
+      if (isTesting() && !model) {
+        console.log(`could not find ${url} in test mode, using test realm URL`);
+        externalURL = new URL('http://localhost:4202/test/');
+
+        prospectiveCardURL = externalURL;
+
+        if (path != '') {
+          prospectiveCardURL.pathname += path;
+        }
+
+        cardResource = getCard(this, () => prospectiveCardURL.href);
+        await cardResource.loaded;
+        model = cardResource.card;
+      }
+
       if (!model) {
         throw new Error(`Could not find ${url}`);
       }
