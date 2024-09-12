@@ -54,11 +54,6 @@ module('Integration | create app module via ai-assistant', function (hooks) {
   setupServerSentEvents(hooks);
 
   hooks.beforeEach(async function () {
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    // matrixService = this.owner.lookup(
-    //   'service:matrixService',
-    // ) as MockMatrixService;
-    // matrixService.cardAPI = cardApi;
     operatorModeStateService = this.owner.lookup(
       'service:operator-mode-state-service',
     ) as OperatorModeStateService;
