@@ -288,8 +288,7 @@ export default class RealmService extends Service {
   }
 
   // Currently the personal realm has not yet been implemented,
-  // until then default to the realm serving the host app if it is writable,
-  // otherwise default to the first writable realm lexically
+  // default to the first writable realm lexically
   @cached
   get defaultWritableRealm(): { path: string; info: RealmInfo } | null {
     let writeableRealms = Object.entries(this.allRealmsMeta)
