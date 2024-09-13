@@ -107,7 +107,7 @@ export default class CardService extends Service {
     });
 
     let baseRealmUrl = baseRealm.url;
-    // FIXME isn’t this all v clunky
+
     if (!this.unresolvedRealmURLs.includes(baseRealmUrl)) {
       this.unresolvedRealmURLs.unshift(baseRealmUrl);
     }
