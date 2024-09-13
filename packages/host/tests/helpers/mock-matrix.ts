@@ -29,11 +29,31 @@ export interface Config {
 class MockUtils {
   constructor(
     private opts: Config,
-    private owner: Owner[],
+    private testState: { owner?: Owner; sdk?: MockSDK },
   ) {}
+  getRoomEvents = (roomId: string) => {
+    return this.testState.sdk!.getRoomEvents(roomId);
+  };
   setRealmPermissions = (permissions: Record<string, string[]>) => {
     this.opts.realmPermissions = permissions;
-    (this.owner[0].lookup('service:realm') as RealmService).logout();
+    (this.testState.owner!.lookup('service:realm') as RealmService).logout();
+  };
+  simulateRemoteMessage = (
+    roomId: string,
+    sender: string,
+    content: {
+      msgtype: string;
+      body: string;
+      formatted_body: string;
+      data: any;
+      'm.relates_to': { rel_type: string; event_id: string };
+    },
+  ) => {
+    this.testState.sdk!.serverState.addRoomEvent(sender, {
+      room_id: roomId,
+      type: 'm.room.message',
+      content,
+    });
   };
   setExpiresInSec = (sec: number) => {
     this.opts.expiresInSec = sec;
@@ -43,16 +63,18 @@ class MockUtils {
   };
 }
 
-// When also using setupBaseRealm, this must come before setupBastRealm so it
-// can pre-fill the local storage mock before services start initializing.
 export function setupMockMatrix(
   hooks: NestedHooks,
   opts: Config = {},
 ): MockUtils {
-  let ownerContainer: Owner[] = [];
+  let testState: { owner?: Owner; sdk?: MockSDK } = {
+    owner: undefined,
+    sdk: undefined,
+  };
   hooks.beforeEach(async function () {
-    ownerContainer[0] = this.owner;
+    testState.owner = this.owner;
     let sdk = new MockSDK(opts);
+    testState.sdk = sdk;
     const { loggedInAs } = opts;
     if (loggedInAs) {
       window.localStorage.setItem(
@@ -83,22 +105,197 @@ export function setupMockMatrix(
       await matrixService.start();
     }
   });
-  return new MockUtils(opts, ownerContainer);
+  return new MockUtils(opts, testState);
 }
 
 class ServerState {
   #roomCounter = 0;
   #eventCounter = 0;
-  #rooms: { id: string }[] = [];
+  #rooms: Map<string, { events: MatrixEvent[]; receipts: MatrixEvent[] }> =
+    new Map();
+  #listeners: ((event: MatrixEvent) => void)[] = [];
 
-  get rooms(): { id: string }[] {
-    return this.#rooms;
+  onEvent(callback: (event: MatrixEvent) => void) {
+    this.addListener(callback);
   }
 
-  createRoom(): string {
-    let id = `mock_room_${this.#roomCounter++}`;
-    this.#rooms.push({ id });
-    return id;
+  get rooms(): { id: string }[] {
+    return Array.from(this.#rooms.keys()).map((id) => ({ id }));
+  }
+
+  addListener(callback: (event: MatrixEvent) => void) {
+    this.#listeners.push(callback);
+  }
+
+  createRoom(sender: string, name?: string): string {
+    let roomId = `mock_room_${this.#roomCounter++}`;
+
+    if (this.#rooms.has(roomId)) {
+      throw new Error(`room ${roomId} already exists`);
+    }
+
+    this.#rooms.set(roomId, { events: [], receipts: [] });
+
+    let timestamp = Date.now();
+
+    this.addRoomEvent(sender, {
+      room_id: roomId,
+      type: 'm.room.create',
+      content: {
+        creator: sender,
+        room_version: '0',
+      },
+    });
+
+    this.addRoomEvent(sender, {
+      room_id: roomId,
+      type: 'm.room.name',
+      content: { name: name ?? roomId },
+    });
+
+    this.addRoomEvent(sender, {
+      room_id: roomId,
+      type: 'm.room.member',
+      content: {
+        displayname: 'testuser',
+        membership: 'join',
+        membershipTs: timestamp,
+        membershipInitiator: sender,
+      },
+    });
+
+    this.addRoomEvent(
+      sender,
+      {
+        room_id: roomId,
+        type: 'm.room.member',
+        content: {
+          displayname: 'aibot',
+          membership: 'invite',
+        },
+      },
+      // host application expects this for the bot to join the room
+      {
+        state_key: '@aibot:localhost',
+      },
+    );
+
+    return roomId;
+  }
+
+  addRoomEvent(
+    sender: string,
+    event: Omit<
+      MatrixEvent,
+      'event_id' | 'origin_server_ts' | 'unsigned' | 'status' | 'sender'
+    >,
+    overrides?: { state_key?: string },
+  ) {
+    let room = this.#rooms.get(event.room_id);
+    if (!room) {
+      throw new Error(`room ${event.room_id} does not exist`);
+    }
+    let matrixEvent: MatrixEvent = {
+      ...event,
+      // Don’t want to list out all the types from MatrixEvent union type
+      type: event.type as any,
+      event_id: this.eventId(),
+      origin_server_ts: Date.now(),
+      unsigned: { age: 0 },
+      sender,
+      status: 'sent' as MatrixSDK.EventStatus.SENT,
+      state_key: overrides?.state_key ?? sender,
+    };
+
+    room.events.push(matrixEvent);
+    this.#listeners.forEach((listener) => listener(matrixEvent));
+
+    return matrixEvent;
+  }
+
+  addReactionEvent(
+    sender: string,
+    roomId: string,
+    eventId: string,
+    status: string,
+  ) {
+    let room = this.#rooms.get(roomId);
+    if (!room) {
+      throw new Error(`room ${roomId} does not exist`);
+    }
+
+    let content = {
+      'm.relates_to': {
+        event_id: eventId,
+        key: status,
+        rel_type: 'm.annotation' as MatrixSDK.RelationType.Annotation,
+      },
+    };
+
+    let reactionEvent = {
+      event_id: this.eventId(),
+      origin_server_ts: Date.now(),
+      room_id: roomId,
+      type: 'm.reaction' as MatrixSDK.EventType.Reaction,
+      sender,
+      content,
+      state_key: '',
+      unsigned: { age: 0 },
+      status: 'sent' as MatrixSDK.EventStatus.SENT,
+    };
+
+    room.events.push(reactionEvent);
+    this.#listeners.forEach((listener) => listener(reactionEvent));
+
+    return reactionEvent;
+  }
+
+  addReceiptEvent(
+    roomId: string,
+    eventId: string,
+    sender: string,
+    receiptType: MatrixSDK.ReceiptType,
+  ) {
+    let room = this.#rooms.get(roomId);
+    if (!room) {
+      throw new Error(`room ${roomId} does not exist`);
+    }
+
+    let content: Record<string, any> = {
+      [eventId]: {
+        [receiptType]: {
+          [sender]: {
+            thread_id: 'main',
+            ts: Date.now(),
+          },
+        },
+      },
+    };
+
+    let receiptEvent: MatrixEvent = {
+      event_id: this.eventId(),
+      origin_server_ts: Date.now(),
+      room_id: roomId,
+      type: 'm.receipt' as any,
+      sender,
+      unsigned: { age: 0 },
+      state_key: '',
+      status: 'sent' as MatrixSDK.EventStatus.SENT,
+      content,
+    };
+
+    room.receipts.push(receiptEvent);
+    this.#listeners.forEach((listener) => listener(receiptEvent));
+
+    return receiptEvent;
+  }
+
+  getRoomEvents(roomId: string): MatrixEvent[] {
+    let room = this.#rooms.get(roomId);
+    if (!room) {
+      throw new Error(`room ${roomId} does not exist`);
+    }
+    return room.events;
   }
 
   eventId(): string {
@@ -111,12 +308,16 @@ class ServerState {
 type PublicAPI<T> = { [K in keyof T]: T[K] };
 
 class MockSDK implements PublicAPI<ExtendedMatrixSDK> {
-  private serverState = new ServerState();
+  serverState = new ServerState();
 
   constructor(private sdkOpts: Config) {}
 
   createClient(clientOpts: MatrixSDK.ICreateClientOpts) {
     return new MockClient(this, this.serverState, clientOpts, this.sdkOpts);
+  }
+
+  getRoomEvents(roomId: string) {
+    return this.serverState.getRoomEvents(roomId);
   }
 
   RoomEvent = {
@@ -193,7 +394,7 @@ class MockClient implements ExtendedClient {
   }
 
   get credentials(): { userId: string | null } {
-    throw new Error('Method not implemented.');
+    return { userId: this.sdkOpts.loggedInAs ?? null };
   }
 
   deleteThreePid(
@@ -204,10 +405,16 @@ class MockClient implements ExtendedClient {
   }
 
   fetchRoomEvent(
-    _roomId: string,
-    _eventId: string,
+    roomId: string,
+    eventId: string,
   ): Promise<Partial<MatrixSDK.IEvent>> {
-    throw new Error('Method not implemented.');
+    let events = this.serverState.getRoomEvents(roomId);
+    let event = events.find((e) => e.event_id === eventId);
+
+    if (!event) {
+      throw new Error(`event ${eventId} not found in room ${roomId}`);
+    }
+    return Promise.resolve(event);
   }
 
   forget(_roomId: string, _deleteRoom?: boolean | undefined): Promise<{}> {
@@ -245,12 +452,22 @@ class MockClient implements ExtendedClient {
     throw new Error('Method not implemented.');
   }
 
-  sendReadReceipt(
-    _event: MatrixSDK.MatrixEvent | null,
-    _receiptType?: MatrixSDK.ReceiptType | undefined,
+  async sendReadReceipt(
+    event: MatrixSDK.MatrixEvent | null,
+    receiptType?: MatrixSDK.ReceiptType | undefined,
     _unthreaded?: boolean | undefined,
   ): Promise<{} | undefined> {
-    throw new Error('Method not implemented.');
+    if (!event) return;
+    const eventId = event.getId()!;
+
+    this.serverState.addReceiptEvent(
+      event.getRoomId()!,
+      eventId,
+      this.sdkOpts.loggedInAs!,
+      receiptType ?? ('m.read' as MatrixSDK.ReceiptType),
+    );
+
+    return Promise.resolve({});
   }
 
   setPassword(
@@ -341,7 +558,7 @@ class MockClient implements ExtendedClient {
   async sendEvent(...args: any[]): Promise<MatrixSDK.ISendEventResponse> {
     let roomId: string;
 
-    let eventType: string;
+    let eventType: any;
     let content: MatrixSDK.IContent;
 
     if (typeof args[2] === 'object') {
@@ -351,21 +568,16 @@ class MockClient implements ExtendedClient {
     }
 
     let roomEvent = {
-      event_id: this.serverState.eventId(),
       room_id: roomId,
-      state_key: 'state',
       type: eventType,
-      sender: this.sdkOpts.loggedInAs || 'unknown_user',
-      origin_server_ts: Date.now(),
       content,
       status: null,
-      unsigned: {
-        age: 105,
-        transaction_id: '1',
-      },
     };
-    await this.emitEvent(roomEvent);
-    return roomEvent;
+    let matrixEvent = this.serverState.addRoomEvent(
+      this.sdkOpts.loggedInAs || 'unknown_user',
+      roomEvent,
+    );
+    return matrixEvent;
   }
 
   getRoom(roomId: string | undefined): MatrixSDK.Room | null {
@@ -378,6 +590,7 @@ class MockClient implements ExtendedClient {
           };
         },
         oldState: {},
+        getLastActiveTimestamp: () => Date.now(),
       } as MatrixSDK.Room;
     }
     return null;
@@ -399,28 +612,38 @@ class MockClient implements ExtendedClient {
   async startClient(
     _opts?: MatrixSDK.IStartClientOpts | undefined,
   ): Promise<void> {
+    this.serverState.onEvent(this.emitEvent.bind(this));
+
     await this.emitEvent({
+      // This is not an event type in our MatrixEvent union
       type: 'com.cardstack.boxel.realms',
       content: {
         realms: this.sdkOpts.activeRealms ?? [],
       },
-    });
+    } as unknown as MatrixEvent);
   }
 
   private eventHandlerType(type: string) {
     switch (type) {
       case 'com.cardstack.boxel.realms':
         return this.sdk.ClientEvent.AccountData;
+      case 'm.reaction':
       case 'm.room.create':
       case 'm.room.message':
+      case 'm.room.name':
+      case 'm.room.member':
         return this.sdk.RoomEvent.Timeline;
+      case 'm.receipt':
+        return this.sdk.RoomEvent.Receipt;
+
       default:
         throw new Error(`unknown type ${type} in mock`);
     }
   }
 
-  private async emitEvent(event: { type: string } & Record<string, unknown>) {
+  private async emitEvent(event: MatrixEvent) {
     let handlers = this.listeners.get(this.eventHandlerType(event.type));
+
     if (handlers) {
       for (let handler of handlers) {
         let result: any = { event };
@@ -472,21 +695,13 @@ class MockClient implements ExtendedClient {
     return { event_id: this.serverState.eventId() };
   }
 
-  async createRoom(
-    _options: MatrixSDK.ICreateRoomOpts,
-  ): Promise<{ room_id: string }> {
-    let room_id = this.serverState.createRoom();
+  async createRoom({
+    name,
+  }: MatrixSDK.ICreateRoomOpts): Promise<{ room_id: string }> {
+    let sender = this.sdkOpts.loggedInAs || 'unknown_user';
+    let roomId = this.serverState.createRoom(sender, name);
 
-    this.emitEvent({
-      event_id: this.serverState.eventId(),
-      origin_server_ts: new Date().getTime(),
-      room_id,
-      sender: this.sdkOpts.loggedInAs ?? 'unknown_user',
-      state_key: '',
-      type: 'm.room.create',
-    });
-
-    return { room_id };
+    return { room_id: roomId };
   }
 
   async getThreePids(): Promise<{ threepids: MatrixSDK.IThreepid[] }> {
