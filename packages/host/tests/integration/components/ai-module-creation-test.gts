@@ -93,7 +93,6 @@ module('Integration | create app module via ai-assistant', function (hooks) {
       },
     );
     let roomId = await openAiAssistant();
-    console.log('room id  ', roomId);
     return roomId;
   }
 
@@ -213,7 +212,6 @@ module('Integration | create app module via ai-assistant', function (hooks) {
 
     await waitFor('[data-test-command-apply="ready"]');
     await click('[data-test-command-apply="ready"]');
-
     assert.dom('[data-test-view-module]').exists();
     let moduleURL = (
       document.querySelector('[data-test-view-module]') as HTMLElement
