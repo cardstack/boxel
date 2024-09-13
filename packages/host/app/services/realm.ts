@@ -14,6 +14,8 @@ import window from 'ember-window-mock';
 
 import { TrackedSet } from 'tracked-built-ins';
 
+import { logger } from '@cardstack/runtime-common';
+
 import {
   Permissions,
   type RealmInfo,
@@ -25,6 +27,8 @@ import ENV from '@cardstack/host/config/environment';
 
 import type LoaderService from './loader-service';
 import type MatrixService from './matrix-service';
+
+const log = logger('service:realm');
 
 interface Meta {
   info: RealmInfo;
@@ -295,8 +299,7 @@ export default class RealmService extends Service {
     let first = writeableRealms[0];
 
     if (!first) {
-      // FIXME debug logging maybe?
-      console.log(
+      log.debug(
         `No writable realms found, known realms and writability: ${Object.keys(
           this.allRealmsMeta,
         )
