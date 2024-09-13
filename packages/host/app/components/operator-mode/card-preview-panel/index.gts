@@ -150,19 +150,26 @@ export default class CardPreviewPanel extends Component<Signature> {
         onScroll=this.onScroll
       }}
     >
+
       {{#if (eq this.format 'fitted')}}
-        <FittedFormatGallery @card={{@card}} />
+        <div class='fitted-wrapper'>
+          <FittedFormatGallery @card={{@card}} />
+        </div>
       {{else if (eq this.format 'embedded')}}
-        <EmbeddedPreview @card={{@card}} />
+        <div class='embedded-wrapper'>
+          <EmbeddedPreview @card={{@card}} />
+        </div>
       {{else if (eq this.format 'atom')}}
         <div class='atom-wrapper'>
           <Preview @card={{@card}} @format={{this.format}} />
         </div>
       {{else}}
-        <Preview @card={{@card}} @format={{this.format}} />
+        <div class='wrapper'>
+          <Preview @card={{@card}} @format={{this.format}} />
+        </div>
       {{/if}}
-    </div>
 
+    </div>
     <div
       class='preview-footer'
       {{ResizeModifier setFooterWidthPx=this.setFooterWidthPx}}
@@ -221,6 +228,9 @@ export default class CardPreviewPanel extends Component<Signature> {
 
       .preview-body {
         flex-grow: 1;
+        overflow-y: auto;
+      }
+      .preview-body > * {
         overflow-y: auto;
       }
 
