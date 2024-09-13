@@ -19,6 +19,7 @@ import {
   readFileSync,
   existsSync,
   readdirSync,
+  copySync,
 } from 'fs-extra';
 import { setupCloseHandler } from './node-realm';
 import {
@@ -67,6 +68,16 @@ const DEFAULT_PERMISSIONS = Object.freeze([
   'realm-owner',
 ]) as RealmPermissions['user'];
 
+const IGNORE_SEED_FILES = [
+  'node_modules',
+  '.gitignore',
+  '.realm.json',
+  '.template-lintrc.js',
+  'package.json',
+  'TODO.md',
+  'tsconfig.json',
+];
+
 export class RealmServer {
   private log = logger('realm:requests');
   private realms: Realm[];
@@ -79,6 +90,7 @@ export class RealmServer {
   private assetsURL: URL;
   private getIndexHTML: () => Promise<string>;
   private serverURL: URL;
+  private seedPath: string | undefined;
   private matrixRegistrationSecret: string | undefined;
   private matrixRegistrationSecretFile: string | undefined;
   private onRealmCreate: ((realm: Realm) => void) | undefined;
@@ -96,6 +108,7 @@ export class RealmServer {
     getIndexHTML,
     matrixRegistrationSecret,
     matrixRegistrationSecretFile,
+    seedPath,
     onRealmStart,
     onRealmCreate,
   }: {
@@ -109,6 +122,7 @@ export class RealmServer {
     queue: Queue;
     assetsURL: URL;
     getIndexHTML: () => Promise<string>;
+    seedPath?: string;
     matrixRegistrationSecret?: string;
     matrixRegistrationSecretFile?: string;
     // these are a special callbacks for our tests that allows the test worker
@@ -129,6 +143,7 @@ export class RealmServer {
     this.matrixClient = matrixClient;
     this.secretSeed = secretSeed;
     this.realmsRootPath = realmsRootPath;
+    this.seedPath = seedPath;
     this.dbAdapter = dbAdapter;
     this.queue = queue;
     this.assetsURL = assetsURL;
@@ -464,6 +479,16 @@ export class RealmServer {
     });
 
     writeJSONSync(join(realmPath, '.realm.json'), { name: realmName });
+    if (this.seedPath) {
+      let ignoreList = IGNORE_SEED_FILES.map((file) =>
+        join(this.seedPath!.replace(/\/$/, ''), file),
+      );
+      copySync(this.seedPath, realmPath, {
+        filter: (src, _dest) => {
+          return !ignoreList.includes(src);
+        },
+      });
+    }
 
     let realm = new Realm({
       url,
