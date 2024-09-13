@@ -369,6 +369,7 @@ export async function runTestRealmServer({
     serverURL: new URL(realmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
     onRealmStart: (realm) => privateNetwork.mount(realm.maybeHandle),
+    onRealmCreate: (realm) => privateNetwork.mount(realm.maybeHandle),
   });
   let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
   await testRealmServer.start();
@@ -376,7 +377,6 @@ export async function runTestRealmServer({
     testRealm,
     testRealmServer,
     testRealmHttpServer,
-    workerVirtualNetwork: privateNetwork,
   };
 }
 
