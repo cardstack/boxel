@@ -70,7 +70,6 @@ export default class CardService extends Service {
     return this.loaderToCardAPILoadingCache.get(loader)!;
   }
 
-  // TODO remove in a followup PR for CS-7036
   unresolvedRealmURLs = new TrackedArray<string>([baseRealm.url]);
 
   onSave(subscriber: CardSaveSubscriber) {
