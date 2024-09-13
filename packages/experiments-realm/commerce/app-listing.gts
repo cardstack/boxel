@@ -44,13 +44,30 @@ class Isolated extends Component<typeof AppListing> {
 
   <template>
     <style>
+      /* for all array of list */
+      .containsMany-field > * + * {
+        margin-top: var(--boxel-sp-sm);
+      }
+      h1,
+      h2,
+      p {
+        margin-block-start: 0;
+        margin-block-end: var(--boxel-sp-xs);
+      }
+      hr {
+        border-style: solid;
+        border-color: var(--boxel-200);
+      }
       .app-listing {
         padding: 20px;
+        container-type: inline-size;
+      }
+      .app-listing > * + * {
+        margin-top: var(--boxel-sp-lg);
       }
       .app-listing-header {
         display: flex;
         align-items: center;
-        margin-bottom: 20px;
       }
       .app-icon img {
         width: 60px;
@@ -71,16 +88,25 @@ class Isolated extends Component<typeof AppListing> {
         color: #666;
       }
       .add-to-workspace-btn {
+        /*white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-box-orient: horizontal;
+        -webkit-line-clamp: 1;
+        word-break: break-word;*/
       }
-      .app-listing-content {
-        display: flex;
-        gap: 30px;
+      .app-details-and-pricing {
+        display: grid;
+        grid-template-columns: 3fr 2fr;
+        gap: var(--boxel-sp);
       }
       .app-details {
-        flex: 2;
+      }
+      .app-details > * + * {
+        margin-top: var(--boxel-sp-lg);
       }
       .app-pricing {
-        flex: 1;
       }
       .pricing-options {
         display: flex;
@@ -111,11 +137,13 @@ class Isolated extends Component<typeof AppListing> {
       }
       .app-meta {
         display: flex;
+        flex-wrap: wrap;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 20px;
+        gap: var(--boxel-sp-xs);
         color: #666;
         font-size: 14px;
+        margin-top: var(--boxel-sp);
       }
       .publish-date {
         font-style: italic;
@@ -123,7 +151,6 @@ class Isolated extends Component<typeof AppListing> {
       .category-pills {
         display: flex;
         gap: 8px;
-        margin-bottom: 16px;
       }
 
       .category-pill {
@@ -144,10 +171,16 @@ class Isolated extends Component<typeof AppListing> {
         background-color: #f6f6f6;
         color: #666;
       }
+
+      @container (max-width: 599px) {
+        .app-details-and-pricing {
+          grid-template-columns: 1fr;
+        }
+      }
     </style>
 
     <div class='app-listing'>
-      <div class='app-listing-header'>
+      <section class='app-listing-header'>
         <div>
           <img
             style={{cssUrl 'background-image' @model.thumbnailURL}}
@@ -166,9 +199,9 @@ class Isolated extends Component<typeof AppListing> {
         >
           Add to Workspace
         </Button>
-      </div>
+      </section>
 
-      <div class='app-meta'>
+      <section class='app-meta'>
         <div class='publish-date'>Published: <@fields.publishDate /></div>
         {{! TODO: Replace with pill components from boxel }}
         <div class='category-pills'>
@@ -179,11 +212,12 @@ class Isolated extends Component<typeof AppListing> {
             class='category-pill secondary-category'
           >{{@model.secondaryCategory.name}}</span>
         </div>
-      </div>
+      </section>
 
-      <div class='app-listing-content'>
+      <hr />
+
+      <section class='app-details-and-pricing'>
         <div class='app-details'>
-
           <section class='license-section'>
             <h2>License</h2>
             <div class='license'>License: MIT</div>
@@ -194,14 +228,6 @@ class Isolated extends Component<typeof AppListing> {
             <p>{{@model.detail}}</p>
           </section>
 
-          <div>
-            <h2>Images & Videos</h2>
-            <ImageLayout @images={{@fields.images}} @displayFormat='grid' />
-          </div>
-          <div>
-            <h2>Examples</h2>
-            <@fields.examples />
-          </div>
         </div>
 
         <div class='app-pricing'>
@@ -211,9 +237,18 @@ class Isolated extends Component<typeof AppListing> {
             @selectedPriceOptionId={{this.selectedPriceOptionId}}
             @onSelectRadio={{this.onSelectPriceOption}}
           />
-
         </div>
-      </div>
+      </section>
+
+      <section class='app-image-gallery'>
+        <h2>Images & Videos</h2>
+        <ImageLayout @images={{@fields.images}} @displayFormat='grid' />
+      </section>
+
+      <section class='app-examples'>
+        <h2>Examples</h2>
+        <@fields.examples />
+      </section>
     </div>
   </template>
 }

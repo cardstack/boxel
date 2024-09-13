@@ -56,23 +56,25 @@ export class ImageLayout extends Component<{
     <style>
       .cards-layout {
         position: relative;
+        overflow-x: hidden;
       }
       .cards,
       .cards.grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr 1fr;
+        display: flex;
+        flex-wrap: nowrap;
+        overflow-x: auto;
         gap: var(--boxel-sp);
       }
       .cards.list {
         display: block;
       }
       .cards.list > * + * {
-        margin-top: 1rem;
+        margin-top: var(--boxel-sp-med);
         display: block;
       }
       .gallery-item {
-        width: 150px;
-        height: 100px;
+        width: 300px;
+        height: 300px;
         background-color: #eee;
         border-radius: 5px;
       }
