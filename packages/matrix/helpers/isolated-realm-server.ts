@@ -76,10 +76,9 @@ export async function startServer() {
     new Promise<true>((r) => setTimeout(() => r(true), 30_000)),
   ]);
   if (timeout) {
-    console.error(
+    throw new Error(
       `timed-out waiting for realm server to start. Stopping server`,
     );
-    process.exit(-2);
   }
 
   return new IsolatedRealmServer(realmServer);
