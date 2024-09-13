@@ -7,14 +7,17 @@ exports.up = (pgm) => {
       pgm.sql(
         `INSERT INTO realm_user_permissions (realm_url, username, read, write)
          VALUES
-           ('https://realms-staging.stack.cards/seed/', 'habdelra1', true, true)`,
+           ('https://realms-staging.stack.cards/seed/', '@habdelra1:stack.cards', true, true),
+           ('https://realms-staging.stack.cards/seed/', '@tintinthong:stack.cards', true, true),
+           ('https://realms-staging.stack.cards/seed/', '@lukemelia:stack.cards', true, true)`,
       );
       break;
     case 'production':
       pgm.sql(
         `INSERT INTO realm_user_permissions (realm_url, username, read, write)
          VALUES
-           ('https://app.boxel.ai/seed/', 'habdelra1', true, true)`,
+           ('https://app.boxel.ai/seed/', '@hassan1:boxel.ai', true, true),
+           ('https://app.boxel.ai/seed/', '@lukemelia:boxel.ai', true, true)`,
       );
       break;
     // intentionally not giving localhost "user" read/write access so that we
