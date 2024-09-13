@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import supertest, { Test, SuperTest } from 'supertest';
 import { join, resolve } from 'path';
 import { Server } from 'http';
-import { dirSync, setGracefulCleanup, DirResult } from 'tmp';
+import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { validate as uuidValidate } from 'uuid';
 import {
   copySync,

@@ -4,6 +4,11 @@ import {
   synapseStop,
   type SynapseInstance,
 } from '../docker/synapse';
+import {
+  startServer as startRealmServer,
+  IsolatedRealmServer,
+  appURL,
+} from '../helpers/isolated-realm-server';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
 import {
   clearLocalStorage,
@@ -18,27 +23,21 @@ import { registerUser, createRegistrationToken } from '../docker/synapse';
 
 const REGISTRATION_TOKEN = 'abc123';
 
-// TODO after we start creating realms as part of user creation we'll need to
-// figure out how to perform better isolation for these tests. Creating a user
-// will result in DB and filesystem state changes that will bleed into the other
-// matrix tests. One idea is that since playwright is running on the server we
-// could perform realm server isolation by using randomly generated DB names's
-// like we do in the realm server tests along with resetting the underlying
-// filesystem and restarting the realm server in between tests that we expect to
-// mutate realm state. These would be rather expensive tests so we should be
-// prudent around the realm server isolation.
-
-test.describe('User Registration w/ Token', () => {
+test.describe('User Registration w/ Token - isolated realm server', () => {
   let synapse: SynapseInstance;
+  let realmServer: IsolatedRealmServer;
 
   test.beforeEach(async () => {
     synapse = await synapseStart({
       template: 'test',
     });
     await smtpStart();
+    realmServer = await startRealmServer();
+    console.log('=================');
   });
 
   test.afterEach(async () => {
+    realmServer.stop();
     await synapseStop(synapse.synapseId);
     await smtpStop();
   });
@@ -47,8 +46,8 @@ test.describe('User Registration w/ Token', () => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await registerRealmUsers(synapse);
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
-    await clearLocalStorage(page);
-    await gotoRegistration(page);
+    await clearLocalStorage(page, appURL);
+    await gotoRegistration(page, appURL);
 
     await expect(
       page.locator('[data-test-token-field]'),
@@ -104,6 +103,48 @@ test.describe('User Registration w/ Token', () => {
     // assert that the registration mode state is cleared properly
     await logout(page);
     await assertLoggedOut(page);
+  });
+
+  test(`it can resend email validation message`, async ({ page }) => {
+    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
+    await registerRealmUsers(synapse);
+    await clearLocalStorage(page, appURL);
+    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
+    await gotoRegistration(page, appURL);
+
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-name-field]').fill('user1');
+    await page.locator('[data-test-email-field]').fill('user1@example.com');
+    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-password-field]').fill('mypassword1!');
+    await page
+      .locator('[data-test-confirm-password-field]')
+      .fill('mypassword1!');
+    await expect(page.locator('[data-test-register-btn]')).toBeEnabled();
+    await page.locator('[data-test-register-btn]').click();
+
+    await expect(page.locator('[data-test-next-btn]')).toBeDisabled();
+    await page.locator('[data-test-token-field]').fill('abc123');
+    await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
+    await page.locator('[data-test-next-btn]').click();
+
+    await validateEmail(page, 'user1@example.com', { sendAttempts: 2 });
+  });
+});
+
+test.describe('User Registration w/ Token', () => {
+  let synapse: SynapseInstance;
+
+  test.beforeEach(async () => {
+    synapse = await synapseStart({
+      template: 'test',
+    });
+    await smtpStart();
+  });
+
+  test.afterEach(async () => {
+    await synapseStop(synapse.synapseId);
+    await smtpStop();
   });
 
   test('it shows an error when the username is already taken', async ({
@@ -424,36 +465,6 @@ test.describe('User Registration w/ Token', () => {
 
     await page.locator('[data-test-register-btn]').click();
     await expect(page.locator('[data-test-token-field]')).toHaveCount(1);
-  });
-
-  test(`it can resend email validation message`, async ({ page }) => {
-    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await registerRealmUsers(synapse);
-    await clearLocalStorage(page);
-    await createRegistrationToken(
-      // synapse,
-      admin.accessToken,
-      REGISTRATION_TOKEN,
-    );
-    await gotoRegistration(page);
-
-    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-name-field]').fill('user1');
-    await page.locator('[data-test-email-field]').fill('user1@example.com');
-    await page.locator('[data-test-username-field]').fill('user1');
-    await page.locator('[data-test-password-field]').fill('mypassword1!');
-    await page
-      .locator('[data-test-confirm-password-field]')
-      .fill('mypassword1!');
-    await expect(page.locator('[data-test-register-btn]')).toBeEnabled();
-    await page.locator('[data-test-register-btn]').click();
-
-    await expect(page.locator('[data-test-next-btn]')).toBeDisabled();
-    await page.locator('[data-test-token-field]').fill('abc123');
-    await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
-    await page.locator('[data-test-next-btn]').click();
-
-    await validateEmail(page, 'user1@example.com', { sendAttempts: 2 });
   });
 
   test('it shows an error encountered when registering', async ({ page }) => {

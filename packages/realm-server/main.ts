@@ -243,7 +243,19 @@ let dist: URL = new URL(distURL);
     matrixRegistrationSecretFile,
   });
 
-  server.listen(port);
+  let httpServer = server.listen(port);
+  process.on('message', (message) => {
+    if (message === 'stop') {
+      console.log(`stopping realm server on port ${port}...`);
+      httpServer.closeAllConnections();
+      httpServer.close(() => {
+        console.log(`realm server on port ${port} has stopped`);
+        if (process.send) {
+          process.send('stopped');
+        }
+      });
+    }
+  });
 
   await server.start();
 
@@ -259,6 +271,10 @@ let dist: URL = new URL(distURL);
     }
   }
   log.info(`Using host url: '${dist}' for card pre-rendering`);
+
+  if (process.send) {
+    process.send('ready');
+  }
 })().catch((e: any) => {
   Sentry.captureException(e);
   console.error(
