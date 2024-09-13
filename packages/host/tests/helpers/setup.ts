@@ -1,3 +1,6 @@
+/* eslint-disable window-mock/wrapped-setup-helpers-only */
+// This is the one place we allow these to be used directly.
+
 import {
   setupApplicationTest as emberSetupApplicationTest,
   setupRenderingTest as emberSetupRenderingTest,
