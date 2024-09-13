@@ -150,23 +150,22 @@ class Isolated extends Component<typeof CardsGrid> {
                 <:response as |cards|>
                   {{measureLoadTime}}
                   {{#each cards as |card|}}
-                    <CardContainer class='card'>
-                      <li
-                        {{@context.cardComponentModifier
-                          cardId=card.url
-                          format='data'
-                          fieldType=undefined
-                          fieldName=undefined
-                        }}
-                        data-test-cards-grid-item={{removeFileExtension
-                          card.url
-                        }}
-                        {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
-                        data-cards-grid-item={{removeFileExtension card.url}}
-                      >
+                    <li
+                      class='card'
+                      {{@context.cardComponentModifier
+                        cardId=card.url
+                        format='data'
+                        fieldType=undefined
+                        fieldName=undefined
+                      }}
+                      data-test-cards-grid-item={{removeFileExtension card.url}}
+                      {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
+                      data-cards-grid-item={{removeFileExtension card.url}}
+                    >
+                      <CardContainer>
                         {{card.component}}
-                      </li>
-                    </CardContainer>
+                      </CardContainer>
+                    </li>
                   {{/each}}
                 </:response>
               </PrerenderedCardSearch>
