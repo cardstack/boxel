@@ -12,7 +12,9 @@ import {
   StringField,
   type CardContext,
 } from 'https://cardstack.com/base/card-api';
+import { CardContainer } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
+import { baseRealm } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -131,7 +133,15 @@ class AppCardIsolated extends Component<typeof AppCard> {
             </div>
           {{else}}
             {{#if this.instances.length}}
-              <CardsGrid @instances={{this.instances}} @context={{@context}} />
+              {{#if this.query}}
+                {{#if this.realms}}
+                  <CardsGrid
+                    @query={{this.query}}
+                    @realms={{this.realms}}
+                    @context={{@context}}
+                  />
+                {{/if}}
+              {{/if}}
             {{else}}
               {{#if this.liveQuery.isLoading}}
                 Loading...
@@ -269,6 +279,10 @@ class AppCardIsolated extends Component<typeof AppCard> {
     return this.args.model[realmURL];
   }
 
+  get realms(): string[] {
+    return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
+  }
+
   get activeTab() {
     if (!this.tabs?.length) {
       return;
@@ -332,6 +346,32 @@ class AppCardIsolated extends Component<typeof AppCard> {
   @action setActiveTab(index: number) {
     this.activeTabIndex = index;
     this.setSearch();
+  }
+
+  get query() {
+    if (!this.activeTabRef) {
+      return;
+    }
+    return {
+      filter: {
+        every: [
+          { type: this.activeTabRef },
+          { not: { eq: { id: this.args.model.id! } } },
+        ],
+      },
+      // sorting by title so that we can maintain stability in
+      // the ordering of the search results (server sorts results
+      // by order indexed by default)
+      sort: [
+        {
+          on: {
+            module: `${baseRealm.url}card-api`,
+            name: 'CardDef',
+          },
+          by: 'title',
+        },
+      ],
+    };
   }
 
   setSearch(query?: Query) {
@@ -400,6 +440,10 @@ class AppCardIsolated extends Component<typeof AppCard> {
   );
 }
 
+function removeFileExtension(cardUrl: string) {
+  return cardUrl.replace(/\.[^/.]+$/, '');
+}
+
 export class AppCard extends CardDef {
   static displayName = 'App Card';
   static prefersWideFormat = true;
@@ -412,7 +456,8 @@ export class AppCard extends CardDef {
 
 export class CardsGrid extends GlimmerComponent<{
   Args: {
-    instances: CardDef[] | [];
+    query: Query;
+    realms: string[];
     context?: CardContext;
     isListFormat?: boolean;
   };
@@ -420,25 +465,40 @@ export class CardsGrid extends GlimmerComponent<{
 }> {
   <template>
     <ul class={{cn 'cards-grid' list-format=@isListFormat}} ...attributes>
-      {{! use "key" to keep the list stable between refreshes }}
-      {{#each @instances key='id' as |card|}}
-        <li
-          class='cards-grid-item'
-          {{! In order to support scrolling cards into view
-            we use a selector that is not pruned out in production builds }}
-          data-cards-grid-item={{card.id}}
-          {{@context.cardComponentModifier
-            card=card
-            format='data'
-            fieldType=undefined
-            fieldName=undefined
-          }}
+      {{#let
+        (component @context.prerenderedCardSearchComponent)
+        as |PrerenderedCardSearch|
+      }}
+        <PrerenderedCardSearch
+          @query={{@query}}
+          @format='fitted'
+          @realms={{@realms}}
         >
-          {{#let (this.getComponent card) as |Card|}}
-            <Card />
-          {{/let}}
-        </li>
-      {{/each}}
+          <:loading>
+            Loading...
+          </:loading>
+          <:response as |cards|>
+            {{#each cards as |card|}}
+              <li
+                class='cards-grid-item'
+                {{@context.cardComponentModifier
+                  cardId=card.url
+                  format='data'
+                  fieldType=undefined
+                  fieldName=undefined
+                }}
+                data-test-cards-grid-item={{removeFileExtension card.url}}
+                {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
+                data-cards-grid-item={{removeFileExtension card.url}}
+              >
+                <CardContainer class='card' @displayBoundaries={{true}}>
+                  {{card.component}}
+                </CardContainer>
+              </li>
+            {{/each}}
+          </:response>
+        </PrerenderedCardSearch>
+      {{/let}}
     </ul>
     <style scoped>
       .cards-grid {
@@ -462,8 +522,11 @@ export class CardsGrid extends GlimmerComponent<{
         width: var(--grid-card-width);
         height: var(--grid-card-height);
       }
-      .cards-grid-item > :deep(.field-component-card.fitted-format) {
-        --overlay-fitted-card-header-height: 0;
+      .card {
+        height: 100%;
+        width: 100%;
+        container-name: fitted-card;
+        container-type: size;
       }
     </style>
   </template>
