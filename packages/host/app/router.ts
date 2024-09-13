@@ -7,21 +7,6 @@ export default class Router extends EmberRouter {
   rootURL = config.rootURL;
 }
 
-// When resolvedOwnRealmURL is available, that is actually the path in the browser.
-// It will not be available when running in fastboot.
-// When paths of resolvedOwnRealmURL and ownRealmURL are not symmetrical,
-// that means that means the resolvedOwnRealmURL should be used instead of ownRealmURL.
-
-// FIXME what to replace this with? Or it just goes away?
-/*
-let path = new URL(resolvedOwnRealmURL ?? ownRealmURL).pathname.replace(
-  /\/$/,
-  '',
-);
-*/
-
-let path = false;
-
 Router.map(function () {
   this.route('host-freestyle', { path: '/_freestyle' });
   this.route('indexer', { path: '/indexer/:id' });
@@ -31,7 +16,7 @@ Router.map(function () {
   // component exists to support the indexer
   this.route('acceptance-test-setup');
 
-  if (!path || hostsOwnAssets) {
+  if (hostsOwnAssets) {
     this.route('index-card', { path: '/' });
   }
 });
