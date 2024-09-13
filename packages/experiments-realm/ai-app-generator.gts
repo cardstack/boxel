@@ -20,7 +20,7 @@ import {
   type LooseSingleCardDocument,
   type Query,
 } from '@cardstack/runtime-common';
-import { AppCard, Tab, CardsGrid } from './app-card';
+import { AppCard, Tab, CardsGrid, QueryContainer } from './app-card';
 
 class HowToSidebar extends GlimmerComponent {
   <template>
@@ -114,12 +114,18 @@ class CardListSidebar extends GlimmerComponent<{
       <header class='sidebar-header'>
         <h3 class='sidebar-title'>{{@title}}</h3>
       </header>
-      <CardsGrid
+      <QueryContainer
         @query={{@query}}
         @realms={{@realms}}
         @context={{@context}}
-        @isListFormat={{true}}
-      />
+        as |cards|
+      >
+        <CardsGrid
+          @cards={{@cards}}
+          @context={{@context}}
+          @isListFormat={{true}}
+        />
+      </QueryContainer>
     </aside>
     <style scoped>
       .sidebar {
@@ -249,102 +255,34 @@ class PromptContainer extends GlimmerComponent<{
   </template>
 }
 
-class Isolated extends AppCard.isolated {
+class DashboardTab extends GlimmerComponent<{
+  Args: { context: CardContext; realms: string[]; currentRealm: URL };
+}> {
   <template>
-    <section class='app'>
-      <TabbedHeader
-        @title={{@model.title}}
-        @tabs={{this.tabs}}
-        @onSetActiveTab={{this.setActiveTab}}
-        @activeTabIndex={{this.activeTabIndex}}
-        @headerBackgroundColor={{this.headerColor}}
-      >
-        <:headerIcon>
-          {{#if @model.headerIcon.base64}}
-            <@fields.headerIcon />
-          {{/if}}
-        </:headerIcon>
-      </TabbedHeader>
-      <div class='app-content'>
-        {{#if (eq this.activeTabIndex 0)}}
-          <div class='dashboard'>
-            <HowToSidebar />
-            <section>
-              <header class='section-header'>
-                <h2 class='section-title'>Generate an App</h2>
-              </header>
-              <PromptContainer
-                @prompt={{this.prompt}}
-                @setPrompt={{this.setPrompt}}
-                @generateProductRequirementsDoc={{this.generateProductRequirementsDoc}}
-                @isLoading={{this.generateRequirements.isRunning}}
-              />
-              {{#if this.errorMessage}}
-                <p class='error'>{{this.errorMessage}}</p>
-              {{/if}}
-            </section>
-            {{#if this.query}}
-              <CardListSidebar
-                @title='Browse Sample Apps'
-                @query={{this.query}}
-                @realms={{this.realms}}
-                @context={{@context}}
-              />
-            {{/if}}
-          </div>
-        {{else}}
-          {{#if
-            (and (bool @context.actions.createCard) (eq this.activeTabIndex 1))
-          }}
-            <Button
-              @kind='text-only'
-              @loading={{this.isCreateCardRunning}}
-              @disabled={{this.isCreateCardRunning}}
-              class='create-new-button'
-              {{on 'click' this.createNew}}
-            >
-              {{#unless this.isCreateCardRunning}}
-                <IconPlus
-                  class='plus-icon'
-                  width='15'
-                  height='15'
-                  role='presentation'
-                />
-              {{/unless}}
-              Create new requirement
-            </Button>
-          {{/if}}
-          {{#if this.query}}
-            <CardsGrid
-              class='grid-cards'
-              @query={{this.query}}
-              @realms={{this.realms}}
-              @context={{@context}}
-            />
-          {{/if}}
+    <div class='dashboard'>
+      <HowToSidebar />
+      <section>
+        <header class='section-header'>
+          <h2 class='section-title'>Generate an App</h2>
+        </header>
+        <PromptContainer
+          @prompt={{this.prompt}}
+          @setPrompt={{this.setPrompt}}
+          @generateProductRequirementsDoc={{this.generateProductRequirementsDoc}}
+          @isLoading={{this.generateRequirements.isRunning}}
+        />
+        {{#if this.errorMessage}}
+          <p class='error'>{{this.errorMessage}}</p>
         {{/if}}
-      </div>
-    </section>
-    <style scoped>
-      .app {
-        position: relative;
-        min-height: 100%;
-        display: grid;
-        grid-template-rows: auto 1fr;
-        background-color: var(--boxel-light);
-        color: var(--boxel-dark);
-        font: var(--boxel-font);
-        letter-spacing: var(--boxel-lsp);
-      }
-      .app-content {
-        padding: var(--boxel-sp);
-        background-color: #f7f7f7;
-      }
-      .grid-cards {
-        padding: var(--boxel-sp);
-      }
-
-      /* Dashboard */
+      </section>
+      <CardListSidebar
+        @title='Browse Sample Apps'
+        @query={{this.query}}
+        @realms={{this.realms}}
+        @context={{@context}}
+      />
+    </div>
+    <style>
       .dashboard {
         display: grid;
         grid-template-columns: auto minmax(400px, 1fr) auto;
@@ -361,63 +299,14 @@ class Isolated extends AppCard.isolated {
         font-size: 1.5rem;
         letter-spacing: var(--boxel-lsp-xs);
       }
-
-      /* Create New button */
-      .create-new-button {
-        --boxel-button-loading-icon-size: 15px;
-        --boxel-button-text-color: var(--boxel-dark);
-        margin-left: var(--boxel-sp-sm);
-        color: var(--boxel-dark);
-        font-weight: 500;
-        padding: var(--boxel-sp-xxs);
-        gap: var(--boxel-sp-xxs);
-      }
-      .create-new-button :deep(.loading-indicator) {
-        width: 15px;
-        height: 15px;
-        margin-right: 0;
-      }
-      .create-new-button:hover:not(:disabled) {
-        --icon-color: var(--boxel-highlight);
-        color: var(--boxel-highlight);
-      }
-      .plus-icon {
-        stroke-width: 0;
-      }
     </style>
   </template>
-
-  @tracked tabs = [
-    new Tab({
-      displayName: 'Dashboard',
-      tabId: 'dashboard',
-      ref: {
-        name: 'AppCard',
-        module: `${this.currentRealm?.href}app-card`,
-      },
-    }),
-    new Tab({
-      displayName: 'Requirements',
-      tabId: 'requirements',
-      ref: {
-        name: 'ProductRequirementDocument',
-        module: `${this.currentRealm?.href}product-requirement-document`,
-      },
-    }),
-    new Tab({
-      displayName: 'Your Apps',
-      tabId: 'your-apps',
-      ref: {
-        name: 'AppCard',
-        module: `${this.currentRealm?.href}app-card`,
-      },
-    }),
-  ];
   promptReset: Prompt = {
     appType: '',
     domain: '',
     customRequirements: '',
   };
+  @tracked errorMessage = '';
   @tracked prompt: Prompt = this.promptReset;
   @action setPrompt(key: string, value: string) {
     this.prompt = { ...this.prompt, [key]: value };
@@ -468,6 +357,136 @@ class Isolated extends AppCard.isolated {
       }
     },
   );
+
+  get query() {
+    return {
+      filter: {
+        every: [
+          {
+            type: {
+              name: 'AppCard',
+              module: `${this.currentRealm?.href}app-card`,
+            },
+          },
+          { not: { eq: { id: this.args.model?.id! } } },
+        ],
+      },
+      // sorting by title so that we can maintain stability in
+      // the ordering of the search results (server sorts results
+      // by order indexed by default)
+      sort: [
+        {
+          on: {
+            module: `${baseRealm.url}card-api`,
+            name: 'CardDef',
+          },
+          by: 'title',
+        },
+      ],
+    };
+  }
+}
+
+class DefaultTab extends GlimmerComponent<{ Args: { context: CardContext } }> {
+  <template>
+    <div class='tab-content'>
+      {{#if @context.actions.createCard}}
+        <Button
+          @kind='text-only'
+          @loading={{this.isCreateCardRunning}}
+          @disabled={{this.isCreateCardRunning}}
+          class='create-new-button'
+          {{on 'click' this.createNew}}
+        >
+          {{#unless this.isCreateCardRunning}}
+            <IconPlus
+              class='plus-icon'
+              width='15'
+              height='15'
+              role='presentation'
+            />
+          {{/unless}}
+          Create new requirement
+        </Button>
+      {{/if}}
+      <QueryContainer
+        @query={{@query}}
+        @realms={{@realms}}
+        @context={{@context}}
+        as |cards|
+      >
+        <CardsGrid class='grid-cards' @cards={{@cards}} @context={{@context}} />
+      </QueryContainer>
+    </div>
+    <style>
+      .app-content {
+        padding: var(--boxel-sp);
+        background-color: #f7f7f7;
+      }
+      .grid-cards {
+        padding: var(--boxel-sp);
+      }
+
+      /* Create New button */
+      .create-new-button {
+        --boxel-button-loading-icon-size: 15px;
+        --boxel-button-text-color: var(--boxel-dark);
+        margin-left: var(--boxel-sp-sm);
+        color: var(--boxel-dark);
+        font-weight: 500;
+        padding: var(--boxel-sp-xxs);
+        gap: var(--boxel-sp-xxs);
+      }
+      .create-new-button :deep(.loading-indicator) {
+        width: 15px;
+        height: 15px;
+        margin-right: 0;
+      }
+      .create-new-button:hover:not(:disabled) {
+        --icon-color: var(--boxel-highlight);
+        color: var(--boxel-highlight);
+      }
+      .plus-icon {
+        stroke-width: 0;
+      }
+    </style>
+  </template>
+}
+
+class Isolated extends AppCard.isolated {
+  tabs = [
+    new Tab({
+      displayName: 'Dashboard',
+      tabId: 'dashboard',
+      component: DashboardTab,
+    }),
+    new Tab({
+      displayName: 'Requirements',
+      tabId: 'requirements',
+      ref: {
+        name: 'ProductRequirementDocument',
+        module: `${this.currentRealm?.href}product-requirement-document`,
+      },
+      component: DefaultTab,
+    }),
+    new Tab({
+      displayName: 'Your Apps',
+      tabId: 'your-apps',
+      ref: {
+        name: 'AppCard',
+        module: `${this.currentRealm?.href}app-card`,
+      },
+      component: DefaultTab,
+    }),
+  ];
+
+  get currentRealm() {
+    return this.args.model?.[realmURL];
+  }
+
+  get realms(): string[] {
+    return this.args.model?.[realmURL] ? [this.args.model[realmURL].href] : [];
+  }
 }
 
 export class AiAppGenerator extends AppCard {

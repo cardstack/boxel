@@ -14,7 +14,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import { and, bool, cn } from '@cardstack/boxel-ui/helpers';
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, type Query } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -147,31 +147,22 @@ class DefaultTabTemplate extends GlimmerComponent<{
       {{#if this.errorMessage}}
         <p class='error'>{{this.errorMessage}}</p>
       {{/if}}
-      {{#let
-        (component @context.prerenderedCardSearchComponent)
-        as |PrerenderedCardSearch|
-      }}
-        <PrerenderedCardSearch
-          @query={{this.query}}
-          @format='fitted'
-          @realms={{this.realms}}
-        >
-          <:loading>
-            Loading...
-          </:loading>
-          <:response as |cards|>
-            {{#if cards.length}}
-              {{#if @activeTab.isTable}}
-                <TableView @instances={{cards}} />
-              {{else}}
-                <CardsGrid @cards={{cards}} @context={{@context}} />
-              {{/if}}
-            {{else}}
-              <p>No cards available</p>
-            {{/if}}
-          </:response>
-        </PrerenderedCardSearch>
-      {{/let}}
+      <QueryContainer
+        @query={{this.query}}
+        @realms={{this.realms}}
+        @context={{@context}}
+        as |cards|
+      >
+        {{#if cards.length}}
+          {{#if @activeTab.isTable}}
+            <TableView @instances={{cards}} />
+          {{else}}
+            <CardsGrid @cards={{cards}} @context={{@context}} />
+          {{/if}}
+        {{else}}
+          <p>No cards available</p>
+        {{/if}}
+      </QueryContainer>
       {{#if (and (bool @context.actions.createCard) (bool @activeTab.ref))}}
         <div class='add-card-button'>
           <Tooltip @placement='left' @offset={{6}}>
@@ -416,6 +407,34 @@ export class AppCard extends CardDef {
   @field headerIcon = contains(Base64ImageField);
   @field moduleId = contains(StringField);
   static isolated = AppCardIsolated;
+}
+
+export class QueryContainer extends GlimmerComponent<{
+  Args: {
+    query: Query;
+    realms: string[];
+    context: CardContext;
+  };
+}> {
+  <template>
+    {{#let
+      (component @context.prerenderedCardSearchComponent)
+      as |PrerenderedCardSearch|
+    }}
+      <PrerenderedCardSearch
+        @query={{@query}}
+        @format='fitted'
+        @realms={{@realms}}
+      >
+        <:loading>
+          Loading...
+        </:loading>
+        <:response as |cards|>
+          {{yield cards}}
+        </:response>
+      </PrerenderedCardSearch>
+    {{/let}}
+  </template>
 }
 
 export class CardsGrid extends GlimmerComponent<{
