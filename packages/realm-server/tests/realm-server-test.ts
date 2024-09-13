@@ -48,6 +48,7 @@ import {
   closeServer,
   getFastbootState,
   matrixRegistrationSecret,
+  seedPath,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
@@ -2190,13 +2191,36 @@ module('Realm Server', function (hooks) {
         'realm creation JSON is correct',
       );
 
-      let realmJSON = readJSONSync(
-        join(dir.name, 'realm_server_2', owner, realmName, '.realm.json'),
-      );
+      let realmPath = join(dir.name, 'realm_server_2', owner, realmName);
+      let realmJSON = readJSONSync(join(realmPath, '.realm.json'));
       assert.deepEqual(
         realmJSON,
         { name: realmName },
         '.realm.json is correct',
+      );
+      assert.ok(
+        existsSync(join(realmPath, 'index.json')),
+        'seed file index.json exists',
+      );
+      assert.ok(
+        existsSync(join(realmPath, 'hello-world.json')),
+        'seed file hello-world.json exists',
+      );
+      assert.notOk(
+        existsSync(join(realmPath, 'package.json')),
+        'ignored seed file package.json does not exist',
+      );
+      assert.notOk(
+        existsSync(join(realmPath, 'node_modules')),
+        'ignored seed file node_modules/ does not exist',
+      );
+      assert.notOk(
+        existsSync(join(realmPath, '.gitignore')),
+        'ignored seed file .gitignore does not exist',
+      );
+      assert.notOk(
+        existsSync(join(realmPath, 'tsconfig.json')),
+        'ignored seed file tsconfig.json does not exist',
       );
 
       let permissions = await fetchUserPermissions(
@@ -3313,6 +3337,7 @@ module('Realm server serving multiple realms', function (hooks) {
         dbAdapter,
         queue,
         getIndexHTML,
+        seedPath,
         serverURL: new URL('http://127.0.0.1:4446'),
         assetsURL: new URL(`http://example.com/notional-assets-host/`),
       }).listen(parseInt(localBaseRealmURL.port));
