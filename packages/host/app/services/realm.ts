@@ -374,8 +374,7 @@ export default class RealmService extends Service {
     return resource;
   }
 
-  // FIXME this was private
-  getOrCreateRealmResource(realmURL: string): RealmResource {
+  private getOrCreateRealmResource(realmURL: string): RealmResource {
     // this should be the only place we do the untracked read. It needs to be
     // untracked so our `this.realms.set` below will not be an assertion.
     let resource = this.knownRealm(realmURL, false);
