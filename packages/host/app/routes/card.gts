@@ -2,7 +2,6 @@ import Route from '@ember/routing/route';
 import type RouterService from '@ember/routing/router-service';
 import Transition from '@ember/routing/transition';
 import { service } from '@ember/service';
-import { isTesting } from '@embroider/macros';
 
 import { all, task, timeout } from 'ember-concurrency';
 import stringify from 'safe-stable-stringify';
@@ -66,29 +65,16 @@ export default class RenderCard extends Route<Model | null> {
     try {
       await this.loadMatrix.perform();
 
+      let model = null;
+
       if (params.card) {
         let directlyRequestedCardResource = getCard(this, () => params.card);
         await directlyRequestedCardResource.loaded;
 
-        if (!directlyRequestedCardResource?.card) {
-          return null;
-        } else {
-          return directlyRequestedCardResource.card;
+        if (directlyRequestedCardResource?.card) {
+          model = directlyRequestedCardResource.card;
         }
-      }
-
-      console.log(
-        'hostsOwnAssets',
-        hostsOwnAssets,
-        'rootURL',
-        rootURL,
-        'path',
-        path,
-      );
-
-      let model = null;
-
-      if (!hostsOwnAssets) {
+      } else if (!hostsOwnAssets) {
         let externalURL = new URL(document.location.href);
         let pathOnRoot = `${rootURL}${path}`;
         let prospectiveCardURL = new URL(pathOnRoot, externalURL);
@@ -96,9 +82,7 @@ export default class RenderCard extends Route<Model | null> {
         let resource = getCard(this, () => prospectiveCardURL.href);
         await resource.loaded;
 
-        if (!resource.card) {
-          return null;
-        } else {
+        if (resource.card) {
           model = resource.card;
         }
       } else {
@@ -107,53 +91,6 @@ export default class RenderCard extends Route<Model | null> {
         await indexCardResource.loaded;
         model = indexCardResource.card;
       }
-
-      // let externalURL = new URL(document.location.href);
-
-      // let rootURL = ENV.rootURL;
-
-      // let pathOnRoot = `${rootURL}${path}`;
-      // let prospectiveCardURL = new URL(pathOnRoot, externalURL);
-
-      // // FIXME this needs to be fully exercised with trailing / etc, should be like path.join
-
-      // // FIXME use user default realm when logged in
-      // // let defaultRealmURL = this.realm.c.path;
-
-      // let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
-      //   new URL(prospectiveCardURL),
-      // );
-      // let model = null;
-      // if (!isPublicReadableRealm && !this.matrixService.isLoggedIn) {
-      //   return model;
-      // }
-
-      // let url = path
-      //   ? new URL(`/${path}`, prospectiveCardURL)
-      //   : new URL('/', prospectiveCardURL);
-
-      // let cardResource = getCard(this, () => url.href);
-      // await cardResource.loaded;
-      // model = cardResource.card;
-
-      // if (isTesting() && !model) {
-      //   console.log(`could not find ${url} in test mode, using test realm URL`);
-      //   externalURL = new URL('http://localhost:4202/test/');
-
-      //   prospectiveCardURL = externalURL;
-
-      //   if (path != '') {
-      //     prospectiveCardURL.pathname += path;
-      //   }
-
-      //   cardResource = getCard(this, () => prospectiveCardURL.href);
-      //   await cardResource.loaded;
-      //   model = cardResource.card;
-      // }
-
-      // if (!model) {
-      //   throw new Error(`Could not find ${url}`);
-      // }
 
       if (operatorModeEnabled) {
         let operatorModeStateObject = JSON.parse(operatorModeState);
@@ -174,13 +111,6 @@ export default class RenderCard extends Route<Model | null> {
       return model ?? null;
     } catch (e) {
       console.error(e);
-      // FIXME what can replace url.href === defaultRealmURL if Matrix hasn’t yet loaded so realms aren’t known?
-
-      // Previously
-      //         ? 'stack'
-      //   : url.href === defaultRealmURL
-      //   ? 'index'
-      //   : 'card';
 
       (e as any).loadType = params.operatorModeEnabled ? 'stack' : 'card';
       (e as any).operatorModeState = params.operatorModeState;
