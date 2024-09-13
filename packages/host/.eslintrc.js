@@ -46,6 +46,7 @@ module.exports = {
         'no-undef': 'off',
         'ember/no-runloop': 'off',
         'window-mock/mock-window-only': 'error',
+        'window-mock/wrapped-setup-helpers-only': 'error',
       },
     },
     {
@@ -94,6 +95,7 @@ module.exports = {
         'node/no-deprecated-api': 'off',
         'deprecation/deprecation': 'off',
         'window-mock/mock-window-only': 'error',
+        'window-mock/wrapped-setup-helpers-only': 'error',
       },
     },
     // node files

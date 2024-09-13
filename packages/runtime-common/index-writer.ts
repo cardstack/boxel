@@ -227,6 +227,7 @@ export class Batch {
       ...every([
         ['i.realm_url =', param(this.realmURL.href)],
         ['i.type != ', param('error')],
+        ['i.is_deleted != true'],
         realmVersionExpression({ useWorkInProgressIndex: true }),
       ]),
     ] as Expression)) as { total: string }[];

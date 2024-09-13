@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Hello World",
+      "description": "This is a test card instance."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/card-api",
+        "name": "CardDef"
+      }
+    }
+  }
+}
