@@ -5,9 +5,9 @@ import {
   type SynapseInstance,
 } from '../docker/synapse';
 import {
-  startServer as startRealmServer,
-  IsolatedRealmServer,
   appURL,
+  startServer as startRealmServer,
+  type IsolatedRealmServer,
 } from '../helpers/isolated-realm-server';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
 import {
@@ -33,11 +33,10 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     });
     await smtpStart();
     realmServer = await startRealmServer();
-    console.log('=================');
   });
 
   test.afterEach(async () => {
-    realmServer.stop();
+    await realmServer.stop();
     await synapseStop(synapse.synapseId);
     await smtpStop();
   });
