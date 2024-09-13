@@ -423,8 +423,12 @@ class Isolated extends Component<typeof CardsGrid> {
       id: string;
       attributes: { displayName: string; total: number };
     }[];
+    let excludedCardTypeIds = [
+      `${baseRealm.url}card-api/CardDef`,
+      `${baseRealm.url}cards-grid/CardsGrid`,
+    ];
     cardTypeSummaries.forEach((summary) => {
-      if (summary.attributes.displayName === 'Cards Grid') {
+      if (excludedCardTypeIds.includes(summary.id)) {
         return;
       }
       const lastIndex = summary.id.lastIndexOf('/');
