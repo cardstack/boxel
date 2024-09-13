@@ -196,7 +196,6 @@ export default class Login extends Component<Signature> {
       throw e;
     }
     if (auth) {
-      // FIXME is this reversing valid?
       await this.matrixService.start(auth);
       await this.router.refresh();
     } else {

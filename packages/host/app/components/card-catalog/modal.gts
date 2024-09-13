@@ -268,7 +268,6 @@ export default class CardCatalogModal extends Component<Signature> {
   }
 
   fetchAvailableRealms = trackedFunction(this, async () => {
-    // FIXME can this use allRealmsMeta?
     let realmInfos: Record<string, RealmInfo> = Object.fromEntries(
       this.state?.availableRealmUrls.map((url) => [
         url,
