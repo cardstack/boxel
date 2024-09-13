@@ -1,6 +1,6 @@
 import { find, visit, currentURL } from '@ember/test-helpers';
 
-import { module, skip, test } from 'qunit';
+import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
@@ -100,7 +100,7 @@ module('Acceptance | basic tests', function (hooks) {
     assert.dom('[data-test-index-card]').containsText('Hello, world');
   });
 
-  skip('glimmer-scoped-css smoke test', async function (assert) {
+  test('glimmer-scoped-css smoke test', async function (assert) {
     await visit('/');
 
     const cardContainerElement = find('[data-test-boxel-card-container]');
