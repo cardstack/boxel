@@ -73,6 +73,7 @@ export class ImageLayout extends Component<{
         display: block;
       }
       .gallery-item {
+        flex: 0 0 300px;
         width: 300px;
         height: 300px;
         background-color: #eee;
