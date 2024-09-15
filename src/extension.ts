@@ -143,6 +143,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   vscode.window.showInformationMessage(`Boxel - logging in`);
   let realmUri: string;
+  let firstRealm: string;
 
   try {
     const username = vscode.workspace
@@ -159,16 +160,35 @@ export async function activate(context: vscode.ExtensionContext) {
       throw new Error("Realm password not set");
     }
 
+    const matrixClient = await getClient(
+      context,
+      "https://matrix.boxel.ai/",
+      username,
+      password
+    );
+
+    let realmsEventData =
+      (await matrixClient.getAccountDataFromServer(
+        "com.cardstack.boxel.realms"
+      )) || {};
+    console.log("Realms event data:", realmsEventData, typeof realmsEventData);
+    let realms = realmsEventData.realms || [];
+
+    if (realms.length === 0) {
+      throw new Error("No realms found");
+    }
+    firstRealm = realms[0];
+
     const realmClient = await setup(
       context,
       username,
       password,
       "https://matrix.boxel.ai/",
-      "https://app.boxel.ai/experiments/"
+      firstRealm
     );
     const memFs = new MemFS(realmClient);
     vscode.window.showInformationMessage(
-      `Boxel - logged in as ${username} on "https://app.boxel.ai/experiments/"`
+      `Boxel - logged in as ${username} on "${firstRealm}"`
     );
     console.log("Registering file system providers now");
     context.subscriptions.push(
@@ -189,10 +209,10 @@ export async function activate(context: vscode.ExtensionContext) {
   vscode.commands.registerCommand("boxelrealm.createWorkspace", async (_) => {
     console.log(
       "Creating workspace",
-      vscode.Uri.parse(`boxelrealm+https://app.boxel.ai/experiments/`)
+      vscode.Uri.parse(`boxelrealm+${firstRealm}`)
     );
     vscode.workspace.updateWorkspaceFolders(0, 0, {
-      uri: vscode.Uri.parse(`boxelrealm+https://app.boxel.ai/experiments/`),
+      uri: vscode.Uri.parse(`boxelrealm+${firstRealm}`),
       name: "Experiments",
     });
   });
