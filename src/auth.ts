@@ -22,13 +22,18 @@ export interface RealmAuthMatrixClientInterface {
   sendEvent(room: string, type: string, content: any): Promise<any>;
 }
 
+interface SecretStorage {
+  get(key: string): Thenable<string | undefined>;
+  store(key: string, value: string): Thenable<void>;
+}
+
 export class RealmAuthClient {
   private _jwt: string | undefined;
 
   constructor(
     private realmURL: URL,
     private matrixClient: RealmAuthMatrixClientInterface,
-    private fetch: typeof globalThis.fetch
+    private secrets: SecretStorage
   ) {}
 
   get jwt(): string | undefined {
@@ -132,7 +137,7 @@ export class RealmAuthClient {
       "Initiating session request -",
       `${this.realmURL.href}_session`
     );
-    return this.fetch(`${this.realmURL.href}_session`, {
+    return fetch(`${this.realmURL.href}_session`, {
       method: "POST",
       headers: {
         Accept: "application/json",
@@ -144,7 +149,7 @@ export class RealmAuthClient {
   }
 
   private async challengeRequest(challenge: string) {
-    return this.fetch(`${this.realmURL.href}_session`, {
+    return fetch(`${this.realmURL.href}_session`, {
       method: "POST",
       headers: {
         Accept: "application/json",

@@ -5,7 +5,8 @@
 
 import * as path from "path";
 import * as vscode from "vscode";
-import { RealmAuthClient } from "./auth";
+import { RealmAuthClient, RealmAuthMatrixClientInterface } from "./auth";
+import { SecretStorage } from "vscode";
 
 function getUrl(uri: vscode.Uri) {
   let scheme = uri.scheme.split("+")[1];
@@ -55,20 +56,33 @@ export type Entry = File | Directory;
 
 export class MemFS implements vscode.FileSystemProvider {
   root = new Directory("");
-  realmClient: RealmAuthClient;
+  realmClients: Map<string, RealmAuthClient>;
 
-  constructor(realmClient: RealmAuthClient) {
+  constructor(
+    matrixClient: RealmAuthMatrixClientInterface,
+    realms: string[],
+    secrets: SecretStorage
+  ) {
     // we should do logins here?
-    console.log("MemFS constructor", realmClient);
-    this.realmClient = realmClient;
+    console.log("MemFS constructor", realms);
+    this.realmClients = new Map();
+    for (const realm of realms) {
+      this.realmClients.set(
+        realm,
+        new RealmAuthClient(new URL(realm), matrixClient, secrets)
+      );
+    }
   }
 
-  async getJWT() {
-    console.log("Getting JWT", this);
-    if (!this.realmClient) {
-      throw new Error("Realm client not initialized");
+  async getJWT(url: string) {
+    console.log("Getting JWT for ", url);
+    // Find the realm client that prefixes the url
+    for (const [realmUrl, realmClient] of this.realmClients.entries()) {
+      if (url.startsWith(realmUrl.toString())) {
+        return await realmClient.getJWT();
+      }
     }
-    return await this.realmClient.getJWT();
+    throw new Error("No realm client found for " + url);
   }
 
   async stat(uri: vscode.Uri): Promise<vscode.FileStat> {
@@ -117,7 +131,7 @@ export class MemFS implements vscode.FileSystemProvider {
 
     let headers: Record<string, string> = {
       "Content-Type": "text/plain;charset=UTF-8",
-      Authorization: `${await this.getJWT()}`,
+      Authorization: `${await this.getJWT(apiUrl)}`,
     };
 
     // Add special header for .gts files
@@ -242,7 +256,7 @@ export class MemFS implements vscode.FileSystemProvider {
       const response = await fetch(apiUrl, {
         headers: {
           Accept: "application/vnd.api+json",
-          Authorization: `${await this.getJWT()}`,
+          Authorization: `${await this.getJWT(apiUrl)}`,
         },
       });
       console.log("Response!");
@@ -283,7 +297,7 @@ export class MemFS implements vscode.FileSystemProvider {
     try {
       let headers = {
         Accept: "application/vnd.api+json",
-        Authorization: `${await this.getJWT()}`,
+        Authorization: `${await this.getJWT(apiUrl)}`,
       };
 
       // Add special header for .gts files

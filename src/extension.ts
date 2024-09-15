@@ -118,26 +118,6 @@ async function getClient(
   }
 }
 
-async function setup(
-  context: vscode.ExtensionContext,
-  username: string,
-  password: string,
-  matrixUrl: string,
-  realmUrl: string
-) {
-  console.log(
-    "Setting up file system provider",
-    username,
-    password,
-    matrixUrl,
-    realmUrl
-  );
-  let client = await getClient(context, matrixUrl, username, password);
-  let realmClient = new RealmAuthClient(new URL(realmUrl), client, fetch);
-  await realmClient.getJWT();
-  return realmClient;
-}
-
 export async function activate(context: vscode.ExtensionContext) {
   vscode.commands.registerCommand("boxelrealm.login", async (_) => {});
 
@@ -178,14 +158,7 @@ export async function activate(context: vscode.ExtensionContext) {
   firstRealm = realms[0];
   vscode.window.showInformationMessage(`Boxel - using realm ${firstRealm}`);
   try {
-    const realmClient = await setup(
-      context,
-      username,
-      password,
-      "https://matrix.boxel.ai/",
-      firstRealm
-    );
-    const memFs = new MemFS(realmClient);
+    const memFs = new MemFS(matrixClient, [firstRealm], context.secrets);
     vscode.window.showInformationMessage(
       `Boxel - logged in as ${username} on "${firstRealm}"`
     );
