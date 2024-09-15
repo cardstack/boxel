@@ -142,43 +142,42 @@ export async function activate(context: vscode.ExtensionContext) {
   vscode.commands.registerCommand("boxelrealm.login", async (_) => {});
 
   vscode.window.showInformationMessage(`Boxel - logging in`);
-  let realmUri: string;
   let firstRealm: string;
 
+  const username = vscode.workspace
+    .getConfiguration("boxelrealm")
+    .get<string>("realmUsername");
+  if (!username) {
+    throw new Error("Realm username not set");
+  }
+
+  const password = vscode.workspace
+    .getConfiguration("boxelrealm")
+    .get<string>("realmPassword");
+  if (!password) {
+    throw new Error("Realm password not set");
+  }
+  const matrixClient = await getClient(
+    context,
+    "https://matrix.boxel.ai/",
+    username,
+    password
+  );
+  vscode.window.showInformationMessage(`Boxel - logged in to matrix`);
+
+  let realmsEventData =
+    (await matrixClient.getAccountDataFromServer(
+      "com.cardstack.boxel.realms"
+    )) || {};
+  console.log("Realms event data:", realmsEventData, typeof realmsEventData);
+  let realms = realmsEventData.realms || [];
+  vscode.window.showInformationMessage(`Boxel - found ${realms.length} realms`);
+  if (realms.length === 0) {
+    throw new Error("No realms found");
+  }
+  firstRealm = realms[0];
+  vscode.window.showInformationMessage(`Boxel - using realm ${firstRealm}`);
   try {
-    const username = vscode.workspace
-      .getConfiguration("boxelrealm")
-      .get<string>("realmUsername");
-    if (!username) {
-      throw new Error("Realm username not set");
-    }
-
-    const password = vscode.workspace
-      .getConfiguration("boxelrealm")
-      .get<string>("realmPassword");
-    if (!password) {
-      throw new Error("Realm password not set");
-    }
-
-    const matrixClient = await getClient(
-      context,
-      "https://matrix.boxel.ai/",
-      username,
-      password
-    );
-
-    let realmsEventData =
-      (await matrixClient.getAccountDataFromServer(
-        "com.cardstack.boxel.realms"
-      )) || {};
-    console.log("Realms event data:", realmsEventData, typeof realmsEventData);
-    let realms = realmsEventData.realms || [];
-
-    if (realms.length === 0) {
-      throw new Error("No realms found");
-    }
-    firstRealm = realms[0];
-
     const realmClient = await setup(
       context,
       username,
