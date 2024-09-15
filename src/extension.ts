@@ -44,7 +44,9 @@ interface AuthEntry {
 }
 
 type AuthStore = {
-  [username: string]: AuthEntry;
+  [matrixUrl: string]: {
+    [username: string]: AuthEntry;
+  };
 };
 
 async function getClient(
@@ -53,6 +55,7 @@ async function getClient(
   username: string,
   password: string
 ) {
+  // Try and get a known access token for this user on this matrix instance
   let storedAuth = await context.secrets.get("auth");
   let auth: AuthStore = {};
   if (storedAuth) {
@@ -62,9 +65,15 @@ async function getClient(
       console.log("Failed to parse stored auth, logging in again");
     }
   }
-  if (auth[username]) {
+  // If we've never signed into this matrix instance before, create an entry for it
+  if (!auth[matrixUrl]) {
+    auth[matrixUrl] = {};
+  }
+  // If we've already signed into this matrix instance before, try and use the stored credentials
+  // this avoids creating lots of logins and devices, and hitting rate limits
+  if (auth[matrixUrl][username]) {
     try {
-      let { access_token, user_id, device_id } = auth[username];
+      let { access_token, user_id, device_id } = auth[matrixUrl][username];
       return createClient({
         baseUrl: matrixUrl,
         accessToken: access_token,
@@ -82,20 +91,24 @@ async function getClient(
     let client = createClient({
       baseUrl: matrixUrl,
     });
-    auth[username] = await client.loginWithPassword(username, password);
+    auth[matrixUrl][username] = await client.loginWithPassword(
+      username,
+      password
+    );
     // Update the auth store with the new login details
     context.secrets.store("auth", JSON.stringify(auth));
     return client;
   } catch (error) {
     console.log("Login with password failed, trying login with email");
-    auth[username] = await loginWithEmail(matrixUrl, username, password);
+    let login = await loginWithEmail(matrixUrl, username, password);
+    auth[matrixUrl][username] = login;
     // Update the auth store with the new login details
     context.secrets.store("auth", JSON.stringify(auth));
     let {
       access_token: accessToken,
       user_id: userId,
       device_id: deviceId,
-    } = auth[username];
+    } = auth[matrixUrl][username];
     return createClient({
       baseUrl: matrixUrl,
       accessToken,
@@ -126,18 +139,12 @@ async function setup(
 }
 
 export async function activate(context: vscode.ExtensionContext) {
+  vscode.commands.registerCommand("boxelrealm.login", async (_) => {});
+
   vscode.window.showInformationMessage(`Boxel - logging in`);
   let realmUri: string;
 
   try {
-    let realmUrl = vscode.workspace
-      .getConfiguration("boxelrealm")
-      .get<string>("realmUrl");
-    if (!realmUrl) {
-      throw new Error("Realm URL not set");
-    }
-    realmUri = "boxelrealm+" + realmUrl;
-
     const username = vscode.workspace
       .getConfiguration("boxelrealm")
       .get<string>("realmUsername");
@@ -152,24 +159,18 @@ export async function activate(context: vscode.ExtensionContext) {
       throw new Error("Realm password not set");
     }
 
-    const matrixUrl = vscode.workspace
-      .getConfiguration("boxelrealm")
-      .get<string>("matrixUrl");
-    if (!matrixUrl) {
-      throw new Error("Matrix URL not set");
-    }
-
     const realmClient = await setup(
       context,
       username,
       password,
-      matrixUrl,
-      realmUrl
+      "https://matrix.boxel.ai/",
+      "https://app.boxel.ai/experiments/"
     );
     const memFs = new MemFS(realmClient);
     vscode.window.showInformationMessage(
-      `Boxel - logged in as ${username} on ${realmUrl}`
+      `Boxel - logged in as ${username} on "https://app.boxel.ai/experiments/"`
     );
+    console.log("Registering file system providers now");
     context.subscriptions.push(
       vscode.workspace.registerFileSystemProvider("boxelrealm+http", memFs, {
         isCaseSensitive: true,
@@ -185,12 +186,14 @@ export async function activate(context: vscode.ExtensionContext) {
     throw error;
   }
 
-  context.subscriptions.push(
-    vscode.commands.registerCommand("boxelrealm.workspaceInit", async (_) => {
-      vscode.workspace.updateWorkspaceFolders(0, 0, {
-        uri: vscode.Uri.parse(realmUri),
-        name: "Realm",
-      });
-    })
-  );
+  vscode.commands.registerCommand("boxelrealm.createWorkspace", async (_) => {
+    console.log(
+      "Creating workspace",
+      vscode.Uri.parse(`boxelrealm+https://app.boxel.ai/experiments/`)
+    );
+    vscode.workspace.updateWorkspaceFolders(0, 0, {
+      uri: vscode.Uri.parse(`boxelrealm+https://app.boxel.ai/experiments/`),
+      name: "Experiments",
+    });
+  });
 }

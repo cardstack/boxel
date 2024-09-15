@@ -23,29 +23,47 @@
   "contributes": {
     "commands": [
       {
-        "command": "boxelrealm.workspaceInit",
-        "title": "Setup Workspace",
+        "command": "boxelrealm.login",
+        "title": "Login",
+        "category": "boxelrealm"
+      },
+      {
+        "command": "boxelrealm.createWorkspace",
+        "title": "Create Workspace",
         "category": "boxelrealm"
       }
     ],
     "menus": {
       "commandPalette": [
         {
-          "command": "boxelrealm.workspaceInit",
-          "when": "workbenchState != workspace"
+          "command": "boxelrealm.login"
         }
       ]
     },
-    "configuration": [
-      {
-        "title": "Realm URL",
-        "properties": {
-          "boxelrealm.realmUrl": {
-            "type": "string",
-            "description": "Realm URL"
-          }
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "boxel-realm-explorer",
+          "title": "BoxelRealm",
+          "icon": "resources/boxel.svg"
         }
-      },
+      ]
+    },
+    "views": {
+      "boxel-realm-explorer": [
+        {
+          "id": "boxel-realm-explorer-sub",
+          "name": "BoxelRealm"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "boxel-realm-explorer-sub",
+        "contents": "[Login](command:boxelrealm.login)\n[Create Workspace](command:boxelrealm.createWorkspace)"
+      }
+    ],
+    "configuration": [
       {
         "title": "Realm Password",
         "properties": {
@@ -63,15 +81,6 @@
             "description": "Realm Username"
           }
         }
-      },
-      {
-        "title": "Matrix URL",
-        "properties": {
-          "boxelrealm.matrixUrl": {
-            "type": "string",
-            "description": "Matrix URL"
-          }
-        }
       }
     ]
   },
@@ -81,9 +90,10 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
+    "vscode:package": "npx vsce package",
     "compile": "tsc --skipLibCheck -p ./",
     "lint": "eslint \"src/**/*.ts\"",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc --skipLibCheck  -watch -p ./"
   },
   "dependencies": {
     "matrix-js-sdk": "^31.0.0"
