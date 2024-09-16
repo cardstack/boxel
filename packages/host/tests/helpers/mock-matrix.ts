@@ -533,7 +533,7 @@ class MockClient implements ExtendedClient {
   }
 
   logout(_stopClient?: boolean | undefined): Promise<{}> {
-    this.loggedInAs = undefined;
+    this.clientOpts.userId = undefined;
     return Promise.resolve({});
   }
 
