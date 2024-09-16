@@ -73,7 +73,7 @@ class TableView extends GlimmerComponent<{ Args: { instances: CardDef[] } }> {
         {{/each}}
       </tbody>
     </table>
-    <style>
+    <style scoped>
       .styled-table {
         width: 100%;
         margin-bottom: 40px;
@@ -182,7 +182,7 @@ class DefaultTabTemplate extends GlimmerComponent<{
         </div>
       {{/if}}
     </div>
-    <style>
+    <style scoped>
       .app-card-content {
         width: 100%;
         max-width: 70rem;

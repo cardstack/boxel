@@ -292,7 +292,7 @@ class DashboardTab extends GlimmerComponent<TabComponentSignature> {
         @context={{@context}}
       />
     </div>
-    <style>
+    <style scoped>
       .dashboard {
         display: grid;
         grid-template-columns: auto minmax(400px, 1fr) auto;
@@ -403,7 +403,7 @@ class DashboardTab extends GlimmerComponent<TabComponentSignature> {
 }
 
 interface DefaultTabSignature extends TabComponentSignature {
-  cardRef: ResolvedCodeRef;
+  cardRef: CodeRef;
 }
 
 class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
@@ -416,21 +416,14 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
       >
         <:loading>Loading...</:loading>
         <:response as |cards|>
-          <CardsGrid
-            class='grid-cards'
-            @cards={{cards}}
-            @context={{@context}}
-          />
+          <CardsGrid @cards={{cards}} @context={{@context}} />
         </:response>
       </@context.prerenderedCardSearchComponent>
     </div>
-    <style>
+    <style scoped>
       .tab-content {
         padding: var(--boxel-sp);
         background-color: #f7f7f7;
-      }
-      .grid-cards {
-        padding: var(--boxel-sp);
       }
     </style>
   </template>
@@ -464,33 +457,39 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
 
 class RequirementsTab extends GlimmerComponent<TabComponentSignature> {
   <template>
-    {{#if @context.actions.createCard}}
-      <Button
-        @kind='text-only'
-        @loading={{this.isCreateCardRunning}}
-        @disabled={{this.isCreateCardRunning}}
-        class='create-new-button'
-        {{on 'click' this.createNew}}
-      >
-        {{#unless this.isCreateCardRunning}}
-          <IconPlus
-            class='plus-icon'
-            width='15'
-            height='15'
-            role='presentation'
-          />
-        {{/unless}}
-        Create new requirement
-      </Button>
-    {{/if}}
-    <DefaultTabTemplate
-      @cardRef={{this.cardRef}}
-      @appCardId={{@appCardId}}
-      @currentRealm={{@currentRealm}}
-      @realms={{@realms}}
-      @context={{@context}}
-    />
-    <style>
+    <div class='tab-content'>
+      {{#if @context.actions.createCard}}
+        <Button
+          @kind='text-only'
+          @loading={{this.isCreateCardRunning}}
+          @disabled={{this.isCreateCardRunning}}
+          class='create-new-button'
+          {{on 'click' this.createNew}}
+        >
+          {{#unless this.isCreateCardRunning}}
+            <IconPlus
+              class='plus-icon'
+              width='15'
+              height='15'
+              role='presentation'
+            />
+          {{/unless}}
+          Create new requirement
+        </Button>
+      {{/if}}
+      <DefaultTabTemplate
+        @cardRef={{this.cardRef}}
+        @appCardId={{@appCardId}}
+        @currentRealm={{@currentRealm}}
+        @realms={{@realms}}
+        @context={{@context}}
+      />
+    </div>
+    <style scoped>
+      .tab-content {
+        padding: var(--boxel-sp);
+        background-color: #f7f7f7;
+      }
       .create-new-button {
         --boxel-button-loading-icon-size: 15px;
         --boxel-button-text-color: var(--boxel-dark);
