@@ -14,7 +14,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import { and, bool, cn } from '@cardstack/boxel-ui/helpers';
-import { baseRealm, type Query } from '@cardstack/runtime-common';
+import { baseRealm, type CodeRef } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -35,6 +35,13 @@ import {
   LooseSingleCardDocument,
   isSingleCardDocument,
 } from '@cardstack/runtime-common';
+
+export interface TabComponentSignature {
+  appCardId: string;
+  currentRealm: URL;
+  realms: string[];
+  context?: CardContext;
+}
 
 export class Tab extends FieldDef {
   @field displayName = contains(StringField);
@@ -134,35 +141,34 @@ class TableView extends GlimmerComponent<{ Args: { instances: CardDef[] } }> {
 
 class DefaultTabTemplate extends GlimmerComponent<{
   Args: {
-    model?: Partial<AppCard>;
+    appCardId: string;
+    currentRealm: URL;
+    realms: string[];
     context?: CardContext;
+    module?: string;
     tabs?: Tab[];
     setTabs?: (tabs: Tab[]) => void;
     activeTab?: Tab;
+    activeTabRef?: CodeRef;
     setActiveTab?: (index: number) => void;
   };
 }> {
   <template>
     <div class='app-card-content'>
-      {{#if this.errorMessage}}
-        <p class='error'>{{this.errorMessage}}</p>
-      {{/if}}
-      <QueryContainer
+      <@context.prerenderedCardSearchComponent
         @query={{this.query}}
-        @realms={{this.realms}}
-        @context={{@context}}
-        as |cards|
+        @format='fitted'
+        @realms={{@realms}}
       >
-        {{#if cards.length}}
+        <:loading>Loading...</:loading>
+        <:response as |cards|>
           {{#if @activeTab.isTable}}
             <TableView @instances={{cards}} />
           {{else}}
             <CardsGrid @cards={{cards}} @context={{@context}} />
           {{/if}}
-        {{else}}
-          <p>No cards available</p>
-        {{/if}}
-      </QueryContainer>
+        </:response>
+      </@context.prerenderedCardSearchComponent>
       {{#if (and (bool @context.actions.createCard) (bool @activeTab.ref))}}
         <div class='add-card-button'>
           <Tooltip @placement='left' @offset={{6}}>
@@ -196,8 +202,6 @@ class DefaultTabTemplate extends GlimmerComponent<{
     </style>
   </template>
 
-  @tracked errorMessage = '';
-
   constructor(owner: Owner, args: any) {
     super(owner, args);
     if (!this.args.tabs?.length) {
@@ -207,20 +211,16 @@ class DefaultTabTemplate extends GlimmerComponent<{
   }
 
   async setupInitialTabs() {
-    this.errorMessage = '';
-    if (!this.args.model?.moduleId) {
-      this.errorMessage = 'Error: ModuleId is not available.';
-      return;
+    if (!this.args.module) {
+      throw new Error('ModuleId is not available.');
     }
     let loader: Loader = (import.meta as any).loader;
     let module;
     try {
-      module = await loader.import(this.args.model.moduleId);
+      module = await loader.import(this.args.module);
     } catch (e) {
       console.error(e);
-      this.errorMessage =
-        e instanceof Error ? `Error: ${e.message}` : 'An error occurred';
-      return;
+      throw new Error(e instanceof Error ? e.message : 'An error occurred');
     }
     let exportedCards = Object.entries(module).filter(
       ([_, declaration]) =>
@@ -237,7 +237,7 @@ class DefaultTabTemplate extends GlimmerComponent<{
           tabId: name,
           ref: {
             name,
-            module: this.args.model.moduleId,
+            module: this.args.module,
           },
           isTable: false,
         }),
@@ -249,14 +249,11 @@ class DefaultTabTemplate extends GlimmerComponent<{
   }
 
   get query() {
-    if (!this.activeTabRef) {
-      return;
-    }
     return {
       filter: {
         every: [
-          { type: this.activeTabRef },
-          { not: { eq: { id: this.args.model?.id! } } },
+          { type: this.args.activeTabRef },
+          { not: { eq: { id: this.args.appCardId } } },
         ],
       },
       // sorting by title so that we can maintain stability in
@@ -274,21 +271,6 @@ class DefaultTabTemplate extends GlimmerComponent<{
     };
   }
 
-  get currentRealm() {
-    return this.args.model?.[realmURL];
-  }
-
-  get realms(): string[] {
-    return this.args.model?.[realmURL] ? [this.args.model[realmURL].href] : [];
-  }
-
-  get activeTabRef() {
-    if (!this.args.activeTab?.ref || !this.currentRealm) {
-      return;
-    }
-    return codeRefWithAbsoluteURL(this.args.activeTab.ref, this.currentRealm);
-  }
-
   @action createNew(value: unknown) {
     let cardDoc = isSingleCardDocument(value) ? value : undefined;
     this.createCard.perform(cardDoc);
@@ -300,19 +282,18 @@ class DefaultTabTemplate extends GlimmerComponent<{
 
   private createCard = restartableTask(
     async (doc: LooseSingleCardDocument | undefined = undefined) => {
-      if (!this.activeTabRef) {
+      if (!this.args.activeTabRef) {
         return;
       }
       try {
         await this.args.context?.actions?.createCard?.(
-          this.activeTabRef,
-          this.currentRealm,
+          this.args.activeTabRef,
+          this.args.currentRealm,
           { doc },
         );
       } catch (e) {
         console.error(e);
-        this.errorMessage =
-          e instanceof Error ? `Error: ${e.message}` : 'An error occurred';
+        throw new Error(e instanceof Error ? e.message : 'An error occurred');
       }
     },
   );
@@ -334,17 +315,28 @@ class AppCardIsolated extends Component<typeof AppCard> {
           {{/if}}
         </:headerIcon>
       </TabbedHeader>
-      {{#if this.activeTab.component}}
-        <this.activeTab.component />
-      {{else}}
-        <DefaultTabTemplate
-          @tabs={{this.tabs}}
-          @activeTab={{this.activeTab}}
-          @model={{this.args.model}}
-          @context={{@context}}
-          @setActiveTab={{this.setActiveTab}}
-          @setTabs={{this.setTabs}}
-        />
+      {{#if this.currentRealm}}
+        {{#if this.activeTab.component}}
+          <this.activeTab.component
+            @appCardId={{this.args.model.id}}
+            @currentRealm={{this.currentRealm}}
+            @realms={{this.realms}}
+            @context={{@context}}
+          />
+        {{else if this.args.model.id}}
+          <DefaultTabTemplate
+            @appCardId={{this.args.model.id}}
+            @currentRealm={{this.currentRealm}}
+            @realms={{this.realms}}
+            @context={{@context}}
+            @tabs={{this.tabs}}
+            @activeTab={{this.activeTab}}
+            @module={{this.args.model.moduleId}}
+            @setActiveTab={{this.setActiveTab}}
+            @activeTabRef={{this.activeTabRef}}
+            @setTabs={{this.setTabs}}
+          />
+        {{/if}}
       {{/if}}
     </section>
     <style scoped>
@@ -363,7 +355,6 @@ class AppCardIsolated extends Component<typeof AppCard> {
 
   @tracked tabs = this.args.model.tabs;
   @tracked activeTabIndex = 0;
-  @tracked errorMessage = '';
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -382,8 +373,23 @@ class AppCardIsolated extends Component<typeof AppCard> {
     );
   }
 
+  get currentRealm() {
+    return this.args.model?.[realmURL];
+  }
+
+  get realms(): string[] {
+    return this.args.model?.[realmURL] ? [this.args.model[realmURL].href] : [];
+  }
+
   get activeTab() {
     return this.tabs?.[this.activeTabIndex];
+  }
+
+  get activeTabRef() {
+    if (!this.activeTab?.ref || !this.currentRealm) {
+      return;
+    }
+    return codeRefWithAbsoluteURL(this.activeTab.ref, this.currentRealm);
   }
 
   setTabs(tabs: Tab[]) {
@@ -409,34 +415,6 @@ export class AppCard extends CardDef {
   static isolated = AppCardIsolated;
 }
 
-export class QueryContainer extends GlimmerComponent<{
-  Args: {
-    query: Query;
-    realms: string[];
-    context: CardContext;
-  };
-}> {
-  <template>
-    {{#let
-      (component @context.prerenderedCardSearchComponent)
-      as |PrerenderedCardSearch|
-    }}
-      <PrerenderedCardSearch
-        @query={{@query}}
-        @format='fitted'
-        @realms={{@realms}}
-      >
-        <:loading>
-          Loading...
-        </:loading>
-        <:response as |cards|>
-          {{yield cards}}
-        </:response>
-      </PrerenderedCardSearch>
-    {{/let}}
-  </template>
-}
-
 export class CardsGrid extends GlimmerComponent<{
   Args: {
     cards: CardDef[];
@@ -446,26 +424,30 @@ export class CardsGrid extends GlimmerComponent<{
   Element: HTMLElement;
 }> {
   <template>
-    <ul class={{cn 'cards-grid' list-format=@isListFormat}} ...attributes>
-      {{#each @cards as |card|}}
-        <li
-          class='cards-grid-item'
-          {{@context.cardComponentModifier
-            cardId=card.url
-            format='data'
-            fieldType=undefined
-            fieldName=undefined
-          }}
-          data-test-cards-grid-item={{removeFileExtension card.url}}
-          {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
-          data-cards-grid-item={{removeFileExtension card.url}}
-        >
-          <CardContainer class='card' @displayBoundaries={{true}}>
-            {{card.component}}
-          </CardContainer>
-        </li>
-      {{/each}}
-    </ul>
+    {{#if @cards.length}}
+      <ul class={{cn 'cards-grid' list-format=@isListFormat}} ...attributes>
+        {{#each @cards as |card|}}
+          <li
+            class='cards-grid-item'
+            {{@context.cardComponentModifier
+              cardId=card.url
+              format='data'
+              fieldType=undefined
+              fieldName=undefined
+            }}
+            data-test-cards-grid-item={{removeFileExtension card.url}}
+            {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
+            data-cards-grid-item={{removeFileExtension card.url}}
+          >
+            <CardContainer class='card' @displayBoundaries={{true}}>
+              {{card.component}}
+            </CardContainer>
+          </li>
+        {{/each}}
+      </ul>
+    {{else}}
+      <p>No cards available</p>
+    {{/if}}
     <style scoped>
       .cards-grid {
         --grid-card-width: 10.25rem; /* 164px */

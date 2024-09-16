@@ -4,9 +4,7 @@ import {
   FieldContainer,
   BoxelInput,
   Button,
-  TabbedHeader,
 } from '@cardstack/boxel-ui/components';
-import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -16,11 +14,18 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import {
   baseRealm,
+  isSingleCardDocument,
   type CodeRef,
   type LooseSingleCardDocument,
   type Query,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import { AppCard, Tab, CardsGrid, QueryContainer } from './app-card';
+import {
+  AppCard,
+  CardsGrid,
+  Tab,
+  type TabComponentSignature,
+} from './app-card';
 
 class HowToSidebar extends GlimmerComponent {
   <template>
@@ -114,18 +119,25 @@ class CardListSidebar extends GlimmerComponent<{
       <header class='sidebar-header'>
         <h3 class='sidebar-title'>{{@title}}</h3>
       </header>
-      <QueryContainer
-        @query={{@query}}
-        @realms={{@realms}}
-        @context={{@context}}
-        as |cards|
-      >
-        <CardsGrid
-          @cards={{@cards}}
-          @context={{@context}}
-          @isListFormat={{true}}
-        />
-      </QueryContainer>
+      {{#let
+        (component @context.prerenderedCardSearchComponent)
+        as |PrerenderedCardSearch|
+      }}
+        <PrerenderedCardSearch
+          @query={{@query}}
+          @format='fitted'
+          @realms={{@realms}}
+        >
+          <:loading>Loading...</:loading>
+          <:response as |cards|>
+            <CardsGrid
+              @cards={{cards}}
+              @context={{@context}}
+              @isListFormat={{true}}
+            />
+          </:response>
+        </PrerenderedCardSearch>
+      {{/let}}
     </aside>
     <style scoped>
       .sidebar {
@@ -255,9 +267,7 @@ class PromptContainer extends GlimmerComponent<{
   </template>
 }
 
-class DashboardTab extends GlimmerComponent<{
-  Args: { context: CardContext; realms: string[]; currentRealm: URL };
-}> {
+class DashboardTab extends GlimmerComponent<TabComponentSignature> {
   <template>
     <div class='dashboard'>
       <HowToSidebar />
@@ -278,7 +288,7 @@ class DashboardTab extends GlimmerComponent<{
       <CardListSidebar
         @title='Browse Sample Apps'
         @query={{this.query}}
-        @realms={{this.realms}}
+        @realms={{@realms}}
         @context={{@context}}
       />
     </div>
@@ -287,6 +297,7 @@ class DashboardTab extends GlimmerComponent<{
         display: grid;
         grid-template-columns: auto minmax(400px, 1fr) auto;
         gap: var(--boxel-sp-xxl);
+        padding: var(--boxel-sp);
       }
       .section-header {
         display: flex;
@@ -306,22 +317,31 @@ class DashboardTab extends GlimmerComponent<{
     domain: '',
     customRequirements: '',
   };
+  appCardRef = {
+    name: 'AppCard',
+    module: `${this.args.currentRealm?.href}app-card`,
+  };
+  prdCardRef = {
+    name: 'ProductRequirementDocument',
+    module: `${this.args.currentRealm?.href}product-requirement-document`,
+  };
   @tracked errorMessage = '';
   @tracked prompt: Prompt = this.promptReset;
+
   @action setPrompt(key: string, value: string) {
     this.prompt = { ...this.prompt, [key]: value };
   }
+
   @action generateProductRequirementsDoc() {
-    let ref = this.tabs[1].ref;
     let appTitle = `${this.prompt.domain} ${this.prompt.appType}`;
     let requirements = this.prompt.customRequirements
       ? `that has these features: ${this.prompt.customRequirements}`
       : '';
     let prompt = `I want to make a ${this.prompt.appType} tailored for a ${this.prompt.domain} ${requirements}`;
-    this.generateRequirements.perform(ref, {
+    this.generateRequirements.perform(this.prdCardRef, {
       data: {
         attributes: { appTitle, prompt },
-        meta: { adoptsFrom: ref },
+        meta: { adoptsFrom: this.prdCardRef },
       },
     });
   }
@@ -335,7 +355,7 @@ class DashboardTab extends GlimmerComponent<{
           this.errorMessage = 'Error: Missing required card actions';
           return;
         }
-        let card = await createCard(ref, this.currentRealm, {
+        let card = await createCard(ref, this.args.currentRealm, {
           doc,
           cardModeAfterCreation: 'isolated',
         });
@@ -349,7 +369,7 @@ class DashboardTab extends GlimmerComponent<{
           'Generate product requirements document',
         );
         this.prompt = this.promptReset;
-        this.setActiveTab(1);
+        // this.args.setActiveTab?.(1);
       } catch (e) {
         console.error(e);
         this.errorMessage =
@@ -362,13 +382,8 @@ class DashboardTab extends GlimmerComponent<{
     return {
       filter: {
         every: [
-          {
-            type: {
-              name: 'AppCard',
-              module: `${this.currentRealm?.href}app-card`,
-            },
-          },
-          { not: { eq: { id: this.args.model?.id! } } },
+          { type: this.appCardRef },
+          { not: { eq: { id: this.args.appCardId } } },
         ],
       },
       // sorting by title so that we can maintain stability in
@@ -387,47 +402,95 @@ class DashboardTab extends GlimmerComponent<{
   }
 }
 
-class DefaultTab extends GlimmerComponent<{ Args: { context: CardContext } }> {
+interface DefaultTabSignature extends TabComponentSignature {
+  cardRef: ResolvedCodeRef;
+}
+
+class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
   <template>
     <div class='tab-content'>
-      {{#if @context.actions.createCard}}
-        <Button
-          @kind='text-only'
-          @loading={{this.isCreateCardRunning}}
-          @disabled={{this.isCreateCardRunning}}
-          class='create-new-button'
-          {{on 'click' this.createNew}}
-        >
-          {{#unless this.isCreateCardRunning}}
-            <IconPlus
-              class='plus-icon'
-              width='15'
-              height='15'
-              role='presentation'
-            />
-          {{/unless}}
-          Create new requirement
-        </Button>
-      {{/if}}
-      <QueryContainer
-        @query={{@query}}
+      <@context.prerenderedCardSearchComponent
+        @query={{this.query}}
+        @format='fitted'
         @realms={{@realms}}
-        @context={{@context}}
-        as |cards|
       >
-        <CardsGrid class='grid-cards' @cards={{@cards}} @context={{@context}} />
-      </QueryContainer>
+        <:loading>Loading...</:loading>
+        <:response as |cards|>
+          <CardsGrid
+            class='grid-cards'
+            @cards={{cards}}
+            @context={{@context}}
+          />
+        </:response>
+      </@context.prerenderedCardSearchComponent>
     </div>
     <style>
-      .app-content {
+      .tab-content {
         padding: var(--boxel-sp);
         background-color: #f7f7f7;
       }
       .grid-cards {
         padding: var(--boxel-sp);
       }
+    </style>
+  </template>
 
-      /* Create New button */
+  get query() {
+    if (!this.args.cardRef) {
+      return;
+    }
+    return {
+      filter: {
+        every: [
+          { type: this.args.cardRef },
+          { not: { eq: { id: this.args.appCardId } } },
+        ],
+      },
+      // sorting by title so that we can maintain stability in
+      // the ordering of the search results (server sorts results
+      // by order indexed by default)
+      sort: [
+        {
+          on: {
+            module: `${baseRealm.url}card-api`,
+            name: 'CardDef',
+          },
+          by: 'title',
+        },
+      ],
+    };
+  }
+}
+
+class RequirementsTab extends GlimmerComponent<TabComponentSignature> {
+  <template>
+    {{#if @context.actions.createCard}}
+      <Button
+        @kind='text-only'
+        @loading={{this.isCreateCardRunning}}
+        @disabled={{this.isCreateCardRunning}}
+        class='create-new-button'
+        {{on 'click' this.createNew}}
+      >
+        {{#unless this.isCreateCardRunning}}
+          <IconPlus
+            class='plus-icon'
+            width='15'
+            height='15'
+            role='presentation'
+          />
+        {{/unless}}
+        Create new requirement
+      </Button>
+    {{/if}}
+    <DefaultTabTemplate
+      @cardRef={{this.cardRef}}
+      @appCardId={{@appCardId}}
+      @currentRealm={{@currentRealm}}
+      @realms={{@realms}}
+      @context={{@context}}
+    />
+    <style>
       .create-new-button {
         --boxel-button-loading-icon-size: 15px;
         --boxel-button-text-color: var(--boxel-dark);
@@ -451,6 +514,55 @@ class DefaultTab extends GlimmerComponent<{ Args: { context: CardContext } }> {
       }
     </style>
   </template>
+
+  cardRef = {
+    name: 'ProductRequirementDocument',
+    module: `${this.args.currentRealm?.href}product-requirement-document`,
+  };
+
+  get isCreateCardRunning() {
+    return this.createCard.isRunning;
+  }
+
+  @action createNew(value: unknown) {
+    let cardDoc = isSingleCardDocument(value) ? value : undefined;
+    this.createCard.perform(cardDoc);
+  }
+
+  private createCard = restartableTask(
+    async (doc: LooseSingleCardDocument | undefined = undefined) => {
+      if (!this.cardRef) {
+        return;
+      }
+      try {
+        await this.args.context?.actions?.createCard?.(
+          this.cardRef,
+          this.args.currentRealm,
+          { doc },
+        );
+      } catch (e) {
+        console.error(e);
+        throw new Error(e instanceof Error ? e.message : 'An error occurred');
+      }
+    },
+  );
+}
+
+class YourAppsTab extends GlimmerComponent<TabComponentSignature> {
+  <template>
+    <DefaultTabTemplate
+      @cardRef={{this.cardRef}}
+      @appCardId={{@appCardId}}
+      @currentRealm={{@currentRealm}}
+      @realms={{@realms}}
+      @context={{@context}}
+    />
+  </template>
+
+  cardRef = {
+    name: 'AppCard',
+    module: `${this.args.currentRealm?.href}app-card`,
+  };
 }
 
 class Isolated extends AppCard.isolated {
@@ -463,30 +575,14 @@ class Isolated extends AppCard.isolated {
     new Tab({
       displayName: 'Requirements',
       tabId: 'requirements',
-      ref: {
-        name: 'ProductRequirementDocument',
-        module: `${this.currentRealm?.href}product-requirement-document`,
-      },
-      component: DefaultTab,
+      component: RequirementsTab,
     }),
     new Tab({
       displayName: 'Your Apps',
       tabId: 'your-apps',
-      ref: {
-        name: 'AppCard',
-        module: `${this.currentRealm?.href}app-card`,
-      },
-      component: DefaultTab,
+      component: YourAppsTab,
     }),
   ];
-
-  get currentRealm() {
-    return this.args.model?.[realmURL];
-  }
-
-  get realms(): string[] {
-    return this.args.model?.[realmURL] ? [this.args.model[realmURL].href] : [];
-  }
 }
 
 export class AiAppGenerator extends AppCard {
