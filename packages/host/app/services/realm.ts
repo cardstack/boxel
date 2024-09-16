@@ -400,6 +400,10 @@ export default class RealmService extends Service {
       let response = await this.loaderService.loader.fetch(url, {
         method: 'HEAD',
       });
+      if (this.knownRealm(url)) {
+        // could have already been discovered while we were queued
+        return;
+      }
       let realmURL = response.headers.get('x-boxel-realm-url');
       if (realmURL) {
         this.getOrCreateRealmResource(realmURL);
