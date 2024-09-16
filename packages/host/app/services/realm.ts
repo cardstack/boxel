@@ -209,6 +209,8 @@ export default class RealmService extends Service {
   private realms: Map<string, RealmResource> = this.restoreSessions();
   private currentKnownRealms = new TrackedSet<string>();
 
+  @tracked private identifyRealmTracker = 0;
+
   async ensureRealmMeta(realmURL: string): Promise<void> {
     let resource = this.getOrCreateRealmResource(realmURL);
     await resource.fetchMeta();
@@ -224,8 +226,7 @@ export default class RealmService extends Service {
     if (!resource) {
       this.identifyRealm.perform(url);
 
-      // entangle with the task so we know when it's finished
-      this.identifyRealm.isIdle;
+      this.identifyRealmTracker;
 
       return {
         name: 'Unknown Realm',
@@ -404,13 +405,10 @@ export default class RealmService extends Service {
       let response = await this.loaderService.loader.fetch(url, {
         method: 'HEAD',
       });
-      if (this.knownRealm(url)) {
-        // could have already been discovered while we were queued
-        return;
-      }
       let realmURL = response.headers.get('x-boxel-realm-url');
       if (realmURL) {
         this.getOrCreateRealmResource(realmURL);
+        this.identifyRealmTracker = 0;
       }
     },
   );
