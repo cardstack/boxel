@@ -113,6 +113,7 @@ export class Router {
     return this;
   }
   patch(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
+    console.log('patch', path, mimeType);
     this.setRoute(mimeType, 'PATCH', path, handler);
     return this;
   }
