@@ -220,9 +220,13 @@ export default class RealmService extends Service {
   }
 
   info = (url: string): RealmInfo => {
-    let resource = this.knownRealm(url);
+    let resource = this.knownRealm(url, false);
     if (!resource) {
       this.identifyRealm.perform(url);
+
+      // entangle with the task so we know when it's finished
+      this.identifyRealm.isIdle;
+
       return {
         name: 'Unknown Realm',
         backgroundURL: null,
