@@ -14,13 +14,14 @@ import MatrixService from '@cardstack/host/services/matrix-service';
 import OperatorModeStateService, {
   SerializedState as OperatorModeSerializedState,
 } from '@cardstack/host/services/operator-mode-state-service';
+import Realm from '@cardstack/host/services/realm';
 import RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
 import type CardService from '../services/card-service';
 
-const { ownRealmURL, loginMessageTimeoutMs } = ENV;
+const { hostsOwnAssets, loginMessageTimeoutMs, rootURL } = ENV;
 
 export type Model = CardDef | null;
 
@@ -47,35 +48,48 @@ export default class RenderCard extends Route<Model | null> {
   @service declare router: RouterService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare matrixService: MatrixService;
+  @service declare realm: Realm;
   @service declare realmInfoService: RealmInfoService;
 
   hasLoadMatrixBeenExecuted = false;
 
   async model(params: {
+    card?: string;
     path: string;
     operatorModeState: string;
     operatorModeEnabled: boolean;
   }): Promise<Model> {
     let { path, operatorModeState, operatorModeEnabled } = params;
     path = path || '';
-    let url = path
-      ? new URL(`/${path}`, ownRealmURL)
-      : new URL('./', ownRealmURL);
 
     try {
       await this.loadMatrix.perform();
-      let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
-        new URL(ownRealmURL),
-      );
+
       let model = null;
-      if (!isPublicReadableRealm && !this.matrixService.isLoggedIn) {
-        return model;
-      }
-      let cardResource = getCard(this, () => url.href);
-      await cardResource.loaded;
-      model = cardResource.card;
-      if (!model) {
-        throw new Error(`Could not find ${url}`);
+
+      if (params.card) {
+        let directlyRequestedCardResource = getCard(this, () => params.card);
+        await directlyRequestedCardResource.loaded;
+
+        if (directlyRequestedCardResource?.card) {
+          model = directlyRequestedCardResource.card;
+        }
+      } else if (!hostsOwnAssets) {
+        let externalURL = new URL(document.location.href);
+        let pathOnRoot = `${rootURL}${path}`;
+        let prospectiveCardURL = new URL(pathOnRoot, externalURL);
+
+        let resource = getCard(this, () => prospectiveCardURL.href);
+        await resource.loaded;
+
+        if (resource.card) {
+          model = resource.card;
+        }
+      } else {
+        let indexCardURL = new URL(this.realm.defaultReadableRealm.path);
+        let indexCardResource = getCard(this, () => indexCardURL.href);
+        await indexCardResource.loaded;
+        model = indexCardResource.card;
       }
 
       if (operatorModeEnabled) {
@@ -97,11 +111,8 @@ export default class RenderCard extends Route<Model | null> {
       return model ?? null;
     } catch (e) {
       console.error(e);
-      (e as any).loadType = params.operatorModeEnabled
-        ? 'stack'
-        : url.href === ownRealmURL
-        ? 'index'
-        : 'card';
+
+      (e as any).loadType = params.operatorModeEnabled ? 'stack' : 'card';
       (e as any).operatorModeState = params.operatorModeState;
       throw e;
     }
@@ -112,7 +123,7 @@ export default class RenderCard extends Route<Model | null> {
     // so users will be redirected to operator mode.
     // We can update the codes below after we have a clear idea on how to implement authentication in guest mode.
     let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
-      new URL(ownRealmURL),
+      new URL(this.realm.defaultReadableRealm.path),
     );
     if (
       !isPublicReadableRealm &&
@@ -120,8 +131,8 @@ export default class RenderCard extends Route<Model | null> {
     ) {
       let path = transition.to?.params?.path ?? '';
       let url = path
-        ? new URL(`/${path}`, ownRealmURL)
-        : new URL('./', ownRealmURL);
+        ? new URL(`/${path}`, this.realm.defaultReadableRealm.path)
+        : new URL('./', this.realm.defaultReadableRealm.path);
       await this.router.replaceWith(`card`, {
         queryParams: {
           operatorModeEnabled: 'true',

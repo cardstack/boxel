@@ -114,6 +114,15 @@ class ServerState {
   #rooms: Map<string, { events: MatrixEvent[]; receipts: MatrixEvent[] }> =
     new Map();
   #listeners: ((event: MatrixEvent) => void)[] = [];
+  #displayName: string;
+
+  constructor(opts: { displayName: string }) {
+    this.#displayName = opts.displayName;
+  }
+
+  get displayName() {
+    return this.#displayName;
+  }
 
   onEvent(callback: (event: MatrixEvent) => void) {
     this.addListener(callback);
@@ -301,6 +310,14 @@ class ServerState {
   eventId(): string {
     return `mock_event_${this.#eventCounter++}`;
   }
+
+  setDisplayName(name: string) {
+    if (name === 'MAKEMECRASH') {
+      throw new Error('BOOM!');
+    } else {
+      this.#displayName = name;
+    }
+  }
 }
 
 // without this, using a class as an interface forces you to have the same
@@ -308,9 +325,13 @@ class ServerState {
 type PublicAPI<T> = { [K in keyof T]: T[K] };
 
 class MockSDK implements PublicAPI<ExtendedMatrixSDK> {
-  serverState = new ServerState();
+  serverState: ServerState;
 
-  constructor(private sdkOpts: Config) {}
+  constructor(private sdkOpts: Config) {
+    this.serverState = new ServerState({
+      displayName: sdkOpts.displayName ?? '',
+    });
+  }
 
   createClient(clientOpts: MatrixSDK.ICreateClientOpts) {
     return new MockClient(this, this.serverState, clientOpts, this.sdkOpts);
@@ -353,6 +374,10 @@ class MockClient implements ExtendedClient {
     private sdkOpts: Config,
   ) {}
 
+  get loggedInAs() {
+    return this.clientOpts.userId;
+  }
+
   async createRealmSession(realmURL: URL): Promise<string> {
     let secret = "shhh! it's a secret";
     let nowInSeconds = unixTime(Date.now());
@@ -361,7 +386,7 @@ class MockClient implements ExtendedClient {
     let payload = {
       iat: nowInSeconds,
       exp: expires,
-      user: this.sdkOpts.loggedInAs,
+      user: this.loggedInAs,
       realm: realmURL.href,
       // adding a nonce to the test token so that we can tell the difference
       // between different tokens created in the same second
@@ -394,7 +419,7 @@ class MockClient implements ExtendedClient {
   }
 
   get credentials(): { userId: string | null } {
-    return { userId: this.sdkOpts.loggedInAs ?? null };
+    return { userId: this.loggedInAs ?? null };
   }
 
   deleteThreePid(
@@ -463,7 +488,7 @@ class MockClient implements ExtendedClient {
     this.serverState.addReceiptEvent(
       event.getRoomId()!,
       eventId,
-      this.sdkOpts.loggedInAs!,
+      this.loggedInAs!,
       receiptType ?? ('m.read' as MatrixSDK.ReceiptType),
     );
 
@@ -508,15 +533,17 @@ class MockClient implements ExtendedClient {
   }
 
   logout(_stopClient?: boolean | undefined): Promise<{}> {
-    throw new Error('Method not implemented.');
+    this.clientOpts.userId = undefined;
+    return Promise.resolve({});
   }
 
   roomState(_roomId: string): Promise<MatrixSDK.IStateEventWithRoomId[]> {
     throw new Error('Method not implemented.');
   }
 
-  setDisplayName(_name: string): Promise<{}> {
-    throw new Error('Method not implemented.');
+  setDisplayName(name: string): Promise<{}> {
+    this.serverState.setDisplayName(name);
+    return Promise.resolve({});
   }
 
   allRoomMessages(
@@ -574,7 +601,7 @@ class MockClient implements ExtendedClient {
       status: null,
     };
     let matrixEvent = this.serverState.addRoomEvent(
-      this.sdkOpts.loggedInAs || 'unknown_user',
+      this.loggedInAs || 'unknown_user',
       roomEvent,
     );
     return matrixEvent;
@@ -698,7 +725,7 @@ class MockClient implements ExtendedClient {
   async createRoom({
     name,
   }: MatrixSDK.ICreateRoomOpts): Promise<{ room_id: string }> {
-    let sender = this.sdkOpts.loggedInAs || 'unknown_user';
+    let sender = this.loggedInAs || 'unknown_user';
     let roomId = this.serverState.createRoom(sender, name);
 
     return { room_id: roomId };
@@ -725,15 +752,15 @@ class MockClient implements ExtendedClient {
     displayname?: string | undefined;
   }> {
     return {
-      displayname: this.sdkOpts.displayName ?? 'Mock User',
+      displayname: this.serverState.displayName,
     };
   }
 
   isLoggedIn() {
-    return Boolean(this.sdkOpts.loggedInAs);
+    return Boolean(this.loggedInAs);
   }
 
   getUserId(): string | null {
-    return this.sdkOpts.loggedInAs ?? null;
+    return this.loggedInAs ?? null;
   }
 }

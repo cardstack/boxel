@@ -23,7 +23,7 @@ export default class WithKnownRealmsLoaded extends Component<Signature> {
   }
 
   private loadRealmsTask = task(async () => {
-    let realmURLs = this.cardService.realmURLs;
+    let realmURLs = this.cardService.unresolvedRealmURLs;
     await Promise.all(
       realmURLs.map(
         async (realmURL) => await this.realm.ensureRealmMeta(realmURL),

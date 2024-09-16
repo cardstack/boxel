@@ -30,7 +30,7 @@ export default class CardQueryResults extends Component<Signature> {
   @service declare cardService: CardService;
 
   get realms() {
-    return this.cardService.realmURLs;
+    return this.cardService.unresolvedRealmURLs;
   }
   get query() {
     let { searchKey } = this.args;

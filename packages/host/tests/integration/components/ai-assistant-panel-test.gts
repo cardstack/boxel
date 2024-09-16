@@ -26,6 +26,7 @@ import {
   updateRoomEvent,
 } from '@cardstack/host/lib/matrix-handlers';
 
+import CardService from '@cardstack/host/services/card-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { CardDef } from '../../../../experiments-realm/re-export';
@@ -69,7 +70,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
-  setupMatrixServiceMock(hooks, { autostart: true });
+  setupMatrixServiceMock(hooks);
 
   let noop = () => {};
 
@@ -79,6 +80,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
       'service:matrixService',
     ) as MockMatrixService;
     matrixService.cardAPI = cardApi;
+
+    (this.owner.lookup('service:card-service') as CardService).setRealms([
+      testRealmURL,
+    ]);
+    await matrixService.start();
+
     operatorModeStateService = this.owner.lookup(
       'service:operator-mode-state-service',
     ) as OperatorModeStateService;
