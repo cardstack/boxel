@@ -1331,7 +1331,10 @@ export class Realm {
         merge(card, { data: { meta: { realmURL: this.url } } }),
         url,
       );
-      console.log('fileSerialization', fileSerialization);
+      console.log(
+        'fileSerialization',
+        JSON.stringify(fileSerialization, null, 2),
+      );
     } catch (err: any) {
       console.log('err', err);
       if (err.message.startsWith('field validation error')) {
@@ -1340,48 +1343,57 @@ export class Realm {
         return systemError(requestContext, err.message, err);
       }
     }
-    console.log('writing file');
-    let { lastModified } = await this.write(
+    console.log(
+      'writing file',
       path,
-      JSON.stringify(fileSerialization, null, 2),
       request.headers.get('X-Boxel-Client-Request-Id'),
     );
-    console.log('lastModified', lastModified);
-    let instanceURL = url.href.replace(/\.json$/, '');
-    console.log('instanceURL', instanceURL);
-    let entry = await this.#realmIndexQueryEngine.cardDocument(
-      new URL(instanceURL),
-      {
-        loadLinks: true,
-      },
-    );
-    console.log('entry', entry);
-    if (!entry || entry?.type === 'error') {
-      console.log('systemError');
-      return systemError(
-        requestContext,
-        `Unable to index card: can't find patched instance in index`,
-        entry ? CardError.fromSerializableError(entry.error) : undefined,
+    try {
+      let { lastModified } = await this.write(
+        path,
+        JSON.stringify(fileSerialization, null, 2),
+        request.headers.get('X-Boxel-Client-Request-Id'),
       );
-    }
-    let doc: SingleCardDocument = merge({}, entry.doc, {
-      data: {
-        links: { self: instanceURL },
-        meta: { lastModified },
-      },
-    });
-    console.log('doc', doc);
-    console.log('createResponse next', JSON.stringify(doc, null, 2));
-    return createResponse({
-      body: JSON.stringify(doc, null, 2),
-      init: {
-        headers: {
-          'content-type': SupportedMimeType.CardJson,
-          ...lastModifiedHeader(doc),
+      console.log('lastModified', lastModified);
+      let instanceURL = url.href.replace(/\.json$/, '');
+      console.log('instanceURL', instanceURL);
+      let entry = await this.#realmIndexQueryEngine.cardDocument(
+        new URL(instanceURL),
+        {
+          loadLinks: true,
         },
-      },
-      requestContext,
-    });
+      );
+      console.log('entry', entry);
+      if (!entry || entry?.type === 'error') {
+        console.log('systemError');
+        return systemError(
+          requestContext,
+          `Unable to index card: can't find patched instance in index`,
+          entry ? CardError.fromSerializableError(entry.error) : undefined,
+        );
+      }
+      let doc: SingleCardDocument = merge({}, entry.doc, {
+        data: {
+          links: { self: instanceURL },
+          meta: { lastModified },
+        },
+      });
+      console.log('doc', doc);
+      console.log('createResponse next', JSON.stringify(doc, null, 2));
+      return createResponse({
+        body: JSON.stringify(doc, null, 2),
+        init: {
+          headers: {
+            'content-type': SupportedMimeType.CardJson,
+            ...lastModifiedHeader(doc),
+          },
+        },
+        requestContext,
+      });
+    } catch (err: any) {
+      console.log('systemError', err);
+      return systemError(requestContext, err.message, err);
+    }
   }
 
   private async getCard(
