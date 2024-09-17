@@ -124,9 +124,11 @@ class RealmResource {
   logout(): void {
     this.token = undefined;
     this.loginTask.cancelAll();
+    this.tokenRefresher.cancelAll();
     this.loggingIn = undefined;
     this.fetchMetaTask.cancelAll();
     this.fetchingMeta = undefined;
+    window.localStorage.removeItem(sessionLocalStorageKey);
   }
 
   private fetchingMeta: Promise<void> | undefined;

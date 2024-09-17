@@ -715,7 +715,7 @@ export default class RegisterUser extends Component<Signature> {
     // If access_token and device_id are present, RegisterResponse matches LoginResponse
     // except for the optional well_known field
     if (auth.access_token && auth.device_id) {
-      await this.matrixService.startAndSetDisplayName(
+      await this.matrixService.startAndCreateRealm(
         auth as LoginResponse,
         this.state.name,
       );

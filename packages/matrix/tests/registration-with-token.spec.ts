@@ -102,6 +102,14 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     // assert that the registration mode state is cleared properly
     await logout(page);
     await assertLoggedOut(page);
+
+    // let auth = await loginUser(`@user1:localhost`, 'mypassword');
+    // let realms = await getAccountData(
+    //   auth.userId,
+    //   auth.accessToken,
+    //   'com.cardstack.boxel.realms',
+    // );
+    // debugger;
   });
 
   test(`it can resend email validation message`, async ({ page }) => {

@@ -15,14 +15,22 @@ export interface RealmAuthMatrixClientInterface {
   sendEvent(room: string, type: string, content: any): Promise<any>;
 }
 
+interface Options {
+  authWithRealmServer?: true;
+}
+
 export class RealmAuthClient {
   private _jwt: string | undefined;
+  private isRealmServerAuth: boolean;
 
   constructor(
     private realmURL: URL,
     private matrixClient: RealmAuthMatrixClientInterface,
     private fetch: typeof globalThis.fetch,
-  ) {}
+    options?: Options,
+  ) {
+    this.isRealmServerAuth = Boolean(options?.authWithRealmServer);
+  }
 
   get jwt(): string | undefined {
     return this._jwt;
@@ -49,6 +57,10 @@ export class RealmAuthClient {
     }
   }
 
+  private get sessionEndpoint() {
+    return this.isRealmServerAuth ? '_server-session' : '_session';
+  }
+
   private async createRealmSession() {
     if (!this.matrixClient.isLoggedIn()) {
       throw new Error(
@@ -60,9 +72,9 @@ export class RealmAuthClient {
 
     if (initialResponse.status !== 401) {
       throw new Error(
-        `unexpected response from POST ${this.realmURL.href}_session: ${
-          initialResponse.status
-        } - ${await initialResponse.text()}`,
+        `unexpected response from POST ${this.realmURL.href}${
+          this.sessionEndpoint
+        }: ${initialResponse.status} - ${await initialResponse.text()}`,
       );
     }
 
@@ -102,7 +114,7 @@ export class RealmAuthClient {
     if (!userId) {
       throw new Error('userId is undefined');
     }
-    return this.fetch(`${this.realmURL.href}_session`, {
+    return this.fetch(`${this.realmURL.href}${this.sessionEndpoint}`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
@@ -114,7 +126,7 @@ export class RealmAuthClient {
   }
 
   private async challengeRequest(challenge: string) {
-    return this.fetch(`${this.realmURL.href}_session`, {
+    return this.fetch(`${this.realmURL.href}${this.sessionEndpoint}`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',

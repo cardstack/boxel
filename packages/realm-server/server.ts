@@ -261,9 +261,14 @@ export class RealmServer {
     );
 
     return async (ctxt: Koa.Context, _next: Koa.Next) => {
-      let request = await fetchRequestFromContext(ctxt);
-      let response = await matrixBackendAuthentication.createSession(request);
-      await setContextResponse(ctxt, response);
+      try {
+        let request = await fetchRequestFromContext(ctxt);
+        let response = await matrixBackendAuthentication.createSession(request);
+        await setContextResponse(ctxt, response);
+      } catch (e: any) {
+        console.error(`Exception while creating a session on realm server`, e);
+        await sendResponseForSystemError(ctxt, `${e.message}: at ${e.stack}`);
+      }
     };
   }
 

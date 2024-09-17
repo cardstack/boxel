@@ -413,6 +413,23 @@ export async function updateAccountData(
   );
 }
 
+export async function getAccountData<T>(
+  userId: string,
+  accessToken: string,
+  type: string,
+): Promise<T> {
+  let response = await fetch(
+    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/user/${userId}/account_data/${type}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+  let json = await response.json();
+  return json as T;
+}
+
 export async function getJoinedRooms(accessToken: string) {
   let response = await fetch(
     `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/joined_rooms`,

@@ -72,6 +72,7 @@ import type LoaderService from './loader-service';
 
 import type MatrixSDKLoader from './matrix-sdk-loader';
 import type { ExtendedClient, ExtendedMatrixSDK } from './matrix-sdk-loader';
+import type RealmServerService from './realm-server';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
@@ -92,6 +93,7 @@ export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare realm: RealmService;
+  @service declare realmServer: RealmServerService;
   @service private declare matrixSdkLoader: MatrixSDKLoader;
 
   @service declare router: RouterService;
@@ -221,6 +223,7 @@ export default class MatrixService extends Service {
       await this.flushTimeline;
       clearAuth();
       this.realm.logout();
+      this.realmServer.logout();
       this.unbindEventListeners();
       await this.client.logout(true);
     } catch (e) {
@@ -230,9 +233,10 @@ export default class MatrixService extends Service {
     }
   }
 
-  async startAndSetDisplayName(auth: LoginResponse, displayName: string) {
+  async startAndCreateRealm(auth: LoginResponse, displayName: string) {
     this.start(auth);
     this.setDisplayName(displayName);
+    await this.realmServer.createRealm('personal');
     await this.router.refresh();
   }
 
@@ -292,6 +296,7 @@ export default class MatrixService extends Service {
       deviceId,
     });
     if (this.isLoggedIn) {
+      this.realmServer.setClient(this.client);
       saveAuth(auth);
       this.bindEventListeners();
 
