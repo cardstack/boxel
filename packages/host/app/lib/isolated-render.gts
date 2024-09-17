@@ -67,6 +67,7 @@ export function render(
       vm.commitCacheGroup();
     }
 
+    console.log('render arguments', C, element, owner, format);
     let error = new CardError(
       `Encountered error rendering HTML for card: ${err.message}`,
     );
