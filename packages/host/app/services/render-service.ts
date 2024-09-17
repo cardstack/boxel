@@ -97,6 +97,7 @@ export default class RenderService extends Service {
             realmPath,
           });
         } else {
+          console.log('throw err', component, element, this.owner, format);
           throw err;
         }
       }
