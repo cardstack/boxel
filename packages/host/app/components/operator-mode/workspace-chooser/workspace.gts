@@ -40,7 +40,7 @@ export default class Workspace extends Component<Signature> {
         </div>
       </div>
       <div class='info'>
-        <span class='name'>{{this.name}}</span>
+        <span class='name' data-test-workspace-name>{{this.name}}</span>
         <span class='type'>Personal</span>
       </div>
     </button>

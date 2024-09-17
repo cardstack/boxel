@@ -218,7 +218,7 @@ export default class RealmService extends Service {
     if (!resource) {
       this.identifyRealm.perform(url);
       return {
-        name: 'Unknown Realm',
+        name: 'Unknown Workspace',
         backgroundURL: null,
         iconURL: null,
       };
@@ -227,7 +227,7 @@ export default class RealmService extends Service {
     if (!resource.meta) {
       resource.fetchMeta();
       return {
-        name: 'Unknown Realm',
+        name: 'Unknown Workspace',
         backgroundURL: null,
         iconURL: null,
       };
