@@ -724,9 +724,13 @@ export class Realm {
   // technically inside the realm (as the realm includes the trailing '/'),
   // so issue a redirect in those scenarios.
   private rootRealmRedirect(request: Request) {
+    console.log('rootRealmRedirect', request.url);
     let url = new URL(request.url);
+    console.log('url', url);
     let urlWithoutQueryParams = url.protocol + '//' + url.host + url.pathname;
+    console.log('urlWithoutQueryParams', urlWithoutQueryParams);
     if (`${urlWithoutQueryParams}/` === this.url) {
+      console.log('sending redirect');
       return new Response(null, {
         status: 302,
         headers: {
@@ -736,6 +740,7 @@ export class Realm {
         },
       });
     }
+    console.log('no redirect');
     return undefined;
   }
 
