@@ -652,8 +652,9 @@ export class Realm {
       return redirectResponse;
     }
 
+    console.log('creating request context');
     let requestContext = await this.createRequestContext(); // Cache realm permissions for the duration of the request so that we don't have to fetch them multiple times
-
+    console.log('requestContext', requestContext);
     try {
       // local requests are allowed to query the realm as the index is being built up
       console.log('isLocal', isLocal);
