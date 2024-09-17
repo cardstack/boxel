@@ -22,6 +22,7 @@ import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import flattenDeep from 'lodash/flattenDeep';
 
 let log = logger('main');
+const SEED_REALM_USERNAME = 'seed_realm';
 
 if (process.env.REALM_SENTRY_DSN) {
   log.info('Setting up Sentry.');
@@ -189,6 +190,7 @@ let dist: URL = new URL(distURL);
 
   await startWorker();
 
+  let seedPath: string | undefined;
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
 
@@ -198,6 +200,9 @@ let dist: URL = new URL(distURL);
     if (username.length === 0) {
       console.error(`missing username for realm ${url}`);
       process.exit(-1);
+    }
+    if (username === SEED_REALM_USERNAME) {
+      seedPath = resolve(String(path));
     }
 
     let realmAdapter = new NodeAdapter(resolve(String(path)));
@@ -239,11 +244,24 @@ let dist: URL = new URL(distURL);
     assetsURL: dist,
     getIndexHTML,
     serverURL: new URL(serverURL),
+    seedPath,
     matrixRegistrationSecret: MATRIX_REGISTRATION_SHARED_SECRET,
     matrixRegistrationSecretFile,
   });
 
-  server.listen(port);
+  let httpServer = server.listen(port);
+  process.on('message', (message) => {
+    if (message === 'stop') {
+      console.log(`stopping realm server on port ${port}...`);
+      httpServer.closeAllConnections();
+      httpServer.close(() => {
+        console.log(`realm server on port ${port} has stopped`);
+        if (process.send) {
+          process.send('stopped');
+        }
+      });
+    }
+  });
 
   await server.start();
 
@@ -259,6 +277,10 @@ let dist: URL = new URL(distURL);
     }
   }
   log.info(`Using host url: '${dist}' for card pre-rendering`);
+
+  if (process.send) {
+    process.send('ready');
+  }
 })().catch((e: any) => {
   Sentry.captureException(e);
   console.error(

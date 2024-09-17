@@ -72,17 +72,18 @@ Live reloads are not available in this mode, however, if you use start the serve
 
 Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. Here's what is spun up with `start:all`:
 
-| Port  | Description                                               | Running `start:all` | Running `start:base` |
-| ----- | --------------------------------------------------------- | ------------------- | -------------------- |
-| :4201 | `/base` base realm                                        | ✅                  | ✅                   |
-| :4201 | `/experiments` experiments realm                          | ✅                  | 🚫                   |
-| :4201 | `/seed` seed realm                                        | ✅                  | 🚫                   |
-| :4202 | `/test` host test realm, `/node-test` node test realm     | ✅                  | 🚫                   |
-| :4203 | `root (/)` base realm                                     | ✅                  | 🚫                   |
-| :4204 | `root (/)` experiments realm                              | ✅                  | 🚫                   |
-| :5001 | Mail user interface for viewing emails sent to local SMTP | ✅                  | 🚫                   |
-| :5435 | Postgres DB                                               | ✅                  | 🚫                   |
-| :8008 | Matrix synapse server                                     | ✅                  | 🚫                   |
+| Port  | Description                                                   | Running `start:all` | Running `start:base` |
+| ----- | ------------------------------------------------------------- | ------------------- | -------------------- |
+| :4201 | `/base` base realm                                            | ✅                  | ✅                   |
+| :4201 | `/experiments` experiments realm                              | ✅                  | 🚫                   |
+| :4201 | `/seed` seed realm                                            | ✅                  | 🚫                   |
+| :4202 | `/test` host test realm, `/node-test` node test realm         | ✅                  | 🚫                   |
+| :4203 | `root (/)` base realm                                         | ✅                  | 🚫                   |
+| :4204 | `root (/)` experiments realm                                  | ✅                  | 🚫                   |
+| :4205 | `/test` realm for matrix client tests (playwright controlled) | 🚫                  | 🚫                   |
+| :5001 | Mail user interface for viewing emails sent to local SMTP     | ✅                  | 🚫                   |
+| :5435 | Postgres DB                                                   | ✅                  | 🚫                   |
+| :8008 | Matrix synapse server                                         | ✅                  | 🚫                   |
 
 #### Using `start:development`
 

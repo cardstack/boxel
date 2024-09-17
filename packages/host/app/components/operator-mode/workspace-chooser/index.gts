@@ -17,12 +17,11 @@ export default class WorkspaceChooser extends Component<Signature> {
     <div class='workspace-chooser' data-test-workspace-chooser>
       <span class='workspace-chooser__title'>Your Workspaces</span>
       <div class='workspace-list'>
-        {{#each this.cardService.realmURLs as |realmURL|}}
-          {{!-- <li class='workspace' data-test-workspace>{{realmURL}}</li> --}}
+        {{#each this.cardService.userRealms as |realmURL|}}
           <Workspace @realmURL={{realmURL}} />
         {{/each}}
       </div>
-      {{! TODO: [CS-7031] Implement list workspaces that user has access to }}
+      {{! TODO: [CS-7199] Include "Community Catalogs" if there are catalogs to show }}
       <span class='workspace-chooser__title'>Community Catalogs</span>
     </div>
     <style scoped>

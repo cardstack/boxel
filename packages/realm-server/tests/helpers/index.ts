@@ -47,7 +47,10 @@ export const secretSeed = `shhh! it's a secret`;
 export const matrixRegistrationSecret: string =
   getSynapseConfig()!.registration_shared_secret; // as long as synapse has been started at least once, this will always exist
 
-let basePath = resolve(join(__dirname, '..', '..', '..', 'base'));
+export const seedPath = resolve(
+  join(__dirname, '..', '..', '..', 'seed-realm'),
+);
+const basePath = resolve(join(__dirname, '..', '..', '..', 'base'));
 
 let manager = new RunnerOptionsManager();
 let fastbootState:
@@ -366,9 +369,11 @@ export async function runTestRealmServer({
     dbAdapter,
     queue,
     getIndexHTML,
+    seedPath,
     serverURL: new URL(realmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
     onRealmStart: (realm) => privateNetwork.mount(realm.maybeHandle),
+    onRealmCreate: (realm) => privateNetwork.mount(realm.maybeHandle),
   });
   let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
   await testRealmServer.start();
@@ -376,7 +381,6 @@ export async function runTestRealmServer({
     testRealm,
     testRealmServer,
     testRealmHttpServer,
-    workerVirtualNetwork: privateNetwork,
   };
 }
 

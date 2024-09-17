@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import supertest, { Test, SuperTest } from 'supertest';
 import { join, resolve } from 'path';
 import { Server } from 'http';
-import { dirSync, setGracefulCleanup, DirResult } from 'tmp';
+import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { validate as uuidValidate } from 'uuid';
 import {
   copySync,
@@ -29,7 +29,6 @@ import {
   baseCardRef,
   type Queue,
   type LooseSingleCardDocument,
-  type VirtualNetwork,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
 import { stringify } from 'qs';
@@ -49,6 +48,7 @@ import {
   closeServer,
   getFastbootState,
   matrixRegistrationSecret,
+  seedPath,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
@@ -2103,7 +2103,6 @@ module('Realm Server', function (hooks) {
     let testRealmHttpServer2: Server;
     let testRealmServer2: RealmServer;
     let testRealm2: Realm;
-    let workerVirtualNetwork: VirtualNetwork;
     let dbAdapter: PgAdapter;
     let queue: Queue;
     let request2: SuperTest<Test>;
@@ -2125,7 +2124,6 @@ module('Realm Server', function (hooks) {
         testRealm: testRealm2,
         testRealmServer: testRealmServer2,
         testRealmHttpServer: testRealmHttpServer2,
-        workerVirtualNetwork,
       } = await runTestRealmServer({
         virtualNetwork,
         testRealmDir,
@@ -2152,203 +2150,308 @@ module('Realm Server', function (hooks) {
       },
     });
 
-    // TODO this test will move to an HTTP API test with various permissions
-    // configurations after we implement the HTTP API for creating a realm
-    test('can call RealmServer.createRealm()', async function (assert) {
-      // we randomize the realm name so that we can isolate matrix test
-      // state--there is no "delete user" matrix API
+    test('POST /_create-realm', async function (assert) {
+      // we randomize the realm and owner names so that we can isolate matrix
+      // test state--there is no "delete user" matrix API
       let realmName = `test-realm-${uuidv4()}`;
-      let realm = await testRealmServer2.createRealm(
-        '@mango:boxel.ai',
-        realmName,
-      );
-      // the test worker needs a special privileged network that has the interior
-      // Realm.maybeHandle mounted--this prevents the test worker from having to
-      // authenticate with itself when talking to the realm whose credentials its
-      // using
-      workerVirtualNetwork.mount(realm.maybeHandle);
-      await realm.start();
+      let owner = 'mango';
+      let ownerUserId = '@mango:boxel.ai';
+      let response = await request2
+        .post('/_create-realm')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .set(
+          'Authorization',
+          `Bearer ${testRealmServer2.createJWT(ownerUserId)}`,
+        )
+        .send(
+          JSON.stringify({
+            data: {
+              type: 'realm',
+              attributes: {
+                name: realmName,
+              },
+            },
+          }),
+        );
 
-      let realmJSON = readJSONSync(
-        join(dir.name, 'realm_server_2', 'mango', realmName, '.realm.json'),
+      assert.strictEqual(response.status, 201, 'HTTP 201 status');
+      let json = response.body;
+      assert.deepEqual(
+        json,
+        {
+          data: {
+            type: 'realm',
+            id: `${testRealm2URL.origin}/${owner}/${realmName}/`,
+            attributes: {
+              name: realmName,
+            },
+          },
+        },
+        'realm creation JSON is correct',
       );
+
+      let realmPath = join(dir.name, 'realm_server_2', owner, realmName);
+      let realmJSON = readJSONSync(join(realmPath, '.realm.json'));
       assert.deepEqual(
         realmJSON,
         { name: realmName },
         '.realm.json is correct',
       );
+      assert.ok(
+        existsSync(join(realmPath, 'index.json')),
+        'seed file index.json exists',
+      );
+      assert.ok(
+        existsSync(join(realmPath, 'hello-world.json')),
+        'seed file hello-world.json exists',
+      );
+      assert.notOk(
+        existsSync(join(realmPath, 'package.json')),
+        'ignored seed file package.json does not exist',
+      );
+      assert.notOk(
+        existsSync(join(realmPath, 'node_modules')),
+        'ignored seed file node_modules/ does not exist',
+      );
+      assert.notOk(
+        existsSync(join(realmPath, '.gitignore')),
+        'ignored seed file .gitignore does not exist',
+      );
+      assert.notOk(
+        existsSync(join(realmPath, 'tsconfig.json')),
+        'ignored seed file tsconfig.json does not exist',
+      );
 
       let permissions = await fetchUserPermissions(
         dbAdapter,
-        new URL(realm.url),
+        new URL(json.data.id),
       );
       assert.deepEqual(permissions, {
-        '@mango:boxel.ai': ['read', 'write', 'realm-owner'],
+        [ownerUserId]: ['read', 'write', 'realm-owner'],
       });
 
-      // owner can create an instance
-      let response = await request2
-        .post(`/mango/${realmName}/`)
-        .send({
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Test Card',
-            },
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
-                name: 'CardDef',
-              },
-            },
-          },
-        })
-        .set('Accept', 'application/vnd.card+json')
-        .set(
-          'Authorization',
-          `Bearer ${createJWT(realm, '@mango:boxel.ai', [
-            'read',
-            'write',
-            'realm-owner',
-          ])}`,
-        );
-
-      assert.strictEqual(response.status, 201, 'HTTP 201 status');
-      let doc = response.body as SingleCardDocument;
-
-      // owner can get an instance
-      response = await request2
-        .get(new URL(doc.data.id).pathname)
-        .set('Accept', 'application/vnd.card+json')
-        .set(
-          'Authorization',
-          `Bearer ${createJWT(realm, '@mango:boxel.ai', [
-            'read',
-            'write',
-            'realm-owner',
-          ])}`,
-        );
-
-      assert.strictEqual(response.status, 200, 'HTTP 200 status');
-      doc = response.body as SingleCardDocument;
-      assert.strictEqual(
-        doc.data.attributes?.title,
-        'Test Card',
-        'instance data is correct',
-      );
-
-      // owner can search in the realm
-      response = await request2
-        .get(
-          `${new URL(realm.url).pathname}_search?${stringify({
-            filter: {
-              on: baseCardRef,
-              eq: {
+      let id: string;
+      let realm = testRealmServer2.testingOnlyRealms.find(
+        (r) => r.url === json.data.id,
+      )!;
+      {
+        // owner can create an instance
+        let response = await request2
+          .post(`/${owner}/${realmName}/`)
+          .send({
+            data: {
+              type: 'card',
+              attributes: {
                 title: 'Test Card',
               },
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'CardDef',
+                },
+              },
             },
-          } as Query)}`,
-        )
-        .set('Accept', 'application/vnd.card+json')
-        .set(
-          'Authorization',
-          `Bearer ${createJWT(realm, '@mango:boxel.ai', [
-            'read',
-            'write',
-            'realm-owner',
-          ])}`,
-        );
+          })
+          .set('Accept', 'application/vnd.card+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(realm, ownerUserId, [
+              'read',
+              'write',
+              'realm-owner',
+            ])}`,
+          );
 
-      assert.strictEqual(response.status, 200, 'HTTP 200 status');
-      let results = response.body as CardCollectionDocument;
-      assert.strictEqual(results.data.length, 1),
-        'correct number of search results';
+        assert.strictEqual(response.status, 201, 'HTTP 201 status');
+        let doc = response.body as SingleCardDocument;
+        id = doc.data.id;
+      }
+
+      {
+        // owner can get an instance
+        let response = await request2
+          .get(new URL(id).pathname)
+          .set('Accept', 'application/vnd.card+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(realm, ownerUserId, [
+              'read',
+              'write',
+              'realm-owner',
+            ])}`,
+          );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let doc = response.body as SingleCardDocument;
+        assert.strictEqual(
+          doc.data.attributes?.title,
+          'Test Card',
+          'instance data is correct',
+        );
+      }
+
+      {
+        // owner can search in the realm
+        let response = await request2
+          .get(
+            `${new URL(realm.url).pathname}_search?${stringify({
+              filter: {
+                on: baseCardRef,
+                eq: {
+                  title: 'Test Card',
+                },
+              },
+            } as Query)}`,
+          )
+          .set('Accept', 'application/vnd.card+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(realm, ownerUserId, [
+              'read',
+              'write',
+              'realm-owner',
+            ])}`,
+          );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let results = response.body as CardCollectionDocument;
+        assert.strictEqual(results.data.length, 1),
+          'correct number of search results';
+      }
     });
 
     test('dynamically created realms are not publicly readable or writable', async function (assert) {
       let realmName = `test-realm-${uuidv4()}`;
-      let realm = await testRealmServer2.createRealm(
-        '@mango:boxel.ai',
-        realmName,
-      );
-      workerVirtualNetwork.mount(realm.maybeHandle);
-      await realm.start();
-
+      let owner = 'mango';
+      let ownerUserId = '@mango:boxel.ai';
       let response = await request2
-        .get(
-          `${new URL(realm.url).pathname}_search?${stringify({
-            filter: {
-              on: baseCardRef,
-              eq: {
+        .post('/_create-realm')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .set(
+          'Authorization',
+          `Bearer ${testRealmServer2.createJWT(ownerUserId)}`,
+        )
+        .send(
+          JSON.stringify({
+            data: {
+              type: 'realm',
+              attributes: {
+                name: realmName,
+              },
+            },
+          }),
+        );
+
+      let realmURL = response.body.data.id;
+      assert.strictEqual(response.status, 201, 'HTTP 201 status');
+      let realm = testRealmServer2.testingOnlyRealms.find(
+        (r) => r.url === realmURL,
+      )!;
+
+      {
+        let response = await request2
+          .get(
+            `${new URL(realmURL).pathname}_search?${stringify({
+              filter: {
+                on: baseCardRef,
+                eq: {
+                  title: 'Test Card',
+                },
+              },
+            } as Query)}`,
+          )
+          .set('Accept', 'application/vnd.card+json')
+          .set('Authorization', `Bearer ${createJWT(realm, 'rando')}`);
+
+        assert.strictEqual(response.status, 403, 'HTTP 403 status');
+
+        response = await request2
+          .post(`/${owner}/${realmName}/`)
+          .send({
+            data: {
+              type: 'card',
+              attributes: {
                 title: 'Test Card',
               },
-            },
-          } as Query)}`,
-        )
-        .set('Accept', 'application/vnd.card+json')
-        .set('Authorization', `Bearer ${createJWT(realm, 'rando')}`);
-
-      assert.strictEqual(response.status, 403, 'HTTP 403 status');
-
-      response = await request2
-        .post(`/mango/${realmName}/`)
-        .send({
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Test Card',
-            },
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
-                name: 'CardDef',
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'CardDef',
+                },
               },
             },
-          },
-        })
-        .set('Accept', 'application/vnd.card+json')
-        .set('Authorization', `Bearer ${createJWT(realm, 'rando')}`);
+          })
+          .set('Accept', 'application/vnd.card+json')
+          .set('Authorization', `Bearer ${createJWT(realm, 'rando')}`);
 
-      assert.strictEqual(response.status, 403, 'HTTP 403 status');
+        assert.strictEqual(response.status, 403, 'HTTP 403 status');
+      }
     });
 
     test('can restart a realm that was created dynamically', async function (assert) {
       let realmName = `test-realm-${uuidv4()}`;
-      let realm = await testRealmServer2.createRealm(
-        '@mango:boxel.ai',
-        realmName,
-      );
-      workerVirtualNetwork.mount(realm.maybeHandle);
-      await realm.start();
+      let owner = 'mango';
+      let ownerUserId = '@mango:boxel.ai';
+      let realmURL: string;
+      {
+        let response = await request2
+          .post('/_create-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${testRealmServer2.createJWT(ownerUserId)}`,
+          )
+          .send(
+            JSON.stringify({
+              data: {
+                type: 'realm',
+                attributes: {
+                  name: realmName,
+                },
+              },
+            }),
+          );
+        assert.strictEqual(response.status, 201, 'HTTP 201 status');
+        realmURL = response.body.data.id;
+      }
 
-      let response = await request2
-        .post(`/mango/${realmName}/`)
-        .send({
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Test Card',
-            },
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
-                name: 'CardDef',
+      let id: string;
+      let realm = testRealmServer2.testingOnlyRealms.find(
+        (r) => r.url === realmURL,
+      )!;
+      {
+        let response = await request2
+          .post(`/${owner}/${realmName}/`)
+          .send({
+            data: {
+              type: 'card',
+              attributes: {
+                title: 'Test Card',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'CardDef',
+                },
               },
             },
-          },
-        })
-        .set('Accept', 'application/vnd.card+json')
-        .set(
-          'Authorization',
-          `Bearer ${createJWT(realm, '@mango:boxel.ai', [
-            'read',
-            'write',
-            'realm-owner',
-          ])}`,
-        );
+          })
+          .set('Accept', 'application/vnd.card+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(realm, ownerUserId, [
+              'read',
+              'write',
+              'realm-owner',
+            ])}`,
+          );
 
-      assert.strictEqual(response.status, 201, 'HTTP 201 status');
-      let doc = response.body as SingleCardDocument;
+        assert.strictEqual(response.status, 201, 'HTTP 201 status');
+        id = response.body.data.id;
+      }
 
       // Stop and restart the server
       testRealmServer2.testingOnlyUnmountRealms();
@@ -2356,55 +2459,266 @@ module('Realm Server', function (hooks) {
       await startRealmServer(dbAdapter, queue);
       await testRealmServer2.start();
 
-      realm = testRealmServer2.testingOnlyRealms.find(
-        (r) => `${r.url.endsWith(realmName)}/`,
-      )!;
-      response = await request2
-        .get(new URL(doc.data.id).pathname)
-        .set('Accept', 'application/vnd.card+json')
+      {
+        let response = await request2
+          .get(new URL(id).pathname)
+          .set('Accept', 'application/vnd.card+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(realm, ownerUserId, [
+              'read',
+              'write',
+              'realm-owner',
+            ])}`,
+          );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let doc = response.body as SingleCardDocument;
+        assert.strictEqual(
+          doc.data.attributes?.title,
+          'Test Card',
+          'instance data is correct',
+        );
+      }
+    });
+
+    test('POST /_create-realm without JWT', async function (assert) {
+      let realmName = `test-realm-${uuidv4()}`;
+      let response = await request2
+        .post('/_create-realm')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .send(
+          JSON.stringify({
+            data: {
+              type: 'realm',
+              attributes: {
+                name: realmName,
+              },
+            },
+          }),
+        );
+      assert.strictEqual(response.status, 401, 'HTTP 401 status');
+      let error = response.body.errors[0];
+      assert.strictEqual(
+        error,
+        'Missing Authorization header',
+        'error message is correct',
+      );
+    });
+
+    test('POST /_create-realm with invalid JWT', async function (assert) {
+      let realmName = `test-realm-${uuidv4()}`;
+      let response = await request2
+        .post('/_create-realm')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .set('Authorization', 'Bearer invalid-jwt')
+        .send(
+          JSON.stringify({
+            data: {
+              type: 'realm',
+              attributes: {
+                name: realmName,
+              },
+            },
+          }),
+        );
+      assert.strictEqual(response.status, 401, 'HTTP 401 status');
+      let error = response.body.errors[0];
+      assert.strictEqual(error, 'Token invalid', 'error message is correct');
+    });
+
+    test('POST /_create-realm with invalid JSON', async function (assert) {
+      let response = await request2
+        .post('/_create-realm')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
         .set(
           'Authorization',
-          `Bearer ${createJWT(realm, '@mango:boxel.ai', [
-            'read',
-            'write',
-            'realm-owner',
-          ])}`,
-        );
+          `Bearer ${testRealmServer.createJWT('@mango:boxel.ai')}`,
+        )
+        .send('make a new realm please!');
+      assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      let error = response.body.errors[0];
+      assert.ok(error.match(/not valid JSON-API/), 'error message is correct');
+    });
 
-      assert.strictEqual(response.status, 200, 'HTTP 200 status');
-      doc = response.body as SingleCardDocument;
-      assert.strictEqual(
-        doc.data.attributes?.title,
-        'Test Card',
-        'instance data is correct',
+    test('POST /_create-realm with bad JSON-API', async function (assert) {
+      let response = await request2
+        .post('/_create-realm')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .set(
+          'Authorization',
+          `Bearer ${testRealmServer.createJWT('@mango:boxel.ai')}`,
+        )
+        .send(
+          JSON.stringify({
+            name: 'mango-realm',
+          }),
+        );
+      assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      let error = response.body.errors[0];
+      assert.ok(error.match(/not valid JSON-API/), 'error message is correct');
+    });
+
+    test('POST /_create-realm without a realm name', async function (assert) {
+      let response = await request2
+        .post('/_create-realm')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .set(
+          'Authorization',
+          `Bearer ${testRealmServer.createJWT('@mango:boxel.ai')}`,
+        )
+        .send(
+          JSON.stringify({
+            data: {
+              type: 'realm',
+              attributes: {},
+            },
+          }),
+        );
+      assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      let error = response.body.errors[0];
+      assert.ok(
+        error.match(/name must be a string/),
+        'error message is correct',
       );
     });
 
     test('cannot create a realm on a realm server that has a realm mounted at the origin', async function (assert) {
-      assert.rejects(
-        testRealmServer.createRealm('@mango:boxel.ai', 'mango-realm'),
-        /a realm is already mounted at the origin of this server/,
+      let response = await request
+        .post('/_create-realm')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .set(
+          'Authorization',
+          `Bearer ${testRealmServer.createJWT('@mango:boxel.ai')}`,
+        )
+        .send(
+          JSON.stringify({
+            data: {
+              type: 'realm',
+              attributes: {
+                name: 'mango-realm',
+              },
+            },
+          }),
+        );
+      assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      let error = response.body.errors[0];
+      assert.ok(
+        error.match(/a realm is already mounted at the origin of this server/),
+        'error message is correct',
       );
     });
 
     test('cannot create a new realm that collides with an existing realm', async function (assert) {
       let realmName = `test-realm-${uuidv4()}`;
-      await testRealmServer2.createRealm('@mango:boxel.ai', realmName);
-      assert.rejects(
-        testRealmServer2.createRealm('@mango:boxel.ai', realmName),
-        'already exists on this server',
-      );
+      let ownerUserId = '@mango:boxel.ai';
+      let response = await request2
+        .post('/_create-realm')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .set(
+          'Authorization',
+          `Bearer ${testRealmServer2.createJWT(ownerUserId)}`,
+        )
+        .send(
+          JSON.stringify({
+            data: {
+              type: 'realm',
+              attributes: {
+                name: realmName,
+              },
+            },
+          }),
+        );
+      assert.strictEqual(response.status, 201, 'HTTP 201 status');
+      {
+        let response = await request2
+          .post('/_create-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${testRealmServer2.createJWT(ownerUserId)}`,
+          )
+          .send(
+            JSON.stringify({
+              data: {
+                type: 'realm',
+                attributes: {
+                  name: realmName,
+                },
+              },
+            }),
+          );
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let error = response.body.errors[0];
+        assert.ok(
+          error.match(/already exists on this server/),
+          'error message is correct',
+        );
+      }
     });
 
     test('cannot create a realm with invalid characters', async function (assert) {
-      assert.rejects(
-        testRealmServer2.createRealm('@mango:boxel.ai', 'invalid_realm_name'),
-        'contains invalid characters',
-      );
-      assert.rejects(
-        testRealmServer2.createRealm('@mango:boxel.ai', 'invalid realm name'),
-        'contains invalid characters',
-      );
+      let ownerUserId = '@mango:boxel.ai';
+      {
+        let response = await request2
+          .post('/_create-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${testRealmServer2.createJWT(ownerUserId)}`,
+          )
+          .send(
+            JSON.stringify({
+              data: {
+                type: 'realm',
+                attributes: {
+                  name: 'invalid_realm_name',
+                },
+              },
+            }),
+          );
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let error = response.body.errors[0];
+        assert.ok(
+          error.match(/contains invalid characters/),
+          'error message is correct',
+        );
+      }
+      {
+        let response = await request2
+          .post('/_create-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${testRealmServer2.createJWT(ownerUserId)}`,
+          )
+          .send(
+            JSON.stringify({
+              data: {
+                type: 'realm',
+                attributes: {
+                  name: 'invalid realm name',
+                },
+              },
+            }),
+          );
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let error = response.body.errors[0];
+        assert.ok(
+          error.match(/contains invalid characters/),
+          'error message is correct',
+        );
+      }
     });
 
     test('can dynamically load a card definition from own realm', async function (assert) {
@@ -3023,6 +3337,7 @@ module('Realm server serving multiple realms', function (hooks) {
         dbAdapter,
         queue,
         getIndexHTML,
+        seedPath,
         serverURL: new URL('http://127.0.0.1:4446'),
         assetsURL: new URL(`http://example.com/notional-assets-host/`),
       }).listen(parseInt(localBaseRealmURL.port));

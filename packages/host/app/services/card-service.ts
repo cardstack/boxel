@@ -6,6 +6,7 @@ import { TrackedArray } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
+  baseRealm,
   SupportedMimeType,
   type LooseCardResource,
   isSingleCardDocument,
@@ -23,6 +24,7 @@ import type { Query } from '@cardstack/runtime-common/query';
 import ENV from '@cardstack/host/config/environment';
 
 import type MessageService from '@cardstack/host/services/message-service';
+import type Realm from '@cardstack/host/services/realm';
 
 import type {
   BaseDef,
@@ -42,11 +44,12 @@ export type CardSaveSubscriber = (
   content: SingleCardDocument | string,
 ) => void;
 
-const { ownRealmURL, testRealmURLs, environment } = ENV;
+const { environment } = ENV;
 
 export default class CardService extends Service {
   @service private declare loaderService: LoaderService;
   @service private declare messageService: MessageService;
+  @service private declare realm: Realm;
 
   private subscriber: CardSaveSubscriber | undefined;
   // For tracking requests during the duration of this service. Used for being able to tell when to ignore an incremental indexing SSE event.
@@ -67,14 +70,7 @@ export default class CardService extends Service {
     return this.loaderToCardAPILoadingCache.get(loader)!;
   }
 
-  // TODO remove in a followup PR for CS-7036
-  realmURLs = new TrackedArray<string>(testRealmURLs);
-
-  // Note that this should be the unresolved URL and that we need to rely on our
-  // fetch to do any URL resolution.
-  get defaultURL(): URL {
-    return new URL(ownRealmURL);
-  }
+  unresolvedRealmURLs = new TrackedArray<string>([baseRealm.url]);
 
   onSave(subscriber: CardSaveSubscriber) {
     this.subscriber = subscriber;
@@ -84,18 +80,37 @@ export default class CardService extends Service {
     this.subscriber = undefined;
   }
 
+  get searchRealms() {
+    return this.unresolvedRealmURLs;
+  }
+
+  get userRealms() {
+    return this.unresolvedRealmURLs.filter(
+      (realmURL) => realmURL != baseRealm.url,
+    );
+  }
+
   setRealms(realms: string[]) {
     realms.forEach((realm) => {
-      if (!this.realmURLs.includes(realm)) {
-        this.realmURLs.push(realm);
+      if (!this.unresolvedRealmURLs.includes(realm)) {
+        this.unresolvedRealmURLs.push(realm);
       }
     });
 
-    this.realmURLs.forEach((realm) => {
+    this.unresolvedRealmURLs.forEach((realm) => {
       if (!realms.includes(realm)) {
-        this.realmURLs.splice(this.realmURLs.indexOf(realm), 1);
+        this.unresolvedRealmURLs.splice(
+          this.unresolvedRealmURLs.indexOf(realm),
+          1,
+        );
       }
     });
+
+    let baseRealmUrl = baseRealm.url;
+
+    if (!this.unresolvedRealmURLs.includes(baseRealmUrl)) {
+      this.unresolvedRealmURLs.unshift(baseRealmUrl);
+    }
   }
 
   async fetchJSON(
@@ -350,16 +365,13 @@ export default class CardService extends Service {
 
   private async saveCardDocument(
     doc: LooseSingleCardDocument,
-    realmUrl?: URL,
+    realmUrl: URL,
   ): Promise<SingleCardDocument> {
     let isSaved = !!doc.data.id;
-    let json = await this.fetchJSON(
-      doc.data.id ?? realmUrl ?? this.defaultURL,
-      {
-        method: isSaved ? 'PATCH' : 'POST',
-        body: JSON.stringify(doc, null, 2),
-      },
-    );
+    let json = await this.fetchJSON(doc.data.id ?? realmUrl, {
+      method: isSaved ? 'PATCH' : 'POST',
+      body: JSON.stringify(doc, null, 2),
+    });
     if (!isSingleCardDocument(json)) {
       throw new Error(
         `bug: arg is not a card document:
@@ -458,10 +470,8 @@ export default class CardService extends Service {
   async getRealmURL(card: CardDef) {
     let api = await this.getAPI();
     // in the case where we get no realm URL from the card, we are dealing with
-    // a new card instance that does not have a realm URL yet. For now let's
-    // assume that the new card instance will reside in the realm that is hosting the app...
-    // TODO change this after implementing CS-6381
-    return card[api.realmURL] ?? new URL(ownRealmURL);
+    // a new card instance that does not have a realm URL yet.
+    return card[api.realmURL] ?? new URL(this.realm.defaultReadableRealm.path);
   }
 
   async cardsSettled() {

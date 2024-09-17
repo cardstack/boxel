@@ -309,7 +309,7 @@ export default class MatrixService extends Service {
   private async loginToRealms() {
     // This is where we would actually load user-specific choices out of the
     // user's profile based on this.client.getUserId();
-    let activeRealms = this.cardService.realmURLs;
+    let activeRealms = this.cardService.userRealms;
 
     await Promise.all(
       activeRealms.map(async (realmURL) => {
