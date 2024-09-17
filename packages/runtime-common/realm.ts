@@ -1237,18 +1237,24 @@ export class Realm {
     requestContext: RequestContext,
   ): Promise<Response> {
     let localPath = this.paths.local(new URL(request.url));
+    console.log('localPath', localPath);
     if (localPath.startsWith('_')) {
+      console.log('methodNotAllowed');
       return methodNotAllowed(request, requestContext);
     }
 
     let url = this.paths.fileURL(localPath);
+    console.log('url', url);
     let originalMaybeError = await this.#realmIndexQueryEngine.cardDocument(
       url,
     );
+    console.log('originalMaybeError', originalMaybeError);
     if (!originalMaybeError) {
+      console.log('notFound');
       return notFound(request, requestContext);
     }
     if (originalMaybeError.type === 'error') {
+      console.log('systemError');
       return systemError(
         requestContext,
         `unable to patch card, cannot load original from index`,
@@ -1256,20 +1262,31 @@ export class Realm {
       );
     }
     let { doc: original } = originalMaybeError;
+    console.log('original', original);
     let originalClone = cloneDeep(original);
+    console.log('originalClone', originalClone);
     delete originalClone.data.meta.lastModified;
 
     let patch = await request.json();
+    console.log('patch', patch);
     if (!isSingleCardDocument(patch)) {
+      console.log('badRequest');
       return badRequest(
         `The request body was not a card document`,
         requestContext,
       );
     }
+
+    console.log(
+      'internalKeyFor',
+      internalKeyFor(patch.data.meta.adoptsFrom, url),
+      internalKeyFor(originalClone.data.meta.adoptsFrom, url),
+    );
     if (
       internalKeyFor(patch.data.meta.adoptsFrom, url) !==
       internalKeyFor(originalClone.data.meta.adoptsFrom, url)
     ) {
+      console.log('badRequest');
       return badRequest(
         `Cannot change card instance type to ${JSON.stringify(
           patch.data.meta.adoptsFrom,
@@ -1292,13 +1309,14 @@ export class Realm {
         return Array.isArray(sourceValue) ? sourceValue : undefined;
       },
     );
-
+    console.log('card', card);
     if (card.data.relationships || patch.data.relationships) {
+      console.log('mergeRelationships');
       let merged = mergeRelationships(
         card.data.relationships,
         patch.data.relationships,
       );
-
+      console.log('merged', merged);
       if (merged && Object.keys(merged).length !== 0) {
         card.data.relationships = merged;
       }
@@ -1306,32 +1324,40 @@ export class Realm {
 
     delete (card as any).data.id; // don't write the ID to the file
     let path: LocalPath = `${localPath}.json`;
+    console.log('path', path);
     let fileSerialization: LooseSingleCardDocument | undefined;
     try {
       fileSerialization = await this.fileSerialization(
         merge(card, { data: { meta: { realmURL: this.url } } }),
         url,
       );
+      console.log('fileSerialization', fileSerialization);
     } catch (err: any) {
+      console.log('err', err);
       if (err.message.startsWith('field validation error')) {
         return badRequest(err.message, requestContext);
       } else {
         return systemError(requestContext, err.message, err);
       }
     }
+    console.log('writing file');
     let { lastModified } = await this.write(
       path,
       JSON.stringify(fileSerialization, null, 2),
       request.headers.get('X-Boxel-Client-Request-Id'),
     );
+    console.log('lastModified', lastModified);
     let instanceURL = url.href.replace(/\.json$/, '');
+    console.log('instanceURL', instanceURL);
     let entry = await this.#realmIndexQueryEngine.cardDocument(
       new URL(instanceURL),
       {
         loadLinks: true,
       },
     );
+    console.log('entry', entry);
     if (!entry || entry?.type === 'error') {
+      console.log('systemError');
       return systemError(
         requestContext,
         `Unable to index card: can't find patched instance in index`,
@@ -1344,6 +1370,8 @@ export class Realm {
         meta: { lastModified },
       },
     });
+    console.log('doc', doc);
+    console.log('createResponse next', JSON.stringify(doc, null, 2));
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {
