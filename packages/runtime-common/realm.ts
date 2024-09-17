@@ -645,22 +645,22 @@ export class Realm {
     request: Request,
     isLocal: boolean,
   ): Promise<ResponseWithNodeStream> {
-    console.log('internalHandle', request.method, request.url);
+    // console.log('internalHandle', request.method, request.url);
     let redirectResponse = this.rootRealmRedirect(request);
     if (redirectResponse) {
-      console.log('redirectResponse', redirectResponse);
+      // console.log('redirectResponse', redirectResponse);
       return redirectResponse;
     }
 
-    console.log('creating request context');
+    // console.log('creating request context');
     let requestContext = await this.createRequestContext(); // Cache realm permissions for the duration of the request so that we don't have to fetch them multiple times
-    console.log('requestContext', requestContext);
+    // console.log('requestContext', requestContext);
     try {
       // local requests are allowed to query the realm as the index is being built up
-      console.log('isLocal', isLocal);
+      // console.log('isLocal', isLocal);
       if (!isLocal) {
         if (!request.headers.get('X-Boxel-Building-Index')) {
-          console.log('no X-Boxel-Building-Index header');
+          // console.log('no X-Boxel-Building-Index header');
           let timeout = await Promise.race<void | Error>([
             this.#startedUp.promise,
             new Promise((resolve) =>
@@ -681,7 +681,7 @@ export class Realm {
         let isWrite = ['PUT', 'PATCH', 'POST', 'DELETE'].includes(
           request.method,
         );
-        console.log('isWrite', isWrite);
+        // console.log('isWrite', isWrite);
         await this.checkPermission(
           request,
           requestContext,
@@ -689,18 +689,18 @@ export class Realm {
         );
       }
       if (!this.#realmIndexQueryEngine) {
-        console.log('no realmIndexQueryEngine');
+        // console.log('no realmIndexQueryEngine');
         return systemError(requestContext, 'search index is not available');
       }
       if (this.#router.handles(request)) {
-        console.log('handles', this.#router.handles(request));
+        // console.log('handles', this.#router.handles(request));
         return this.#router.handle(request, requestContext);
       } else {
-        console.log('fallbackHandle');
+        // console.log('fallbackHandle');
         return this.fallbackHandle(request, requestContext);
       }
     } catch (e) {
-      console.log('error', e);
+      // console.log('error', e);
       if (e instanceof AuthenticationError) {
         return new Response(`${e.message}`, {
           status: 401,
@@ -724,13 +724,13 @@ export class Realm {
   // technically inside the realm (as the realm includes the trailing '/'),
   // so issue a redirect in those scenarios.
   private rootRealmRedirect(request: Request) {
-    console.log('rootRealmRedirect', request.url);
+    // console.log('rootRealmRedirect', request.url);
     let url = new URL(request.url);
-    console.log('url', url);
+    // console.log('url', url);
     let urlWithoutQueryParams = url.protocol + '//' + url.host + url.pathname;
-    console.log('urlWithoutQueryParams', urlWithoutQueryParams);
+    // console.log('urlWithoutQueryParams', urlWithoutQueryParams);
     if (`${urlWithoutQueryParams}/` === this.url) {
-      console.log('sending redirect');
+      // console.log('sending redirect');
       return new Response(null, {
         status: 302,
         headers: {
@@ -740,7 +740,7 @@ export class Realm {
         },
       });
     }
-    console.log('no redirect');
+    // console.log('no redirect');
     return undefined;
   }
 
@@ -1237,24 +1237,24 @@ export class Realm {
     requestContext: RequestContext,
   ): Promise<Response> {
     let localPath = this.paths.local(new URL(request.url));
-    console.log('localPath', localPath);
+    // console.log('localPath', localPath);
     if (localPath.startsWith('_')) {
-      console.log('methodNotAllowed');
+      // console.log('methodNotAllowed');
       return methodNotAllowed(request, requestContext);
     }
 
     let url = this.paths.fileURL(localPath);
-    console.log('url', url);
+    // console.log('url', url);
     let originalMaybeError = await this.#realmIndexQueryEngine.cardDocument(
       url,
     );
-    console.log('originalMaybeError', originalMaybeError);
+    // console.log('originalMaybeError', originalMaybeError);
     if (!originalMaybeError) {
-      console.log('notFound');
+      // console.log('notFound');
       return notFound(request, requestContext);
     }
     if (originalMaybeError.type === 'error') {
-      console.log('systemError');
+      // console.log('systemError');
       return systemError(
         requestContext,
         `unable to patch card, cannot load original from index`,
@@ -1262,22 +1262,22 @@ export class Realm {
       );
     }
     let { doc: original } = originalMaybeError;
-    console.log('original', original);
+    // console.log('original', original);
     let originalClone = cloneDeep(original);
-    console.log('originalClone', originalClone);
+    // console.log('originalClone', originalClone);
     delete originalClone.data.meta.lastModified;
 
     let patch = await request.json();
-    console.log('patch', patch);
+    // console.log('patch', patch);
     if (!isSingleCardDocument(patch)) {
-      console.log('badRequest');
+      // console.log('badRequest');
       return badRequest(
         `The request body was not a card document`,
         requestContext,
       );
     }
 
-    console.log(
+    // console.log(
       'internalKeyFor',
       internalKeyFor(patch.data.meta.adoptsFrom, url),
       internalKeyFor(originalClone.data.meta.adoptsFrom, url),
@@ -1286,7 +1286,7 @@ export class Realm {
       internalKeyFor(patch.data.meta.adoptsFrom, url) !==
       internalKeyFor(originalClone.data.meta.adoptsFrom, url)
     ) {
-      console.log('badRequest');
+      // console.log('badRequest');
       return badRequest(
         `Cannot change card instance type to ${JSON.stringify(
           patch.data.meta.adoptsFrom,
@@ -1309,14 +1309,14 @@ export class Realm {
         return Array.isArray(sourceValue) ? sourceValue : undefined;
       },
     );
-    console.log('card', card);
+    // console.log('card', card);
     if (card.data.relationships || patch.data.relationships) {
-      console.log('mergeRelationships');
+      // console.log('mergeRelationships');
       let merged = mergeRelationships(
         card.data.relationships,
         patch.data.relationships,
       );
-      console.log('merged', merged);
+      // console.log('merged', merged);
       if (merged && Object.keys(merged).length !== 0) {
         card.data.relationships = merged;
       }
@@ -1324,35 +1324,35 @@ export class Realm {
 
     delete (card as any).data.id; // don't write the ID to the file
     let path: LocalPath = `${localPath}.json`;
-    console.log('path', path);
+    // console.log('path', path);
     let fileSerialization: LooseSingleCardDocument | undefined;
     try {
       fileSerialization = await this.fileSerialization(
         merge(card, { data: { meta: { realmURL: this.url } } }),
         url,
       );
-      console.log(
+      // console.log(
         'fileSerialization',
         JSON.stringify(fileSerialization, null, 2),
       );
     } catch (err: any) {
-      console.log('err', err);
+      // console.log('err', err);
       if (err.message.startsWith('field validation error')) {
         return badRequest(err.message, requestContext);
       } else {
         return systemError(requestContext, err.message, err);
       }
     }
-    console.log('writing file');
-    console.log('path');
-    console.log(path);
+    // console.log('writing file');
+    // console.log('path');
+    // console.log(path);
 
-    console.log(
+    // console.log(
       'meta adoptsFrom module',
       // @ts-ignore
       fileSerialization.data?.meta?.adoptsFrom?.module,
     );
-    console.log(
+    // console.log(
       'meta adoptsfrom name',
       // @ts-ignore
       fileSerialization.data?.meta?.adoptsFrom?.name,
@@ -1363,18 +1363,18 @@ export class Realm {
         JSON.stringify(fileSerialization, null, 2),
         request.headers.get('X-Boxel-Client-Request-Id'),
       );
-      console.log('lastModified', lastModified);
+      // console.log('lastModified', lastModified);
       let instanceURL = url.href.replace(/\.json$/, '');
-      console.log('instanceURL', instanceURL);
+      // console.log('instanceURL', instanceURL);
       let entry = await this.#realmIndexQueryEngine.cardDocument(
         new URL(instanceURL),
         {
           loadLinks: true,
         },
       );
-      console.log('entry', entry);
+      // console.log('entry', entry);
       if (!entry || entry?.type === 'error') {
-        console.log('systemError');
+        // console.log('systemError');
         return systemError(
           requestContext,
           `Unable to index card: can't find patched instance in index`,
@@ -1387,8 +1387,8 @@ export class Realm {
           meta: { lastModified },
         },
       });
-      console.log('doc', doc);
-      console.log('createResponse next', JSON.stringify(doc, null, 2));
+      // console.log('doc', doc);
+      // console.log('createResponse next', JSON.stringify(doc, null, 2));
       return createResponse({
         body: JSON.stringify(doc, null, 2),
         init: {
@@ -1400,7 +1400,7 @@ export class Realm {
         requestContext,
       });
     } catch (err: any) {
-      console.log('systemError', err);
+      // console.log('systemError', err);
       return systemError(requestContext, err.message, err);
     }
   }
