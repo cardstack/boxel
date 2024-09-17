@@ -1343,10 +1343,19 @@ export class Realm {
         return systemError(requestContext, err.message, err);
       }
     }
+    console.log('writing file');
+    console.log('path');
+    console.log(path);
+
     console.log(
-      'writing file',
-      path,
-      request.headers.get('X-Boxel-Client-Request-Id'),
+      'meta adoptsFrom module',
+      // @ts-ignore
+      fileSerialization.data?.meta?.adoptsFrom?.module,
+    );
+    console.log(
+      'meta adoptsfrom name',
+      // @ts-ignore
+      fileSerialization.data?.meta?.adoptsFrom?.name,
     );
     try {
       let { lastModified } = await this.write(
