@@ -94,8 +94,8 @@ export async function openRoot(page: Page, url = testHost) {
   }
 }
 
-export async function clearLocalStorage(page: Page) {
-  await openRoot(page);
+export async function clearLocalStorage(page: Page, appURL = testHost) {
+  await openRoot(page, appURL);
   await page.evaluate(() => window.localStorage.clear());
 }
 
@@ -230,15 +230,15 @@ export async function validateEmailForResetPassword(
   return resetPasswordPage;
 }
 
-export async function gotoRegistration(page: Page) {
-  await openRoot(page);
+export async function gotoRegistration(page: Page, appURL = testHost) {
+  await openRoot(page, appURL);
   await toggleOperatorMode(page);
   await page.locator('[data-test-register-user]').click();
   await expect(page.locator('[data-test-register-btn]')).toHaveCount(1);
 }
 
-export async function gotoForgotPassword(page: Page) {
-  await openRoot(page);
+export async function gotoForgotPassword(page: Page, appURL = testHost) {
+  await openRoot(page, appURL);
   await toggleOperatorMode(page);
   await page.locator('[data-test-forgot-password]').click();
   await expect(page.locator('[data-test-reset-your-password-btn]')).toHaveCount(

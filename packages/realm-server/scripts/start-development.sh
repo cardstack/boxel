@@ -15,7 +15,6 @@ NODE_ENV=development \
   REALM_SECRET_SEED="shhh! it's a secret" \
   MATRIX_URL=http://localhost:8008 \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
-  REALM_SERVER_MATRIX_PASSWORD=password \
   ts-node \
   --transpileOnly main \
   --port=4201 \

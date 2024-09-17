@@ -14,8 +14,6 @@ NODE_ENV=test \
   REALM_SECRET_SEED="shhh! it's a secret" \
   MATRIX_URL=http://localhost:8008 \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
-  REALM_SERVER_MATRIX_PASSWORD=password \
-  PGPORT="5435" \
   ts-node \
   --transpileOnly main \
   --port=4202 \
