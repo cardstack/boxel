@@ -62,6 +62,7 @@ interface IndexedModule {
   source: string;
   canonicalURL: string;
   lastModified: number;
+  resourceCreatedAt: number;
   deps: string[] | null;
 }
 
@@ -71,6 +72,7 @@ export interface IndexedInstance {
   source: string;
   canonicalURL: string;
   lastModified: number;
+  resourceCreatedAt: number;
   isolatedHtml: string | null;
   embeddedHtml: { [refURL: string]: string } | null;
   fittedHtml: { [refURL: string]: string } | null;
@@ -122,6 +124,7 @@ export interface QueryResultsMeta {
 // A mapper for fields that can be sorted on but are not an attribute of a card
 export const generalSortFields: Record<string, string> = {
   lastModified: 'last_modified',
+  createdAt: 'resource_created_at',
 };
 
 export function isValidPrerenderedHtmlFormat(
@@ -181,6 +184,7 @@ export class IndexQueryEngine {
       source,
       url: canonicalURL,
       last_modified: lastModified,
+      resource_created_at: resourceCreatedAt,
     } = moduleEntry;
     if (!executableCode) {
       throw new Error(
@@ -195,6 +199,7 @@ export class IndexQueryEngine {
       executableCode,
       source,
       lastModified: parseInt(lastModified),
+      resourceCreatedAt: parseInt(resourceCreatedAt),
       deps: moduleEntry.deps,
     };
   }
@@ -246,6 +251,7 @@ export class IndexQueryEngine {
       realm_url: realmURL,
       indexed_at: indexedAt,
       last_modified: lastModified,
+      resource_created_at: resourceCreatedAt,
       source,
       types,
       deps,
@@ -272,6 +278,7 @@ export class IndexQueryEngine {
       source,
       deps,
       lastModified: parseInt(lastModified),
+      resourceCreatedAt: parseInt(resourceCreatedAt),
       realmVersion,
     };
   }
@@ -1042,10 +1049,11 @@ function isFieldPlural(field: Field): boolean {
 
 function assertIndexEntrySource<T>(obj: T): Omit<
   T,
-  'source' | 'last_modified'
+  'source' | 'last_modified' | 'resource_created_at'
 > & {
   source: string;
   last_modified: string;
+  resource_created_at: string;
 } {
   if (!obj || typeof obj !== 'object') {
     throw new Error(`expected index entry is null or not an object`);
@@ -1056,9 +1064,18 @@ function assertIndexEntrySource<T>(obj: T): Omit<
   if (!('last_modified' in obj) || typeof obj.last_modified !== 'string') {
     throw new Error(`expected index entry to have "last_modified" property`);
   }
-  return obj as Omit<T, 'source' | 'last_modified'> & {
+  if (
+    !('resource_created_at' in obj) ||
+    typeof obj.resource_created_at !== 'string'
+  ) {
+    throw new Error(
+      `expected index entry to have "resource_created_at" property`,
+    );
+  }
+  return obj as Omit<T, 'source' | 'last_modified' | 'resource_created_at'> & {
     source: string;
     last_modified: string;
+    resource_created_at: string;
   };
 }
 

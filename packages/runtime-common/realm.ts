@@ -96,6 +96,8 @@ export interface FileRef {
   path: LocalPath;
   content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
   lastModified: number;
+  created: number;
+
   [key: symbol]: object;
 }
 
@@ -841,6 +843,7 @@ export class Realm {
     requestContext: RequestContext,
   ): Promise<ResponseWithNodeStream> {
     let headers = {
+      'x-created': formatRFC7231(ref.created * 1000),
       'last-modified': formatRFC7231(ref.lastModified * 1000),
       ...(Symbol.for('shimmed-module') in ref
         ? { 'X-Boxel-Shimmed-Module': 'true' }

@@ -331,6 +331,7 @@ const tests = Object.freeze({
       resource,
       source: JSON.stringify(resource),
       lastModified: Date.now(),
+      resourceCreatedAt: Date.now(),
       searchData: { name: 'Van Gogh' },
       deps: new Set([`${testRealmURL}fancy-person`]),
       displayNames: ['Fancy Person', 'Person', 'Card'],
@@ -546,6 +547,7 @@ const tests = Object.freeze({
       resource,
       source: JSON.stringify(resource),
       lastModified: Date.now(),
+      resourceCreatedAt: Date.now(),
       searchData: { name: 'Van Gogh' },
       deps: new Set(),
       displayNames: [],
@@ -574,6 +576,7 @@ const tests = Object.freeze({
         },
         source: originalSource,
         lastModified: originalModified,
+        resourceCreatedAt: originalModified,
         searchDoc: null,
         deps: null,
         types: null,
@@ -637,6 +640,7 @@ const tests = Object.freeze({
       resource,
       source,
       lastModified: now,
+      resourceCreatedAt: now,
       searchData: { name: 'Van Gogh' },
       deps: new Set(),
       displayNames: [],
@@ -672,6 +676,7 @@ const tests = Object.freeze({
         },
         source,
         lastModified: now,
+        resourceCreatedAt: now,
         searchDoc: { name: 'Van Gogh' },
         deps: [],
         types: [],
@@ -786,6 +791,7 @@ const tests = Object.freeze({
         type: 'module',
         source: cardSrc,
         lastModified: now,
+        resourceCreatedAt: now,
         deps: new Set(),
       });
       await batch.done();
@@ -816,6 +822,7 @@ const tests = Object.freeze({
         type: 'module',
         source: cardSrc,
         lastModified: now,
+        resourceCreatedAt: now,
         deps: new Set(),
       });
       await batch.done();
@@ -848,6 +855,7 @@ const tests = Object.freeze({
       type: 'module',
       source: cardSrc,
       lastModified: now,
+      resourceCreatedAt: now,
       deps: new Set(),
     });
 
@@ -989,6 +997,7 @@ const tests = Object.freeze({
       resource: resource2,
       source: JSON.stringify(resource2),
       lastModified: Date.now(),
+      resourceCreatedAt: Date.now(),
       searchData: { name: 'Van Gogh' },
       deps: new Set([`${testRealmURL}fancy-person`]),
       displayNames: ['Fancy Person', 'Person', 'Card'],
@@ -1076,6 +1085,7 @@ const tests = Object.freeze({
       resource: resource3,
       source: JSON.stringify(resource3),
       lastModified: Date.now(),
+      resourceCreatedAt: Date.now(),
       searchData: { name: 'Van Gogh2' },
       deps: new Set([`${testRealmURL}fancy-person`]),
       displayNames: ['Fancy Person', 'Person', 'Card'],
@@ -1104,6 +1114,7 @@ const tests = Object.freeze({
       resource: resource4,
       source: JSON.stringify(resource4),
       lastModified: Date.now(),
+      resourceCreatedAt: Date.now(),
       searchData: { name: 'Mango' },
       deps: new Set([`${testRealmURL}pet`]),
       displayNames: ['Pet', 'Card'],

@@ -27,6 +27,7 @@ export interface BoxelIndexTable {
   atom_html: string | null;
   indexed_at: string | null; // pg represents big integers as strings in javascript
   last_modified: string | null; // pg represents big integers as strings in javascript
+  resource_created_at: string | null; // pg represents big integers as strings in javascript
   is_deleted: boolean | null;
 }
 
