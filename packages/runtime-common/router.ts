@@ -162,19 +162,19 @@ export class Router {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    console.log('handle', request.method, request.url);
+    // console.log('handle', request.method, request.url);
     let handler = this.lookupHandler(request);
-    console.log('handler', handler);
+    // console.log('handler', handler);
     if (!handler) {
-      console.log('not found');
+      // console.log('not found');
       return notFound(request, requestContext);
     }
     try {
-      console.log('calling handler');
+      // console.log('calling handler');
       return await handler(request, requestContext);
     } catch (err) {
       if (err instanceof CardError) {
-        console.log('responseWithError');
+        // console.log('responseWithError');
         return responseWithError(err, requestContext);
       }
 
