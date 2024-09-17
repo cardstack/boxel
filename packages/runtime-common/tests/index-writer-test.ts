@@ -523,6 +523,7 @@ const tests = Object.freeze({
           pristine_doc: originalResource,
           source: originalSource,
           last_modified: String(originalModified),
+          resource_created_at: String(originalModified),
         },
       ],
     );

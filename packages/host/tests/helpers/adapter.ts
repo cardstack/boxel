@@ -144,6 +144,10 @@ export class TestRealmAdapter implements RealmAdapter {
     return this.#lastModified;
   }
 
+  get resourceCreatedAtMap() {
+    return this.#resourceCreatedAt;
+  }
+
   async lastModified(path: string): Promise<number | undefined> {
     return this.#lastModified.get(this.#paths.fileURL(path).href);
   }
