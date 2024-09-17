@@ -648,6 +648,7 @@ export class Realm {
     console.log('internalHandle', request.method, request.url);
     let redirectResponse = this.rootRealmRedirect(request);
     if (redirectResponse) {
+      console.log('redirectResponse', redirectResponse);
       return redirectResponse;
     }
 
@@ -655,8 +656,10 @@ export class Realm {
 
     try {
       // local requests are allowed to query the realm as the index is being built up
+      console.log('isLocal', isLocal);
       if (!isLocal) {
         if (!request.headers.get('X-Boxel-Building-Index')) {
+          console.log('no X-Boxel-Building-Index header');
           let timeout = await Promise.race<void | Error>([
             this.#startedUp.promise,
             new Promise((resolve) =>
@@ -677,6 +680,7 @@ export class Realm {
         let isWrite = ['PUT', 'PATCH', 'POST', 'DELETE'].includes(
           request.method,
         );
+        console.log('isWrite', isWrite);
         await this.checkPermission(
           request,
           requestContext,
@@ -684,14 +688,18 @@ export class Realm {
         );
       }
       if (!this.#realmIndexQueryEngine) {
+        console.log('no realmIndexQueryEngine');
         return systemError(requestContext, 'search index is not available');
       }
       if (this.#router.handles(request)) {
+        console.log('handles', this.#router.handles(request));
         return this.#router.handle(request, requestContext);
       } else {
+        console.log('fallbackHandle');
         return this.fallbackHandle(request, requestContext);
       }
     } catch (e) {
+      console.log('error', e);
       if (e instanceof AuthenticationError) {
         return new Response(`${e.message}`, {
           status: 401,
