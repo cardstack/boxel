@@ -38,10 +38,14 @@ import {
 } from '@cardstack/runtime-common';
 
 export interface TabComponentSignature {
-  model: Partial<AppCard>;
-  context?: CardContext;
+  currentRealm?: URL;
   activeTabId?: string;
   setActiveTab?: (tabId: string) => void;
+}
+
+export interface DefaultTabSignature extends TabComponentSignature {
+  model: Partial<AppCard>;
+  context?: CardContext;
 }
 
 export class Tab extends FieldDef {
@@ -139,7 +143,7 @@ class TableView extends GlimmerComponent<{ Args: { instances: CardDef[] } }> {
   }
 }
 
-class DefaultTabTemplate extends GlimmerComponent<TabComponentSignature> {
+class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
   <template>
     <div class='app-card-content'>
       <@context.prerenderedCardSearchComponent
@@ -188,10 +192,6 @@ class DefaultTabTemplate extends GlimmerComponent<TabComponentSignature> {
       }
     </style>
   </template>
-
-  get currentRealm() {
-    return this.args.model?.[realmURL];
-  }
 
   get realms(): string[] {
     return this.args.model?.[realmURL] ? [this.args.model[realmURL].href] : [];
@@ -254,7 +254,7 @@ class DefaultTabTemplate extends GlimmerComponent<TabComponentSignature> {
     if (!this.activeTab?.ref?.name || !this.activeTab.ref.module) {
       return;
     }
-    return codeRefWithAbsoluteURL(this.activeTab.ref, this.currentRealm);
+    return codeRefWithAbsoluteURL(this.activeTab.ref, this.args.currentRealm);
   }
 
   get query() {
@@ -300,7 +300,7 @@ class DefaultTabTemplate extends GlimmerComponent<TabComponentSignature> {
         }
         await this.args.context?.actions?.createCard?.(
           this.activeTabRef,
-          this.currentRealm,
+          this.args.currentRealm,
           { doc },
         );
       } catch (e: unknown) {
@@ -335,8 +335,7 @@ export class AppCardTemplate extends GlimmerComponent<{
       </TabbedHeader>
       {{yield
         (hash
-          model=@model
-          context=@context
+          currentRealm=this.currentRealm
           activeTabId=this.activeTabId
           setActiveTab=this.setActiveTab
         )
@@ -361,9 +360,12 @@ export class AppCardTemplate extends GlimmerComponent<{
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
-    let tabId = window.location?.hash?.slice(1).length
-      ? window.location?.hash?.slice(1)
-      : this.args.model.tabs?.[0]?.tabId;
+    let tabs = this.args.model.tabs;
+    let hashTab = window.location?.hash?.slice(1);
+    let tabId =
+      hashTab?.length && tabs?.map((t) => t.tabId)?.includes(hashTab)
+        ? hashTab
+        : tabs?.[0]?.tabId;
     if (tabId) {
       this.setActiveTab(tabId);
     }
@@ -374,6 +376,10 @@ export class AppCardTemplate extends GlimmerComponent<{
       Object.getPrototypeOf(this.args.model).constructor.headerColor ??
       undefined
     );
+  }
+
+  get currentRealm() {
+    return this.args.model?.[realmURL];
   }
 
   @action setActiveTab(id: string) {
@@ -391,7 +397,8 @@ export class AppCardIsolated extends Component<typeof AppCard> {
       <:component as |args|>
         <DefaultTabTemplate
           @model={{@model}}
-          @context={{args.context}}
+          @context={{@context}}
+          @currentRealm={{args.currentRealm}}
           @activeTabId={{args.activeTabId}}
           @setActiveTab={{args.setActiveTab}}
         />

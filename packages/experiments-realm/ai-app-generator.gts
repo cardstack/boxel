@@ -1,5 +1,6 @@
 import {
   type CardContext,
+  Component,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
 import {
@@ -8,6 +9,7 @@ import {
   BoxelInput,
   Button,
 } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -26,7 +28,7 @@ import {
   AppCard,
   AppCardTemplate,
   CardsGrid,
-  type TabComponentSignature,
+  type DefaultTabSignature,
 } from './app-card';
 
 class HowToSidebar extends GlimmerComponent {
@@ -269,7 +271,7 @@ class PromptContainer extends GlimmerComponent<{
   </template>
 }
 
-class DashboardTab extends GlimmerComponent<TabComponentSignature> {
+class DashboardTab extends GlimmerComponent<DefaultTabSignature> {
   <template>
     <div class='dashboard'>
       <HowToSidebar />
@@ -412,11 +414,11 @@ class DashboardTab extends GlimmerComponent<TabComponentSignature> {
   }
 }
 
-interface DefaultTabSignature extends TabComponentSignature {
+interface DefaultTabTemplateSignature extends DefaultTabSignature {
   cardRef: CodeRef;
 }
 
-class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
+class DefaultTabTemplate extends GlimmerComponent<DefaultTabTemplateSignature> {
   <template>
     <div class='tab-content'>
       <@context.prerenderedCardSearchComponent
@@ -438,12 +440,8 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
     </style>
   </template>
 
-  get currentRealm() {
-    return this.args.model?.[realmURL];
-  }
-
   get realms() {
-    return this.currentRealm ? [this.currentRealm.href] : [];
+    return this.args.currentRealm ? [this.args.currentRealm.href] : [];
   }
 
   get query() {
@@ -473,7 +471,7 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
   }
 }
 
-class RequirementsTab extends GlimmerComponent<TabComponentSignature> {
+class RequirementsTab extends GlimmerComponent<DefaultTabSignature> {
   <template>
     <div class='tab-content'>
       {{#if @context.actions.createCard}}
@@ -567,7 +565,7 @@ class RequirementsTab extends GlimmerComponent<TabComponentSignature> {
   );
 }
 
-class YourAppsTab extends GlimmerComponent<TabComponentSignature> {
+class YourAppsTab extends GlimmerComponent<DefaultTabSignature> {
   <template>
     <DefaultTabTemplate
       @model={{@model}}
@@ -586,12 +584,30 @@ class YourAppsTab extends GlimmerComponent<TabComponentSignature> {
   }
 }
 
-class Isolated extends AppCard.isolated {
+class Isolated extends Component<typeof AiAppGenerator> {
   <template>
     <AppCardTemplate @model={{@model}} @fields={{@fields}}>
       <:component as |args|>
-        Hi
-        {{args.activeTabId}}
+        {{#if (eq args.activeTabId 'dashboard')}}
+          <DashboardTab
+            @model={{@model}}
+            @context={{@context}}
+            @currentRealm={{args.currentRealm}}
+            @setActiveTab={{args.setActiveTab}}
+          />
+        {{else if (eq args.activeTabId 'requirements')}}
+          <RequirementsTab
+            @model={{@model}}
+            @context={{@context}}
+            @currentRealm={{args.currentRealm}}
+          />
+        {{else}}
+          <YourAppsTab
+            @model={{@model}}
+            @context={{@context}}
+            @currentRealm={{args.currentRealm}}
+          />
+        {{/if}}
       </:component>
     </AppCardTemplate>
   </template>
@@ -601,5 +617,5 @@ export class AiAppGenerator extends AppCard {
   static displayName = 'AI App Generator';
   static prefersWideFormat = true;
   static headerColor = '#ffeb00';
-  // static isolated = Isolated;
+  static isolated = Isolated;
 }
