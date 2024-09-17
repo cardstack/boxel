@@ -69,7 +69,7 @@ export function render(
 
     console.log('render arguments', C, element, owner, format);
     let error = new CardError(
-      `Encountered error rendering HTML for card: ${err.message}`,
+      `Encountered error rendering HTML for card: ${err.message} (${C}, ${element}, ${owner}, ${format})`,
     );
     error.additionalErrors = [err];
     throw error;
