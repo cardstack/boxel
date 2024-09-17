@@ -1284,10 +1284,10 @@ export class Realm {
     }
 
     // console.log(
-      'internalKeyFor',
-      internalKeyFor(patch.data.meta.adoptsFrom, url),
-      internalKeyFor(originalClone.data.meta.adoptsFrom, url),
-    );
+    //   'internalKeyFor',
+    //   internalKeyFor(patch.data.meta.adoptsFrom, url),
+    //   internalKeyFor(originalClone.data.meta.adoptsFrom, url),
+    // );
     if (
       internalKeyFor(patch.data.meta.adoptsFrom, url) !==
       internalKeyFor(originalClone.data.meta.adoptsFrom, url)
@@ -1338,9 +1338,9 @@ export class Realm {
         url,
       );
       // console.log(
-        'fileSerialization',
-        JSON.stringify(fileSerialization, null, 2),
-      );
+      //   'fileSerialization',
+      //   JSON.stringify(fileSerialization, null, 2),
+      // );
     } catch (err: any) {
       // console.log('err', err);
       if (err.message.startsWith('field validation error')) {
@@ -1354,15 +1354,15 @@ export class Realm {
     // console.log(path);
 
     // console.log(
-      'meta adoptsFrom module',
-      // @ts-ignore
-      fileSerialization.data?.meta?.adoptsFrom?.module,
-    );
+    //   'meta adoptsFrom module',
+    //   // @ts-ignore
+    //   fileSerialization.data?.meta?.adoptsFrom?.module,
+    // );
     // console.log(
-      'meta adoptsfrom name',
-      // @ts-ignore
-      fileSerialization.data?.meta?.adoptsFrom?.name,
-    );
+    //   'meta adoptsfrom name',
+    //   // @ts-ignore
+    //   fileSerialization.data?.meta?.adoptsFrom?.name,
+    // );
     try {
       let { lastModified } = await this.write(
         path,
