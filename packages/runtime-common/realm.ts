@@ -458,9 +458,14 @@ export class Realm {
     contents: string,
     clientRequestId?: string | null,
   ): Promise<WriteResult> {
+    console.log('write', path, contents, clientRequestId);
+    console.log('awaiting indexing');
     await this.indexing();
+    console.log('indexing done, tracking write');
     await this.trackOwnWrite(path);
+    console.log('write done, writing to adapter');
     let results = await this.#adapter.write(path, contents);
+    console.log('wrote to adapter, updating index');
     await this.#realmIndexUpdater.update(this.paths.fileURL(path), {
       onInvalidation: (invalidatedURLs: URL[]) => {
         this.sendServerEvent({
@@ -473,6 +478,7 @@ export class Realm {
         });
       },
     });
+    console.log('index updated, returning results');
     return results;
   }
 
