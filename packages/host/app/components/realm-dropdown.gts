@@ -150,8 +150,14 @@ export default class RealmDropdown extends Component<Signature> {
       return selectedRealm;
     }
 
+    let defaultWritableRealm = this.realm.defaultWritableRealm;
+
+    if (!defaultWritableRealm) {
+      return undefined;
+    }
+
     return this.realms.find(
-      (realm) => realm.path === this.realm.userDefaultRealm.path,
+      (realm) => realm.path === defaultWritableRealm!.path,
     );
   }
 }

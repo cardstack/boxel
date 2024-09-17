@@ -13,6 +13,7 @@ import { CardTypeFilter, assertQuery } from '@cardstack/runtime-common/query';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type Realm from '@cardstack/host/services/realm';
 
 import { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
 import { CommandField } from 'https://cardstack.com/base/command';
@@ -35,6 +36,7 @@ export default class CommandService extends Service {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
   @service private declare cardService: CardService;
+  @service private declare realm: Realm;
 
   //TODO: Convert to non-EC async method after fixing CS-6987
   run = task(async (command: CommandField, roomId: string) => {
@@ -62,7 +64,7 @@ export default class CommandService extends Service {
           );
         }
         let query = { filter: payload.filter };
-        let realmUrls = this.cardService.realmURLs;
+        let realmUrls = this.cardService.unresolvedRealmURLs;
         let instances: CardDef[] = flatMap(
           await Promise.all(
             realmUrls.map(
@@ -75,12 +77,20 @@ export default class CommandService extends Service {
           instances.map((c) => this.cardService.serializeCard(c)),
         );
       } else if (command.name === 'generateAppModule') {
-        let realmURL = this.cardService.defaultURL;
+        let defaultWritableRealm = this.realm.defaultWritableRealm;
+
+        if (!defaultWritableRealm) {
+          throw new Error(
+            `Cannot generate app module without a writable realm`,
+          );
+        }
+
+        let realmURL = defaultWritableRealm.path;
         let timestamp = Date.now();
         let fileName =
           (payload.appTitle as string)?.replace(/ /g, '-').toLowerCase() ??
           `untitled-app-${timestamp}`;
-        let moduleId = `${realmURL.href}AppModules/${fileName}-${timestamp}`;
+        let moduleId = `${realmURL}AppModules/${fileName}-${timestamp}`;
         let content = (payload.moduleCode as string) ?? '';
         res = await this.cardService.saveSource(
           new URL(`${moduleId}.gts`),

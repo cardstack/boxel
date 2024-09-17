@@ -6,6 +6,11 @@ import {
 } from '../docker/synapse';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
 import {
+  appURL,
+  startServer as startRealmServer,
+  type IsolatedRealmServer,
+} from '../helpers/isolated-realm-server';
+import {
   clearLocalStorage,
   validateEmail,
   gotoRegistration,
@@ -15,6 +20,7 @@ import {
 
 test.describe('User Registration w/o Token', () => {
   let synapse: SynapseInstance;
+  let realmServer: IsolatedRealmServer;
 
   test.beforeEach(async () => {
     synapse = await synapseStart({
@@ -22,9 +28,11 @@ test.describe('User Registration w/o Token', () => {
     });
     await smtpStart();
     await registerRealmUsers(synapse);
+    realmServer = await startRealmServer();
   });
 
   test.afterEach(async () => {
+    await realmServer.stop();
     await synapseStop(synapse.synapseId);
     await smtpStop();
   });
@@ -32,8 +40,8 @@ test.describe('User Registration w/o Token', () => {
   test('it can register a user without a registration token', async ({
     page,
   }) => {
-    await clearLocalStorage(page);
-    await gotoRegistration(page);
+    await clearLocalStorage(page, appURL);
+    await gotoRegistration(page, appURL);
 
     await expect(
       page.locator('[data-test-token-field]'),

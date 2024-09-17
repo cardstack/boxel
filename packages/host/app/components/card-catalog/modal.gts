@@ -395,8 +395,8 @@ export default class CardCatalogModal extends Component<Signature> {
         dismissModal: false,
         query,
         originalQuery: query,
-        availableRealmUrls: this.cardService.realmURLs,
-        selectedRealmUrls: this.cardService.realmURLs,
+        availableRealmUrls: this.cardService.unresolvedRealmURLs,
+        selectedRealmUrls: this.cardService.unresolvedRealmURLs,
       });
       this.stateStack.push(cardCatalogState);
 

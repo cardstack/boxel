@@ -1272,7 +1272,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       let cardService = this.owner.lookup(
         'service:card-service',
       ) as CardService;
-      cardService.realmURLs.push('http://localhost:4202/test/');
+      cardService.unresolvedRealmURLs.push('http://localhost:4202/test/');
       await visitOperatorMode({
         stacks: [
           [
