@@ -61,17 +61,22 @@ export function lookupRouteTable<T>(
   paths: RealmPaths,
   request: Request,
 ) {
+  console.log('lookupRouteTable', request.method, request.url);
   let acceptMimeType = extractSupportedMimeType(
     request.headers.get('Accept') as unknown as null | string | [string],
   );
+  console.log('acceptMimeType', acceptMimeType);
   if (!acceptMimeType) {
+    console.log('no acceptMimeType');
     return;
   }
   if (!isHTTPMethod(request.method)) {
+    console.log('no isHTTPMethod');
     return;
   }
   let routes = routeTable.get(acceptMimeType)?.get(request.method);
   if (!routes) {
+    console.log('no routes');
     return;
   }
 
@@ -82,11 +87,15 @@ export function lookupRouteTable<T>(
     request.url.endsWith('/') && requestPath !== '/'
       ? `${requestPath}/`
       : requestPath;
+  console.log('requestPath', requestPath);
   for (let [route, value] of routes) {
+    console.log('route, value', route, value);
     // let's take care of auto escaping '/' and anchoring in our route regex's
     // to make it more readable in our config
     let routeRegExp = new RegExp(`^${route.replace('/', '\\/')}$`);
+    console.log('routeRegExp', routeRegExp);
     if (routeRegExp.test(requestPath)) {
+      console.log('returning value');
       return value;
     }
   }
@@ -153,14 +162,19 @@ export class Router {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    console.log('handle', request.method, request.url);
     let handler = this.lookupHandler(request);
+    console.log('handler', handler);
     if (!handler) {
+      console.log('not found');
       return notFound(request, requestContext);
     }
     try {
+      console.log('calling handler');
       return await handler(request, requestContext);
     } catch (err) {
       if (err instanceof CardError) {
+        console.log('responseWithError');
         return responseWithError(err, requestContext);
       }
 
