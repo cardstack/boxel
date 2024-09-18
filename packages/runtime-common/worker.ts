@@ -310,7 +310,7 @@ export function getReader(
           ).getTime(),
         );
       } else {
-        throw new Error(`Response for ${url.href} has no 'x-created' header`);
+        created = lastModified; // Default created to lastModified if no created header is present
       }
       let path = new RealmPaths(realmURL).local(url);
       return {
