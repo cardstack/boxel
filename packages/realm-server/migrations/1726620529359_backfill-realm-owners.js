@@ -98,5 +98,8 @@ exports.down = (pgm) => {
       pgm.sql(
         "DELETE FROM realm_user_permissions WHERE realm_url = 'http://localhost:4204/' AND username = '@experiments_realm:localhost'",
       );
+      pgm.sql(
+        "DELETE FROM realm_user_permissions WHERE realm_url = 'http://localhost:4205/test/' AND username = '@test_realm:localhost'",
+      );
   }
 };
