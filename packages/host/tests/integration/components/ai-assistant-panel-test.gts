@@ -1823,17 +1823,20 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
     await waitFor('[data-test-command-result]');
     await waitFor('.result-list li:nth-child(2)');
-    let commandResultEvents = (await getRoomEvents(roomId)).filter(
-      (event) =>
-        event.type === 'm.room.message' &&
-        typeof event.content === 'object' &&
-        event.content.msgtype === 'org.boxel.commandResult',
-    ) as CommandResultEvent[];
-    assert.equal(
-      commandResultEvents[0].content.result.length,
-      2,
-      'number of search results',
-    );
+    let commandResultEvent = (await getRoomEvents(roomId)).find(
+      (e) =>
+        e.type === 'm.room.message' &&
+        e.content.msgtype === 'org.boxel.commandResult' &&
+        e.content['m.relates_to']?.rel_type === 'm.annotation',
+    ) as CommandResultEvent;
+    let serializedResults =
+      typeof commandResultEvent?.content?.result === 'string'
+        ? JSON.parse(commandResultEvent.content.result)
+        : commandResultEvent.content.result;
+    serializedResults = Array.isArray(serializedResults)
+      ? serializedResults
+      : [];
+    assert.equal(serializedResults.length, 2, 'number of search results');
     assert
       .dom('[data-test-command-message]')
       .containsText('Search for the following card');
