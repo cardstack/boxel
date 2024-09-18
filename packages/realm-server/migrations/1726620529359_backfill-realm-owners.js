@@ -44,7 +44,10 @@ exports.up = (pgm) => {
            ('http://localhost:4203/', '*', true, false, false),
            ('http://localhost:4204/', '@experiments_realm:localhost', true, true, true),
            ('http://localhost:4204/', '*', true, false, false),
-           ('http://localhost:4204/', 'users', true, true, false)`,
+           ('http://localhost:4204/', 'users', true, true, false),
+           ('http://localhost:4205/test/', '@test_realm:localhost', true, true, true),
+           ('http://localhost:4205/test/', '*', true, false, false),
+           ('http://localhost:4205/test/', 'users', true, true, false)`,
       );
   }
 };
