@@ -202,6 +202,7 @@ module('Realm Server', function (hooks) {
         let json = response.body;
         assert.ok(json.data.meta.lastModified, 'lastModified exists');
         delete json.data.meta.lastModified;
+        delete json.data.meta.resourceCreatedAt;
         assert.strictEqual(
           response.get('X-boxel-realm-url'),
           testRealmURL.href,
@@ -546,6 +547,7 @@ module('Realm Server', function (hooks) {
           );
           assert.ok(json.data.meta.lastModified, 'lastModified is populated');
           delete json.data.meta.lastModified;
+          delete json.data.meta.resourceCreatedAt;
           let cardFile = join(dir.name, 'realm_server_1', 'test', entry);
           assert.ok(existsSync(cardFile), 'card json exists');
           let card = readJSONSync(cardFile);
@@ -2835,6 +2837,7 @@ module('Realm Server', function (hooks) {
         let json = response.body;
         assert.ok(json.data.meta.lastModified, 'lastModified exists');
         delete json.data.meta.lastModified;
+        delete json.data.meta.resourceCreatedAt;
         assert.strictEqual(
           response.get('X-boxel-realm-url'),
           testRealmURL.href,

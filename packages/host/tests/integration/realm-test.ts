@@ -110,6 +110,9 @@ module('Integration | realm', function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}dir/empty.json`,
           ),
+          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+            `${testRealmURL}dir/empty.json`,
+          ),
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
@@ -205,6 +208,9 @@ module('Integration | realm', function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}dir/mango.json`,
           ),
+          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+            `${testRealmURL}dir/mango.json`,
+          ),
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
@@ -230,6 +236,9 @@ module('Integration | realm', function (hooks) {
               name: 'Person',
             },
             lastModified: adapter.lastModifiedMap.get(
+              `${testRealmURL}dir/owner.json`,
+            ),
+            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
               `${testRealmURL}dir/owner.json`,
             ),
             realmInfo: testRealmInfo,
@@ -285,6 +294,7 @@ module('Integration | realm', function (hooks) {
     let json = await response.json();
     let { included = [] } = json;
     delete included[0]?.meta.lastModified;
+    delete included[0]?.meta.resourceCreatedAt;
     assert.deepEqual(json, {
       data: {
         type: 'card',
@@ -316,6 +326,9 @@ module('Integration | realm', function (hooks) {
           ),
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
+          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+            `${testRealmURL}dir/mango.json`,
+          ),
         },
         links: {
           self: `${testRealmURL}dir/mango`,
@@ -562,6 +575,9 @@ module('Integration | realm', function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}Pet/${id}.json`,
           ),
+          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+            `${testRealmURL}Pet/${id}.json`,
+          ),
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
@@ -587,6 +603,9 @@ module('Integration | realm', function (hooks) {
               name: 'Person',
             },
             lastModified: adapter.lastModifiedMap.get(
+              `${testRealmURL}dir/owner.json`,
+            ),
+            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
               `${testRealmURL}dir/owner.json`,
             ),
             realmInfo: testRealmInfo,
@@ -942,6 +961,9 @@ module('Integration | realm', function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}ski-trip.json`,
           ),
+          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+            `${testRealmURL}ski-trip.json`,
+          ),
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
@@ -1109,11 +1131,14 @@ module('Integration | realm', function (hooks) {
             module: `http://localhost:4202/test/pet-person`,
             name: 'PetPerson',
           },
+          realmInfo: testRealmInfo,
+          realmURL: testRealmURL,
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}jackie.json`,
           ),
-          realmInfo: testRealmInfo,
-          realmURL: testRealmURL,
+          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+            `${testRealmURL}jackie.json`,
+          ),
         },
       },
       included: [
@@ -1135,6 +1160,9 @@ module('Integration | realm', function (hooks) {
               name: 'Person',
             },
             lastModified: adapter.lastModifiedMap.get(
+              `${testRealmURL}dir/friend.json`,
+            ),
+            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
               `${testRealmURL}dir/friend.json`,
             ),
             realmInfo: testRealmInfo,
@@ -1162,6 +1190,9 @@ module('Integration | realm', function (hooks) {
             ),
             realmInfo: testRealmInfo,
             realmURL: testRealmURL,
+            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+              `${testRealmURL}dir/van-gogh.json`,
+            ),
           },
         },
       ],
@@ -1325,6 +1356,9 @@ module('Integration | realm', function (hooks) {
           name: 'PetPerson',
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
+        resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+          `${testRealmURL}jackie.json`,
+        ),
         realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
@@ -1437,6 +1471,9 @@ module('Integration | realm', function (hooks) {
           name: 'PetPerson',
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
+        resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+          `${testRealmURL}jackie.json`,
+        ),
         realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
@@ -1540,6 +1577,9 @@ module('Integration | realm', function (hooks) {
           name: 'PetPerson',
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
+        resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+          `${testRealmURL}jackie.json`,
+        ),
         realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
@@ -1668,6 +1708,9 @@ module('Integration | realm', function (hooks) {
           name: 'PetPerson',
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
+        resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+          `${testRealmURL}jackie.json`,
+        ),
         realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
@@ -1810,6 +1853,9 @@ module('Integration | realm', function (hooks) {
           name: 'PetPerson',
         },
         lastModified: adapter.lastModifiedMap.get(`${testRealmURL}jackie.json`),
+        resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+          `${testRealmURL}jackie.json`,
+        ),
         realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
@@ -1940,6 +1986,9 @@ module('Integration | realm', function (hooks) {
           ),
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
+          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+            `${testRealmURL}dir/mango.json`,
+          ),
         },
         links: {
           self: `${testRealmURL}dir/mango`,
@@ -1967,6 +2016,9 @@ module('Integration | realm', function (hooks) {
             ),
             realmInfo: testRealmInfo,
             realmURL: testRealmURL,
+            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+              `${testRealmURL}dir/mariko.json`,
+            ),
           },
           links: {
             self: `${testRealmURL}dir/mariko`,
@@ -2126,6 +2178,9 @@ module('Integration | realm', function (hooks) {
           ),
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
+          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+            `${testRealmURL}dir/driver.json`,
+          ),
         },
         links: {
           self: `${testRealmURL}dir/driver`,
@@ -2844,6 +2899,7 @@ module('Integration | realm', function (hooks) {
     );
     let json = await response.json();
     delete json.included?.[0].meta.lastModified;
+    delete json.included?.[0].meta.resourceCreatedAt;
     assert.deepEqual(json, {
       data: [
         {
@@ -2876,6 +2932,9 @@ module('Integration | realm', function (hooks) {
             ),
             realmInfo: testRealmInfo,
             realmURL: testRealmURL,
+            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+              `${testRealmURL}dir/mango.json`,
+            ),
           },
           links: {
             self: `${testRealmURL}dir/mango`,
@@ -2902,6 +2961,9 @@ module('Integration | realm', function (hooks) {
             ),
             realmInfo: testRealmInfo,
             realmURL: testRealmURL,
+            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+              `${testRealmURL}dir/mariko.json`,
+            ),
           },
           links: {
             self: `${testRealmURL}dir/mariko`,
@@ -2937,6 +2999,9 @@ module('Integration | realm', function (hooks) {
             ),
             realmInfo: testRealmInfo,
             realmURL: testRealmURL,
+            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+              `${testRealmURL}dir/vanGogh.json`,
+            ),
           },
           links: {
             self: `${testRealmURL}dir/vanGogh`,
