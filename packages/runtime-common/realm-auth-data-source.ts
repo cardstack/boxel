@@ -11,7 +11,7 @@ export class RealmAuthDataSource {
   constructor(
     matrixClient: MatrixClient,
     // we want our fetch to be lazily obtained as it might be the very fetch
-    // that this is composed by middleware containing this data source instance
+    // that is composed by middleware containing this data source instance
     getFetch: () => typeof globalThis.fetch,
     realmURL: string,
   ) {

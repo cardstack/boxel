@@ -901,7 +901,7 @@ export class Realm {
     try {
       token = this.#adapter.verifyJWT(tokenString, this.#realmSecretSeed);
 
-      // if the client is the the realm matrix user then we permit all actions
+      // if the client is the realm matrix user then we permit all actions
       if (token.user === this.#matrixClient.getUserId()) {
         return;
       }
