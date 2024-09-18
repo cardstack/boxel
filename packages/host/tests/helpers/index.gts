@@ -528,6 +528,7 @@ async function setupTestRealm({
     queue,
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
   });
+  // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
   virtualNetwork.mount(realm.maybeHandle);
   await adapter.ready;
   await worker.run();

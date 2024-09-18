@@ -2228,6 +2228,11 @@ module('Realm Server', function (hooks) {
         new URL(json.data.id),
       );
       assert.deepEqual(permissions, {
+        [`@realm/mango_${realmName}:localhost`]: [
+          'read',
+          'write',
+          'realm-owner',
+        ],
         [ownerUserId]: ['read', 'write', 'realm-owner'],
       });
 

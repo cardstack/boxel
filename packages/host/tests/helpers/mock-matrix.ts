@@ -378,6 +378,10 @@ class MockClient implements ExtendedClient {
     return this.clientOpts.userId;
   }
 
+  async hashMessageWithSecret(_message: string): Promise<string> {
+    throw new Error('Method not implemented.');
+  }
+
   async createRealmSession(realmURL: URL): Promise<string> {
     let secret = "shhh! it's a secret";
     let nowInSeconds = unixTime(Date.now());

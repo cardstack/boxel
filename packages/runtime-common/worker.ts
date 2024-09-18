@@ -178,7 +178,11 @@ export class Worker {
       username: args.realmUsername,
       seed: this.#secretSeed,
     });
-    let fetch = fetcher(this.#virtualNetwork.fetch, [
+    let _fetch: typeof globalThis.fetch | undefined;
+    function getFetch() {
+      return _fetch!;
+    }
+    _fetch = fetcher(this.#virtualNetwork.fetch, [
       async (req, next) => {
         req.headers.set('X-Boxel-Building-Index', 'true');
         return next(req);
@@ -188,16 +192,12 @@ export class Worker {
         return (await maybeHandleScopedCSSRequest(req)) || next(req);
       },
       authorizationMiddleware(
-        new RealmAuthDataSource(
-          matrixClient,
-          this.#virtualNetwork.fetch,
-          args.realmURL,
-        ),
+        new RealmAuthDataSource(matrixClient, getFetch, args.realmURL),
       ),
     ]);
     let optsId = this.runnerOptsMgr.setOptions({
-      _fetch: fetch,
-      reader: getReader(fetch, new URL(args.realmURL)),
+      _fetch,
+      reader: getReader(_fetch, new URL(args.realmURL)),
       indexWriter: this.#indexWriter,
       registerRunner: async (fromScratch, incremental) => {
         this.#fromScratch = fromScratch;
