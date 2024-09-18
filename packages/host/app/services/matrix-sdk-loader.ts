@@ -116,7 +116,15 @@ export type ExtendedClient = Pick<
     password: string,
   ): Promise<MatrixSDK.LoginResponse>;
   createRealmSession(realmURL: URL): Promise<string>;
+  hashMessageWithSecret(message: string): Promise<string>;
 };
+
+async function hashMessageWithSecret(
+  this: ExtendedClient,
+  _fetch: typeof globalThis.fetch,
+) {
+  throw new Error(`This should not be called on the browser client`);
+}
 
 async function createRealmSession(
   this: ExtendedClient,
@@ -298,6 +306,8 @@ function extendedClient(
           return setAccountData.bind(extendedTarget, fetch);
         case 'getAccountData':
           return getAccountData.bind(extendedTarget, fetch);
+        case 'hashMessageWithSecret':
+          return hashMessageWithSecret.bind(extendedTarget, fetch);
         case 'allRoomMessages':
           return allRoomMessages.bind(extendedTarget, fetch);
         case 'requestEmailToken':

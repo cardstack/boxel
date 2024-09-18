@@ -221,7 +221,7 @@ export async function createRealm({
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
   });
   if (worker) {
-    virtualNetwork.mount(realm.maybeHandle);
+    virtualNetwork.mount(realm.handle);
     await worker.run();
   }
   return realm;
@@ -321,39 +321,34 @@ export async function runTestRealmServer({
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
   realmURL: URL;
   permissions?: RealmPermissions;
-  virtualNetwork: VirtualNetwork; // this is the public network
+  virtualNetwork: VirtualNetwork;
   queue: Queue;
   dbAdapter: PgAdapter;
   matrixURL: URL;
   matrixConfig?: MatrixConfig;
 }) {
-  // the test worker needs a special privileged network that has the interior
-  // Realm.maybeHandle mounted--this prevents the test worker from having to
-  // authenticate with itself when talking to the realm whose credentials its
-  // using
-  let privateNetwork = createVirtualNetwork();
   let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue,
     runnerOptsManager: manager,
     indexRunner,
-    virtualNetwork: privateNetwork,
+    virtualNetwork,
     matrixURL,
     secretSeed,
   });
+  await worker.run();
   let testRealm = await createRealm({
     dir: testRealmDir,
     fileSystem,
     realmURL: realmURL.href,
     permissions,
-    virtualNetwork: privateNetwork,
+    virtualNetwork,
     matrixConfig,
     queue,
     dbAdapter,
   });
   virtualNetwork.mount(testRealm.handle);
-  await worker.run();
   let matrixClient = new MatrixClient({
     matrixURL: realmServerTestMatrix.url,
     username: realmServerTestMatrix.username,
@@ -372,8 +367,6 @@ export async function runTestRealmServer({
     seedPath,
     serverURL: new URL(realmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
-    onRealmStart: (realm) => privateNetwork.mount(realm.maybeHandle),
-    onRealmCreate: (realm) => privateNetwork.mount(realm.maybeHandle),
   });
   let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
   await testRealmServer.start();

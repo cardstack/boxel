@@ -2,11 +2,11 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
-import compact from 'ember-composable-helpers/helpers/compact';
 import cssUrl from 'ember-css-url';
 import { Link } from 'ember-link';
 
 import cn from '../../helpers/cn.ts';
+import compact from '../../helpers/compact.ts';
 import type { MenuDivider } from '../../helpers/menu-divider.ts';
 import type { MenuItem } from '../../helpers/menu-item.ts';
 import { eq } from '../../helpers/truth-helpers.ts';

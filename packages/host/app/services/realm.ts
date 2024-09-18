@@ -14,6 +14,8 @@ import window from 'ember-window-mock';
 
 import { TrackedSet } from 'tracked-built-ins';
 
+import { logger } from '@cardstack/runtime-common';
+
 import {
   Permissions,
   type RealmInfo,
@@ -26,7 +28,7 @@ import ENV from '@cardstack/host/config/environment';
 import type LoaderService from './loader-service';
 import type MatrixService from './matrix-service';
 
-const { ownRealmURL } = ENV;
+const log = logger('service:realm');
 
 interface Meta {
   info: RealmInfo;
@@ -51,6 +53,10 @@ class RealmResource {
     token: string | undefined,
   ) {
     this.token = token;
+  }
+
+  get url(): string {
+    return this.realmURL;
   }
 
   get token(): string | undefined {
@@ -205,6 +211,8 @@ export default class RealmService extends Service {
   private realms: Map<string, RealmResource> = this.restoreSessions();
   private currentKnownRealms = new TrackedSet<string>();
 
+  @tracked private identifyRealmTracker = 0;
+
   async ensureRealmMeta(realmURL: string): Promise<void> {
     let resource = this.getOrCreateRealmResource(realmURL);
     await resource.fetchMeta();
@@ -216,11 +224,14 @@ export default class RealmService extends Service {
   }
 
   info = (url: string): RealmInfo => {
-    let resource = this.knownRealm(url);
+    let resource = this.knownRealm(url, false);
     if (!resource) {
       this.identifyRealm.perform(url);
+
+      this.identifyRealmTracker;
+
       return {
-        name: 'Unknown Realm',
+        name: 'Unknown Workspace',
         backgroundURL: null,
         iconURL: null,
       };
@@ -229,7 +240,7 @@ export default class RealmService extends Service {
     if (!resource.meta) {
       resource.fetchMeta();
       return {
-        name: 'Unknown Realm',
+        name: 'Unknown Workspace',
         backgroundURL: null,
         iconURL: null,
       };
@@ -244,6 +255,10 @@ export default class RealmService extends Service {
 
   canWrite = (url: string): boolean => {
     return this.knownRealm(url)?.canWrite ?? false;
+  };
+
+  url = (url: string): string | undefined => {
+    return this.knownRealm(url)?.url;
   };
 
   permissions = (url: string): Permissions => {
@@ -280,21 +295,50 @@ export default class RealmService extends Service {
   }
 
   // Currently the personal realm has not yet been implemented,
-  // until then default to the realm serving the host app if it is writable,
-  // otherwise default to the first writable realm lexically
+  // default to the first writable realm lexically
   @cached
-  get userDefaultRealm(): { path: string; info: RealmInfo } {
+  get defaultWritableRealm(): { path: string; info: RealmInfo } | null {
     let writeableRealms = Object.entries(this.allRealmsMeta)
       .filter(([, i]) => i.canWrite)
       .sort(([, i], [, j]) => i.info.name.localeCompare(j.info.name));
 
-    let ownRealm = writeableRealms.find(([url]) => url === ownRealmURL);
-    if (ownRealm) {
-      return { path: ownRealm[0], info: ownRealm[1].info };
-    } else {
-      let first = writeableRealms[0];
-      return { path: first[0], info: first[1].info };
+    let first = writeableRealms[0];
+
+    if (!first) {
+      log.debug(
+        `No writable realms found, known realms and writability: ${Object.keys(
+          this.allRealmsMeta,
+        )
+          .map(
+            (realmUrl) =>
+              `${realmUrl}: ${this.allRealmsMeta[realmUrl].canWrite}`,
+          )
+          .join(', ')}`,
+      );
+
+      return null;
     }
+
+    return { path: first[0], info: first[1].info };
+  }
+
+  @cached
+  get defaultReadableRealm(): { path: string; info: RealmInfo } {
+    if (this.defaultWritableRealm) {
+      return this.defaultWritableRealm;
+    }
+
+    let allRealmsMetaEntries = Object.entries(this.allRealmsMeta);
+
+    if (allRealmsMetaEntries.length > 0) {
+      let firstMeta = allRealmsMetaEntries[0];
+      return { path: firstMeta[0], info: firstMeta[1].info };
+    }
+
+    return {
+      path: ENV.resolvedBaseRealmURL,
+      info: this.info(ENV.resolvedBaseRealmURL),
+    };
   }
 
   token = (url: string): string | undefined => {
@@ -366,6 +410,7 @@ export default class RealmService extends Service {
       let realmURL = response.headers.get('x-boxel-realm-url');
       if (realmURL) {
         this.getOrCreateRealmResource(realmURL);
+        this.identifyRealmTracker = 0;
       }
     },
   );

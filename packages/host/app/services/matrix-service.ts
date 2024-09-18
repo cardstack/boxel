@@ -314,7 +314,7 @@ export default class MatrixService extends Service {
   private async loginToRealms() {
     // This is where we would actually load user-specific choices out of the
     // user's profile based on this.client.getUserId();
-    let activeRealms = this.cardService.realmURLs;
+    let activeRealms = this.cardService.userRealms;
 
     await Promise.all(
       activeRealms.map(async (realmURL) => {
@@ -521,7 +521,7 @@ export default class MatrixService extends Service {
           mappings,
         );
         if (this.realm.canWrite(attachedOpenCard.id)) {
-          tools.push(getPatchTool(attachedOpenCard, patchSpec));
+          tools.push(getPatchTool(attachedOpenCard.id, patchSpec));
           tools.push(getSearchTool());
           tools.push(getGenerateAppModuleTool(attachedOpenCard.id));
         }

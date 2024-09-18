@@ -3,6 +3,7 @@ import {
   type LooseSingleCardDocument,
   type CardResource,
 } from '@cardstack/runtime-common';
+import { getSearchTool } from '@cardstack/runtime-common/helpers/ai';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardFragmentContent,
@@ -241,24 +242,29 @@ export function getRelevantCards(
   };
 }
 
-export function getTools(history: DiscreteMatrixEvent[], aiBotUserId: string) {
+export function getTools(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): Tool[] {
+  let searchTool = getSearchTool();
+  let tools = [searchTool];
   // Just get the users messages
   const userMessages = history.filter((event) => event.sender !== aiBotUserId);
   // Get the last message
   if (userMessages.length === 0) {
-    // If the user has sent no messages, there are no relevant tools to return
-    return [];
+    // If the user has sent no messages, return tools that are available by default
+    return tools;
   }
   const lastMessage = userMessages[userMessages.length - 1];
   if (
     lastMessage.type === 'm.room.message' &&
     lastMessage.content.msgtype === 'org.boxel.message' &&
-    lastMessage.content.data?.context?.tools
+    lastMessage.content.data?.context?.tools?.length
   ) {
     return lastMessage.content.data.context.tools;
   } else {
-    // If it's a different message type, or there are no tools, return an empty array
-    return [];
+    // If it's a different message type, or there are no tools, return tools that are available by default
+    return tools;
   }
 }
 
@@ -429,7 +435,7 @@ export function getModifyPrompt(
 
   if (tools.length == 0) {
     systemMessage +=
-      'You are unable to edit any cards, the user has not given you access, they need to open the card on the stack and let it be auto-attached';
+      'You are unable to edit any cards, the user has not given you access, they need to open the card on the stack and let it be auto-attached. However, you are allowed to search for cards.';
   }
 
   let messages: OpenAIPromptMessage[] = [

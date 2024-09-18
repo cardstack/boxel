@@ -276,11 +276,26 @@ export class MatrixClient {
       msgtype: 'm.text',
     });
   }
+
+  async hashMessageWithSecret(message: string) {
+    let hash = new Sha256();
+    hash.update(message);
+    if (this.seed) {
+      hash.update(await passwordFromSeed(this.username, this.seed));
+    } else if (this.password) {
+      hash.update(this.password);
+    }
+    return uint8ArrayToHex(await hash.digest());
+  }
+}
+
+export function getMatrixUsername(userId: string) {
+  return userId.replace(/^@/, '').replace(/:.*$/, '');
 }
 
 export async function passwordFromSeed(username: string, seed: string) {
   let hash = new Sha256();
-  let cleanUsername = username.replace(/^@/, '').replace(/:.*$/, '');
+  let cleanUsername = getMatrixUsername(username);
   hash.update(cleanUsername);
   hash.update(seed);
   return uint8ArrayToHex(await hash.digest());

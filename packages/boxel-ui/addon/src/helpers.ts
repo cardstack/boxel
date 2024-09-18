@@ -1,4 +1,5 @@
 import cn from './helpers/cn.ts';
+import compact from './helpers/compact.ts';
 import { getContrastColor } from './helpers/contrast-color.ts';
 import cssVar from './helpers/css-var.ts';
 import dayjsFormat from './helpers/dayjs-format.ts';
@@ -15,6 +16,7 @@ export {
   and,
   bool,
   cn,
+  compact,
   cssVar,
   dayjsFormat,
   element,
