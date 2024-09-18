@@ -46,6 +46,7 @@ import * as Sentry from '@sentry/node';
 import {
   MatrixClient,
   passwordFromSeed,
+  getMatrixUsername,
 } from '@cardstack/runtime-common/matrix-client';
 import {
   MatrixBackendAuthentication,
@@ -93,7 +94,6 @@ export class RealmServer {
   private seedPath: string | undefined;
   private matrixRegistrationSecret: string | undefined;
   private matrixRegistrationSecretFile: string | undefined;
-  private onRealmCreate: ((realm: Realm) => void) | undefined;
 
   constructor({
     serverURL,
@@ -109,8 +109,6 @@ export class RealmServer {
     matrixRegistrationSecret,
     matrixRegistrationSecretFile,
     seedPath,
-    onRealmStart,
-    onRealmCreate,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -125,10 +123,6 @@ export class RealmServer {
     seedPath?: string;
     matrixRegistrationSecret?: string;
     matrixRegistrationSecretFile?: string;
-    // these are a special callbacks for our tests that allows the test worker
-    // to mount the realm in its private network
-    onRealmStart?: (realm: Realm) => void;
-    onRealmCreate?: (realm: Realm) => void;
   }) {
     if (!matrixRegistrationSecret && !matrixRegistrationSecretFile) {
       throw new Error(
@@ -150,14 +144,7 @@ export class RealmServer {
     this.getIndexHTML = getIndexHTML;
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.matrixRegistrationSecretFile = matrixRegistrationSecretFile;
-    this.onRealmCreate = onRealmCreate;
     this.realms = [...realms, ...this.loadRealms()];
-
-    if (onRealmStart) {
-      for (let realm of this.realms) {
-        onRealmStart(realm);
-      }
-    }
   }
 
   @Memoize()
@@ -354,9 +341,6 @@ export class RealmServer {
       let realm: Realm;
       try {
         realm = await this.createRealm(ownerUserId, realmName);
-        if (this.onRealmCreate) {
-          this.onRealmCreate(realm);
-        }
         await realm.start();
       } catch (e: any) {
         if ('status' in e && e.status === 400) {
@@ -442,7 +426,7 @@ export class RealmServer {
       );
     }
 
-    let ownerUsername = ownerUserId.replace(/^@/, '').replace(/:.*$/, '');
+    let ownerUsername = getMatrixUsername(ownerUserId);
     let url = new URL(
       `${this.serverURL.pathname.replace(
         /\/$/,
@@ -466,7 +450,7 @@ export class RealmServer {
     let adapter = new NodeAdapter(resolve(String(realmPath)));
 
     let username = `realm/${ownerUsername}_${realmName}`;
-    await registerUser({
+    let { userId } = await registerUser({
       matrixURL: this.matrixClient.matrixURL,
       displayname: username,
       username,
@@ -475,6 +459,7 @@ export class RealmServer {
     });
 
     await insertPermissions(this.dbAdapter, new URL(url), {
+      [userId]: DEFAULT_PERMISSIONS,
       [ownerUserId]: DEFAULT_PERMISSIONS,
     });
 

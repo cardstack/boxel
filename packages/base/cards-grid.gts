@@ -70,6 +70,15 @@ let availableSortOptions: SortOption[] = [
       },
     ],
   },
+  {
+    displayName: 'Created at',
+    sort: [
+      {
+        by: 'createdAt',
+        direction: 'desc',
+      },
+    ],
+  },
 ];
 
 class Isolated extends Component<typeof CardsGrid> {

@@ -4,8 +4,6 @@ import {
   VirtualNetwork,
   logger,
   RunnerOptionsManager,
-  permissionsExist,
-  insertPermissions,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
@@ -194,8 +192,6 @@ let dist: URL = new URL(distURL);
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
 
-    await seedRealmPermissions(dbAdapter, new URL(url));
-
     let username = String(usernames[i]);
     if (username.length === 0) {
       console.error(`missing username for realm ${url}`);
@@ -249,7 +245,19 @@ let dist: URL = new URL(distURL);
     matrixRegistrationSecretFile,
   });
 
-  server.listen(port);
+  let httpServer = server.listen(port);
+  process.on('message', (message) => {
+    if (message === 'stop') {
+      console.log(`stopping realm server on port ${port}...`);
+      httpServer.closeAllConnections();
+      httpServer.close(() => {
+        console.log(`realm server on port ${port} has stopped`);
+        if (process.send) {
+          process.send('stopped');
+        }
+      });
+    }
+  });
 
   await server.start();
 
@@ -265,6 +273,10 @@ let dist: URL = new URL(distURL);
     }
   }
   log.info(`Using host url: '${dist}' for card pre-rendering`);
+
+  if (process.send) {
+    process.send('ready');
+  }
 })().catch((e: any) => {
   Sentry.captureException(e);
   console.error(
@@ -319,21 +331,5 @@ async function startWorker() {
   if (timeout) {
     console.error(`timed-out waiting for worker to start. Stopping server`);
     process.exit(-2);
-  }
-}
-
-// In case there are no permissions in the database, seed the realm with default permissions:
-// Base realm: read permissions for everyone
-// Other realms: read permissions for everyone, read/write permissions for signed up users
-async function seedRealmPermissions(dbAdapter: PgAdapter, realmURL: URL) {
-  if (!(await permissionsExist(dbAdapter, realmURL))) {
-    if (realmURL.href === 'https://cardstack.com/base/') {
-      await insertPermissions(dbAdapter, realmURL, { '*': ['read'] });
-    } else {
-      await insertPermissions(dbAdapter, realmURL, {
-        '*': ['read'],
-        users: ['read', 'write'],
-      });
-    }
   }
 }

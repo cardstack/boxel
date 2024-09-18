@@ -2,6 +2,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { primitive } from '../constants';
 import { Loader } from '../loader';
 import { CardDef } from 'https://cardstack.com/base/card-api';
+import type { Tool } from 'https://cardstack.com/base/matrix-event';
 
 type ArraySchema = {
   type: 'array';
@@ -370,7 +371,10 @@ export function generateCardPatchCallSpecification(
   }
 }
 
-export function getPatchTool(attachedOpenCard: CardDef, patchSpec: any) {
+export function getPatchTool(
+  attachedOpenCardId: CardDef['id'],
+  patchSpec: any,
+): Tool {
   return {
     type: 'function',
     function: {
@@ -381,7 +385,7 @@ export function getPatchTool(attachedOpenCard: CardDef, patchSpec: any) {
         properties: {
           card_id: {
             type: 'string',
-            const: attachedOpenCard.id, // Force the valid card_id to be the id of the card being patched
+            const: attachedOpenCardId, // Force the valid card_id to be the id of the card being patched
           },
           description: {
             type: 'string',
@@ -394,12 +398,15 @@ export function getPatchTool(attachedOpenCard: CardDef, patchSpec: any) {
   };
 }
 
-export function getSearchTool() {
+export function getSearchTool(): Tool {
   return {
     type: 'function',
     function: {
       name: 'searchCard',
-      description: `Propose a query to search for a card instance filtered by type. Always prioritise search based upon the card that was last shared.`,
+      description:
+        'Propose a query to search for a card instance filtered by type. \
+  If a card was shared with you, always prioritise search based upon the card that was last shared. \
+  If you do not have information on card module and name, do the search using the `_cardType` attribute.',
       parameters: {
         type: 'object',
         properties: {
@@ -414,7 +421,7 @@ export function getSearchTool() {
                 properties: {
                   module: {
                     type: 'string',
-                    description: `the absolute path of the module`,
+                    description: 'the absolute path of the module',
                   },
                   name: {
                     type: 'string',
@@ -422,6 +429,16 @@ export function getSearchTool() {
                   },
                 },
                 required: ['module', 'name'],
+              },
+              eq: {
+                type: 'object',
+                properties: {
+                  _cardType: {
+                    type: 'string',
+                    description: 'name of the card type',
+                  },
+                },
+                required: ['_cardType'],
               },
             },
           },

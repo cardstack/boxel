@@ -403,11 +403,14 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   setupOnSave(hooks);
   let { setRealmPermissions } = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
-    activeRealms: [baseRealm.url, testRealmURL, testRealmURL2],
+    activeRealms: [testRealmURL, testRealmURL2],
   });
 
   hooks.beforeEach(async function () {
-    setRealmPermissions({ [testRealmURL]: ['read', 'write'] });
+    setRealmPermissions({
+      [testRealmURL]: ['read', 'write'],
+      [testRealmURL2]: ['read', 'write'],
+    });
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader

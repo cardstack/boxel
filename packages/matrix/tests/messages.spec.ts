@@ -296,7 +296,9 @@ test.describe('Room messages', () => {
   }) => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomId(page);
-    await page.locator(`[data-test-boxel-filter-list-button="All Cards"]`).click();
+    await page
+      .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
+      .click();
     await page
       .locator(
         `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${testHost}/mango"]`,
@@ -352,39 +354,50 @@ test.describe('Room messages', () => {
         },
       },
       {
+        type: 'function',
         function: {
-          description: `Propose a query to search for a card instance filtered by type. Always prioritise search based upon the card that was last shared.`,
           name: 'searchCard',
+          description:
+            'Propose a query to search for a card instance filtered by type.   If a card was shared with you, always prioritise search based upon the card that was last shared.   If you do not have information on card module and name, do the search using the `_cardType` attribute.',
           parameters: {
+            type: 'object',
             properties: {
               description: {
                 type: 'string',
               },
               filter: {
+                type: 'object',
                 properties: {
                   type: {
+                    type: 'object',
                     properties: {
                       module: {
-                        description: 'the absolute path of the module',
                         type: 'string',
+                        description: 'the absolute path of the module',
                       },
                       name: {
-                        description: 'the name of the module',
                         type: 'string',
+                        description: 'the name of the module',
                       },
                     },
                     required: ['module', 'name'],
+                  },
+                  eq: {
                     type: 'object',
+                    properties: {
+                      _cardType: {
+                        type: 'string',
+                        description: 'name of the card type',
+                      },
+                    },
+                    required: ['_cardType'],
                   },
                 },
-                type: 'object',
               },
             },
             required: ['filter', 'description'],
-            type: 'object',
           },
         },
-        type: 'function',
       },
       {
         type: 'function',
@@ -425,7 +438,9 @@ test.describe('Room messages', () => {
   }) => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomId(page);
-    await page.locator(`[data-test-boxel-filter-list-button="All Cards"]`).click();
+    await page
+      .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
+      .click();
     await page
       .locator(
         `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${testHost}/mango"]`,
@@ -452,7 +467,9 @@ test.describe('Room messages', () => {
     // the base realm is a read-only realm
     await login(page, 'user1', 'pass', { url: `http://localhost:4201/base` });
     let room1 = await getRoomId(page);
-    await page.locator(`[data-test-boxel-filter-list-button="All Cards"]`).click();
+    await page
+      .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
+      .click();
     await page
       .locator(
         '[data-test-stack-card="https://cardstack.com/base/index"] [data-test-cards-grid-item="https://cardstack.com/base/fields/boolean-field"]',
@@ -680,7 +697,9 @@ test.describe('Room messages', () => {
     test.beforeEach(async ({ page }) => {
       await login(page, 'user1', 'pass');
       await getRoomId(page);
-      await page.locator(`[data-test-boxel-filter-list-button="All Cards"]`).click();
+      await page
+        .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
+        .click();
     });
 
     test('displays auto-attached card (1 stack)', async ({ page }) => {
@@ -755,7 +774,9 @@ test.describe('Room messages', () => {
     }) => {
       const testCard1 = `${testHost}/jersey`;
       const embeddedCard = `${testHost}/justin`;
-      await page.locator(`[data-test-boxel-filter-list-button="All Cards"]`).click();
+      await page
+        .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
+        .click();
       await page
         .locator(
           `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
@@ -972,7 +993,9 @@ test.describe('Room messages', () => {
 
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
-    await page.locator(`[data-test-boxel-filter-list-button="All Cards"]`).click();
+    await page
+      .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
+      .click();
 
     for (let i = 1; i <= 3; i++) {
       await page.locator('[data-test-message-field]').fill(`Message - ${i}`);
@@ -1057,7 +1080,9 @@ test.describe('Room messages', () => {
       }),
     };
 
-    await page.locator(`[data-test-boxel-filter-list-button="All Cards"]`).click();
+    await page
+      .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
+      .click();
     await page
       .locator(
         `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${card_id}"]`,
@@ -1104,7 +1129,9 @@ test.describe('Room messages', () => {
       }),
     };
 
-    await page.locator(`[data-test-boxel-filter-list-button="All Cards"]`).click();
+    await page
+      .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
+      .click();
     await page
       .locator(
         `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${card_id}"]`,

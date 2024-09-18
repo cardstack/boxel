@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import supertest, { Test, SuperTest } from 'supertest';
 import { join, resolve } from 'path';
 import { Server } from 'http';
-import { dirSync, setGracefulCleanup, DirResult } from 'tmp';
+import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { validate as uuidValidate } from 'uuid';
 import {
   copySync,
@@ -202,6 +202,7 @@ module('Realm Server', function (hooks) {
         let json = response.body;
         assert.ok(json.data.meta.lastModified, 'lastModified exists');
         delete json.data.meta.lastModified;
+        delete json.data.meta.resourceCreatedAt;
         assert.strictEqual(
           response.get('X-boxel-realm-url'),
           testRealmURL.href,
@@ -546,6 +547,7 @@ module('Realm Server', function (hooks) {
           );
           assert.ok(json.data.meta.lastModified, 'lastModified is populated');
           delete json.data.meta.lastModified;
+          delete json.data.meta.resourceCreatedAt;
           let cardFile = join(dir.name, 'realm_server_1', 'test', entry);
           assert.ok(existsSync(cardFile), 'card json exists');
           let card = readJSONSync(cardFile);
@@ -2228,6 +2230,11 @@ module('Realm Server', function (hooks) {
         new URL(json.data.id),
       );
       assert.deepEqual(permissions, {
+        [`@realm/mango_${realmName}:localhost`]: [
+          'read',
+          'write',
+          'realm-owner',
+        ],
         [ownerUserId]: ['read', 'write', 'realm-owner'],
       });
 
@@ -2835,6 +2842,7 @@ module('Realm Server', function (hooks) {
         let json = response.body;
         assert.ok(json.data.meta.lastModified, 'lastModified exists');
         delete json.data.meta.lastModified;
+        delete json.data.meta.resourceCreatedAt;
         assert.strictEqual(
           response.get('X-boxel-realm-url'),
           testRealmURL.href,
@@ -3085,7 +3093,7 @@ module('Realm Server serving from root', function (hooks) {
       copySync(join(__dirname, 'cards'), testRealmDir);
       testRealmServer = (
         await runTestRealmServer({
-          virtualNetwork,
+          virtualNetwork: createVirtualNetwork(),
           testRealmDir,
           realmsRootPath: join(dir.name, 'realm_server_3'),
           realmURL: testRealmURL,
@@ -3414,7 +3422,7 @@ module('Realm Server serving from a subdirectory', function (hooks) {
       copySync(join(__dirname, 'cards'), testRealmDir);
       testRealmServer = (
         await runTestRealmServer({
-          virtualNetwork,
+          virtualNetwork: createVirtualNetwork(),
           testRealmDir,
           realmsRootPath: join(dir.name, 'realm_server_4'),
           realmURL: new URL('http://127.0.0.1:4446/demo/'),
@@ -3480,7 +3488,7 @@ module('Realm server authentication', function (hooks) {
       copySync(join(__dirname, 'cards'), testRealmDir);
       testRealmServer = (
         await runTestRealmServer({
-          virtualNetwork,
+          virtualNetwork: createVirtualNetwork(),
           testRealmDir,
           realmsRootPath: join(dir.name, 'realm_server_5'),
           realmURL: testRealmURL,
