@@ -214,6 +214,8 @@ export class Worker {
           // was raised to this level the fastboot instance is probably no
           // longer usable.
           reportError(e);
+          console.trace('Run?');
+          console.log(run.toString());
           console.error(
             `Error raised during indexing has likely stopped the indexer`,
             e,
