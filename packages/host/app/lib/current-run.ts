@@ -267,7 +267,7 @@ export class CurrentRun {
     url: URL,
     identityContext?: IdentityContextType,
   ): Promise<void> {
-    console.log('visitFile', url, identityContext);
+    console.log('visitFile', url.href);
     if (isIgnored(this.#realmURL, this.ignoreMap, url)) {
       return;
     }
