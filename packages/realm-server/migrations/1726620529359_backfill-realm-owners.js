@@ -8,6 +8,8 @@ exports.up = (pgm) => {
            ('https://realms-staging.stack.cards/experiments/', '@experiments_realm:stack.cards', true, true, true),
            ('https://realms-staging.stack.cards/experiments/', '*', true, false, false),
            ('https://realms-staging.stack.cards/experiments/', 'users', true, true, false),
+           ('https://realms-staging.stack.cards/catalog/', '@catalog_realm:stack.cards', true, true, true),
+           ('https://realms-staging.stack.cards/catalog/', '*', true, false, false),
            ('https://cardstack.com/base/', '@base_realm:stack.cards', true, true, true),
            ('https://cardstack.com/base/', '*', true, false, false)`,
       );
@@ -20,6 +22,8 @@ exports.up = (pgm) => {
            ('https://app.boxel.ai/experiments/', '@experiments_realm:boxel.ai', true, true, true),
            ('https://app.boxel.ai/experiments/', '*', true, false, false),
            ('https://app.boxel.ai/experiments/', 'users', true, true, false),
+           ('https://app.boxel.ai/catalog/', '@catalog_realm:boxel.ai', true, true, true),
+           ('https://app.boxel.ai/catalog/', '*', true, false, false),
            ('https://cardstack.com/base/', '@base_realm:boxel.ai', true, true, true),
            ('https://cardstack.com/base/', '*', true, false, false)`,
       );
@@ -34,6 +38,8 @@ exports.up = (pgm) => {
            ('http://localhost:4201/experiments/', '@experiments_realm:localhost', true, true, true),
            ('http://localhost:4201/experiments/', '*', true, false, false),
            ('http://localhost:4201/experiments/', 'users', true, true, false),
+           ('http://localhost:4201/catalog/', '@catalog_realm:localhost', true, true, true),
+           ('http://localhost:4201/catalog/', '*', true, false, false),
            ('http://localhost:4202/test/', '@test_realm:localhost', true, true, true),
            ('http://localhost:4202/test/', '*', true, false, false),
            ('http://localhost:4202/test/', 'users', true, true, false),
