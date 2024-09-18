@@ -68,6 +68,7 @@ export function render(
     }
 
     console.log('render arguments', C, element, format);
+    console.trace('abcdefghi');
     let error = new CardError(
       `Encountered error rendering HTML for card: ${err.message} (${C}, constructor name? ${C.constructor.name} ${element} (tag name ${element.tagName}), ${format})`,
     );
