@@ -59,11 +59,17 @@ export default class RenderCard extends Route<Model | null> {
     operatorModeState: string;
     operatorModeEnabled: boolean;
   }): Promise<Model> {
-    let { path, operatorModeState, operatorModeEnabled } = params;
+    debugger;
+    let {
+      path,
+      operatorModeState,
+      operatorModeEnabled,
+      workspaceChooserOpened,
+    } = params;
     path = path || '';
 
     try {
-      await this.loadMatrix.perform();
+      await this.loadMatrix.perform(); // todo do not load if already loaded
 
       let model = null;
 
@@ -105,7 +111,9 @@ export default class RenderCard extends Route<Model | null> {
           // We have that because we want to support back-forward navigation in operator mode.
           return model ?? null;
         }
-        await this.operatorModeStateService.restore(operatorModeStateObject);
+        await this.operatorModeStateService.restore(
+          operatorModeStateObject || { stacks: [] },
+        );
       }
 
       return model ?? null;
