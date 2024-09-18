@@ -35,11 +35,11 @@ module.exports = function (deployTarget) {
   }
 
   if (deployTarget === 'production') {
-    ENV.build.environment = 'production';
+    ENV.build.environment = 'development';
   }
 
   if (deployTarget === 'build-only') {
-    ENV.build.environment = 'production';
+    ENV.build.environment = 'development';
     ENV.plugins = ['build'];
   }
 
