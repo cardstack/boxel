@@ -38,9 +38,10 @@ import {
 } from '@cardstack/runtime-common';
 
 export interface TabComponentSignature {
-  currentRealm?: URL;
-  activeTabId?: string;
-  setActiveTab?: (tabId: string) => void;
+  activeTab?: Tab;
+  currentRealm: URL;
+  realms: string[];
+  setActiveTab: (tabId: string) => void;
 }
 
 export interface DefaultTabSignature extends TabComponentSignature {
@@ -146,20 +147,24 @@ class TableView extends GlimmerComponent<{ Args: { instances: CardDef[] } }> {
 class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
   <template>
     <div class='app-card-content'>
-      <@context.prerenderedCardSearchComponent
-        @query={{this.query}}
-        @format='fitted'
-        @realms={{this.realms}}
-      >
-        <:loading>Loading...</:loading>
-        <:response as |cards|>
-          {{#if this.activeTab.isTable}}
-            <TableView @instances={{cards}} />
-          {{else}}
-            <CardsGrid @cards={{cards}} @context={{@context}} />
-          {{/if}}
-        </:response>
-      </@context.prerenderedCardSearchComponent>
+      {{#if this.activeTabRef}}
+        <@context.prerenderedCardSearchComponent
+          @query={{this.query}}
+          @format='fitted'
+          @realms={{@realms}}
+        >
+          <:loading>Loading...</:loading>
+          <:response as |cards|>
+            {{#if @activeTab.isTable}}
+              <TableView @instances={{cards}} />
+            {{else}}
+              <CardsGrid @cards={{cards}} @context={{@context}} />
+            {{/if}}
+          </:response>
+        </@context.prerenderedCardSearchComponent>
+      {{else}}
+        <p>No cards available</p>
+      {{/if}}
       {{#if (and (bool @context.actions.createCard) (bool this.activeTabRef))}}
         <div class='add-card-button'>
           <Tooltip @placement='left' @offset={{6}}>
@@ -193,14 +198,6 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
     </style>
   </template>
 
-  get realms(): string[] {
-    return this.args.model?.[realmURL] ? [this.args.model[realmURL].href] : [];
-  }
-
-  get activeTab() {
-    return this.args.model.tabs?.find((t) => t.tabId === this.args.activeTabId);
-  }
-
   constructor(owner: Owner, args: any) {
     super(owner, args);
     if (!this.args.model.tabs?.length) {
@@ -218,7 +215,8 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
       let loader: Loader = (import.meta as any).loader;
       module = await loader.import(this.args.model.moduleId);
     } catch (e) {
-      throw e;
+      console.error(e);
+      return;
     }
     let exportedCards = Object.entries(module).filter(
       ([_, declaration]) =>
@@ -243,23 +241,27 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
     }
 
     this.args.model.tabs = tabs;
-    this.args.setActiveTab?.(tabs[0].tabId);
+    this.args.setActiveTab(tabs[0].tabId);
   }
 
   setTabs(tabs: Tab[]) {
-    this.args.model.tabs = tabs;
+    this.args.model.tabs = tabs ?? [];
   }
 
   get activeTabRef() {
-    if (!this.activeTab?.ref?.name || !this.activeTab.ref.module) {
+    if (!this.args.activeTab?.ref?.name || !this.args.activeTab.ref.module) {
       return;
     }
-    return codeRefWithAbsoluteURL(this.activeTab.ref, this.args.currentRealm);
+    return codeRefWithAbsoluteURL(
+      this.args.activeTab.ref,
+      this.args.currentRealm,
+    );
   }
 
   get query() {
     if (!this.activeTabRef) {
-      throw new Error('Can not get cards without a card ref.');
+      console.error('Can not get cards without a card ref.');
+      return;
     }
     return {
       filter: {
@@ -324,7 +326,7 @@ export class AppCardTemplate extends GlimmerComponent<{
         @headerTitle={{@model.title}}
         @tabs={{@model.tabs}}
         @setActiveTab={{this.setActiveTab}}
-        @activeTabId={{this.activeTabId}}
+        @activeTabId={{this.activeTab.tabId}}
         @headerBackgroundColor={{this.headerColor}}
       >
         <:headerIcon>
@@ -335,8 +337,9 @@ export class AppCardTemplate extends GlimmerComponent<{
       </TabbedHeader>
       {{yield
         (hash
+          activeTab=this.activeTab
           currentRealm=this.currentRealm
-          activeTabId=this.activeTabId
+          realms=this.realms
           setActiveTab=this.setActiveTab
         )
         to='component'
@@ -357,15 +360,15 @@ export class AppCardTemplate extends GlimmerComponent<{
   </template>
 
   @tracked activeTabId?: string;
+  @tracked tabs = this.args.model.tabs ?? [];
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
-    let tabs = this.args.model.tabs;
     let hashTab = window.location?.hash?.slice(1);
     let tabId =
-      hashTab?.length && tabs?.map((t) => t.tabId)?.includes(hashTab)
+      hashTab?.length && this.tabs.map((t) => t.tabId)?.includes(hashTab)
         ? hashTab
-        : tabs?.[0]?.tabId;
+        : this.tabs[0]?.tabId;
     if (tabId) {
       this.setActiveTab(tabId);
     }
@@ -379,7 +382,15 @@ export class AppCardTemplate extends GlimmerComponent<{
   }
 
   get currentRealm() {
-    return this.args.model?.[realmURL];
+    return this.args.model[realmURL]!;
+  }
+
+  get realms(): string[] {
+    return [this.currentRealm.href];
+  }
+
+  get activeTab() {
+    return this.tabs.find((t) => t.tabId === this.activeTabId) ?? this.tabs[0];
   }
 
   @action setActiveTab(id: string) {
@@ -396,10 +407,11 @@ export class AppCardIsolated extends Component<typeof AppCard> {
     >
       <:component as |args|>
         <DefaultTabTemplate
-          @model={{@model}}
+          @activeTab={{args.activeTab}}
           @context={{@context}}
           @currentRealm={{args.currentRealm}}
-          @activeTabId={{args.activeTabId}}
+          @model={{@model}}
+          @realms={{args.realms}}
           @setActiveTab={{args.setActiveTab}}
         />
       </:component>
