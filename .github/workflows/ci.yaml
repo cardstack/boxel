@@ -227,7 +227,7 @@ jobs:
         run: pnpm npx wait-for-localhost 4200
         working-directory: packages/realm-server
       - name: Start realm servers
-        run: pnpm start:without-matrix &> /tmp/server.log &
+        run: pnpm start:all &> /tmp/server.log &
         working-directory: packages/realm-server
       - name: create realm users
         run: pnpm register-realm-users
