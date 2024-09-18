@@ -3090,7 +3090,7 @@ module('Realm Server serving from root', function (hooks) {
       copySync(join(__dirname, 'cards'), testRealmDir);
       testRealmServer = (
         await runTestRealmServer({
-          virtualNetwork,
+          virtualNetwork: createVirtualNetwork(),
           testRealmDir,
           realmsRootPath: join(dir.name, 'realm_server_3'),
           realmURL: testRealmURL,
@@ -3290,7 +3290,7 @@ module('Realm server serving multiple realms', function (hooks) {
   let base: Realm;
   let testRealm: Realm;
 
-  let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
+  let { loader } = createVirtualNetworkAndLoader();
   const basePath = resolve(join(__dirname, '..', '..', 'base'));
 
   hooks.beforeEach(async function () {
@@ -3301,6 +3301,7 @@ module('Realm server serving multiple realms', function (hooks) {
 
   setupDB(hooks, {
     beforeEach: async (dbAdapter, queue) => {
+      let virtualNetwork = createVirtualNetwork();
       let localBaseRealmURL = new URL('http://127.0.0.1:4446/base/');
       virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
 
@@ -3419,7 +3420,7 @@ module('Realm Server serving from a subdirectory', function (hooks) {
       copySync(join(__dirname, 'cards'), testRealmDir);
       testRealmServer = (
         await runTestRealmServer({
-          virtualNetwork,
+          virtualNetwork: createVirtualNetwork(),
           testRealmDir,
           realmsRootPath: join(dir.name, 'realm_server_4'),
           realmURL: new URL('http://127.0.0.1:4446/demo/'),
@@ -3485,7 +3486,7 @@ module('Realm server authentication', function (hooks) {
       copySync(join(__dirname, 'cards'), testRealmDir);
       testRealmServer = (
         await runTestRealmServer({
-          virtualNetwork,
+          virtualNetwork: createVirtualNetwork(),
           testRealmDir,
           realmsRootPath: join(dir.name, 'realm_server_5'),
           realmURL: testRealmURL,
