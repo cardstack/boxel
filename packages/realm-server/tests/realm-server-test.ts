@@ -3293,7 +3293,7 @@ module('Realm server serving multiple realms', function (hooks) {
   let base: Realm;
   let testRealm: Realm;
 
-  let { loader } = createVirtualNetworkAndLoader();
+  let { loader, virtualNetwork } = createVirtualNetworkAndLoader();
   const basePath = resolve(join(__dirname, '..', '..', 'base'));
 
   hooks.beforeEach(async function () {
@@ -3304,7 +3304,6 @@ module('Realm server serving multiple realms', function (hooks) {
 
   setupDB(hooks, {
     beforeEach: async (dbAdapter, queue) => {
-      let virtualNetwork = createVirtualNetwork();
       let localBaseRealmURL = new URL('http://127.0.0.1:4446/base/');
       virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
 
