@@ -1,13 +1,11 @@
-import { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
-
 import type * as MatrixSDK from 'matrix-js-sdk';
+type IEvent = MatrixSDK.IEvent;
 
 export class ServerState {
   #roomCounter = 0;
   #eventCounter = 0;
-  #rooms: Map<string, { events: MatrixEvent[]; receipts: MatrixEvent[] }> =
-    new Map();
-  #listeners: ((event: MatrixEvent) => void)[] = [];
+  #rooms: Map<string, { events: IEvent[]; receipts: IEvent[] }> = new Map();
+  #listeners: ((event: IEvent) => void)[] = [];
   #displayName: string;
 
   constructor(opts: { displayName: string }) {
@@ -18,7 +16,7 @@ export class ServerState {
     return this.#displayName;
   }
 
-  onEvent(callback: (event: MatrixEvent) => void) {
+  onEvent(callback: (event: IEvent) => void) {
     this.addListener(callback);
   }
 
@@ -26,7 +24,7 @@ export class ServerState {
     return Array.from(this.#rooms.keys()).map((id) => ({ id }));
   }
 
-  addListener(callback: (event: MatrixEvent) => void) {
+  addListener(callback: (event: IEvent) => void) {
     this.#listeners.push(callback);
   }
 
@@ -108,17 +106,17 @@ export class ServerState {
   addRoomEvent(
     sender: string,
     event: Omit<
-      MatrixEvent,
+      IEvent,
       'event_id' | 'origin_server_ts' | 'unsigned' | 'status' | 'sender'
     >,
     overrides?: { state_key?: string; origin_server_ts?: number },
   ) {
-    let room = this.#rooms.get(event.room_id);
+    let room = event.room_id && this.#rooms.get(event.room_id);
     if (!room) {
       throw new Error(`room ${event.room_id} does not exist`);
     }
     let eventId = this.eventId();
-    let matrixEvent: MatrixEvent = {
+    let matrixEvent: IEvent = {
       ...event,
       // Don’t want to list out all the types from MatrixEvent union type
       type: event.type as any,
@@ -126,7 +124,6 @@ export class ServerState {
       origin_server_ts: overrides?.origin_server_ts ?? Date.now(),
       unsigned: { age: 0 },
       sender,
-      status: 'sent' as MatrixSDK.EventStatus.SENT,
       state_key: overrides?.state_key ?? sender,
     };
     let matrixContent = matrixEvent.content as any;
@@ -203,7 +200,7 @@ export class ServerState {
       },
     };
 
-    let receiptEvent: MatrixEvent = {
+    let receiptEvent: IEvent = {
       event_id: this.eventId(),
       origin_server_ts: Date.now(),
       room_id: roomId,
@@ -211,7 +208,6 @@ export class ServerState {
       sender,
       unsigned: { age: 0 },
       state_key: '',
-      status: 'sent' as MatrixSDK.EventStatus.SENT,
       content,
     };
 
@@ -221,7 +217,7 @@ export class ServerState {
     return receiptEvent;
   }
 
-  getRoomEvents(roomId: string): MatrixEvent[] {
+  getRoomEvents(roomId: string): IEvent[] {
     let room = this.#rooms.get(roomId);
     if (!room) {
       throw new Error(`room ${roomId} does not exist`);
@@ -230,7 +226,7 @@ export class ServerState {
   }
 
   eventId(): string {
-    return `mock_event_${this.#eventCounter++}`;
+    return `!mock_event_${this.#eventCounter++}`;
   }
 
   setDisplayName(name: string) {

@@ -4,11 +4,10 @@ import { service } from '@ember/service';
 
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
-
 import LoaderService from './loader-service';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
+type MatrixEvent = MatrixSDK.MatrixEvent;
 
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -102,7 +101,7 @@ export type ExtendedClient = Pick<
   allRoomMessages(
     roomId: string,
     opts?: MessageOptions,
-  ): Promise<DiscreteMatrixEvent[]>;
+  ): Promise<MatrixEvent[]>;
   requestEmailToken(
     type: 'registration' | 'threepid',
     email: string,
@@ -131,8 +130,8 @@ async function allRoomMessages(
   fetch: typeof globalThis.fetch,
   roomId: string,
   opts?: MessageOptions,
-): Promise<DiscreteMatrixEvent[]> {
-  let messages: DiscreteMatrixEvent[] = [];
+): Promise<MatrixEvent[]> {
+  let messages: MatrixEvent[] = [];
   let from: string | undefined;
 
   do {
@@ -150,7 +149,7 @@ async function allRoomMessages(
     );
     let { chunk, end } = await response.json();
     from = end;
-    let events: DiscreteMatrixEvent[] = chunk;
+    let events: MatrixEvent[] = chunk;
     if (opts?.onMessages) {
       await opts.onMessages(events);
     }
@@ -253,6 +252,6 @@ function extendedClient(
 
 export interface MessageOptions {
   direction?: 'forward' | 'backward';
-  onMessages?: (messages: DiscreteMatrixEvent[]) => Promise<void>;
+  onMessages?: (messages: MatrixEvent[]) => Promise<void>;
   pageSize: number;
 }

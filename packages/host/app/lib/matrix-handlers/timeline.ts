@@ -38,6 +38,7 @@ export function onTimeline(MatrixService: MatrixService) {
 
 export function onUpdateEventStatus(MatrixService: MatrixService) {
   return (e: MatrixEvent, _room: Room, maybeOldEventId?: unknown) => {
+    console.log('onUpdateEventStatus', { e, maybeOldEventId });
     if (typeof maybeOldEventId !== 'string') {
       return;
     }

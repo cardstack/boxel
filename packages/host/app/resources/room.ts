@@ -95,6 +95,19 @@ export class RoomResource extends Resource<Args> {
   });
 
   get messages() {
+    // console.log('get messages', {
+    //   roomId: this._roomId,
+    //   messageCacheLength: this._messageCache.size,
+    //   statuses: [...this._messageCache.values()].map((m) => m.status),
+    //   events: this.events.map((ev) => {
+    //     return {
+    //       event_id: ev.event_id,
+    //       eventType: ev.type,
+    //       status: ev.status,
+    //       body: ev.content?.body,
+    //     };
+    //   }),
+    // });
     if (this._messageCache) {
       return [...this._messageCache.values()].sort(
         (a, b) => a.created.getTime() - b.created.getTime(),
@@ -186,6 +199,9 @@ export class RoomResource extends Resource<Args> {
       if (event.type !== 'm.room.message') {
         continue;
       }
+      // if (event?.content?.body?.includes('slow')) {
+      //   debugger;
+      // }
       let event_id = event.event_id;
       let update = false;
       if (event.content['m.relates_to']?.rel_type == 'm.annotation') {

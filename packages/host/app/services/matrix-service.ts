@@ -155,6 +155,12 @@ export default class MatrixService extends Service {
     // building the event bindings like this so that we can consistently bind
     // and unbind these events programmatically--this way if we add a new event
     // we won't forget to unbind it.
+
+    this._client.on(
+      this.matrixSDK.RoomMemberEvent.Membership,
+      Membership.onMembership(this),
+    );
+
     this.#eventBindings = [
       [
         this.matrixSDK.RoomMemberEvent.Membership,
@@ -393,6 +399,7 @@ export default class MatrixService extends Service {
       | ReactionEventContent
       | CommandResultContent,
   ) {
+    console.log('MatrixService.sendEvent ', eventType, content);
     if ('data' in content) {
       const encodedContent = {
         ...content,
@@ -597,10 +604,10 @@ export default class MatrixService extends Service {
           addRoomEvent(this, { ...event, status: null });
         }),
       );
-      let messages = await this.client.allRoomMessages(roomId);
+      let messageMatrixEvents = await this.client.allRoomMessages(roomId);
       await Promise.all(
-        messages.map((event) => {
-          addRoomEvent(this, { ...event, status: null });
+        messageMatrixEvents.map((matrixEvent) => {
+          addRoomEvent(this, { ...matrixEvent.event, status: null });
         }),
       );
     }

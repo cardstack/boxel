@@ -1,3 +1,5 @@
+import { MatrixEvent } from 'matrix-js-sdk';
+
 import { unixTime } from '@cardstack/runtime-common';
 
 import type {
@@ -5,7 +7,7 @@ import type {
   MessageOptions,
 } from '@cardstack/host/services/matrix-sdk-loader';
 
-import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import { assertNever } from '@cardstack/host/utils/assert-never';
 
 import { MockSDK } from './_sdk';
 
@@ -15,10 +17,17 @@ import type { Config } from '../mock-matrix';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
+type IEvent = MatrixSDK.IEvent;
+
 let nonce = 0;
 
+type Plural<T> = {
+  [K in keyof T]: T[K][];
+};
+
 export class MockClient implements ExtendedClient {
-  private listeners = new Map();
+  private listeners: Partial<Plural<MatrixSDK.ClientEventHandlerMap>> = {};
+
   private txnCtr = 0;
 
   constructor(
@@ -30,6 +39,23 @@ export class MockClient implements ExtendedClient {
 
   get loggedInAs() {
     return this.clientOpts.userId;
+  }
+
+  async startClient(
+    _opts?: MatrixSDK.IStartClientOpts | undefined,
+  ): Promise<void> {
+    this.serverState.onEvent((serverEvent: IEvent) => {
+      this.emitEvent(new MatrixEvent(serverEvent));
+    });
+
+    this.emitEvent(
+      new MatrixEvent({
+        type: 'com.cardstack.boxel.realms',
+        content: {
+          realms: this.sdkOpts.activeRealms ?? [],
+        },
+      }),
+    );
   }
 
   async createRealmSession(realmURL: URL): Promise<string> {
@@ -247,7 +273,6 @@ export class MockClient implements ExtendedClient {
     } else {
       [roomId, , eventType, content] = args;
     }
-
     let roomEvent = {
       room_id: roomId,
       type: eventType,
@@ -257,16 +282,17 @@ export class MockClient implements ExtendedClient {
     // Local Echo
     let txnId = this.makeTxnId();
     let localEventId = '~' + roomId + ':' + txnId;
-    let localEvent = {
+    let localEventData = {
       ...roomEvent,
       event_id: localEventId,
       origin_server_ts: Date.now(),
       unsigned: { age: 0 },
       sender: this.loggedInAs || 'unknown_user',
       user_id: this.loggedInAs || 'unknown_user',
-      status: 'sending' as MatrixSDK.EventStatus.SENDING,
       state_key: this.loggedInAs!,
     };
+    let localEvent = new MatrixEvent(localEventData);
+    localEvent.setStatus('sending' as MatrixSDK.EventStatus.SENDING);
     this.emitEvent(localEvent);
     if (content.body?.match(/SENDING_DELAY_THEN_SUCCESS/)) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -276,11 +302,10 @@ export class MockClient implements ExtendedClient {
       roomEvent,
     );
     this.emitLocalEchoUpdated(
-      {
-        ...localEvent,
-        status: 'sent' as MatrixSDK.EventStatus.SENT,
+      new MatrixEvent({
+        ...localEventData,
         event_id: eventId,
-      },
+      }),
       localEventId,
     );
     return { event_id: eventId };
@@ -320,20 +345,6 @@ export class MockClient implements ExtendedClient {
     };
   }
 
-  async startClient(
-    _opts?: MatrixSDK.IStartClientOpts | undefined,
-  ): Promise<void> {
-    this.serverState.onEvent(this.emitEvent.bind(this));
-
-    await this.emitEvent({
-      // This is not an event type in our MatrixEvent union
-      type: 'com.cardstack.boxel.realms',
-      content: {
-        realms: this.sdkOpts.activeRealms ?? [],
-      },
-    } as unknown as MatrixEvent);
-  }
-
   private eventHandlerType(type: string) {
     switch (type) {
       case 'com.cardstack.boxel.realms':
@@ -352,25 +363,54 @@ export class MockClient implements ExtendedClient {
     }
   }
 
-  private async emitEvent(event: MatrixEvent) {
-    let handlers = this.listeners.get(this.eventHandlerType(event.type));
+  private emitEvent(event: MatrixEvent) {
+    let eventType = this.eventHandlerType(event.event.type!);
+    switch (eventType) {
+      case this.sdk.RoomEvent.Timeline:
+        {
+          let handlers = this.listeners[eventType];
 
-    if (handlers) {
-      for (let handler of handlers) {
-        let result: any = { event };
-        result.getContent = function () {
-          return this.event.content;
-        };
-        await handler(result);
-      }
+          if (handlers) {
+            for (let handler of handlers) {
+              handler(event, undefined, undefined, false, {
+                fake: 'event-timeline ',
+              } as any);
+            }
+          }
+        }
+        break;
+      case this.sdk.RoomEvent.Receipt:
+        {
+          let handlers = this.listeners[eventType];
+
+          if (handlers) {
+            for (let handler of handlers) {
+              handler(event, { fake: 'room ' } as any);
+            }
+          }
+        }
+        break;
+      case this.sdk.ClientEvent.AccountData:
+        {
+          let handlers = this.listeners[eventType];
+
+          if (handlers) {
+            for (let handler of handlers) {
+              handler(event, undefined);
+            }
+          }
+        }
+        break;
+      default:
+        throw assertNever(eventType);
     }
   }
 
   private emitLocalEchoUpdated(event: MatrixEvent, oldEventId?: string) {
-    let handlers = this.listeners.get(this.sdk.RoomEvent.LocalEchoUpdated);
+    let handlers = this.listeners[this.sdk.RoomEvent.LocalEchoUpdated];
     if (handlers) {
       for (let handler of handlers) {
-        handler(event, oldEventId);
+        handler(event, { fake: 'room' } as any, oldEventId, undefined);
       }
     }
   }
@@ -386,10 +426,12 @@ export class MockClient implements ExtendedClient {
     if (!event) {
       throw new Error(`missing event type in matrix mock`);
     }
-    let list = this.listeners.get(event);
+    // @ts-expect-error haven't got the types right yet
+    let list = this.listeners[event];
     if (!list) {
       list = [];
-      this.listeners.set(event, list);
+      // @ts-expect-error haven't got the types right yet
+      this.listeners[event] = list;
     }
     list.push(listener);
     return this as unknown as MatrixSDK.MatrixClient;
