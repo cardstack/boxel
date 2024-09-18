@@ -324,6 +324,13 @@ export class CurrentRun {
             );
             lastModified = unixTime(Date.now());
           }
+          console.trace('indexCard', url.href);
+          console.log(
+            `indexCard path: ${localPath}, resource id: ${resource.id}`,
+          );
+          console.log('source following');
+          console.log(content);
+
           await this.indexCard({
             path: localPath,
             source: content,
