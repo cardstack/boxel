@@ -1,7 +1,6 @@
 import {
   type CardContext,
   Component,
-  realmURL,
 } from 'https://cardstack.com/base/card-api';
 import {
   CardContainer,
@@ -555,38 +554,27 @@ class Isolated extends Component<typeof AiAppGenerator> {
           <DashboardTab
             @appCardId={{@model.id}}
             @context={{@context}}
-            @currentRealm={{this.currentRealm}}
-            @realms={{this.realms}}
+            @currentRealm={{args.currentRealm}}
+            @realms={{args.realms}}
             @setActiveTab={{args.setActiveTab}}
           />
         {{else if (eq args.activeTab.tabId 'requirements')}}
           <RequirementsTab
             @context={{@context}}
-            @currentRealm={{this.currentRealm}}
-            @realms={{this.realms}}
+            @currentRealm={{args.currentRealm}}
+            @realms={{args.realms}}
           />
         {{else}}
           <YourAppsTab
             @appCardId={{@model.id}}
             @context={{@context}}
-            @currentRealm={{this.currentRealm}}
-            @realms={{this.realms}}
+            @currentRealm={{args.currentRealm}}
+            @realms={{args.realms}}
           />
         {{/if}}
       </:component>
     </AppCardTemplate>
   </template>
-
-  get currentRealm() {
-    return this.args.model?.[realmURL];
-  }
-
-  get realms() {
-    if (!this.currentRealm) {
-      console.error('Missing currentRealm url');
-    }
-    return this.currentRealm ? [this.currentRealm.href] : [];
-  }
 }
 
 export class AiAppGenerator extends AppCard {

@@ -15,7 +15,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import { and, bool, cn } from '@cardstack/boxel-ui/helpers';
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, getCard } from '@cardstack/runtime-common';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -49,6 +49,11 @@ export interface DefaultTabSignature extends TabComponentSignature {
   context?: CardContext;
 }
 
+interface PrerenderedCard {
+  url: string;
+  component: typeof GlimmerComponent;
+}
+
 export class Tab extends FieldDef {
   @field displayName = contains(StringField);
   @field tabId = contains(StringField);
@@ -56,7 +61,9 @@ export class Tab extends FieldDef {
   @field isTable = contains(BooleanField);
 }
 
-class TableView extends GlimmerComponent<{ Args: { instances: CardDef[] } }> {
+class TableView extends GlimmerComponent<{
+  Args: { cards: PrerenderedCard[] };
+}> {
   <template>
     <table class='styled-table'>
       <thead>
@@ -112,11 +119,32 @@ class TableView extends GlimmerComponent<{ Args: { instances: CardDef[] } }> {
     </style>
   </template>
 
+  @tracked instances?: CardDef[];
+
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+    this._getCards.perform();
+  }
+
+  private _getCards = restartableTask(async () => {
+    let instances: CardDef[] = [];
+    await Promise.all(
+      this.args.cards.map(async (c) => {
+        let result = getCard(new URL(c.url));
+        await result.loaded;
+        if (result.card) {
+          instances.push(result.card);
+        }
+      }),
+    );
+    this.instances = instances;
+  });
+
   get tableData() {
-    if (!this.args.instances) {
+    if (!this.instances) {
       return;
     }
-    let exampleCard = this.args.instances[0];
+    let exampleCard = this.instances[0];
     let headers: string[] = [];
     for (let fieldName in exampleCard) {
       if (
@@ -130,7 +158,7 @@ class TableView extends GlimmerComponent<{ Args: { instances: CardDef[] } }> {
     }
     headers.sort();
 
-    let rows = this.args.instances.map((card) => {
+    let rows = this.instances.map((card) => {
       let row: string[] = [];
       for (let header of headers) {
         row.push((card as any)[header]);
@@ -156,7 +184,7 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
           <:loading>Loading...</:loading>
           <:response as |cards|>
             {{#if @activeTab.isTable}}
-              <TableView @instances={{cards}} />
+              <TableView @cards={{cards}} />
             {{else}}
               <CardsGrid @cards={{cards}} @context={{@context}} />
             {{/if}}
@@ -267,7 +295,7 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
       filter: {
         every: [
           { type: this.activeTabRef },
-          { not: { eq: { id: this.args.model.id } } },
+          { not: { eq: { id: this.args.model.id! } } },
         ],
       },
       // sorting by title so that we can maintain stability in
@@ -435,7 +463,7 @@ export class AppCard extends CardDef {
 
 export class CardsGrid extends GlimmerComponent<{
   Args: {
-    cards: CardDef[];
+    cards: PrerenderedCard[];
     context?: CardContext;
     isListFormat?: boolean;
   };
