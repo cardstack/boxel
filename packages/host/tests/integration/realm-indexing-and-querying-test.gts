@@ -108,6 +108,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}empty.json`,
           ),
+          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+            `${testRealmURL}empty.json`,
+          ),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
         },
@@ -284,6 +287,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}Pet/mango.json`,
             ),
+            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+              `${testRealmURL}Pet/mango.json`,
+            ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
           },
@@ -338,6 +344,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     if (entry?.type === 'doc') {
       // we see the "production" version of this card while it is being indexed
       delete entry.doc.data.meta.lastModified;
+      delete entry.doc.data.meta.resourceCreatedAt;
       assert.deepEqual(entry.doc.data, {
         id: `${testRealmURL}Pet/mango`,
         type: 'card',
@@ -378,6 +385,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       if (entry?.type === 'doc') {
         // we see the "production" version of this card while it is being indexed
         delete entry.doc.data.meta.lastModified;
+        delete entry.doc.data.meta.resourceCreatedAt;
         assert.deepEqual(entry.doc.data, {
           id: `${testRealmURL}Pet/mango`,
           type: 'card',
@@ -485,6 +493,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}Pet/mango.json`,
           ),
+          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+            `${testRealmURL}Pet/mango.json`,
+          ),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
         },
@@ -565,6 +576,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}Pet/mango.json`,
           ),
+          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+            `${testRealmURL}Pet/mango.json`,
+          ),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
         },
@@ -633,6 +647,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             name: 'CatalogEntry',
           },
           lastModified: adapter.lastModifiedMap.get(
+            `${testRealmURL}person-catalog-entry.json`,
+          ),
+          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
             `${testRealmURL}person-catalog-entry.json`,
           ),
           realmInfo: testRealmInfo,
@@ -1593,6 +1610,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}Vendor/vendor1.json`,
             ),
+            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+              `${testRealmURL}Vendor/vendor1.json`,
+            ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
           },
@@ -1619,6 +1639,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(
                 `${testRealmURL}Chain/1.json`,
               ),
+              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+                `${testRealmURL}Chain/1.json`,
+              ),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
             },
@@ -1642,6 +1665,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
                 name: 'Chain',
               },
               lastModified: adapter.lastModifiedMap.get(
+                `${testRealmURL}Chain/2.json`,
+              ),
+              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
                 `${testRealmURL}Chain/2.json`,
               ),
               realmInfo: testRealmInfo,
@@ -1970,6 +1996,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}PetPerson/hassan.json`,
           ),
+          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+            `${testRealmURL}PetPerson/hassan.json`,
+          ),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
         },
@@ -1991,6 +2020,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}Pet/mango.json`,
             ),
+            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+              `${testRealmURL}Pet/mango.json`,
+            ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
           },
@@ -2009,6 +2041,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           meta: {
             adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
             lastModified: adapter.lastModifiedMap.get(
+              `${testRealmURL}Pet/vanGogh.json`,
+            ),
+            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
               `${testRealmURL}Pet/vanGogh.json`,
             ),
             realmInfo: testRealmInfo,
@@ -2108,6 +2143,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
               name: 'PetPerson',
             },
             lastModified: adapter.lastModifiedMap.get(
+              `${testRealmURL}PetPerson/burcu.json`,
+            ),
+            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
               `${testRealmURL}PetPerson/burcu.json`,
             ),
             realmInfo: testRealmInfo,
@@ -2259,6 +2297,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           ),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
+          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+            `${testRealmURL}pet-person-catalog-entry.json`,
+          ),
         },
       });
 
@@ -2281,6 +2322,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
+            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+              `${testRealmURL}pet-person-catalog-entry.json`,
+            ),
           },
         },
         {
@@ -2301,6 +2345,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
+            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+              `${testRealmURL}pet-person-catalog-entry.json`,
+            ),
           },
         },
       ]);
@@ -2463,6 +2510,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           ),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
+          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+            `${testRealmURL}Friend/hassan.json`,
+          ),
         },
       });
     } else {
@@ -2593,6 +2643,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
+            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+              `${testRealmURL}Friend/hassan.json`,
+            ),
           },
         },
         included: [
@@ -2627,6 +2680,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
               ),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
+              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+                `${testRealmURL}Friend/mango.json`,
+              ),
             },
           },
         ],
@@ -2702,6 +2758,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
+            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+              `${testRealmURL}Friend/mango.json`,
+            ),
           },
         },
         included: [
@@ -2736,6 +2795,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
               ),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
+              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+                `${testRealmURL}Friend/hassan.json`,
+              ),
             },
           },
         ],
@@ -2855,6 +2917,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(`${hassanID}.json`),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
+            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+              `${hassanID}.json`,
+            ),
           },
         },
         'hassan doc.data is correct',
@@ -2884,6 +2949,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(`${mangoID}.json`),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
+              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+                `${mangoID}.json`,
+              ),
             },
           },
           {
@@ -2907,6 +2975,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(`${vanGoghID}.json`),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
+              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+                `${vanGoghID}.json`,
+              ),
             },
           },
         ],
@@ -2973,6 +3044,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(`${mangoID}.json`),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
+            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+              `${mangoID}.json`,
+            ),
           },
         },
         'mango doc.data is correct',
@@ -3005,6 +3079,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(`${hassanID}.json`),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
+              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+                `${hassanID}.json`,
+              ),
             },
           },
           {
@@ -3028,6 +3105,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(`${vanGoghID}.json`),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
+              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+                `${vanGoghID}.json`,
+              ),
             },
           },
         ],
@@ -3093,6 +3173,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(`${vanGoghID}.json`),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
+            resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+              `${vanGoghID}.json`,
+            ),
           },
         },
         'vanGogh doc.data is correct',
@@ -3125,6 +3208,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(`${hassanID}.json`),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
+              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+                `${hassanID}.json`,
+              ),
             },
           },
           {
@@ -3148,6 +3234,9 @@ module(`Integration | realm indexing and querying`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(`${mangoID}.json`),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
+              resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+                `${mangoID}.json`,
+              ),
             },
           },
         ],

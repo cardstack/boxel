@@ -38,6 +38,7 @@ export interface CardResource<Identity extends Unsaved = Saved> {
   };
   meta: Meta & {
     lastModified?: number;
+    resourceCreatedAt?: number;
     realmInfo?: RealmInfo;
     realmURL?: string;
   };

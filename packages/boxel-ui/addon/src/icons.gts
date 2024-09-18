@@ -41,6 +41,7 @@ import IconTurnDownRight from './icons/icon-turn-down-right.gts';
 import IconX from './icons/icon-x.gts';
 import ImagePlaceholder from './icons/image-placeholder.gts';
 import LoadingIndicator from './icons/loading-indicator.gts';
+import Lock from './icons/lock.gts';
 import Profile from './icons/profile.gts';
 import Search from './icons/search.gts';
 import Send from './icons/send.gts';
@@ -89,6 +90,7 @@ export const ALL_ICON_COMPONENTS = [
   IconX,
   ImagePlaceholder,
   LoadingIndicator,
+  Lock,
   Profile,
   Search,
   Send,
@@ -138,6 +140,7 @@ export {
   IconX,
   ImagePlaceholder,
   LoadingIndicator,
+  Lock,
   Profile,
   Search,
   Send,

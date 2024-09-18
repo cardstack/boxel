@@ -298,10 +298,25 @@ export function getReader(
           new Date(),
         ).getTime(),
       );
+
+      let createdRfc7321 = response.headers.get('x-created');
+      let created: number;
+      if (createdRfc7321) {
+        created = unixTime(
+          parse(
+            createdRfc7321.replace(/ GMT$/, 'Z'),
+            'EEE, dd MMM yyyy HH:mm:ssX',
+            new Date(),
+          ).getTime(),
+        );
+      } else {
+        throw new Error(`Response for ${url.href} has no 'x-created' header`);
+      }
       let path = new RealmPaths(realmURL).local(url);
       return {
         content,
         lastModified,
+        created,
         path,
         ...(Symbol.for('shimmed-module') in response ||
         response.headers.get('X-Boxel-Shimmed-Module')
