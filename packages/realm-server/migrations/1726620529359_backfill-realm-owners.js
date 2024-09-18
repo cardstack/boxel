@@ -6,7 +6,10 @@ exports.up = (pgm) => {
          VALUES
            ('https://realms-staging.stack.cards/seed/', '@seed_realm:stack.cards', true, true, true),
            ('https://realms-staging.stack.cards/experiments/', '@experiments_realm:stack.cards', true, true, true),
-           ('https://cardstack.com/base/', '@base_realm:stack.cards', true, true, true)`,
+           ('https://realms-staging.stack.cards/experiments/', '*', true, false, false),
+           ('https://realms-staging.stack.cards/experiments/', 'user', true, true, false),
+           ('https://cardstack.com/base/', '@base_realm:stack.cards', true, true, true),
+           ('https://cardstack.com/base/', '*', true, false, false)`,
       );
       break;
     case 'production':
@@ -15,7 +18,10 @@ exports.up = (pgm) => {
          VALUES
            ('https://app.boxel.ai/seed/', '@seed_realm:boxel.ai', true, true, true),
            ('https://app.boxel.ai/experiments/', '@experiments_realm:boxel.ai', true, true, true),
-           ('https://cardstack.com/base/', '@base_realm:boxel.ai', true, true, true)`,
+           ('https://app.boxel.ai/experiments/', '*', true, false, false),
+           ('https://app.boxel.ai/experiments/', 'user', true, true, false),
+           ('https://cardstack.com/base/', '@base_realm:boxel.ai', true, true, true),
+           ('https://cardstack.com/base/', '*', true, false, false)`,
       );
       break;
     default:
@@ -23,12 +29,22 @@ exports.up = (pgm) => {
         `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
          VALUES
            ('https://cardstack.com/base/', '@base_realm:localhost', true, true, true),
+           ('https://cardstack.com/base/', '*', true, false, false),
            ('http://localhost:4201/seed/', '@seed_realm:localhost', true, true, true),
            ('http://localhost:4201/experiments/', '@experiments_realm:localhost', true, true, true),
+           ('http://localhost:4201/experiments/', '*', true, false, false),
+           ('http://localhost:4201/experiments/', 'user', true, true, false),
            ('http://localhost:4202/test/', '@test_realm:localhost', true, true, true),
+           ('http://localhost:4202/test/', '*', true, false, false),
+           ('http://localhost:4202/test/', 'user', true, true, false),
            ('http://localhost:4202/node-test/', '@node-test_realm:localhost', true, true, true),
+           ('http://localhost:4202/node-test/', '*', true, false, false),
+           ('http://localhost:4202/node-test/', 'user', true, true, false),
            ('http://localhost:4203/', '@base_realm:localhost', true, true, true),
-           ('http://localhost:4204/', '@experiments_realm:localhost', true, true, true)`,
+           ('http://localhost:4203/', '*', true, false, false),
+           ('http://localhost:4204/', '@experiments_realm:localhost', true, true, true),
+           ('http://localhost:4204/', '*', true, false, false),
+           ('http://localhost:4204/', 'user', true, true, false)`,
       );
   }
 };
