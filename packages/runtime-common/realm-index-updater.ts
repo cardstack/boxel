@@ -204,11 +204,12 @@ export class RealmIndexUpdater {
       case 'http://127.0.0.1:4444/':
       case 'http://127.0.0.1:4445/':
       case 'http://127.0.0.1:4445/test/':
+      case 'http://127.0.0.1:4446/demo/':
       case 'http://127.0.0.1:4448/':
         return 'node-test_realm';
     }
     throw new Error(
-      `Cannot determine realm owner for realm ${this.realmURL.href}`,
+      `Cannot determine realm owner for realm ${this.realmURL.href}.`,
     );
   }
 }
