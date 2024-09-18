@@ -343,7 +343,7 @@ async function startWorker() {
 // Other realms: read permissions for everyone, read/write permissions for signed up users
 async function seedRealmPermissions(dbAdapter: PgAdapter, realmURL: URL) {
   if (!(await permissionsExist(dbAdapter, realmURL))) {
-    if (realmURL.href === 'https://cardstack.com/base/') {
+    if (realmURL.href === 'https://cardstack.com/base/' || realmURL.href.split('/')[1] === 'catalog') {
       await insertPermissions(dbAdapter, realmURL, { '*': ['read'] });
     } else {
       await insertPermissions(dbAdapter, realmURL, {
