@@ -11,7 +11,14 @@ exports.up = (pgm) => {
            ('https://realms-staging.stack.cards/catalog/', '@catalog_realm:stack.cards', true, true, true),
            ('https://realms-staging.stack.cards/catalog/', '*', true, false, false),
            ('https://cardstack.com/base/', '@base_realm:stack.cards', true, true, true),
-           ('https://cardstack.com/base/', '*', true, false, false)`,
+           ('https://cardstack.com/base/', '*', true, false, false)
+         ON CONFLICT ON CONSTRAINT realm_user_permissions_pkey
+         DO UPDATE SET
+           realm_url   = EXCLUDED.realm_url,
+           username    = EXCLUDED.username,
+           read        = EXCLUDED.read,
+           write       = EXCLUDED.write,
+           realm_owner = EXCLUDED.realm_owner`,
       );
       break;
     case 'production':
@@ -25,7 +32,14 @@ exports.up = (pgm) => {
            ('https://app.boxel.ai/catalog/', '@catalog_realm:boxel.ai', true, true, true),
            ('https://app.boxel.ai/catalog/', '*', true, false, false),
            ('https://cardstack.com/base/', '@base_realm:boxel.ai', true, true, true),
-           ('https://cardstack.com/base/', '*', true, false, false)`,
+           ('https://cardstack.com/base/', '*', true, false, false)
+         ON CONFLICT ON CONSTRAINT realm_user_permissions_pkey
+         DO UPDATE SET
+           realm_url   = EXCLUDED.realm_url,
+           username    = EXCLUDED.username,
+           read        = EXCLUDED.read,
+           write       = EXCLUDED.write,
+           realm_owner = EXCLUDED.realm_owner`,
       );
       break;
     default:
@@ -53,7 +67,14 @@ exports.up = (pgm) => {
            ('http://localhost:4204/', 'users', true, true, false),
            ('http://localhost:4205/test/', '@test_realm:localhost', true, true, true),
            ('http://localhost:4205/test/', '*', true, false, false),
-           ('http://localhost:4205/test/', 'users', true, true, false)`,
+           ('http://localhost:4205/test/', 'users', true, true, false)
+         ON CONFLICT ON CONSTRAINT realm_user_permissions_pkey
+         DO UPDATE SET
+           realm_url   = EXCLUDED.realm_url,
+           username    = EXCLUDED.username,
+           read        = EXCLUDED.read,
+           write       = EXCLUDED.write,
+           realm_owner = EXCLUDED.realm_owner`,
       );
   }
 };
