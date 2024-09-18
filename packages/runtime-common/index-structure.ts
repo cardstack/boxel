@@ -27,6 +27,7 @@ export interface BoxelIndexTable {
   atom_html: string | null;
   indexed_at: string | null; // pg represents big integers as strings in javascript
   last_modified: string | null; // pg represents big integers as strings in javascript
+  resource_created_at: string | null; // pg represents big integers as strings in javascript
   is_deleted: boolean | null;
 }
 
@@ -60,6 +61,7 @@ export const coerceTypes = Object.freeze({
   display_names: 'JSON',
   is_deleted: 'BOOLEAN',
   last_modified: 'VARCHAR',
+  resource_created_at: 'VARCHAR',
   indexed_at: 'VARCHAR',
   value: 'JSON',
 });

@@ -2485,6 +2485,7 @@ const tests = Object.freeze({
         realm_url: testRealmURL,
         deps: [],
         last_modified: '1',
+        resource_created_at: '1',
       },
       {
         url: `${testRealmURL}jimmy.json`,
@@ -2494,6 +2495,7 @@ const tests = Object.freeze({
         realm_url: testRealmURL,
         deps: [],
         last_modified: '3',
+        resource_created_at: '3',
       },
       {
         url: `${testRealmURL}donald.json`,
@@ -2503,6 +2505,7 @@ const tests = Object.freeze({
         realm_url: testRealmURL,
         deps: [],
         last_modified: '2',
+        resource_created_at: '2',
       },
     ]);
 
@@ -2556,6 +2559,33 @@ const tests = Object.freeze({
         `${testRealmURL}vangogh.json`,
         `${testRealmURL}donald.json`,
         `${testRealmURL}jimmy.json`,
+      ],
+      'results are correct',
+    );
+
+    let { prerenderedCards: results3 } =
+      await indexQueryEngine.searchPrerendered(
+        new URL(testRealmURL),
+        {
+          sort: [
+            {
+              by: 'createdAt',
+              direction: 'desc',
+            },
+          ],
+        },
+        loader,
+        {
+          htmlFormat: 'embedded',
+        },
+      );
+
+    assert.deepEqual(
+      results3.map((r: { url: string }) => r.url),
+      [
+        `${testRealmURL}jimmy.json`,
+        `${testRealmURL}donald.json`,
+        `${testRealmURL}vangogh.json`,
       ],
       'results are correct',
     );

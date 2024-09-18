@@ -229,7 +229,7 @@ export default class RealmService extends Service {
       this.identifyRealmTracker;
 
       return {
-        name: 'Unknown Realm',
+        name: 'Unknown Workspace',
         backgroundURL: null,
         iconURL: null,
       };
@@ -238,7 +238,7 @@ export default class RealmService extends Service {
     if (!resource.meta) {
       resource.fetchMeta();
       return {
-        name: 'Unknown Realm',
+        name: 'Unknown Workspace',
         backgroundURL: null,
         iconURL: null,
       };

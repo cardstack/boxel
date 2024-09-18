@@ -2,6 +2,9 @@ import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import type CardService from '@cardstack/host/services/card-service';
+
+import Workspace from './workspace';
+
 interface Signature {
   Element: HTMLDivElement;
   Args: {};
@@ -13,12 +16,12 @@ export default class WorkspaceChooser extends Component<Signature> {
   <template>
     <div class='workspace-chooser' data-test-workspace-chooser>
       <span class='workspace-chooser__title'>Your Workspaces</span>
-      <ul>
+      <div class='workspace-list'>
         {{#each this.cardService.userRealms as |realmURL|}}
-          <li class='workspace' data-test-workspace>{{realmURL}}</li>
+          <Workspace @realmURL={{realmURL}} />
         {{/each}}
-      </ul>
-      {{! TODO: [CS-7031] Implement list workspaces that user has access to }}
+      </div>
+      {{! TODO: [CS-7199] Include "Community Catalogs" if there are catalogs to show }}
       <span class='workspace-chooser__title'>Community Catalogs</span>
     </div>
     <style scoped>
@@ -47,9 +50,11 @@ export default class WorkspaceChooser extends Component<Signature> {
         letter-spacing: var(--boxel-lsp);
       }
 
-      .workspace {
-        /* placeholder style only */
-        color: var(--boxel-light);
+      .workspace-list {
+        display: flex;
+        gap: var(--boxel-sp);
+        padding: var(--boxel-sp-xs) 0;
+        overflow: auto;
       }
     </style>
   </template>
