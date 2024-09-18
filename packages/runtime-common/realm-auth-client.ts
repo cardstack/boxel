@@ -23,7 +23,7 @@ export class RealmAuthClient {
     private realmURL: URL,
     private matrixClient: RealmAuthMatrixClientInterface,
     private fetch: typeof globalThis.fetch,
-  ) { }
+  ) {}
 
   get jwt(): string | undefined {
     return this._jwt;
@@ -61,7 +61,9 @@ export class RealmAuthClient {
 
     if (initialResponse.status !== 401) {
       throw new Error(
-        `unexpected response from POST ${this.realmURL.href}_session: ${initialResponse.status} - ${await initialResponse.text()}`,
+        `unexpected response from POST ${this.realmURL.href}_session: ${
+          initialResponse.status
+        } - ${await initialResponse.text()}`,
       );
     }
 
