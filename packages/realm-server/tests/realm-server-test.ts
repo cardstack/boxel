@@ -3293,7 +3293,7 @@ module('Realm server serving multiple realms', function (hooks) {
   let base: Realm;
   let testRealm: Realm;
 
-  let { loader, virtualNetwork } = createVirtualNetworkAndLoader();
+  let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
   const basePath = resolve(join(__dirname, '..', '..', 'base'));
 
   hooks.beforeEach(async function () {
