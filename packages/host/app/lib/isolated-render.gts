@@ -67,9 +67,9 @@ export function render(
       vm.commitCacheGroup();
     }
 
-    console.log('render arguments', C, element, owner, format);
+    console.log('render arguments', C, element, format);
     let error = new CardError(
-      `Encountered error rendering HTML for card: ${err.message} (${C}, constructor name? ${C.constructor.name} ${element} (tag name ${element.tagName}), ${owner}, ${format})`,
+      `Encountered error rendering HTML for card: ${err.message} (${C}, constructor name? ${C.constructor.name} ${element} (tag name ${element.tagName}), ${format})`,
     );
     error.additionalErrors = [err];
     throw error;
