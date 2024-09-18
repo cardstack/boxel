@@ -198,6 +198,7 @@ export class RealmIndexUpdater {
       case 'http://test-realm/':
       case 'http://test-realm/test/':
       case 'http://test-realm/test2/':
+      case 'http://test-realm/test/root/':
       case 'http://127.0.0.1:4447/':
         return 'test_realm';
       case 'http://127.0.0.1:4444/':
