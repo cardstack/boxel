@@ -131,11 +131,9 @@ export interface SheetSignature {
 
 class Sheet extends GlimmerComponent<SheetSignature> {
   <template>
-    <div class='sheet-overlay {{if @isOpen "is-open"}}' {{on 'click' @onClose}}>
-      <div
-        class='sheet-content {{if @isOpen "is-open"}}'
-        {{on 'click' this.stopPropagation}}
-      >
+    <div class='sheet-overlay {{if @isOpen "is-open"}}'>
+      <div class='sheet-content {{if @isOpen "is-open"}}'>
+        <button class='close-button' {{on 'click' @onClose}}>×</button>
         {{yield}}
       </div>
     </div>
@@ -167,17 +165,26 @@ class Sheet extends GlimmerComponent<SheetSignature> {
         box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
         transform: translateX(100%);
         transition: transform 0.3s ease-out;
+        position: relative;
       }
 
       .sheet-content.is-open {
         transform: translateX(0);
       }
+
+      .close-button {
+        position: absolute;
+        top: var(--boxel-sp-xs);
+        right: var(--boxel-sp-xs);
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        padding: var(--boxel-sp-xxs);
+        line-height: 1;
+      }
     </style>
   </template>
-
-  stopPropagation = (event: Event) => {
-    event.stopPropagation();
-  };
 }
 
 export class TaskAppCard extends CardDef {
