@@ -36,7 +36,6 @@ export type Event = Partial<IEvent> & {
 };
 
 export async function addRoomEvent(context: MatrixService, event: Event) {
-  console.log('addRoomEvent', { event });
   let { event_id: eventId, room_id: roomId, state_key: stateKey } = event;
   // If we are receiving an event which contains
   // a data field, we need to parse it
@@ -85,7 +84,6 @@ export async function updateRoomEvent(
   event: Event,
   oldEventId: string,
 ) {
-  console.log('updateRoomEvent', { event, oldEventId });
   if (event.content?.data && typeof event.content.data === 'string') {
     event.content.data = JSON.parse(event.content.data);
   }

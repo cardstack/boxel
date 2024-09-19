@@ -136,7 +136,6 @@ export class ServerState {
     if (relatesTo?.event_id?.replace) {
       relatesTo.event_id = relatesTo.event_id.replace(/__EVENT_ID__/g, eventId);
     }
-    console.log('adding event', matrixEvent);
     room.events.push(matrixEvent);
     this.#listeners.forEach((listener) => listener(matrixEvent));
 

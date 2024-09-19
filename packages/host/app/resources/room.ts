@@ -95,19 +95,6 @@ export class RoomResource extends Resource<Args> {
   });
 
   get messages() {
-    // console.log('get messages', {
-    //   roomId: this._roomId,
-    //   messageCacheLength: this._messageCache.size,
-    //   statuses: [...this._messageCache.values()].map((m) => m.status),
-    //   events: this.events.map((ev) => {
-    //     return {
-    //       event_id: ev.event_id,
-    //       eventType: ev.type,
-    //       status: ev.status,
-    //       body: ev.content?.body,
-    //     };
-    //   }),
-    // });
     if (this._messageCache) {
       return [...this._messageCache.values()].sort(
         (a, b) => a.created.getTime() - b.created.getTime(),

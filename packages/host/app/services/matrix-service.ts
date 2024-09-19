@@ -399,7 +399,6 @@ export default class MatrixService extends Service {
       | ReactionEventContent
       | CommandResultContent,
   ) {
-    console.log('MatrixService.sendEvent ', eventType, content);
     if ('data' in content) {
       const encodedContent = {
         ...content,
