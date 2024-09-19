@@ -21,13 +21,15 @@ export function setupMockMatrix(
   hooks: NestedHooks,
   opts: Config = {},
 ): MockUtils {
-  let testState: { owner?: Owner; sdk?: MockSDK } = {
+  let testState: { owner?: Owner; sdk?: MockSDK; opts?: Config } = {
     owner: undefined,
     sdk: undefined,
+    opts: undefined,
   };
   hooks.beforeEach(async function () {
     testState.owner = this.owner;
-    let sdk = new MockSDK(opts);
+    testState.opts = { ...opts };
+    let sdk = new MockSDK(testState.opts);
     testState.sdk = sdk;
     const { loggedInAs } = opts;
     if (loggedInAs) {
@@ -59,5 +61,5 @@ export function setupMockMatrix(
       await matrixService.start();
     }
   });
-  return new MockUtils(opts, testState);
+  return new MockUtils(testState);
 }
