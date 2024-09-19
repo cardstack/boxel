@@ -5,6 +5,7 @@ import { task } from 'ember-concurrency';
 import flatMap from 'lodash/flatMap';
 
 import {
+  type Actions,
   type PatchData,
   baseRealm,
   LooseSingleCardDocument,
@@ -32,8 +33,10 @@ import { Message } from '../lib/matrix-classes/message';
 
 import CardService from './card-service';
 
-function getComponent(cardOrField: BaseDef) {
-  return cardOrField.constructor.getComponent(cardOrField);
+function getComponent(cardOrField: BaseDef, actions?: Actions) {
+  return cardOrField.constructor.getComponent(cardOrField, undefined, {
+    actions,
+  });
 }
 
 export default class CommandService extends Service {
@@ -164,12 +167,12 @@ export default class CommandService extends Service {
     return;
   }
 
-  getCommandResultComponent(message: Message) {
+  getCommandResultComponent(message: Message, actions?: Actions) {
     if (
       message?.command?.result?.cardIds.length &&
       message?.command?.name === 'searchCard'
     ) {
-      return getComponent(message.command.result as CommandResult);
+      return getComponent(message.command.result as CommandResult, actions);
     }
     return;
   }

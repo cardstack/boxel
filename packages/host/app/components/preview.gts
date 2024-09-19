@@ -10,6 +10,7 @@ import {
 
 import type {
   BaseDef,
+  CardContext,
   Format,
   Field,
 } from 'https://cardstack.com/base/card-api';
@@ -23,7 +24,7 @@ interface Signature {
     format?: Format;
     field?: Field;
     codeRef?: ResolvedCodeRef;
-    cardContext?: Record<string, any>;
+    cardContext?: Partial<CardContext>;
   };
 }
 
@@ -53,7 +54,10 @@ export default class Preview extends Component<Signature> {
     return this.args.card.constructor.getComponent(
       this.args.card,
       this.args.field,
-      this.args.codeRef ? { componentCodeRef: this.args.codeRef } : undefined,
+      {
+        componentCodeRef: this.args.codeRef,
+        actions: this.args.cardContext?.actions,
+      },
     );
   }
 }

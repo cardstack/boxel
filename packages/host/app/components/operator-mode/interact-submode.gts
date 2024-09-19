@@ -174,7 +174,6 @@ export default class InteractSubmode extends Component<Signature> {
           doc,
           relativeTo,
         );
-
         let newItem = new StackItem({
           owner: here,
           card: newCard,
@@ -615,6 +614,7 @@ export default class InteractSubmode extends Component<Signature> {
 
   <template>
     <SubmodeLayout
+      @actions={{this.publicAPI this 1}}
       @onSearchSheetClosed={{this.clearSearchSheetTrigger}}
       @onCardSelectFromSearch={{perform this.openSelectedSearchResultInStack}}
       as |search|
@@ -669,11 +669,11 @@ export default class InteractSubmode extends Component<Signature> {
             {{/let}}
           {{/each}}
 
-          <CopyButton
+          {{!-- <CopyButton
             @selectedCards={{this.selectedCards}}
             @copy={{fn (perform this.copy)}}
             @isCopying={{this.copy.isRunning}}
-          />
+          /> --}}
         {{/if}}
 
         {{#if this.canCreateNeighborStack}}

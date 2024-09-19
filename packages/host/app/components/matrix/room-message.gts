@@ -18,7 +18,7 @@ import { MatrixEvent } from 'matrix-js-sdk';
 import { Button } from '@cardstack/boxel-ui/components';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
-import { markdownToHtml } from '@cardstack/runtime-common';
+import { markdownToHtml, type Actions } from '@cardstack/runtime-common';
 
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
@@ -41,6 +41,7 @@ import ProfileAvatarIcon from '../operator-mode/profile-avatar-icon';
 interface Signature {
   Element: HTMLDivElement;
   Args: {
+    actions?: Actions;
     roomId: string;
     message: Message;
     messages: Message[];
@@ -136,7 +137,10 @@ export default class RoomMessage extends Component<Signature> {
   }
 
   get getComponent() {
-    return this.commandService.getCommandResultComponent(this.args.message);
+    return this.commandService.getCommandResultComponent(
+      this.args.message,
+      this.args.actions,
+    );
   }
 
   <template>

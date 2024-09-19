@@ -1,4 +1,4 @@
-import { getCard, primitive } from '@cardstack/runtime-common';
+import { baseRealm, getCard, primitive } from '@cardstack/runtime-common';
 import {
   BaseDef,
   CardDef,
@@ -7,6 +7,7 @@ import {
   StringField,
   contains,
   containsMany,
+  createFromSerialized,
   field,
 } from './card-api';
 import { cached, tracked } from '@glimmer/tracking';
@@ -19,6 +20,7 @@ import {
 } from '@cardstack/boxel-ui/icons';
 import { Button, Header, IconButton } from '@cardstack/boxel-ui/components';
 import { on } from '@ember/modifier';
+import { restartableTask } from 'ember-concurrency';
 
 type AttachedCardResource = {
   card: CardDef | undefined;
@@ -114,6 +116,7 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
             class='icon-button'
             aria-label='Options'
             data-test-more-options-button
+            {{on 'click' this.openCard}}
           />
         </:actions>
       </Header>
@@ -215,6 +218,35 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
       }
     </style>
   </template>
+
+  @action openCard() {
+    this._openCard.perform();
+  }
+
+  _openCard = restartableTask(async () => {
+    let searchCardRef = {
+      name: 'SearchResult',
+      module: `${baseRealm.url}command-result`,
+    };
+    let { cardIds } = this.args.model;
+    let resource = {
+      attributes: {
+        title: 'Search Results',
+        cardIds,
+      },
+      meta: { adoptsFrom: searchCardRef },
+    };
+    try {
+      let card = await createFromSerialized(
+        resource,
+        { data: resource },
+        undefined,
+      );
+      this.args.context?.actions?.viewCard(card);
+    } catch (e) {
+      throw e;
+    }
+  });
 }
 
 type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
@@ -235,4 +267,30 @@ export class CommandResult extends FieldDef {
   @field cardIds = containsMany(StringField);
 
   static embedded = CommandResultEmbeddedView;
+}
+
+export class SearchResult extends CardDef {
+  static displayName = 'Search Result';
+  @field cardIds = containsMany(StringField);
+  static isolated = class Isolated extends CommandResultEmbeddedView {
+    <template>
+      <ol class='result-list'>
+        {{#each this.attachedResources as |cardResource|}}
+          {{#if cardResource.cardError}}
+            <li data-test-card-error={{cardResource.cardError.id}}>
+              Error: cannot render card
+              {{cardResource.cardError.id}}:
+              {{cardResource.cardError.error.message}}
+            </li>
+          {{else if cardResource.card}}
+            <li data-test-result-card={{cardResource.card.id}}>
+              {{#let (getComponent cardResource.card) as |Component|}}
+                <Component @format='atom' @displayContainer={{true}} />
+              {{/let}}
+            </li>
+          {{/if}}
+        {{/each}}
+      </ol>
+    </template>
+  };
 }

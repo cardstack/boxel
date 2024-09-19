@@ -19,6 +19,7 @@ import {
   PermissionsContextName,
   getField,
   Loader,
+  type Actions,
   type CodeRef,
   type Permissions,
 } from '@cardstack/runtime-common';
@@ -40,6 +41,7 @@ export interface BoxComponentSignature {
 export type BoxComponent = ComponentLike<BoxComponentSignature>;
 
 interface CardContextConsumerSignature {
+  Args: { actions?: Actions };
   Blocks: { default: [CardContext] };
 }
 
@@ -58,6 +60,7 @@ export class CardContextConsumer extends Component<CardContextConsumerSignature>
     return {
       ...DEFAULT_CARD_CONTEXT,
       ...this.dynamicCardContext,
+      actions: this.args.actions,
     };
   }
 
@@ -117,7 +120,7 @@ export function getBoxComponent(
   cardOrField: typeof BaseDef,
   model: Box<BaseDef>,
   field: Field | undefined,
-  opts?: { componentCodeRef?: CodeRef },
+  opts?: { componentCodeRef?: CodeRef; actions?: Actions },
 ): BoxComponent {
   // the componentCodeRef is only set on the server during card prerendering,
   // it should have no effect on component stability
@@ -199,7 +202,7 @@ export function getBoxComponent(
     Element: HTMLElement;
     Args: { format?: Format; displayContainer?: boolean };
   }> = <template>
-    <CardContextConsumer as |context|>
+    <CardContextConsumer @actions={{opts.actions}} as |context|>
       <PermissionsConsumer as |permissions|>
         <DefaultFormatsConsumer as |defaultFormats|>
           {{#let
