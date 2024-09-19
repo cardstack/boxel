@@ -227,6 +227,7 @@ export default class CardPreviewPanel extends Component<Signature> {
 
       .preview-content {
         height: auto;
+        margin: var(--boxel-sp-sm);
       }
 
       .header-actions {
