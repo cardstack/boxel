@@ -49,7 +49,7 @@ module('Acceptance | interact submode tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  let { setRealmPermissions } = setupMockMatrix(hooks, {
+  let { setRealmPermissions, setActiveRealms } = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
     activeRealms: [testRealmURL, testRealm2URL],
   });
@@ -1272,10 +1272,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test('visiting 2 stacks from differing realms', async function (assert) {
-      let cardService = this.owner.lookup(
-        'service:card-service',
-      ) as CardService;
-      cardService.unresolvedRealmURLs.push('http://localhost:4202/test/');
+      setActiveRealms([testRealmURL, 'http://localhost:4202/test/']);
       await visitOperatorMode({
         stacks: [
           [
