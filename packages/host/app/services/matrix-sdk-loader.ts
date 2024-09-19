@@ -4,11 +4,11 @@ import { service } from '@ember/service';
 
 import * as MatrixSDK from 'matrix-js-sdk';
 
+import { MatrixEvent } from 'matrix-js-sdk';
+
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
 import LoaderService from './loader-service';
-
-const MatrixEvent = MatrixSDK.MatrixEvent;
 
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -150,10 +150,7 @@ async function allRoomMessages(
     );
     let { chunk, end } = await response.json();
     from = end;
-    let events: MatrixEvent[] = chunk;
-    if (opts?.onMessages) {
-      await opts.onMessages(events);
-    }
+    let events: Partial<MatrixSDK.IEvent>[] = chunk;
     messages.push(...events.map((event) => new MatrixEvent(event)));
   } while (from);
   return messages;
@@ -253,6 +250,5 @@ function extendedClient(
 
 export interface MessageOptions {
   direction?: 'forward' | 'backward';
-  onMessages?: (messages: MatrixEvent[]) => Promise<void>;
   pageSize: number;
 }
