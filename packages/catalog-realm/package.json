@@ -1,0 +1,25 @@
+{
+  "name": "@cardstack/catalog-realm",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "devDependencies": {
+    "@cardstack/boxel-ui": "workspace:*",
+    "@cardstack/runtime-common": "workspace:*",
+    "@types/lodash": "^4.14.182",
+    "chess.js": "1.0.0-beta.8",
+    "concurrently": "^8.0.1",
+    "ember-concurrency": "^4.0.2",
+    "ember-modifier": "^4.1.0",
+    "ember-template-lint": "^5.11.2",
+    "tracked-built-ins": "^3.3.0"
+  },
+  "scripts": {
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
+    "lint:hbs": "ember-template-lint .",
+    "lint:hbs:fix": "ember-template-lint . --fix"
+  },
+  "volta": {
+    "extends": "../../package.json"
+  }
+}
