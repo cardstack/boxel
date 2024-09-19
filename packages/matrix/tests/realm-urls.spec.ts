@@ -70,12 +70,16 @@ test.describe('Realm URLs in Matrix account data', () => {
       .waitFor({ state: 'visible' });
     expect(await page.locator('[data-test-workspace]').count()).toBe(2);
 
-    expect(page.locator('[data-test-workspace="Test Workspace A"] [data-test-workspace-name]')).toHaveText(
-      'Test Workspace A',
-    );
+    expect(
+      page.locator(
+        '[data-test-workspace="Test Workspace A"] [data-test-workspace-name]',
+      ),
+    ).toHaveText('Test Workspace A');
 
-    expect(page.locator('[data-test-workspace="Unknown Workspace"] [data-test-workspace-name]')).toHaveText(
-      'Unknown Workspace',
-    );
+    expect(
+      page.locator(
+        '[data-test-workspace="Unknown Workspace"] [data-test-workspace-name]',
+      ),
+    ).toHaveText('Unknown Workspace');
   });
 });

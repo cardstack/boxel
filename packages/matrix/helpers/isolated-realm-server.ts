@@ -2,7 +2,7 @@ import { spawn } from 'child_process';
 import { resolve, join } from 'path';
 // @ts-expect-error no types
 import { dirSync, setGracefulCleanup } from 'tmp';
-import { ensureDirSync, copySync } from 'fs-extra';
+import { ensureDirSync, copySync, readFileSync } from 'fs-extra';
 
 setGracefulCleanup();
 
@@ -38,10 +38,7 @@ export async function startServer() {
       `--port=4205`,
       `--matrixURL='http://localhost:8008'`,
       `--realmsRootPath='${dir.name}'`,
-      `--matrixRegistrationSecretFile='${join(
-        matrixDir,
-        'registration_secret.txt',
-      )}`,
+      `--useRegistrationSecretFunction`,
       `--path='${testRealmDir}'`,
       `--username='test_realm'`,
       `--fromUrl='/test/'`,
@@ -64,6 +61,15 @@ export async function startServer() {
       console.error(`realm server: ${data.toString()}`),
     );
   }
+  realmServer.on('message', (message) => {
+    if (message === 'get-registration-secret' && realmServer.send) {
+      let secret = readFileSync(
+        join(matrixDir, 'registration_secret.txt'),
+        'utf8',
+      );
+      realmServer.send(`registration-secret:${secret}`);
+    }
+  });
 
   let timeout = await Promise.race([
     new Promise<void>((r) => {
@@ -73,7 +79,7 @@ export async function startServer() {
         }
       });
     }),
-    new Promise<true>((r) => setTimeout(() => r(true), 30_000)),
+    new Promise<true>((r) => setTimeout(() => r(true), 60_000)),
   ]);
   if (timeout) {
     throw new Error(
@@ -81,11 +87,14 @@ export async function startServer() {
     );
   }
 
-  return new IsolatedRealmServer(realmServer);
+  return new IsolatedRealmServer(realmServer, testRealmDir);
 }
 
 export class IsolatedRealmServer {
-  constructor(private realmServerProcess: ReturnType<typeof spawn>) {}
+  constructor(
+    private realmServerProcess: ReturnType<typeof spawn>,
+    readonly realmPath: string, // useful for debugging
+  ) {}
 
   async stop() {
     let stopped: () => void;

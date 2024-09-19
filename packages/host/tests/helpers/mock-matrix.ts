@@ -382,6 +382,14 @@ class MockClient implements ExtendedClient {
     throw new Error('Method not implemented.');
   }
 
+  async setAccountData<T>(_type: string, _data: T): Promise<void> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getAccountData<T>(_type: string): Promise<T> {
+    throw new Error('Method not implemented.');
+  }
+
   async createRealmSession(realmURL: URL): Promise<string> {
     let secret = "shhh! it's a secret";
     let nowInSeconds = unixTime(Date.now());

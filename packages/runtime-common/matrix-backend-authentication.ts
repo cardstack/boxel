@@ -113,11 +113,12 @@ export class MatrixBackendAuthentication {
         await this.matrixClient.hashMessageWithSecret(challenge);
       if (challengeResponse === successfulChallengeResponse) {
         let jwt = await this.utils.createJWT(user);
-        return this.utils.createResponse(null, {
+        return this.utils.createResponse(JSON.stringify({ jwt }), {
           status: 201,
           headers: {
             'Content-Type': 'application/json',
             Authorization: jwt,
+            'Access-Control-Expose-Headers': 'Authorization',
           },
         });
       } else {
@@ -212,11 +213,12 @@ export class MatrixBackendAuthentication {
     let hashedResponse = uint8ArrayToHex(await hash.digest());
     if (hashedResponse === lastChallenge) {
       let jwt = await this.utils.createJWT(user);
-      return this.utils.createResponse(null, {
+      return this.utils.createResponse(JSON.stringify({ jwt }), {
         status: 201,
         headers: {
           'Content-Type': 'application/json',
           Authorization: jwt,
+          'Access-Control-Expose-Headers': 'Authorization',
         },
       });
     } else {

@@ -18,8 +18,7 @@ NODE_ENV=development \
   --transpileOnly main \
   --port=4203 \
   --matrixURL='http://localhost:8008' \
-  --realmsRootPath='./realms' \
-  --matrixRegistrationSecretFile='../matrix/registration_secret.txt' \
+  --realmsRootPath='./realms/localhost_4203' \
   \
   --path='../base' \
   --username='base_realm' \

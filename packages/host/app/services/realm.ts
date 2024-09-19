@@ -153,6 +153,9 @@ class RealmResource {
       }
       let headers: Record<string, string> = {
         Accept: SupportedMimeType.RealmInfo,
+        ...(this.auth.type === 'logged-in'
+          ? { Authorization: `Bearer ${this.token}` }
+          : {}),
       };
       let response = await this.loaderService.loader.fetch(
         `${this.realmURL}_info`,

@@ -585,6 +585,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     url = currentURL().split('?')[1].replace(/^\/\?/, '') ?? '';
     urlParameters = new URLSearchParams(url);
     assert.true(Boolean(urlParameters.get('workspaceChooserOpened')));
+    await percySnapshot(assert);
   });
 
   module('2 stacks', function () {

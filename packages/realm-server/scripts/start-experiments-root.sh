@@ -17,8 +17,7 @@ NODE_NO_WARNINGS=1 \
   --transpileOnly main \
   --port=4204 \
   --matrixURL='http://localhost:8008' \
-  --realmsRootPath='./realms' \
-  --matrixRegistrationSecretFile='../matrix/registration_secret.txt' \
+  --realmsRootPath='./realms/localhost_4204' \
   \
   --path='../experiments-realm/' \
   --username='experiments_realm' \

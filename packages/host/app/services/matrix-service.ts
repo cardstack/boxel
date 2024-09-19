@@ -1,4 +1,5 @@
 import type Owner from '@ember/owner';
+import { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import Service, { service } from '@ember/service';
 import { cached, tracked } from '@glimmer/tracking';
@@ -42,6 +43,7 @@ import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
 import { currentRoomIdPersistenceKey } from '@cardstack/host/components/ai-assistant/panel';
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
+import type CardController from '@cardstack/host/controllers/card';
 
 import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
@@ -233,11 +235,30 @@ export default class MatrixService extends Service {
     }
   }
 
-  async startAndCreateRealm(auth: LoginResponse, displayName: string) {
+  async initializeRealmsForNewUser(auth: LoginResponse, displayName: string) {
+    let cardController = getOwner(this)!.lookup(
+      'controller:card',
+    ) as CardController;
+    cardController.workspaceChooserOpened = true;
     this.start(auth);
     this.setDisplayName(displayName);
-    await this.realmServer.createRealm('personal');
-    await this.router.refresh();
+
+    let personalRealmURL = await this.realmServer.createRealm('Personal');
+    let { realms = [] } =
+      (await this.client.getAccountData<{ realms: string[] } | undefined>(
+        'com.cardstack.boxel.realms',
+      )) ?? {};
+    realms.push(
+      personalRealmURL.href,
+      // TODO add this after catalog realm has landed
+      // `${this.realmServer.url}catalog/`
+    );
+    await this.client.setAccountData('com.cardstack.boxel.realms', { realms });
+    this.cardService.setRealms(realms);
+    await this.loginToRealms();
+
+    // I don't think we need this anymore...
+    // await this.router.refresh();
   }
 
   async setDisplayName(displayName: string) {

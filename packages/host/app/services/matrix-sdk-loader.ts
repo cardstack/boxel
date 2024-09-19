@@ -141,10 +141,14 @@ async function setAccountData<T>(
   type: string,
   data: T,
 ) {
+  let userId = this.getUserId();
+  if (!userId) {
+    throw new Error(`Cannot set account data without matrix session`);
+  }
   let response = await fetch(
-    `${
-      this.baseUrl
-    }_matrix/client/v3/user/${this.getUserId()}/account_data/${type}`,
+    `${this.baseUrl}/_matrix/client/v3/user/${encodeURIComponent(
+      userId,
+    )}/account_data/${type}`,
     {
       method: 'PUT',
       headers: {
@@ -168,10 +172,14 @@ async function getAccountData<T>(
   fetch: typeof globalThis.fetch,
   type: string,
 ) {
+  let userId = this.getUserId();
+  if (!userId) {
+    throw new Error(`Cannot get account data without matrix session`);
+  }
   let response = await fetch(
-    `${
-      this.baseUrl
-    }_matrix/client/v3/user/${this.getUserId()}/account_data/${type}`,
+    `${this.baseUrl}/_matrix/client/v3/user/${encodeURIComponent(
+      userId,
+    )}/account_data/${type}`,
     {
       headers: {
         Authorization: `Bearer ${this.getAccessToken()}`,

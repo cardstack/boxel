@@ -13,14 +13,7 @@ import {
   type Queue,
   type RealmPermissions,
 } from '@cardstack/runtime-common';
-import {
-  ensureDirSync,
-  writeJSONSync,
-  readFileSync,
-  existsSync,
-  readdirSync,
-  copySync,
-} from 'fs-extra';
+import { ensureDirSync, writeJSONSync, readdirSync, copySync } from 'fs-extra';
 import { setupCloseHandler } from './node-realm';
 import {
   livenessCheck,
@@ -93,7 +86,9 @@ export class RealmServer {
   private serverURL: URL;
   private seedPath: string | undefined;
   private matrixRegistrationSecret: string | undefined;
-  private matrixRegistrationSecretFile: string | undefined;
+  private getRegistrationSecret:
+    | (() => Promise<string | undefined>)
+    | undefined;
 
   constructor({
     serverURL,
@@ -107,7 +102,7 @@ export class RealmServer {
     assetsURL,
     getIndexHTML,
     matrixRegistrationSecret,
-    matrixRegistrationSecretFile,
+    getRegistrationSecret,
     seedPath,
   }: {
     serverURL: URL;
@@ -122,11 +117,11 @@ export class RealmServer {
     getIndexHTML: () => Promise<string>;
     seedPath?: string;
     matrixRegistrationSecret?: string;
-    matrixRegistrationSecretFile?: string;
+    getRegistrationSecret?: () => Promise<string | undefined>;
   }) {
-    if (!matrixRegistrationSecret && !matrixRegistrationSecretFile) {
+    if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
-        `'matrixRegistrationSecret' or 'matrixRegistrationSecretFile' must be specified`,
+        `'matrixRegistrationSecret' or 'getRegistrationSecret' must be specified`,
       );
     }
     detectRealmCollision(realms);
@@ -143,7 +138,7 @@ export class RealmServer {
     this.assetsURL = assetsURL;
     this.getIndexHTML = getIndexHTML;
     this.matrixRegistrationSecret = matrixRegistrationSecret;
-    this.matrixRegistrationSecretFile = matrixRegistrationSecretFile;
+    this.getRegistrationSecret = getRegistrationSecret;
     this.realms = [...realms, ...this.loadRealms()];
   }
 
@@ -412,6 +407,7 @@ export class RealmServer {
 
   private async createRealm(
     ownerUserId: string, // note matrix userIDs look like "@mango:boxel.ai"
+    // TODO human friendly realm name and realm URL name should be separate params
     realmName: string,
   ): Promise<Realm> {
     if (
@@ -424,19 +420,20 @@ export class RealmServer {
         `Cannot create a realm: a realm is already mounted at the origin of this server`,
       );
     }
-    if (!realmName.match(/^[a-z0-9-]+$/)) {
+    if (!realmName.match(/^[A-Za-z0-9-]+$/)) {
       throw errorWithStatus(
         400,
         `realm name '${realmName}' contains invalid characters`,
       );
     }
 
+    let cleansedRealmName = realmName.toLocaleLowerCase();
     let ownerUsername = getMatrixUsername(ownerUserId);
     let url = new URL(
       `${this.serverURL.pathname.replace(
         /\/$/,
         '',
-      )}/${ownerUsername}/${realmName}/`,
+      )}/${ownerUsername}/${cleansedRealmName}/`,
       this.serverURL,
     ).href;
 
@@ -449,18 +446,18 @@ export class RealmServer {
     }
 
     let realmPath = resolve(
-      join(this.realmsRootPath, ownerUsername, realmName),
+      join(this.realmsRootPath, ownerUsername, cleansedRealmName),
     );
     ensureDirSync(realmPath);
     let adapter = new NodeAdapter(resolve(String(realmPath)));
 
-    let username = `realm/${ownerUsername}_${realmName}`;
+    let username = `realm/${ownerUsername}_${cleansedRealmName}`;
     let { userId } = await registerUser({
       matrixURL: this.matrixClient.matrixURL,
       displayname: username,
       username,
       password: await passwordFromSeed(username, this.secretSeed),
-      registrationSecret: this.getMatrixRegistrationSecret(),
+      registrationSecret: await this.getMatrixRegistrationSecret(),
     });
 
     await insertPermissions(this.dbAdapter, new URL(url), {
@@ -468,6 +465,7 @@ export class RealmServer {
       [ownerUserId]: DEFAULT_PERMISSIONS,
     });
 
+    // TODO set realm icon based on first letter of realm name
     writeJSONSync(join(realmPath, '.realm.json'), { name: realmName });
     if (this.seedPath) {
       let ignoreList = IGNORE_SEED_FILES.map((file) =>
@@ -560,15 +558,12 @@ export class RealmServer {
   // client tests leverage a synapse instance that changes multiple times per
   // realm lifespan, and each new synapse instance has a unique registration
   // secret
-  private getMatrixRegistrationSecret() {
-    if (
-      this.matrixRegistrationSecretFile &&
-      existsSync(this.matrixRegistrationSecretFile)
-    ) {
-      let secret = readFileSync(this.matrixRegistrationSecretFile, 'utf8');
+  private async getMatrixRegistrationSecret() {
+    if (this.getRegistrationSecret) {
+      let secret = await this.getRegistrationSecret();
       if (!secret) {
         throw new Error(
-          `The matrix registration secret file '${this.matrixRegistrationSecretFile}' is empty`,
+          `the getRegistrationSecret() function returned no secret`,
         );
       }
       return secret;
@@ -578,7 +573,7 @@ export class RealmServer {
       return this.matrixRegistrationSecret;
     }
 
-    throw new Error('Can not determine the matrix registration secret');
+    throw new Error(`Can not determine the matrix registration secret`);
   }
 }
 

@@ -42,6 +42,9 @@ export default class RealmServerService extends Service {
       throw new Error(`Cannot create realm without matrix client`);
     }
     await this.login();
+    if (this.auth.type !== 'logged-in') {
+      throw new Error('Could not login to realm server');
+    }
 
     let response = await this.loaderService.loader.fetch(
       `${this.url.href}_create-realm`,
@@ -57,15 +60,9 @@ export default class RealmServerService extends Service {
         }),
       },
     );
-    let realms =
-      (await this.client.getAccountData<string[] | null>(
-        'com.cardstack.boxel.realms',
-      )) ?? [];
     let {
       data: { id: realmURL },
     } = (await response.json()) as { data: { id: string } };
-    realms.push(realmURL);
-    await this.client.setAccountData('com.cardstack.boxel.realms', realms);
     return new URL(realmURL);
   }
 
@@ -78,11 +75,11 @@ export default class RealmServerService extends Service {
     window.localStorage.removeItem(sessionLocalStorageKey);
   }
 
-  private get url() {
+  get url() {
     let url = globalThis.location.origin;
     // the ember CLI hosted app will use the dev env realm server
     // http://localhost:4201
-    url === 'http://localhost:4200' ? 'http://localhost:4201' : url;
+    url = url === 'http://localhost:4200' ? 'http://localhost:4201' : url;
     return new URL(url);
   }
 

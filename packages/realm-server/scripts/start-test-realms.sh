@@ -18,7 +18,7 @@ NODE_ENV=test \
   --transpileOnly main \
   --port=4202 \
   --matrixURL='http://localhost:8008' \
-  --realmsRootPath='./realms' \
+  --realmsRootPath='./realms/localhost_4202' \
   --matrixRegistrationSecretFile='../matrix/registration_secret.txt' \
   \
   --path='./tests/cards' \
