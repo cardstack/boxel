@@ -68,6 +68,10 @@ const BoxelMultiSelect: TemplateOnlyComponent<Signature> = <template>
       padding: 0;
       overflow: auto;
     }
+    :global(.boxel-multi-select li) {
+      display: flex;
+      align-items: center;
+    }
     :global(
         .boxel-multi-select__dropdown
           .ember-power-select-option[aria-selected='true']

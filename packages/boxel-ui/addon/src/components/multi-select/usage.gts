@@ -9,6 +9,7 @@ import {
 } from 'ember-freestyle/decorators/css-variable';
 
 import BoxelMultiSelect from './index.gts';
+import { includes } from 'lodash';
 
 interface Country {
   name: string;
@@ -42,6 +43,21 @@ export default class BoxelMultiSelectUsage extends Component {
 
   @action onSelectItems(items: Country[]): void {
     this.selectedItems = items;
+  }
+
+  @tracked assignees = [
+    { name: 'No assignee', issues: 28, avatar: '🚫' },
+    { name: 'Current user', issues: 1, avatar: '👤' },
+    { name: 'tintinthong', issues: 1, avatar: '🧑' },
+    { name: 'lucas.law', issues: 1, avatar: '🧑' },
+    { name: 'lukemelia', issues: 2, avatar: '🧑' },
+    { name: 'matic', issues: 2, avatar: '👨' },
+  ] as Array<AssigneeOption>;
+
+  @tracked selectedAssignees: AssigneeOption[] = [];
+
+  @action onSelectAssignees(assignees: AssigneeOption[]) {
+    this.selectedAssignees = assignees;
   }
 
   <template>
@@ -160,6 +176,30 @@ export default class BoxelMultiSelectUsage extends Component {
         />
       </:cssVars>
     </FreestyleUsage>
+
+    <FreestyleUsage @name='Assignee Multi Select'>
+      <:example>
+        <BoxelMultiSelect
+          @placeholder='Select assignees'
+          @searchEnabled={{true}}
+          @searchField='name'
+          @selected={{this.selectedAssignees}}
+          @onChange={{this.onSelectAssignees}}
+          @options={{this.assignees}}
+          @renderInPlace={{true}}
+          @matchTriggerWidth={{true}}
+          @selectedItemComponent={{component AssigneePill isInDropdown=false}}
+          aria-label='Select assignees'
+          as |assignee|
+        >
+          <AssigneePill
+            @option={{assignee}}
+            @isSelected={{includes this.selectedAssignees assignee}}
+            @isInDropdown={{true}}
+          />
+        </BoxelMultiSelect>
+      </:example>
+    </FreestyleUsage>
   </template>
 }
 
@@ -190,6 +230,73 @@ class CustomPill extends Component<CustomPillArgs> {
         cursor: pointer;
         margin-left: 4px;
         font-weight: bold;
+      }
+    </style>
+  </template>
+}
+
+interface AssigneeOption {
+  avatar: string;
+  name: string;
+  issues: number;
+}
+
+interface AssigneePillArgs {
+  Element: Element;
+  Args: {
+    option: AssigneeOption;
+    isSelected: boolean;
+    isInDropdown?: boolean;
+  };
+}
+
+class AssigneePill extends Component<AssigneePillArgs> {
+  get issueText() {
+    const { issues } = this.args.option;
+    return `${issues} ${issues === 1 ? 'issue' : 'issues'}`;
+  }
+
+  <template>
+    <span class='assignee-pill {{if @isInDropdown "dropdown-item"}}'>
+      {{#if @isInDropdown}}
+        <input type='checkbox' checked={{@isSelected}} />
+      {{/if}}
+      <span class='assignee-avatar'>{{@option.avatar}}</span>
+      <span class='assignee-name'>{{@option.name}}</span>
+      {{#if @isInDropdown}}
+        <span class='assignee-issues'>{{this.issueText}}</span>
+      {{/if}}
+    </span>
+
+    <style>
+      .assignee-pill {
+        display: flex;
+        align-items: center;
+        font-size: var(--boxel-font-size-sm);
+      }
+      .dropdown-item {
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
+      }
+      .assignee-avatar {
+        width: var(--boxel-sp-lg);
+        height: var(--boxel-sp-lg);
+        border-radius: 50%;
+        background-color: var(--avatar-bg-color, #e0e0e0);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: var(--boxel-sp-xs);
+        font-size: var(--boxel-font-size-xs);
+      }
+      .assignee-name {
+        flex-grow: 1;
+      }
+      .assignee-issues {
+        color: var(--boxel-orange);
+        font-size: var(--boxel-font-size-xs);
+      }
+      input[type='checkbox'] {
+        margin-right: var(--boxel-sp-xs);
       }
     </style>
   </template>
