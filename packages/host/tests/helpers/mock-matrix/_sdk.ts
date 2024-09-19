@@ -17,6 +17,7 @@ export class MockSDK implements PublicAPI<ExtendedMatrixSDK> {
   constructor(private sdkOpts: Config) {
     this.serverState = new ServerState({
       displayName: sdkOpts.displayName ?? '',
+      now: sdkOpts.now ?? Date.now,
     });
   }
 

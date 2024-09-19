@@ -5,11 +5,11 @@ import {
   fillIn,
   triggerEvent,
 } from '@ember/test-helpers';
+import { settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { format, subMinutes } from 'date-fns';
 
-import { rawTimeout } from 'ember-concurrency';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
@@ -77,6 +77,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
       loggedInAs: '@testuser:staging',
       activeRealms: [testRealmURL],
       autostart: true,
+      now: (() => {
+        // deterministic clock so that, for example, screenshots
+        // have consistent content
+        let clock = new Date(2024, 8, 19).getTime();
+        return () => (clock += 10);
+      })(),
     });
 
   let noop = () => {};
@@ -350,9 +356,30 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let room1Id = await createAndJoinRoom('@testuser:staging', 'test room 1');
-    let room2Id = await createAndJoinRoom('@testuser:staging', 'test room 2');
-    await simulateRemoteMessage(room1Id, '@aibot:localhost', {
+    let room1Id = createAndJoinRoom('@testuser:staging', 'test room 1');
+    let room2Id = createAndJoinRoom('@testuser:staging', 'test room 2');
+    simulateRemoteMessage(room2Id, '@aibot:localhost', {
+      msgtype: 'org.boxel.command',
+      body: 'Incorrect command',
+      formatted_body: 'Incorrect command',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'patchCard',
+          argument: {
+            card_id: `${testRealmURL}Person/fadhlan`,
+            relationships: { pet: null }, // this will error
+          },
+        },
+        eventId: '__EVENT_ID__',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
+      },
+    });
+
+    simulateRemoteMessage(room1Id, '@aibot:localhost', {
       msgtype: 'org.boxel.command',
       body: 'Changing first name to Evie',
       formatted_body: 'Changing first name to Evie',
@@ -373,7 +400,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     });
 
-    await simulateRemoteMessage(room1Id, '@aibot:localhost', {
+    simulateRemoteMessage(room1Id, '@aibot:localhost', {
       msgtype: 'org.boxel.command',
       body: 'Changing first name to Jackie',
       formatted_body: 'Changing first name to Jackie',
@@ -393,27 +420,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
         event_id: '__EVENT_ID__',
       },
     });
-    await simulateRemoteMessage(room2Id, '@aibot:localhost', {
-      msgtype: 'org.boxel.command',
-      body: 'Incorrect command',
-      formatted_body: 'Incorrect command',
-      format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
-          name: 'patchCard',
-          argument: {
-            card_id: `${testRealmURL}Person/fadhlan`,
-            relationships: { pet: null }, // this will error
-          },
-        },
-        eventId: '__EVENT_ID__',
-      }),
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
-    });
-    await rawTimeout(1000); //TODO: test waiter?
+
+    // let the room events all process before we open the assistant, so it will
+    // pick the appropriate room.
+    await settled();
 
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-room-name="test room 1"]');
@@ -968,19 +978,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
         },
       );
 
-      let now = Date.now();
-
-      await createAndJoinRoom('@testuser:staging', 'test room 0', now - 10);
-      let room1Id = await createAndJoinRoom(
-        '@testuser:staging',
-        'test room 1',
-        now - 5,
-      );
-      const room2Id = await createAndJoinRoom(
-        '@testuser:staging',
-        'test room 2',
-      );
-      await rawTimeout(1000); //TODO: test waiter?
+      createAndJoinRoom('@testuser:staging', 'test room 0');
+      let room1Id = createAndJoinRoom('@testuser:staging', 'test room 1');
+      const room2Id = createAndJoinRoom('@testuser:staging', 'test room 2');
+      await settled();
 
       await openAiAssistant();
       await waitFor(`[data-room-settled]`);
@@ -1069,7 +1070,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await fillIn(
       '[data-test-message-field]',
-      'This is a magic message with a SENDING_DELAY_THEN_SUCCESS!', // TODO: make this message magic in our mock
+      'This is a magic message with a SENDING_DELAY_THEN_SUCCESS!',
     );
     assert
       .dom('[data-test-message-field]')
@@ -1113,13 +1114,11 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await fillIn(
       '[data-test-message-field]',
-      'This is a magic message with a SENDING_DELAY_THEN_FAILURE_ONCE!',
+      'This is a magic message with a SENDING_DELAY_THEN_FAILURE!',
     );
     assert
       .dom('[data-test-message-field]')
-      .hasValue(
-        'This is a magic message with a SENDING_DELAY_THEN_FAILURE_ONCE!',
-      );
+      .hasValue('This is a magic message with a SENDING_DELAY_THEN_FAILURE!');
     assert.dom('[data-test-send-message-btn]').isEnabled();
     assert.dom('[data-test-ai-assistant-message]').doesNotExist();
     click('[data-test-send-message-btn]');
@@ -1186,14 +1185,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
   test('it animates the sessions dropdown button when there are other sessions that have activity which was not seen by the user yet', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
-    await simulateRemoteMessage(roomId, '@matic:boxel', {
+    simulateRemoteMessage(roomId, '@matic:boxel', {
       body: 'Say one word.',
       msgtype: 'org.boxel.message',
       formatted_body: 'Say one word.',
       format: 'org.matrix.custom.html',
     });
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Word.',
       msgtype: 'm.text',
       formatted_body: 'Word.',
@@ -1210,18 +1209,22 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     // Create a new room with some activity (this could happen when we will have a feature that interacts with AI outside of the AI pannel, i.e. "commands")
 
-    let anotherRoomId = await createAndJoinRoom(
-      '@testuser:staging',
-      'Another Room',
-    );
+    let anotherRoomId = createAndJoinRoom('@testuser:staging', 'Another Room');
 
-    await simulateRemoteMessage(anotherRoomId, '@aibot:localhost', {
-      body: 'I sent a message from the background.',
-      msgtype: 'm.text',
-      formatted_body: 'Word.',
-      format: 'org.matrix.custom.html',
-      isStreamingFinished: true,
-    });
+    simulateRemoteMessage(
+      anotherRoomId,
+      '@aibot:localhost',
+      {
+        body: 'I sent a message from the background.',
+        msgtype: 'm.text',
+        formatted_body: 'Word.',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      {
+        origin_server_ts: Date.now(),
+      },
+    );
 
     await waitFor('[data-test-has-active-sessions]');
 
@@ -1282,7 +1285,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
   test('sends read receipts only for bot messages', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
-    await simulateRemoteMessage(roomId, '@testuser:staging', {
+    simulateRemoteMessage(roomId, '@testuser:staging', {
       body: 'Say one word.',
       msgtype: 'org.boxel.message',
       formatted_body: 'Say one word.',
@@ -1291,7 +1294,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await waitFor(`[data-room-settled]`);
 
-    let eventId2 = await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    let eventId2 = simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Word.',
       msgtype: 'm.text',
       formatted_body: 'Word.',
@@ -1306,18 +1309,22 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom(`[data-test-enter-room='${roomId}'] [data-test-is-streaming]`)
       .doesNotExist();
 
-    let anotherRoomId = await createAndJoinRoom(
-      '@testuser:staging',
-      'Another Room',
-    );
+    let anotherRoomId = createAndJoinRoom('@testuser:staging', 'Another Room');
 
-    let eventId3 = await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: 'I sent a message from the background.',
-      msgtype: 'm.text',
-      formatted_body: 'Word.',
-      format: 'org.matrix.custom.html',
-      isStreamingFinished: true,
-    });
+    let eventId3 = simulateRemoteMessage(
+      anotherRoomId,
+      '@aibot:localhost',
+      {
+        body: 'I sent a message from the background.',
+        msgtype: 'm.text',
+        formatted_body: 'Word.',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      {
+        origin_server_ts: Date.now(),
+      },
+    );
 
     await waitFor('[data-test-has-active-sessions]');
     await click('[data-test-past-sessions-button]');
@@ -1474,14 +1481,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
   test('it displays the streaming indicator when ai bot message is in progress (streaming words)', async function (assert) {
     let roomId = await renderAiAssistantPanel();
-    await simulateRemoteMessage(roomId, '@matic:boxel', {
+    simulateRemoteMessage(roomId, '@matic:boxel', {
       body: 'Say one word.',
       msgtype: 'org.boxel.message',
       formatted_body: 'Say one word.',
       format: 'org.matrix.custom.html',
     });
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'French.',
       msgtype: 'm.text',
       formatted_body: 'French.',
@@ -1489,14 +1496,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
       isStreamingFinished: true,
     });
 
-    await simulateRemoteMessage(roomId, '@matic:boxel', {
+    simulateRemoteMessage(roomId, '@matic:boxel', {
       body: 'What is a french bulldog?',
       msgtype: 'org.boxel.message',
       formatted_body: 'What is a french bulldog?',
       format: 'org.matrix.custom.html',
     });
 
-    let partialEventId = await simulateRemoteMessage(
+    let partialEventId = simulateRemoteMessage(
       roomId,
       '@aibot:localhost',
       {
@@ -1505,6 +1512,9 @@ module('Integration | ai-assistant-panel', function (hooks) {
         formatted_body: 'French bulldog is a',
         format: 'org.matrix.custom.html',
         isStreamingFinished: false,
+      },
+      {
+        origin_server_ts: Date.now(),
       },
     );
 
@@ -1527,18 +1537,25 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom(`[data-test-enter-room='${roomId}']`).includesText('Thinking');
     assert.dom('[data-test-is-streaming]').exists();
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: 'French bulldog is a French breed of companion dog or toy dog.',
-      msgtype: 'm.text',
-      formatted_body:
-        'French bulldog is a French breed of companion dog or toy dog',
-      format: 'org.matrix.custom.html',
-      isStreamingFinished: true, // This is an indicator from the ai bot that the message is finalized and the openai is done streaming
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: partialEventId,
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: 'French bulldog is a French breed of companion dog or toy dog.',
+        msgtype: 'm.text',
+        formatted_body:
+          'French bulldog is a French breed of companion dog or toy dog',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true, // This is an indicator from the ai bot that the message is finalized and the openai is done streaming
+        'm.relates_to': {
+          rel_type: 'm.replace',
+          event_id: partialEventId,
+        },
       },
-    });
+      {
+        origin_server_ts: Date.now(),
+      },
+    );
 
     await waitFor('[data-test-message-idx="3"]');
     await waitUntil(() => !document.querySelector('.ai-avatar-animated'));
@@ -1673,8 +1690,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = await createAndJoinRoom('@testuser:staging', 'test room 1');
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: 'org.boxel.command',
       body: 'Changing first name to Evie',
       formatted_body: 'Changing first name to Evie',
@@ -1690,7 +1707,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         eventId: '__EVENT_ID__',
       }),
     });
-    let commandReactionEvents = await getRoomEvents(roomId).filter(
+    let commandReactionEvents = getRoomEvents(roomId).filter(
       (event) =>
         event.type === 'm.reaction' &&
         event.content['m.relates_to']?.rel_type === 'm.annotation' &&
@@ -1701,7 +1718,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
       0,
       'reaction event is not dispatched',
     );
-    await rawTimeout(1000); //TODO: test waiter?
+
+    await settled();
 
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-room-name="test room 1"]');
@@ -1737,8 +1755,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = await createAndJoinRoom('@testuser:staging', 'test room 1');
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Changing first name to Evie',
       msgtype: 'org.boxel.command',
       formatted_body: 'Changing first name to Evie',
@@ -1759,7 +1777,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         eventId: '__EVENT_ID__',
       }),
     });
-    let commandResultEvents = await getRoomEvents(roomId).filter(
+    let commandResultEvents = getRoomEvents(roomId).filter(
       (event) =>
         event.type === 'm.room.message' &&
         typeof event.content === 'object' &&
@@ -1770,7 +1788,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       0,
       'command result event is not dispatched',
     );
-    await rawTimeout(1000); //TODO: test waiter?
+    await settled();
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-room-name="test room 1"]');
     await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');

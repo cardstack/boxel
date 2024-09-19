@@ -1,5 +1,7 @@
 import { MatrixEvent } from 'matrix-js-sdk';
 
+import * as MatrixSDK from 'matrix-js-sdk';
+
 import { unixTime } from '@cardstack/runtime-common';
 
 import type {
@@ -14,8 +16,6 @@ import { MockSDK } from './_sdk';
 import { ServerState } from './_server-state';
 
 import type { Config } from '../mock-matrix';
-
-import type * as MatrixSDK from 'matrix-js-sdk';
 
 type IEvent = MatrixSDK.IEvent;
 
@@ -285,7 +285,7 @@ export class MockClient implements ExtendedClient {
     let localEventData = {
       ...roomEvent,
       event_id: localEventId,
-      origin_server_ts: Date.now(),
+      origin_server_ts: (this.sdkOpts.now ?? Date.now)(),
       unsigned: { age: 0 },
       sender: this.loggedInAs || 'unknown_user',
       user_id: this.loggedInAs || 'unknown_user',
@@ -294,20 +294,21 @@ export class MockClient implements ExtendedClient {
     let localEvent = new MatrixEvent(localEventData);
     localEvent.setStatus('sending' as MatrixSDK.EventStatus.SENDING);
     this.emitEvent(localEvent);
-    if (content.body?.match(/SENDING_DELAY_THEN_SUCCESS/)) {
+    if (content.body?.match(/SENDING_DELAY_THEN_/)) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
     let eventId = this.serverState.addRoomEvent(
       this.loggedInAs || 'unknown_user',
       roomEvent,
     );
-    this.emitLocalEchoUpdated(
-      new MatrixEvent({
-        ...localEventData,
-        event_id: eventId,
-      }),
-      localEventId,
-    );
+    let matrixEvent = new MatrixEvent({
+      ...localEventData,
+      event_id: eventId,
+    });
+    if (content.body?.match(/SENDING_DELAY_THEN_FAILURE/)) {
+      matrixEvent.setStatus(MatrixSDK.EventStatus.NOT_SENT);
+    }
+    this.emitLocalEchoUpdated(matrixEvent, localEventId);
     return { event_id: eventId };
   }
 

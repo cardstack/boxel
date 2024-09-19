@@ -7,9 +7,11 @@ export class ServerState {
   #rooms: Map<string, { events: IEvent[]; receipts: IEvent[] }> = new Map();
   #listeners: ((event: IEvent) => void)[] = [];
   #displayName: string;
+  #now: () => number;
 
-  constructor(opts: { displayName: string }) {
+  constructor(opts: { displayName: string; now: () => number }) {
     this.#displayName = opts.displayName;
+    this.#now = opts.now;
   }
 
   get displayName() {
@@ -31,7 +33,7 @@ export class ServerState {
   createRoom(
     sender: string,
     name?: string,
-    timestamp: number = Date.now(),
+    timestamp: number = this.#now(),
   ): string {
     if (document.querySelector('[data-test-throw-room-error]')) {
       throw new Error('Intentional error thrown');
@@ -121,7 +123,7 @@ export class ServerState {
       // Don’t want to list out all the types from MatrixEvent union type
       type: event.type as any,
       event_id: eventId,
-      origin_server_ts: overrides?.origin_server_ts ?? Date.now(),
+      origin_server_ts: overrides?.origin_server_ts ?? this.#now(),
       unsigned: { age: 0 },
       sender,
       state_key: overrides?.state_key ?? sender,
@@ -162,7 +164,7 @@ export class ServerState {
 
     let reactionEvent = {
       event_id: this.eventId(),
-      origin_server_ts: Date.now(),
+      origin_server_ts: this.#now(),
       room_id: roomId,
       type: 'm.reaction' as MatrixSDK.EventType.Reaction,
       sender,
@@ -189,12 +191,13 @@ export class ServerState {
       throw new Error(`room ${roomId} does not exist`);
     }
 
+    let ts = this.#now();
     let content: Record<string, any> = {
       [eventId]: {
         [receiptType]: {
           [sender]: {
             thread_id: 'main',
-            ts: Date.now(),
+            ts,
           },
         },
       },
@@ -202,7 +205,7 @@ export class ServerState {
 
     let receiptEvent: IEvent = {
       event_id: this.eventId(),
-      origin_server_ts: Date.now(),
+      origin_server_ts: ts,
       room_id: roomId,
       type: 'm.receipt' as any,
       sender,

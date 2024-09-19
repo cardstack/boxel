@@ -14,6 +14,7 @@ export interface Config {
   realmPermissions?: Record<string, string[]>;
   expiresInSec?: number;
   autostart?: boolean;
+  now?: () => number;
 }
 
 export function setupMockMatrix(
