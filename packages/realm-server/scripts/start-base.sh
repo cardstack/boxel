@@ -4,8 +4,10 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 wait_for_postgres
 
-MATRIX_REGISTRATION_SHARED_SECRET=$(ts-node --transpileOnly "$SCRIPTS_DIR/matrix-registration-secret.ts")
-export MATRIX_REGISTRATION_SHARED_SECRET
+if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
+  MATRIX_REGISTRATION_SHARED_SECRET=$(ts-node --transpileOnly "$SCRIPTS_DIR/matrix-registration-secret.ts")
+  export MATRIX_REGISTRATION_SHARED_SECRET
+fi
 
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
