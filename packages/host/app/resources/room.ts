@@ -186,6 +186,9 @@ export class RoomResource extends Resource<Args> {
       if (event.type !== 'm.room.message') {
         continue;
       }
+      // if (event?.content?.body?.includes('slow')) {
+      //   debugger;
+      // }
       let event_id = event.event_id;
       let update = false;
       if (event.content['m.relates_to']?.rel_type == 'm.annotation') {
