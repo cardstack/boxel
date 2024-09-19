@@ -1,0 +1,1 @@
+Make sure to lint for hbs when we add gts files to this realm like we do in the experiments realm. Currently linting for templates fails because there are no gts files in this realm.
