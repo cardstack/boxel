@@ -156,11 +156,6 @@ export default class MatrixService extends Service {
     // and unbind these events programmatically--this way if we add a new event
     // we won't forget to unbind it.
 
-    this._client.on(
-      this.matrixSDK.RoomMemberEvent.Membership,
-      Membership.onMembership(this),
-    );
-
     this.#eventBindings = [
       [
         this.matrixSDK.RoomMemberEvent.Membership,
