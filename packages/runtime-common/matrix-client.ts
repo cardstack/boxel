@@ -78,6 +78,10 @@ export class MatrixClient {
       );
     }
 
+    console.log(
+      `Attempting to log in as ${this.username} to ${this.matrixURL.href}`,
+    );
+
     let response = await this.request(
       '_matrix/client/v3/login',
       'POST',
