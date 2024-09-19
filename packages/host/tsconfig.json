@@ -35,6 +35,7 @@
       "include": [
         "../experiments-realm/**",
         "../seed-realm/**",
+        "../catalog-realm/**/*",
         "../base/**",
         "app/**",
         "tests/**",
