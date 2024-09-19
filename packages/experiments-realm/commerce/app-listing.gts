@@ -73,7 +73,7 @@ class Isolated extends Component<typeof AppListing> {
         width: 60px;
         height: 60px;
         background-color: #6666ff;
-        border-radius: 12px;
+        border-radius: var(--boxel-border-radius);
         margin-right: 15px;
       }
       .app-info {
@@ -88,13 +88,13 @@ class Isolated extends Component<typeof AppListing> {
         color: #666;
       }
       .add-to-workspace-btn {
-        /*white-space: nowrap;
+        white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
         display: -webkit-box;
         -webkit-box-orient: horizontal;
         -webkit-line-clamp: 1;
-        word-break: break-word;*/
+        word-break: break-word;
       }
       .app-details-and-pricing {
         display: grid;

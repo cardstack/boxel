@@ -73,11 +73,13 @@ export class ImageLayout extends Component<{
         display: block;
       }
       .gallery-item {
-        flex: 0 0 300px;
-        width: 300px;
-        height: 300px;
+        --gallery-item-width: 200px;
+        flex: 0 0 var(--gallery-item-width);
+        width: var(--gallery-item-width);
+        height: var(--gallery-item-width);
         background-color: #eee;
-        border-radius: 5px;
+        border-radius: var(--boxel-border-radius);
+        border: 1px solid var(--boxel-300);
       }
     </style>
   </template>
