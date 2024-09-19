@@ -34,6 +34,7 @@ test.describe('Room messages', () => {
   test.afterEach(async () => {
     await synapseStop(synapse.synapseId);
   });
+  //test
 
   test(`it can send a message in a room`, async ({ page }) => {
     await login(page, 'user1', 'pass');
