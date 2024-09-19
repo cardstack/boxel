@@ -38,19 +38,19 @@ class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
           </div>
         {{/each}}
       </div>
-      {{#if this.isSheetOpen}}
-        <Sheet @onClose={{this.toggleSheet}}>
-          <h2>Sheet Content</h2>
-          <p>This is the content of the sheet.</p>
-        </Sheet>
-      {{/if}}
+      <Sheet @onClose={{this.toggleSheet}} @isOpen={{this.isSheetOpen}}>
+        <h2>Sheet Content</h2>
+        <p>This is the content of the sheet.</p>
+      </Sheet>
     </div>
     <style>
       .task-app {
         display: flex;
+        position: relative;
         flex-direction: column;
         height: 100vh;
         font: var(--boxel-font);
+        overflow: hidden; /* Add this to prevent scrolling when sheet is open */
       }
 
       .filter-section {
@@ -121,6 +121,7 @@ class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
 export interface SheetSignature {
   Args: {
     onClose: () => void;
+    isOpen: boolean;
   };
   Blocks: {
     default: [];
@@ -130,52 +131,48 @@ export interface SheetSignature {
 
 class Sheet extends GlimmerComponent<SheetSignature> {
   <template>
-    <div class='sheet-overlay' {{on 'click' @onClose}}>
-      <div class='sheet-content' {{on 'click' this.stopPropagation}}>
+    <div class='sheet-overlay {{if @isOpen "is-open"}}' {{on 'click' @onClose}}>
+      <div
+        class='sheet-content {{if @isOpen "is-open"}}'
+        {{on 'click' this.stopPropagation}}
+      >
         {{yield}}
       </div>
-
-      <style>
-        .sheet-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background-color: rgba(0, 0, 0, 0.5);
-          display: flex;
-          justify-content: flex-end;
-        }
-
-        .sheet-content {
-          width: 300px;
-          height: 100%;
-          background-color: var(--boxel-light);
-          padding: var(--boxel-sp);
-          box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
-        }
-      </style>
-      <style>
-        .sheet-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background-color: rgba(0, 0, 0, 0.5);
-          display: flex;
-          justify-content: flex-end;
-        }
-
-        .sheet-content {
-          width: 300px;
-          height: 100%;
-          background-color: var(--boxel-light);
-          padding: var(--boxel-sp);
-          box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
-        }
-      </style>
     </div>
+
+    <style>
+      .sheet-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0, 0, 0, 0);
+        display: flex;
+        justify-content: flex-end;
+        pointer-events: none;
+        transition: background-color 0.3s ease-out;
+      }
+
+      .sheet-overlay.is-open {
+        background-color: rgba(0, 0, 0, 0.5);
+        pointer-events: auto;
+      }
+
+      .sheet-content {
+        width: 300px;
+        height: 100%;
+        background-color: var(--boxel-light);
+        padding: var(--boxel-sp);
+        box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
+        transform: translateX(100%);
+        transition: transform 0.3s ease-out;
+      }
+
+      .sheet-content.is-open {
+        transform: translateX(0);
+      }
+    </style>
   </template>
 
   stopPropagation = (event: Event) => {
