@@ -251,6 +251,7 @@ export async function registerUser(
       realms: [
         'http://localhost:4202/test/',
         'http://localhost:4201/experiments/',
+        'http://localhost:4201/catalog/',
         'https://cardstack.com/base/',
         // intentionally not including seed realm here
       ],
