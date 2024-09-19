@@ -26,15 +26,17 @@ class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
       <div class='columns-container'>
         {{#each this.columnNumbers as |columnNumber|}}
           <div class='column'>
-            <h3>Column {{columnNumber}}</h3>
-            {{#each this.taskNumbers as |taskNumber|}}
-              <div class='task-card'>
-                <h4>Task {{taskNumber}}</h4>
-                <p>This is a longer description for Task
-                  {{taskNumber}}
-                  to demonstrate scrolling within the column.</p>
-              </div>
-            {{/each}}
+            <div class='column-title'>Column {{columnNumber}}</div>
+            <div class='column-data'>
+              {{#each this.taskNumbers as |taskNumber|}}
+                <div class='task-card'>
+                  <h4>Task {{taskNumber}}</h4>
+                  <p>This is a longer description for Task
+                    {{taskNumber}}
+                    to demonstrate scrolling within the column.</p>
+                </div>
+              {{/each}}
+            </div>
           </div>
         {{/each}}
       </div>
@@ -79,9 +81,25 @@ class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
 
       .column {
         flex: 0 0 var(--boxel-xs-container);
+        border-right: var(--boxel-border);
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+      }
+
+      .column-title {
+        position: sticky;
+        top: 0;
+        background-color: var(--boxel-100);
+        padding: var(--boxel-sp-xs) var(--boxel-sp);
+        font: var(--boxel-font-sm);
+        z-index: 1;
+      }
+
+      .column-data {
+        flex-grow: 1;
         overflow-y: auto;
         padding: var(--boxel-sp);
-        border-right: var(--boxel-border);
       }
 
       .task-card {
