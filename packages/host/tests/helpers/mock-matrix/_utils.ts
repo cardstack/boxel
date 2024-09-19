@@ -5,6 +5,8 @@ import RealmService from '@cardstack/host/services/realm';
 import type { MockSDK } from './_sdk';
 import type { Config } from '../mock-matrix';
 
+import type * as MatrixSDK from 'matrix-js-sdk';
+
 export class MockUtils {
   constructor(
     private opts: Config,
@@ -20,22 +22,7 @@ export class MockUtils {
   simulateRemoteMessage = (
     roomId: string,
     sender: string,
-    content: {
-      msgtype: string;
-      body: string;
-      formatted_body: string;
-      format?: string;
-      data?: any;
-      isStreamingFinished?: boolean;
-      errorMessage?: string;
-      'm.relates_to'?: { rel_type: string; event_id: string };
-      'm.new_content'?: {
-        body: string;
-        msgtype: string;
-        formatted_body: string;
-        format: string;
-      };
-    },
+    content: MatrixSDK.IEvent['content'],
     overrides?: { state_key?: string; origin_server_ts?: number },
   ) => {
     return this.testState.sdk!.serverState.addRoomEvent(
