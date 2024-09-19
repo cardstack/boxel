@@ -14,7 +14,7 @@ import window from 'ember-window-mock';
 
 import { TrackedSet } from 'tracked-built-ins';
 
-import { logger } from '@cardstack/runtime-common';
+import { Deferred, logger } from '@cardstack/runtime-common';
 
 import {
   Permissions,
@@ -213,6 +213,7 @@ export default class RealmService extends Service {
   // tracked reads from `currentKnownRealms` to establish dependencies.
   private realms: Map<string, RealmResource> = this.restoreSessions();
   private currentKnownRealms = new TrackedSet<string>();
+  private reauthentications = new Map<string, Promise<string | undefined>>();
 
   @tracked private identifyRealmTracker = 0;
 
@@ -370,10 +371,26 @@ export default class RealmService extends Service {
   }
 
   async reauthenticate(realmURL: string): Promise<string | undefined> {
+    if (this.reauthentications.has(realmURL)) {
+      return;
+    }
+    let inProgressAuthentication = this.reauthentications.get(realmURL);
+    if (inProgressAuthentication) {
+      return inProgressAuthentication;
+    }
+    let deferred = new Deferred<string | undefined>();
+    this.reauthentications.set(realmURL, deferred.promise);
+
     let resource = this.getOrCreateRealmResource(realmURL);
     resource.logout();
     await resource.login();
-    return resource.token;
+    let result = resource.token;
+    deferred.fulfill(result);
+    try {
+      return result;
+    } finally {
+      this.reauthentications.delete(realmURL);
+    }
   }
 
   private createRealmResource(
