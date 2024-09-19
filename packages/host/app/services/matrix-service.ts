@@ -1,5 +1,6 @@
 import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
+import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 import { cached, tracked } from '@glimmer/tracking';
 
@@ -49,6 +50,7 @@ import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
 import { BaseDef, type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import type {
   CardMessageContent,
   CardFragmentContent,
@@ -59,7 +61,6 @@ import type {
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import { Skill } from '../components/ai-assistant/skill-menu';
-import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
 import { getCard } from '../resources/card-resource';
 import { importResource } from '../resources/import';
 
@@ -78,10 +79,13 @@ import type * as MatrixSDK from 'matrix-js-sdk';
 const { matrixURL } = ENV;
 const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
 const MAX_CARD_SIZE_KB = 60;
-
+const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 const DefaultSkillCards = [`${baseRealm.url}SkillCard/card-editing`];
 
-export type Event = Partial<IEvent>;
+type TempEvent = Partial<IEvent> & {
+  status: MatrixSDK.EventStatus | null;
+  error?: MatrixSDK.MatrixError;
+};
 
 export type OperatorModeContext = {
   submode: Submode;
@@ -157,16 +161,10 @@ export default class MatrixService extends Service {
     // we won't forget to unbind it.
 
     this.#eventBindings = [
-      [
-        this.matrixSDK.RoomMemberEvent.Membership,
-        Membership.onMembership(this),
-      ],
-      [this.matrixSDK.RoomEvent.Timeline, Timeline.onTimeline(this)],
-      [
-        this.matrixSDK.RoomEvent.LocalEchoUpdated,
-        Timeline.onUpdateEventStatus(this),
-      ],
-      [this.matrixSDK.RoomEvent.Receipt, Timeline.onReceipt(this)],
+      [this.matrixSDK.RoomMemberEvent.Membership, this.onMembership],
+      [this.matrixSDK.RoomEvent.Timeline, this.onTimeline],
+      [this.matrixSDK.RoomEvent.LocalEchoUpdated, this.onUpdateEventStatus],
+      [this.matrixSDK.RoomEvent.Receipt, this.onReceipt],
       [
         this.matrixSDK.ClientEvent.AccountData,
         async (e) => {
@@ -595,13 +593,13 @@ export default class MatrixService extends Service {
       let stateEvents = await this.client.roomState(roomId);
       await Promise.all(
         stateEvents.map((event) => {
-          addRoomEvent(this, { ...event, status: null });
+          this.addRoomEvent({ ...event, status: null });
         }),
       );
       let messageMatrixEvents = await this.client.allRoomMessages(roomId);
       await Promise.all(
         messageMatrixEvents.map((matrixEvent) => {
-          addRoomEvent(this, { ...matrixEvent.event, status: null });
+          this.addRoomEvent({ ...matrixEvent.event, status: null });
         }),
       );
     }
@@ -757,6 +755,327 @@ export default class MatrixService extends Service {
       undefined,
     );
     return card;
+  }
+
+  addRoomEvent(event: TempEvent) {
+    let { event_id: eventId, room_id: roomId, state_key: stateKey } = event;
+    // If we are receiving an event which contains
+    // a data field, we need to parse it
+    // because matrix doesn't support all json types
+    // Corresponding encoding is done in
+    // sendEvent in the matrix-service
+    if (event.content?.data) {
+      if (typeof event.content.data !== 'string') {
+        console.warn(
+          `skipping matrix event ${
+            eventId ?? stateKey
+          }, event.content.data is not serialized properly`,
+        );
+        return;
+      }
+      event.content.data = JSON.parse(event.content.data);
+    }
+    eventId = eventId ?? stateKey; // room state may not necessary have an event ID
+    if (!eventId) {
+      throw new Error(
+        `bug: event ID is undefined for event ${JSON.stringify(
+          event,
+          null,
+          2,
+        )}`,
+      );
+    }
+    if (!roomId) {
+      throw new Error(
+        `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
+      );
+    }
+    let room = this.getRoom(roomId);
+    if (!room) {
+      room = new RoomState();
+      this.setRoom(roomId, room);
+    }
+
+    // duplicate events may be emitted from matrix, as well as the resolved room card might already contain this event
+    if (!room.events.find((e) => e.event_id === eventId)) {
+      room.events = [
+        ...(room.events ?? []),
+        event as unknown as DiscreteMatrixEvent,
+      ];
+    }
+  }
+
+  onMembership = (event: MatrixEvent, member: RoomMember) => {
+    this.roomMembershipQueue.push({ event, member });
+    debounce(this, this.drainMembership, 100);
+  };
+
+  async drainMembership() {
+    await this.flushMembership;
+
+    let eventsDrained: () => void;
+    this.flushMembership = new Promise((res) => (eventsDrained = res));
+
+    let events = [...this.roomMembershipQueue];
+    this.roomMembershipQueue = [];
+
+    await Promise.all(
+      events.map(({ event: { event, status } }) =>
+        this.addRoomEvent({ ...event, status }),
+      ),
+    );
+
+    // For rooms that we have been invited to we are unable to get the full
+    // timeline event yet (it's not available until we join the room), but we
+    // still need to get enough room state events to reasonably render the
+    // room card.
+    for (let {
+      event: { event: rawEvent },
+      member,
+    } of events) {
+      let event = rawEvent as DiscreteMatrixEvent;
+      let { room_id: roomId } = rawEvent as DiscreteMatrixEvent;
+      if (!roomId) {
+        throw new Error(
+          `bug: roomId is undefined for event ${JSON.stringify(
+            event,
+            null,
+            2,
+          )}`,
+        );
+      }
+      let room = this.client.getRoom(roomId);
+      if (!room) {
+        throw new Error(
+          `bug: should never get here--matrix sdk returned a null room for ${roomId}`,
+        );
+      }
+
+      if (
+        member.userId === this.client.getUserId() &&
+        event.type === 'm.room.member' &&
+        room.getMyMembership() === 'invite'
+      ) {
+        if (event.content.membership === 'invite') {
+          let stateEvents = room
+            .getLiveTimeline()
+            .getState('f' as MatrixSDK.Direction)?.events;
+          if (!stateEvents) {
+            throw new Error(`bug: cannot get state events for room ${roomId}`);
+          }
+          for (let eventType of STATE_EVENTS_OF_INTEREST) {
+            let events = stateEvents.get(eventType);
+            if (!events) {
+              continue;
+            }
+            await Promise.all(
+              [...events.values()]
+                .map((e) => ({
+                  ...e.event,
+                  // annoyingly these events have been stripped of their id's
+                  event_id: `${roomId}_${eventType}_${e.localTimestamp}`,
+                  status: e.status,
+                }))
+                .map((event) => this.addRoomEvent(event)),
+            );
+          }
+        }
+      }
+    }
+
+    eventsDrained!();
+  }
+
+  onReceipt = async (e: MatrixEvent) => {
+    let userId = this.client.credentials.userId;
+    if (userId) {
+      let eventIds = Object.keys(e.getContent());
+      for (let eventId of eventIds) {
+        let receipt = e.getContent()[eventId]['m.read'][userId];
+        if (receipt) {
+          this.addEventReadReceipt(eventId, { readAt: receipt.ts });
+        }
+      }
+    }
+  };
+
+  onTimeline = (e: MatrixEvent) => {
+    this.timelineQueue.push({ event: e });
+    debounce(this, this.drainTimeline, 100);
+  };
+
+  onUpdateEventStatus = (
+    e: MatrixEvent,
+    _room: unknown,
+    maybeOldEventId?: string,
+  ) => {
+    if (typeof maybeOldEventId !== 'string') {
+      return;
+    }
+    this.timelineQueue.push({ event: e, oldEventId: maybeOldEventId });
+    debounce(this, this.drainTimeline, 100);
+  };
+
+  async drainTimeline() {
+    await this.flushTimeline;
+
+    let eventsDrained: () => void;
+    this.flushTimeline = new Promise((res) => (eventsDrained = res));
+    let events = [...this.timelineQueue];
+    this.timelineQueue = [];
+    for (let { event, oldEventId } of events) {
+      await this.client?.decryptEventIfNeeded(event);
+      await this.processDecryptedEvent(
+        {
+          ...event.event,
+          status: event.status,
+          content: event.getContent() || undefined,
+          error: event.error ?? undefined,
+        },
+        oldEventId,
+      );
+    }
+    eventsDrained!();
+  }
+
+  async processDecryptedEvent(event: TempEvent, oldEventId?: string) {
+    let { room_id: roomId } = event;
+    if (!roomId) {
+      throw new Error(
+        `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
+      );
+    }
+    let room = this.client.getRoom(roomId);
+    if (!room) {
+      throw new Error(
+        `bug: should never get here--matrix sdk returned a null room for ${roomId}`,
+      );
+    }
+
+    let userId = this.client.getUserId();
+    if (!userId) {
+      throw new Error(
+        `bug: userId is required for event ${JSON.stringify(event, null, 2)}`,
+      );
+    }
+
+    // We might still receive events from the rooms that the user has left.
+    let member = room.getMember(userId);
+    if (!member || member.membership !== 'join') {
+      return;
+    }
+
+    let roomState = await this.getRoom(roomId);
+    // patch in any missing room events--this will support dealing with local
+    // echoes, migrating older histories as well as handle any matrix syncing gaps
+    // that might occur
+    if (
+      roomState &&
+      event.type === 'm.room.message' &&
+      event.content?.msgtype === 'org.boxel.message' &&
+      event.content.data
+    ) {
+      let data = (
+        typeof event.content.data === 'string'
+          ? JSON.parse(event.content.data)
+          : event.content.data
+      ) as CardMessageContent['data'];
+      if (
+        'attachedCardsEventIds' in data &&
+        Array.isArray(data.attachedCardsEventIds)
+      ) {
+        for (let attachedCardEventId of data.attachedCardsEventIds) {
+          let currentFragmentId: string | undefined = attachedCardEventId;
+          do {
+            let fragmentEvent = roomState.events.find(
+              (e: DiscreteMatrixEvent) => e.event_id === currentFragmentId,
+            );
+            let fragmentData: CardFragmentContent['data'];
+            if (!fragmentEvent) {
+              fragmentEvent = (await this.client?.fetchRoomEvent(
+                roomId,
+                currentFragmentId ?? '',
+              )) as DiscreteMatrixEvent;
+              if (
+                fragmentEvent.type !== 'm.room.message' ||
+                fragmentEvent.content.msgtype !== 'org.boxel.cardFragment'
+              ) {
+                throw new Error(
+                  `Expected event ${currentFragmentId} to be 'org.boxel.card' but was ${JSON.stringify(
+                    fragmentEvent,
+                  )}`,
+                );
+              }
+              await this.addRoomEvent({
+                ...fragmentEvent,
+              });
+              fragmentData = (
+                typeof fragmentEvent.content.data === 'string'
+                  ? JSON.parse((fragmentEvent.content as any).data)
+                  : fragmentEvent.content.data
+              ) as CardFragmentContent['data'];
+            } else {
+              if (
+                fragmentEvent.type !== 'm.room.message' ||
+                fragmentEvent.content.msgtype !== 'org.boxel.cardFragment'
+              ) {
+                throw new Error(
+                  `Expected event to be 'org.boxel.cardFragment' but was ${JSON.stringify(
+                    fragmentEvent,
+                  )}`,
+                );
+              }
+              fragmentData = fragmentEvent.content.data;
+            }
+            currentFragmentId = fragmentData?.nextFragment; // using '?' so we can be kind to older event schemas
+          } while (currentFragmentId);
+        }
+      }
+    }
+    if (oldEventId) {
+      await this.updateRoomEvent(event, oldEventId);
+    } else {
+      await this.addRoomEvent(event);
+    }
+
+    if (room.oldState.paginationToken != null) {
+      // we need to scroll back to capture any room events fired before this one
+      await this.client?.scrollback(room);
+    }
+  }
+
+  async updateRoomEvent(event: Partial<IEvent>, oldEventId: string) {
+    if (event.content?.data && typeof event.content.data === 'string') {
+      event.content.data = JSON.parse(event.content.data);
+    }
+    let { event_id: eventId, room_id: roomId, state_key: stateKey } = event;
+    eventId = eventId ?? stateKey; // room state may not necessary have an event ID
+    if (!eventId) {
+      throw new Error(
+        `bug: event ID is undefined for event ${JSON.stringify(
+          event,
+          null,
+          2,
+        )}`,
+      );
+    }
+    if (!roomId) {
+      throw new Error(
+        `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
+      );
+    }
+
+    let room = this.getRoom(roomId);
+    if (!room) {
+      throw new Error(
+        `bug: unknown room for event ${JSON.stringify(event, null, 2)}`,
+      );
+    }
+    let oldEventIndex = room.events.findIndex((e) => e.event_id === oldEventId);
+    if (oldEventIndex >= 0) {
+      room.events[oldEventIndex] = event as unknown as DiscreteMatrixEvent;
+      room.events = [...room.events];
+    }
   }
 }
 
