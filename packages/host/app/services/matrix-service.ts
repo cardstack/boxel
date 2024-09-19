@@ -93,50 +93,47 @@ export type OperatorModeContext = {
 };
 
 export default class MatrixService extends Service {
-  @service declare loaderService: LoaderService;
-  @service declare cardService: CardService;
-  @service declare realm: RealmService;
+  @service private declare loaderService: LoaderService;
+  @service private declare cardService: CardService;
+  @service private declare realm: RealmService;
   @service private declare matrixSdkLoader: MatrixSDKLoader;
 
-  @service declare router: RouterService;
+  @service private declare router: RouterService;
   @tracked private _client: ExtendedClient | undefined;
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
-  accountDataProcessed = new Deferred<void>();
-  rooms: TrackedMap<string, RoomState> = new TrackedMap();
+  private accountDataProcessed = new Deferred<void>();
+  private rooms: TrackedMap<string, RoomState> = new TrackedMap();
   roomResourcesCache: TrackedMap<string, RoomResource> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
   failedCommandState: TrackedMap<string, Error> = new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
-  roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[] = [];
-  timelineQueue: { event: MatrixEvent; oldEventId?: string }[] = [];
+  private roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[] =
+    [];
+  private timelineQueue: { event: MatrixEvent; oldEventId?: string }[] = [];
   #ready: Promise<void>;
   #matrixSDK: ExtendedMatrixSDK | undefined;
   #eventBindings: [EmittedEvents, (...arg: any[]) => void][] | undefined;
   currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
     new TrackedMap();
-  cardHashes: Map<string, string> = new Map(); // hashes <> event id
-  skillCardHashes: Map<string, string> = new Map(); // hashes <> event id
-  defaultSkills: Skill[] = [];
+  private cardHashes: Map<string, string> = new Map(); // hashes <> event id
+  private skillCardHashes: Map<string, string> = new Map(); // hashes <> event id
+  private defaultSkills: Skill[] = [];
 
   constructor(owner: Owner) {
     super(owner);
     this.#ready = this.loadState.perform();
   }
 
-  addEventReadReceipt(eventId: string, receipt: { readAt: Date }) {
+  private addEventReadReceipt(eventId: string, receipt: { readAt: Date }) {
     this.currentUserEventReadReceipts.set(eventId, receipt);
   }
 
   get ready() {
     return this.#ready;
-  }
-
-  get isLoading() {
-    return this.loadState.isRunning;
   }
 
   private cardAPIModule = importResource(
@@ -193,7 +190,7 @@ export default class MatrixService extends Service {
     return this.client.getUserId();
   }
 
-  get cardAPI() {
+  private get cardAPI() {
     if (this.cardAPIModule.error) {
       throw new Error(
         `Error loading Card API: ${JSON.stringify(this.cardAPIModule.error)}`,
@@ -327,7 +324,7 @@ export default class MatrixService extends Service {
     );
   }
 
-  public async createRealmSession(realmURL: URL) {
+  async createRealmSession(realmURL: URL) {
     return this.client.createRealmSession(realmURL);
   }
 
@@ -363,24 +360,6 @@ export default class MatrixService extends Service {
       }
     });
     return roomId;
-  }
-
-  // these can be local names
-  async invite(roomId: string, invite: string[]) {
-    let userId = this.client.getUserId();
-    if (!userId) {
-      throw new Error(
-        `bug: there is no userId associated with the matrix client`,
-      );
-    }
-    await Promise.all(
-      invite.map((i) =>
-        this.client.invite(
-          roomId,
-          i.startsWith('@') ? i : `@${i}:${userId!.split(':')[1]}`,
-        ),
-      ),
-    );
   }
 
   private async sendEvent(
@@ -451,7 +430,8 @@ export default class MatrixService extends Service {
       );
     }
   }
-  async getCardEventIds(
+
+  private async getCardEventIds(
     cards: CardDef[],
     roomId: string,
     cardHashes: Map<string, string>,
@@ -553,7 +533,7 @@ export default class MatrixService extends Service {
     } as CardMessageContent);
   }
 
-  generateCardHashKey(roomId: string, card: LooseSingleCardDocument) {
+  private generateCardHashKey(roomId: string, card: LooseSingleCardDocument) {
     return md5(roomId + JSON.stringify(card));
   }
 
@@ -587,7 +567,7 @@ export default class MatrixService extends Service {
     return responses;
   }
 
-  async initializeRooms() {
+  private async initializeRooms() {
     let { joined_rooms: joinedRooms } = await this.client.getJoinedRooms();
     for (let roomId of joinedRooms) {
       let stateEvents = await this.client.roomState(roomId);
@@ -661,7 +641,7 @@ export default class MatrixService extends Service {
     return this.rooms.get(roomId);
   }
 
-  setRoom(roomId: string, room: RoomState) {
+  private setRoom(roomId: string, room: RoomState) {
     this.rooms.set(roomId, room);
     if (!this.roomResourcesCache.has(roomId)) {
       this.roomResourcesCache.set(
@@ -757,7 +737,7 @@ export default class MatrixService extends Service {
     return card;
   }
 
-  addRoomEvent(event: TempEvent) {
+  private addRoomEvent(event: TempEvent) {
     let { event_id: eventId, room_id: roomId, state_key: stateKey } = event;
     // If we are receiving an event which contains
     // a data field, we need to parse it
@@ -805,12 +785,12 @@ export default class MatrixService extends Service {
     }
   }
 
-  onMembership = (event: MatrixEvent, member: RoomMember) => {
+  private onMembership = (event: MatrixEvent, member: RoomMember) => {
     this.roomMembershipQueue.push({ event, member });
     debounce(this, this.drainMembership, 100);
   };
 
-  async drainMembership() {
+  private async drainMembership() {
     await this.flushMembership;
 
     let eventsDrained: () => void;
@@ -886,7 +866,7 @@ export default class MatrixService extends Service {
     eventsDrained!();
   }
 
-  onReceipt = async (e: MatrixEvent) => {
+  private onReceipt = async (e: MatrixEvent) => {
     let userId = this.client.credentials.userId;
     if (userId) {
       let eventIds = Object.keys(e.getContent());
@@ -899,12 +879,12 @@ export default class MatrixService extends Service {
     }
   };
 
-  onTimeline = (e: MatrixEvent) => {
+  private onTimeline = (e: MatrixEvent) => {
     this.timelineQueue.push({ event: e });
     debounce(this, this.drainTimeline, 100);
   };
 
-  onUpdateEventStatus = (
+  private onUpdateEventStatus = (
     e: MatrixEvent,
     _room: unknown,
     maybeOldEventId?: string,
@@ -916,7 +896,7 @@ export default class MatrixService extends Service {
     debounce(this, this.drainTimeline, 100);
   };
 
-  async drainTimeline() {
+  private async drainTimeline() {
     await this.flushTimeline;
 
     let eventsDrained: () => void;
@@ -938,7 +918,7 @@ export default class MatrixService extends Service {
     eventsDrained!();
   }
 
-  async processDecryptedEvent(event: TempEvent, oldEventId?: string) {
+  private async processDecryptedEvent(event: TempEvent, oldEventId?: string) {
     let { room_id: roomId } = event;
     if (!roomId) {
       throw new Error(
@@ -1044,7 +1024,7 @@ export default class MatrixService extends Service {
     }
   }
 
-  async updateRoomEvent(event: Partial<IEvent>, oldEventId: string) {
+  private async updateRoomEvent(event: Partial<IEvent>, oldEventId: string) {
     if (event.content?.data && typeof event.content.data === 'string') {
       event.content.data = JSON.parse(event.content.data);
     }
