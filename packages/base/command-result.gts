@@ -9,7 +9,10 @@ import {
   containsMany,
   createFromSerialized,
   field,
+  type CardContext,
+  type Format,
 } from './card-api';
+import GlimmerComponent from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import {
@@ -19,6 +22,7 @@ import {
   ThreeDotsHorizontal,
 } from '@cardstack/boxel-ui/icons';
 import { Button, Header, IconButton } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import { restartableTask } from 'ember-concurrency';
 
@@ -31,13 +35,81 @@ function getComponent(cardOrField: BaseDef) {
   return cardOrField.constructor.getComponent(cardOrField);
 }
 
+interface ResourceListSignature {
+  resources: AttachedCardResource[];
+  format: Format;
+  context?: CardContext;
+}
+
+class ResourceList extends GlimmerComponent<ResourceListSignature> {
+  <template>
+    <ol class='list {{@format}}'>
+      {{#each @resources as |cardResource|}}
+        {{#if cardResource.cardError}}
+          <li
+            class='list-item'
+            data-test-card-error={{cardResource.cardError.id}}
+          >
+            Error: cannot render card
+            {{cardResource.cardError.id}}:
+            {{cardResource.cardError.error.message}}
+          </li>
+        {{else if cardResource.card}}
+          <li
+            class='list-item {{@format}}'
+            data-test-result-card={{cardResource.card.id}}
+            {{@context.cardComponentModifier
+              card=cardResource.card
+              format='data'
+              fieldType=undefined
+              fieldName=undefined
+            }}
+          >
+            {{#let (getComponent cardResource.card) as |Component|}}
+              <Component
+                @format={{@format}}
+                @displayContainer={{if (eq @format 'embedded') true false}}
+              />
+            {{/let}}
+          </li>
+        {{/if}}
+      {{/each}}
+    </ol>
+    <style scoped>
+      .list {
+        padding-left: var(--boxel-sp);
+        margin-block-end: 0;
+      }
+      .list-item {
+        margin-bottom: var(--boxel-sp-xxs);
+      }
+      .list.embedded {
+        --grid-card-width: 10.25rem; /* 164px */
+        --grid-card-height: 14rem; /* 224px */
+        list-style-type: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, var(--grid-card-width));
+        grid-auto-rows: max-content;
+        gap: var(--boxel-sp-xl) var(--boxel-sp-lg);
+      }
+      .list-item.embedded {
+        margin-bottom: 0;
+        width: var(--grid-card-width);
+        height: var(--grid-card-height);
+      }
+    </style>
+  </template>
+}
+
 class CommandResultEmbeddedView extends Component<typeof CommandResult> {
   @tracked showAllResults = false;
 
   @cached
-  get attachedResources(): AttachedCardResource[] | undefined {
+  get attachedResources(): AttachedCardResource[] {
     if (!this.cardIdsToDisplay.length) {
-      return undefined;
+      return [];
     }
     let cards = this.cardIdsToDisplay.map((id) => {
       let card = getCard(new URL(id));
@@ -121,23 +193,7 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
         </:actions>
       </Header>
       <div class='body'>
-        <ol class='result-list'>
-          {{#each this.attachedResources as |cardResource|}}
-            {{#if cardResource.cardError}}
-              <li data-test-card-error={{cardResource.cardError.id}}>
-                Error: cannot render card
-                {{cardResource.cardError.id}}:
-                {{cardResource.cardError.error.message}}
-              </li>
-            {{else if cardResource.card}}
-              <li data-test-result-card={{cardResource.card.id}}>
-                {{#let (getComponent cardResource.card) as |Component|}}
-                  <Component @format='atom' @displayContainer={{false}} />
-                {{/let}}
-              </li>
-            {{/if}}
-          {{/each}}
-        </ol>
+        <ResourceList @resources={{this.attachedResources}} @format='atom' />
         <div class='footer'>
           {{#if this.numberOfCardsGreaterThanPaginateSize}}
             <Button
@@ -209,13 +265,6 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
         gap: var(--boxel-sp-xxxs);
         border: none;
       }
-      .result-list {
-        padding-left: var(--boxel-sp);
-        margin-block-end: 0;
-      }
-      .result-list li {
-        margin-bottom: var(--boxel-sp-xxs);
-      }
     </style>
   </template>
 
@@ -270,27 +319,31 @@ export class CommandResult extends FieldDef {
 }
 
 export class SearchResult extends CardDef {
-  static displayName = 'Search Result';
+  static displayName = 'Search Results';
   @field cardIds = containsMany(StringField);
   static isolated = class Isolated extends CommandResultEmbeddedView {
     <template>
-      <ol class='result-list'>
-        {{#each this.attachedResources as |cardResource|}}
-          {{#if cardResource.cardError}}
-            <li data-test-card-error={{cardResource.cardError.id}}>
-              Error: cannot render card
-              {{cardResource.cardError.id}}:
-              {{cardResource.cardError.error.message}}
-            </li>
-          {{else if cardResource.card}}
-            <li data-test-result-card={{cardResource.card.id}}>
-              {{#let (getComponent cardResource.card) as |Component|}}
-                <Component @format='atom' @displayContainer={{true}} />
-              {{/let}}
-            </li>
-          {{/if}}
-        {{/each}}
-      </ol>
+      <div class='search-results'>
+        <p class='result-count'>
+          {{this.numberOfCards}}
+          {{if (eq this.numberOfCards 1) 'Result' 'Results'}}
+        </p>
+        <ResourceList
+          @resources={{this.attachedResources}}
+          @format='embedded'
+          @context={{@context}}
+        />
+      </div>
+      <style scoped>
+        .search-results {
+          padding: var(--boxel-sp);
+        }
+        .result-count {
+          margin-top: 0;
+          margin-bottom: var(--boxel-sp);
+          font-weight: bold;
+        }
+      </style>
     </template>
   };
 }
