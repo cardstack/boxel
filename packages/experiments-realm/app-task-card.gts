@@ -93,7 +93,6 @@ class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
         background-color: var(--boxel-100);
         padding: var(--boxel-sp-xs) var(--boxel-sp);
         font: var(--boxel-font-sm);
-        z-index: 1;
       }
 
       .column-data {
