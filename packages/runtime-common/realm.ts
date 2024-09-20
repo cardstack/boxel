@@ -320,7 +320,7 @@ export class Realm {
       authorizationMiddleware(
         new RealmAuthDataSource(
           this.#matrixClient,
-          virtualNetwork.fetch,
+          () => virtualNetwork.fetch,
           this.url,
         ),
       ),
@@ -903,6 +903,11 @@ export class Realm {
 
     try {
       token = this.#adapter.verifyJWT(tokenString, this.#realmSecretSeed);
+
+      // if the client is the realm matrix user then we permit all actions
+      if (token.user === this.#matrixClient.getUserId()) {
+        return;
+      }
 
       let realmPermissionChecker = new RealmPermissionChecker(
         realmPermissions,

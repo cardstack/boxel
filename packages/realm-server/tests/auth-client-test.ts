@@ -32,6 +32,9 @@ module('realm-auth-client', function (assert) {
       async sendEvent() {
         return Promise.resolve();
       },
+      async hashMessageWithSecret(_message: string): Promise<string> {
+        throw new Error('Method not implemented.');
+      },
     } as RealmAuthMatrixClientInterface;
 
     let virtualNetwork = new VirtualNetwork();
