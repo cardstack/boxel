@@ -90,6 +90,10 @@ export class MockClient implements ExtendedClient {
     return this.clientOpts.baseUrl;
   }
 
+  hashMessageWithSecret(_message: string): Promise<string> {
+    throw new Error('Method not implemented.');
+  }
+
   getAccessToken(): string | null {
     throw new Error('Method not implemented.');
   }
