@@ -354,7 +354,7 @@ export default class RealmService extends Service {
   // use it untracked to implement the read-through cache.
   private knownRealm(url: string, tracked = true): RealmResource | undefined {
     for (let [key, value] of this.realms) {
-      if (url.startsWith(key)) {
+      if (url?.startsWith(key)) {
         return value;
       }
     }

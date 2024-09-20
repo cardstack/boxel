@@ -14,5 +14,5 @@ export function getCodeRefFromSearchKey(
 }
 
 export function removeFileExtension(cardId: string) {
-  return cardId.replace(/\.[^/.]+$/, '');
+  return cardId?.replace(/\.[^/.]+$/, '');
 }
