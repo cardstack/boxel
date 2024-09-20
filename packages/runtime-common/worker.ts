@@ -332,10 +332,10 @@ export function getReader(
         },
       });
       console.log('directoryListing', url);
-      console.log('body text', await response.text());
       let {
         data: { relationships: _relationships },
       } = await response.json();
+      console.log('json extracted');
       let relationships = _relationships as Record<string, Relationship>;
       return Object.values(relationships).map((entry) =>
         entry.meta!.kind === 'file'
