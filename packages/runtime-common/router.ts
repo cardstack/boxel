@@ -152,8 +152,6 @@ export class Router {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    this.log.info(`Request for ${request.method} ${request.url}`);
-
     let handler = this.lookupHandler(request);
     if (!handler) {
       return notFound(request, requestContext);
