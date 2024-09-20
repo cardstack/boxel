@@ -1,3 +1,4 @@
+import './instrument';
 import isEqual from 'lodash/isEqual';
 import {
   type Queue,
@@ -45,14 +46,6 @@ export interface QueueOpts {
 const defaultQueueOpts: Required<QueueOpts> = Object.freeze({
   queueName: 'default',
 });
-
-if (process.env.SENTRY_DSN) {
-  Sentry.init({
-    dsn: process.env.SENTRY_DSN,
-    environment: process.env.SENTRY_ENVIRONMENT || 'development',
-  });
-  setErrorReporter(Sentry.captureException);
-}
 
 // Tracks a job that should loop with a timeout and an interruptible sleep.
 class WorkLoop {
