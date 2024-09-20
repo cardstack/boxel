@@ -357,5 +357,19 @@ class ColumnQuery extends GlimmerComponent<ColumnQuerySignature> {
         </PrerenderedCardSearch>
       {{/let}}
     </ul>
+
+    <style
+    >
+      .cards {
+        list-style-type: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp);
+      }
+
+      // ... existing styles ...
+    </style>
   </template>
 }
