@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "dueDate": "2024-09-20",
+      "priority": {
+        "code": null,
+        "label": null
+      },
+      "content": "Do something",
+      "completed": false,
+      "status": {
+        "code": null,
+        "label": "Next Sprint"
+      },
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "assignee": {
+        "links": {
+          "self": "../Person/1"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../productivity/task",
+        "name": "AssignedTask"
+      }
+    }
+  }
+}
