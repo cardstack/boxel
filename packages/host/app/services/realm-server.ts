@@ -65,6 +65,13 @@ export default class RealmServerService extends Service {
         }),
       },
     );
+    if (!response.ok) {
+      let err = `Could not create realm with endpoint '${args.endpoint}': ${
+        response.status
+      } - ${await response.text()}`;
+      console.error(err);
+      throw new Error(err);
+    }
     let {
       data: { id: realmURL },
     } = (await response.json()) as { data: { id: string } };

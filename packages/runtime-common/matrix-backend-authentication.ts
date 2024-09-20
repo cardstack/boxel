@@ -113,7 +113,7 @@ export class MatrixBackendAuthentication {
         await this.matrixClient.hashMessageWithSecret(challenge);
       if (challengeResponse === successfulChallengeResponse) {
         let jwt = await this.utils.createJWT(user);
-        return this.utils.createResponse(JSON.stringify({ jwt }), {
+        return this.utils.createResponse(null, {
           status: 201,
           headers: {
             'Content-Type': 'application/json',
@@ -213,7 +213,7 @@ export class MatrixBackendAuthentication {
     let hashedResponse = uint8ArrayToHex(await hash.digest());
     if (hashedResponse === lastChallenge) {
       let jwt = await this.utils.createJWT(user);
-      return this.utils.createResponse(JSON.stringify({ jwt }), {
+      return this.utils.createResponse(null, {
         status: 201,
         headers: {
           'Content-Type': 'application/json',
