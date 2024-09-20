@@ -7,9 +7,9 @@ import {
   contains,
   field,
   linksToMany,
-} from '../../base/card-api';
-import DateField from '../../base/date';
-import NumberField from '../../base/number';
+} from 'https://cardstack.com/base/card-api';
+import DateField from 'https://cardstack.com/base/date';
+import NumberField from 'https://cardstack.com/base/number';
 class StatusField extends FieldDef {
   @field code = contains(NumberField);
   @field label = contains(StringField);
