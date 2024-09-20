@@ -668,14 +668,12 @@ export default class InteractSubmode extends Component<Signature> {
               />
             {{/let}}
           {{/each}}
-
-          {{!-- <CopyButton
-            @selectedCards={{this.selectedCards}}
-            @copy={{fn (perform this.copy)}}
-            @isCopying={{this.copy.isRunning}}
-          /> --}}
         {{/if}}
-
+        <CopyButton
+          @selectedCards={{this.selectedCards}}
+          @copy={{fn (perform this.copy)}}
+          @isCopying={{this.copy.isRunning}}
+        />
         {{#if this.canCreateNeighborStack}}
           <NeighborStackTriggerButton
             data-test-add-card-left-stack
