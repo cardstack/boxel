@@ -115,11 +115,6 @@ export class RealmAuthClient {
       );
     }
 
-    // TODO for the realm server auth specifically, the response object headers were
-    // empty despite the XHR logs showing they exist--only after loading the
-    // body did they appear. needs to look into this more....
-    await challengeResponse.json();
-
     let jwt = challengeResponse.headers.get('Authorization');
 
     if (!jwt) {
