@@ -131,6 +131,14 @@ jobs:
           path: packages/matrix/test-results/**/trace.zip
           retention-days: 30
           if-no-files-found: ignore
+      - name: Upload Reload Screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reload-screenshot
+          path: /tmp/reload*.png
+          retention-days: 30
+          if-no-files-found: ignore
 
   matrix-client-merge-reports-and-publish:
     name: Merge Matrix reports and publish

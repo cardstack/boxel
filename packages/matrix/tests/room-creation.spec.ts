@@ -51,7 +51,7 @@ test.describe('Room creation', () => {
     let room2 = await createRoom(page);
     await assertRooms(page, [room1, room2]);
 
-    await reloadAndOpenAiAssistant(page);
+    await reloadAndOpenAiAssistant(page, 'it-can-create-a-room');
     await assertRooms(page, [room1, room2]);
 
     await logout(page);
@@ -89,7 +89,10 @@ test.describe('Room creation', () => {
     expect(await getRoomId(page)).toEqual(newRoom);
     await assertRooms(page, [room, newRoom]);
 
-    await reloadAndOpenAiAssistant(page);
+    await reloadAndOpenAiAssistant(
+      page,
+      'it-does-not-create-new-room-when-another-is-available',
+    );
     await assertRooms(page, [room, newRoom]);
 
     await logout(page);
@@ -150,7 +153,7 @@ test.describe('Room creation', () => {
     await expect(page.locator(`[data-test-room="${room1}"]`)).toHaveCount(1);
     await expect(page.locator(`[data-test-chat-title]`)).toHaveText(newRoom1);
 
-    await reloadAndOpenAiAssistant(page);
+    await reloadAndOpenAiAssistant(page, 'it-can-rename-a-room');
     await assertRooms(page, [room1, room2, room3]);
 
     await logout(page);
@@ -441,7 +444,7 @@ test.describe('Room creation', () => {
     ).toEqual(room2);
     await isInRoom(page, room2);
 
-    await reloadAndOpenAiAssistant(page);
+    await reloadAndOpenAiAssistant(page, 'it-orders-past-sessions-list-items');
     await isInRoom(page, room2);
     await page.locator(`[data-test-past-sessions-button]`).click();
     await expect(
