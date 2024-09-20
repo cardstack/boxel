@@ -267,6 +267,8 @@ let dist: URL = new URL(distURL);
       console.log(`stopping realm server on port ${port}...`);
       httpServer.closeAllConnections();
       httpServer.close(() => {
+        queue.destroy(); // warning this is async
+        dbAdapter.close(); // warning this is async
         console.log(`realm server on port ${port} has stopped`);
         if (process.send) {
           process.send('stopped');
