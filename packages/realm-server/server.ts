@@ -183,6 +183,7 @@ export class RealmServer {
       .use(this.serveFromRealm);
 
     app.on('error', (err, ctx) => {
+      console.error(`Unhandled server error`, err);
       Sentry.withScope((scope) => {
         scope.setSDKProcessingMetadata({ request: ctx.request });
         Sentry.captureException(err);

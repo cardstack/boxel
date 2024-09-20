@@ -47,6 +47,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
   });
 
   test('it can register a user with a registration token', async ({ page }) => {
+    test.setTimeout(120_000);
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await registerRealmUsers(synapse);
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
@@ -109,27 +110,44 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
     await expect(
       page.locator(
-        '[data-test-workspace="Personal"] [data-test-workspace-name]',
+        '[data-test-personal-workspaces] [data-test-workspace-name]',
       ),
-    ).toContainText('Personal');
+    ).toContainText('Personal', { timeout: 30_000 });
 
-    // TODO click on the workspace and verify the finder shows the seed files in
-    // the workspace
+    let newRealmURL = new URL('user1/personal/', new URL(appURL).origin).href;
+    await page.locator('[data-test-workspace="Personal"]').click();
+
+    await expect(
+      page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
+    ).toHaveCount(1);
+    await page
+      .locator('[data-test-boxel-filter-list-button="All Cards"]')
+      .click();
+    await expect(
+      page.locator(`[data-test-cards-grid-item="${newRealmURL}hello-world"]`),
+    ).toHaveCount(1);
+
+    await page.reload();
+
+    await page
+      .locator('[data-test-boxel-filter-list-button="All Cards"]')
+      .click();
+    await expect(
+      page.locator(`[data-test-cards-grid-item="${newRealmURL}hello-world"]`),
+    ).toHaveCount(1);
 
     // assert that the registration mode state is cleared properly
+    await logout(page);
+    await assertLoggedOut(page);
+
     let auth = await loginUser(`user1`, 'mypassword1!');
     let realms = await getAccountData<{ realms: string[] } | undefined>(
       auth.userId,
       auth.accessToken,
       'com.cardstack.boxel.realms',
     );
-
     expect(realms).toEqual({
-      realms: [
-        'http://localhost:4205/user1/personal/',
-        // TODO add this after catalog realm has landed
-        // 'http://localhost:4205/catalog/',
-      ],
+      realms: ['http://localhost:4205/user1/personal/'],
     });
   });
 

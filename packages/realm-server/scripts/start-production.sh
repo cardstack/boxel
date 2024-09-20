@@ -13,6 +13,7 @@ NODE_NO_WARNINGS=1 \
   --matrixURL='https://matrix.boxel.ai' \
   --realmsRootPath='/persistent/realms' \
   --serverURL='https://app.boxel.ai' \
+  --seedPath='../seed-realm' \
   \
   --path='/persistent/base' \
   --username='base_realm' \

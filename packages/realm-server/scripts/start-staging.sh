@@ -13,6 +13,7 @@ NODE_NO_WARNINGS=1 \
   --matrixURL='https://matrix-staging.stack.cards' \
   --realmsRootPath='/persistent/realms' \
   --serverURL='https://realms-staging.stack.cards' \
+  --seedPath='../seed-realm' \
   \
   --path='/persistent/base' \
   --username='base_realm' \

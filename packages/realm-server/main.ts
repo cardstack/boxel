@@ -21,7 +21,6 @@ import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import flattenDeep from 'lodash/flattenDeep';
 
 let log = logger('main');
-const SEED_REALM_USERNAME = 'seed_realm';
 
 if (process.env.REALM_SENTRY_DSN) {
   log.info('Setting up Sentry.');
@@ -81,6 +80,7 @@ let {
   toUrl: toUrls,
   username: usernames,
   useRegistrationSecretFunction,
+  seedPath,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
   .options({
@@ -116,6 +116,11 @@ let {
     distURL: {
       description:
         'the URL of a deployed host app. (This can be provided instead of the --distPath)',
+      type: 'string',
+    },
+    seedPath: {
+      description:
+        'the path of the seed realm which is used to seed new realms',
       type: 'string',
     },
     matrixURL: {
@@ -189,7 +194,6 @@ let dist: URL = new URL(distURL);
 
   await startWorker();
 
-  let seedPath: string | undefined;
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
 
@@ -197,9 +201,6 @@ let dist: URL = new URL(distURL);
     if (username.length === 0) {
       console.error(`missing username for realm ${url}`);
       process.exit(-1);
-    }
-    if (username === SEED_REALM_USERNAME) {
-      seedPath = resolve(String(path));
     }
 
     let realmAdapter = new NodeAdapter(resolve(String(path)));

@@ -9,6 +9,7 @@ setGracefulCleanup();
 const testRealmCards = resolve(
   join(__dirname, '..', '..', 'host', 'tests', 'cards'),
 );
+const seedPath = resolve(join(__dirname, '..', '..', 'seed-realm'));
 const realmServerDir = resolve(join(__dirname, '..', '..', 'realm-server'));
 const matrixDir = resolve(join(__dirname, '..'));
 export const appURL = 'http://localhost:4205/test';
@@ -38,7 +39,9 @@ export async function startServer() {
       `--port=4205`,
       `--matrixURL='http://localhost:8008'`,
       `--realmsRootPath='${dir.name}'`,
+      `--seedPath='${seedPath}'`,
       `--useRegistrationSecretFunction`,
+
       `--path='${testRealmDir}'`,
       `--username='test_realm'`,
       `--fromUrl='/test/'`,

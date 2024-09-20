@@ -243,11 +243,7 @@ export default class MatrixService extends Service {
       (await this.client.getAccountData<{ realms: string[] } | undefined>(
         'com.cardstack.boxel.realms',
       )) ?? {};
-    realms.push(
-      personalRealmURL.href,
-      // TODO add this after catalog realm has landed
-      // `${this.realmServer.url}catalog/`
-    );
+    realms.push(personalRealmURL.href);
     await this.client.setAccountData('com.cardstack.boxel.realms', { realms });
     this.cardService.setRealms(realms);
     await this.loginToRealms();
