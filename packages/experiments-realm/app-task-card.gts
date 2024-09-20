@@ -1,7 +1,12 @@
-import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+import {
+  Component,
+  CardDef,
+  realmURL,
+} from 'https://cardstack.com/base/card-api';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import GlimmerComponent from '@glimmer/component';
+import { CardContainer } from '@cardstack/boxel-ui/components';
 
 class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
   @tracked isSheetOpen = false;
@@ -14,6 +19,13 @@ class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
     return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
   }
 
+  get query() {
+    return {};
+  }
+  get realms() {
+    return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
+  }
+
   <template>
     <div class='task-app'>
       <div class='filter-section'>
@@ -24,6 +36,43 @@ class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
         </button>
       </div>
       <div class='columns-container'>
+        <ul class='cards' data-test-cards-grid-cards>
+          {{#let
+            (component @context.prerenderedCardSearchComponent)
+            as |PrerenderedCardSearch|
+          }}
+            <PrerenderedCardSearch
+              @query={{this.query}}
+              @format='fitted'
+              @realms={{this.realms}}
+            >
+
+              <:loading>
+                Loading...
+              </:loading>
+              <:response as |cards|>
+                {{#each cards as |card|}}
+                  <li
+                    class='card'
+                    {{@context.cardComponentModifier
+                      cardId=card.url
+                      format='data'
+                      fieldType=undefined
+                      fieldName=undefined
+                    }}
+                    data-test-cards-grid-item={{removeFileExtension card.url}}
+                    {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
+                    data-cards-grid-item={{removeFileExtension card.url}}
+                  >
+                    <CardContainer @displayBoundaries={{true}}>
+                      {{card.component}}
+                    </CardContainer>
+                  </li>
+                {{/each}}
+              </:response>
+            </PrerenderedCardSearch>
+          {{/let}}
+        </ul>
         {{#each this.columnNumbers as |columnNumber|}}
           <div class='column'>
             <div class='column-title'>Column {{columnNumber}}</div>
@@ -205,5 +254,10 @@ class Sheet extends GlimmerComponent<SheetSignature> {
 }
 
 export class TaskAppCard extends CardDef {
+  static displayName = 'Task App Card';
   static isolated = TaskAppCardIsolated;
+}
+
+function removeFileExtension(cardUrl: string) {
+  return cardUrl.replace(/\.[^/.]+$/, '');
 }
