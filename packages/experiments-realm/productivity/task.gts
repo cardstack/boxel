@@ -7,6 +7,8 @@ import {
   contains,
   field,
   linksToMany,
+  linksTo,
+  Component,
 } from 'https://cardstack.com/base/card-api';
 import DateField from 'https://cardstack.com/base/date';
 import NumberField from 'https://cardstack.com/base/number';
@@ -51,8 +53,39 @@ export class ManagedTask extends Task {
   @field priority = contains(PriorityField);
 }
 
+class Fitted extends Component<typeof AssignedTask> {
+  <template>
+    <div class='assigned-task-card'>
+      <h3 class='task-title'><@fields.content /></h3>
+      <p class='task-assignee'>Assigned to: {{@model.assignee.firstName}}</p>
+      <p class='task-status'>Status: {{@fields.status}}</p>
+      <p class='task-due-date'>Due Date: <@fields.dueDate /></p>
+    </div>
+    <style scoped>
+      .assigned-task-card {
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        padding: 16px;
+        margin: 8px;
+        background-color: #f9f9f9;
+      }
+      .task-title {
+        font-size: 18px;
+        font-weight: bold;
+      }
+      .task-assignee,
+      .task-status,
+      .task-due-date {
+        margin: 4px 0;
+      }
+    </style>
+  </template>
+}
 export class AssignedTask extends ManagedTask {
-  @field assignee = linksToMany(Person);
+  @field assignee = linksTo(Person);
+
+  // New Fitted template for AssignedTask
+  static fitted = Fitted;
 }
 
 //app card is a smart collection (a lens)

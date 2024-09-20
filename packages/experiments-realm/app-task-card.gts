@@ -2,11 +2,13 @@ import {
   Component,
   CardDef,
   realmURL,
+  CardContext,
 } from 'https://cardstack.com/base/card-api';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import GlimmerComponent from '@glimmer/component';
 import { CardContainer } from '@cardstack/boxel-ui/components';
+import { Query } from '@cardstack/runtime-common';
 
 class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
   @tracked isSheetOpen = false;
@@ -18,12 +20,45 @@ class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
   get taskNumbers() {
     return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
   }
-
-  get query() {
-    return {};
-  }
-  get realms() {
+  get realms(): string[] {
     return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
+  }
+
+  get assignedTaskCodeRef() {
+    return {
+      module: 'http://localhost:4201/experiments/productivity/task',
+      name: 'AssignedTask',
+    };
+  }
+
+  get backlogQuery() {
+    return {
+      filter: {
+        on: this.assignedTaskCodeRef,
+        any: [
+          {
+            eq: {
+              'status.label': 'Backlog',
+            },
+          },
+        ],
+      },
+    };
+  }
+
+  get nextSprintQuery() {
+    return {
+      filter: {
+        on: this.assignedTaskCodeRef,
+        any: [
+          {
+            eq: {
+              'status.label': 'Next Sprint',
+            },
+          },
+        ],
+      },
+    };
   }
 
   <template>
@@ -36,58 +71,27 @@ class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
         </button>
       </div>
       <div class='columns-container'>
-        <ul class='cards' data-test-cards-grid-cards>
-          {{#let
-            (component @context.prerenderedCardSearchComponent)
-            as |PrerenderedCardSearch|
-          }}
-            <PrerenderedCardSearch
-              @query={{this.query}}
-              @format='fitted'
+        <div class='column'>
+          <div class='column-title'>Backlog </div>
+          <div class='column-data'>
+            <ColumnQuery
+              @context={{@context}}
               @realms={{this.realms}}
-            >
-
-              <:loading>
-                Loading...
-              </:loading>
-              <:response as |cards|>
-                {{#each cards as |card|}}
-                  <li
-                    class='card'
-                    {{@context.cardComponentModifier
-                      cardId=card.url
-                      format='data'
-                      fieldType=undefined
-                      fieldName=undefined
-                    }}
-                    data-test-cards-grid-item={{removeFileExtension card.url}}
-                    {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
-                    data-cards-grid-item={{removeFileExtension card.url}}
-                  >
-                    <CardContainer @displayBoundaries={{true}}>
-                      {{card.component}}
-                    </CardContainer>
-                  </li>
-                {{/each}}
-              </:response>
-            </PrerenderedCardSearch>
-          {{/let}}
-        </ul>
-        {{#each this.columnNumbers as |columnNumber|}}
-          <div class='column'>
-            <div class='column-title'>Column {{columnNumber}}</div>
-            <div class='column-data'>
-              {{#each this.taskNumbers as |taskNumber|}}
-                <div class='task-card'>
-                  <h4>Task {{taskNumber}}</h4>
-                  <p>This is a longer description for Task
-                    {{taskNumber}}
-                    to demonstrate scrolling within the column.</p>
-                </div>
-              {{/each}}
-            </div>
+              @query={{this.backlogQuery}}
+            />
           </div>
-        {{/each}}
+        </div>
+        <div class='column'>
+          <div class='column-title'>Next Sprint</div>
+          <div class='column-data'>
+            <ColumnQuery
+              @context={{@context}}
+              @realms={{this.realms}}
+              @query={{this.nextSprintQuery}}
+            />
+          </div>
+        </div>
+        // ... Add more columns as needed ...
       </div>
       <Sheet @onClose={{this.toggleSheet}} @isOpen={{this.isSheetOpen}}>
         <h2>Sheet Content</h2>
@@ -260,4 +264,58 @@ export class TaskAppCard extends CardDef {
 
 function removeFileExtension(cardUrl: string) {
   return cardUrl.replace(/\.[^/.]+$/, '');
+}
+
+export interface ColumnQuerySignature {
+  Args: {
+    context: CardContext | undefined;
+    realms: string[];
+    query: Query;
+  };
+  Blocks: {
+    default: [];
+  };
+  Element: HTMLDivElement;
+}
+
+class ColumnQuery extends GlimmerComponent<ColumnQuerySignature> {
+  <template>
+    <ul class='cards' data-test-cards-grid-cards>
+      {{#let
+        (component @context.prerenderedCardSearchComponent)
+        as |PrerenderedCardSearch|
+      }}
+        <PrerenderedCardSearch
+          @query={{@query}}
+          @format='fitted'
+          @realms={{@realms}}
+        >
+
+          <:loading>
+            Loading...
+          </:loading>
+          <:response as |cards|>
+            {{#each cards as |card|}}
+              <li
+                class='card'
+                {{@context.cardComponentModifier
+                  cardId=card.url
+                  format='data'
+                  fieldType=undefined
+                  fieldName=undefined
+                }}
+                data-test-cards-grid-item={{removeFileExtension card.url}}
+                {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
+                data-cards-grid-item={{removeFileExtension card.url}}
+              >
+                <CardContainer @displayBoundaries={{true}}>
+                  {{card.component}}
+                </CardContainer>
+              </li>
+            {{/each}}
+          </:response>
+        </PrerenderedCardSearch>
+      {{/let}}
+    </ul>
+  </template>
 }
