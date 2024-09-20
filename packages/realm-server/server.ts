@@ -12,6 +12,7 @@ import {
   type DBAdapter,
   type Queue,
   type RealmPermissions,
+  fetchPublicRealms,
 } from '@cardstack/runtime-common';
 import {
   ensureDirSync,
@@ -94,6 +95,7 @@ export class RealmServer {
   private seedPath: string | undefined;
   private matrixRegistrationSecret: string | undefined;
   private matrixRegistrationSecretFile: string | undefined;
+  private excludedPublicRealms: string[];
 
   constructor({
     serverURL,
@@ -109,6 +111,7 @@ export class RealmServer {
     matrixRegistrationSecret,
     matrixRegistrationSecretFile,
     seedPath,
+    excludedPublicRealms,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -123,6 +126,7 @@ export class RealmServer {
     seedPath?: string;
     matrixRegistrationSecret?: string;
     matrixRegistrationSecretFile?: string;
+    excludedPublicRealms?: string[];
   }) {
     if (!matrixRegistrationSecret && !matrixRegistrationSecretFile) {
       throw new Error(
@@ -145,6 +149,7 @@ export class RealmServer {
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.matrixRegistrationSecretFile = matrixRegistrationSecretFile;
     this.realms = [...realms, ...this.loadRealms()];
+    this.excludedPublicRealms = excludedPublicRealms ?? [];
   }
 
   @Memoize()
@@ -154,6 +159,7 @@ export class RealmServer {
     router.get('/', healthCheck, this.serveIndex(), this.serveFromRealm);
     router.post('/_server-session', this.createSession());
     router.post('/_create-realm', this.handleCreateRealmRequest());
+    router.get('/_public-realms', this.fetchPublicRealms());
 
     let app = new Koa<Koa.DefaultState, Koa.Context>()
       .use(httpLogging)
@@ -574,6 +580,45 @@ export class RealmServer {
     }
 
     throw new Error('Can not determine the matrix registration secret');
+  }
+
+  private fetchPublicRealms(): (
+    ctxt: Koa.Context,
+    _next: Koa.Next,
+  ) => Promise<any> {
+    return async (ctxt: Koa.Context, _next: Koa.Next) => {
+      let results = await fetchPublicRealms(this.dbAdapter);
+      let promises = results.map(async ({ realm_url: realmURL }) => {
+        if (this.excludedPublicRealms.includes(realmURL)) {
+          return;
+        }
+        let response = await this.virtualNetwork.handle(
+          new Request(`${realmURL}_info`, {
+            headers: {
+              Accept: SupportedMimeType.RealmInfo,
+            },
+          }),
+        );
+        if (response.status != 200) {
+          throw new Error(
+            `Failed to fetch realm info for public realm ${realmURL}: ${response.status}`,
+          );
+        }
+        let json = await response.json();
+        return {
+          type: 'public-realm',
+          id: realmURL,
+          attributes: json.data.attributes,
+        };
+      });
+      let data = (await Promise.all(promises)).filter(Boolean);
+      return setContextResponse(
+        ctxt,
+        new Response(JSON.stringify({ data }), {
+          headers: { 'content-type': SupportedMimeType.JSONAPI },
+        }),
+      );
+    };
   }
 }
 

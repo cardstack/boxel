@@ -354,6 +354,17 @@ export async function runTestRealmServer({
     username: realmServerTestMatrix.username,
     seed: secretSeed,
   });
+  let excludedPublicRealms = [
+    'http://localhost:4201/experiments/',
+    'http://localhost:4201/seed/',
+    'http://localhost:4201/catalog/',
+    'https://cardstack.com/base/',
+    'http://localhost:4202/test/',
+    'http://localhost:4202/node-test/',
+    'http://localhost:4203/',
+    'http://localhost:4204/',
+    'http://localhost:4205/test/',
+  ];
   let testRealmServer = new RealmServer({
     realms: [testRealm],
     virtualNetwork,
@@ -367,6 +378,7 @@ export async function runTestRealmServer({
     seedPath,
     serverURL: new URL(realmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
+    excludedPublicRealms,
   });
   let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
   await testRealmServer.start();

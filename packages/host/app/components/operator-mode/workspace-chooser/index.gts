@@ -1,7 +1,11 @@
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import { trackedFunction } from 'ember-resources/util/function';
+
 import type CardService from '@cardstack/host/services/card-service';
+
+import RealmService from '@cardstack/host/services/realm';
 
 import Workspace from './workspace';
 
@@ -12,17 +16,46 @@ interface Signature {
 
 export default class WorkspaceChooser extends Component<Signature> {
   @service declare cardService: CardService;
+  @service declare realm: RealmService;
+
+  private get displayCatalogWorkspaces() {
+    return this.catalogWorkspaceURLs && this.catalogWorkspaceURLs.length > 0;
+  }
+
+  private get catalogWorkspaceURLs() {
+    return this.fetchCatalogRealmURLs.value;
+  }
+
+  private fetchCatalogRealmURLs = trackedFunction(this, async () => {
+    return await this.realm.fetchPublicRealmURLs();
+  });
+
+  private get personalWorkspaceURLs() {
+    return this.cardService.userRealms.filter(
+      (realmURL) => !this.catalogWorkspaceURLs?.includes(realmURL),
+    );
+  }
 
   <template>
     <div class='workspace-chooser' data-test-workspace-chooser>
-      <span class='workspace-chooser__title'>Your Workspaces</span>
+      <span class='workspace-chooser__title' data-test-personal-workspaces>Your
+        Workspaces</span>
       <div class='workspace-list'>
-        {{#each this.cardService.userRealms as |realmURL|}}
+        {{#each this.personalWorkspaceURLs as |realmURL|}}
           <Workspace @realmURL={{realmURL}} />
         {{/each}}
       </div>
-      {{! TODO: [CS-7199] Include "Community Catalogs" if there are catalogs to show }}
-      <span class='workspace-chooser__title'>Community Catalogs</span>
+      {{#if this.displayCatalogWorkspaces}}
+        <span
+          class='workspace-chooser__title'
+          data-test-comunity-catalogs
+        >Community Catalogs</span>
+        <div class='workspace-list'>
+          {{#each this.catalogWorkspaceURLs as |realmURL|}}
+            <Workspace @realmURL={{realmURL}} />
+          {{/each}}
+        </div>
+      {{/if}}
     </div>
     <style scoped>
       @keyframes fadeIn {
@@ -41,7 +74,7 @@ export default class WorkspaceChooser extends Component<Signature> {
         position: relative;
         background-color: var(--boxel-700);
         height: 100%;
-        padding: 10rem 11.5rem;
+        padding: 8.5rem 11.5rem;
         animation: fadeIn 1s ease-in forwards;
       }
       .workspace-chooser__title {
@@ -49,12 +82,15 @@ export default class WorkspaceChooser extends Component<Signature> {
         font: 600 var(--boxel-font-lg);
         letter-spacing: var(--boxel-lsp);
       }
+      .workspace-chooser__title:last-of-type {
+        margin-top: var(--boxel-sp-lg);
+      }
 
       .workspace-list {
         display: flex;
         gap: var(--boxel-sp);
         padding: var(--boxel-sp-xs) 0;
-        overflow: auto;
+        overflow: auto hidden;
       }
     </style>
   </template>

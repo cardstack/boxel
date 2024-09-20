@@ -3012,6 +3012,27 @@ module('Realm Server', function (hooks) {
         ],
       });
     });
+
+    test('can fetch public realms', async function (assert) {
+      let response = await request2
+        .get('/_public-realms')
+        .set('Accept', 'application/json');
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.deepEqual(response.body, {
+        data: [
+          {
+            type: 'public-realm',
+            id: `${testRealm2URL}`,
+            attributes: {
+              name: 'Test Realm',
+              iconURL: null,
+              backgroundURL: null,
+            },
+          },
+        ],
+      });
+    });
   });
 
   module('BOXEL_HTTP_BASIC_PW env var', function (hooks) {

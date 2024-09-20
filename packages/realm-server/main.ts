@@ -69,6 +69,8 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
   );
 }
 
+const EXCLUDED_PUBLIC_REALMS = process.env.EXCLUDED_PUBLIC_REALMS;
+
 let {
   port,
   matrixURL,
@@ -243,6 +245,7 @@ let dist: URL = new URL(distURL);
     seedPath,
     matrixRegistrationSecret: MATRIX_REGISTRATION_SHARED_SECRET,
     matrixRegistrationSecretFile,
+    excludedPublicRealms: EXCLUDED_PUBLIC_REALMS?.split(',') ?? [],
   });
 
   let httpServer = server.listen(port);

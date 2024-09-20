@@ -95,3 +95,13 @@ export async function fetchUserPermissions(
     {} as RealmPermissions,
   );
 }
+
+export async function fetchPublicRealms(dbAdapter: DBAdapter) {
+  let results = (await query(dbAdapter, [
+    `SELECT realm_url FROM realm_user_permissions WHERE username = '*' AND read = true`
+  ])) as {
+    realm_url: string;
+  }[];
+
+  return results;
+}

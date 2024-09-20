@@ -8,7 +8,7 @@ import { restartableTask } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
 
-import { cssVar } from '@cardstack/boxel-ui/helpers';
+import { cssVar, not } from '@cardstack/boxel-ui/helpers';
 import { Lock } from '@cardstack/boxel-ui/icons';
 
 import { StackItem } from '@cardstack/host/lib/stack-item';
@@ -35,13 +35,15 @@ export default class Workspace extends Component<Signature> {
         style={{cssVar workspace-background-image-url=this.backgroundImageURL}}
       >
         <img src={{this.iconURL}} alt='Workspace Icon' />
-        <div class='small-icon'>
-          <Lock width='11px' height='11px' />
-        </div>
+        {{#if (not this.isPublic)}}
+          <div class='small-icon'>
+            <Lock width='11px' height='11px' />
+          </div>
+        {{/if}}
       </div>
       <div class='info'>
         <span class='name' data-test-workspace-name>{{this.name}}</span>
-        <span class='type'>Personal</span>
+        <span class='type'>{{if this.isPublic 'Catalog' 'Personal'}}</span>
       </div>
     </button>
     <style scoped>
@@ -119,6 +121,11 @@ export default class Workspace extends Component<Signature> {
   @cached
   private get realmInfo() {
     return this.realm.info(this.args.realmURL);
+  }
+
+  @cached
+  private get isPublic() {
+    return this.realm.isPublic(this.args.realmURL);
   }
 
   private get name() {

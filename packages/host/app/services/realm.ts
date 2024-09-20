@@ -84,6 +84,10 @@ class RealmResource {
     return this.meta?.info;
   }
 
+  get isPublic() {
+    return this.meta?.isPublic;
+  }
+
   get claims(): JWTPayload | undefined {
     if (this.auth.type === 'logged-in') {
       return this.auth.claims;
@@ -247,6 +251,10 @@ export default class RealmService extends Service {
     }
   };
 
+  isPublic = (url: string): boolean => {
+    return this.knownRealm(url)?.isPublic ?? false;
+  };
+
   canRead = (url: string): boolean => {
     return this.knownRealm(url)?.canRead ?? false;
   };
@@ -369,6 +377,25 @@ export default class RealmService extends Service {
     resource.logout();
     await resource.login();
     return resource.token;
+  }
+
+  async fetchPublicRealmURLs(): Promise<string[]> {
+    let realmServerURL = new URL(window.location.href);
+    if (window.origin === 'http://localhost:4200') {
+      realmServerURL = new URL('http://localhost:4201');
+    }
+
+    let response = await this.loaderService.loader.fetch(
+      `${realmServerURL.origin}/_public-realms`,
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Failed to fetch public realms from realm server: ${realmServerURL.origin}`,
+      );
+    }
+
+    let { data } = await response.json();
+    return data.map((publicRealm: { id: string }) => publicRealm.id);
   }
 
   private createRealmResource(
