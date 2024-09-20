@@ -614,7 +614,7 @@ export default class InteractSubmode extends Component<Signature> {
 
   <template>
     <SubmodeLayout
-      @actions={{this.publicAPI this 1}}
+      @actions={{this.publicAPI this (if this.stacks.0.length 1 0)}}
       @onSearchSheetClosed={{this.clearSearchSheetTrigger}}
       @onCardSelectFromSearch={{perform this.openSelectedSearchResultInStack}}
       as |search|
