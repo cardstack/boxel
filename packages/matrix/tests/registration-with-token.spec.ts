@@ -85,20 +85,18 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
 
     await validateEmail(page, 'user1@example.com', {
       onEmailPage: async (page) => {
-        // TODO UNCOMMENT THIS!!
-        // await expect(page).toHaveScreenshot('verification-email.png', {
-        //   mask: [page.locator('.messagelist')],
-        //   maxDiffPixelRatio: 0.01,
-        // });
+        await expect(page).toHaveScreenshot('verification-email.png', {
+          mask: [page.locator('.messagelist')],
+          maxDiffPixelRatio: 0.01,
+        });
       },
       onValidationPage: async (page) => {
         await expect(page.locator('body')).toContainText(
           'Your email has now been validated',
         );
-        // TODO UNCOMMENT THIS!!
-        // await expect(page).toHaveScreenshot('verification-page.png', {
-        //   maxDiffPixelRatio: 0.01,
-        // });
+        await expect(page).toHaveScreenshot('verification-page.png', {
+          maxDiffPixelRatio: 0.01,
+        });
       },
     });
 
@@ -112,10 +110,14 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       page.locator(
         '[data-test-personal-workspaces] [data-test-workspace-name]',
       ),
-    ).toContainText('Personal', { timeout: 30_000 });
+    ).toContainText("Test User's Workspace", { timeout: 30_000 });
+    await expect(
+      page.locator(`[data-test-workspace="Test User's Workspace"] img`),
+      'the "T" icon URL is shown',
+    ).toHaveAttribute('src', 'https://i.postimg.cc/Rq550Bwv/T.png');
 
     let newRealmURL = new URL('user1/personal/', new URL(appURL).origin).href;
-    await page.locator('[data-test-workspace="Personal"]').click();
+    await page.locator(`[data-test-workspace="Test User's Workspace"]`).click();
 
     await expect(
       page.locator(`[data-test-stack-card="${newRealmURL}index"]`),

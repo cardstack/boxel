@@ -338,10 +338,12 @@ export class RealmServer {
         return;
       }
 
-      let realmName = json.data.attributes.name;
       let realm: Realm;
       try {
-        realm = await this.createRealm(ownerUserId, realmName);
+        realm = await this.createRealm({
+          ownerUserId,
+          ...json.data.attributes,
+        });
         await realm.start();
       } catch (e: any) {
         if ('status' in e && e.status === 400) {
@@ -358,9 +360,7 @@ export class RealmServer {
             data: {
               type: 'realm',
               id: realm.url,
-              attributes: {
-                name: realmName,
-              },
+              attributes: { ...json.data.attributes },
             },
           },
           null,
@@ -406,11 +406,19 @@ export class RealmServer {
     }
   }
 
-  private async createRealm(
-    ownerUserId: string, // note matrix userIDs look like "@mango:boxel.ai"
-    // TODO human friendly realm name and realm URL name should be separate params
-    realmName: string,
-  ): Promise<Realm> {
+  private async createRealm({
+    ownerUserId,
+    endpoint,
+    name,
+    backgroundURL,
+    iconURL,
+  }: {
+    ownerUserId: string; // note matrix userIDs look like "@mango:boxel.ai"
+    endpoint: string;
+    name: string;
+    backgroundURL?: string;
+    iconURL?: string;
+  }): Promise<Realm> {
     if (
       this.realms.find(
         (r) => new URL(r.url).href.replace(/\/$/, '') === new URL(r.url).origin,
@@ -421,20 +429,19 @@ export class RealmServer {
         `Cannot create a realm: a realm is already mounted at the origin of this server`,
       );
     }
-    if (!realmName.match(/^[A-Za-z0-9-]+$/)) {
+    if (!endpoint.match(/^[a-z0-9-]+$/)) {
       throw errorWithStatus(
         400,
-        `realm name '${realmName}' contains invalid characters`,
+        `realm endpoint '${endpoint}' contains invalid characters`,
       );
     }
 
-    let cleansedRealmName = realmName.toLocaleLowerCase();
     let ownerUsername = getMatrixUsername(ownerUserId);
     let url = new URL(
       `${this.serverURL.pathname.replace(
         /\/$/,
         '',
-      )}/${ownerUsername}/${cleansedRealmName}/`,
+      )}/${ownerUsername}/${endpoint}/`,
       this.serverURL,
     ).href;
 
@@ -446,13 +453,11 @@ export class RealmServer {
       );
     }
 
-    let realmPath = resolve(
-      join(this.realmsRootPath, ownerUsername, cleansedRealmName),
-    );
+    let realmPath = resolve(join(this.realmsRootPath, ownerUsername, endpoint));
     ensureDirSync(realmPath);
     let adapter = new NodeAdapter(resolve(String(realmPath)));
 
-    let username = `realm/${ownerUsername}_${cleansedRealmName}`;
+    let username = `realm/${ownerUsername}_${endpoint}`;
     let { userId } = await registerUser({
       matrixURL: this.matrixClient.matrixURL,
       displayname: username,
@@ -466,8 +471,11 @@ export class RealmServer {
       [ownerUserId]: DEFAULT_PERMISSIONS,
     });
 
-    // TODO set realm icon based on first letter of realm name
-    writeJSONSync(join(realmPath, '.realm.json'), { name: realmName });
+    writeJSONSync(join(realmPath, '.realm.json'), {
+      name,
+      ...(iconURL ? { iconURL } : {}),
+      ...(backgroundURL ? { backgroundURL } : {}),
+    });
     if (this.seedPath) {
       let ignoreList = IGNORE_SEED_FILES.map((file) =>
         join(this.seedPath!.replace(/\/$/, ''), file),
@@ -606,7 +614,10 @@ interface RealmCreationJSON {
   data: {
     type: 'realm';
     attributes: {
+      endpoint: string;
       name: string;
+      backgroundURL?: string;
+      iconURL?: string;
     };
   };
 }
@@ -638,7 +649,23 @@ function assertIsRealmCreationJSON(
   }
   let { attributes } = data;
   if (!('name' in attributes) || typeof attributes.name !== 'string') {
-    throw new Error(`json.data.attributes.name must be a string`);
+    throw new Error(
+      `json.data.attributes.name is required and must be a string`,
+    );
+  }
+  if (!('endpoint' in attributes) || typeof attributes.endpoint !== 'string') {
+    throw new Error(
+      `json.data.attributes.endpoint is required and must be a string`,
+    );
+  }
+  if (
+    'backgroundURL' in attributes &&
+    typeof attributes.backgroundURL !== 'string'
+  ) {
+    throw new Error(`json.data.attributes.backgroundURL must be a string`);
+  }
+  if ('iconURL' in attributes && typeof attributes.iconURL !== 'string') {
+    throw new Error(`json.data.attributes.iconURL must be a string`);
   }
 }
 

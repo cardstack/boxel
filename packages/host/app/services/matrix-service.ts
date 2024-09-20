@@ -47,6 +47,7 @@ import ENV from '@cardstack/host/config/environment';
 import type CardController from '@cardstack/host/controllers/card';
 
 import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
+import { iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
@@ -230,7 +231,8 @@ export default class MatrixService extends Service {
     }
   }
 
-  async initializeRealmsForNewUser(auth: LoginResponse, displayName: string) {
+  async initializeNewUser(auth: LoginResponse, displayName: string) {
+    displayName = displayName.trim();
     let cardController = getOwner(this)!.lookup(
       'controller:card',
     ) as CardController;
@@ -238,7 +240,11 @@ export default class MatrixService extends Service {
     this.start(auth);
     this.setDisplayName(displayName);
 
-    let personalRealmURL = await this.realmServer.createRealm('Personal');
+    let personalRealmURL = await this.realmServer.createRealm({
+      endpoint: 'personal',
+      name: `${displayName}'s Workspace`,
+      iconURL: iconURLFor(displayName),
+    });
     let { realms = [] } =
       (await this.client.getAccountData<{ realms: string[] } | undefined>(
         'com.cardstack.boxel.realms',
@@ -247,9 +253,6 @@ export default class MatrixService extends Service {
     await this.client.setAccountData('com.cardstack.boxel.realms', { realms });
     this.cardService.setRealms(realms);
     await this.loginToRealms();
-
-    // I don't think we need this anymore...
-    // await this.router.refresh();
   }
 
   async setDisplayName(displayName: string) {

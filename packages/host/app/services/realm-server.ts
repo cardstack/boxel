@@ -37,7 +37,12 @@ export default class RealmServerService extends Service {
       window.localStorage.getItem(sessionLocalStorageKey) ?? undefined;
   }
 
-  async createRealm(name: string) {
+  async createRealm(args: {
+    endpoint: string;
+    name: string;
+    iconURL?: string;
+    backgroundURL?: string;
+  }) {
     if (!this.client) {
       throw new Error(`Cannot create realm without matrix client`);
     }
@@ -56,7 +61,7 @@ export default class RealmServerService extends Service {
           Authorization: `Bearer ${this.token}`,
         },
         body: JSON.stringify({
-          data: { type: 'realm', attributes: { name } },
+          data: { type: 'realm', attributes: args },
         }),
       },
     );
