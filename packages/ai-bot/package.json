@@ -2,7 +2,7 @@
   "name": "@cardstack/ai-bot",
   "dependencies": {
     "@cardstack/runtime-common": "workspace:^",
-    "@sentry/node": "^7.119.0",
+    "@sentry/node": "^8.30.0",
     "@types/node": "^18.18.5",
     "@types/stream-chain": "^2.0.1",
     "@types/stream-json": "^1.7.3",
