@@ -56,26 +56,35 @@ export class ManagedTask extends Task {
 class Fitted extends Component<typeof AssignedTask> {
   <template>
     <div class='assigned-task-card'>
-      <h3 class='task-title'>{{@model.content}} </h3>
+      <h3 class='task-title'>{{@model.content}}</h3>
       <p class='task-assignee'>Assigned to: {{@model.assignee.firstName}}</p>
       <p class='task-status'>Status: {{@model.status.label}}</p>
       <p class='task-due-date'>Due Date: <@fields.dueDate /></p>
     </div>
     <style scoped>
       .assigned-task-card {
-        border: 1px solid #ccc;
+        border: 1px solid #e0e0e0;
         border-radius: 8px;
         padding: 16px;
-        background-color: #f9f9f9;
+        background-color: #ffffff;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        transition: box-shadow 0.2s ease;
+      }
+      .assigned-task-card:hover {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
       }
       .task-title {
-        font-size: 18px;
+        font-size: 16px;
         font-weight: bold;
+        color: #333;
+        margin: 0;
       }
       .task-assignee,
       .task-status,
       .task-due-date {
-        margin: 4px 0;
+        margin: 0;
+        font-size: 14px;
+        color: #666;
       }
     </style>
   </template>
