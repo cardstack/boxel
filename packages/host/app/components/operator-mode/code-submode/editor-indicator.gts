@@ -16,7 +16,7 @@ interface Signature {
 }
 
 const CodeSubmodeEditorIndicator: TemplateOnlyComponent<Signature> = <template>
-  <style>
+  <style scoped>
     .indicator {
       position: absolute;
       display: flex;

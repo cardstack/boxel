@@ -2,16 +2,13 @@ import {
   visit,
   currentURL,
   click,
-  triggerEvent,
   waitFor,
   fillIn,
+  triggerEvent,
   waitUntil,
 } from '@ember/test-helpers';
 
-import { setupApplicationTest } from 'ember-qunit';
-
 import window from 'ember-window-mock';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
@@ -34,18 +31,18 @@ import {
   visitOperatorMode,
   lookupLoaderService,
 } from '../helpers';
-import {
-  MockMatrixService,
-  setupMatrixServiceMock,
-} from '../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../helpers/mock-matrix';
+import { setupApplicationTest } from '../helpers/setup';
 
 module('Acceptance | operator mode tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  setupWindowMock(hooks);
-  let { setExpiresInSec } = setupMatrixServiceMock(hooks);
+  let { setExpiresInSec } = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [testRealmURL],
+  });
 
   hooks.beforeEach(async function () {
     setExpiresInSec(60 * 60);
@@ -379,10 +376,8 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
   });
 
-  test('visiting index card and entering operator mode', async function (assert) {
+  test('visiting operator mode', async function (assert) {
     await visit('/');
-
-    assert.strictEqual(currentURL(), '/');
 
     // Enter operator mode
     await triggerEvent(document.body, 'keydown', {
@@ -394,6 +389,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     await waitFor('[data-test-operator-mode-stack]');
     assert.dom('[data-test-operator-mode-stack]').exists();
     assert.dom('[data-test-stack-card-index="0"]').exists(); // Index card opens in the stack
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
 
     await waitFor(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`);
 
@@ -473,10 +469,6 @@ module('Acceptance | operator mode tests', function (hooks) {
       ],
     })!;
 
-    let matrixService = this.owner.lookup(
-      'service:matrixService',
-    ) as MockMatrixService;
-
     await click('[data-test-profile-icon-button]');
     await click('[data-test-settings-button]');
 
@@ -496,15 +488,9 @@ module('Acceptance | operator mode tests', function (hooks) {
       .dom('[data-test-boxel-input-error-message]')
       .hasText('Name is required');
 
-    await fillIn('[data-test-display-name-field]', 'John');
+    await fillIn('[data-test-display-name-field]', 'MAKEMECRASH');
 
     assert.dom('[data-test-boxel-input-error-message]').doesNotExist();
-
-    let setDisplayNameOriginal = matrixService.setDisplayName;
-
-    matrixService.setDisplayName = async function () {
-      throw new Error('Boom!');
-    };
 
     await click('[data-test-profile-settings-save-button]');
 
@@ -512,8 +498,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       .dom('[data-test-profile-save-error]')
       .hasText('Failed to save profile. Please try again.');
 
-    matrixService.setDisplayName = setDisplayNameOriginal;
-
+    await fillIn('[data-test-display-name-field]', 'John');
     await click('[data-test-profile-settings-save-button]');
 
     assert.dom('[data-test-profile-save-error]').doesNotExist();
@@ -567,6 +552,39 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.operatorModeParametersMatch(currentURL(), {
       codePath: `${testRealmURL}address-with-no-embedded-template.gts`,
     });
+  });
+
+  test('open workspace chooser when boxel icon is clicked', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    assert
+      .dom('[data-test-stack-card="http://test-realm/test/Person/fadhlan"]')
+      .exists();
+    assert.dom('[data-test-submode-layout-title]').doesNotExist();
+    assert.dom('[data-test-workspace-chooser]').doesNotExist();
+    let url = currentURL().split('?')[1].replace(/^\/\?/, '') ?? '';
+    let urlParameters = new URLSearchParams(url);
+    assert.false(Boolean(urlParameters.get('workspaceChooserOpened')));
+
+    await click('[data-test-submode-layout-boxel-icon-button]');
+
+    assert.dom('[data-test-submode-layout-title]').exists();
+    assert.dom('[data-test-workspace-chooser]').exists();
+    assert
+      .dom(`[data-test-stack-card="http://test-realm/test/Person/fadhlan"]`)
+      .doesNotExist();
+    url = currentURL().split('?')[1].replace(/^\/\?/, '') ?? '';
+    urlParameters = new URLSearchParams(url);
+    assert.true(Boolean(urlParameters.get('workspaceChooserOpened')));
   });
 
   module('2 stacks', function () {

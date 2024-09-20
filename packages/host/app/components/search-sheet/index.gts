@@ -174,7 +174,7 @@ export default class SearchSheet extends Component<Signature> {
     }
     let cardURL = this.searchKey;
 
-    let maybeIndexCardURL = this.cardService.realmURLs.find(
+    let maybeIndexCardURL = this.cardService.unresolvedRealmURLs.find(
       (u) => u === cardURL + '/',
     );
     let cardResource = getCard(this, () => maybeIndexCardURL ?? cardURL, {
@@ -267,7 +267,7 @@ export default class SearchSheet extends Component<Signature> {
         </div>
       </div>
     </div>
-    <style>
+    <style scoped>
       :global(:root) {
         --search-sheet-closed-height: 3.5rem;
         --search-sheet-closed-width: 10.75rem;

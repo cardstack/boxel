@@ -13,8 +13,6 @@ import {
 } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
-import { setupRenderingTest } from 'ember-qunit';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
@@ -40,8 +38,9 @@ import {
   lookupLoaderService,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
-import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
+import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | operator-mode', function (hooks) {
   setupRenderingTest(hooks);
@@ -65,8 +64,11 @@ module('Integration | operator-mode', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupServerSentEvents(hooks);
-  setupMatrixServiceMock(hooks, { autostart: true });
-  setupWindowMock(hooks);
+  setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [testRealmURL],
+    autostart: true,
+  });
   let noop = () => {};
 
   hooks.beforeEach(async function () {
@@ -417,6 +419,7 @@ module('Integration | operator-mode', function (hooks) {
           authorBio: author1,
         }),
         'BlogPost/2.json': new BlogPost({ title: 'Beginnings' }),
+        'CardDef/1.json': new CardDef({ title: 'CardDef instance' }),
         '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
         ...Object.fromEntries(personCards),
       },
@@ -566,6 +569,7 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await waitFor(`[data-test-cards-grid-item]`);
 
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
@@ -653,7 +657,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await waitFor(`[data-test-stack-card-index]`);
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
-
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
 
@@ -1202,6 +1206,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
     await waitFor(`[data-test-stack-card-index="1"]`);
@@ -1231,6 +1236,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     assert.dom(`[data-test-stack-card-header]`).containsText(realmName);
 
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
     await waitFor(`[data-test-stack-card-index="1"]`);
@@ -1258,6 +1264,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     assert.dom(`[data-test-stack-card-header]`).containsText(realmName);
 
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
     await waitFor(`[data-test-stack-card-index="1"]`);
@@ -1309,6 +1316,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     assert.dom(`[data-test-stack-card-header]`).containsText(realmName);
 
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
     for (let i = 1; i <= 11; i++) {
       await click(`[data-test-cards-grid-item="${testRealmURL}Person/${i}"]`);
@@ -1357,7 +1365,9 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-realm-name]`).exists({ count: 4 });
     assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
     assert
-      .dom(`[data-test-realm-name]`)
+      .dom(
+        `[data-test-search-result="${testRealmURL}Pet/mango"] + [data-test-realm-name]`,
+      )
       .containsText('Operator Mode Workspace');
     assert
       .dom(`[data-test-search-result="${testRealmURL}Author/mark"]`)
@@ -1409,6 +1419,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-create-new-card-button]`);
     await waitFor(`[data-test-card-catalog-item]`);
@@ -1456,6 +1467,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-create-new-card-button]`);
     await waitFor('[data-test-card-catalog-item]');
@@ -1541,6 +1553,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-create-new-card-button]`);
     await waitFor('[data-test-card-catalog-item]');
@@ -1561,70 +1574,85 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-create-new-card-button]`);
     await waitFor('[data-test-card-catalog-item]');
     assert
-      .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
+      .dom(
+        `[data-test-realm="Operator Mode Workspace"] [data-test-card-catalog-item]`,
+      )
       .exists({ count: 3 });
+    assert
+      .dom(`[data-test-realm="Base Workspace"] [data-test-card-catalog-item]`)
+      .exists({ count: 2 });
 
     await fillIn(`[data-test-search-field]`, `general`);
+
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/pet-card"]`,
       { count: 0 },
     );
-    assert.dom(`[data-test-card-catalog-item]`).exists({ count: 2 });
-    assert.dom(`[data-test-realm]`).exists({ count: 2 });
-    assert.dom('[data-test-realm="Operator Mode Workspace"]').exists();
+
+    assert
+      .dom(
+        `[data-test-realm="Operator Mode Workspace"] [data-test-card-catalog-item]`,
+      )
+      .exists({ count: 1 });
+
+    assert
+      .dom(
+        `[data-test-realm="Operator Mode Workspace"] [data-test-card-catalog-item]`,
+      )
+      .exists({ count: 1 });
+
     assert
       .dom(
         '[data-test-realm="Operator Mode Workspace"] [data-test-results-count]',
       )
       .hasText('1 result');
+
+    assert
+      .dom('[data-test-realm="Base Workspace"] [data-test-results-count]')
+      .hasText('1 result');
+
     assert
       .dom(
         `[data-test-realm="Operator Mode Workspace"] [data-test-select="${testRealmURL}CatalogEntry/pet-room"]`,
       )
       .exists();
-    assert.dom('[data-test-realm="Base Workspace"]').exists();
-    assert
-      .dom('[data-test-realm="Base Workspace"] [data-test-results-count]')
-      .hasText('1 result');
+
     assert
       .dom(
         `[data-test-realm="Base Workspace"] [data-test-select="${baseRealm.url}types/card"]`,
       )
       .exists();
 
-    await click('[data-test-realm-filter-button]');
-    await click('[data-test-boxel-menu-item-text="Base Workspace"]');
+    await click('[data-test-realm-filter-button]'); // At this point, both realms are selected
+    await click('[data-test-boxel-menu-item-text="Base Workspace"]'); // Unselects the Base Workspace
+
     assert.dom(`[data-test-realm]`).exists({ count: 1 });
-    assert.dom('[data-test-realm="Operator Mode Workspace"]').doesNotExist();
-    assert.dom('[data-test-realm="Base Workspace"]').exists();
-    assert.dom(`[data-test-select="${baseRealm.url}types/card"]`).exists();
-
-    await click('[data-test-realm-filter-button]');
-    await click('[data-test-boxel-menu-item-text="Operator Mode Workspace"]');
     assert.dom('[data-test-realm="Operator Mode Workspace"]').exists();
-    assert.dom('[data-test-realm="Base Workspace"]').exists();
-    assert.dom(`[data-test-card-catalog-item]`).exists({ count: 2 });
-
-    await fillIn(`[data-test-search-field]`, '');
-    await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/pet-card"]`,
-    );
+    assert.dom('[data-test-realm="Base Workspace"]').doesNotExist();
     assert
-      .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
-      .exists({ count: 3 }, 'can clear search input');
+      .dom(`[data-test-select="${testRealmURL}CatalogEntry/pet-room"]`)
+      .exists();
 
-    await fillIn(`[data-test-search-field]`, 'pet');
-    await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/pet-card"]`,
-    );
     await click('[data-test-realm-filter-button]');
-    await click(`[data-test-boxel-menu-item-text="${realmName}"]`);
-    await waitFor('[data-test-card-catalog-item]', { count: 0 });
+    await click('[data-test-boxel-menu-item-text="Operator Mode Workspace"]'); // Unselects the Operator Mode Workspace
+    assert.dom('[data-test-realm="Operator Mode Workspace"]').doesNotExist();
+    assert.dom('[data-test-realm="Base Workspace"]').doesNotExist();
+    assert.dom(`[data-test-card-catalog-item]`).doesNotExist();
     assert.dom('[data-test-card-catalog]').hasText('No cards available');
+
+    await click('[data-test-realm-filter-button]');
+    await click('[data-test-boxel-menu-item-text="Operator Mode Workspace"]'); // Selects the Operator Mode Workspace
+    assert.dom(`[data-test-realm]`).exists({ count: 1 });
+    assert.dom('[data-test-realm="Operator Mode Workspace"]').exists();
+    assert.dom('[data-test-realm="Base Workspace"]').doesNotExist();
+    assert
+      .dom(`[data-test-select="${testRealmURL}CatalogEntry/pet-room"]`)
+      .exists();
   });
 
   test(`can open new card editor in the stack after searching in card catalog`, async function (assert) {
@@ -1638,6 +1666,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-create-new-card-button]`);
     await waitFor('[data-test-card-catalog-item]');
@@ -1674,6 +1703,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-create-new-card-button]`);
 
@@ -1719,9 +1749,12 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor('[data-test-card-catalog-modal]');
     await waitFor('[data-test-card-catalog-item]', { count: 3 });
+
     await typeIn(`[data-test-search-field]`, `bob`);
     assert.dom(`[data-test-search-field]`).hasValue('bob');
+
     await waitFor('[data-test-card-catalog-item]', { count: 1 });
+
     await click(`[data-test-select="${testRealmURL}Author/1"]`);
     assert
       .dom(
@@ -1754,6 +1787,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
     await focus(`[data-test-search-field]`);
 
@@ -1823,6 +1857,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     assert.dom(`[data-test-cards-grid-cards]`).exists();
 
     await waitFor(
@@ -2225,6 +2260,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
 
     await focus(`[data-test-search-field]`);
@@ -2410,6 +2446,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}BlogPost/1"]`);
 
@@ -2471,6 +2508,7 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
 
@@ -2562,7 +2600,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-plural-view-item="2"]`).hasText('Jackie');
   });
 
-  test('open workspace chooser when boxel icon is clicked', async function (assert) {
+  test('can add cards to favourites list', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
 
     await renderComponent(
@@ -2575,18 +2613,47 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    await waitFor(`[data-test-cards-grid-item]`);
-
-    assert.dom(`[data-test-stack-card-index="0"]`).exists();
-    assert.dom(`[data-test-cards-grid-item]`).exists();
-
-    assert.dom('[data-test-submode-layout-title]').doesNotExist();
-    assert.dom('[data-test-workspace-chooser]').doesNotExist();
-    await click('[data-test-submode-layout-boxel-icon-button]');
-
-    assert.dom('[data-test-submode-layout-title]').exists();
-    assert.dom('[data-test-workspace-chooser]').exists();
-    assert.dom(`[data-test-stack-card-index="0"]`).doesNotExist();
     assert.dom(`[data-test-cards-grid-item]`).doesNotExist();
+    await click('[data-test-edit-button]');
+
+    await click('[data-test-add-new]');
+    await click(`[data-test-select="${testRealmURL}Person/1"]`);
+    await click(`[data-test-card-catalog-go-button]`);
+
+    await click('[data-test-add-new]');
+    await click(`[data-test-select="${testRealmURL}Person/10"]`);
+    await click(`[data-test-card-catalog-go-button]`);
+
+    await click('[data-test-edit-button]');
+    assert.dom(`[data-test-cards-grid-item]`).exists({ count: 2 });
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}Person/1"]`)
+      .exists();
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}Person/10"]`)
+      .exists();
+  });
+
+  test('CardDef filter is not displayed in filter list', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}Person/1"]`)
+      .exists();
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}CardDef/1"]`)
+      .exists();
+    assert.dom(`[data-test-boxel-filter-list-button="Person"]`).exists();
+    assert.dom(`[data-test-boxel-filter-list-button="CardDef"]`).doesNotExist();
   });
 });

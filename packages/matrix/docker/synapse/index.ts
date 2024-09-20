@@ -14,6 +14,10 @@ import {
 export const SYNAPSE_IP_ADDRESS = '172.20.0.5';
 export const SYNAPSE_PORT = 8008;
 
+const registrationSecretFile = path.resolve(
+  path.join(__dirname, '..', '..', 'registration_secret.txt'),
+);
+
 interface SynapseConfig {
   configDir: string;
   registrationSecret: string;
@@ -97,6 +101,7 @@ interface StartOptions {
   template?: string;
   dataDir?: string;
   containerName?: string;
+  suppressRegistrationSecretFile?: true;
 }
 export async function synapseStart(
   opts?: StartOptions,
@@ -162,6 +167,17 @@ export async function synapseStart(
 
   const synapse: SynapseInstance = { synapseId, ...synCfg };
   synapses.set(synapseId, synapse);
+
+  function cleanupRegistrationSecret() {
+    fse.removeSync(registrationSecretFile);
+  }
+
+  cleanupRegistrationSecret();
+  if (!opts?.suppressRegistrationSecretFile) {
+    fse.writeFileSync(registrationSecretFile, synapse.registrationSecret);
+    process.on('exit', cleanupRegistrationSecret);
+    process.on('SIGINT', cleanupRegistrationSecret);
+  }
   return synapse;
 }
 
@@ -226,6 +242,21 @@ export async function registerUser(
       },
     })
   ).json();
+
+  await updateAccountData(
+    response.user_id,
+    response.access_token,
+    'com.cardstack.boxel.realms',
+    JSON.stringify({
+      realms: [
+        'http://localhost:4202/test/',
+        'http://localhost:4201/experiments/',
+        'https://cardstack.com/base/',
+        // intentionally not including seed realm here
+      ],
+    }),
+  );
+
   return {
     homeServer: response.home_server,
     accessToken: response.access_token,
@@ -356,6 +387,30 @@ export async function updateUser(
       `could not update user: ${res.status} - ${await res.text()}`,
     );
   }
+}
+
+export async function updateAccountData(
+  userId: string,
+  accessToken: string,
+  type: string,
+  data: string,
+): Promise<void> {
+  let response = await fetch(
+    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/user/${userId}/account_data/${type}`,
+    {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: data,
+    },
+  );
+
+  console.log(
+    `updateAccountData result for ${type}: ${response.status}, ${
+      response.statusText
+    }, ${JSON.stringify(await response.json())}`,
+  );
 }
 
 export async function getJoinedRooms(accessToken: string) {

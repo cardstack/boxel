@@ -87,7 +87,7 @@ export default class Login extends Component<Signature> {
       {{on 'click' (fn @setMode 'register')}}
     >Create a new Boxel account</Button>
 
-    <style>
+    <style scoped>
       form {
         display: flex;
         flex-direction: column;
@@ -196,8 +196,8 @@ export default class Login extends Component<Signature> {
       throw e;
     }
     if (auth) {
-      await this.router.refresh();
       await this.matrixService.start(auth);
+      await this.router.refresh();
     } else {
       throw new Error(
         `bug: should be impossible to get here - successful matrix login with no auth response`,

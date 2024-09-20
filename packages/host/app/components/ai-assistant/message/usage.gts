@@ -143,7 +143,7 @@ export default class AiAssistantMessageUsage extends Component {
         </div>
       </:example>
     </FreestyleUsage>
-    <style>
+    <style scoped>
       .example-container {
         background: var(--boxel-ai-purple);
         width: 371px;

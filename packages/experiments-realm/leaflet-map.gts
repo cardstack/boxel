@@ -44,7 +44,7 @@ export class LeafletMap extends CardDef {
         {{@model.lon}}
       </figure>
 
-      <style>
+      <style scoped>
         figure.map {
           margin: 0;
           width: 100%;
@@ -70,6 +70,7 @@ export class LeafletMap extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
 
 
   */

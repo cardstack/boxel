@@ -150,19 +150,20 @@ export default class CardPreviewPanel extends Component<Signature> {
         onScroll=this.onScroll
       }}
     >
-      {{#if (eq this.format 'fitted')}}
-        <FittedFormatGallery @card={{@card}} />
-      {{else if (eq this.format 'embedded')}}
-        <EmbeddedPreview @card={{@card}} />
-      {{else if (eq this.format 'atom')}}
-        <div class='atom-wrapper'>
+      <div class='preview-content'>
+        {{#if (eq this.format 'fitted')}}
+          <FittedFormatGallery @card={{@card}} />
+        {{else if (eq this.format 'embedded')}}
+          <EmbeddedPreview @card={{@card}} />
+        {{else if (eq this.format 'atom')}}
+          <div class='atom-wrapper'>
+            <Preview @card={{@card}} @format={{this.format}} />
+          </div>
+        {{else}}
           <Preview @card={{@card}} @format={{this.format}} />
-        </div>
-      {{else}}
-        <Preview @card={{@card}} @format={{this.format}} />
-      {{/if}}
+        {{/if}}
+      </div>
     </div>
-
     <div
       class='preview-footer'
       {{ResizeModifier setFooterWidthPx=this.setFooterWidthPx}}
@@ -201,7 +202,7 @@ export default class CardPreviewPanel extends Component<Signature> {
       </div>
     </div>
 
-    <style>
+    <style scoped>
       .preview-header {
         background: white;
         border-top-left-radius: var(--boxel-border-radius);
@@ -222,6 +223,11 @@ export default class CardPreviewPanel extends Component<Signature> {
       .preview-body {
         flex-grow: 1;
         overflow-y: auto;
+      }
+
+      .preview-content {
+        height: auto;
+        margin: var(--boxel-sp-sm);
       }
 
       .header-actions {

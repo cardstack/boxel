@@ -50,7 +50,7 @@ test.describe('Login', () => {
     await assertLoggedIn(page);
     let boxelSession = await page.evaluate(async () => {
       // playwright needs a beat before it get access local storage
-      await new Promise((res) => setTimeout(res, 1000));
+      await new Promise((res) => setTimeout(res, 1500));
       return window.localStorage.getItem('boxel-session');
     });
     let token = (JSON.parse(boxelSession!) as { [realmURL: string]: string })[
@@ -59,7 +59,7 @@ test.describe('Login', () => {
     let claims = jwt.verify(token, REALM_SECRET_SEED) as {
       user: string;
       realm: string;
-      permissions: ('read' | 'write')[];
+      permissions: ('read' | 'write' | 'realm-owner')[];
     };
     expect(claims.user).toStrictEqual('@user1:localhost');
     expect(claims.realm).toStrictEqual(`${testHost}/`);
@@ -156,9 +156,6 @@ test.describe('Login', () => {
           '{"user_id":"@b:stack.cards","access_token":"INVALID_TOKEN","home_server":"stack.cards","device_id":"HELLO","well_known":{"m.homeserver":{"base_url":"http://example.com/"}}}'
         )`,
     });
-
-    await openRoot(page);
-    await toggleOperatorMode(page);
 
     await assertLoggedOut(page);
   });

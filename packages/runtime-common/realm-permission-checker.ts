@@ -28,7 +28,7 @@ export default class RealmPermissionChecker {
     );
   }
 
-  async can(username: string, action: 'read' | 'write') {
+  async can(username: string, action: 'read' | 'write' | 'realm-owner') {
     let userPermissions = await this.for(username);
     return userPermissions.includes(action);
   }

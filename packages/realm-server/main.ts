@@ -22,6 +22,7 @@ import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import flattenDeep from 'lodash/flattenDeep';
 
 let log = logger('main');
+const SEED_REALM_USERNAME = 'seed_realm';
 
 if (process.env.REALM_SENTRY_DSN) {
   log.info('Setting up Sentry.');
@@ -61,6 +62,9 @@ if (!REALM_SERVER_MATRIX_USERNAME) {
   process.exit(-1);
 }
 
+const MATRIX_REGISTRATION_SHARED_SECRET =
+  process.env.MATRIX_REGISTRATION_SHARED_SECRET;
+
 if (process.env.DISABLE_MODULE_CACHING === 'true') {
   console.warn(
     `module caching has been disabled, module executables will be served directly from the filesystem`,
@@ -70,12 +74,14 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
 let {
   port,
   matrixURL,
+  realmsRootPath,
+  serverURL = `http://localhost:${port}`,
   distURL = process.env.HOST_URL ?? 'http://localhost:4200',
   path: paths,
   fromUrl: fromUrls,
   toUrl: toUrls,
-  useTestingDomain,
   username: usernames,
+  matrixRegistrationSecretFile,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
   .options({
@@ -94,6 +100,15 @@ let {
       demandOption: true,
       type: 'array',
     },
+    realmsRootPath: {
+      description: 'the path in which dynamically created realms are created',
+      demandOption: true,
+      type: 'string',
+    },
+    serverURL: {
+      description: 'the unresolved URL of the realm server',
+      type: 'string',
+    },
     path: {
       description: 'realm directory path',
       demandOption: true,
@@ -104,11 +119,6 @@ let {
         'the URL of a deployed host app. (This can be provided instead of the --distPath)',
       type: 'string',
     },
-    useTestingDomain: {
-      description:
-        'relaxes document domain rules so that cross origin scripting can be used for test assertions across iframe boundaries',
-      type: 'boolean',
-    },
     matrixURL: {
       description: 'The matrix homeserver for the realm',
       demandOption: true,
@@ -118,6 +128,11 @@ let {
       description: 'The matrix username for the realm user',
       demandOption: true,
       type: 'array',
+    },
+    matrixRegistrationSecretFile: {
+      description:
+        "The path to a file that contains the matrix registration secret (used for matrix tests where the registration secret changes during the realm server's lifespan)",
+      type: 'string',
     },
   })
   .parseSync();
@@ -138,6 +153,13 @@ if (fromUrls.length < paths.length) {
 if (paths.length !== usernames.length) {
   console.error(
     `not enough usernames were provided to satisfy the paths provided. There must be at least one --username set for each --path parameter`,
+  );
+  process.exit(-1);
+}
+
+if (!matrixRegistrationSecretFile && !MATRIX_REGISTRATION_SHARED_SECRET) {
+  console.error(
+    `The MATRIX_REGISTRATION_SHARED_SECRET environment variable is not set. Please make sure this env var has a value (or specify --matrixRegistrationSecretFile)`,
   );
   process.exit(-1);
 }
@@ -168,6 +190,7 @@ let dist: URL = new URL(distURL);
 
   await startWorker();
 
+  let seedPath: string | undefined;
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
 
@@ -178,6 +201,9 @@ let dist: URL = new URL(distURL);
       console.error(`missing username for realm ${url}`);
       process.exit(-1);
     }
+    if (username === SEED_REALM_USERNAME) {
+      seedPath = resolve(String(path));
+    }
 
     let realmAdapter = new NodeAdapter(resolve(String(path)));
     let realm = new Realm(
@@ -186,7 +212,7 @@ let dist: URL = new URL(distURL);
         adapter: realmAdapter,
         getIndexHTML,
         matrix: { url: new URL(matrixURL), username },
-        realmSecretSeed: REALM_SECRET_SEED,
+        secretSeed: REALM_SECRET_SEED,
         virtualNetwork,
         dbAdapter,
         queue,
@@ -195,11 +221,6 @@ let dist: URL = new URL(distURL);
       {
         ...(process.env.DISABLE_MODULE_CACHING === 'true'
           ? { disableModuleCaching: true }
-          : {}),
-        ...(useTestingDomain
-          ? {
-              useTestingDomain,
-            }
           : {}),
       },
     );
@@ -212,18 +233,37 @@ let dist: URL = new URL(distURL);
     username: REALM_SERVER_MATRIX_USERNAME,
     seed: REALM_SECRET_SEED,
   });
-  let server = new RealmServer(
+  let server = new RealmServer({
     realms,
     virtualNetwork,
     matrixClient,
-    REALM_SECRET_SEED,
-  );
+    realmsRootPath,
+    secretSeed: REALM_SECRET_SEED,
+    dbAdapter,
+    queue,
+    assetsURL: dist,
+    getIndexHTML,
+    serverURL: new URL(serverURL),
+    seedPath,
+    matrixRegistrationSecret: MATRIX_REGISTRATION_SHARED_SECRET,
+    matrixRegistrationSecretFile,
+  });
 
-  server.listen(port);
+  let httpServer = server.listen(port);
+  process.on('message', (message) => {
+    if (message === 'stop') {
+      console.log(`stopping realm server on port ${port}...`);
+      httpServer.closeAllConnections();
+      httpServer.close(() => {
+        console.log(`realm server on port ${port} has stopped`);
+        if (process.send) {
+          process.send('stopped');
+        }
+      });
+    }
+  });
 
-  for (let realm of realms) {
-    await realm.start();
-  }
+  await server.start();
 
   log.info(`Realm server listening on port ${port} is serving realms:`);
   let additionalMappings = hrefs.slice(paths.length);
@@ -237,6 +277,10 @@ let dist: URL = new URL(distURL);
     }
   }
   log.info(`Using host url: '${dist}' for card pre-rendering`);
+
+  if (process.send) {
+    process.send('ready');
+  }
 })().catch((e: any) => {
   Sentry.captureException(e);
   console.error(

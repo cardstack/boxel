@@ -1,7 +1,5 @@
 import { visit, currentURL, triggerEvent, waitFor } from '@ember/test-helpers';
 
-import { setupApplicationTest } from 'ember-qunit';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -15,14 +13,17 @@ import {
   testRealmURL,
   lookupLoaderService,
 } from '../helpers';
-import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../helpers/mock-matrix';
+import { setupApplicationTest } from '../helpers/setup';
 
 module('Acceptance | permissioned realm tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
-  setupWindowMock(hooks);
-  setupMatrixServiceMock(hooks);
+  setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [testRealmURL],
+  });
 
   hooks.beforeEach(async function () {
     let loader = lookupLoaderService().loader;
@@ -61,7 +62,7 @@ module('Acceptance | permissioned realm tests', function (hooks) {
             <p>Last name: <@fields.lastName /></p>
             <p>Title: <@fields.title /></p>
           </div>
-          <style>
+          <style scoped>
             div {
               color: green;
               content: '';

@@ -1,6 +1,5 @@
 import { click, waitFor, triggerEvent } from '@ember/test-helpers';
 
-import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
 import {
@@ -36,8 +35,9 @@ import {
   setupBaseRealm,
   StringField,
 } from '../../helpers/base-realm';
-import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent, renderCard } from '../../helpers/render-component';
+import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   let loader: Loader;
@@ -55,12 +55,16 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
 
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
+  setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [testRealmURL],
+    autostart: true,
+  });
   setupBaseRealm(hooks);
   setupCardLogs(
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-  setupMatrixServiceMock(hooks, { autostart: true });
 
   hooks.beforeEach(async function () {
     let permissions: Permissions = {
@@ -411,7 +415,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
             -
             <@fields.currencyName />
           </div>
-          <style>
+          <style scoped>
             .currency {
               display: flex;
               font-weight: bold;

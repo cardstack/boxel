@@ -16,7 +16,7 @@ const Accordion: TemplateOnlyComponent<Signature> = <template>
   <div class='accordion' ...attributes>
     {{yield (hash Item=(component AccordionItem className='item'))}}
   </div>
-  <style>
+  <style scoped>
     .accordion {
       --accordion-background-color: var(--boxel-light);
       --accordion-border: var(--boxel-border);

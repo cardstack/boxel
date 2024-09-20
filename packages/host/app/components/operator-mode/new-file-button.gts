@@ -49,7 +49,7 @@ export default class NewFileButton extends Component<Signature> {
       </:content>
     </BoxelDropdown>
 
-    <style>
+    <style scoped>
       .new-file-button {
         --new-file-button-width: 7.5rem;
         --new-file-button-height: var(--boxel-form-control-height);

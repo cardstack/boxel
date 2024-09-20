@@ -3,7 +3,7 @@ import Component from '@glimmer/component';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
-import { skillCardRef, type Query } from '@cardstack/runtime-common';
+import { skillCardRef } from '@cardstack/runtime-common';
 
 import PillMenu from '@cardstack/host/components/pill-menu';
 
@@ -48,7 +48,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         </span>
       </:headerDetail>
     </PillMenu>
-    <style>
+    <style scoped>
       .skill-menu {
         --boxel-header-gap: var(--boxel-sp-xxs);
         --boxel-header-detail-margin-left: 0;
@@ -89,7 +89,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
     </style>
   </template>
 
-  private get query(): Query {
+  private get query() {
     let selectedCardIds =
       this.args.skills?.map((skill: Skill) => ({
         not: { eq: { id: skill.card.id } },

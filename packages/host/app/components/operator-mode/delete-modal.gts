@@ -71,7 +71,7 @@ export default class DeleteModal extends Component<Signature> {
       </section>
     </Modal>
 
-    <style>
+    <style scoped>
       .content {
         width: 100%;
         margin: 0;

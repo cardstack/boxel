@@ -3,9 +3,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
-import compact from 'ember-composable-helpers/helpers/compact';
-
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq, compact } from '@cardstack/boxel-ui/helpers';
 
 import { DiagonalArrowLeftUp } from '@cardstack/boxel-ui/icons';
 
@@ -194,7 +192,7 @@ export default class Selector extends Component<Signature> {
         {{/each}}
       {{/if}}
     </ul>
-    <style>
+    <style scoped>
       @layer {
         .boxel-selector {
           --boxel-selector-border-radius: var(--boxel-border-radius);

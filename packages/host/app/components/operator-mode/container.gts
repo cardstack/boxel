@@ -155,7 +155,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       {{/if}}
     </Modal>
 
-    <style>
+    <style scoped>
       :global(:root) {
         --operator-mode-bg-color: #686283;
         --boxel-modal-max-width: 100%;

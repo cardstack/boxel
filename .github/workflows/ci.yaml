@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   checks: write
@@ -101,11 +102,18 @@ jobs:
         run: pnpm npx wait-for-localhost 4200
         working-directory: packages/host
       - name: Start realm servers
-        run: pnpm start:without-matrix &
+        run: pnpm start:without-matrix &> /tmp/server.log &
         working-directory: packages/realm-server
       - name: Run Playwright tests
         run: pnpm test:group ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         working-directory: packages/matrix
+      - name: Upload realm server log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: realm-server-log-${{ matrix.shardIndex }}
+          path: /tmp/server.log
+          retention-days: 30
 
       - name: Upload blob report to GitHub Actions Artifacts
         if: ${{ !cancelled() }}
@@ -226,9 +234,6 @@ jobs:
         working-directory: packages/matrix
       - name: realm server test suite
         run: pnpm test:wait-for-servers
-        working-directory: packages/realm-server
-      - name: realm server DOM tests
-        run: pnpm test:dom
         working-directory: packages/realm-server
 
   change-check:

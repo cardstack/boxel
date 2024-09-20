@@ -10,7 +10,11 @@ import { restartableTask } from 'ember-concurrency';
 import { AddButton, Header } from '@cardstack/boxel-ui/components';
 import { cn, gt, not, or } from '@cardstack/boxel-ui/helpers';
 
-import { chooseCard, baseCardRef, type Query } from '@cardstack/runtime-common';
+import {
+  chooseCard,
+  baseCardRef,
+  type CardCatalogQuery,
+} from '@cardstack/runtime-common';
 
 import CardPill from '@cardstack/host/components/card-pill';
 
@@ -30,7 +34,7 @@ interface Signature {
     isExpandableHeader?: boolean;
     headerAction?: () => void;
     canAttachCard?: boolean;
-    query?: Query;
+    query?: CardCatalogQuery;
     onChooseCard?: (card: CardDef) => void;
   };
   Blocks: {
@@ -112,7 +116,7 @@ export default class PillMenu extends Component<Signature> {
         {{/if}}
       {{/if}}
     </div>
-    <style>
+    <style scoped>
       .pill-menu {
         --pill-menu-spacing: var(--boxel-pill-menu-spacing, var(--boxel-sp-xs));
         --boxel-header-padding: 0 0 0 var(--pill-menu-spacing);

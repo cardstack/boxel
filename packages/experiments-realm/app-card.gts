@@ -12,7 +12,9 @@ import {
   StringField,
   type CardContext,
 } from 'https://cardstack.com/base/card-api';
+import { CardContainer } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
+import { baseRealm } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -23,17 +25,14 @@ import { restartableTask } from 'ember-concurrency';
 import {
   AddButton,
   Tooltip,
-  FieldContainer,
-  BoxelButton,
-  BoxelInput,
   TabbedHeader,
 } from '@cardstack/boxel-ui/components';
 
 import {
   getLiveCards,
   codeRefWithAbsoluteURL,
-  type Loader,
   type Query,
+  type Loader,
   LooseSingleCardDocument,
   isSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -46,24 +45,16 @@ export class Tab extends FieldDef {
 }
 
 class AppCardIsolated extends Component<typeof AppCard> {
-  @tracked moduleName = '';
-  @action updateModuleName(val: string) {
+  async setupInitialTabs() {
     this.errorMessage = '';
-    this.moduleName = val;
-  }
-  @action async setupInitialTabs() {
-    if (!this.moduleName) {
-      this.errorMessage = 'Module name is required';
-      return;
-    }
-    if (!this.currentRealm) {
-      this.errorMessage = 'Current realm is not available';
+    if (!this.args.model.moduleId) {
+      this.errorMessage = 'ModuleId is not available.';
       return;
     }
     let loader: Loader = (import.meta as any).loader;
     let module;
     try {
-      module = await loader.import(this.currentRealm.href + this.moduleName);
+      module = await loader.import(this.args.model.moduleId);
     } catch (e) {
       console.error(e);
       this.errorMessage =
@@ -74,7 +65,8 @@ class AppCardIsolated extends Component<typeof AppCard> {
       ([_, declaration]) =>
         declaration &&
         typeof declaration === 'function' &&
-        'isCardDef' in declaration,
+        'isCardDef' in declaration &&
+        !AppCard.isPrototypeOf(declaration),
     );
     let tabs = [];
     for (let [name, _declaration] of exportedCards) {
@@ -84,7 +76,7 @@ class AppCardIsolated extends Component<typeof AppCard> {
           tabId: name,
           ref: {
             name,
-            module: this.moduleName,
+            module: this.args.model.moduleId,
           },
           isTable: false,
         }),
@@ -93,7 +85,6 @@ class AppCardIsolated extends Component<typeof AppCard> {
 
     this.args.model.tabs = tabs;
     this.setActiveTab(0);
-    this.moduleName = '';
   }
 
   <template>
@@ -142,7 +133,15 @@ class AppCardIsolated extends Component<typeof AppCard> {
             </div>
           {{else}}
             {{#if this.instances.length}}
-              <CardsGrid @instances={{this.instances}} @context={{@context}} />
+              {{#if this.query}}
+                {{#if this.realms}}
+                  <CardsGrid
+                    @query={{this.query}}
+                    @realms={{this.realms}}
+                    @context={{@context}}
+                  />
+                {{/if}}
+              {{/if}}
             {{else}}
               {{#if this.liveQuery.isLoading}}
                 Loading...
@@ -165,36 +164,10 @@ class AppCardIsolated extends Component<typeof AppCard> {
               </Tooltip>
             </div>
           {{/if}}
-        {{else}}
-          <p>
-            It looks like this app hasn't been setup yet. For a quick setup,
-            enter the module name and click create.
-          </p>
-          <div class='module-input-group'>
-            <FieldContainer
-              @label='Module Name'
-              @vertical={{true}}
-              @tag='label'
-            >
-              <BoxelInput
-                @value={{this.moduleName}}
-                @onInput={{this.updateModuleName}}
-                @state={{if this.errorMessage 'invalid' 'initial'}}
-                @errorMessage={{this.errorMessage}}
-              />
-            </FieldContainer>
-            <BoxelButton
-              @kind='primary'
-              @size='touch'
-              {{on 'click' this.setupInitialTabs}}
-            >
-              Create
-            </BoxelButton>
-          </div>
         {{/if}}
       </div>
     </section>
-    <style>
+    <style scoped>
       .app-card {
         position: relative;
         min-height: 100%;
@@ -285,6 +258,10 @@ class AppCardIsolated extends Component<typeof AppCard> {
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
+    if (!this.tabs?.length) {
+      this.setupInitialTabs();
+      return;
+    }
     this.setTab();
     this.setSearch();
   }
@@ -300,6 +277,10 @@ class AppCardIsolated extends Component<typeof AppCard> {
 
   get currentRealm() {
     return this.args.model[realmURL];
+  }
+
+  get realms(): string[] {
+    return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
   }
 
   get activeTab() {
@@ -365,6 +346,32 @@ class AppCardIsolated extends Component<typeof AppCard> {
   @action setActiveTab(index: number) {
     this.activeTabIndex = index;
     this.setSearch();
+  }
+
+  get query() {
+    if (!this.activeTabRef) {
+      return;
+    }
+    return {
+      filter: {
+        every: [
+          { type: this.activeTabRef },
+          { not: { eq: { id: this.args.model.id! } } },
+        ],
+      },
+      // sorting by title so that we can maintain stability in
+      // the ordering of the search results (server sorts results
+      // by order indexed by default)
+      sort: [
+        {
+          on: {
+            module: `${baseRealm.url}card-api`,
+            name: 'CardDef',
+          },
+          by: 'title',
+        },
+      ],
+    };
   }
 
   setSearch(query?: Query) {
@@ -433,18 +440,24 @@ class AppCardIsolated extends Component<typeof AppCard> {
   );
 }
 
+function removeFileExtension(cardUrl: string) {
+  return cardUrl.replace(/\.[^/.]+$/, '');
+}
+
 export class AppCard extends CardDef {
   static displayName = 'App Card';
   static prefersWideFormat = true;
   static headerColor = '#ffffff';
   @field tabs = containsMany(Tab);
   @field headerIcon = contains(Base64ImageField);
+  @field moduleId = contains(StringField);
   static isolated = AppCardIsolated;
 }
 
 export class CardsGrid extends GlimmerComponent<{
   Args: {
-    instances: CardDef[] | [];
+    query: Query;
+    realms: string[];
     context?: CardContext;
     isListFormat?: boolean;
   };
@@ -452,27 +465,42 @@ export class CardsGrid extends GlimmerComponent<{
 }> {
   <template>
     <ul class={{cn 'cards-grid' list-format=@isListFormat}} ...attributes>
-      {{! use "key" to keep the list stable between refreshes }}
-      {{#each @instances key='id' as |card|}}
-        <li
-          class='cards-grid-item'
-          {{! In order to support scrolling cards into view
-            we use a selector that is not pruned out in production builds }}
-          data-cards-grid-item={{card.id}}
-          {{@context.cardComponentModifier
-            card=card
-            format='data'
-            fieldType=undefined
-            fieldName=undefined
-          }}
+      {{#let
+        (component @context.prerenderedCardSearchComponent)
+        as |PrerenderedCardSearch|
+      }}
+        <PrerenderedCardSearch
+          @query={{@query}}
+          @format='fitted'
+          @realms={{@realms}}
         >
-          {{#let (this.getComponent card) as |Card|}}
-            <Card />
-          {{/let}}
-        </li>
-      {{/each}}
+          <:loading>
+            Loading...
+          </:loading>
+          <:response as |cards|>
+            {{#each cards as |card|}}
+              <li
+                class='cards-grid-item'
+                {{@context.cardComponentModifier
+                  cardId=card.url
+                  format='data'
+                  fieldType=undefined
+                  fieldName=undefined
+                }}
+                data-test-cards-grid-item={{removeFileExtension card.url}}
+                {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
+                data-cards-grid-item={{removeFileExtension card.url}}
+              >
+                <CardContainer class='card' @displayBoundaries={{true}}>
+                  {{card.component}}
+                </CardContainer>
+              </li>
+            {{/each}}
+          </:response>
+        </PrerenderedCardSearch>
+      {{/let}}
     </ul>
-    <style>
+    <style scoped>
       .cards-grid {
         --grid-card-width: 10.25rem; /* 164px */
         --grid-card-height: 14rem; /* 224px */
@@ -494,8 +522,11 @@ export class CardsGrid extends GlimmerComponent<{
         width: var(--grid-card-width);
         height: var(--grid-card-height);
       }
-      .cards-grid-item > :deep(.field-component-card.fitted-format) {
-        --overlay-fitted-card-header-height: 0;
+      .card {
+        height: 100%;
+        width: 100%;
+        container-name: fitted-card;
+        container-type: size;
       }
     </style>
   </template>

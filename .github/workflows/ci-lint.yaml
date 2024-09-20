@@ -81,3 +81,16 @@ jobs:
         if: always()
         run: pnpm run lint
         working-directory: packages/runtime-common
+      - name: Lint Base Realm
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/base
+      - name: Lint Experiments Realm
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/experiments-realm
+      # uncomment this after there are actual gts files to lint in seed realm
+      # - name: Lint Seed Realm
+      #   if: always()
+      #   run: pnpm run lint
+      #   working-directory: packages/seed-realm

@@ -1,5 +1,6 @@
 import { Deferred } from './deferred';
 import {
+  makeCardTypeSummaryDoc,
   transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
 } from './card-document';
@@ -95,17 +96,19 @@ export interface FileRef {
   path: LocalPath;
   content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
   lastModified: number;
+  created: number;
+
   [key: symbol]: object;
 }
 
 export interface TokenClaims {
   user: string;
   realm: string;
-  permissions: ('read' | 'write')[];
+  permissions: ('read' | 'write' | 'realm-owner')[];
 }
 
 export interface RealmPermissions {
-  [username: string]: ('read' | 'write')[];
+  [username: string]: ('read' | 'write' | 'realm-owner')[];
 }
 
 export interface RealmAdapter {
@@ -154,7 +157,6 @@ export interface RealmAdapter {
 }
 
 interface Options {
-  useTestingDomain?: true;
   disableModuleCaching?: true;
 }
 
@@ -229,7 +231,6 @@ export class Realm {
   #realmIndexQueryEngine: RealmIndexQueryEngine;
   #adapter: RealmAdapter;
   #router: Router;
-  #useTestingDomain = false;
   #log = logger('realm');
   #perfLog = logger('perf');
   #startTime = Date.now();
@@ -276,7 +277,7 @@ export class Realm {
       adapter,
       getIndexHTML,
       matrix,
-      realmSecretSeed,
+      secretSeed,
       dbAdapter,
       queue,
       virtualNetwork,
@@ -286,7 +287,7 @@ export class Realm {
       adapter: RealmAdapter;
       getIndexHTML: () => Promise<string>;
       matrix: MatrixConfig;
-      realmSecretSeed: string;
+      secretSeed: string;
       dbAdapter: DBAdapter;
       queue: Queue;
       virtualNetwork: VirtualNetwork;
@@ -296,14 +297,13 @@ export class Realm {
   ) {
     this.paths = new RealmPaths(new URL(url));
     let { username, url: matrixURL } = matrix;
-    this.#realmSecretSeed = realmSecretSeed;
+    this.#realmSecretSeed = secretSeed;
     this.#matrixClient = new MatrixClient({
       matrixURL,
       username,
-      seed: realmSecretSeed,
+      seed: secretSeed,
     });
     this.#getIndexHTML = getIndexHTML;
-    this.#useTestingDomain = Boolean(opts?.useTestingDomain);
     this.#assetsURL = assetsURL;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
 
@@ -357,6 +357,11 @@ export class Realm {
         '/_search-prerendered',
         SupportedMimeType.CardJson,
         this.searchPrerendered.bind(this),
+      )
+      .get(
+        '/_types',
+        SupportedMimeType.CardTypeSummary,
+        this.fetchCardTypeSummary.bind(this),
       )
       .post(
         '/_session',
@@ -814,8 +819,6 @@ export class Realm {
       (_match, g1, g2, g3) => {
         let config = JSON.parse(decodeURIComponent(g2));
         config = merge({}, config, {
-          ownRealmURL: this.url, // unresolved url
-          resolvedOwnRealmURL: this.url,
           hostsOwnAssets: !isNode,
           realmsServed: opts?.realmsServed,
           assetsURL: this.#assetsURL.href,
@@ -829,69 +832,6 @@ export class Realm {
         /(src|href)="\//g,
         `$1="${this.#assetsURL.href}`,
       );
-
-      // this installs an event listener to allow a test driver to introspect
-      // the DOM from a different localhost:4205 origin (the test driver's
-      // origin)
-      if (this.#useTestingDomain) {
-        indexHTML = `
-          ${indexHTML}
-          <script>
-            window.addEventListener('message', (event) => {
-              console.log('received event in realm index HTML', event);
-              if ([
-                  'http://localhost:4205',
-                  'http://localhost:7357',
-                  'http://127.0.0.1:4205',
-                  'http://127.0.0.1:7357'
-                ].includes(event.origin)) {
-                if (event.data === 'location') {
-                  event.source.postMessage(document.location.href, event.origin);
-                  return;
-                }
-
-                let { data: { querySelector, querySelectorAll, click, fillInput, uuid } } = event;
-                let response;
-                if (querySelector) {
-                  let element = document.querySelector(querySelector);
-                  response = element ? element.outerHTML : null;
-                } else if (querySelectorAll) {
-                  response = [...document.querySelectorAll(querySelectorAll)].map(el => el.outerHTML);
-                } else if (click) {
-                  let el = document.querySelector(click);
-                  if (el) {
-                    el.click();
-                    response = null;
-                  } else {
-                    response = "cannot click on element: could not find '" + click + "'";
-                  }
-                } else if (fillInput) {
-                  let [ target, text ] = fillInput;
-                  let el = document.querySelector(target);
-                  if (el && text != undefined) {
-                    el.value = text;
-                    el.dispatchEvent(new Event('input'));
-                    response = null;
-                  } else if (text == undefined) {
-                    response = "Must provide '" + text + "' when calling 'fillIn'.)";
-                  } else {
-                    response =
-                      "Element not found when calling 'fillInput(" + target + ")'.";
-                  }
-                } else if (uuid) {
-                  // this can be ignored
-                  response = null
-                } else {
-                  response = 'Do not know how to handle event data: ' + JSON.stringify(event.data);
-                }
-                console.log('event response:', response);
-                event.source.postMessage(response, event.origin);
-              }
-            });
-          </script>
-          </
-        `;
-      }
     }
     return indexHTML;
   }
@@ -901,6 +841,7 @@ export class Realm {
     requestContext: RequestContext,
   ): Promise<ResponseWithNodeStream> {
     let headers = {
+      'x-created': formatRFC7231(ref.created * 1000),
       'last-modified': formatRFC7231(ref.lastModified * 1000),
       ...(Symbol.for('shimmed-module') in ref
         ? { 'X-Boxel-Shimmed-Module': 'true' }
@@ -1618,6 +1559,8 @@ export class Realm {
 
     let parsedQueryString = qs.parse(new URL(request.url).search.slice(1));
     let htmlFormat = parsedQueryString.prerenderedHtmlFormat as string;
+    let cardUrls = parsedQueryString.cardUrls as string[];
+
     if (!isValidPrerenderedHtmlFormat(htmlFormat)) {
       return badRequest(
         JSON.stringify({
@@ -1628,8 +1571,9 @@ export class Realm {
         requestContext,
       );
     }
-    // prerenederedHtmlFormat is a special parameter only for this endpoint so don't include it in our Query for card search
+    // prerenderedHtmlFormat and cardUrls are special parameters only for this endpoint so don't include it in our Query for standard card search
     delete parsedQueryString.prerenderedHtmlFormat;
+    delete parsedQueryString.cardUrls;
 
     let cardsQuery = parsedQueryString;
     assertQuery(parsedQueryString);
@@ -1639,6 +1583,7 @@ export class Realm {
       {
         useWorkInProgressIndex,
         htmlFormat,
+        cardUrls,
       },
     );
 
@@ -1653,10 +1598,24 @@ export class Realm {
     });
   }
 
-  private async realmInfo(
+  private async fetchCardTypeSummary(
     _request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    let results = await this.#realmIndexQueryEngine.fetchCardTypeSummary();
+
+    let doc = makeCardTypeSummaryDoc(results);
+
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: { 'content-type': SupportedMimeType.CardJson },
+      },
+      requestContext,
+    });
+  }
+
+  private async parseRealmInfo(): Promise<RealmInfo> {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
     let realmConfig = await this.readFileAsText(localPath, undefined);
@@ -1665,6 +1624,9 @@ export class Realm {
       backgroundURL: null,
       iconURL: null,
     };
+    if (!realmConfig) {
+      return realmInfo;
+    }
 
     if (realmConfig) {
       try {
@@ -1677,6 +1639,15 @@ export class Realm {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }
     }
+    return realmInfo;
+  }
+
+  private async realmInfo(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let realmInfo = await this.parseRealmInfo();
+
     let doc = {
       data: {
         id: this.url,
@@ -1817,7 +1788,7 @@ export class Realm {
       chunkArr.push(`"${item}": ${JSON.stringify((data as any)[item])}`);
     }
     let chunk = sseToChunkData(type, `{${chunkArr.join(', ')}}`, id);
-    await Promise.all(
+    await Promise.allSettled(
       this.listeningClients.map((client) => writeToStream(client, chunk)),
     );
   }
@@ -1831,7 +1802,6 @@ export class Realm {
       init: {
         headers: { 'content-type': 'text/html' },
       },
-      relaxDocumentDomain: this.#useTestingDomain,
       requestContext,
     });
   }

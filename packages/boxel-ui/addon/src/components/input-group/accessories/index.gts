@@ -28,7 +28,7 @@ export const Button: TemplateOnlyComponent<ButtonSignature> = <template>
   >
     {{yield}}
   </BoxelButton>
-  <style>
+  <style scoped>
     .accessory {
       border: 1px solid var(--boxel-input-group-border-color);
       border-radius: var(--boxel-input-group-border-radius);
@@ -65,7 +65,7 @@ export const IconButton: TemplateOnlyComponent<IconButtonSignature> = <template>
     data-test-boxel-input-group-icon-button-accessory
     ...attributes
   />
-  <style>
+  <style scoped>
     .accessory {
       border: 1px solid var(--boxel-input-group-border-color);
       border-radius: var(--boxel-input-group-border-radius);
@@ -93,7 +93,7 @@ export const Text: TemplateOnlyComponent<TextSignature> = <template>
     data-test-boxel-input-group-text-accessory
     ...attributes
   >{{yield}}</span>
-  <style>
+  <style scoped>
     .accessory {
       border: 1px solid var(--boxel-input-group-border-color);
       border-radius: var(--boxel-input-group-border-radius);
@@ -163,7 +163,7 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
         {{/if}}
       </BoxelSelect>
     </div>
-    <style>
+    <style scoped>
       .boxel-input-group__accessory {
         border: 1px solid var(--boxel-input-group-border-color);
         border-radius: var(--boxel-input-group-border-radius);

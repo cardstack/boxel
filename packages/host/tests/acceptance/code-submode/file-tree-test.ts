@@ -8,9 +8,7 @@ import {
   triggerEvent,
 } from '@ember/test-helpers';
 
-import { setupApplicationTest } from 'ember-qunit';
 import window from 'ember-window-mock';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -23,7 +21,8 @@ import {
   visitOperatorMode,
   waitForCodeEditor,
 } from '../../helpers';
-import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
+import { setupApplicationTest } from '../../helpers/setup';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -64,7 +63,7 @@ const personCardSource = `
           <p>Address List: <@fields.address /></p>
           <p>Friends: <@fields.friends /></p>
         </div>
-        <style>
+        <style scoped>
           div {
             color: green;
             content: '';
@@ -169,7 +168,7 @@ const friendCardSource = `
           <p>Last name: <@fields.lastName /></p>
           <p>Title: <@fields.title /></p>
         </div>
-        <style>
+        <style scoped>
           div {
             color: green;
             content: '';
@@ -190,8 +189,10 @@ const realmInfo = {
 module('Acceptance | code submode | file-tree tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupWindowMock(hooks);
-  let { setRealmPermissions } = setupMatrixServiceMock(hooks);
+  let { setRealmPermissions } = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [testRealmURL],
+  });
 
   hooks.beforeEach(async function () {
     setRealmPermissions({ [testRealmURL]: ['read', 'write'] });
@@ -743,15 +744,23 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       ],
       submode: 'code',
       fileView: 'browser',
-      codePath: `${testRealmURL}person-entry.json`,
+
+      // this was picked because it's way out in the middle of a long list of
+      // files. So it will get scrolled to the middle of the visible window,
+      // such that it's following entry (z80) is always on-screen.
+      //
+      // If instead we picked a file whose neighbor may hang off the bottom of
+      // the screen, choosing that neighbor would intentionally cause scroll and
+      // fail our test.
+      codePath: `${testRealmURL}z79.json`,
     });
 
-    await waitFor('[data-test-file="person.gts"]');
+    await waitFor('[data-test-file="z80.json"]');
 
     let scrollablePanel = find('[data-test-togglable-left-panel]');
     let currentScrollTop = scrollablePanel?.scrollTop;
 
-    await click('[data-test-file="person.gts"]');
+    await click('[data-test-file="z80.json"]');
 
     let newScrollTop = scrollablePanel?.scrollTop;
 

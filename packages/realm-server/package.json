@@ -65,12 +65,11 @@
     "typescript-memoize": "^1.1.1",
     "uuid": "^9.0.1",
     "wait-for-localhost-cli": "^3.2.0",
+    "yaml": "^2.5.1",
     "yargs": "^17.5.1"
   },
   "scripts": {
     "test": "./scripts/remove-test-dbs.sh && LOG_LEVELS=\"pg-adapter=warn,realm:requests=warn,current-run=error${LOG_LEVELS:+,}${LOG_LEVELS}\" NODE_NO_WARNINGS=1 PGPORT=5435 qunit --require ts-node/register/transpile-only tests/index.ts",
-    "test:dom": "cd ../matrix && pnpm register-test-user && cd ../realm-server && start-server-and-test 'pnpm run wait' 'http://127.0.0.1:4205' 'testem ci -f ./testem.js'",
-    "start:test-container": "http-server ./dom-tests -p 4205 --silent",
     "start:matrix": "cd ../matrix && pnpm assert-synapse-running",
     "start:smtp": "cd ../matrix && pnpm assert-smtp-running",
     "start:pg": "./scripts/start-pg.sh",
@@ -78,6 +77,7 @@
     "test:wait-for-servers": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run wait' 'http-get://localhost:4201/base/fields/boolean-field?acceptHeader=application%2Fvnd.card%2Bjson' 'pnpm run wait' 'http-get://localhost:4202/node-test/person-1?acceptHeader=application%2Fvnd.card%2Bjson|http://localhost:8008|http://localhost:5001' 'test'",
     "setup:base-in-deployment": "mkdir -p /persistent/base && cp --verbose --update --recursive ../base/. /persistent/base/",
     "setup:experiments-in-deployment": "mkdir -p /persistent/experiments && cp --verbose --update --recursive ../experiments-realm/. /persistent/experiments/",
+    "setup:seed-in-deployment": "mkdir -p /persistent/seed && cp --verbose --update --recursive ../seed-realm/. /persistent/seed/",
     "start": "PGPORT=5435 NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
     "start:base": "./scripts/start-base.sh",
     "start:test-realms": "./scripts/start-test-realms.sh",

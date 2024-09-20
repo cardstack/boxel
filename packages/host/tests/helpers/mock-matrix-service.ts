@@ -49,7 +49,11 @@ let nonce = 0;
 export type MockMatrixService = MatrixService & {
   sendReactionDeferred: Deferred<void>; // used to assert applying state in apply button
   cardAPI: typeof cardApi;
-  createAndJoinRoom(roomId: string, roomName?: string): Promise<string>;
+  createAndJoinRoom(
+    roomId: string,
+    roomName: string,
+    timestamp?: number,
+  ): Promise<string>;
 };
 
 class MockClient {
@@ -125,6 +129,7 @@ function generateMockMatrixService(
     cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
     failedCommandState: TrackedMap<string, Error> = new TrackedMap();
     cardHashes: Map<string, string> = new Map(); // hashes <> event id
+    skillCardHashes: Map<string, string> = new Map(); // hashes <> event id
     currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
       new TrackedMap();
 
@@ -132,10 +137,14 @@ function generateMockMatrixService(
       await this.loginToRealms();
     }
 
+    async loadDefaultSkills() {
+      return [];
+    }
+
     private async loginToRealms() {
       // This is where we would actually load user-specific choices out of the
       // user's profile based on this.client.getUserId();
-      let activeRealms = this.cardService.realmURLs;
+      let activeRealms = this.cardService.userRealms;
 
       await Promise.all(
         activeRealms.map(async (realmURL) => {
@@ -199,7 +208,7 @@ function generateMockMatrixService(
       if (document.querySelector('[data-test-throw-room-error]')) {
         throw new Error('Intentional error thrown');
       }
-      return await this.createAndJoinRoom(name);
+      return await this.createAndJoinRoom(name, name);
     }
 
     async sendReactionEvent(roomId: string, eventId: string, status: string) {
@@ -277,7 +286,7 @@ function generateMockMatrixService(
           transaction_id: '1',
         },
       };
-      await addRoomEvent(this, roomEvent);
+      await addRoomEvent(this as unknown as MatrixService, roomEvent);
       return roomEvent;
     }
 
@@ -321,6 +330,7 @@ function generateMockMatrixService(
       roomId: string,
       body: string | undefined,
       attachedCards: CardDef[],
+      skillCards: CardDef[] = [],
       clientGeneratedId: string,
       _context?: OperatorModeContext,
     ) {
@@ -330,6 +340,12 @@ function generateMockMatrixService(
         roomId,
         this.cardHashes,
       );
+      let attachedSkillEventIds = await this.getCardEventIds(
+        skillCards,
+        roomId,
+        this.skillCardHashes,
+        { includeComputeds: true, maybeRelativeURL: null },
+      );
       let content = {
         body,
         msgtype: 'org.boxel.message',
@@ -338,6 +354,7 @@ function generateMockMatrixService(
         clientGeneratedId,
         data: {
           attachedCardsEventIds,
+          attachedSkillEventIds,
         },
       };
       await this.sendEvent(roomId, 'm.room.message', content);
@@ -391,8 +408,12 @@ function generateMockMatrixService(
       await this.profile.load.perform();
     }
 
-    async createAndJoinRoom(roomId: string, name?: string) {
-      await addRoomEvent(this, {
+    async createAndJoinRoom(
+      roomId: string,
+      name: string,
+      timestamp = Date.now(),
+    ) {
+      await addRoomEvent(this as unknown as MatrixService, {
         event_id: 'eventname',
         room_id: roomId,
         type: 'm.room.name',
@@ -400,11 +421,11 @@ function generateMockMatrixService(
         status: null,
       });
 
-      await addRoomEvent(this, {
+      await addRoomEvent(this as unknown as MatrixService, {
         event_id: 'eventcreate',
         room_id: roomId,
         type: 'm.room.create',
-        origin_server_ts: Date.now(),
+        origin_server_ts: timestamp,
         content: {
           creator: '@testuser:staging',
           room_version: '0',
@@ -412,23 +433,23 @@ function generateMockMatrixService(
         status: null,
       });
 
-      await addRoomEvent(this, {
+      await addRoomEvent(this as unknown as MatrixService, {
         event_id: 'eventjoin',
         room_id: roomId,
         type: 'm.room.member',
         sender: '@testuser:staging',
         state_key: '@testuser:staging',
-        origin_server_ts: Date.now(),
+        origin_server_ts: timestamp,
         content: {
           displayname: 'testuser',
           membership: 'join',
-          membershipTs: Date.now(),
+          membershipTs: timestamp,
           membershipInitiator: '@testuser:staging',
         },
         status: null,
       });
 
-      await addRoomEvent(this, {
+      await addRoomEvent(this as unknown as MatrixService, {
         event_id: 'eventinvite',
         room_id: roomId,
         type: 'm.room.member',

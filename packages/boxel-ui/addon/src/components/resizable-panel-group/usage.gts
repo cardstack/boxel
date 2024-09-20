@@ -240,7 +240,7 @@ export default class ResizablePanelUsage extends Component {
         />
       </:cssVars>
     </FreestyleUsage>
-    <style>
+    <style scoped>
       .vertical-container {
         height: 30rem;
       }

@@ -123,18 +123,6 @@ export class StackItem {
     await Promise.all([this.cardResource?.loaded, this.newCardApiPromise]);
   }
 
-  async setCardURL(url: URL) {
-    if (this.cardResource) {
-      throw new Error(
-        `Cannot set cardURL ${url.href} on this stack item when CardResource has already been set`,
-      );
-    }
-
-    this.cardResource = getCard(this.owner, () => url.href);
-    await this.cardResource.loaded;
-    this.newCard = undefined;
-  }
-
   clone(args: Partial<Args>) {
     let {
       card,

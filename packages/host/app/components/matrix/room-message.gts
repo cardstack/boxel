@@ -180,7 +180,7 @@ export default class RoomMessage extends Component<Signature> {
         {{#if @message.command}}
           <div
             class='command-button-bar'
-            {{! In test, if we change this isIdle check to the task running locally on this component, it will fail because roomMessages get destroyed during re-indexing. 
+            {{! In test, if we change this isIdle check to the task running locally on this component, it will fail because roomMessages get destroyed during re-indexing.
             Since services are long-lived so it we will not have this issue. I think this will go away when we convert our room field into a room component }}
             {{! TODO: Convert to non-EC async method after fixing CS-6987 }}
             data-test-command-card-idle={{this.commandService.run.isIdle}}
@@ -200,10 +200,6 @@ export default class RoomMessage extends Component<Signature> {
               data-test-command-apply={{this.applyButtonState}}
             />
           </div>
-
-          {{#let this.getComponent as |Component|}}
-            <Component @format='embedded' />
-          {{/let}}
           {{#if this.isDisplayingCode}}
             <div class='preview-code'>
               <Button
@@ -238,11 +234,14 @@ export default class RoomMessage extends Component<Signature> {
               />
             </div>
           {{/if}}
+          {{#let this.getComponent as |Component|}}
+            <Component @format='embedded' />
+          {{/let}}
         {{/if}}
       </AiAssistantMessage>
     {{/if}}
 
-    <style>
+    <style scoped>
       .room-message {
         --ai-assistant-message-padding: var(--boxel-sp);
       }
@@ -273,7 +272,7 @@ export default class RoomMessage extends Component<Signature> {
         --fill-container-spacing: calc(
           -1 * var(--ai-assistant-message-padding)
         );
-        margin: var(--boxel-sp) var(--fill-container-spacing)
+        margin: var(--boxel-sp) var(--fill-container-spacing) 0
           var(--fill-container-spacing);
         padding: var(--spacing) 0;
         background-color: var(--boxel-dark);

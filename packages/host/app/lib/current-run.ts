@@ -59,6 +59,7 @@ const log = logger('current-run');
 interface CardType {
   refURL: string;
   codeRef: CodeRef;
+  displayName: string;
 }
 type TypesWithErrors =
   | {
@@ -293,7 +294,7 @@ export class CurrentRun {
       error.deps = [url.href];
       throw error;
     }
-    let { content, lastModified } = fileRef;
+    let { content, lastModified, created } = fileRef;
     if (hasExecutableExtension(url.href)) {
       await this.indexModule(url, fileRef);
     } else {
@@ -326,6 +327,7 @@ export class CurrentRun {
             path: localPath,
             source: content,
             lastModified,
+            resourceCreatedAt: created,
             resource,
             identityContext,
           });
@@ -376,6 +378,7 @@ export class CurrentRun {
       type: 'module',
       source: ref.content,
       lastModified: ref.lastModified,
+      resourceCreatedAt: ref.created,
       deps: new Set(deps),
     });
     this.stats.modulesIndexed++;
@@ -385,12 +388,14 @@ export class CurrentRun {
     path,
     source,
     lastModified,
+    resourceCreatedAt,
     resource,
     identityContext,
   }: {
     path: LocalPath;
     source: string;
     lastModified: number;
+    resourceCreatedAt: number;
     resource: LooseCardResource;
     identityContext: IdentityContextType;
   }): Promise<void> {
@@ -484,6 +489,7 @@ export class CurrentRun {
           id: instanceURL.href,
           meta: {
             lastModified,
+            resourceCreatedAt,
             realmInfo: this.#realmInfo,
             realmURL: this.realmURL.href,
           },
@@ -500,11 +506,7 @@ export class CurrentRun {
       // Add a "pseudo field" to the search doc for the card type. We use the
       // "_" prefix to make a decent attempt to not pollute the userland
       // namespace for cards
-      if (cardType.displayName === 'Card') {
-        searchData._cardType = cardType.name;
-      } else {
-        searchData._cardType = cardType.displayName;
-      }
+      searchData._cardType = getDisplayName(cardType);
     } catch (err: any) {
       uncaughtError = err;
     }
@@ -541,7 +543,11 @@ export class CurrentRun {
         embeddedHtml,
         fittedHtml,
         lastModified,
+        resourceCreatedAt,
         types: typesMaybeError.types.map(({ refURL }) => refURL),
+        displayNames: typesMaybeError.types.map(
+          ({ displayName }) => displayName,
+        ),
         deps: new Set([
           moduleURL,
           ...(await this.loaderService.loader.getConsumedModules(moduleURL)),
@@ -652,6 +658,7 @@ export class CurrentRun {
       types.push({
         refURL: internalKeyFor(loadedCardRef, undefined),
         codeRef: loadedCardRef,
+        displayName: getDisplayName(loadedCard),
       });
       if (!isEqual(loadedCardRef, baseCardRef)) {
         fullRef = {
@@ -690,4 +697,12 @@ function unwrap(html: string): string {
     .replace(/^<!---->/, '')
     .replace(/<\/div>$/, '')
     .trim();
+}
+
+function getDisplayName(card: typeof CardDef) {
+  if (card.displayName === 'Card') {
+    return card.name;
+  } else {
+    return card.displayName;
+  }
 }

@@ -6,6 +6,7 @@ import {
   hasExecutableExtension,
   trimExecutableExtension,
   RealmPaths,
+  unixTime,
 } from './index';
 import { transpileJS } from './transpile';
 import {
@@ -23,6 +24,7 @@ import { type SerializedError } from './error';
 import { type DBAdapter } from './db';
 import {
   coerceTypes,
+  RealmMetaTable,
   type BoxelIndexTable,
   type RealmVersionsTable,
 } from './index-structure';
@@ -59,6 +61,7 @@ export interface InstanceEntry {
   type: 'instance';
   source: string;
   lastModified: number;
+  resourceCreatedAt: number;
   resource: CardResource;
   searchData: Record<string, any>;
   isolatedHtml?: string;
@@ -66,6 +69,7 @@ export interface InstanceEntry {
   fittedHtml?: Record<string, string>;
   atomHtml?: string;
   types: string[];
+  displayNames: string[];
   deps: Set<string>;
 }
 
@@ -78,6 +82,7 @@ interface ModuleEntry {
   type: 'module';
   source: string;
   lastModified: number;
+  resourceCreatedAt: number;
   deps: Set<string>;
 }
 
@@ -158,8 +163,10 @@ export class Batch {
               atom_html: entry.atomHtml,
               deps: [...entry.deps],
               types: entry.types,
+              display_names: entry.displayNames,
               source: entry.source,
               last_modified: entry.lastModified,
+              resource_created_at: entry.resourceCreatedAt,
             }
           : entry.type === 'module'
           ? {
@@ -167,6 +174,7 @@ export class Batch {
               deps: [...entry.deps],
               source: entry.source,
               last_modified: entry.lastModified,
+              resource_created_at: entry.resourceCreatedAt,
               transpiled_code: transpileJS(
                 entry.source,
                 new RealmPaths(this.realmURL).local(url),
@@ -202,31 +210,10 @@ export class Batch {
   }
 
   async done(): Promise<{ totalIndexEntries: number }> {
-    let { nameExpressions, valueExpressions } = asExpressions({
-      realm_url: this.realmURL.href,
-      current_version: this.realmVersion,
-    } as RealmVersionsTable);
-    // Make the batch updates live
-    await this.query([
-      ...upsert(
-        'realm_versions',
-        'realm_versions_pkey',
-        nameExpressions,
-        valueExpressions,
-      ),
-    ]);
+    await this.updateRealmMeta();
+    await this.applyBatchUpdates();
+    await this.pruneObsoleteEntries();
 
-    // prune obsolete generation index entries
-    if (this.isNewGeneration) {
-      await this.query([
-        `DELETE FROM boxel_index`,
-        'WHERE',
-        ...every([
-          ['realm_version <', param(this.realmVersion)],
-          ['realm_url =', param(this.realmURL.href)],
-        ]),
-      ] as Expression);
-    }
     let totalIndexEntries = await this.numberOfIndexEntries();
     return { totalIndexEntries };
   }
@@ -244,10 +231,90 @@ export class Batch {
       ...every([
         ['i.realm_url =', param(this.realmURL.href)],
         ['i.type != ', param('error')],
+        ['i.is_deleted != true'],
         realmVersionExpression({ useWorkInProgressIndex: true }),
       ]),
     ] as Expression)) as { total: string }[];
     return parseInt(total);
+  }
+
+  private async updateRealmMeta() {
+    let results = await this.query([
+      `SELECT CAST(count(i.url) AS INTEGER) as total, i.display_names->>0 as display_name, i.types->>0 as code_ref
+       FROM boxel_index as i
+       INNER JOIN realm_versions r ON i.realm_url = r.realm_url
+          WHERE`,
+      ...every([
+        ['i.realm_url =', param(this.realmURL.href)],
+        ['i.type = ', param('instance')],
+        ['i.types IS NOT NULL'],
+        realmVersionExpression({
+          useWorkInProgressIndex: true,
+          withMaxVersion: this.realmVersion,
+        }),
+      ]),
+      `GROUP BY i.display_names->>0, i.types->>0`,
+    ] as Expression);
+
+    let { nameExpressions, valueExpressions } = asExpressions(
+      {
+        realm_url: this.realmURL.href,
+        realm_version: this.realmVersion,
+        value: results,
+        indexed_at: unixTime(new Date().getTime()),
+      } as Omit<RealmMetaTable, 'indexed_at'> & {
+        indexed_at: number;
+      },
+      {
+        jsonFields: ['value'],
+      },
+    );
+
+    await this.query([
+      ...upsert(
+        'realm_meta',
+        'realm_meta_pkey',
+        nameExpressions,
+        valueExpressions,
+      ),
+    ]);
+  }
+
+  private async applyBatchUpdates() {
+    let { nameExpressions, valueExpressions } = asExpressions({
+      realm_url: this.realmURL.href,
+      current_version: this.realmVersion,
+    } as RealmVersionsTable);
+    await this.query([
+      ...upsert(
+        'realm_versions',
+        'realm_versions_pkey',
+        nameExpressions,
+        valueExpressions,
+      ),
+    ]);
+  }
+
+  private async pruneObsoleteEntries() {
+    await this.query([
+      `DELETE FROM realm_meta`,
+      'WHERE',
+      ...every([
+        ['realm_version <', param(this.realmVersion)],
+        ['realm_url =', param(this.realmURL.href)],
+      ]),
+    ] as Expression);
+
+    if (this.isNewGeneration) {
+      await this.query([
+        `DELETE FROM boxel_index`,
+        'WHERE',
+        ...every([
+          ['realm_version <', param(this.realmVersion)],
+          ['realm_url =', param(this.realmURL.href)],
+        ]),
+      ] as Expression);
+    }
   }
 
   private async setNextRealmVersion() {

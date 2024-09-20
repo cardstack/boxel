@@ -76,7 +76,7 @@ export default class RealmDropdown extends Component<Signature> {
         />
       </:content>
     </BoxelDropdown>
-    <style>
+    <style scoped>
       .realm-dropdown-trigger {
         width: var(--realm-dropdown-width, auto);
         display: flex;
@@ -150,8 +150,14 @@ export default class RealmDropdown extends Component<Signature> {
       return selectedRealm;
     }
 
+    let defaultWritableRealm = this.realm.defaultWritableRealm;
+
+    if (!defaultWritableRealm) {
+      return undefined;
+    }
+
     return this.realms.find(
-      (realm) => realm.path === this.realm.userDefaultRealm.path,
+      (realm) => realm.path === defaultWritableRealm!.path,
     );
   }
 }

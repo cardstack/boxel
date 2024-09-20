@@ -59,7 +59,7 @@ export default class NewSession extends Component<Signature> {
       {{/if}}
     </div>
 
-    <style>
+    <style scoped>
       .intro {
         display: flex;
         flex-direction: column;

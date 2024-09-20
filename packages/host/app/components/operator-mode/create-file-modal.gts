@@ -18,6 +18,7 @@ import {
   Button,
   BoxelInput,
   LoadingIndicator,
+  Pill,
 } from '@cardstack/boxel-ui/components';
 import { eq, or } from '@cardstack/boxel-ui/helpers';
 
@@ -44,7 +45,6 @@ import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
 import ModalContainer from '../modal-container';
 
-import Pill from '../pill';
 import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
 
 import WithKnownRealmsLoaded from '../with-known-realms-loaded';
@@ -263,7 +263,7 @@ export default class CreateFileModal extends Component<Signature> {
       </:default>
       <:loading></:loading>
     </WithKnownRealmsLoaded>
-    <style>
+    <style scoped>
       .create-file-modal > :deep(.boxel-modal__inner) {
         display: flex;
       }
@@ -531,11 +531,12 @@ export default class CreateFileModal extends Component<Signature> {
   private chooseType = restartableTask(async () => {
     this.clearSaveError();
     let isField = this.fileType.id === 'field-definition';
+
     this.selectedCatalogEntry = await chooseCard({
       filter: {
         on: catalogEntryRef,
         // REMEMBER ME
-        eq: { isField },
+        every: [{ eq: { isField } }],
       },
     });
   });
@@ -791,7 +792,7 @@ class SelectedTypePill extends Component<SelectedTypePillSignature> {
         {{@entry.title}}
       </:default>
     </Pill>
-    <style>
+    <style scoped>
       .selected-type {
         padding: var(--boxel-sp-xxxs);
         gap: var(--boxel-sp-xxxs);

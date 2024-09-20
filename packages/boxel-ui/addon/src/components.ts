@@ -27,12 +27,14 @@ import Menu from './components/menu/index.gts';
 import BoxelMessage from './components/message/index.gts';
 import Message from './components/message/index.gts';
 import Modal from './components/modal/index.gts';
+import Pill from './components/pill/index.gts';
 import RadioInput from './components/radio-input/index.gts';
 import ResizablePanelGroup, {
   ResizablePanel,
   ResizeHandle,
 } from './components/resizable-panel-group/index.gts';
 import BoxelSelect from './components/select/index.gts';
+import Switch from './components/switch/index.gts';
 import TabbedHeader from './components/tabbed-header/index.gts';
 import Tooltip from './components/tooltip/index.gts';
 
@@ -66,10 +68,12 @@ export {
   Menu,
   Message,
   Modal,
+  Pill,
   RadioInput,
   ResizablePanel,
   ResizablePanelGroup,
   ResizeHandle,
+  Switch,
   TabbedHeader,
   Tooltip,
 };
