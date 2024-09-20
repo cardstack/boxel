@@ -138,6 +138,7 @@ export default class Workspace extends Component<Signature> {
   }
 
   private openWorkspace = restartableTask(async () => {
+    debugger;
     let card = await this.cardService.getCard(this.args.realmURL);
     let stackItem = new StackItem({
       owner: this,
