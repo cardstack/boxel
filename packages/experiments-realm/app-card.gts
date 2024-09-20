@@ -269,7 +269,10 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
     }
 
     this.args.model.tabs = tabs;
-    this.args.setActiveTab(tabs[0].tabId);
+
+    if (tabs[0]) {
+      this.args.setActiveTab(tabs[0].tabId);
+    }
   }
 
   setTabs(tabs: Tab[]) {
