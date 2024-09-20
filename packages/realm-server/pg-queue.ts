@@ -15,7 +15,6 @@ import {
   Deferred,
   upsert,
   Job,
-  setErrorReporter,
 } from '@cardstack/runtime-common';
 import PgAdapter from './pg-adapter';
 import * as Sentry from '@sentry/node';
