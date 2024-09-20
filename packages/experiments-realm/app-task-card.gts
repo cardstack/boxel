@@ -91,7 +91,47 @@ class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
             />
           </div>
         </div>
-        // ... Add more columns as needed ...
+        <div class='column'>
+          <div class='column-title'>Current Sprint</div>
+          <div class='column-data'>
+            <ColumnQuery
+              @context={{@context}}
+              @realms={{this.realms}}
+              @query={{this.nextSprintQuery}}
+            />
+          </div>
+        </div>
+        <div class='column'>
+          <div class='column-title'>In Review </div>
+          <div class='column-data'>
+            <ColumnQuery
+              @context={{@context}}
+              @realms={{this.realms}}
+              @query={{this.nextSprintQuery}}
+            />
+          </div>
+        </div>
+
+        <div class='column'>
+          <div class='column-title'>Staged</div>
+          <div class='column-data'>
+            <ColumnQuery
+              @context={{@context}}
+              @realms={{this.realms}}
+              @query={{this.nextSprintQuery}}
+            />
+          </div>
+        </div>
+        <div class='column'>
+          <div class='column-title'>Shipped</div>
+          <div class='column-data'>
+            <ColumnQuery
+              @context={{@context}}
+              @realms={{this.realms}}
+              @query={{this.nextSprintQuery}}
+            />
+          </div>
+        </div>
       </div>
       <Sheet @onClose={{this.toggleSheet}} @isOpen={{this.isSheetOpen}}>
         <h2>Sheet Content</h2>
