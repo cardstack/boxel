@@ -333,6 +333,8 @@ export function getReader(
           Accept: SupportedMimeType.DirectoryListing,
         },
       });
+      console.log('directoryListing', url);
+      console.log('body text', await response.text());
       let {
         data: { relationships: _relationships },
       } = await response.json();
