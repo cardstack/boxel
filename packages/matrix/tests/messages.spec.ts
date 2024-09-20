@@ -76,7 +76,7 @@ test.describe('Room messages', () => {
     let room2 = await createRoom(page);
     await openRoom(page, room1);
 
-    await reloadAndOpenAiAssistant(page, 'it-can-send-a-message-in-a-room');
+    await reloadAndOpenAiAssistant(page);
     await openRoom(page, room1);
     await assertMessages(page, messages);
 
@@ -596,7 +596,7 @@ test.describe('Room messages', () => {
     await sendMessage(page, room1, 'message 2', [testCard2]);
     await assertMessages(page, [message1, message2]);
 
-    await reloadAndOpenAiAssistant(page, 'can-render-multiple-cards-in-a-room');
+    await reloadAndOpenAiAssistant(page);
     await openRoom(page, room1);
     await assertMessages(page, [message1, message2]);
 
@@ -626,10 +626,7 @@ test.describe('Room messages', () => {
     await sendMessage(page, room1, 'message 1');
     await assertMessages(page, [message]);
 
-    await reloadAndOpenAiAssistant(
-      page,
-      'can-send-multiple-cards-in-a-message',
-    );
+    await reloadAndOpenAiAssistant(page);
     await openRoom(page, room1);
     await assertMessages(page, [message]);
 

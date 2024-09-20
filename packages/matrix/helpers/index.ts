@@ -60,9 +60,8 @@ export async function registerRealmUsers(synapse: SynapseInstance) {
   );
 }
 
-export async function reloadAndOpenAiAssistant(page: Page, name: string) {
+export async function reloadAndOpenAiAssistant(page: Page) {
   await page.reload();
-  await page.screenshot({ path: `/tmp/reload-${name}.png` });
   await openAiAssistant(page);
 }
 

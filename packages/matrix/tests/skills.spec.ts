@@ -488,7 +488,7 @@ test.describe('Skills', () => {
       '2 of 3 Skills Active',
     );
 
-    await reloadAndOpenAiAssistant(page, 'skills-are-persisted-per-room');
+    await reloadAndOpenAiAssistant(page);
     await openRoom(page, room1);
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
       '2 of 3 Skills Active',
@@ -514,5 +514,7 @@ test.describe('Skills', () => {
   });
 
   // TODO: CS-6985
-  test.skip(`persisted enabled skills are attached to sent messages`, async () => {});
+  test.skip(`persisted enabled skills are attached to sent messages`, async () => {
+    // TODO
+  });
 });
