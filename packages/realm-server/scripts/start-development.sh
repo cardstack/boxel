@@ -35,4 +35,9 @@ NODE_ENV=development \
   --path='../seed-realm' \
   --username='seed_realm' \
   --fromUrl='http://localhost:4201/seed/' \
-  --toUrl='http://localhost:4201/seed/'
+  --toUrl='http://localhost:4201/seed/' \
+  \
+  --path='../catalog-realm' \
+  --username='catalog_realm' \
+  --fromUrl='http://localhost:4201/catalog/' \
+  --toUrl='http://localhost:4201/catalog/'

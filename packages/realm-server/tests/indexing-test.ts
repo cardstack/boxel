@@ -702,6 +702,20 @@ module('indexing', function (hooks) {
     );
   });
 
+  test('sets resource_created_at for modules and instances', async function (assert) {
+    let entry = (await realm.realmIndexQueryEngine.module(
+      new URL(`${testRealm}fancy-person.gts`),
+    )) as { resourceCreatedAt: number };
+
+    assert.ok(entry!.resourceCreatedAt, 'resourceCreatedAt is set');
+
+    entry = (await realm.realmIndexQueryEngine.instance(
+      new URL(`${testRealm}mango`),
+    )) as { resourceCreatedAt: number };
+
+    assert.ok(entry!.resourceCreatedAt, 'resourceCreatedAt is set');
+  });
+
   test('sets urls containing encoded CSS for deps for a module', async function (assert) {
     let entry = (await realm.realmIndexQueryEngine.module(
       new URL('http://test-realm/fancy-person.gts'),
