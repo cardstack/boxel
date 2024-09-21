@@ -20,7 +20,6 @@ import {
 } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 
-import CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import { claimsFromRawToken } from '@cardstack/host/services/realm';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
@@ -37,7 +36,7 @@ import {
   visitOperatorMode,
   lookupLoaderService,
 } from '../helpers';
-import { setupMatrixServiceMock } from '../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
 const testRealm2URL = `http://test-realm/test2/`;
@@ -49,7 +48,10 @@ module('Acceptance | interact submode tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  let { setRealmPermissions } = setupMatrixServiceMock(hooks);
+  let { setRealmPermissions, setActiveRealms } = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [testRealmURL, testRealm2URL],
+  });
 
   hooks.beforeEach(async function () {
     let loader = lookupLoaderService().loader;
@@ -1269,10 +1271,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test('visiting 2 stacks from differing realms', async function (assert) {
-      let cardService = this.owner.lookup(
-        'service:card-service',
-      ) as CardService;
-      cardService.realmURLs.push('http://localhost:4202/test/');
+      setActiveRealms([testRealmURL, 'http://localhost:4202/test/']);
       await visitOperatorMode({
         stacks: [
           [

@@ -1,12 +1,14 @@
-import type { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
+import {
+  type CardContext,
+  Component,
+} from 'https://cardstack.com/base/card-api';
 import {
   CardContainer,
   FieldContainer,
   BoxelInput,
   Button,
-  TabbedHeader,
 } from '@cardstack/boxel-ui/components';
-import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
+import { eq } from '@cardstack/boxel-ui/helpers';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -16,10 +18,38 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import {
   baseRealm,
+  isSingleCardDocument,
   type CodeRef,
   type LooseSingleCardDocument,
+  type Query,
 } from '@cardstack/runtime-common';
-import { AppCard, Tab, CardsGrid } from './app-card';
+import { AppCard, AppCardTemplate, CardsGrid } from './app-card';
+
+const getCardTypeQuery = (cardRef: CodeRef, excludedId?: string): Query => {
+  let filter: Query['filter'];
+  if (excludedId) {
+    filter = {
+      every: [{ type: cardRef }, { not: { eq: { id: excludedId } } }],
+    };
+  } else {
+    filter = { type: cardRef };
+  }
+  return {
+    filter,
+    // sorting by title so that we can maintain stability in
+    // the ordering of the search results (server sorts results
+    // by order indexed by default)
+    sort: [
+      {
+        on: {
+          module: `${baseRealm.url}card-api`,
+          name: 'CardDef',
+        },
+        by: 'title',
+      },
+    ],
+  };
+};
 
 class HowToSidebar extends GlimmerComponent {
   <template>
@@ -104,7 +134,8 @@ class HowToSidebar extends GlimmerComponent {
 
 class CardListSidebar extends GlimmerComponent<{
   title: string;
-  instances: CardDef[];
+  query: Query;
+  realms: string[];
   context?: CardContext;
 }> {
   <template>
@@ -112,11 +143,20 @@ class CardListSidebar extends GlimmerComponent<{
       <header class='sidebar-header'>
         <h3 class='sidebar-title'>{{@title}}</h3>
       </header>
-      <CardsGrid
-        @isListFormat={{true}}
-        @instances={{@instances}}
-        @context={{@context}}
-      />
+      <@context.prerenderedCardSearchComponent
+        @query={{@query}}
+        @format='fitted'
+        @realms={{@realms}}
+      >
+        <:loading>Loading...</:loading>
+        <:response as |cards|>
+          <CardsGrid
+            @cards={{cards}}
+            @context={{@context}}
+            @isListFormat={{true}}
+          />
+        </:response>
+      </@context.prerenderedCardSearchComponent>
     </aside>
     <style scoped>
       .sidebar {
@@ -190,6 +230,7 @@ class PromptContainer extends GlimmerComponent<{
     </CardContainer>
     <style scoped>
       .prompt-container {
+        height: auto;
         padding: var(--boxel-sp-lg) var(--boxel-sp-xl) var(--boxel-sp-xl);
       }
       .prompt-container-options {
@@ -246,100 +287,46 @@ class PromptContainer extends GlimmerComponent<{
   </template>
 }
 
-class Isolated extends AppCard.isolated {
+class DashboardTab extends GlimmerComponent<{
+  Args: {
+    appCardId?: string;
+    context?: CardContext;
+    currentRealm?: URL;
+    realms: string[];
+    setActiveTab?: (tabId: string) => void;
+  };
+}> {
   <template>
-    <section class='app'>
-      <TabbedHeader
-        @title={{@model.title}}
-        @tabs={{this.tabs}}
-        @onSetActiveTab={{this.setActiveTab}}
-        @activeTabIndex={{this.activeTabIndex}}
-        @headerBackgroundColor={{this.headerColor}}
-      >
-        <:headerIcon>
-          {{#if @model.headerIcon.base64}}
-            <@fields.headerIcon />
-          {{/if}}
-        </:headerIcon>
-      </TabbedHeader>
-      <div class='app-content'>
-        {{#if (eq this.activeTabIndex 0)}}
-          <div class='dashboard'>
-            <HowToSidebar />
-            <section>
-              <header class='section-header'>
-                <h2 class='section-title'>Generate an App</h2>
-              </header>
-              <PromptContainer
-                @prompt={{this.prompt}}
-                @setPrompt={{this.setPrompt}}
-                @generateProductRequirementsDoc={{this.generateProductRequirementsDoc}}
-                @isLoading={{this.generateRequirements.isRunning}}
-              />
-              {{#if this.errorMessage}}
-                <p class='error'>{{this.errorMessage}}</p>
-              {{/if}}
-            </section>
-            <CardListSidebar
-              @title='Browse Sample Apps'
-              @instances={{this.instances}}
-              @context={{@context}}
-            />
-          </div>
-        {{else}}
-          {{#if
-            (and (bool @context.actions.createCard) (eq this.activeTabIndex 1))
-          }}
-            <Button
-              @kind='text-only'
-              @loading={{this.isCreateCardRunning}}
-              @disabled={{this.isCreateCardRunning}}
-              class='create-new-button'
-              {{on 'click' this.createNew}}
-            >
-              {{#unless this.isCreateCardRunning}}
-                <IconPlus
-                  class='plus-icon'
-                  width='15'
-                  height='15'
-                  role='presentation'
-                />
-              {{/unless}}
-              Create new requirement
-            </Button>
-          {{/if}}
-          <CardsGrid
-            class='grid-cards'
-            @instances={{this.instances}}
-            @context={{@context}}
-          />
+    <div class='dashboard'>
+      <HowToSidebar />
+      <section>
+        <header class='section-header'>
+          <h2 class='section-title'>Generate an App</h2>
+        </header>
+        <PromptContainer
+          @prompt={{this.prompt}}
+          @setPrompt={{this.setPrompt}}
+          @generateProductRequirementsDoc={{this.generateProductRequirementsDoc}}
+          @isLoading={{this.generateRequirements.isRunning}}
+        />
+        {{#if this.errorMessage}}
+          <p class='error'>{{this.errorMessage}}</p>
         {{/if}}
-      </div>
-    </section>
+      </section>
+      <CardListSidebar
+        @title='Browse Sample Apps'
+        @query={{getCardTypeQuery this.appCardRef @appCardId}}
+        @realms={{@realms}}
+        @context={{@context}}
+      />
+    </div>
     <style scoped>
-      .app {
-        position: relative;
-        min-height: 100%;
-        display: grid;
-        grid-template-rows: auto 1fr;
-        background-color: var(--boxel-light);
-        color: var(--boxel-dark);
-        font: var(--boxel-font);
-        letter-spacing: var(--boxel-lsp);
-      }
-      .app-content {
-        padding: var(--boxel-sp);
-        background-color: #f7f7f7;
-      }
-      .grid-cards {
-        padding: var(--boxel-sp);
-      }
-
-      /* Dashboard */
       .dashboard {
         display: grid;
         grid-template-columns: auto minmax(400px, 1fr) auto;
         gap: var(--boxel-sp-xxl);
+        padding: var(--boxel-sp);
+        background-color: #f7f7f7;
       }
       .section-header {
         display: flex;
@@ -352,8 +339,122 @@ class Isolated extends AppCard.isolated {
         font-size: 1.5rem;
         letter-spacing: var(--boxel-lsp-xs);
       }
+    </style>
+  </template>
+  promptReset: Prompt = {
+    appType: '',
+    domain: '',
+    customRequirements: '',
+  };
+  appCardRef = {
+    name: 'AppCard',
+    module: `${this.args.currentRealm?.href}app-card`,
+  };
+  prdCardRef = {
+    name: 'ProductRequirementDocument',
+    module: `${this.args.currentRealm?.href}product-requirement-document`,
+  };
+  @tracked errorMessage = '';
+  @tracked prompt: Prompt = this.promptReset;
 
-      /* Create New button */
+  @action setPrompt(key: string, value: string) {
+    this.prompt = { ...this.prompt, [key]: value };
+  }
+
+  @action generateProductRequirementsDoc() {
+    let appTitle = `${this.prompt.domain} ${this.prompt.appType}`;
+    let requirements = this.prompt.customRequirements
+      ? `that has these features: ${this.prompt.customRequirements}`
+      : '';
+    let prompt = `I want to make a ${this.prompt.appType} tailored for a ${this.prompt.domain} ${requirements}`;
+    this.generateRequirements.perform(this.prdCardRef, {
+      data: {
+        attributes: { appTitle, prompt },
+        meta: { adoptsFrom: this.prdCardRef },
+      },
+    });
+  }
+  private generateRequirements = restartableTask(
+    async (ref: CodeRef, doc: LooseSingleCardDocument) => {
+      try {
+        this.errorMessage = '';
+        let { createCard, viewCard, runCommand } =
+          this.args.context?.actions ?? {};
+        if (!createCard || !viewCard || !runCommand) {
+          throw new Error('Missing required card actions');
+        }
+        let card = await createCard(ref, this.args.currentRealm, {
+          doc,
+          cardModeAfterCreation: 'isolated',
+        });
+        if (!card) {
+          throw new Error('Error: Failed to create card');
+        }
+        await runCommand(
+          card,
+          `${baseRealm.url}SkillCard/generate-product-requirements`,
+          'Generate product requirements document',
+        );
+        this.prompt = this.promptReset;
+        this.args.setActiveTab?.('requirements');
+      } catch (e) {
+        this.errorMessage =
+          e instanceof Error ? `${e.name}: ${e.message}` : 'An error occurred.';
+        throw e;
+      }
+    },
+  );
+}
+
+class RequirementsTab extends GlimmerComponent<{
+  Args: {
+    context?: CardContext;
+    currentRealm?: URL;
+    realms: string[];
+  };
+}> {
+  <template>
+    <div class='tab-content'>
+      {{#if @context.actions.createCard}}
+        <Button
+          @kind='text-only'
+          @loading={{this.isCreateCardRunning}}
+          @disabled={{this.isCreateCardRunning}}
+          class='create-new-button'
+          {{on 'click' this.createNew}}
+        >
+          {{#unless this.isCreateCardRunning}}
+            <IconPlus
+              class='plus-icon'
+              width='15'
+              height='15'
+              role='presentation'
+            />
+          {{/unless}}
+          Create new requirement
+        </Button>
+      {{/if}}
+      <div class='query-container'>
+        <@context.prerenderedCardSearchComponent
+          @query={{getCardTypeQuery this.cardRef}}
+          @format='fitted'
+          @realms={{@realms}}
+        >
+          <:loading>Loading...</:loading>
+          <:response as |cards|>
+            <CardsGrid @cards={{cards}} @context={{@context}} />
+          </:response>
+        </@context.prerenderedCardSearchComponent>
+      </div>
+    </div>
+    <style scoped>
+      .tab-content {
+        padding: var(--boxel-sp);
+        background-color: #f7f7f7;
+      }
+      .query-container {
+        padding: var(--boxel-sp);
+      }
       .create-new-button {
         --boxel-button-loading-icon-size: 15px;
         --boxel-button-text-color: var(--boxel-dark);
@@ -378,87 +479,102 @@ class Isolated extends AppCard.isolated {
     </style>
   </template>
 
-  @tracked tabs = [
-    new Tab({
-      displayName: 'Dashboard',
-      tabId: 'dashboard',
-      ref: {
-        name: 'AppCard',
-        module: `${this.currentRealm?.href}app-card`,
-      },
-    }),
-    new Tab({
-      displayName: 'Requirements',
-      tabId: 'requirements',
-      ref: {
-        name: 'ProductRequirementDocument',
-        module: `${this.currentRealm?.href}product-requirement-document`,
-      },
-    }),
-    new Tab({
-      displayName: 'Your Apps',
-      tabId: 'your-apps',
-      ref: {
-        name: 'AppCard',
-        module: `${this.currentRealm?.href}app-card`,
-      },
-    }),
-  ];
-  promptReset: Prompt = {
-    appType: '',
-    domain: '',
-    customRequirements: '',
+  cardRef = {
+    name: 'ProductRequirementDocument',
+    module: `${this.args.currentRealm}product-requirement-document`,
   };
-  @tracked prompt: Prompt = this.promptReset;
-  @action setPrompt(key: string, value: string) {
-    this.prompt = { ...this.prompt, [key]: value };
+
+  get isCreateCardRunning() {
+    return this.createCard.isRunning;
   }
-  @action generateProductRequirementsDoc() {
-    let ref = this.tabs[1].ref;
-    let appTitle = `${this.prompt.domain} ${this.prompt.appType}`;
-    let requirements = this.prompt.customRequirements
-      ? `that has these features: ${this.prompt.customRequirements}`
-      : '';
-    let prompt = `I want to make a ${this.prompt.appType} tailored for a ${this.prompt.domain} ${requirements}`;
-    this.generateRequirements.perform(ref, {
-      data: {
-        attributes: { appTitle, prompt },
-        meta: { adoptsFrom: ref },
-      },
-    });
+
+  @action createNew(value: unknown) {
+    let cardDoc = isSingleCardDocument(value) ? value : undefined;
+    this.createCard.perform(cardDoc);
   }
-  private generateRequirements = restartableTask(
-    async (ref: CodeRef, doc: LooseSingleCardDocument) => {
+
+  private createCard = restartableTask(
+    async (doc: LooseSingleCardDocument | undefined = undefined) => {
       try {
-        this.errorMessage = '';
-        let { createCard, viewCard, runCommand } =
-          this.args.context?.actions ?? {};
-        if (!createCard || !viewCard || !runCommand) {
-          this.errorMessage = 'Error: Missing required card actions';
-          return;
+        if (!this.cardRef) {
+          throw new Error('Can not create a card without a card ref.');
         }
-        let card = await createCard(ref, this.currentRealm, {
-          doc,
-          cardModeAfterCreation: 'isolated',
-        });
-        if (!card) {
-          this.errorMessage = 'Error: Failed to create card';
-          return;
-        }
-        await runCommand(
-          card,
-          `${baseRealm.url}SkillCard/generate-product-requirements`,
-          'Generate product requirements document',
+        await this.args.context?.actions?.createCard?.(
+          this.cardRef,
+          this.args.currentRealm,
+          { doc },
         );
-        this.prompt = this.promptReset;
-        this.setActiveTab(1);
       } catch (e) {
-        console.error(e);
-        this.errorMessage =
-          e instanceof Error ? `Error: ${e.message}` : 'An error occurred';
+        throw e;
       }
     },
   );
+}
+
+class YourAppsTab extends GlimmerComponent<{
+  Args: {
+    appCardId?: string;
+    context?: CardContext;
+    currentRealm?: URL;
+    realms: string[];
+  };
+}> {
+  <template>
+    <div class='query-container'>
+      <@context.prerenderedCardSearchComponent
+        @query={{getCardTypeQuery this.cardRef @appCardId}}
+        @format='fitted'
+        @realms={{@realms}}
+      >
+        <:loading>Loading...</:loading>
+        <:response as |cards|>
+          <CardsGrid @cards={{cards}} @context={{@context}} />
+        </:response>
+      </@context.prerenderedCardSearchComponent>
+    </div>
+    <style scoped>
+      .query-container {
+        padding: var(--boxel-sp);
+        background-color: #f7f7f7;
+      }
+    </style>
+  </template>
+
+  cardRef = {
+    name: 'AppCard',
+    module: `${this.args.currentRealm}app-card`,
+  };
+}
+
+class Isolated extends Component<typeof AiAppGenerator> {
+  <template>
+    <AppCardTemplate @model={{@model}} @fields={{@fields}}>
+      <:component as |args|>
+        {{#if (eq args.activeTab.tabId 'dashboard')}}
+          <DashboardTab
+            @appCardId={{@model.id}}
+            @context={{@context}}
+            @currentRealm={{args.currentRealm}}
+            @realms={{args.realms}}
+            @setActiveTab={{args.setActiveTab}}
+          />
+        {{else if (eq args.activeTab.tabId 'requirements')}}
+          <RequirementsTab
+            @context={{@context}}
+            @currentRealm={{args.currentRealm}}
+            @realms={{args.realms}}
+          />
+        {{else}}
+          <YourAppsTab
+            @appCardId={{@model.id}}
+            @context={{@context}}
+            @currentRealm={{args.currentRealm}}
+            @realms={{args.realms}}
+          />
+        {{/if}}
+      </:component>
+    </AppCardTemplate>
+  </template>
 }
 
 export class AiAppGenerator extends AppCard {

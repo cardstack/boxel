@@ -606,10 +606,32 @@ export default class CodeSubmode extends Component<Signature> {
       if (!this.createFileModal) {
         throw new Error(`bug: CreateFileModal not instantiated`);
       }
+
+      let destinationRealm: string | undefined;
+
+      if (sourceInstance && this.realm.canWrite(sourceInstance.id)) {
+        destinationRealm = this.realm.url(sourceInstance.id);
+      }
+
+      if (
+        definitionClass?.ref &&
+        this.realm.canWrite(definitionClass.ref.module)
+      ) {
+        destinationRealm = this.realm.url(definitionClass.ref.module);
+      }
+
+      if (!destinationRealm && this.realm.defaultWritableRealm) {
+        destinationRealm = this.realm.defaultWritableRealm.path;
+      }
+
+      if (!destinationRealm) {
+        throw new Error('No writable realm found');
+      }
+
       this.isCreateModalOpen = true;
       let url = await this.createFileModal.createNewFile(
         fileType,
-        new URL(this.realm.userDefaultRealm.path),
+        new URL(destinationRealm),
         definitionClass,
         sourceInstance,
       );

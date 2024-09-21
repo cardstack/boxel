@@ -11,6 +11,7 @@
     "fs-extra": "^10.1.0",
     "jsonwebtoken": "^9.0.2",
     "start-server-and-test": "^1.14.0",
+    "tmp": "^0.2.1",
     "ts-node": "^10.9.1",
     "typescript": "~5.1.6"
   },
@@ -23,7 +24,7 @@
     "assert-smtp-running": "if [ \"`docker ps -f name='boxel-smtp' --format '{{.Names}}'`\" = 'boxel-smtp' ]; then echo 'SMTP is already running'; else pnpm run start:smtp; fi",
     "start:host-pre-built": "cd ../host && pnpm start --path ./dist",
     "start:admin": "ts-node --transpileOnly ./scripts/admin-console",
-    "stop:admin": "docker stop synapse-admin",
+    "stop:admin": "docker stop synapse-admin && docker rm synapse-admin",
     "register-bot-user": "MATRIX_USERNAME=aibot MATRIX_PASSWORD=pass ts-node --transpileOnly ./scripts/register-test-user.ts",
     "register-test-user": "MATRIX_USERNAME=user MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts",
     "register-realm-users": "./scripts/register-realm-users.sh",

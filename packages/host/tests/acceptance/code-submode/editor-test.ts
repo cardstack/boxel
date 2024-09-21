@@ -526,6 +526,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       delete json.data.meta.realmInfo;
       delete json.data.meta.realmURL;
       delete json.data.meta.lastModified;
+      delete json.data.meta.resourceCreatedAt;
       assert.strictEqual(
         stringify(json),
         stringify(expected),

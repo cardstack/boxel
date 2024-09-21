@@ -1,0 +1,18 @@
+<svg data-name="icon_List (stroke)" xmlns="http://www.w3.org/2000/svg" width="20" height="16" viewBox="0 0 20 16">
+    <g data-name="V 02">
+        <g data-name="Rectangle 1992" style="stroke:var(--icon-color, #000);stroke-width:1.4px;fill:none">
+            <rect width="20" height="4" rx="2" style="stroke:none" />
+            <rect x=".7" y=".7" width="18.6" height="2.6" rx="1.3" style="fill:none" />
+        </g>
+        <g data-name="Rectangle 1993" transform="translate(0 6)"
+            style="stroke:var(--icon-color, #000);stroke-width:1.4px;fill:none">
+            <rect width="20" height="4" rx="2" style="stroke:none" />
+            <rect x=".7" y=".7" width="18.6" height="2.6" rx="1.3" style="fill:none" />
+        </g>
+        <g data-name="Rectangle 1994" transform="translate(0 12)"
+            style="stroke:var(--icon-color, #000);stroke-width:1.4px;fill:none">
+            <rect width="20" height="4" rx="2" style="stroke:none" />
+            <rect x=".7" y=".7" width="18.6" height="2.6" rx="1.3" style="fill:none" />
+        </g>
+    </g>
+</svg>

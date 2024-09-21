@@ -715,11 +715,13 @@ module('getModifyPrompt', () => {
     );
     assert.equal(
       mostRecentlyAttachedCard,
-      history[0].content.data.attachedCards[0]['data'],
+      (history[0].content as CardMessageContent).data.attachedCards?.[0][
+        'data'
+      ],
     );
   });
 
-  test('If there are no functions in the last message from the user, store none', () => {
+  test('If there are no functions in the last message from the user, store only searchTool', () => {
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -748,10 +750,11 @@ module('getModifyPrompt', () => {
       },
     ];
     const functions = getTools(history, '@aibot:localhost');
-    assert.equal(functions.length, 0);
+    assert.equal(functions.length, 1);
+    assert.deepEqual(functions[0], getSearchTool());
   });
 
-  test('If a user stops sharing their context then ignore function calls', () => {
+  test('If a user stops sharing their context then ignore function calls with exception of searchTool', () => {
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -765,12 +768,9 @@ module('getModifyPrompt', () => {
             context: {
               openCardIds: ['http://localhost:4201/experiments/Friend/1'],
               tools: [
-                getPatchTool(
-                  { id: 'http://localhost:4201/experiments/Friend/1' },
-                  {
-                    firstName: { type: 'string' },
-                  },
-                ),
+                getPatchTool('http://localhost:4201/experiments/Friend/1', {
+                  firstName: { type: 'string' },
+                }),
               ],
               submode: 'interact',
             },
@@ -812,7 +812,8 @@ module('getModifyPrompt', () => {
       },
     ];
     const functions = getTools(history, '@aibot:localhost');
-    assert.equal(functions.length, 0);
+    assert.equal(functions.length, 1);
+    assert.deepEqual(functions[0], getSearchTool());
   });
 
   test("Don't break when there is an older format type with open cards", () => {
@@ -926,12 +927,9 @@ module('getModifyPrompt', () => {
             context: {
               openCardIds: ['http://localhost:4201/experiments/Friend/1'],
               tools: [
-                getPatchTool(
-                  { id: 'http://localhost:4201/experiments/Friend/1' } as any,
-                  {
-                    firstName: { type: 'string' },
-                  },
-                ),
+                getPatchTool('http://localhost:4201/experiments/Friend/1', {
+                  firstName: { type: 'string' },
+                }),
               ],
               submode: 'interact',
             },
@@ -990,12 +988,9 @@ module('getModifyPrompt', () => {
             context: {
               openCardIds: ['http://localhost:4201/experiments/Friend/1'],
               tools: [
-                getPatchTool(
-                  { id: 'http://localhost:4201/experiments/Friend/1' } as any,
-                  {
-                    firstName: { type: 'string' },
-                  },
-                ),
+                getPatchTool('http://localhost:4201/experiments/Friend/1', {
+                  firstName: { type: 'string' },
+                }),
               ],
               submode: 'interact',
             },
@@ -1022,12 +1017,9 @@ module('getModifyPrompt', () => {
             context: {
               openCardIds: ['http://localhost:4201/experiments/Meeting/2'],
               tools: [
-                getPatchTool(
-                  { id: 'http://localhost:4201/experiments/Meeting/2' },
-                  {
-                    location: { type: 'string' },
-                  },
-                ),
+                getPatchTool('http://localhost:4201/experiments/Meeting/2', {
+                  location: { type: 'string' },
+                }),
               ],
               submode: 'interact',
             },
@@ -1588,76 +1580,10 @@ module('getModifyPrompt', () => {
 
     const functions = getTools(history, '@aibot:localhost');
     assert.equal(functions.length, 1);
-    let res = {
-      type: 'function',
-      function: {
-        name: 'searchCard',
-        description:
-          'Propose a query to search for a card instance filtered by type and/or by title. Always prioritise search based upon the card that was last shared.',
-        parameters: {
-          type: 'object',
-          properties: {
-            description: {
-              type: 'string',
-            },
-            filter: {
-              type: 'object',
-              properties: {
-                every: {
-                  type: 'array',
-                  items: {
-                    anyOf: [
-                      {
-                        type: 'object',
-                        properties: {
-                          type: {
-                            type: 'object',
-                            properties: {
-                              module: {
-                                type: 'string',
-                                description: 'the absolute path of the module',
-                              },
-                              name: {
-                                type: 'string',
-                                description: 'the name of the module',
-                              },
-                            },
-                            required: ['module', 'name'],
-                          },
-                        },
-                        required: ['type'],
-                      },
-                      {
-                        type: 'object',
-                        properties: {
-                          contains: {
-                            type: 'object',
-                            properties: {
-                              title: {
-                                type: 'string',
-                                description: 'title of the card',
-                              },
-                            },
-                            required: ['title'],
-                          },
-                        },
-                        required: ['contains'],
-                      },
-                    ],
-                  },
-                },
-              },
-              required: ['every'],
-            },
-          },
-          required: ['filter', 'description'],
-        },
-      },
-    };
-    assert.deepEqual(functions[0], res);
+    assert.deepEqual(functions[0], getSearchTool());
   });
 
-  test.only('Return host result of tool call back to open ai', () => {
+  test('Return host result of tool call back to open ai', () => {
     const history: IRoomEvent[] = [
       {
         type: 'm.room.message',
@@ -1719,74 +1645,7 @@ module('getModifyPrompt', () => {
                     },
                   },
                 },
-                {
-                  type: 'function',
-                  function: {
-                    name: 'searchCard',
-                    description:
-                      'Propose a query to search for a card instance filtered by type and/or by title. Always prioritise search based upon the card that was last shared.',
-                    parameters: {
-                      type: 'object',
-                      properties: {
-                        description: {
-                          type: 'string',
-                        },
-                        filter: {
-                          type: 'object',
-                          properties: {
-                            every: {
-                              type: 'array',
-                              items: {
-                                anyOf: [
-                                  {
-                                    type: 'object',
-                                    properties: {
-                                      type: {
-                                        type: 'object',
-                                        properties: {
-                                          module: {
-                                            type: 'string',
-                                            description:
-                                              'the absolute path of the module',
-                                          },
-                                          name: {
-                                            type: 'string',
-                                            description:
-                                              'the name of the module',
-                                          },
-                                        },
-                                        required: ['module', 'name'],
-                                      },
-                                    },
-                                    required: ['type'],
-                                  },
-                                  {
-                                    type: 'object',
-                                    properties: {
-                                      contains: {
-                                        type: 'object',
-                                        properties: {
-                                          title: {
-                                            type: 'string',
-                                            description: 'title of the card',
-                                          },
-                                        },
-                                        required: ['title'],
-                                      },
-                                    },
-                                    required: ['contains'],
-                                  },
-                                ],
-                              },
-                            },
-                          },
-                          required: ['every'],
-                        },
-                      },
-                      required: ['filter', 'description'],
-                    },
-                  },
-                },
+                getSearchTool(),
               ],
               submode: 'interact',
             },
@@ -1935,74 +1794,7 @@ module('getModifyPrompt', () => {
                     },
                   },
                 },
-                {
-                  type: 'function',
-                  function: {
-                    name: 'searchCard',
-                    description:
-                      'Propose a query to search for a card instance filtered by type and/or by title. Always prioritise search based upon the card that was last shared.',
-                    parameters: {
-                      type: 'object',
-                      properties: {
-                        description: {
-                          type: 'string',
-                        },
-                        filter: {
-                          type: 'object',
-                          properties: {
-                            every: {
-                              type: 'array',
-                              items: {
-                                anyOf: [
-                                  {
-                                    type: 'object',
-                                    properties: {
-                                      type: {
-                                        type: 'object',
-                                        properties: {
-                                          module: {
-                                            type: 'string',
-                                            description:
-                                              'the absolute path of the module',
-                                          },
-                                          name: {
-                                            type: 'string',
-                                            description:
-                                              'the name of the module',
-                                          },
-                                        },
-                                        required: ['module', 'name'],
-                                      },
-                                    },
-                                    required: ['type'],
-                                  },
-                                  {
-                                    type: 'object',
-                                    properties: {
-                                      contains: {
-                                        type: 'object',
-                                        properties: {
-                                          title: {
-                                            type: 'string',
-                                            description: 'title of the card',
-                                          },
-                                        },
-                                        required: ['title'],
-                                      },
-                                    },
-                                    required: ['contains'],
-                                  },
-                                ],
-                              },
-                            },
-                          },
-                          required: ['every'],
-                        },
-                      },
-                      required: ['filter', 'description'],
-                    },
-                  },
-                },
+                getSearchTool(),
               ],
               submode: 'interact',
             },

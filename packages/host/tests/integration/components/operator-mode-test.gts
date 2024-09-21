@@ -66,7 +66,7 @@ module('Integration | operator-mode', function (hooks) {
   setupServerSentEvents(hooks);
   setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
-    activeRealms: [baseRealm.url, testRealmURL],
+    activeRealms: [testRealmURL],
     autostart: true,
   });
   let noop = () => {};
@@ -419,6 +419,7 @@ module('Integration | operator-mode', function (hooks) {
           authorBio: author1,
         }),
         'BlogPost/2.json': new BlogPost({ title: 'Beginnings' }),
+        'CardDef/1.json': new CardDef({ title: 'CardDef instance' }),
         '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
         ...Object.fromEntries(personCards),
       },
@@ -1364,7 +1365,9 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-realm-name]`).exists({ count: 4 });
     assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
     assert
-      .dom(`[data-test-realm-name]`)
+      .dom(
+        `[data-test-search-result="${testRealmURL}Pet/mango"] + [data-test-realm-name]`,
+      )
       .containsText('Operator Mode Workspace');
     assert
       .dom(`[data-test-search-result="${testRealmURL}Author/mark"]`)
@@ -2629,5 +2632,28 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom(`[data-test-cards-grid-item="${testRealmURL}Person/10"]`)
       .exists();
+  });
+
+  test('CardDef filter is not displayed in filter list', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}Person/1"]`)
+      .exists();
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}CardDef/1"]`)
+      .exists();
+    assert.dom(`[data-test-boxel-filter-list-button="Person"]`).exists();
+    assert.dom(`[data-test-boxel-filter-list-button="CardDef"]`).doesNotExist();
   });
 });

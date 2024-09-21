@@ -4,6 +4,11 @@ import {
   synapseStop,
   type SynapseInstance,
 } from '../docker/synapse';
+import {
+  appURL,
+  startServer as startRealmServer,
+  type IsolatedRealmServer,
+} from '../helpers/isolated-realm-server';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
 import {
   clearLocalStorage,
@@ -18,17 +23,20 @@ import { registerUser, createRegistrationToken } from '../docker/synapse';
 
 const REGISTRATION_TOKEN = 'abc123';
 
-test.describe('User Registration w/ Token', () => {
+test.describe('User Registration w/ Token - isolated realm server', () => {
   let synapse: SynapseInstance;
+  let realmServer: IsolatedRealmServer;
 
   test.beforeEach(async () => {
     synapse = await synapseStart({
       template: 'test',
     });
     await smtpStart();
+    realmServer = await startRealmServer();
   });
 
   test.afterEach(async () => {
+    await realmServer.stop();
     await synapseStop(synapse.synapseId);
     await smtpStop();
   });
@@ -37,8 +45,8 @@ test.describe('User Registration w/ Token', () => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await registerRealmUsers(synapse);
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
-    await clearLocalStorage(page);
-    await gotoRegistration(page);
+    await clearLocalStorage(page, appURL);
+    await gotoRegistration(page, appURL);
 
     await expect(
       page.locator('[data-test-token-field]'),
@@ -96,6 +104,48 @@ test.describe('User Registration w/ Token', () => {
     await assertLoggedOut(page);
   });
 
+  test(`it can resend email validation message`, async ({ page }) => {
+    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
+    await registerRealmUsers(synapse);
+    await clearLocalStorage(page, appURL);
+    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
+    await gotoRegistration(page, appURL);
+
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-name-field]').fill('user1');
+    await page.locator('[data-test-email-field]').fill('user1@example.com');
+    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-password-field]').fill('mypassword1!');
+    await page
+      .locator('[data-test-confirm-password-field]')
+      .fill('mypassword1!');
+    await expect(page.locator('[data-test-register-btn]')).toBeEnabled();
+    await page.locator('[data-test-register-btn]').click();
+
+    await expect(page.locator('[data-test-next-btn]')).toBeDisabled();
+    await page.locator('[data-test-token-field]').fill('abc123');
+    await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
+    await page.locator('[data-test-next-btn]').click();
+
+    await validateEmail(page, 'user1@example.com', { sendAttempts: 2 });
+  });
+});
+
+test.describe('User Registration w/ Token', () => {
+  let synapse: SynapseInstance;
+
+  test.beforeEach(async () => {
+    synapse = await synapseStart({
+      template: 'test',
+    });
+    await smtpStart();
+  });
+
+  test.afterEach(async () => {
+    await synapseStop(synapse.synapseId);
+    await smtpStop();
+  });
+
   test('it shows an error when the username is already taken', async ({
     page,
   }) => {
@@ -128,7 +178,7 @@ test.describe('User Registration w/ Token', () => {
       page.locator(
         '[data-test-username-field] ~ [data-test-boxel-input-group-error-message]',
       ),
-    ).toContainText('User Name is already taken');
+    ).toContainText('Username is already taken');
 
     await page.locator('[data-test-username-field]').fill('user2');
     await expect(
@@ -181,7 +231,60 @@ test.describe('User Registration w/ Token', () => {
       page.locator(
         '[data-test-username-field] ~ [data-test-boxel-input-group-error-message]',
       ),
-    ).toContainText('User Name cannot start with an underscore');
+    ).toContainText('Username cannot start with an underscore');
+
+    await page.locator('[data-test-username-field]').fill('user1');
+    await expect(
+      page.locator(
+        '[data-test-username-field] ~ [data-test-boxel-input-group-error-message]',
+      ),
+      'no error message is displayed',
+    ).toHaveCount(0);
+    await page.locator('[data-test-register-btn]').click();
+
+    await page.locator('[data-test-token-field]').fill('abc123');
+    await page.locator('[data-test-next-btn]').click();
+
+    await validateEmail(page, 'user1@example.com');
+
+    await assertLoggedIn(page, {
+      userId: '@user1:localhost',
+      displayName: 'Test User',
+    });
+  });
+
+  test('it shows an error when the username start with "realm/"', async ({
+    page,
+  }) => {
+    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
+    await registerRealmUsers(synapse);
+    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
+    await clearLocalStorage(page);
+
+    await gotoRegistration(page);
+
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-name-field]').fill('Test User');
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-email-field]').fill('user1@example.com');
+    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+    await page.locator('[data-test-username-field]').fill('realm/user');
+    await page.locator('[data-test-password-field]').fill('mypassword1!');
+    await page
+      .locator('[data-test-confirm-password-field]')
+      .fill('mypassword1!');
+
+    await expect(
+      page.locator(
+        '[data-test-username-field][data-test-boxel-input-group-validation-state="invalid"]',
+      ),
+      'username field displays invalid validation state',
+    ).toHaveCount(1);
+    await expect(
+      page.locator(
+        '[data-test-username-field] ~ [data-test-boxel-input-group-error-message]',
+      ),
+    ).toContainText('Username cannot start with "realm/"');
 
     await page.locator('[data-test-username-field]').fill('user1');
     await expect(
@@ -361,36 +464,6 @@ test.describe('User Registration w/ Token', () => {
 
     await page.locator('[data-test-register-btn]').click();
     await expect(page.locator('[data-test-token-field]')).toHaveCount(1);
-  });
-
-  test(`it can resend email validation message`, async ({ page }) => {
-    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await registerRealmUsers(synapse);
-    await clearLocalStorage(page);
-    await createRegistrationToken(
-      // synapse,
-      admin.accessToken,
-      REGISTRATION_TOKEN,
-    );
-    await gotoRegistration(page);
-
-    await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
-    await page.locator('[data-test-name-field]').fill('user1');
-    await page.locator('[data-test-email-field]').fill('user1@example.com');
-    await page.locator('[data-test-username-field]').fill('user1');
-    await page.locator('[data-test-password-field]').fill('mypassword1!');
-    await page
-      .locator('[data-test-confirm-password-field]')
-      .fill('mypassword1!');
-    await expect(page.locator('[data-test-register-btn]')).toBeEnabled();
-    await page.locator('[data-test-register-btn]').click();
-
-    await expect(page.locator('[data-test-next-btn]')).toBeDisabled();
-    await page.locator('[data-test-token-field]').fill('abc123');
-    await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
-    await page.locator('[data-test-next-btn]').click();
-
-    await validateEmail(page, 'user1@example.com', { sendAttempts: 2 });
   });
 
   test('it shows an error encountered when registering', async ({ page }) => {

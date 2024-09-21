@@ -359,7 +359,7 @@ test.describe('Room messages', () => {
         function: {
           name: 'searchCard',
           description:
-            'Propose a query to search for a card instance filtered by type and/or by title. Always prioritise search based upon the card that was last shared.',
+            'Propose a query to search for a card instance filtered by type.   If a card was shared with you, always prioritise search based upon the card that was last shared.   If you do not have information on card module and name, do the search using the `_cardType` attribute.',
           parameters: {
             type: 'object',
             properties: {
@@ -369,52 +369,38 @@ test.describe('Room messages', () => {
               filter: {
                 type: 'object',
                 properties: {
-                  every: {
-                    type: 'array',
-                    items: {
-                      anyOf: [
-                        {
-                          type: 'object',
-                          properties: {
-                            type: {
-                              type: 'object',
-                              properties: {
-                                module: {
-                                  type: 'string',
-                                  description:
-                                    'the absolute path of the module',
-                                },
-                                name: {
-                                  type: 'string',
-                                  description: 'the name of the module',
-                                },
-                              },
-                              required: ['module', 'name'],
-                            },
-                          },
-                          required: ['type'],
-                        },
-                        {
-                          type: 'object',
-                          properties: {
-                            contains: {
-                              type: 'object',
-                              properties: {
-                                title: {
-                                  type: 'string',
-                                  description: 'title of the card',
-                                },
-                              },
-                              required: ['title'],
-                            },
-                          },
-                          required: ['contains'],
-                        },
-                      ],
+                  type: {
+                    type: 'object',
+                    properties: {
+                      module: {
+                        type: 'string',
+                        description: 'the absolute path of the module',
+                      },
+                      name: {
+                        type: 'string',
+                        description: 'the name of the module',
+                      },
                     },
+                    required: ['module', 'name'],
+                  },
+                  contains: {
+                    type: 'object',
+                    properties: {
+                      title: { type: 'string', description: 'title of the card' },
+                    },
+                    required: ['title'],
+                  },
+                  eq: {
+                    type: 'object',
+                    properties: {
+                      _cardType: {
+                        type: 'string',
+                        description: 'name of the card type',
+                      },
+                    },
+                    required: ['_cardType'],
                   },
                 },
-                required: ['every'],
               },
             },
             required: ['filter', 'description'],

@@ -52,8 +52,8 @@ test.describe('Realm URLs in Matrix account data', () => {
       .waitFor({ state: 'visible' });
 
     expect(await page.locator('[data-test-workspace]').count()).toBe(1);
-    expect(page.locator('[data-test-workspace]')).toHaveText(
-      'http://localhost:4202/test/',
+    expect(page.locator('[data-test-workspace-name]')).toHaveText(
+      'Test Workspace A',
     );
 
     await updateAccountData(
@@ -70,12 +70,12 @@ test.describe('Realm URLs in Matrix account data', () => {
       .waitFor({ state: 'visible' });
     expect(await page.locator('[data-test-workspace]').count()).toBe(2);
 
-    expect(page.locator('[data-test-workspace]:first-child')).toHaveText(
-      'http://localhost:4202/test/',
+    expect(page.locator('[data-test-workspace="Test Workspace A"] [data-test-workspace-name]')).toHaveText(
+      'Test Workspace A',
     );
 
-    expect(page.locator('[data-test-workspace]:last-child')).toHaveText(
-      'http://example.com/',
+    expect(page.locator('[data-test-workspace="Unknown Workspace"] [data-test-workspace-name]')).toHaveText(
+      'Unknown Workspace',
     );
   });
 });

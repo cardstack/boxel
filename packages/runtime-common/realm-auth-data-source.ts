@@ -5,16 +5,18 @@ export class RealmAuthDataSource {
   // Cached realm info and session to avoid fetching it multiple times for the same realm
   private visitedRealms = new Map<string, RealmAuthClient>();
   private matrixClient: MatrixClient;
-  private fetch: typeof globalThis.fetch;
+  private getFetch: () => typeof globalThis.fetch;
   realmURL: string;
 
   constructor(
     matrixClient: MatrixClient,
-    fetch: typeof globalThis.fetch,
+    // we want our fetch to be lazily obtained as it might be the very fetch
+    // that is composed by middleware containing this data source instance
+    getFetch: () => typeof globalThis.fetch,
     realmURL: string,
   ) {
     this.matrixClient = matrixClient;
-    this.fetch = fetch;
+    this.getFetch = getFetch;
     this.realmURL = realmURL;
   }
 
@@ -37,17 +39,11 @@ export class RealmAuthDataSource {
   }
 
   async reauthenticate(targetRealmURL: string): Promise<string | undefined> {
-    if (targetRealmURL === this.realmURL) {
-      throw new Error(
-        `bug: did not expect to ever be asked to log into myself`,
-      );
-    }
-
     this.visitedRealms.delete(targetRealmURL);
     let client = this.createRealmAuthClient(
       new URL(targetRealmURL),
       this.matrixClient,
-      this.fetch,
+      this.getFetch(),
     );
     this.visitedRealms.set(targetRealmURL, client);
 

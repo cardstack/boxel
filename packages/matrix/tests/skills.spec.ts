@@ -98,8 +98,12 @@ test.describe('Skills', () => {
       page.locator('[data-test-pill-menu-header-button]'),
     ).toHaveText('Hide');
     await expect(page.locator('[data-test-pill-menu-item]')).toHaveCount(1);
-    await expect(page.locator(`[data-test-pill-menu-item="${defaultSkillCard}"]`)).toHaveCount(1);
-    await expect(page.locator(`[data-test-card-pill-toggle="${defaultSkillCard}-on"]`)).toHaveCount(1);
+    await expect(
+      page.locator(`[data-test-pill-menu-item="${defaultSkillCard}"]`),
+    ).toHaveCount(1);
+    await expect(
+      page.locator(`[data-test-card-pill-toggle="${defaultSkillCard}-on"]`),
+    ).toHaveCount(1);
     await expect(page.locator('[data-test-pill-menu-add-button]')).toHaveCount(
       1,
     );
@@ -249,7 +253,8 @@ test.describe('Skills', () => {
     expect(fragment3.content.data).toContain(skillCard2);
     expect(cardFragments).not.toContain(skillCard3);
 
-    let [defaultSkillCardEventId, skillEventId1, skillEventId2] = attachedSkillEventIds;
+    let [defaultSkillCardEventId, skillEventId1, skillEventId2] =
+      attachedSkillEventIds;
     expect(fragment1.event_id).toStrictEqual(defaultSkillCardEventId);
     expect(fragment2.event_id).toStrictEqual(skillEventId1);
     expect(fragment3.event_id).toStrictEqual(skillEventId2);
@@ -509,5 +514,7 @@ test.describe('Skills', () => {
   });
 
   // TODO: CS-6985
-  test.skip(`persisted enabled skills are attached to sent messages`, async () => {});
+  test.skip(`persisted enabled skills are attached to sent messages`, async () => {
+    // TODO
+  });
 });

@@ -27,7 +27,7 @@ const testRealmHref = testRealmURL.href;
 
 module('loader', function (hooks) {
   let dir: DirResult;
-  let testRealmServer: Server;
+  let testRealmHttpServer: Server;
 
   let virtualNetwork = new VirtualNetwork();
   shimExternals(virtualNetwork);
@@ -50,9 +50,10 @@ module('loader', function (hooks) {
 
   setupDB(hooks, {
     before: async (dbAdapter, queue) => {
-      ({ testRealmServer } = await runTestRealmServer({
+      ({ testRealmHttpServer } = await runTestRealmServer({
         virtualNetwork,
-        dir: dir.name,
+        testRealmDir: dir.name,
+        realmsRootPath: dir.name,
         realmURL: testRealmURL,
         dbAdapter,
         queue,
@@ -60,7 +61,7 @@ module('loader', function (hooks) {
       }));
     },
     after: async () => {
-      await closeServer(testRealmServer);
+      await closeServer(testRealmHttpServer);
     },
   });
 

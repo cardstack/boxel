@@ -633,9 +633,6 @@ importers:
       ember-basic-dropdown:
         specifier: ^8.0.0
         version: 8.0.4(patch_hash=4oyt6m5mwcw3sqhrngg4jt6oxa)(@ember/string@3.1.1)(@ember/test-helpers@3.3.0)(@glimmer/component@1.1.2)(@glimmer/tracking@1.1.2)(@glint/environment-ember-loose@1.3.0)(@glint/template@1.3.0)(ember-source@5.4.1)
-      ember-composable-helpers:
-        specifier: ^5.0.0
-        version: 5.0.0
       ember-css-url:
         specifier: ^1.0.0
         version: 1.0.0(patch_hash=aglq5wzlwgv75jfevvip6brqo4)
@@ -1005,6 +1002,36 @@ importers:
         specifier: ^5.89.0
         version: 5.89.0
 
+  packages/catalog-realm:
+    devDependencies:
+      '@cardstack/boxel-ui':
+        specifier: workspace:*
+        version: link:../boxel-ui/addon
+      '@cardstack/runtime-common':
+        specifier: workspace:*
+        version: link:../runtime-common
+      '@types/lodash':
+        specifier: ^4.14.182
+        version: 4.14.182
+      chess.js:
+        specifier: 1.0.0-beta.8
+        version: 1.0.0-beta.8
+      concurrently:
+        specifier: ^8.0.1
+        version: 8.2.2
+      ember-concurrency:
+        specifier: ^4.0.2
+        version: 4.0.2(@babel/core@7.24.3)(@glimmer/tracking@1.1.2)(@glint/template@1.3.0)(ember-source@5.4.1)
+      ember-modifier:
+        specifier: ^4.1.0
+        version: 4.1.0(ember-source@5.4.1)
+      ember-template-lint:
+        specifier: ^5.11.2
+        version: 5.11.2
+      tracked-built-ins:
+        specifier: ^3.3.0
+        version: 3.3.0
+
   packages/eslint-plugin-window-mock: {}
 
   packages/experiments-realm:
@@ -1264,9 +1291,6 @@ importers:
       ember-click-outside:
         specifier: ^6.0.1
         version: 6.0.1(ember-source@5.4.1)
-      ember-composable-helpers:
-        specifier: ^5.0.0
-        version: 5.0.0
       ember-concurrency:
         specifier: ^3.1.1
         version: 3.1.1(@babel/core@7.24.3)(ember-source@5.4.1)
@@ -1489,6 +1513,9 @@ importers:
       start-server-and-test:
         specifier: ^1.14.0
         version: 1.14.0
+      tmp:
+        specifier: ^0.2.1
+        version: 0.2.1
       ts-node:
         specifier: ^10.9.1
         version: 10.9.1(@types/node@18.18.5)(typescript@5.1.6)
@@ -1684,6 +1711,9 @@ importers:
       wait-for-localhost-cli:
         specifier: ^3.2.0
         version: 3.2.0
+      yaml:
+        specifier: ^2.5.1
+        version: 2.5.1
       yargs:
         specifier: ^17.5.1
         version: 17.5.1
@@ -1868,6 +1898,36 @@ importers:
       ember-cli-htmlbars:
         specifier: ^6.3.0
         version: 6.3.0
+
+  packages/seed-realm:
+    devDependencies:
+      '@cardstack/boxel-ui':
+        specifier: workspace:*
+        version: link:../boxel-ui/addon
+      '@cardstack/runtime-common':
+        specifier: workspace:*
+        version: link:../runtime-common
+      '@types/lodash':
+        specifier: ^4.14.182
+        version: 4.14.182
+      chess.js:
+        specifier: 1.0.0-beta.8
+        version: 1.0.0-beta.8
+      concurrently:
+        specifier: ^8.0.1
+        version: 8.2.2
+      ember-concurrency:
+        specifier: ^4.0.2
+        version: 4.0.2(@babel/core@7.24.3)(@glimmer/tracking@1.1.2)(@glint/template@1.3.0)(ember-source@5.4.1)
+      ember-modifier:
+        specifier: ^4.1.0
+        version: 4.1.0(ember-source@5.4.1)
+      ember-template-lint:
+        specifier: ^5.11.2
+        version: 5.11.2
+      tracked-built-ins:
+        specifier: ^3.3.0
+        version: 3.3.0
 
   packages/template-lint:
     devDependencies:
@@ -8845,26 +8905,6 @@ packages:
       - supports-color
     dev: true
 
-  /broccoli-funnel@2.0.1:
-    resolution: {integrity: sha512-C8Lnp9TVsSSiZMGEF16C0dCiNg2oJqUKwuZ1K4kVC6qRPG/2Cj/rtB5kRCC9qEbwqhX71bDbfHROx0L3J7zXQg==}
-    engines: {node: ^4.5 || 6.* || >= 7.*}
-    dependencies:
-      array-equal: 1.0.0
-      blank-object: 1.0.2
-      broccoli-plugin: 1.3.1
-      debug: 2.6.9
-      fast-ordered-set: 1.0.3
-      fs-tree-diff: 0.5.9
-      heimdalljs: 0.2.6
-      minimatch: 3.1.2
-      mkdirp: 0.5.6
-      path-posix: 1.0.0
-      rimraf: 2.7.1
-      symlink-or-copy: 1.3.1
-      walk-sync: 0.3.4
-    transitivePeerDependencies:
-      - supports-color
-
   /broccoli-funnel@2.0.2:
     resolution: {integrity: sha512-/vDTqtv7ipjEZQOVqO4vGDVAOZyuYzQ/EgGoyewfOgh1M7IQAToBKZI0oAQPgMBeFPPlIbfMuAngk+ohPBuaHQ==}
     engines: {node: ^4.5 || 6.* || >= 7.*}
@@ -12273,17 +12313,6 @@ packages:
       - '@babel/core'
       - supports-color
 
-  /ember-composable-helpers@5.0.0:
-    resolution: {integrity: sha512-gyUrjiSju4QwNrsCLbBpP0FL6VDFZaELNW7Kbcp60xXhjvNjncYgzm4zzYXhT+i1lLA6WEgRZ3lOGgyBORYD0w==}
-    engines: {node: 12.* || 14.* || >= 16}
-    dependencies:
-      '@babel/core': 7.24.3(supports-color@8.1.1)
-      broccoli-funnel: 2.0.1
-      ember-cli-babel: 7.26.11
-      resolve: 1.22.8
-    transitivePeerDependencies:
-      - supports-color
-
   /ember-concurrency@3.1.1(@babel/core@7.24.3)(ember-source@5.4.1):
     resolution: {integrity: sha512-doXFYYfy1C7jez+jDDlfahTp03QdjXeSY/W3Zbnx/q3UNJ9g10Shf2d7M/HvWo/TC22eU+6dPLIpqd/6q4pR+Q==}
     engines: {node: 16.* || >= 18}
@@ -15248,7 +15277,7 @@ packages:
     resolution: {integrity: sha512-oWb1Z6mkHIskLzEJ/XWX0srkpkTQ7vaopMQkyaEIoq0fmtFVxOthb8cCxeT+p3ynTdkk/RZwbgG4brR5BeWECw==}
     engines: {node: '>= 4.0'}
     os: [darwin]
-    deprecated: The v1 package contains DANGEROUS / INSECURE binaries. Upgrade to safe fsevents v2
+    deprecated: Upgrade to fsevents v2 to mitigate potential security issues
     requiresBuild: true
     dependencies:
       bindings: 1.5.0
@@ -23752,6 +23781,12 @@ packages:
   /yaml@2.3.3:
     resolution: {integrity: sha512-zw0VAJxgeZ6+++/su5AFoqBbZbrEakwu+X0M5HmcwUiBL7AzcuPKjj5we4xfQLp78LkEMpD0cOnUhmgOVy3KdQ==}
     engines: {node: '>= 14'}
+    dev: true
+
+  /yaml@2.5.1:
+    resolution: {integrity: sha512-bLQOjaX/ADgQ20isPJRvF0iRUHIxVhYvr53Of7wGcWlO2jvtUlH5m87DsmulFVxRpNLOnI4tB6p/oh8D7kpn9Q==}
+    engines: {node: '>= 14'}
+    hasBin: true
     dev: true
 
   /yargs-parser@20.2.3:

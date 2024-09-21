@@ -37,6 +37,7 @@ setGracefulCleanup();
 // loading of cards necessary for indexing and the ability to manipulate the
 // underlying filesystem in a manner that doesn't leak into other tests (as well
 // as to test through loader caching)
+
 module('indexing', function (hooks) {
   let { virtualNetwork: baseRealmServerVirtualNetwork, loader } =
     createVirtualNetworkAndLoader();
@@ -402,7 +403,7 @@ module('indexing', function (hooks) {
         instanceErrors: 0,
         moduleErrors: 0,
         modulesIndexed: 0,
-        totalIndexEntries: 12,
+        totalIndexEntries: 10,
       },
       'indexed correct number of files',
     );
@@ -430,7 +431,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 1,
         modulesIndexed: 0,
-        totalIndexEntries: 12,
+        totalIndexEntries: 8,
       },
       'indexed correct number of files',
     );
@@ -449,7 +450,7 @@ module('indexing', function (hooks) {
         instanceErrors: 4, // 1 post, 2 persons, 1 bad-link post
         moduleErrors: 3, // post, fancy person, person
         modulesIndexed: 0,
-        totalIndexEntries: 12,
+        totalIndexEntries: 2,
       },
       'indexed correct number of files',
     );
@@ -482,7 +483,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
         modulesIndexed: 3,
-        totalIndexEntries: 12,
+        totalIndexEntries: 8,
       },
       'indexed correct number of files',
     );
@@ -518,7 +519,7 @@ module('indexing', function (hooks) {
         instanceErrors: 0,
         moduleErrors: 0,
         modulesIndexed: 0,
-        totalIndexEntries: 12,
+        totalIndexEntries: 9,
       },
       'index did not touch any files',
     );
@@ -559,7 +560,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
         modulesIndexed: 1,
-        totalIndexEntries: 12,
+        totalIndexEntries: 10,
       },
       'indexed correct number of files',
     );
@@ -601,7 +602,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
         modulesIndexed: 3,
-        totalIndexEntries: 12,
+        totalIndexEntries: 10,
       },
       'indexed correct number of files',
     );
@@ -654,7 +655,7 @@ module('indexing', function (hooks) {
         instanceErrors: 2,
         moduleErrors: 0,
         modulesIndexed: 0,
-        totalIndexEntries: 12,
+        totalIndexEntries: 8,
       },
       'indexed correct number of files',
     );
@@ -695,10 +696,24 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
         modulesIndexed: 1,
-        totalIndexEntries: 12,
+        totalIndexEntries: 10,
       },
       'indexed correct number of files',
     );
+  });
+
+  test('sets resource_created_at for modules and instances', async function (assert) {
+    let entry = (await realm.realmIndexQueryEngine.module(
+      new URL(`${testRealm}fancy-person.gts`),
+    )) as { resourceCreatedAt: number };
+
+    assert.ok(entry!.resourceCreatedAt, 'resourceCreatedAt is set');
+
+    entry = (await realm.realmIndexQueryEngine.instance(
+      new URL(`${testRealm}mango`),
+    )) as { resourceCreatedAt: number };
+
+    assert.ok(entry!.resourceCreatedAt, 'resourceCreatedAt is set');
   });
 
   test('sets urls containing encoded CSS for deps for a module', async function (assert) {
@@ -811,9 +826,10 @@ module('permissioned realm', function (hooks) {
   ) {
     setupDB(hooks, {
       beforeEach: async (dbAdapter, queue) => {
-        ({ testRealmServer: testRealmServer1 } = await runTestRealmServer({
+        ({ testRealmHttpServer: testRealmServer1 } = await runTestRealmServer({
           virtualNetwork: await createVirtualNetwork(),
-          dir: dirSync().name,
+          testRealmDir: dirSync().name,
+          realmsRootPath: dirSync().name,
           realmURL: testRealm1URL,
           fileSystem: {
             'article.gts': `
@@ -834,10 +850,11 @@ module('permissioned realm', function (hooks) {
           queue,
         }));
 
-        ({ testRealmServer: testRealmServer2, testRealm: testRealm2 } =
+        ({ testRealmHttpServer: testRealmServer2, testRealm: testRealm2 } =
           await runTestRealmServer({
             virtualNetwork: await createVirtualNetwork(),
-            dir: dirSync().name,
+            testRealmDir: dirSync().name,
+            realmsRootPath: dirSync().name,
             realmURL: testRealm2URL,
             fileSystem: {
               'website.gts': `
@@ -922,7 +939,7 @@ module('permissioned realm', function (hooks) {
           instancesIndexed: 0,
           moduleErrors: 1,
           modulesIndexed: 0,
-          totalIndexEntries: 2,
+          totalIndexEntries: 0,
         },
         'has a module error',
       );

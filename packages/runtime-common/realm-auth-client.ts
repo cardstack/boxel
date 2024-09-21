@@ -13,6 +13,7 @@ export interface RealmAuthMatrixClientInterface {
   getJoinedRooms(): Promise<{ joined_rooms: string[] }>;
   joinRoom(room: string): Promise<any>;
   sendEvent(room: string, type: string, content: any): Promise<any>;
+  hashMessageWithSecret(message: string): Promise<string>;
 }
 
 export class RealmAuthClient {
@@ -67,24 +68,33 @@ export class RealmAuthClient {
     }
 
     let initialJSON = (await initialResponse.json()) as {
-      room: string;
+      room?: string;
       challenge: string;
     };
 
     let { room, challenge } = initialJSON;
+    let challengeResponse: Response;
+    if (!room) {
+      // if the realm did not invite us to a room that means that the realm user
+      // is the same as our user and that we hash the challenge with our realm
+      // password
+      challengeResponse = await this.challengeRequest(
+        challenge,
+        await this.matrixClient.hashMessageWithSecret(challenge),
+      );
+    } else {
+      let { joined_rooms: rooms } = await this.matrixClient.getJoinedRooms();
 
-    let { joined_rooms: rooms } = await this.matrixClient.getJoinedRooms();
+      if (!rooms.includes(room)) {
+        await this.matrixClient.joinRoom(room);
+      }
 
-    if (!rooms.includes(room)) {
-      await this.matrixClient.joinRoom(room);
+      await this.matrixClient.sendEvent(room, 'm.room.message', {
+        body: `auth-response: ${challenge}`,
+        msgtype: 'm.text',
+      });
+      challengeResponse = await this.challengeRequest(challenge);
     }
-
-    await this.matrixClient.sendEvent(room, 'm.room.message', {
-      body: `auth-response: ${challenge}`,
-      msgtype: 'm.text',
-    });
-
-    let challengeResponse = await this.challengeRequest(challenge);
 
     let jwt = challengeResponse.headers.get('Authorization');
 
@@ -113,7 +123,10 @@ export class RealmAuthClient {
     });
   }
 
-  private async challengeRequest(challenge: string) {
+  private async challengeRequest(
+    challenge: string,
+    challengeResponse?: string,
+  ) {
     return this.fetch(`${this.realmURL.href}_session`, {
       method: 'POST',
       headers: {
@@ -122,6 +135,7 @@ export class RealmAuthClient {
       body: JSON.stringify({
         user: this.matrixClient.getUserId(),
         challenge,
+        ...(challengeResponse ? { challengeResponse } : {}),
       }),
     });
   }
