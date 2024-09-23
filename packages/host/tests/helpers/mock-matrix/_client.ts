@@ -230,13 +230,6 @@ export class MockClient implements ExtendedClient {
     return Promise.resolve({});
   }
 
-  allRoomMessages(
-    _roomId: string,
-    _opts?: MessageOptions | undefined,
-  ): Promise<MatrixEvent[]> {
-    throw new Error('Method not implemented.');
-  }
-
   requestEmailToken(
     _type: 'registration' | 'threepid',
     _email: string,

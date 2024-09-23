@@ -99,10 +99,6 @@ export type ExtendedClient = Pick<
   | 'setRoomName'
   | 'startClient'
 > & {
-  allRoomMessages(
-    roomId: string,
-    opts?: MessageOptions,
-  ): Promise<MatrixEvent[]>;
   requestEmailToken(
     type: 'registration' | 'threepid',
     email: string,
@@ -132,36 +128,6 @@ async function createRealmSession(
   let realmAuthClient = new RealmAuthClient(realmURL, this, fetch);
 
   return await realmAuthClient.getJWT();
-}
-
-async function allRoomMessages(
-  this: ExtendedClient,
-  fetch: typeof globalThis.fetch,
-  roomId: string,
-  opts?: MessageOptions,
-): Promise<MatrixEvent[]> {
-  let messages: MatrixEvent[] = [];
-  let from: string | undefined;
-
-  do {
-    let response = await fetch(
-      `${this.baseUrl}/_matrix/client/v3/rooms/${roomId}/messages?dir=${
-        opts?.direction ? opts.direction.slice(0, 1) : 'f'
-      }&limit=${opts?.pageSize ?? DEFAULT_PAGE_SIZE}${
-        from ? '&from=' + from : ''
-      }`,
-      {
-        headers: {
-          Authorization: `Bearer ${this.getAccessToken()}`,
-        },
-      },
-    );
-    let { chunk, end } = await response.json();
-    from = end;
-    let events: Partial<MatrixSDK.IEvent>[] = chunk;
-    messages.push(...events.map((event) => new MatrixEvent(event)));
-  } while (from);
-  return messages;
 }
 
 async function requestEmailToken(
@@ -243,8 +209,6 @@ function extendedClient(
       switch (key) {
         case 'hashMessageWithSecret':
           return hashMessageWithSecret.bind(extendedTarget, fetch);
-        case 'allRoomMessages':
-          return allRoomMessages.bind(extendedTarget, fetch);
         case 'requestEmailToken':
           return requestEmailToken.bind(extendedTarget, fetch);
         case 'loginWithEmail':

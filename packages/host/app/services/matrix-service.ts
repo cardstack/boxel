@@ -294,7 +294,6 @@ export default class MatrixService extends Service {
       try {
         await this._client.startClient();
         await this.accountDataProcessed.promise;
-        await this.initializeRooms();
       } catch (e) {
         console.log('Error starting Matrix client', e);
         await this.logout();
@@ -567,23 +566,6 @@ export default class MatrixService extends Service {
     return responses;
   }
 
-  private async initializeRooms() {
-    let { joined_rooms: joinedRooms } = await this.client.getJoinedRooms();
-    for (let roomId of joinedRooms) {
-      let stateEvents = await this.client.roomState(roomId);
-      await Promise.all(
-        stateEvents.map((event) => {
-          this.addRoomEvent({ ...event, status: null });
-        }),
-      );
-      let messageMatrixEvents = await this.client.allRoomMessages(roomId);
-      await Promise.all(
-        messageMatrixEvents.map((matrixEvent) => {
-          this.addRoomEvent({ ...matrixEvent.event, status: null });
-        }),
-      );
-    }
-  }
 
   getLastActiveTimestamp(roomId: string, defaultTimestamp: number) {
     let matrixRoom = this.client.getRoom(roomId);
