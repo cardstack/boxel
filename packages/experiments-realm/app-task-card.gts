@@ -334,6 +334,7 @@ class ColumnQuery extends GlimmerComponent<ColumnQuerySignature> {
 
     <style>
       .cards {
+        padding: 0;
         list-style-type: none;
         display: flex;
         flex-direction: column;
