@@ -222,6 +222,7 @@ export default class MatrixService extends Service {
       clearAuth();
       this.realm.logout();
       this.realmServer.logout();
+      this.cardService.resetState();
       this.unbindEventListeners();
       await this.client.logout(true);
     } catch (e) {

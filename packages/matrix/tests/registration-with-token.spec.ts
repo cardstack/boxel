@@ -19,6 +19,7 @@ import {
   assertLoggedIn,
   assertLoggedOut,
   logout,
+  login,
   registerRealmUsers,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
@@ -49,6 +50,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
   test('it can register a user with a registration token', async ({ page }) => {
     test.setTimeout(120_000);
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
+    await registerUser(synapse, 'user2', 'pass');
     await registerRealmUsers(synapse);
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
     await clearLocalStorage(page, appURL);
@@ -129,18 +131,38 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       page.locator(`[data-test-cards-grid-item="${newRealmURL}hello-world"]`),
     ).toHaveCount(1);
 
-    await page.reload();
-
-    await page
-      .locator('[data-test-boxel-filter-list-button="All Cards"]')
-      .click();
-    await expect(
-      page.locator(`[data-test-cards-grid-item="${newRealmURL}hello-world"]`),
-    ).toHaveCount(1);
-
     // assert that the registration mode state is cleared properly
     await logout(page);
     await assertLoggedOut(page);
+
+    // assert workspaces state don't leak into other sessions
+    await login(page, 'user2', 'pass', { url: appURL });
+    await assertLoggedIn(page, {
+      userId: '@user2:localhost',
+      displayName: 'user2',
+    });
+    await page.locator('[data-test-workspace-chooser-toggle]').click();
+    await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
+    await expect(page.locator(`[data-test-workspace]`)).toHaveCount(2);
+    await expect(
+      page.locator(`[data-test-workspace="Test User's Workspace"]`),
+    ).toHaveCount(0);
+
+    // assert newly registered user can login with their credentials
+    await logout(page);
+    await assertLoggedOut(page);
+    await login(page, 'user1', 'mypassword1!', { url: appURL });
+    await assertLoggedIn(page, { displayName: 'Test User' });
+    await page.locator('[data-test-workspace-chooser-toggle]').click();
+    await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
+    await expect(
+      page.locator(`[data-test-workspace="Test User's Workspace"]`),
+    ).toHaveCount(1);
+
+    await page.reload();
+    await expect(
+      page.locator(`[data-test-workspace="Test User's Workspace"]`),
+    ).toHaveCount(1);
 
     let auth = await loginUser(`user1`, 'mypassword1!');
     let realms = await getAccountData<{ realms: string[] } | undefined>(

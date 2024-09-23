@@ -45,7 +45,7 @@ test.describe('Realm URLs in Matrix account data', () => {
   test('active realms are determined by account data', async ({ page }) => {
     await login(page, 'user1', 'pass');
 
-    await page.locator('[data-test-submode-layout-boxel-icon-button]').click();
+    await page.locator('[data-test-workspace-chooser-toggle]').click();
 
     await page
       .locator('[data-test-workspace-chooser]')

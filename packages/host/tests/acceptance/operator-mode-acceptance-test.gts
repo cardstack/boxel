@@ -575,7 +575,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     let urlParameters = new URLSearchParams(url);
     assert.false(Boolean(urlParameters.get('workspaceChooserOpened')));
 
-    await click('[data-test-submode-layout-boxel-icon-button]');
+    await click('[data-test-workspace-chooser-toggle]');
 
     assert.dom('[data-test-submode-layout-title]').exists();
     assert.dom('[data-test-workspace-chooser]').exists();

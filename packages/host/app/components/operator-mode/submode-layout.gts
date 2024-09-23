@@ -255,7 +255,7 @@ export default class SubmodeLayout extends Component<Signature> {
                 dark-icon=(not this.workspaceChooserOpened)
               }}
               {{on 'click' this.toggleWorkspaceChooser}}
-              data-test-submode-layout-boxel-icon-button
+              data-test-workspace-chooser-toggle
             />
             {{#if this.workspaceChooserOpened}}
               <span
