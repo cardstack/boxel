@@ -4,13 +4,9 @@ import { service } from '@ember/service';
 
 import * as MatrixSDK from 'matrix-js-sdk';
 
-import { MatrixEvent } from 'matrix-js-sdk';
-
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
 import LoaderService from './loader-service';
-
-const DEFAULT_PAGE_SIZE = 50;
 
 /*
   This abstracts over the matrix SDK, including several extra functions that are
@@ -98,13 +94,10 @@ export type ExtendedClient = Pick<
   | 'setPowerLevel'
   | 'setRoomName'
   | 'startClient'
+  | 'getAccountDataFromServer'
 > & {
   setAccountData<T>(type: string, data: T): Promise<void>;
   getAccountData<T>(type: string): Promise<T>;
-  allRoomMessages(
-    roomId: string,
-    opts?: MessageOptions,
-  ): Promise<MatrixEvent[]>;
   requestEmailToken(
     type: 'registration' | 'threepid',
     email: string,
@@ -200,36 +193,6 @@ async function getAccountData<T>(
   return json as T;
 }
 
-async function allRoomMessages(
-  this: ExtendedClient,
-  fetch: typeof globalThis.fetch,
-  roomId: string,
-  opts?: MessageOptions,
-): Promise<MatrixEvent[]> {
-  let messages: MatrixEvent[] = [];
-  let from: string | undefined;
-
-  do {
-    let response = await fetch(
-      `${this.baseUrl}/_matrix/client/v3/rooms/${roomId}/messages?dir=${
-        opts?.direction ? opts.direction.slice(0, 1) : 'f'
-      }&limit=${opts?.pageSize ?? DEFAULT_PAGE_SIZE}${
-        from ? '&from=' + from : ''
-      }`,
-      {
-        headers: {
-          Authorization: `Bearer ${this.getAccessToken()}`,
-        },
-      },
-    );
-    let { chunk, end } = await response.json();
-    from = end;
-    let events: Partial<MatrixSDK.IEvent>[] = chunk;
-    messages.push(...events.map((event) => new MatrixEvent(event)));
-  } while (from);
-  return messages;
-}
-
 async function requestEmailToken(
   this: ExtendedClient,
   fetch: typeof globalThis.fetch,
@@ -313,8 +276,6 @@ function extendedClient(
           return getAccountData.bind(extendedTarget, fetch);
         case 'hashMessageWithSecret':
           return hashMessageWithSecret.bind(extendedTarget, fetch);
-        case 'allRoomMessages':
-          return allRoomMessages.bind(extendedTarget, fetch);
         case 'requestEmailToken':
           return requestEmailToken.bind(extendedTarget, fetch);
         case 'loginWithEmail':

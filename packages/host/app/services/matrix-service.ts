@@ -22,7 +22,6 @@ import { TrackedMap, TrackedObject } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
-  Deferred,
   type LooseSingleCardDocument,
   markdownToHtml,
   aiBotUsername,
@@ -107,7 +106,6 @@ export default class MatrixService extends Service {
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
-  private accountDataProcessed = new Deferred<void>();
   private rooms: TrackedMap<string, RoomState> = new TrackedMap();
   roomResourcesCache: TrackedMap<string, RoomResource> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
@@ -172,7 +170,6 @@ export default class MatrixService extends Service {
           if (e.event.type == 'com.cardstack.boxel.realms') {
             this.cardService.setRealms(e.event.content.realms);
             await this.loginToRealms();
-            this.accountDataProcessed.fulfill();
           }
         },
       ],
@@ -318,8 +315,11 @@ export default class MatrixService extends Service {
 
       try {
         await this._client.startClient();
-        await this.accountDataProcessed.promise;
-        await this.initializeRooms();
+        let accountDataContent = await this._client.getAccountDataFromServer<{
+          realms: string[];
+        }>('com.cardstack.boxel.realms');
+        this.cardService.setRealms(accountDataContent?.realms ?? []);
+        await this.loginToRealms();
       } catch (e) {
         console.log('Error starting Matrix client', e);
         await this.logout();
@@ -590,24 +590,6 @@ export default class MatrixService extends Service {
       responses.unshift(response);
     }
     return responses;
-  }
-
-  private async initializeRooms() {
-    let { joined_rooms: joinedRooms } = await this.client.getJoinedRooms();
-    for (let roomId of joinedRooms) {
-      let stateEvents = await this.client.roomState(roomId);
-      await Promise.all(
-        stateEvents.map((event) => {
-          this.addRoomEvent({ ...event, status: null });
-        }),
-      );
-      let messageMatrixEvents = await this.client.allRoomMessages(roomId);
-      await Promise.all(
-        messageMatrixEvents.map((matrixEvent) => {
-          this.addRoomEvent({ ...matrixEvent.event, status: null });
-        }),
-      );
-    }
   }
 
   getLastActiveTimestamp(roomId: string, defaultTimestamp: number) {
