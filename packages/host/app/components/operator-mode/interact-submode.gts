@@ -612,9 +612,13 @@ export default class InteractSubmode extends Component<Signature> {
     openSearchCallback();
   }
 
+  get hasItemsInLeftStack() {
+    return Boolean(this.stacks[0].length);
+  }
+
   <template>
     <SubmodeLayout
-      @actions={{this.publicAPI this (if this.stacks.0.length 1 0)}}
+      @actions={{this.publicAPI this (if this.hasItemsInLeftStack 1 0)}}
       @onSearchSheetClosed={{this.clearSearchSheetTrigger}}
       @onCardSelectFromSearch={{perform this.openSelectedSearchResultInStack}}
       as |search|

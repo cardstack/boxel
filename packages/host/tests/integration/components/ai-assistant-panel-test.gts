@@ -1925,38 +1925,26 @@ module('Integration | ai-assistant-panel', function (hooks) {
     const id2 = `${testRealmURL}Pet/mango`;
     const roomId = await renderAiAssistantPanel(id1);
 
-    await addRoomEvent(matrixService, {
-      event_id: 'event1',
-      room_id: roomId,
-      state_key: 'state',
-      type: 'm.room.message',
-      origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      sender: '@aibot:localhost',
-      content: {
-        msgtype: 'org.boxel.command',
-        formatted_body: 'Search for the following card',
-        format: 'org.matrix.custom.html',
-        data: JSON.stringify({
-          toolCall: {
-            name: 'searchCard',
-            arguments: {
-              description: 'Searching for card',
-              filter: {
-                type: {
-                  module: `${testRealmURL}pet`,
-                  name: 'Pet',
-                },
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: 'org.boxel.command',
+      body: 'Search for the following card',
+      formatted_body: 'Search for the following card',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'searchCard',
+          arguments: {
+            description: 'Searching for card',
+            filter: {
+              type: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
               },
             },
           },
-          eventId: 'search1',
-        }),
-        'm.relates_to': {
-          rel_type: 'm.replace',
-          event_id: 'search1',
         },
-      },
-      status: null,
+        eventId: '__EVENT_ID__',
+      }),
     });
 
     assert

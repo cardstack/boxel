@@ -326,7 +326,7 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
         { data: resource },
         undefined,
       );
-      this.args.context?.actions?.viewCard(card);
+      this.args.context?.actions?.viewCard(card as CardDef);
     } catch (e) {
       throw e;
     }
