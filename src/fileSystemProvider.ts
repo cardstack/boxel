@@ -57,6 +57,8 @@ export type Entry = File | Directory;
 export class MemFS implements vscode.FileSystemProvider {
   root = new Directory("");
   realmClients: Map<string, RealmAuthClient>;
+  jwtPromises: Map<string, Promise<string>> = new Map();
+  secrets: SecretStorage;
 
   constructor(
     matrixClient: RealmAuthMatrixClientInterface,
@@ -64,14 +66,21 @@ export class MemFS implements vscode.FileSystemProvider {
     secrets: SecretStorage
   ) {
     // we should do logins here?
-    console.log("MemFS constructor", realms);
+    console.log("Boxel filesystem constructor", realms);
+    this.secrets = secrets;
     this.realmClients = new Map();
     for (const realm of realms) {
       this.realmClients.set(
         realm,
-        new RealmAuthClient(new URL(realm), matrixClient, secrets)
+        new RealmAuthClient(new URL(realm), matrixClient)
       );
     }
+  }
+
+  async getJwtAndDeletePromise(url: string) {
+    let jwt = await this.jwtPromises.get(url);
+    this.jwtPromises.delete(url);
+    return jwt;
   }
 
   async getJWT(url: string) {
@@ -79,7 +88,23 @@ export class MemFS implements vscode.FileSystemProvider {
     // Find the realm client that prefixes the url
     for (const [realmUrl, realmClient] of this.realmClients.entries()) {
       if (url.startsWith(realmUrl.toString())) {
-        return await realmClient.getJWT();
+        console.log(
+          "Found realm client for",
+          url,
+          "it's the one for",
+          realmUrl
+        );
+        console.log("Checking if we're currently loading one");
+
+        if (this.jwtPromises.has(realmUrl.toString())) {
+          console.log("We're already loading one, waiting");
+          return this.getJwtAndDeletePromise(realmUrl.toString());
+        } else {
+          console.log("We're not currently loading one, creating");
+          const promise = realmClient.getJWT();
+          this.jwtPromises.set(realmUrl.toString(), promise);
+          return promise;
+        }
       }
     }
     throw new Error("No realm client found for " + url);
@@ -126,6 +151,7 @@ export class MemFS implements vscode.FileSystemProvider {
     _options: { create: boolean; overwrite: boolean }
   ): Promise<void> {
     console.log("Writing file:", uri);
+
     let requestType: string = "POST";
     let apiUrl = getUrl(uri);
 
@@ -139,17 +165,18 @@ export class MemFS implements vscode.FileSystemProvider {
       headers["Accept"] = "application/vnd.card+source";
       requestType = "POST";
     } else if (uri.path.endsWith(".json")) {
-      //strip the .json from the apiUrl
-      apiUrl = apiUrl.replace(".json", "");
+      // We cannot write new files so this only works for editing existing ones
       requestType = "PATCH";
+      apiUrl = apiUrl.replace(".json", "");
+      console.log("API URL:", apiUrl, "requestType:", requestType);
       headers["Accept"] = "application/vnd.card+json";
     }
 
     try {
       // Convert Uint8Array to text
       const contentText = new TextDecoder().decode(content);
-      console.log("Content text PATCH:", contentText);
-      const response = await fetch(apiUrl, {
+      console.log("Content text:", contentText);
+      let response = await fetch(apiUrl, {
         method: requestType,
         headers: headers,
         body: contentText,

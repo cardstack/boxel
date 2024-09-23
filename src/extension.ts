@@ -158,6 +158,7 @@ export async function activate(context: vscode.ExtensionContext) {
   firstRealm = realms[0];
   vscode.window.showInformationMessage(`Boxel - using realm ${firstRealm}`);
   try {
+    console.log("Secrets storage", context.secrets.get);
     const memFs = new MemFS(matrixClient, [firstRealm], context.secrets);
     vscode.window.showInformationMessage(
       `Boxel - logged in as ${username} on "${firstRealm}"`

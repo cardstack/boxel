@@ -22,18 +22,12 @@ export interface RealmAuthMatrixClientInterface {
   sendEvent(room: string, type: string, content: any): Promise<any>;
 }
 
-interface SecretStorage {
-  get(key: string): Thenable<string | undefined>;
-  store(key: string, value: string): Thenable<void>;
-}
-
 export class RealmAuthClient {
   private _jwt: string | undefined;
 
   constructor(
     private realmURL: URL,
-    private matrixClient: RealmAuthMatrixClientInterface,
-    private secrets: SecretStorage
+    private matrixClient: RealmAuthMatrixClientInterface
   ) {}
 
   get jwt(): string | undefined {
