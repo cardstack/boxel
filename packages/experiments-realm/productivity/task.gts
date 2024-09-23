@@ -12,13 +12,16 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import DateField from 'https://cardstack.com/base/date';
 import NumberField from 'https://cardstack.com/base/number';
+import { action } from '@ember/object';
+import { BoxelSelect } from '@cardstack/boxel-ui/components';
+
 class StatusField extends FieldDef {
   @field code = contains(NumberField);
   @field label = contains(StringField);
 }
 
 //Version 1
-class TaskStatusField extends StatusField {
+class CrmTaskStatusField extends StatusField {
   statuses = [
     { code: null, index: 1, label: 'New' },
     { code: null, index: 2, label: 'Contacted' },
@@ -30,6 +33,16 @@ class TaskStatusField extends StatusField {
     { code: null, index: 8, label: 'Closed - Won' },
     { code: null, index: 9, label: 'Closed - Lost' },
     { code: null, index: 10, label: 'No Response' },
+  ];
+}
+
+class TaskStatusField extends StatusField {
+  statuses = [
+    { code: null, index: 1, label: 'Backlog' },
+    { code: null, index: 2, label: 'Next Sprint' },
+    { code: null, index: 3, label: 'In Progress' },
+    { code: null, index: 4, label: 'Staged' },
+    { code: null, index: 5, label: 'Shipped' },
   ];
 }
 
@@ -89,11 +102,32 @@ class Fitted extends Component<typeof AssignedTask> {
     </style>
   </template>
 }
+
+class Edit extends Component<typeof AssignedTask> {
+  <template>
+    <BoxelSelect
+      @options={{this.options}}
+      @onChange={{this.updateStatus}}
+      {{!-- @selected={{this.args.model}} --}}
+      as |item|
+    >
+      {{item.label}}
+    </BoxelSelect>
+  </template>
+
+  get options() {
+    return this.args.model.status?.statuses;
+  }
+
+  @action updateStatus(status: string) {}
+}
+
 export class AssignedTask extends ManagedTask {
   @field assignee = linksTo(Person);
 
   // New Fitted template for AssignedTask
   static fitted = Fitted;
+  static edit = Edit;
 }
 
 //app card is a smart collection (a lens)
