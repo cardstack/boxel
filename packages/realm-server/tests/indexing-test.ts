@@ -153,6 +153,21 @@ module('indexing', function (hooks) {
               }
             }
           `,
+          'boom2.gts': `
+            import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+            import StringCard from "https://cardstack.com/base/string";
+
+            export class Boom extends CardDef {
+              @field firstName = contains(StringCard);
+              boom = () => {};
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  {{! From CS-7216 we are using a modifier in a strict mode template that is not imported }}
+                  <h1 {{did-insert this.boom}}><@fields.firstName/></h1>
+                </template>
+              }
+            }
+          `,
           'mango.json': {
             data: {
               attributes: {
@@ -245,6 +260,19 @@ module('indexing', function (hooks) {
               },
             },
           },
+          'boom2.json': {
+            data: {
+              attributes: {
+                firstName: 'Boom!',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './boom2',
+                  name: 'Boom',
+                },
+              },
+            },
+          },
           'empty.json': {
             data: {
               attributes: {},
@@ -306,6 +334,20 @@ module('indexing', function (hooks) {
           'Encountered error rendering HTML for card: intentional error',
         );
         assert.deepEqual(entry.error.deps, [`${testRealm}boom`]);
+      } else {
+        assert.ok('false', 'expected search entry to be an error document');
+      }
+    }
+    {
+      let entry = await realm.realmIndexQueryEngine.cardDocument(
+        new URL(`${testRealm}boom2`),
+      );
+      if (entry?.type === 'error') {
+        assert.strictEqual(
+          entry.error.detail,
+          'Encountered error rendering HTML for card: Attempted to resolve a modifier in a strict mode template, but it was not in scope: did-insert',
+        );
+        assert.deepEqual(entry.error.deps, [`${testRealm}boom2`]);
       } else {
         assert.ok('false', 'expected search entry to be an error document');
       }
@@ -403,7 +445,7 @@ module('indexing', function (hooks) {
         instanceErrors: 0,
         moduleErrors: 0,
         modulesIndexed: 0,
-        totalIndexEntries: 10,
+        totalIndexEntries: 11,
       },
       'indexed correct number of files',
     );
@@ -431,7 +473,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 1,
         modulesIndexed: 0,
-        totalIndexEntries: 8,
+        totalIndexEntries: 9,
       },
       'indexed correct number of files',
     );
@@ -450,7 +492,7 @@ module('indexing', function (hooks) {
         instanceErrors: 4, // 1 post, 2 persons, 1 bad-link post
         moduleErrors: 3, // post, fancy person, person
         modulesIndexed: 0,
-        totalIndexEntries: 2,
+        totalIndexEntries: 3,
       },
       'indexed correct number of files',
     );
@@ -483,7 +525,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
         modulesIndexed: 3,
-        totalIndexEntries: 8,
+        totalIndexEntries: 9,
       },
       'indexed correct number of files',
     );
@@ -519,7 +561,7 @@ module('indexing', function (hooks) {
         instanceErrors: 0,
         moduleErrors: 0,
         modulesIndexed: 0,
-        totalIndexEntries: 9,
+        totalIndexEntries: 10,
       },
       'index did not touch any files',
     );
@@ -560,7 +602,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
         modulesIndexed: 1,
-        totalIndexEntries: 10,
+        totalIndexEntries: 11,
       },
       'indexed correct number of files',
     );
@@ -602,7 +644,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
         modulesIndexed: 3,
-        totalIndexEntries: 10,
+        totalIndexEntries: 11,
       },
       'indexed correct number of files',
     );
@@ -655,7 +697,7 @@ module('indexing', function (hooks) {
         instanceErrors: 2,
         moduleErrors: 0,
         modulesIndexed: 0,
-        totalIndexEntries: 8,
+        totalIndexEntries: 9,
       },
       'indexed correct number of files',
     );
@@ -696,7 +738,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
         modulesIndexed: 1,
-        totalIndexEntries: 10,
+        totalIndexEntries: 11,
       },
       'indexed correct number of files',
     );
