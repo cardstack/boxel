@@ -59,13 +59,7 @@ export default class RenderCard extends Route<Model | null> {
     operatorModeState: string;
     operatorModeEnabled: boolean;
   }): Promise<Model> {
-    debugger;
-    let {
-      path,
-      operatorModeState,
-      operatorModeEnabled,
-      workspaceChooserOpened,
-    } = params;
+    let { path, operatorModeState, operatorModeEnabled } = params;
     path = path || '';
 
     try {

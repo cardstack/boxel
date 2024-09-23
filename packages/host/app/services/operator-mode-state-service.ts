@@ -3,9 +3,9 @@ import type RouterService from '@ember/routing/router-service';
 import { scheduleOnce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
-import { task } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
 import { mergeWith } from 'lodash';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
@@ -34,6 +34,8 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import { type Stack } from '../components/operator-mode/interact-submode';
 
 import type CardService from '../services/card-service';
+import CardController from '../controllers/card';
+import IndexController from '../controllers';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
@@ -364,15 +366,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   private persist() {
-    let cardController = getOwner(this)!.lookup('controller:card') as any;
-    if (!cardController) {
-      throw new Error(
-        'OperatorModeStateService must be used in the context of a CardController',
-      );
-    }
-
-    // Setting this property will trigger a query param update on the controller, which will reload the route
-    cardController.operatorModeState = this.serialize();
+    this.operatorModeController.operatorModeState = this.serialize();
   }
 
   // Serialized POJO version of state, with only cards that have been saved.
@@ -562,5 +556,43 @@ export default class OperatorModeStateService extends Service {
     await newItem.ready();
     this.addItemToStack(newItem);
     this.updateSubmode(Submodes.Interact);
+  }
+
+  openWorkspace = restartableTask(async (realmUrl: string) => {
+    let card = await this.cardService.getCard(realmUrl); // Will return the workspace's index card
+    let stackItem = new StackItem({
+      owner: this,
+      card,
+      format: 'isolated',
+      stackIndex: 0,
+    });
+    await stackItem.ready();
+    this.clearStacks();
+    this.addItemToStack(stackItem);
+
+    this.operatorModeController.workspaceChooserOpened = false;
+  });
+
+  get workspaceChooserOpened() {
+    return this.operatorModeController.workspaceChooserOpened;
+  }
+
+  set workspaceChooserOpened(workspaceChooserOpened: boolean) {
+    this.operatorModeController.workspaceChooserOpened = workspaceChooserOpened;
+  }
+
+  @cached
+  get operatorModeController(): CardController | IndexController {
+    let controller: CardController | IndexController;
+
+    if (this.router.currentRouteName === 'index') {
+      controller = getOwner(this)!.lookup(
+        'controller:index',
+      ) as IndexController;
+    } else {
+      controller = getOwner(this)!.lookup('controller:card') as CardController;
+    }
+
+    return controller;
   }
 }

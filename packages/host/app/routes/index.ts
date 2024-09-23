@@ -1,32 +1,61 @@
 import Route from '@ember/routing/route';
+import RouterService from '@ember/routing/router-service';
+import Transition from '@ember/routing/transition';
 import { service } from '@ember/service';
 
-import MatrixService from '../services/matrix-service';
-import CardService from '../services/card-service';
-import RouterService from '@ember/routing/router-service';
+import stringify from 'safe-stable-stringify';
 
-export default class Application extends Route<void> {
+import OperatorModeStateService, {
+  SerializedState as OperatorModeSerializedState,
+} from '@cardstack/host/services/operator-mode-state-service';
+
+import { Submodes } from '../components/submode-switcher';
+import CardService from '../services/card-service';
+import MatrixService from '../services/matrix-service';
+
+export default class Index extends Route<void> {
+  queryParams = {
+    operatorModeState: {
+      refreshModel: true, // Enabled so that back-forward navigation works in operator mode
+    },
+    operatorModeEnabled: {
+      refreshModel: true,
+    },
+    // `sid` and `clientSecret` come from email verification process to reset password
+    sid: { refreshModel: true },
+    clientSecret: { refreshModel: true },
+  };
+
   @service private declare matrixService: MatrixService;
   @service private declare cardService: CardService;
   @service private declare router: RouterService;
-  async beforeModel(): Promise<void> {
-    await this.matrixService.ready;
-    await this.matrixService.start();
-    debugger;
-    // if (this.matrixService.isLoggedIn) {
-    //   // get a default realm
-    //   // transition to the index card of that realm with operator mode enabled and workspace chooser open
-    //   let realm = this.cardService.userRealms[0];
-    //   // let card
-    //   // let indexCard = await this.cardService.getCard();
-    //   // todo load card
-    //   this.router.transitionTo('card', `index`, {
-    //     queryParams: {
-    //       card: `${realm}index`,
-    //       operatorModeEnabled: 'true',
-    //       workspaceChooserOpened: 'true',
-    //     },
-    //   });
-    // }
+  @service private declare operatorModeStateService: OperatorModeStateService;
+
+  didMatrixServiceStart = false;
+
+  async beforeModel(transition: Transition): Promise<void> {
+    if (!this.didMatrixServiceStart) {
+      await this.matrixService.ready;
+      await this.matrixService.start();
+      this.didMatrixServiceStart = true;
+    }
+    if (!transition.to!.queryParams.operatorModeState) {
+      this.router.transitionTo('index', {
+        queryParams: {
+          workspaceChooserOpened: 'true',
+          operatorModeState: stringify({
+            stacks: [],
+            submode: Submodes.Interact,
+          } as OperatorModeSerializedState),
+        },
+      });
+    } else {
+      let operatorModeStateObject = JSON.parse(
+        transition.to!.queryParams.operatorModeState as string,
+      );
+      await this.operatorModeStateService.restore(
+        operatorModeStateObject || { stacks: [] },
+      );
+    }
   }
 }

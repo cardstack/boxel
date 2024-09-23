@@ -2,10 +2,11 @@ import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { getOwner } from '@ember/owner';
+import type RouterService from '@ember/routing/router-service';
 import { inject as service } from '@ember/service';
 
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask, timeout } from 'ember-concurrency';
@@ -26,6 +27,7 @@ import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profi
 import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-avatar-icon';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 import ENV from '@cardstack/host/config/environment';
+import type IndexController from '@cardstack/host/controllers';
 import CardController from '@cardstack/host/controllers/card';
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
@@ -78,29 +80,30 @@ export default class SubmodeLayout extends Component<Signature> {
   };
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
-  private _cardController: CardController | null = null;
+  @service private declare router: RouterService;
 
   private searchElement: HTMLElement | null = null;
   private suppressSearchClose = false;
   private declare doSearch: (term: string) => void;
 
-  get cardController(): CardController {
-    if (!this._cardController) {
-      // Calling function to set _cardController to avoid 'ember/no-side-effects' error
-      this.setCardController(
-        getOwner(this)!.lookup('controller:card') as CardController,
-      );
-      if (!this._cardController) {
-        throw new Error(
-          'SubmodeLayout must be used in the context of a CardController',
-        );
-      }
-    }
-    return this._cardController;
-  }
+  @cached
+  get operatorModeController(): CardController | IndexController {
+    let controller: CardController | IndexController;
 
-  private setCardController(cardController: CardController) {
-    this._cardController = cardController;
+    if (this.router.currentRouteName === 'card') {
+      controller = getOwner(this)!.lookup('controller:card') as CardController;
+    } else {
+      controller = getOwner(this)!.lookup(
+        'controller:index',
+      ) as IndexController;
+    }
+
+    if (!controller) {
+      throw new Error(
+        'SubmodeLayout must be used in the context of a CardController or IndexController',
+      );
+    }
+    return controller;
   }
 
   private get aiAssistantVisibilityClass() {
@@ -172,15 +175,17 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   private get workspaceChooserOpened() {
-    return this.cardController.workspaceChooserOpened;
+    return this.operatorModeStateService.workspaceChooserOpened;
   }
 
   private set workspaceChooserOpened(workspaceChooserOpened: boolean) {
-    this.cardController.workspaceChooserOpened = workspaceChooserOpened;
+    this.operatorModeStateService.workspaceChooserOpened =
+      workspaceChooserOpened;
   }
 
   @action private toggleWorkspaceChooser() {
-    this.workspaceChooserOpened = !this.workspaceChooserOpened;
+    this.operatorModeStateService.workspaceChooserOpened =
+      !this.operatorModeStateService.workspaceChooserOpened;
   }
 
   @action private toggleProfileSettings() {

@@ -15,6 +15,10 @@ import { StackItem } from '@cardstack/host/lib/stack-item';
 import CardService from '@cardstack/host/services/card-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RealmService from '@cardstack/host/services/realm';
+import IndexController from '@cardstack/host/controllers';
+import CardController from '@cardstack/host/controllers/card';
+import { fn } from '@ember/helper';
+import { action } from '@ember/object';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -28,7 +32,7 @@ export default class Workspace extends Component<Signature> {
     <button
       class='workspace'
       data-test-workspace={{this.name}}
-      {{on 'click' (perform this.openWorkspace)}}
+      {{on 'click' this.openWorkspace}}
     >
       <div
         class='icon'
@@ -115,6 +119,7 @@ export default class Workspace extends Component<Signature> {
   @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
+  @service private declare router: RouterService;
 
   @cached
   private get realmInfo() {
@@ -137,26 +142,7 @@ export default class Workspace extends Component<Signature> {
     return this.backgroundURL ? `url(${this.backgroundURL})` : '';
   }
 
-  private openWorkspace = restartableTask(async () => {
-    debugger;
-    let card = await this.cardService.getCard(this.args.realmURL);
-    let stackItem = new StackItem({
-      owner: this,
-      card,
-      format: 'isolated',
-      stackIndex: 0,
-    });
-    await stackItem.ready();
-    this.operatorModeStateService.clearStacks();
-    this.operatorModeStateService.addItemToStack(stackItem);
-
-    let cardController = getOwner(this)!.lookup('controller:card') as any;
-    if (!cardController) {
-      throw new Error(
-        'Workspace component must be used in the context of a CardController',
-      );
-    }
-
-    cardController.workspaceChooserOpened = false;
-  });
+  @action openWorkspace() {
+    this.operatorModeStateService.openWorkspace.perform(this.args.realmURL);
+  }
 }

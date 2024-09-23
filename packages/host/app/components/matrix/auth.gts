@@ -8,6 +8,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { bool, eq, or } from '@cardstack/boxel-ui/helpers';
 
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import AuthContainer from './auth-container';
 import ForgotPassword, { ResetPasswordParams } from './forgot-password';
 import Login from './login';
@@ -37,6 +38,7 @@ export default class Auth extends Component {
   @tracked mode: AuthMode = 'login';
   @tracked resetPasswordParams: ResetPasswordParams | undefined;
   @service declare router: RouterService;
+  @service declare operatorModeStateService: OperatorModeStateService;
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -58,14 +60,11 @@ export default class Auth extends Component {
 
   @action
   nullifyResetPasswordParams() {
-    let cardController = getOwner(this)!.lookup('controller:card') as any;
-    if (!cardController) {
-      throw new Error(
-        'AuthComponent must be used in the context of a CardController',
-      );
-    }
-    cardController.sid = null;
-    cardController.clientSecret = null;
+    let controller = this.operatorModeStateService.operatorModeController;
+
+    controller.sid = null;
+    controller.clientSecret = null;
+
     this.resetPasswordParams = undefined;
   }
 }

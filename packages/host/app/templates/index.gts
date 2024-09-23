@@ -1,23 +1,19 @@
-import MatrixService from '@cardstack/host/services/matrix-service';
-import { service } from '@ember/service';
+import { action } from '@ember/object';
 import Component from '@glimmer/component';
+
 import RouteTemplate from 'ember-route-template';
-import Auth from '@cardstack/host/components/matrix/auth';
-import WorkspaceChooser from '@cardstack/host/components/operator-mode/workspace-chooser';
+
 import OperatorModeContainer from '../components/operator-mode/container';
 
-let noop = () => {};
 class IndexComponent extends Component<void> {
-  @service private declare matrixService: MatrixService;
+  // Remove this and onClose argument in OperatorModeContainer once we remove host mode and the card route, where closing operator mode will not be a thing anymore
+  @action closeOperatorMode() {
+    // noop
+  }
+
   <template>
     <div>
-      {{!-- {{#if this.matrixService.isLoggedIn}}
-        <WorkspaceChooser />
-      {{else}}
-        <Auth />
-      {{/if}} --}}
-
-      <OperatorModeContainer @onClose={{noop}} />
+      <OperatorModeContainer @onClose={{this.closeOperatorMode}} />
     </div>
   </template>
 }
