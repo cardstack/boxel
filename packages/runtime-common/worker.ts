@@ -121,6 +121,7 @@ export class Worker {
   #queue: Queue;
   #virtualNetwork: VirtualNetwork;
   #matrixURL: URL;
+  #matrixClientCache: Map<string, MatrixClient> = new Map();
   #secretSeed: string;
   #fromScratch:
     | ((realmURL: URL, boom?: true) => Promise<IndexResults>)
@@ -173,11 +174,20 @@ export class Worker {
     run: () => Promise<T>,
   ): Promise<T> {
     let deferred = new Deferred<T>();
-    let matrixClient = new MatrixClient({
-      matrixURL: new URL(this.#matrixURL),
-      username: args.realmUsername,
-      seed: this.#secretSeed,
-    });
+    let matrixClient: MatrixClient;
+
+    if (this.#matrixClientCache.has(args.realmUsername)) {
+      matrixClient = this.#matrixClientCache.get(args.realmUsername)!;
+    } else {
+      matrixClient = new MatrixClient({
+        matrixURL: new URL(this.#matrixURL),
+        username: args.realmUsername,
+        seed: this.#secretSeed,
+      });
+
+      this.#matrixClientCache.set(args.realmUsername, matrixClient);
+    }
+
     let _fetch: typeof globalThis.fetch | undefined;
     function getFetch() {
       return _fetch!;
