@@ -369,24 +369,13 @@ test.describe('Room messages', () => {
               filter: {
                 type: 'object',
                 properties: {
-                  type: {
-                    type: 'object',
-                    properties: {
-                      module: {
-                        type: 'string',
-                        description: 'the absolute path of the module',
-                      },
-                      name: {
-                        type: 'string',
-                        description: 'the name of the module',
-                      },
-                    },
-                    required: ['module', 'name'],
-                  },
                   contains: {
                     type: 'object',
                     properties: {
-                      title: { type: 'string', description: 'title of the card' },
+                      title: {
+                        type: 'string',
+                        description: 'title of the card',
+                      },
                     },
                     required: ['title'],
                   },

@@ -438,7 +438,6 @@ export function getSearchTool() {
               contains: containsFilterProperty,
               eq: eqCardTypeFilterProperty,
             },
-            required: ['every'],
           },
         },
         required: ['filter', 'description'],
