@@ -194,25 +194,6 @@ class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
         margin-bottom: var(--boxel-sp);
         background-color: var(--boxel-light);
       }
-
-      h3 {
-        position: sticky;
-        top: 0;
-        background-color: var(--boxel-light);
-        margin: 0 0 var(--boxel-sp) 0;
-        padding: var(--boxel-sp-xs) 0;
-        font: var(--boxel-font-lg);
-      }
-
-      h4 {
-        font: var(--boxel-font);
-        margin: 0 0 var(--boxel-sp-sm) 0;
-      }
-
-      p {
-        font: var(--boxel-font-sm);
-        margin: 0;
-      }
     </style>
   </template>
 
@@ -351,18 +332,16 @@ class ColumnQuery extends GlimmerComponent<ColumnQuerySignature> {
       {{/let}}
     </ul>
 
-    <style
-    >
+    <style>
       .cards {
         list-style-type: none;
-        padding: 0;
-        margin: 0;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp);
       }
-
-      // ... existing styles ...
+      .card {
+        padding: 10px; /* Add padding here so scroll works */
+      }
     </style>
   </template>
 }
