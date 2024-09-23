@@ -2,12 +2,12 @@
   "data": {
     "type": "card",
     "attributes": {
-      "dueDate": null,
+      "dueDate": "2024-09-20",
       "priority": {
         "code": null,
         "label": null
       },
-      "content": null,
+      "content": "Doing something",
       "completed": false,
       "status": {
         "code": null,
@@ -27,7 +27,7 @@
     "meta": {
       "adoptsFrom": {
         "module": "../productivity/task",
-        "name": "AssignedTask"
+        "name": "Task"
       }
     }
   }

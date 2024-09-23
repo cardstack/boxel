@@ -20,7 +20,7 @@ class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
   get assignedTaskCodeRef() {
     return {
       module: 'http://localhost:4201/experiments/productivity/task',
-      name: 'AssignedTask',
+      name: 'Task',
     };
   }
 

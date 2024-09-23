@@ -27,7 +27,7 @@
     "meta": {
       "adoptsFrom": {
         "module": "../productivity/task",
-        "name": "AssignedTask"
+        "name": "Task"
       }
     }
   }

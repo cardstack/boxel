@@ -1,0 +1,171 @@
+import { Person } from '../person';
+import BooleanField from '../../base/boolean';
+import {
+  CardDef,
+  FieldDef,
+  StringField,
+  contains,
+  field,
+  linksToMany,
+  linksTo,
+  Component,
+} from 'https://cardstack.com/base/card-api';
+import DateField from 'https://cardstack.com/base/date';
+import NumberField from 'https://cardstack.com/base/number';
+import { action } from '@ember/object';
+import { BoxelSelect } from '@cardstack/boxel-ui/components';
+
+class StatusField extends FieldDef {
+  @field code = contains(NumberField);
+  @field label = contains(StringField);
+}
+
+//Version 1
+class CrmTaskStatusField extends StatusField {
+  statuses = [
+    { code: null, index: 1, label: 'New' },
+    { code: null, index: 2, label: 'Contacted' },
+    { code: null, index: 3, label: 'Qualified' },
+    { code: null, index: 4, label: 'Unqualified' },
+    { code: null, index: 5, label: 'Nurturing' },
+    { code: null, index: 6, label: 'Proposal Sent' },
+    { code: null, index: 7, label: 'Negotiation' },
+    { code: null, index: 8, label: 'Closed - Won' },
+    { code: null, index: 9, label: 'Closed - Lost' },
+    { code: null, index: 10, label: 'No Response' },
+  ];
+}
+
+class TaskStatusField extends StatusField {
+  statuses = [
+    { code: null, index: 1, label: 'Backlog' },
+    { code: null, index: 2, label: 'Next Sprint' },
+    { code: null, index: 3, label: 'In Progress' },
+    { code: null, index: 4, label: 'Staged' },
+    { code: null, index: 5, label: 'Shipped' },
+  ];
+}
+
+class PriorityField extends StatusField {
+  priority = [
+    { code: null, index: 1, label: 'Low' },
+    { code: null, index: 2, label: 'Medium' },
+    { code: null, index: 3, label: 'High' },
+  ];
+}
+
+export class Task extends CardDef {
+  static displayName = 'Task Form';
+  @field content = contains(StringField);
+  @field completed = contains(BooleanField);
+  @field status = contains(TaskStatusField);
+}
+
+export class ManagedTask extends Task {
+  @field dueDate = contains(DateField);
+  @field priority = contains(PriorityField);
+}
+
+class Fitted extends Component<typeof AssignedTask> {
+  <template>
+    <div class='assigned-task-card'>
+      <h3 class='task-title'>{{@model.content}}</h3>
+      <p class='task-assignee'>Assigned to: {{@model.assignee.firstName}}</p>
+      <p class='task-status'>Status: {{@model.status.label}}</p>
+      <p class='task-due-date'>Due Date: <@fields.dueDate /></p>
+    </div>
+    <style scoped>
+      .assigned-task-card {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 16px;
+        background-color: #ffffff;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        transition: box-shadow 0.2s ease;
+      }
+      .assigned-task-card:hover {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+      }
+      .task-title {
+        font-size: 16px;
+        font-weight: bold;
+        color: #333;
+        margin: 0;
+      }
+      .task-assignee,
+      .task-status,
+      .task-due-date {
+        margin: 0;
+        font-size: 14px;
+        color: #666;
+      }
+    </style>
+  </template>
+}
+
+class Edit extends Component<typeof AssignedTask> {
+  <template>
+    <BoxelSelect
+      @options={{this.options}}
+      @onChange={{this.updateStatus}}
+      {{!-- @selected={{this.args.model}} --}}
+      as |item|
+    >
+      {{item.label}}
+    </BoxelSelect>
+  </template>
+
+  get options() {
+    return this.args.model.status?.statuses;
+  }
+
+  @action updateStatus(status: string) {}
+}
+
+export class AssignedTask extends ManagedTask {
+  @field assignee = linksTo(Person);
+
+  // New Fitted template for AssignedTask
+  static fitted = Fitted;
+  static edit = Edit;
+}
+
+//app card is a smart collection (a lens)
+//this is task list is manual list
+
+//https://todomvc.com/examples/react/dist/#/
+//isolated mode which is editable
+//use hacky javascript. dont use command architecture
+export class TodoList extends CardDef {
+  @field tasks = linksToMany(Task);
+
+  // @action
+  // clearCompleted
+  // unlink but every completed task
+
+  // completed
+  // remaining
+  // how many items left
+  // clear completed
+
+  // isolated view
+  // - task list
+  // - kanban view
+}
+
+export class ProgressTracker extends CardDef {
+  @field tasks = linksToMany(ManagedTask);
+}
+
+//Version 2
+
+//3 apps
+// - todoist. manual collection
+// - task with statuses / kanban. Its an app card. tile is embedded ratio
+// - linear edit anything at anytime (skip is too little)
+
+// important things to go thru
+// mutate realm
+// lens
+
+// crm should be related , task with statuses and assignment and linear

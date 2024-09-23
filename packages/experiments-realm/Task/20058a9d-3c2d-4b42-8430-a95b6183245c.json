@@ -2,32 +2,36 @@
   "data": {
     "type": "card",
     "attributes": {
-      "dueDate": "2024-09-20",
-      "priority": {
-        "code": null,
-        "label": null
-      },
-      "content": "Do something",
-      "completed": false,
+      "taskName": "Do Something",
+      "taskDetail": null,
       "status": {
-        "code": null,
+        "index": null,
         "label": "Backlog"
       },
-      "title": null,
+      "priority": {
+        "index": null,
+        "label": null
+      },
+      "dueDate": "2024-09-20",
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
       "assignee": {
         "links": {
-          "self": "../Person/1"
+          "self": null
+        }
+      },
+      "project": {
+        "links": {
+          "self": null
         }
       }
     },
     "meta": {
       "adoptsFrom": {
         "module": "../productivity/task",
-        "name": "AssignedTask"
+        "name": "Task"
       }
     }
   }

@@ -1,75 +1,152 @@
-import { Person } from '../person';
-import BooleanField from '../../base/boolean';
 import {
   CardDef,
+  Component,
   FieldDef,
   StringField,
   contains,
   field,
-  linksToMany,
   linksTo,
-  Component,
 } from 'https://cardstack.com/base/card-api';
-import DateField from 'https://cardstack.com/base/date';
 import NumberField from 'https://cardstack.com/base/number';
-import { action } from '@ember/object';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
+import { action } from '@ember/object';
+import { tracked } from '@glimmer/tracking';
+import DateField from 'https://cardstack.com/base/date';
+import TextAreaCard from '../../base/text-area';
 
-class StatusField extends FieldDef {
-  @field code = contains(NumberField);
+export class StatusField extends FieldDef {
+  @field index = contains(NumberField); //sorting order
   @field label = contains(StringField);
+  // @field statuses = containsMany(StatuField)
+  // bcos we don't have guides we have to repeat the statuses array filling up
+
+  statuses: StatusFieldData[] = []; //help with the types
 }
 
-//Version 1
-class CrmTaskStatusField extends StatusField {
+interface StatusFieldData {
+  index?: number;
+  label?: string;
+}
+
+class Edit extends Component<typeof StatusField> {
+  @tracked label: string | undefined = this.args.model.label;
+  //we can optionally track the selectedStatus here, but we must
+  // ensure we choose do not create a separate instance of object in options
+
+  <template>
+    <BoxelSelect
+      @placeholder={{this.placeholder}}
+      @options={{this.statuses}}
+      @selected={{this.selectedStatus}}
+      @onChange={{this.onSelectStatus}}
+      as |item|
+    >
+      <div> {{item.label}}</div>
+    </BoxelSelect>
+  </template>
+
+  get selectedStatus() {
+    return this.statuses?.find((status) => {
+      return status.label === this.label;
+    });
+  }
+
+  get statuses() {
+    return this.args.model?.statuses;
+  }
+
+  @action onSelectStatus(status: StatusFieldData): void {
+    //#Pattern1: Updating field of containsMany
+    this.label = status.label;
+    this.args.model.label = this.selectedStatus?.label;
+    this.args.model.index = this.selectedStatus?.index;
+  }
+
+  get placeholder() {
+    return 'Fill in';
+  }
+}
+
+export class TaskStatusField extends StatusField {
+  // loosey goosey pattern
+
   statuses = [
-    { code: null, index: 1, label: 'New' },
-    { code: null, index: 2, label: 'Contacted' },
-    { code: null, index: 3, label: 'Qualified' },
-    { code: null, index: 4, label: 'Unqualified' },
-    { code: null, index: 5, label: 'Nurturing' },
-    { code: null, index: 6, label: 'Proposal Sent' },
-    { code: null, index: 7, label: 'Negotiation' },
-    { code: null, index: 8, label: 'Closed - Won' },
-    { code: null, index: 9, label: 'Closed - Lost' },
-    { code: null, index: 10, label: 'No Response' },
+    { index: 0, label: 'To Do' },
+    {
+      index: 1,
+      label: 'In Progress',
+    },
+    {
+      index: 2,
+      label: 'Done',
+    },
   ];
+
+  static edit = Edit;
 }
 
-class TaskStatusField extends StatusField {
+export class TaskPriorityField extends StatusField {
+  // loosey goosey pattern
+
   statuses = [
-    { code: null, index: 1, label: 'Backlog' },
-    { code: null, index: 2, label: 'Next Sprint' },
-    { code: null, index: 3, label: 'In Progress' },
-    { code: null, index: 4, label: 'Staged' },
-    { code: null, index: 5, label: 'Shipped' },
+    { index: 0, label: 'Low' },
+    {
+      index: 1,
+      label: 'Medium',
+    },
+    {
+      index: 2,
+      label: 'High',
+    },
   ];
+
+  static edit = Edit;
 }
 
-class PriorityField extends StatusField {
-  priority = [
-    { code: null, index: 1, label: 'Low' },
-    { code: null, index: 2, label: 'Medium' },
-    { code: null, index: 3, label: 'High' },
-  ];
+export class User extends CardDef {
+  static displayName = 'User';
+  @field name = contains(StringField);
+  @field email = contains(StringField);
+  @field title = contains(StringField, {
+    computeVia: function (this: Team) {
+      return this.name;
+    },
+  });
 }
 
-export class Task extends CardDef {
-  static displayName = 'Task Form';
-  @field content = contains(StringField);
-  @field completed = contains(BooleanField);
-  @field status = contains(TaskStatusField);
+export class Team extends CardDef {
+  static displayName = 'Team';
+  @field name = contains(StringField);
+  @field title = contains(StringField, {
+    computeVia: function (this: Team) {
+      return this.name;
+    },
+  });
 }
 
-export class ManagedTask extends Task {
-  @field dueDate = contains(DateField);
-  @field priority = contains(PriorityField);
+export class TeamMember extends User {
+  static displayName = 'Team Member';
+  @field team = linksTo(Team);
+}
+
+export class Project extends CardDef {
+  static displayName = 'Project';
+  @field name = contains(StringField);
+  @field title = contains(StringField, {
+    computeVia: function (this: Project) {
+      return this.name;
+    },
+  });
+}
+
+export class Issues extends CardDef {
+  static displayName = 'Issues';
 }
 
 class Fitted extends Component<typeof AssignedTask> {
   <template>
     <div class='assigned-task-card'>
-      <h3 class='task-title'>{{@model.content}}</h3>
+      <h3 class='task-title'>{{@model.taskName}}</h3>
       <p class='task-assignee'>Assigned to: {{@model.assignee.firstName}}</p>
       <p class='task-status'>Status: {{@model.status.label}}</p>
       <p class='task-due-date'>Due Date: <@fields.dueDate /></p>
@@ -103,69 +180,27 @@ class Fitted extends Component<typeof AssignedTask> {
   </template>
 }
 
-class Edit extends Component<typeof AssignedTask> {
-  <template>
-    <BoxelSelect
-      @options={{this.options}}
-      @onChange={{this.updateStatus}}
-      {{!-- @selected={{this.args.model}} --}}
-      as |item|
-    >
-      {{item.label}}
-    </BoxelSelect>
-  </template>
+export class Task extends CardDef {
+  static displayName = 'Task';
+  @field taskName = contains(StringField);
+  @field taskDetail = contains(TextAreaCard);
+  @field status = contains(TaskStatusField);
+  @field priority = contains(TaskPriorityField);
+  @field assignee = linksTo(TeamMember);
+  @field project = linksTo(Project);
+  @field dueDate = contains(DateField);
 
-  get options() {
-    return this.args.model.status?.statuses;
-  }
+  @field title = contains(StringField, {
+    computeVia: function (this: Task) {
+      return this.taskName;
+    },
+  });
 
-  @action updateStatus(status: string) {}
-}
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      {{@model.taskName}}
+    </template>
+  };
 
-export class AssignedTask extends ManagedTask {
-  @field assignee = linksTo(Person);
-
-  // New Fitted template for AssignedTask
   static fitted = Fitted;
-  static edit = Edit;
 }
-
-//app card is a smart collection (a lens)
-//this is task list is manual list
-
-//https://todomvc.com/examples/react/dist/#/
-//isolated mode which is editable
-//use hacky javascript. dont use command architecture
-export class TodoList extends CardDef {
-  @field tasks = linksToMany(Task);
-
-  // @action
-  // clearCompleted
-  // unlink but every completed task
-
-  // completed
-  // remaining
-  // how many items left
-  // clear completed
-
-  // isolated view
-  // - task list
-  // - kanban view
-}
-
-export class ProgressTracker extends CardDef {
-  @field tasks = linksToMany(ManagedTask);
-}
-
-//Version 2
-
-//3 apps
-// - todoist. manual collection
-// - task with statuses / kanban. Its an app card. tile is embedded ratio
-// - linear edit anything at anytime (skip is too little)
-
-// important things to go thru
-// mutate realm
-// lens
-
-// crm should be related , task with statuses and assignment and linear
