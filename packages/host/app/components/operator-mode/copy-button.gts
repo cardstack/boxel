@@ -121,9 +121,11 @@ export default class CopyButton extends Component<Signature> {
         }
         let realmURL = item.card[item.api.realmURL];
         if (!realmURL) {
-          throw new Error(
-            `could not determine realm URL for card ${item.card.id}`,
+          // in the case of a search card, there isn't a saved card instance and copy button is not available
+          console.warn(
+            `could not determine realm URL for card ${item.card.id} for copy action`,
           );
+          return [];
         }
         if (item.card.id === `${realmURL.href}index`) {
           return [...indexCards, index];
@@ -150,6 +152,10 @@ export default class CopyButton extends Component<Signature> {
         // eslint-disable-next-line no-case-declarations
         let sourceItem =
           topMostStackItems[indexCardIndicies[0] === LEFT ? RIGHT : LEFT];
+        if (!sourceItem) {
+          // in the case of a search card, there isn't a saved card instance and copy button is not available
+          return undefined;
+        }
         return {
           direction: indexCardIndicies[0] === LEFT ? 'left' : 'right',
           sources: [sourceItem.card],
