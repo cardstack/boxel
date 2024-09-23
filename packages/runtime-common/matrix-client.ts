@@ -1,5 +1,6 @@
 import { Sha256 } from '@aws-crypto/sha256-js';
 import { uint8ArrayToHex } from './index';
+import { logger } from '.';
 
 export interface MatrixAccess {
   accessToken: string;
@@ -13,6 +14,8 @@ export class MatrixClient {
   private access: MatrixAccess | undefined;
   private password?: string;
   private seed?: string;
+
+  #log = logger('matrix-client');
 
   constructor({
     matrixURL,
@@ -98,7 +101,7 @@ export class MatrixClient {
     if (!response.ok) {
       if (json['errcode'] === 'M_LIMIT_EXCEEDED') {
         let retryAfter = json['retry_after_ms'];
-        console.log(
+        this.#log.warn(
           `Matrix rate limit exceeded, retrying after ${retryAfter}ms`,
         );
         await new Promise((res) => setTimeout(res, retryAfter));
