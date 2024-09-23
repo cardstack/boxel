@@ -445,7 +445,7 @@ module('indexing', function (hooks) {
         instanceErrors: 0,
         moduleErrors: 0,
         modulesIndexed: 0,
-        totalIndexEntries: 10,
+        totalIndexEntries: 11,
       },
       'indexed correct number of files',
     );
@@ -473,7 +473,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 1,
         modulesIndexed: 0,
-        totalIndexEntries: 8,
+        totalIndexEntries: 9,
       },
       'indexed correct number of files',
     );
@@ -492,7 +492,7 @@ module('indexing', function (hooks) {
         instanceErrors: 4, // 1 post, 2 persons, 1 bad-link post
         moduleErrors: 3, // post, fancy person, person
         modulesIndexed: 0,
-        totalIndexEntries: 2,
+        totalIndexEntries: 3,
       },
       'indexed correct number of files',
     );
@@ -525,7 +525,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
         modulesIndexed: 3,
-        totalIndexEntries: 8,
+        totalIndexEntries: 9,
       },
       'indexed correct number of files',
     );
@@ -561,7 +561,7 @@ module('indexing', function (hooks) {
         instanceErrors: 0,
         moduleErrors: 0,
         modulesIndexed: 0,
-        totalIndexEntries: 9,
+        totalIndexEntries: 10,
       },
       'index did not touch any files',
     );
@@ -602,7 +602,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
         modulesIndexed: 1,
-        totalIndexEntries: 10,
+        totalIndexEntries: 11,
       },
       'indexed correct number of files',
     );
@@ -644,7 +644,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
         modulesIndexed: 3,
-        totalIndexEntries: 10,
+        totalIndexEntries: 11,
       },
       'indexed correct number of files',
     );
@@ -697,7 +697,7 @@ module('indexing', function (hooks) {
         instanceErrors: 2,
         moduleErrors: 0,
         modulesIndexed: 0,
-        totalIndexEntries: 8,
+        totalIndexEntries: 9,
       },
       'indexed correct number of files',
     );
