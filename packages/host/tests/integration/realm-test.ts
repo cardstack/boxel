@@ -5,7 +5,8 @@ import { module, test } from 'qunit';
 
 import { validate as uuidValidate } from 'uuid';
 
-import { baseRealm, Realm } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
+
 import { isSingleCardDocument } from '@cardstack/runtime-common/card-document';
 import {
   cardSrc,
@@ -14,6 +15,7 @@ import {
 
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
 import { Loader } from '@cardstack/runtime-common/loader';
+import { Realm } from '@cardstack/runtime-common/realm';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as StringFieldMod from 'https://cardstack.com/base/string';

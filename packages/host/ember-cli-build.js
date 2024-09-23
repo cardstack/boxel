@@ -8,6 +8,9 @@ const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
 const MomentLocalesPlugin = require('moment-locales-webpack-plugin');
 const { GlimmerScopedCSSWebpackPlugin } = require('glimmer-scoped-css/webpack');
 const withSideWatch = require('./lib/with-side-watch');
+const StatoscopeWebpackPlugin = require('@statoscope/webpack-plugin').default;
+const BundleAnalyzerPlugin =
+  require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
 
 module.exports = function (defaults) {
   const app = new EmberApp(defaults, {
@@ -72,6 +75,10 @@ module.exports = function (defaults) {
             ],
           },
           plugins: [
+            new StatoscopeWebpackPlugin({
+              saveReportTo: '/tmp/report-[name]-[hash].html',
+            }),
+            new BundleAnalyzerPlugin(),
             new GlimmerScopedCSSWebpackPlugin(),
             new MonacoWebpackPlugin(),
             new webpack.ProvidePlugin({

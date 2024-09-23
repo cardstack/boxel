@@ -1,9 +1,7 @@
 import * as JSONTypes from 'json-typescript';
 import { parse } from 'date-fns';
 import {
-  IndexWriter,
   Deferred,
-  reportError,
   authorizationMiddleware,
   maybeHandleScopedCSSRequest,
   RealmAuthDataSource,
@@ -18,6 +16,8 @@ import {
   type Relationship,
   type ResponseWithNodeStream,
 } from '.';
+import { IndexWriter } from './index-writer';
+import { reportError } from './realm';
 import { MatrixClient } from './matrix-client';
 
 export interface Stats extends JSONTypes.Object {

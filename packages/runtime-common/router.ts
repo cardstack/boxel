@@ -1,5 +1,6 @@
 import { notFound, CardError, responseWithError } from './error';
-import { RealmPaths, RequestContext, logger } from './index';
+import { RealmPaths, logger } from './index';
+import { RequestContext } from './realm';
 
 export class AuthenticationError extends Error {}
 export class AuthorizationError extends Error {}

@@ -23,7 +23,6 @@ import {
   loadCard,
   Deferred,
   RealmPaths,
-  Realm,
   RealmPermissions,
   fetchUserPermissions,
   baseCardRef,
@@ -31,6 +30,8 @@ import {
   type LooseSingleCardDocument,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
+import { Realm } from '@cardstack/runtime-common/realm';
+
 import { stringify } from 'qs';
 import { v4 as uuidv4 } from 'uuid';
 import { Query } from '@cardstack/runtime-common/query';

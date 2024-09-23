@@ -10,11 +10,12 @@ import {
   type CodeRef,
   type LooseSingleCardDocument,
   type IndexedInstance,
-  type Realm,
 } from '@cardstack/runtime-common';
+
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
+import type { Realm } from '@cardstack/runtime-common/realm';
 
 import { RealmIndexQueryEngine } from '@cardstack/runtime-common/realm-index-query-engine';
 

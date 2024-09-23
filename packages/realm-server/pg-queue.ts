@@ -14,8 +14,10 @@ import {
   Deferred,
   upsert,
   Job,
-  setErrorReporter,
 } from '@cardstack/runtime-common';
+
+import { setErrorReporter } from '@cardstack/runtime-common/realm';
+
 import PgAdapter from './pg-adapter';
 import * as Sentry from '@sentry/node';
 

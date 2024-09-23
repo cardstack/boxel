@@ -2,10 +2,11 @@ import { module, test } from 'qunit';
 import {
   Loader,
   VirtualNetwork,
-  type Realm,
   fetcher,
   maybeHandleScopedCSSRequest,
 } from '@cardstack/runtime-common';
+import type { Realm } from '@cardstack/runtime-common/realm';
+
 import { dirSync, setGracefulCleanup, DirResult } from 'tmp';
 import {
   createRealm,

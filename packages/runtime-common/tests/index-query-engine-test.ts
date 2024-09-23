@@ -8,8 +8,8 @@ import {
   type Loader,
   type ResolvedCodeRef,
   DBAdapter,
-  IndexWriter,
 } from '../index';
+import { IndexWriter } from '../index-writer';
 import { serializeCard } from '../helpers/indexer';
 import { testRealmURL } from '../helpers/const';
 import { type SharedTests } from '../helpers';

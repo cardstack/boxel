@@ -10,12 +10,8 @@ import { waitUntil } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import {
-  Loader,
-  Query,
-  type Realm,
-  baseRealm,
-} from '@cardstack/runtime-common';
+import { Loader, Query, baseRealm } from '@cardstack/runtime-common';
+import type { Realm } from '@cardstack/runtime-common/realm';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';

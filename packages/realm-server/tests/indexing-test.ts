@@ -3,9 +3,10 @@ import { dirSync, setGracefulCleanup } from 'tmp';
 import {
   baseRealm,
   LooseSingleCardDocument,
-  Realm,
   RealmPermissions,
 } from '@cardstack/runtime-common';
+import { Realm } from '@cardstack/runtime-common/realm';
+
 import {
   createRealm,
   testRealm,

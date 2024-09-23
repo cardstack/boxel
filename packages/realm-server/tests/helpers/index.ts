@@ -2,7 +2,6 @@ import { writeFileSync, writeJSONSync } from 'fs-extra';
 import { NodeAdapter } from '../../node-realm';
 import { resolve, join } from 'path';
 import {
-  Realm,
   LooseSingleCardDocument,
   baseRealm,
   RealmPermissions,
@@ -14,10 +13,12 @@ import {
   maybeHandleScopedCSSRequest,
   insertPermissions,
   IndexWriter,
-  type MatrixConfig,
   type Queue,
   type IndexRunner,
 } from '@cardstack/runtime-common';
+
+import { Realm, type MatrixConfig } from '@cardstack/runtime-common/realm';
+
 import { dirSync } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse';
 import { makeFastBootIndexRunner } from '../../fastboot';

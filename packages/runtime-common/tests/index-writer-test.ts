@@ -1,5 +1,4 @@
 import {
-  IndexWriter,
   internalKeyFor,
   baseCardRef,
   type LooseCardResource,
@@ -8,6 +7,7 @@ import {
   type BoxelIndexTable,
   type CardResource,
 } from '../index';
+import { IndexWriter } from '../index-writer';
 import { cardSrc, compiledCard } from '../etc/test-fixtures';
 import { type SharedTests } from '../helpers';
 import { setupIndex } from '../helpers/indexer';

@@ -3,7 +3,8 @@ import GlimmerComponent from '@glimmer/component';
 
 import { module, test } from 'qunit';
 
-import { baseRealm, Loader, type Realm } from '@cardstack/runtime-common';
+import { baseRealm, Loader } from '@cardstack/runtime-common';
+import type { Realm } from '@cardstack/runtime-common/realm';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';

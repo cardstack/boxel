@@ -3,7 +3,6 @@ import cors from '@koa/cors';
 import Router from '@koa/router';
 import { Memoize } from 'typescript-memoize';
 import {
-  Realm,
   logger,
   SupportedMimeType,
   insertPermissions,
@@ -13,6 +12,8 @@ import {
   type Queue,
   type RealmPermissions,
 } from '@cardstack/runtime-common';
+import { Realm } from '@cardstack/runtime-common/realm';
+
 import {
   ensureDirSync,
   writeJSONSync,
