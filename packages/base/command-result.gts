@@ -67,16 +67,18 @@ class ResourceList extends GlimmerComponent<ResourceListSignature> {
             class='result-list-item {{@format}}'
             data-test-result-card={{cardResource.card.id}}
             {{@context.cardComponentModifier
-              card=cardResource.card
+              cardId=cardResource.card.id
               format='data'
               fieldType=undefined
               fieldName=undefined
             }}
+            {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
+            data-cards-grid-item={{cardResource.card.id}}
           >
             {{#let (getComponent cardResource.card) as |Component|}}
               <Component
                 @format={{@format}}
-                @displayContainer={{if (eq @format 'embedded') true false}}
+                @displayContainer={{eq @format 'fitted'}}
               />
             {{/let}}
           </li>
@@ -91,7 +93,8 @@ class ResourceList extends GlimmerComponent<ResourceListSignature> {
       .result-list-item {
         margin-bottom: var(--boxel-sp-xxs);
       }
-      .result-list.embedded {
+      .result-list.embedded,
+      .result-list.fitted {
         --grid-card-width: 10.25rem; /* 164px */
         --grid-card-height: 14rem; /* 224px */
         list-style-type: none;
@@ -102,10 +105,14 @@ class ResourceList extends GlimmerComponent<ResourceListSignature> {
         grid-auto-rows: max-content;
         gap: var(--boxel-sp-xl) var(--boxel-sp-lg);
       }
-      .result-list-item.embedded {
+      .result-list-item.embedded,
+      .result-list-item.fitted {
         margin-bottom: 0;
         width: var(--grid-card-width);
         height: var(--grid-card-height);
+      }
+      .result-list-item :deep(.field-component-card.fitted-format) {
+        height: 100%;
       }
     </style>
   </template>
@@ -353,32 +360,35 @@ export class CommandResult extends FieldDef {
   static embedded = CommandResultEmbeddedView;
 }
 
+class Isolated extends CommandResultEmbeddedView {
+  <template>
+    <div class='search-results'>
+      <p class='result-count' data-test-result-count>
+        {{this.numberOfCards}}
+        {{if (eq this.numberOfCards 1) 'Result' 'Results'}}
+      </p>
+      <ResourceList
+        @resources={{this.attachedResources}}
+        @format='fitted'
+        @context={{@context}}
+      />
+    </div>
+    <style scoped>
+      .search-results {
+        padding: var(--boxel-sp);
+      }
+      .result-count {
+        margin-top: 0;
+        margin-bottom: var(--boxel-sp);
+        font-weight: bold;
+      }
+    </style>
+  </template>
+  @tracked showAllResults = true;
+}
+
 export class SearchResult extends CardDef {
   static displayName = 'Search Results';
   @field cardIds = containsMany(StringField);
-  static isolated = class Isolated extends CommandResultEmbeddedView {
-    <template>
-      <div class='search-results'>
-        <p class='result-count' data-test-result-count>
-          {{this.numberOfCards}}
-          {{if (eq this.numberOfCards 1) 'Result' 'Results'}}
-        </p>
-        <ResourceList
-          @resources={{this.attachedResources}}
-          @format='embedded'
-          @context={{@context}}
-        />
-      </div>
-      <style scoped>
-        .search-results {
-          padding: var(--boxel-sp);
-        }
-        .result-count {
-          margin-top: 0;
-          margin-bottom: var(--boxel-sp);
-          font-weight: bold;
-        }
-      </style>
-    </template>
-  };
+  static isolated = Isolated;
 }
