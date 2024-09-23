@@ -51,11 +51,11 @@ interface ResourceListSignature {
 
 class ResourceList extends GlimmerComponent<ResourceListSignature> {
   <template>
-    <ol class='list {{@format}}'>
+    <ol class='result-list {{@format}}' data-test-result-list>
       {{#each @resources as |cardResource|}}
         {{#if cardResource.cardError}}
           <li
-            class='list-item'
+            class='result-list-item'
             data-test-card-error={{cardResource.cardError.id}}
           >
             Error: cannot render card
@@ -64,7 +64,7 @@ class ResourceList extends GlimmerComponent<ResourceListSignature> {
           </li>
         {{else if cardResource.card}}
           <li
-            class='list-item {{@format}}'
+            class='result-list-item {{@format}}'
             data-test-result-card={{cardResource.card.id}}
             {{@context.cardComponentModifier
               card=cardResource.card
@@ -84,14 +84,14 @@ class ResourceList extends GlimmerComponent<ResourceListSignature> {
       {{/each}}
     </ol>
     <style scoped>
-      .list {
+      .result-list {
         padding-left: var(--boxel-sp);
         margin-block-end: 0;
       }
-      .list-item {
+      .result-list-item {
         margin-bottom: var(--boxel-sp-xxs);
       }
-      .list.embedded {
+      .result-list.embedded {
         --grid-card-width: 10.25rem; /* 164px */
         --grid-card-height: 14rem; /* 224px */
         list-style-type: none;
@@ -102,7 +102,7 @@ class ResourceList extends GlimmerComponent<ResourceListSignature> {
         grid-auto-rows: max-content;
         gap: var(--boxel-sp-xl) var(--boxel-sp-lg);
       }
-      .list-item.embedded {
+      .result-list-item.embedded {
         margin-bottom: 0;
         width: var(--grid-card-width);
         height: var(--grid-card-height);
@@ -359,7 +359,7 @@ export class SearchResult extends CardDef {
   static isolated = class Isolated extends CommandResultEmbeddedView {
     <template>
       <div class='search-results'>
-        <p class='result-count'>
+        <p class='result-count' data-test-result-count>
           {{this.numberOfCards}}
           {{if (eq this.numberOfCards 1) 'Result' 'Results'}}
         </p>
