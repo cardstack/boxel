@@ -13,13 +13,6 @@ import { Query } from '@cardstack/runtime-common';
 class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
   @tracked isSheetOpen = false;
 
-  get columnNumbers() {
-    return [1, 2, 3, 4, 5, 6, 7, 8];
-  }
-
-  get taskNumbers() {
-    return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-  }
   get realms(): string[] {
     return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
   }
@@ -298,7 +291,7 @@ class Sheet extends GlimmerComponent<SheetSignature> {
 }
 
 export class TaskAppCard extends CardDef {
-  static displayName = 'Task App Card';
+  static displayName = 'App Task';
   static isolated = TaskAppCardIsolated;
 }
 
