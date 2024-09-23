@@ -5,7 +5,7 @@ import Component from '@glimmer/component';
 
 import { didCancel, enqueueTask, restartableTask } from 'ember-concurrency';
 
-import { type IndexWriter } from '@cardstack/runtime-common';
+import { type IndexWriter } from '@cardstack/runtime-common/index-writer';
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
 import {
   getReader,

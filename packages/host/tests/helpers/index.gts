@@ -20,7 +20,6 @@ import {
   RunnerOptionsManager,
   type RealmInfo,
   type TokenClaims,
-  IndexWriter,
   type RunnerRegistration,
   type IndexRunner,
   type IndexResults,
@@ -32,6 +31,7 @@ import {
   testRealmInfo,
   testRealmURL,
 } from '@cardstack/runtime-common/helpers/const';
+import { IndexWriter } from '@cardstack/runtime-common/index-writer';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import { Realm } from '@cardstack/runtime-common/realm';

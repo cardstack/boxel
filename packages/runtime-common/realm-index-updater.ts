@@ -12,9 +12,9 @@ import {
 } from '.';
 import { IndexWriter } from './index-writer';
 import { Realm } from './realm';
-import { RealmPaths } from './paths';
 import { Loader } from './loader';
 import ignore, { type Ignore } from 'ignore';
+import { isIgnored } from './paths';
 
 export class RealmIndexUpdater {
   #realm: Realm;
@@ -191,34 +191,4 @@ export class RealmIndexUpdater {
       }
     }
   }
-}
-
-export function isIgnored(
-  realmURL: URL,
-  ignoreMap: Map<string, Ignore>,
-  url: URL,
-): boolean {
-  if (url.href === realmURL.href) {
-    return false; // you can't ignore the entire realm
-  }
-  if (url.href === realmURL.href + '.realm.json') {
-    return true;
-  }
-  if (ignoreMap.size === 0) {
-    return false;
-  }
-  // Test URL against closest ignore. (Should the ignores cascade? so that the
-  // child ignore extends the parent ignore?)
-  let ignoreURLs = [...ignoreMap.keys()];
-  let matchingIgnores = ignoreURLs.filter((u) => url.href.includes(u));
-  let ignoreURL = matchingIgnores.sort((a, b) => b.length - a.length)[0] as
-    | string
-    | undefined;
-  if (!ignoreURL) {
-    return false;
-  }
-  let ignore = ignoreMap.get(ignoreURL)!;
-  let realmPath = new RealmPaths(realmURL);
-  let pathname = realmPath.local(url);
-  return ignore.test(pathname).ignored;
 }

@@ -1,7 +1,8 @@
 import { module, test } from 'qunit';
 
-import { IndexWriter, IndexQueryEngine } from '@cardstack/runtime-common';
+import { IndexQueryEngine } from '@cardstack/runtime-common';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
+import { IndexWriter } from '@cardstack/runtime-common/index-writer';
 // eslint-disable-next-line ember/no-test-import-export
 import indexWriterTests from '@cardstack/runtime-common/tests/index-writer-test';
 

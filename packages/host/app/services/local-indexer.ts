@@ -1,6 +1,7 @@
 import Service from '@ember/service';
 
-import { type IndexResults, type IndexWriter } from '@cardstack/runtime-common';
+import type { IndexResults } from '@cardstack/runtime-common';
+import type { IndexWriter } from '@cardstack/runtime-common/index-writer';
 
 import { type TestRealmAdapter } from '@cardstack/host/tests/helpers/adapter';
 

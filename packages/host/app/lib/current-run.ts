@@ -19,12 +19,8 @@ import {
   identifyCard,
   moduleFrom,
   isCardDef,
-  IndexWriter,
   unixTime,
-  type Batch,
   type LooseCardResource,
-  type InstanceEntry,
-  type ErrorEntry,
   type CodeRef,
   type RealmInfo,
   type IndexResults,
@@ -32,7 +28,6 @@ import {
   type CardResource,
   type Relationship,
   type TextFileRef,
-  type LastModifiedTimes,
 } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import {
@@ -41,8 +36,18 @@ import {
   serializableError,
   type SerializedError,
 } from '@cardstack/runtime-common/error';
-import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
-import { isIgnored } from '@cardstack/runtime-common/realm-index-updater';
+import {
+  IndexWriter,
+  type Batch,
+  type InstanceEntry,
+  type ErrorEntry,
+  type LastModifiedTimes,
+} from '@cardstack/runtime-common/index-writer';
+import {
+  isIgnored,
+  RealmPaths,
+  LocalPath,
+} from '@cardstack/runtime-common/paths';
 import { type Reader, type Stats } from '@cardstack/runtime-common/worker';
 
 import {

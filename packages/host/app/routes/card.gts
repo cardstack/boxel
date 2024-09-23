@@ -14,7 +14,7 @@ import MatrixService from '@cardstack/host/services/matrix-service';
 import OperatorModeStateService, {
   SerializedState as OperatorModeSerializedState,
 } from '@cardstack/host/services/operator-mode-state-service';
-import Realm from '@cardstack/host/services/realm';
+import type RealmService from '@cardstack/host/services/realm';
 import RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
@@ -44,12 +44,12 @@ export default class RenderCard extends Route<Model | null> {
     clientSecret: { refreshModel: true },
   };
 
-  @service declare cardService: CardService;
-  @service declare router: RouterService;
-  @service declare operatorModeStateService: OperatorModeStateService;
-  @service declare matrixService: MatrixService;
-  @service declare realm: Realm;
-  @service declare realmInfoService: RealmInfoService;
+  @service private declare cardService: CardService;
+  @service private declare router: RouterService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare matrixService: MatrixService;
+  @service private declare realmService: RealmService;
+  @service private declare realmInfoService: RealmInfoService;
 
   hasLoadMatrixBeenExecuted = false;
 
@@ -86,7 +86,7 @@ export default class RenderCard extends Route<Model | null> {
           model = resource.card;
         }
       } else {
-        let indexCardURL = new URL(this.realm.defaultReadableRealm.path);
+        let indexCardURL = new URL(this.realmService.defaultReadableRealm.path);
         let indexCardResource = getCard(this, () => indexCardURL.href);
         await indexCardResource.loaded;
         model = indexCardResource.card;
@@ -123,7 +123,7 @@ export default class RenderCard extends Route<Model | null> {
     // so users will be redirected to operator mode.
     // We can update the codes below after we have a clear idea on how to implement authentication in guest mode.
     let isPublicReadableRealm = await this.realmInfoService.isPublicReadable(
-      new URL(this.realm.defaultReadableRealm.path),
+      new URL(this.realmService.defaultReadableRealm.path),
     );
     if (
       !isPublicReadableRealm &&
@@ -131,8 +131,8 @@ export default class RenderCard extends Route<Model | null> {
     ) {
       let path = transition.to?.params?.path ?? '';
       let url = path
-        ? new URL(`/${path}`, this.realm.defaultReadableRealm.path)
-        : new URL('./', this.realm.defaultReadableRealm.path);
+        ? new URL(`/${path}`, this.realmService.defaultReadableRealm.path)
+        : new URL('./', this.realmService.defaultReadableRealm.path);
       await this.router.replaceWith(`card`, {
         queryParams: {
           operatorModeEnabled: 'true',
