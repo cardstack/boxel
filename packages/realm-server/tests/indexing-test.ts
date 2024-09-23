@@ -738,7 +738,7 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
         modulesIndexed: 1,
-        totalIndexEntries: 10,
+        totalIndexEntries: 11,
       },
       'indexed correct number of files',
     );
