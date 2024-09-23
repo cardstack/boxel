@@ -16,7 +16,7 @@ import get from 'lodash/get';
 
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
-import { cn, eq, gt } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { IconPlus, Download } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -51,7 +51,6 @@ import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RecentFilesService from '../../services/recent-files-service';
 import type { Submode } from '../submode-switcher';
-import WorkspaceChooser from './workspace-chooser';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 

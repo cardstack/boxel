@@ -33,9 +33,10 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { type Stack } from '../components/operator-mode/interact-submode';
 
-import type CardService from '../services/card-service';
-import CardController from '../controllers/card';
 import IndexController from '../controllers';
+import CardController from '../controllers/card';
+
+import type CardService from '../services/card-service';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).

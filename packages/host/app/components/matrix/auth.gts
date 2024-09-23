@@ -1,4 +1,3 @@
-import { getOwner } from '@ember/application';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
@@ -9,6 +8,7 @@ import { tracked } from '@glimmer/tracking';
 import { bool, eq, or } from '@cardstack/boxel-ui/helpers';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
 import AuthContainer from './auth-container';
 import ForgotPassword, { ResetPasswordParams } from './forgot-password';
 import Login from './login';
