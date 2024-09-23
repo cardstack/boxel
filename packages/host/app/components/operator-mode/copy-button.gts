@@ -67,7 +67,7 @@ export default class CopyButton extends Component<Signature> {
             </span>
           {{else}}
             {{#if (eq this.state.direction 'left')}}
-              <ArrowLeft width='18px' height='18px' />
+              <ArrowLeft class='arrow-icon' width='18px' height='18px' />
             {{/if}}
             <span class='copy-text'>
               Copy
@@ -79,7 +79,7 @@ export default class CopyButton extends Component<Signature> {
               {{/if}}
             </span>
             {{#if (eq this.state.direction 'right')}}
-              <ArrowRight width='18px' height='18px' />
+              <ArrowRight class='arrow-icon' width='18px' height='18px' />
             {{/if}}
           {{/if}}
         </BoxelButton>
@@ -95,6 +95,9 @@ export default class CopyButton extends Component<Signature> {
       }
       .copy-text {
         margin: 0 var(--boxel-sp-xxs);
+      }
+      .arrow-icon {
+        --icon-color: var(--boxel-light);
       }
     </style>
   </template>

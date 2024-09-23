@@ -1,3 +1,24 @@
+import GlimmerComponent from '@glimmer/component';
+import { cached, tracked } from '@glimmer/tracking';
+import { array } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import { restartableTask } from 'ember-concurrency';
+import {
+  BoxelDropdown,
+  Button,
+  Header,
+  IconButton,
+  Menu,
+} from '@cardstack/boxel-ui/components';
+import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
+import {
+  ArrowLeft,
+  IconMinusCircle,
+  IconPlus,
+  IconSearch,
+  ThreeDotsHorizontal,
+} from '@cardstack/boxel-ui/icons';
 import { baseRealm, getCard, primitive } from '@cardstack/runtime-common';
 import {
   BaseDef,
@@ -12,19 +33,6 @@ import {
   type CardContext,
   type Format,
 } from './card-api';
-import GlimmerComponent from '@glimmer/component';
-import { cached, tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
-import {
-  IconMinusCircle,
-  IconPlus,
-  IconSearch,
-  ThreeDotsHorizontal,
-} from '@cardstack/boxel-ui/icons';
-import { Button, Header, IconButton } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
-import { on } from '@ember/modifier';
-import { restartableTask } from 'ember-concurrency';
 
 type AttachedCardResource = {
   card: CardDef | undefined;
@@ -181,15 +189,28 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
           </div>
         </:icon>
         <:actions>
-          <IconButton
-            @icon={{ThreeDotsHorizontal}}
-            @width='20px'
-            @height='20px'
-            class='icon-button'
-            aria-label='Options'
-            data-test-more-options-button
-            {{on 'click' this.openCard}}
-          />
+          <BoxelDropdown>
+            <:trigger as |bindings|>
+              <IconButton
+                @icon={{ThreeDotsHorizontal}}
+                @width='20px'
+                @height='20px'
+                class='icon-button'
+                aria-label='Options'
+                data-test-more-options-button
+                {{bindings}}
+              />
+            </:trigger>
+            <:content as |dd|>
+              <Menu
+                class='options-menu'
+                @items={{array
+                  (menuItem 'Copy to Workspace' this.openCard icon=ArrowLeft)
+                }}
+                @closeMenu={{dd.close}}
+              />
+            </:content>
+          </BoxelDropdown>
         </:actions>
       </Header>
       <div class='body'>
@@ -211,11 +232,9 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
               {{else}}
                 <IconPlus width='11px' height='11px' role='presentation' />
               {{/if}}
-
               {{this.toggleShowText}}
             </Button>
           {{/if}}
-
         </div>
       </div>
     </div>
@@ -241,6 +260,22 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
         --boxel-label-font: 500 var(--boxel-font-xs);
         --boxel-header-padding: var(--boxel-sp-xxxs) var(--boxel-sp-xxxs) 0
           var(--left-padding);
+      }
+      .header :deep(.content) {
+        gap: 0;
+      }
+      .icon-button {
+        --icon-color: var(--boxel-dark);
+      }
+      .icon-button:hover {
+        --icon-color: var(--boxel-highlight);
+      }
+      .options-menu :deep(.boxel-menu__item__content) {
+        padding-right: var(--boxel-sp-xxs);
+        padding-left: var(--boxel-sp-xxs);
+      }
+      .options-menu :deep(.check-icon) {
+        display: none;
       }
       .body {
         display: flex;
