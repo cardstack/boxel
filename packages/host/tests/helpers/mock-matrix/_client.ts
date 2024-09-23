@@ -4,10 +4,7 @@ import * as MatrixSDK from 'matrix-js-sdk';
 
 import { unixTime } from '@cardstack/runtime-common';
 
-import type {
-  ExtendedClient,
-  MessageOptions,
-} from '@cardstack/host/services/matrix-sdk-loader';
+import type { ExtendedClient } from '@cardstack/host/services/matrix-sdk-loader';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
@@ -36,6 +33,14 @@ export class MockClient implements ExtendedClient {
     private clientOpts: MatrixSDK.ICreateClientOpts,
     private sdkOpts: Config,
   ) {}
+
+  async getAccountDataFromServer<T extends { [k: string]: any }>(
+    _eventType: string,
+  ): Promise<T | null> {
+    return {
+      realms: this.sdkOpts.activeRealms ?? [],
+    } as unknown as T;
+  }
 
   get loggedInAs() {
     return this.clientOpts.userId;

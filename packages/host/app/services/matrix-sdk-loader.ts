@@ -4,13 +4,9 @@ import { service } from '@ember/service';
 
 import * as MatrixSDK from 'matrix-js-sdk';
 
-import { MatrixEvent } from 'matrix-js-sdk';
-
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
 import LoaderService from './loader-service';
-
-const DEFAULT_PAGE_SIZE = 50;
 
 /*
   This abstracts over the matrix SDK, including several extra functions that are
@@ -98,6 +94,7 @@ export type ExtendedClient = Pick<
   | 'setPowerLevel'
   | 'setRoomName'
   | 'startClient'
+  | 'getAccountDataFromServer'
 > & {
   requestEmailToken(
     type: 'registration' | 'threepid',

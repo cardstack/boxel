@@ -21,7 +21,6 @@ import { TrackedMap, TrackedObject } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
-  Deferred,
   type LooseSingleCardDocument,
   markdownToHtml,
   aiBotUsername,
@@ -103,7 +102,6 @@ export default class MatrixService extends Service {
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
-  private accountDataProcessed = new Deferred<void>();
   private rooms: TrackedMap<string, RoomState> = new TrackedMap();
   roomResourcesCache: TrackedMap<string, RoomResource> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
@@ -168,7 +166,6 @@ export default class MatrixService extends Service {
           if (e.event.type == 'com.cardstack.boxel.realms') {
             this.cardService.setRealms(e.event.content.realms);
             await this.loginToRealms();
-            this.accountDataProcessed.fulfill();
           }
         },
       ],
@@ -293,7 +290,11 @@ export default class MatrixService extends Service {
 
       try {
         await this._client.startClient();
-        await this.accountDataProcessed.promise;
+        let accountDataContent = await this._client.getAccountDataFromServer<{
+          realms: string[];
+        }>('com.cardstack.boxel.realms');
+        this.cardService.setRealms(accountDataContent?.realms ?? []);
+        await this.loginToRealms();
       } catch (e) {
         console.log('Error starting Matrix client', e);
         await this.logout();
