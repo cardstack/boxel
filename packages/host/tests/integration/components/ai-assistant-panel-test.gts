@@ -1980,12 +1980,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .exists({ count: 2 });
     assert
       .dom(
-        `${rightStackCard} [data-test-card="${id1}"][data-test-card-format="embedded"]`,
+        `${rightStackCard} [data-test-card="${id1}"][data-test-card-format="fitted"]`,
       )
       .exists();
     assert
       .dom(
-        `${rightStackCard} [data-test-card="${id2}"][data-test-card-format="embedded"]`,
+        `${rightStackCard} [data-test-card="${id2}"][data-test-card-format="fitted"]`,
       )
       .exists();
   });
