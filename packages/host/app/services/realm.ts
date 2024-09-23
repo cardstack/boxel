@@ -381,7 +381,7 @@ export default class RealmService extends Service {
 
   async fetchPublicRealmURLs(): Promise<string[]> {
     let realmServerURL = new URL(window.location.href);
-    if (window.origin === 'http://localhost:4200') {
+    if (ENV.environment === 'development' || ENV.environment === 'test') {
       realmServerURL = new URL('http://localhost:4201');
     }
 
@@ -390,7 +390,7 @@ export default class RealmService extends Service {
     );
     if (response.status !== 200) {
       throw new Error(
-        `Failed to fetch public realms from realm server: ${realmServerURL.origin}`,
+        `Failed to fetch public realms for realm server ${realmServerURL.origin}: ${response.status}`,
       );
     }
 
