@@ -178,6 +178,10 @@ export class Worker {
 
     if (this.#matrixClientCache.has(args.realmUsername)) {
       matrixClient = this.#matrixClientCache.get(args.realmUsername)!;
+
+      if (!(await matrixClient.isTokenValid())) {
+        await matrixClient.login();
+      }
     } else {
       matrixClient = new MatrixClient({
         matrixURL: new URL(this.#matrixURL),
