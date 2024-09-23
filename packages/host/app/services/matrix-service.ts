@@ -567,7 +567,6 @@ export default class MatrixService extends Service {
     return responses;
   }
 
-
   getLastActiveTimestamp(roomId: string, defaultTimestamp: number) {
     let matrixRoom = this.client.getRoom(roomId);
     let lastMatrixEvent = matrixRoom?.getLastActiveTimestamp();
