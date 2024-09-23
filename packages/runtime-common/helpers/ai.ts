@@ -406,7 +406,7 @@ const containsFilterProperty = {
   required: ['title'],
 };
 
-const eqCardTypeFilterProperty =  {
+const eqCardTypeFilterProperty = {
   type: 'object',
   properties: {
     _cardType: {
@@ -415,7 +415,7 @@ const eqCardTypeFilterProperty =  {
     },
   },
   required: ['_cardType'],
-}
+};
 
 export function getSearchTool() {
   return {
@@ -436,7 +436,7 @@ export function getSearchTool() {
             type: 'object',
             properties: {
               contains: containsFilterProperty,
-              eq: eqCardTypeFilterProperty 
+              eq: eqCardTypeFilterProperty,
             },
             required: ['every'],
           },
