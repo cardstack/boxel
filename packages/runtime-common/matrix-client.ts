@@ -65,7 +65,7 @@ export class MatrixClient {
     return fetch(`${this.matrixURL.href}${path}`, options);
   }
 
-  async login() {
+  async login(): Promise<void> {
     let password: string | undefined;
     if (this.password) {
       password = this.password;
@@ -96,6 +96,15 @@ export class MatrixClient {
     let json = await response.json();
 
     if (!response.ok) {
+      if (json['errcode'] === 'M_LIMIT_EXCEEDED') {
+        let retryAfter = json['retry_after_ms'];
+        console.log(
+          `Matrix rate limit exceeded, retrying after ${retryAfter}ms`,
+        );
+        await new Promise((res) => setTimeout(res, retryAfter));
+        return this.login();
+      }
+
       throw new Error(
         `Unable to login to matrix ${this.matrixURL.href} as user ${
           this.username
