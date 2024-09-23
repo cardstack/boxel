@@ -64,67 +64,42 @@ class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
         </button>
       </div>
       <div class='columns-container'>
-        <div class='column'>
-          <div class='column-title'>Backlog </div>
-          <div class='column-data'>
-            <ColumnQuery
-              @context={{@context}}
-              @realms={{this.realms}}
-              @query={{this.backlogQuery}}
-            />
-          </div>
-        </div>
-        <div class='column'>
-          <div class='column-title'>Next Sprint</div>
-          <div class='column-data'>
-            <ColumnQuery
-              @context={{@context}}
-              @realms={{this.realms}}
-              @query={{this.nextSprintQuery}}
-            />
-          </div>
-        </div>
-        <div class='column'>
-          <div class='column-title'>Current Sprint</div>
-          <div class='column-data'>
-            <ColumnQuery
-              @context={{@context}}
-              @realms={{this.realms}}
-              @query={{this.nextSprintQuery}}
-            />
-          </div>
-        </div>
-        <div class='column'>
-          <div class='column-title'>In Review </div>
-          <div class='column-data'>
-            <ColumnQuery
-              @context={{@context}}
-              @realms={{this.realms}}
-              @query={{this.nextSprintQuery}}
-            />
-          </div>
-        </div>
-
-        <div class='column'>
-          <div class='column-title'>Staged</div>
-          <div class='column-data'>
-            <ColumnQuery
-              @context={{@context}}
-              @realms={{this.realms}}
-              @query={{this.nextSprintQuery}}
-            />
-          </div>
-        </div>
-        <div class='column'>
-          <div class='column-title'>Shipped</div>
-          <div class='column-data'>
-            <ColumnQuery
-              @context={{@context}}
-              @realms={{this.realms}}
-              @query={{this.nextSprintQuery}}
-            />
-          </div>
-        </div>
+        <ColumnQuery
+          @context={{@context}}
+          @realms={{this.realms}}
+          @query={{this.backlogQuery}}
+          @title='Backlog'
+        />
+        <ColumnQuery
+          @context={{@context}}
+          @realms={{this.realms}}
+          @query={{this.nextSprintQuery}}
+          @title='Next Sprint'
+        />
+        <ColumnQuery
+          @context={{@context}}
+          @realms={{this.realms}}
+          @query={{this.nextSprintQuery}}
+          @title='Current Sprint'
+        />
+        <ColumnQuery
+          @context={{@context}}
+          @realms={{this.realms}}
+          @query={{this.nextSprintQuery}}
+          @title='In Review'
+        />
+        <ColumnQuery
+          @context={{@context}}
+          @realms={{this.realms}}
+          @query={{this.nextSprintQuery}}
+          @title='Staged'
+        />
+        <ColumnQuery
+          @context={{@context}}
+          @realms={{this.realms}}
+          @query={{this.nextSprintQuery}}
+          @title='Shipped'
+        />
       </div>
       <Sheet @onClose={{this.toggleSheet}} @isOpen={{this.isSheetOpen}}>
         <h2>Sheet Content</h2>
@@ -163,28 +138,6 @@ class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
         display: flex;
         overflow-x: auto;
         flex-grow: 1;
-      }
-
-      .column {
-        flex: 0 0 var(--boxel-xs-container);
-        border-right: var(--boxel-border);
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-      }
-
-      .column-title {
-        position: sticky;
-        top: 0;
-        background-color: var(--boxel-100);
-        padding: var(--boxel-sp-xs) var(--boxel-sp);
-        font: var(--boxel-font-sm);
-      }
-
-      .column-data {
-        flex-grow: 1;
-        overflow-y: auto;
-        padding: var(--boxel-sp);
       }
 
       .task-card {
@@ -285,6 +238,7 @@ export interface ColumnQuerySignature {
     context: CardContext | undefined;
     realms: string[];
     query: Query;
+    title: string;
   };
   Blocks: {
     default: [];
@@ -294,45 +248,72 @@ export interface ColumnQuerySignature {
 
 class ColumnQuery extends GlimmerComponent<ColumnQuerySignature> {
   <template>
-    <ul class='cards' data-test-cards-grid-cards>
-      {{#let
-        (component @context.prerenderedCardSearchComponent)
-        as |PrerenderedCardSearch|
-      }}
-        <PrerenderedCardSearch
-          @query={{@query}}
-          @format='fitted'
-          @realms={{@realms}}
-        >
+    <div class='column'>
+      <div class='column-title'>{{@title}}</div>
+      <div class='column-data'>
+        <ul class='cards' data-test-cards-grid-cards>
+          {{#let
+            (component @context.prerenderedCardSearchComponent)
+            as |PrerenderedCardSearch|
+          }}
+            <PrerenderedCardSearch
+              @query={{@query}}
+              @format='fitted'
+              @realms={{@realms}}
+            >
 
-          <:loading>
-            Loading...
-          </:loading>
-          <:response as |cards|>
-            {{#each cards as |card|}}
-              <li
-                class='card'
-                {{@context.cardComponentModifier
-                  cardId=card.url
-                  format='data'
-                  fieldType=undefined
-                  fieldName=undefined
-                }}
-                data-test-cards-grid-item={{removeFileExtension card.url}}
-                {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
-                data-cards-grid-item={{removeFileExtension card.url}}
-              >
-                <CardContainer @displayBoundaries={{true}}>
-                  {{card.component}}
-                </CardContainer>
-              </li>
-            {{/each}}
-          </:response>
-        </PrerenderedCardSearch>
-      {{/let}}
-    </ul>
+              <:loading>
+                Loading...
+              </:loading>
+              <:response as |cards|>
+                {{#each cards as |card|}}
+                  <li
+                    class='card'
+                    {{@context.cardComponentModifier
+                      cardId=card.url
+                      format='data'
+                      fieldType=undefined
+                      fieldName=undefined
+                    }}
+                    data-test-cards-grid-item={{removeFileExtension card.url}}
+                    {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
+                    data-cards-grid-item={{removeFileExtension card.url}}
+                  >
+                    <CardContainer @displayBoundaries={{true}}>
+                      {{card.component}}
+                    </CardContainer>
+                  </li>
+                {{/each}}
+              </:response>
+            </PrerenderedCardSearch>
+          {{/let}}
+        </ul>
+      </div>
+    </div>
 
     <style>
+      .column {
+        flex: 0 0 var(--boxel-xs-container);
+        border-right: var(--boxel-border);
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+      }
+
+      .column-title {
+        position: sticky;
+        top: 0;
+        background-color: var(--boxel-100);
+        padding: var(--boxel-sp-xs) var(--boxel-sp);
+        font: var(--boxel-font-sm);
+      }
+
+      .column-data {
+        flex-grow: 1;
+        overflow-y: auto;
+        padding: var(--boxel-sp);
+      }
+
       .cards {
         padding: 0;
         list-style-type: none;
