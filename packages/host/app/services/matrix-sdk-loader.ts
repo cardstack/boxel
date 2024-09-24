@@ -96,8 +96,12 @@ export type ExtendedClient = Pick<
   | 'startClient'
   | 'getAccountDataFromServer'
 > & {
+  // Despite being documented, these methods are missing from the Matrix SDK
+  // types. They appear to be implemented, just not typed, so we are providing
+  // the types here.
   setAccountData<T>(type: string, data: T): Promise<void>;
   getAccountData<T>(type: string): Promise<T>;
+
   requestEmailToken(
     type: 'registration' | 'threepid',
     email: string,
@@ -127,70 +131,6 @@ async function createRealmSession(
   let realmAuthClient = new RealmAuthClient(realmURL, this, fetch);
 
   return await realmAuthClient.getJWT();
-}
-async function setAccountData<T>(
-  this: ExtendedClient,
-  fetch: typeof globalThis.fetch,
-  type: string,
-  data: T,
-) {
-  let userId = this.getUserId();
-  if (!userId) {
-    throw new Error(`Cannot set account data without matrix session`);
-  }
-  let response = await fetch(
-    `${this.baseUrl}/_matrix/client/v3/user/${encodeURIComponent(
-      userId,
-    )}/account_data/${type}`,
-    {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${this.getAccessToken()}`,
-      },
-      body: JSON.stringify(data),
-    },
-  );
-  if (!response.ok) {
-    let json = await response.json();
-    throw new Error(
-      `Unable to set account data '${type}' for ${this.getUserId()}: status ${
-        response.status
-      } - ${JSON.stringify(json)}`,
-    );
-  }
-}
-
-async function getAccountData<T>(
-  this: ExtendedClient,
-  fetch: typeof globalThis.fetch,
-  type: string,
-) {
-  let userId = this.getUserId();
-  if (!userId) {
-    throw new Error(`Cannot get account data without matrix session`);
-  }
-  let response = await fetch(
-    `${this.baseUrl}/_matrix/client/v3/user/${encodeURIComponent(
-      userId,
-    )}/account_data/${type}`,
-    {
-      headers: {
-        Authorization: `Bearer ${this.getAccessToken()}`,
-      },
-    },
-  );
-  if (response.status === 404) {
-    return;
-  }
-  let json = await response.json();
-  if (!response.ok) {
-    throw new Error(
-      `Unable to get account data '${type}' for ${this.getUserId()}: status ${
-        response.status
-      } - ${JSON.stringify(json)}`,
-    );
-  }
-  return json as T;
 }
 
 async function requestEmailToken(
@@ -270,10 +210,6 @@ function extendedClient(
     get(target, key, receiver) {
       let extendedTarget = target as unknown as ExtendedClient;
       switch (key) {
-        case 'setAccountData':
-          return setAccountData.bind(extendedTarget, fetch);
-        case 'getAccountData':
-          return getAccountData.bind(extendedTarget, fetch);
         case 'hashMessageWithSecret':
           return hashMessageWithSecret.bind(extendedTarget, fetch);
         case 'requestEmailToken':
