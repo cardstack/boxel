@@ -131,6 +131,10 @@ export default class BoxelMultiSelect extends Component<Signature> {
           var(--boxel-form-control-border-radius);
       }
 
+      .ember-power-select-trigger:after {
+        margin-left: 10px;
+      }
+
       .boxel-multi-select__icons-wrapper {
         display: flex;
         align-items: center;
