@@ -3,7 +3,7 @@ import type RouterService from '@ember/routing/router-service';
 import { scheduleOnce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 
-import { cached, tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, task } from 'ember-concurrency';
 import { mergeWith } from 'lodash';
@@ -586,7 +586,7 @@ export default class OperatorModeStateService extends Service {
   // Currently, we have two controllers that could contain operator mode state:
   // - card controller (viewing a card and entering operator mode from there)
   // - index controller (viewing the realm server home page and choosing a workspace)
-  //  We are in the process of removing host mode for viewing cards, so card controller
+  // We are in the process of removing host mode for viewing cards, so card controller
   // will be removed soon - when we are able to do that, remove this method and just use the index controller
   get operatorModeController(): CardController | IndexController {
     let controller: CardController | IndexController;
