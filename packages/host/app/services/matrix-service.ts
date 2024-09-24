@@ -1,4 +1,5 @@
 import type Owner from '@ember/owner';
+import { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
@@ -42,8 +43,10 @@ import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
 import { currentRoomIdPersistenceKey } from '@cardstack/host/components/ai-assistant/panel';
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
+import type CardController from '@cardstack/host/controllers/card';
 
 import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
+import { iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
@@ -72,6 +75,7 @@ import type LoaderService from './loader-service';
 
 import type MatrixSDKLoader from './matrix-sdk-loader';
 import type { ExtendedClient, ExtendedMatrixSDK } from './matrix-sdk-loader';
+import type RealmServerService from './realm-server';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
@@ -96,7 +100,7 @@ export default class MatrixService extends Service {
   @service private declare cardService: CardService;
   @service private declare realm: RealmService;
   @service private declare matrixSdkLoader: MatrixSDKLoader;
-
+  @service private declare realmServer: RealmServerService;
   @service private declare router: RouterService;
   @tracked private _client: ExtendedClient | undefined;
 
@@ -214,6 +218,8 @@ export default class MatrixService extends Service {
       await this.flushTimeline;
       clearAuth();
       this.realm.logout();
+      this.realmServer.logout();
+      this.cardService.resetState();
       this.unbindEventListeners();
       await this.client.logout(true);
     } catch (e) {
@@ -223,10 +229,28 @@ export default class MatrixService extends Service {
     }
   }
 
-  async startAndSetDisplayName(auth: LoginResponse, displayName: string) {
+  async initializeNewUser(auth: LoginResponse, displayName: string) {
+    displayName = displayName.trim();
+    let cardController = getOwner(this)!.lookup(
+      'controller:card',
+    ) as CardController;
+    cardController.workspaceChooserOpened = true;
     this.start(auth);
     this.setDisplayName(displayName);
-    await this.router.refresh();
+
+    let personalRealmURL = await this.realmServer.createRealm({
+      endpoint: 'personal',
+      name: `${displayName}'s Workspace`,
+      iconURL: iconURLFor(displayName),
+    });
+    let { realms = [] } =
+      (await this.client.getAccountDataFromServer<{ realms: string[] }>(
+        'com.cardstack.boxel.realms',
+      )) ?? {};
+    realms.push(personalRealmURL.href);
+    await this.client.setAccountData('com.cardstack.boxel.realms', { realms });
+    this.cardService.setRealms(realms);
+    await this.loginToRealms();
   }
 
   async setDisplayName(displayName: string) {
@@ -285,6 +309,7 @@ export default class MatrixService extends Service {
       deviceId,
     });
     if (this.isLoggedIn) {
+      this.realmServer.setClient(this.client);
       saveAuth(auth);
       this.bindEventListeners();
 

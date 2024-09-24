@@ -4,8 +4,10 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 wait_for_postgres
 
-MATRIX_REGISTRATION_SHARED_SECRET=$(ts-node --transpileOnly "$SCRIPTS_DIR/matrix-registration-secret.ts")
-export MATRIX_REGISTRATION_SHARED_SECRET
+if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
+  MATRIX_REGISTRATION_SHARED_SECRET=$(ts-node --transpileOnly "$SCRIPTS_DIR/matrix-registration-secret.ts")
+  export MATRIX_REGISTRATION_SHARED_SECRET
+fi
 
 NODE_ENV=test \
   PGPORT=5435 \
@@ -18,7 +20,7 @@ NODE_ENV=test \
   --transpileOnly main \
   --port=4202 \
   --matrixURL='http://localhost:8008' \
-  --realmsRootPath='./realms' \
+  --realmsRootPath='./realms/localhost_4202' \
   --matrixRegistrationSecretFile='../matrix/registration_secret.txt' \
   \
   --path='./tests/cards' \
