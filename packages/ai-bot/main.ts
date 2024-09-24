@@ -1,3 +1,4 @@
+import './instrument';
 import './setup-logger'; // This should be first
 import {
   RoomMemberEvent,
@@ -23,14 +24,6 @@ import { handleDebugCommands } from './lib/debug';
 import { MatrixClient } from './lib/matrix';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import * as Sentry from '@sentry/node';
-
-if (process.env.SENTRY_DSN) {
-  Sentry.init({
-    dsn: process.env.SENTRY_DSN,
-    environment: process.env.SENTRY_ENVIRONMENT || 'development',
-    maxValueLength: 8192, // this prevents error messages reported in sentry from being truncated
-  });
-}
 
 let log = logger('ai-bot');
 

@@ -51,9 +51,16 @@ export function healthCheck(ctxt: Koa.Context, next: Koa.Next) {
 
 export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
   let logger = getLogger('realm:requests');
+
+  logger.info(
+    `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${
+      fullRequestURL(ctxt).href
+    }`,
+  );
+
   ctxt.res.on('finish', () => {
     logger.info(
-      `${ctxt.method} ${ctxt.req.headers.accept} ${
+      `--> ${ctxt.method} ${ctxt.req.headers.accept} ${
         fullRequestURL(ctxt).href
       }: ${ctxt.status}`,
     );

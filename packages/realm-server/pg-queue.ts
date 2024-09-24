@@ -1,3 +1,4 @@
+import './instrument';
 import isEqual from 'lodash/isEqual';
 import {
   type Queue,
@@ -14,7 +15,6 @@ import {
   Deferred,
   upsert,
   Job,
-  setErrorReporter,
 } from '@cardstack/runtime-common';
 import PgAdapter from './pg-adapter';
 import * as Sentry from '@sentry/node';
@@ -45,15 +45,6 @@ export interface QueueOpts {
 const defaultQueueOpts: Required<QueueOpts> = Object.freeze({
   queueName: 'default',
 });
-
-if (process.env.SENTRY_DSN) {
-  Sentry.init({
-    dsn: process.env.SENTRY_DSN,
-    environment: process.env.SENTRY_ENVIRONMENT || 'development',
-    maxValueLength: 8192, // this prevents error messages reported in sentry from being truncated
-  });
-  setErrorReporter(Sentry.captureException);
-}
 
 // Tracks a job that should loop with a timeout and an interruptible sleep.
 class WorkLoop {
