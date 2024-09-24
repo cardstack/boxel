@@ -105,7 +105,9 @@ export default class RenderCard extends Route<Model | null> {
           // We have that because we want to support back-forward navigation in operator mode.
           return model ?? null;
         }
-        await this.operatorModeStateService.restore(operatorModeStateObject);
+        await this.operatorModeStateService.restore(
+          operatorModeStateObject || { stacks: [] },
+        );
       }
 
       return model ?? null;

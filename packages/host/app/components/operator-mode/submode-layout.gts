@@ -1,7 +1,8 @@
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { getOwner } from '@ember/owner';
+
+import type RouterService from '@ember/routing/router-service';
 import { inject as service } from '@ember/service';
 
 import Component from '@glimmer/component';
@@ -27,6 +28,7 @@ import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 import ENV from '@cardstack/host/config/environment';
 import type CardController from '@cardstack/host/controllers/card';
+import type IndexController from '@cardstack/host/controllers';
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -78,29 +80,14 @@ export default class SubmodeLayout extends Component<Signature> {
   };
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
-  private _cardController: CardController | null = null;
+  @service private declare router: RouterService;
 
   private searchElement: HTMLElement | null = null;
   private suppressSearchClose = false;
   private declare doSearch: (term: string) => void;
 
-  get cardController(): CardController {
-    if (!this._cardController) {
-      // Calling function to set _cardController to avoid 'ember/no-side-effects' error
-      this.setCardController(
-        getOwner(this)!.lookup('controller:card') as CardController,
-      );
-      if (!this._cardController) {
-        throw new Error(
-          'SubmodeLayout must be used in the context of a CardController',
-        );
-      }
-    }
-    return this._cardController;
-  }
-
-  private setCardController(cardController: CardController) {
-    this._cardController = cardController;
+  get operatorModeController(): CardController | IndexController {
+    return this.operatorModeStateService.operatorModeController;
   }
 
   private get aiAssistantVisibilityClass() {
@@ -172,15 +159,17 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   private get workspaceChooserOpened() {
-    return this.cardController.workspaceChooserOpened;
+    return this.operatorModeStateService.workspaceChooserOpened;
   }
 
   private set workspaceChooserOpened(workspaceChooserOpened: boolean) {
-    this.cardController.workspaceChooserOpened = workspaceChooserOpened;
+    this.operatorModeStateService.workspaceChooserOpened =
+      workspaceChooserOpened;
   }
 
   @action private toggleWorkspaceChooser() {
-    this.workspaceChooserOpened = !this.workspaceChooserOpened;
+    this.operatorModeStateService.workspaceChooserOpened =
+      !this.operatorModeStateService.workspaceChooserOpened;
   }
 
   @action private toggleProfileSettings() {
