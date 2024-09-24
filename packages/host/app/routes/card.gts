@@ -63,7 +63,7 @@ export default class RenderCard extends Route<Model | null> {
     path = path || '';
 
     try {
-      await this.loadMatrix.perform(); // todo do not load if already loaded
+      await this.loadMatrix.perform();
 
       let model = null;
 
