@@ -344,6 +344,7 @@ export class RealmServer {
           ownerUserId,
           ...json.data.attributes,
         });
+        console.log(`====> indexing new realm ${realm.url}`);
         await realm.start();
       } catch (e: any) {
         if ('status' in e && e.status === 400) {
@@ -444,6 +445,9 @@ export class RealmServer {
       )}/${ownerUsername}/${endpoint}/`,
       this.serverURL,
     ).href;
+    console.log(
+      `====> determined realm creation owner username: ${ownerUsername}`,
+    );
 
     let existingRealmURLs = this.realms.map((r) => r.url);
     if (existingRealmURLs.includes(url)) {
@@ -454,10 +458,13 @@ export class RealmServer {
     }
 
     let realmPath = resolve(join(this.realmsRootPath, ownerUsername, endpoint));
+    console.log(`====> determined new realm path: ${realmPath}`);
     ensureDirSync(realmPath);
+    console.log(`====> created new realm path: ${realmPath}`);
     let adapter = new NodeAdapter(resolve(String(realmPath)));
 
     let username = `realm/${ownerUsername}_${endpoint}`;
+    console.log(`====> determined realm bot username: ${username}`);
     let { userId } = await registerUser({
       matrixURL: this.matrixClient.matrixURL,
       displayname: username,
@@ -465,26 +472,33 @@ export class RealmServer {
       password: await passwordFromSeed(username, this.secretSeed),
       registrationSecret: await this.getMatrixRegistrationSecret(),
     });
+    console.log(`====> created realm bot user: ${userId}`);
 
     await insertPermissions(this.dbAdapter, new URL(url), {
       [userId]: DEFAULT_PERMISSIONS,
       [ownerUserId]: DEFAULT_PERMISSIONS,
     });
+    console.log(`====> inserted new realm permissions`);
 
     writeJSONSync(join(realmPath, '.realm.json'), {
       name,
       ...(iconURL ? { iconURL } : {}),
       ...(backgroundURL ? { backgroundURL } : {}),
     });
+    console.log(`====> created ${join(realmPath, '.realm.json')}`);
     if (this.seedPath) {
       let ignoreList = IGNORE_SEED_FILES.map((file) =>
         join(this.seedPath!.replace(/\/$/, ''), file),
+      );
+      console.log(
+        `====> copying seed files from ${this.seedPath} to ${realmPath}`,
       );
       copySync(this.seedPath, realmPath, {
         filter: (src, _dest) => {
           return !ignoreList.includes(src);
         },
       });
+      console.log(`====> seed files copied`);
     }
 
     let realm = new Realm({
@@ -503,6 +517,7 @@ export class RealmServer {
     });
     this.realms.push(realm);
     this.virtualNetwork.mount(realm.handle);
+    console.log(`====> created new realm ${url}`);
     return realm;
   }
 
