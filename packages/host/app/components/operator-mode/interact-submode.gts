@@ -586,6 +586,8 @@ export default class InteractSubmode extends Component<Signature> {
             }
           }
         }
+
+        this.operatorModeStateService.workspaceChooserOpened = false;
       } finally {
         waiter.endAsync(waiterToken);
       }

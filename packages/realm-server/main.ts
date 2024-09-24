@@ -1,3 +1,4 @@
+import './instrument';
 import './setup-logger'; // This should be first
 import {
   Realm,
@@ -13,7 +14,6 @@ import { spawn } from 'child_process';
 import { makeFastBootIndexRunner } from './fastboot';
 import { shimExternals } from './lib/externals';
 import * as Sentry from '@sentry/node';
-import { setErrorReporter } from '@cardstack/runtime-common/realm';
 import PgAdapter from './pg-adapter';
 import PgQueue from './pg-queue';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -21,20 +21,6 @@ import flattenDeep from 'lodash/flattenDeep';
 
 let log = logger('main');
 const SEED_REALM_USERNAME = 'seed_realm';
-
-if (process.env.REALM_SENTRY_DSN) {
-  log.info('Setting up Sentry.');
-  Sentry.init({
-    dsn: process.env.REALM_SENTRY_DSN,
-    environment: process.env.REALM_SENTRY_ENVIRONMENT || 'development',
-  });
-
-  setErrorReporter(Sentry.captureException);
-} else {
-  log.warn(
-    `No REALM_SENTRY_DSN environment variable found, skipping Sentry setup.`,
-  );
-}
 
 const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
 if (!REALM_SECRET_SEED) {
