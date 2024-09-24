@@ -3,19 +3,15 @@ import Component from '@glimmer/component';
 import { provide } from 'ember-provide-consume-context';
 
 import {
-  CardContextName,
   DefaultFormatsContextName,
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import type {
   BaseDef,
-  CardContext,
   Format,
   Field,
 } from 'https://cardstack.com/base/card-api';
-
-import PrerenderedCardSearch from './prerendered-card-search';
 
 interface Signature {
   Element: any;
@@ -24,7 +20,6 @@ interface Signature {
     format?: Format;
     field?: Field;
     codeRef?: ResolvedCodeRef;
-    cardContext?: Partial<CardContext>;
   };
 }
 
@@ -37,15 +32,6 @@ export default class Preview extends Component<Signature> {
     return { cardDef: format, fieldDef: format };
   }
 
-  @provide(CardContextName)
-  // @ts-ignore "context is declared but not used"
-  private get context() {
-    return {
-      prerenderedCardSearchComponent: PrerenderedCardSearch,
-      ...this.args.cardContext,
-    };
-  }
-
   <template>
     <this.renderedCard ...attributes />
   </template>
@@ -54,10 +40,7 @@ export default class Preview extends Component<Signature> {
     return this.args.card.constructor.getComponent(
       this.args.card,
       this.args.field,
-      {
-        componentCodeRef: this.args.codeRef,
-        actions: this.args.cardContext?.actions,
-      },
+      this.args.codeRef ? { componentCodeRef: this.args.codeRef } : undefined,
     );
   }
 }

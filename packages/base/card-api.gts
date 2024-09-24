@@ -1721,7 +1721,7 @@ export class BaseDef {
   static getComponent(
     card: BaseDef,
     field?: Field,
-    opts?: { componentCodeRef?: CodeRef; actions?: Actions },
+    opts?: { componentCodeRef?: CodeRef },
   ) {
     return getComponent(card, field, opts);
   }
@@ -2754,7 +2754,7 @@ export type SignatureFor<CardT extends BaseDefConstructor> = {
 export function getComponent(
   model: BaseDef,
   field?: Field,
-  opts?: { componentCodeRef?: CodeRef; actions?: Actions },
+  opts?: { componentCodeRef?: CodeRef },
 ): BoxComponent {
   let box = Box.create(model);
   let boxComponent = getBoxComponent(

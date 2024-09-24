@@ -20,7 +20,7 @@ import {
 import { not } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowFilled, IconX } from '@cardstack/boxel-ui/icons';
 
-import { aiBotUsername, type Actions } from '@cardstack/runtime-common';
+import { aiBotUsername } from '@cardstack/runtime-common';
 
 import NewSession from '@cardstack/host/components/ai-assistant/new-session';
 import AiAssistantPastSessionsList from '@cardstack/host/components/ai-assistant/past-sessions';
@@ -47,7 +47,6 @@ export const aiBotUserId = `@${aiBotUsername}:${matrixServerName}`;
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    actions?: Actions;
     onClose: () => void;
     resizeHandle: ResizeHandle;
   };
@@ -182,7 +181,6 @@ export default class AiAssistantPanel extends Component<Signature> {
           {{! below if statement is covered in 'isReady' check above but added due to glint not realizing it }}
           {{#if this.currentRoomId}}
             <Room
-              @actions={{@actions}}
               @roomId={{this.currentRoomId}}
               @monacoSDK={{this.monacoSDK}}
             />

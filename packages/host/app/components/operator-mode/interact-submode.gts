@@ -10,6 +10,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { dropTask, restartableTask, task, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+import { provide } from 'ember-provide-consume-context';
 
 import { isEqual } from 'lodash';
 import get from 'lodash/get';
@@ -28,6 +29,7 @@ import {
   getCard,
   moduleFrom,
   RealmPaths,
+  CardContextName,
   type Actions,
   type CodeRef,
   type LooseSingleCardDocument,
@@ -50,6 +52,7 @@ import SubmodeLayout from './submode-layout';
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RecentFilesService from '../../services/recent-files-service';
+import PrerenderedCardSearch from '../prerendered-card-search';
 import type { Submode } from '../submode-switcher';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
@@ -174,6 +177,7 @@ export default class InteractSubmode extends Component<Signature> {
           doc,
           relativeTo,
         );
+
         let newItem = new StackItem({
           owner: here,
           card: newCard,
@@ -612,13 +616,17 @@ export default class InteractSubmode extends Component<Signature> {
     openSearchCallback();
   }
 
-  get hasItemsInLeftStack() {
-    return Boolean(this.stacks[0].length);
+  @provide(CardContextName)
+  // @ts-ignore "context is declared but not used"
+  private get cardContext() {
+    return {
+      prerenderedCardSearchComponent: PrerenderedCardSearch,
+      actions: this.publicAPI(this, this.stacks[0].length ? 1 : 0),
+    };
   }
 
   <template>
     <SubmodeLayout
-      @actions={{this.publicAPI this (if this.hasItemsInLeftStack 1 0)}}
       @onSearchSheetClosed={{this.clearSearchSheetTrigger}}
       @onCardSelectFromSearch={{perform this.openSelectedSearchResultInStack}}
       as |search|
@@ -672,12 +680,12 @@ export default class InteractSubmode extends Component<Signature> {
               />
             {{/let}}
           {{/each}}
+          <CopyButton
+            @selectedCards={{this.selectedCards}}
+            @copy={{fn (perform this.copy)}}
+            @isCopying={{this.copy.isRunning}}
+          />
         {{/if}}
-        <CopyButton
-          @selectedCards={{this.selectedCards}}
-          @copy={{fn (perform this.copy)}}
-          @isCopying={{this.copy.isRunning}}
-        />
         {{#if this.canCreateNeighborStack}}
           <NeighborStackTriggerButton
             data-test-add-card-left-stack

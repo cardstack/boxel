@@ -10,7 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { not } from '@cardstack/boxel-ui/helpers';
 
-import { unixTime, type Actions } from '@cardstack/runtime-common';
+import { unixTime } from '@cardstack/runtime-common';
 
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
@@ -37,7 +37,6 @@ import type { Skill } from '../ai-assistant/skill-menu';
 
 interface Signature {
   Args: {
-    actions?: Actions;
     roomId: string;
     monacoSDK: MonacoSDK;
   };
@@ -57,7 +56,6 @@ export default class Room extends Component<Signature> {
           {{#if this.messages}}
             {{#each this.messages as |message i|}}
               <RoomMessage
-                @actions={{@actions}}
                 @roomId={{@roomId}}
                 @messages={{this.messages}}
                 @message={{message}}
