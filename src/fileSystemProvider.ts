@@ -7,6 +7,7 @@ import * as path from "path";
 import * as vscode from "vscode";
 import { RealmAuthClient, RealmAuthMatrixClientInterface } from "./auth";
 import { SecretStorage } from "vscode";
+import { createClient } from "matrix-js-sdk";
 
 function getUrl(uri: vscode.Uri) {
   let scheme = uri.scheme.split("+")[1];
@@ -56,25 +57,18 @@ export type Entry = File | Directory;
 
 export class MemFS implements vscode.FileSystemProvider {
   root = new Directory("");
-  realmClients: Map<string, RealmAuthClient>;
+  realmClients: Map<string, RealmAuthClient> = new Map();
+  realmsInitialized = false;
   jwtPromises: Map<string, Promise<string>> = new Map();
   secrets: SecretStorage;
 
-  constructor(
-    matrixClient: RealmAuthMatrixClientInterface,
-    realms: string[],
-    secrets: SecretStorage
-  ) {
-    // we should do logins here?
-    console.log("Boxel filesystem constructor", realms);
-    this.secrets = secrets;
-    this.realmClients = new Map();
-    for (const realm of realms) {
-      this.realmClients.set(
-        realm,
-        new RealmAuthClient(new URL(realm), matrixClient)
-      );
+  async getRealmUrls() {
+    if (!this.realmsInitialized) {
+      console.log("No realm clients, setting up realms");
+      await this.setupRealms();
     }
+    console.log("Realm clients", this.realmClients, this.realmClients.keys());
+    return Array.from(this.realmClients.keys());
   }
 
   async getJwtAndDeletePromise(url: string) {
@@ -83,8 +77,44 @@ export class MemFS implements vscode.FileSystemProvider {
     return jwt;
   }
 
+  async setupRealms() {
+    const session = await vscode.authentication.getSession("synapse", [], {
+      createIfNone: true,
+    });
+    console.log("Session:", session);
+    const decodedAuth = JSON.parse(session.accessToken);
+    const matrixClient = createClient({
+      baseUrl: "http://localhost:8008",
+      accessToken: decodedAuth.access_token,
+      userId: decodedAuth.user_id,
+      deviceId: decodedAuth.device_id,
+    });
+    let realmsEventData =
+      (await matrixClient.getAccountDataFromServer(
+        "com.cardstack.boxel.realms"
+      )) || {};
+    console.log("Realms event data:", realmsEventData, typeof realmsEventData);
+    let realms = realmsEventData.realms || [];
+    console.log("Realms:", realms);
+    vscode.window.showInformationMessage(
+      `Boxel - found ${realms.length} realms`
+    );
+    for (const realm of realms) {
+      console.log("new realm:", realm);
+      let newRealmClient = new RealmAuthClient(new URL(realm), matrixClient);
+      console.log("newRealmClient", newRealmClient);
+      this.realmClients.set(realm, newRealmClient);
+      console.log("Realm client set", realm);
+    }
+    console.log("Realm clients setup", this.realmClients);
+    this.realmsInitialized = true;
+  }
+
   async getJWT(url: string) {
     console.log("Getting JWT for ", url);
+    if (!this.realmsInitialized) {
+      await this.setupRealms();
+    }
     // Find the realm client that prefixes the url
     for (const [realmUrl, realmClient] of this.realmClients.entries()) {
       if (url.startsWith(realmUrl.toString())) {

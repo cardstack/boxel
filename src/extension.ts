@@ -4,6 +4,7 @@ import * as vscode from "vscode";
 import { MemFS } from "./fileSystemProvider";
 import { createClient } from "matrix-js-sdk";
 import { RealmAuthClient } from "./auth";
+import { SynapseAuthProvider } from "./synapse-auth-provider";
 
 async function loginWithEmail(
   matrixURL: string,
@@ -119,27 +120,48 @@ async function getClient(
 }
 
 export async function activate(context: vscode.ExtensionContext) {
-  vscode.commands.registerCommand("boxelrealm.login", async (_) => {});
+  const authProvider = new SynapseAuthProvider(context);
+  context.subscriptions.push(
+    vscode.authentication.registerAuthenticationProvider(
+      SynapseAuthProvider.id,
+      authProvider.label,
+      authProvider,
+      { supportsMultipleAccounts: false }
+    )
+  );
 
-  vscode.window.showInformationMessage(`Boxel - logging in`);
-  let firstRealm: string;
+  vscode.commands.registerCommand("boxelrealm.logout", async (_) => {
+    await authProvider.clearAllSessions();
+    vscode.window.showInformationMessage("Logged out of synapse");
+  });
 
-  const username = vscode.workspace
-    .getConfiguration("boxelrealm")
-    .get<string>("realmUsername");
-  if (!username) {
-    throw new Error("Realm username not set");
-  }
+  const memFs = new MemFS();
 
-  const password = vscode.workspace
-    .getConfiguration("boxelrealm")
-    .get<string>("realmPassword");
-  if (!password) {
-    throw new Error("Realm password not set");
-  }
+  console.log("Registering file system providers now");
+  context.subscriptions.push(
+    vscode.workspace.registerFileSystemProvider("boxelrealm+http", memFs, {
+      isCaseSensitive: true,
+    })
+  );
+  context.subscriptions.push(
+    vscode.workspace.registerFileSystemProvider("boxelrealm+https", memFs, {
+      isCaseSensitive: true,
+    })
+  );
+
+  vscode.commands.registerCommand("boxelrealm.createWorkspace", async (_) => {
+    let realmList = (await memFs.getRealmUrls()).map((url) => ({
+      uri: vscode.Uri.parse(`boxelrealm+${url}`),
+      name: `realm-${url}`,
+    }));
+    console.log("Realm list", realmList);
+    vscode.workspace.updateWorkspaceFolders(0, 0, ...realmList);
+  });
+  /*
+
   const matrixClient = await getClient(
     context,
-    "https://matrix.boxel.ai/",
+    "http://localhost:8008/",
     username,
     password
   );
@@ -179,14 +201,5 @@ export async function activate(context: vscode.ExtensionContext) {
     throw error;
   }
 
-  vscode.commands.registerCommand("boxelrealm.createWorkspace", async (_) => {
-    console.log(
-      "Creating workspace",
-      vscode.Uri.parse(`boxelrealm+${firstRealm}`)
-    );
-    vscode.workspace.updateWorkspaceFolders(0, 0, {
-      uri: vscode.Uri.parse(`boxelrealm+${firstRealm}`),
-      name: "Experiments",
-    });
-  });
+  */
 }
