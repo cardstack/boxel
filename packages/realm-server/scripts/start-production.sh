@@ -13,7 +13,7 @@ NODE_NO_WARNINGS=1 \
   --matrixURL='https://matrix.boxel.ai' \
   --realmsRootPath='/persistent/realms' \
   --serverURL='https://app.boxel.ai' \
-  --seedPath='../seed-realm' \
+  --seedPath='/persistent/seed' \
   \
   --path='/persistent/base' \
   --username='base_realm' \
@@ -26,12 +26,12 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='https://app.boxel.ai/experiments/' \
   --toUrl='https://app.boxel.ai/experiments/' \
   \
-  --path='../seed-realm' \
+  --path='/persistent/seed' \
   --username='seed_realm' \
   --fromUrl='https://app.boxel.ai/seed/' \
   --toUrl='https://app.boxel.ai/seed/' \
   \
-  --path='../catalog-realm' \
+  --path='/persistent/catalog' \
   --username='catalog_realm' \
   --fromUrl='https://app.boxel.ai/catalog/' \
   --toUrl='https://app.boxel.ai/catalog/'
