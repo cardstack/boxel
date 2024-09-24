@@ -103,7 +103,7 @@ export class MockClient implements ExtendedClient {
     throw new Error('Method not implemented.');
   }
 
-  setAccountData<T>(_type: string, _data: T): Promise<void> {
+  setAccountData<T>(_type: string, _data: T): Promise<{}> {
     throw new Error('Method not implemented.');
   }
 

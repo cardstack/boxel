@@ -89,6 +89,7 @@ export type ExtendedClient = Pick<
   | 'scrollback'
   | 'sendEvent'
   | 'sendReadReceipt'
+  | 'setAccountData'
   | 'setDisplayName'
   | 'setPassword'
   | 'setPowerLevel'
@@ -96,12 +97,6 @@ export type ExtendedClient = Pick<
   | 'startClient'
   | 'getAccountDataFromServer'
 > & {
-  // Despite being documented, these methods are missing from the Matrix SDK
-  // types. They appear to be implemented, just not typed, so we are providing
-  // the types here.
-  setAccountData<T>(type: string, data: T): Promise<void>;
-  getAccountData<T>(type: string): Promise<T>;
-
   requestEmailToken(
     type: 'registration' | 'threepid',
     email: string,

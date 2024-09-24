@@ -244,7 +244,7 @@ export default class MatrixService extends Service {
       iconURL: iconURLFor(displayName),
     });
     let { realms = [] } =
-      (await this.client.getAccountData<{ realms: string[] } | undefined>(
+      (await this.client.getAccountDataFromServer<{ realms: string[] }>(
         'com.cardstack.boxel.realms',
       )) ?? {};
     realms.push(personalRealmURL.href);
