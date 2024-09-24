@@ -31,10 +31,9 @@ export default class NewSession extends Component<Signature> {
         </div>
       {{else}}
         <p class='message'>
-          Boxel Assistant is an AI that produces tailored responses by merging
-          analytics and cognitive computing. Build a website, batch edit photos
-          or streamline your workflows - all with just a few simple text
-          prompts.
+          Boxel Assistant is an AI that helps you manipulate the content of
+          cards with just a text prompt. Open a card and ask the assistant to
+          make changes to it:
         </p>
         {{#if @sendPrompt}}
           <ul class='prompts'>
@@ -128,8 +127,8 @@ export default class NewSession extends Component<Signature> {
   </template>
 
   private prompts = [
-    'What kind of things can AI do?',
-    'Do I have to use AI with Boxel?',
-    'Will my data be safe?',
+    'Fill in the title and description.',
+    'Make this more polite.',
+    'Translate this card to French.',
   ];
 }
