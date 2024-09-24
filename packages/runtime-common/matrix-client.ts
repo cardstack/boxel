@@ -65,7 +65,7 @@ export class MatrixClient {
     return fetch(`${this.matrixURL.href}${path}`, options);
   }
 
-  async login(): Promise<void> {
+  async login() {
     let password: string | undefined;
     if (this.password) {
       password = this.password;
