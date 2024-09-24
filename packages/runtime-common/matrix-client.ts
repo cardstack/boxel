@@ -1,6 +1,5 @@
 import { Sha256 } from '@aws-crypto/sha256-js';
 import { uint8ArrayToHex } from './index';
-import { logger } from '.';
 
 export interface MatrixAccess {
   accessToken: string;
@@ -14,8 +13,6 @@ export class MatrixClient {
   private access: MatrixAccess | undefined;
   private password?: string;
   private seed?: string;
-
-  #log = logger('matrix-client');
 
   constructor({
     matrixURL,
