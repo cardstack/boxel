@@ -189,7 +189,7 @@ export default class BoxelMultiSelectUsage extends Component {
             @selected={{this.selectedAssignees}}
             @onChange={{this.onSelectAssignees}}
             @options={{this.assignees}}
-            @renderInPlace={{true}}
+            @renderInPlace={{this.renderInPlace}}
             @matchTriggerWidth={{true}}
             @selectedItemComponent={{component AssigneePill isInDropdown=false}}
             as |assignee|

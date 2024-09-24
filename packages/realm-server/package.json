@@ -78,6 +78,7 @@
     "setup:base-in-deployment": "mkdir -p /persistent/base && cp --verbose --update --recursive ../base/. /persistent/base/",
     "setup:experiments-in-deployment": "mkdir -p /persistent/experiments && cp --verbose --update --recursive ../experiments-realm/. /persistent/experiments/",
     "setup:seed-in-deployment": "mkdir -p /persistent/seed && cp --verbose --update --recursive ../seed-realm/. /persistent/seed/",
+    "setup:catalog-in-deployment": "mkdir -p /persistent/catalog && cp --verbose --update --recursive ../catalog-realm/. /persistent/catalog/",
     "start": "PGPORT=5435 NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
     "start:base": "./scripts/start-base.sh",
     "start:test-realms": "./scripts/start-test-realms.sh",
