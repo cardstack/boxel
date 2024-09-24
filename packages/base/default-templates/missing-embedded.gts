@@ -50,7 +50,7 @@ export default class MissingEmbeddedTemplate extends GlimmerComponent<{
         border: none;
         border-radius: var(--boxel-form-control-border-radius);
         color: var(--boxel-dark);
-        font: 700 var(--boxel-font-sm);
+        font: 600 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
         transition: background-color var(--boxel-transition);
       }

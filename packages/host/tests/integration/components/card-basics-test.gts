@@ -2770,7 +2770,7 @@ function fittedViewDriver() {
             margin: 2rem;
           }
           .header {
-            font: 700 var(--boxel-font-lg);
+            font: 600 var(--boxel-font-lg);
           }
           .item {
             padding-bottom: 1rem;
