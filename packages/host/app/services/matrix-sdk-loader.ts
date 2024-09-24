@@ -6,23 +6,20 @@ import * as MatrixSDK from 'matrix-js-sdk';
 
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
-import LoaderService from './loader-service';
+import NetworkService from './network';
 
 /*
   This abstracts over the matrix SDK, including several extra functions that are
   actually implemented via direct HTTP.
 */
 export default class MatrixSDKLoader extends Service {
-  @service private declare loaderService: LoaderService;
+  @service private declare network: NetworkService;
   #extended: ExtendedMatrixSDK | undefined;
 
   async load(): Promise<ExtendedMatrixSDK> {
     if (!this.#extended) {
       let sdk = await import('matrix-js-sdk');
-      this.#extended = new ExtendedMatrixSDK(
-        sdk,
-        this.loaderService.loader.fetch,
-      );
+      this.#extended = new ExtendedMatrixSDK(sdk, this.network.authedFetch);
     }
     return this.#extended;
   }

@@ -340,6 +340,7 @@ export class Realm {
     this.#realmIndexQueryEngine = new RealmIndexQueryEngine({
       realm: this,
       dbAdapter,
+      fetch,
     });
 
     this.#dbAdapter = dbAdapter;

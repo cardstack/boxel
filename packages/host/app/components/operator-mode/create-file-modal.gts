@@ -52,7 +52,7 @@ import WithKnownRealmsLoaded from '../with-known-realms-loaded';
 import RealmIcon from './realm-icon';
 
 import type CardService from '../../services/card-service';
-import type LoaderService from '../../services/loader-service';
+import type NetworkService from '../../services/network';
 
 export type NewFileType =
   | 'duplicate-instance'
@@ -322,7 +322,7 @@ export default class CreateFileModal extends Component<Signature> {
   </template>
 
   @service private declare cardService: CardService;
-  @service declare loaderService: LoaderService;
+  @service private declare network: NetworkService;
 
   @tracked private selectedCatalogEntry: CatalogEntry | undefined = undefined;
   @tracked private displayName = '';
@@ -577,7 +577,7 @@ export default class CreateFileModal extends Component<Signature> {
     )}.gts`.replace(/^\//, '');
     let url = realmPath.fileURL(fileName);
 
-    let response = await this.loaderService.loader.fetch(url, {
+    let response = await this.network.authedFetch(url, {
       headers: { Accept: SupportedMimeType.CardSource },
     });
     if (response.ok) {

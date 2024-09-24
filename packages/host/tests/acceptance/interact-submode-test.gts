@@ -35,6 +35,7 @@ import {
   setupAcceptanceTestRealm,
   visitOperatorMode,
   lookupLoaderService,
+  lookupNetworkService,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -1109,7 +1110,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         ],
       });
 
-      lookupLoaderService().virtualNetwork.mount(
+      lookupNetworkService().mount(
         async (req) => {
           if (req.method !== 'GET' && req.method !== 'HEAD') {
             let token = req.headers.get('Authorization');

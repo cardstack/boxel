@@ -25,8 +25,8 @@ import {
 
 import ENV from '@cardstack/host/config/environment';
 
-import type LoaderService from './loader-service';
 import type MatrixService from './matrix-service';
+import type NetworkService from './network';
 
 const log = logger('service:realm');
 
@@ -41,7 +41,7 @@ type AuthStatus =
 
 class RealmResource {
   @service private declare matrixService: MatrixService;
-  @service declare loaderService: LoaderService;
+  @service private declare network: NetworkService;
 
   @tracked meta: Meta | undefined;
 
@@ -152,12 +152,9 @@ class RealmResource {
       let headers: Record<string, string> = {
         Accept: SupportedMimeType.RealmInfo,
       };
-      let response = await this.loaderService.loader.fetch(
-        `${this.realmURL}_info`,
-        {
-          headers,
-        },
-      );
+      let response = await this.network.authedFetch(`${this.realmURL}_info`, {
+        headers,
+      });
       if (response.status !== 200) {
         throw new Error(
           `Failed to fetch realm info for ${this.realmURL}: ${response.status}`,
@@ -199,7 +196,7 @@ class RealmResource {
 }
 
 export default class RealmService extends Service {
-  @service declare loaderService: LoaderService;
+  @service private declare network: NetworkService;
 
   // This is not a TrackedMap, it's a regular Map. Conceptually, we want it to
   // be tracked, but we're using it as a read-through cache and glimmer/tracking
@@ -402,7 +399,7 @@ export default class RealmService extends Service {
         // could have already been discovered while we were queued
         return;
       }
-      let response = await this.loaderService.loader.fetch(url, {
+      let response = await this.network.authedFetch(url, {
         method: 'HEAD',
       });
       let realmURL = response.headers.get('x-boxel-realm-url');

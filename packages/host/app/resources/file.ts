@@ -17,8 +17,8 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import type LoaderService from '../services/loader-service';
-
 import type MessageService from '../services/message-service';
+import type NetworkService from '../services/network';
 
 const log = logger('resource:file');
 const utf8 = new TextDecoder();
@@ -73,11 +73,12 @@ class _FileResource extends Resource<Args> {
     state: 'loading',
   };
 
-  @service declare loaderService: LoaderService;
-  @service declare messageService: MessageService;
-  @service declare cardService: CardService;
-  @service declare recentFilesService: RecentFilesService;
-  @service declare operatorModeStateService: OperatorModeStateService;
+  @service private declare loaderService: LoaderService;
+  @service private declare network: NetworkService;
+  @service private declare messageService: MessageService;
+  @service private declare cardService: CardService;
+  @service private declare recentFilesService: RecentFilesService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
 
   constructor(owner: Owner) {
     super(owner);
@@ -134,7 +135,7 @@ class _FileResource extends Resource<Args> {
   }
 
   private read = restartableTask(async () => {
-    let response = await this.loaderService.loader.fetch(this._url, {
+    let response = await this.network.authedFetch(this._url, {
       headers: { Accept: SupportedMimeType.CardSource },
     });
 
