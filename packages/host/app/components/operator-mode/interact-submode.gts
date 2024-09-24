@@ -21,6 +21,7 @@ import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { IconPlus, Download } from '@cardstack/boxel-ui/icons';
 
 import {
+  CardContextName,
   aiBotUsername,
   Deferred,
   baseCardRef,
@@ -29,7 +30,6 @@ import {
   getCard,
   moduleFrom,
   RealmPaths,
-  CardContextName,
   type Actions,
   type CodeRef,
   type LooseSingleCardDocument,
@@ -52,7 +52,6 @@ import SubmodeLayout from './submode-layout';
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RecentFilesService from '../../services/recent-files-service';
-import PrerenderedCardSearch from '../prerendered-card-search';
 import type { Submode } from '../submode-switcher';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
@@ -617,11 +616,10 @@ export default class InteractSubmode extends Component<Signature> {
   }
 
   @provide(CardContextName)
-  // @ts-ignore "context is declared but not used"
+  // @ts-ignore "cardContext is declared but not used"
   private get cardContext() {
     return {
-      prerenderedCardSearchComponent: PrerenderedCardSearch,
-      actions: this.publicAPI(this, this.stacks[0].length ? 1 : 0),
+      actions: this.publicAPI(this, this.stacks[0]?.length ? 1 : 0),
     };
   }
 
