@@ -34,6 +34,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import { type Stack } from '../components/operator-mode/interact-submode';
 
 import type IndexController from '../controllers';
+
 import type CardController from '../controllers/card';
 
 import type CardService from '../services/card-service';
@@ -586,7 +587,7 @@ export default class OperatorModeStateService extends Service {
   // Currently, we have two controllers that could contain operator mode state:
   // - card controller (viewing a card and entering operator mode from there)
   // - index controller (viewing the realm server home page and choosing a workspace)
-  // We are in the process of removing host mode for viewing cards, so card controller
+  // We are in the process of removing host mode for viewing cards, so query params in card controller
   // will be removed soon - when we are able to do that, remove this method and just use the index controller
   get operatorModeController(): CardController | IndexController {
     let controller: CardController | IndexController;
