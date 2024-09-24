@@ -33,8 +33,8 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { type Stack } from '../components/operator-mode/interact-submode';
 
-import IndexController from '../controllers';
-import CardController from '../controllers/card';
+import type IndexController from '../controllers';
+import type CardController from '../controllers/card';
 
 import type CardService from '../services/card-service';
 
