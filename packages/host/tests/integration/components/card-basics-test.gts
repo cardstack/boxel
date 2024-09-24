@@ -1675,7 +1675,7 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-card-format="fitted"]').exists({ count: 2 });
       assert
         .dom('[data-test-card-format="fitted"]:nth-child(2)')
-        .hasStyle({ marginTop: '20px' });
+        .hasStyle({ marginTop: '16px' });
     });
 
     test('can #each over a linksToMany @fields', async function (this: RenderingTestContext, assert) {
