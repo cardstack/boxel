@@ -260,6 +260,9 @@ let dist: URL = new URL(distURL);
           process.send('stopped');
         }
       });
+    } else if (message === 'kill') {
+      console.log(`Ending server process for ${port}...`);
+      process.exit(0);
     } else if (
       typeof message === 'string' &&
       message.startsWith('registration-secret:') &&

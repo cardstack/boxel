@@ -109,6 +109,6 @@ export class IsolatedRealmServer {
     });
     this.realmServerProcess.send('stop');
     await stop;
-    this.realmServerProcess.kill();
+    this.realmServerProcess.send('kill');
   }
 }
