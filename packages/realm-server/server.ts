@@ -338,24 +338,20 @@ export class RealmServer {
         return;
       }
 
-      let realm: Realm;
+      let realm: Realm | undefined;
+      let start = Date.now();
+      let indexStart: number | undefined;
       try {
-        let start = Date.now();
         realm = await this.createRealm({
           ownerUserId,
           ...json.data.attributes,
         });
-        console.log(
-          `====> created new realm ${realm.url} in ${Date.now() - start} ms`,
+        this.log.debug(
+          `created new realm ${realm.url} in ${Date.now() - start} ms`,
         );
-        console.log(`====> indexing new realm ${realm.url}`);
-        let indexStart = Date.now();
+        this.log.debug(`indexing new realm ${realm.url}`);
+        indexStart = Date.now();
         await realm.start();
-        console.log(
-          `====> indexing of new realm ${realm.url} completed in ${
-            Date.now() - indexStart
-          } ms`,
-        );
       } catch (e: any) {
         if ('status' in e && e.status === 400) {
           await sendResponseForBadRequest(ctxt, e.message);
@@ -363,6 +359,14 @@ export class RealmServer {
           await sendResponseForSystemError(ctxt, `${e.message}: at ${e.stack}`);
         }
         return;
+      } finally {
+        if (realm != null && indexStart != null) {
+          this.log.debug(
+            `indexing of new realm ${realm.url} ended in ${
+              Date.now() - indexStart
+            } ms`,
+          );
+        }
       }
 
       let response = createResponse({
@@ -469,7 +473,6 @@ export class RealmServer {
     let adapter = new NodeAdapter(resolve(String(realmPath)));
 
     let username = `realm/${ownerUsername}_${endpoint}`;
-    const registerStart = Date.now();
     let { userId } = await registerUser({
       matrixURL: this.matrixClient.matrixURL,
       displayname: username,
@@ -477,11 +480,7 @@ export class RealmServer {
       password: await passwordFromSeed(username, this.secretSeed),
       registrationSecret: await this.getMatrixRegistrationSecret(),
     });
-    console.log(
-      `====> created realm bot user '${userId}' in ${
-        Date.now() - registerStart
-      } ms`,
-    );
+    this.log.debug(`created realm bot user '${userId}' for new realm ${url}`);
 
     await insertPermissions(this.dbAdapter, new URL(url), {
       [userId]: DEFAULT_PERMISSIONS,
@@ -497,16 +496,12 @@ export class RealmServer {
       let ignoreList = IGNORE_SEED_FILES.map((file) =>
         join(this.seedPath!.replace(/\/$/, ''), file),
       );
-      console.log(
-        `====> copying seed files from ${this.seedPath} to ${realmPath}`,
-      );
-      let seedStart = Date.now();
       copySync(this.seedPath, realmPath, {
         filter: (src, _dest) => {
           return !ignoreList.includes(src);
         },
       });
-      console.log(`====> seed files copied in ${Date.now() - seedStart} ms`);
+      this.log.debug(`seed files for new realm ${url} copied to ${realmPath}`);
     }
 
     let realm = new Realm({
