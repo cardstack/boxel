@@ -626,7 +626,10 @@ export class RealmServer {
         }
         let json = await response.json();
         let attributes = json.data.attributes;
-        if (attributes.showAsCatalog != null && attributes.showAsCatalog == false) {
+        if (
+          attributes.showAsCatalog != null &&
+          attributes.showAsCatalog == false
+        ) {
           return;
         }
 

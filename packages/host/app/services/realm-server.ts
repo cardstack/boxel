@@ -8,6 +8,8 @@ import window from 'ember-window-mock';
 import { SupportedMimeType } from '@cardstack/runtime-common';
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
+import ENV from '@cardstack/host/config/environment';
+
 import type LoaderService from './loader-service';
 import type { ExtendedClient } from './matrix-sdk-loader';
 
@@ -85,6 +87,25 @@ export default class RealmServerService extends Service {
     this.client = undefined;
     this.loggingIn = undefined;
     window.localStorage.removeItem(sessionLocalStorageKey);
+  }
+
+  async fetchPublicRealmURLs(): Promise<string[]> {
+    let realmServerURL = new URL(window.location.href);
+    if (ENV.environment === 'development' || ENV.environment === 'test') {
+      realmServerURL = new URL('http://localhost:4201');
+    }
+
+    let response = await this.loaderService.loader.fetch(
+      `${realmServerURL.origin}/_public-realms`,
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Failed to fetch public realms for realm server ${realmServerURL.origin}: ${response.status}`,
+      );
+    }
+
+    let { data } = await response.json();
+    return data.map((publicRealm: { id: string }) => publicRealm.id);
   }
 
   get url() {

@@ -401,25 +401,6 @@ export default class RealmService extends Service {
     }
   }
 
-  async fetchPublicRealmURLs(): Promise<string[]> {
-    let realmServerURL = new URL(window.location.href);
-    if (ENV.environment === 'development' || ENV.environment === 'test') {
-      realmServerURL = new URL('http://localhost:4201');
-    }
-
-    let response = await this.loaderService.loader.fetch(
-      `${realmServerURL.origin}/_public-realms`,
-    );
-    if (response.status !== 200) {
-      throw new Error(
-        `Failed to fetch public realms for realm server ${realmServerURL.origin}: ${response.status}`,
-      );
-    }
-
-    let { data } = await response.json();
-    return data.map((publicRealm: { id: string }) => publicRealm.id);
-  }
-
   private createRealmResource(
     realmURL: string,
     token: string | undefined,

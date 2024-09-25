@@ -5,7 +5,7 @@ import { trackedFunction } from 'ember-resources/util/function';
 
 import type CardService from '@cardstack/host/services/card-service';
 
-import RealmService from '@cardstack/host/services/realm';
+import RealmServerService from '@cardstack/host/services/realm-server';
 
 import Workspace from './workspace';
 
@@ -16,7 +16,7 @@ interface Signature {
 
 export default class WorkspaceChooser extends Component<Signature> {
   @service declare cardService: CardService;
-  @service declare realm: RealmService;
+  @service declare realmServer: RealmServerService;
 
   private get displayCatalogWorkspaces() {
     return this.catalogWorkspaceURLs && this.catalogWorkspaceURLs.length > 0;
@@ -27,7 +27,7 @@ export default class WorkspaceChooser extends Component<Signature> {
   }
 
   private fetchCatalogRealmURLs = trackedFunction(this, async () => {
-    return await this.realm.fetchPublicRealmURLs();
+    return await this.realmServer.fetchPublicRealmURLs();
   });
 
   <template>
