@@ -311,6 +311,7 @@ test.describe('Room messages', () => {
     let message = (await getRoomEvents()).pop()!;
     expect(message.content.msgtype).toStrictEqual('org.boxel.message');
     let boxelMessageData = JSON.parse(message.content.data);
+
     expect(boxelMessageData.context.tools).toMatchObject([
       {
         type: 'function',
@@ -368,19 +369,15 @@ test.describe('Room messages', () => {
               filter: {
                 type: 'object',
                 properties: {
-                  type: {
+                  contains: {
                     type: 'object',
                     properties: {
-                      module: {
+                      title: {
                         type: 'string',
-                        description: 'the absolute path of the module',
-                      },
-                      name: {
-                        type: 'string',
-                        description: 'the name of the module',
+                        description: 'title of the card',
                       },
                     },
-                    required: ['module', 'name'],
+                    required: ['title'],
                   },
                   eq: {
                     type: 'object',
