@@ -257,7 +257,7 @@ export default class RoomMessage extends Component<Signature> {
         margin-top: var(--boxel-sp);
       }
       .view-code-button {
-        --boxel-button-font: 700 var(--boxel-font-xs);
+        --boxel-button-font: 600 var(--boxel-font-xs);
         --boxel-button-min-height: 1.5rem;
         --boxel-button-padding: 0 var(--boxel-sp-xs);
         min-width: initial;
@@ -278,7 +278,7 @@ export default class RoomMessage extends Component<Signature> {
         background-color: var(--boxel-dark);
       }
       .copy-to-clipboard-button {
-        --boxel-button-font: 700 var(--boxel-font-xs);
+        --boxel-button-font: 600 var(--boxel-font-xs);
         --boxel-button-padding: 0 var(--boxel-sp-xs);
         --icon-color: var(--boxel-highlight);
         --icon-stroke-width: 2px;

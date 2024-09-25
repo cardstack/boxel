@@ -77,14 +77,14 @@ export default class NewSession extends Component<Signature> {
       }
       .title-text {
         margin: 0;
-        font-weight: 700;
+        font-weight: 600;
         font-size: 1.625rem;
         line-height: 1.25;
       }
       .message {
         margin: 0;
         padding: var(--boxel-sp-4xs);
-        font: 700 var(--boxel-font);
+        font: 600 var(--boxel-font);
         line-height: 1.5;
       }
       .prompts {

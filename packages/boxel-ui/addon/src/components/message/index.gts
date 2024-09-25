@@ -113,7 +113,7 @@ const Message: TemplateOnlyComponent<Signature> = <template>
 
     .name {
       margin-right: var(--boxel-sp);
-      font-weight: 700;
+      font-weight: 600;
     }
 
     .time {

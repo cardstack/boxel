@@ -274,12 +274,12 @@ export class BoardAnnotation extends FieldDef {
           position: absolute;
           top: -40px;
           left: 50%;
-          font-weight: bold;
+          font-weight: 600;
           font-size: 23px;
         }
         .body-balance {
           display: flex;
-          font-weight: bold;
+          font-weight: 600;
           color: white;
           font-size: 23px;
           flex-direction: row-reverse;

@@ -104,7 +104,7 @@ class HowToSidebar extends GlimmerComponent {
         border-radius: var(--boxel-border-radius-lg);
       }
       .intro-title {
-        font-weight: 700;
+        font-weight: 600;
         font-size: 1.5rem;
         letter-spacing: var(--boxel-lsp-xs);
       }
@@ -252,7 +252,7 @@ class PromptContainer extends GlimmerComponent<{
       .prompt-option.active,
       .prompt-option:hover:not(:disabled) {
         border-bottom: 4px solid var(--boxel-dark);
-        font-weight: 700;
+        font-weight: 600;
       }
       .prompt-editor {
         display: grid;
@@ -335,7 +335,7 @@ class DashboardTab extends GlimmerComponent<{
       .section-title {
         margin-top: 0;
         margin-bottom: var(--boxel-sp);
-        font-weight: 700;
+        font-weight: 600;
         font-size: 1.5rem;
         letter-spacing: var(--boxel-lsp-xs);
       }

@@ -280,8 +280,8 @@ export default class SearchSheet extends Component<Signature> {
         display: flex;
         flex-direction: column;
         justify-content: stretch;
-        left: calc(6 * var(--boxel-sp-xs));
-        width: calc(100% - (7 * var(--boxel-sp)));
+        left: calc(4.5 * var(--boxel-sp));
+        width: calc(100% - (9 * var(--boxel-sp)));
         position: absolute;
         z-index: 1;
         transition:
