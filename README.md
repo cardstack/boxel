@@ -23,7 +23,7 @@ npm install
 Build the extension:
 
 ```bash
-npx vsce package
+npm run vscode:package
 ```
 
 ## Installation
@@ -32,10 +32,9 @@ Open VS Code, and drag the created .vsix file into the VS Code extensions list.
 
 ## Usage
 
-Open a new window and set your username, password, realm url (not the realm server) and matrix server url in your user settings.
-These are under extentions -> Boxel Realm -> Boxel Realm Settings.
-
 Open a new window and in the command pallet select "boxelrealm: Setup Workspace".
+
+You will be prompted for your username and password for production (alter the matrix server url in vscode settings to use locally).
 
 The realm should then be viewable as a folder in your workspace.
 
