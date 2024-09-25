@@ -1944,6 +1944,9 @@ importers:
         specifier: ^31.0.0
         version: 31.0.0(patch_hash=igcckcqmkyc37qn7cofjntczfm)
     devDependencies:
+      '@cardstack/runtime-common':
+        specifier: workspace:*
+        version: link:../runtime-common
       '@types/node':
         specifier: ^18.19.39
         version: 18.19.52

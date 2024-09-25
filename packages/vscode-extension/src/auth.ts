@@ -1,25 +1,10 @@
+import {
+  type JWTPayload,
+  type RealmAuthMatrixClientInterface,
+} from '@cardstack/runtime-common/realm-auth-client';
+
 function unixTime(epochTimeMs: number) {
   return Math.floor(epochTimeMs / 1000);
-}
-
-interface TokenClaims {
-  user: string;
-  realm: string;
-  permissions: ("read" | "write")[];
-}
-
-// iat - issued at (seconds since epoch)
-// exp - expires at (seconds since epoch)
-export type JWTPayload = TokenClaims & { iat: number; exp: number };
-
-// This auth client is intended to be used in both the host app and the realm node environment, where we use different matrix client implementations (in host we have the official matrix sdk
-// and in realm we have a custom implementation). This interface is used to enforce compatibility between the two implementations for the mechanisms used for getting a JWT token from the realm server.
-export interface RealmAuthMatrixClientInterface {
-  isLoggedIn(): boolean;
-  getUserId(): string | null | undefined;
-  getJoinedRooms(): Promise<{ joined_rooms: string[] }>;
-  joinRoom(room: string): Promise<any>;
-  sendEvent(room: string, type: string, content: any): Promise<any>;
 }
 
 export class RealmAuthClient {
