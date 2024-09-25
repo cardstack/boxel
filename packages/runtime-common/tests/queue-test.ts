@@ -3,9 +3,7 @@ import { type Queue } from '../index';
 
 const tests = Object.freeze({
   'it can run a job': async (assert, { queue }) => {
-    let job = await queue.publish<number>('increment', 17, {
-      queueName: 'increment-queue',
-    });
+    let job = await queue.publish<number>('increment', null, 5, 17);
     queue.register('increment', async (a: number) => a + 1);
     let result = await job.done;
     assert.strictEqual(result, 18);
@@ -17,8 +15,8 @@ const tests = Object.freeze({
       throw new Error('boom!');
     });
     let [errorJob, nonErrorJob] = await Promise.all([
-      queue.publish<number>('boom', null),
-      queue.publish<number>('increment', 17),
+      queue.publish<number>('boom', null, 5, null),
+      queue.publish<number>('increment', null, 5, 17),
     ]);
 
     // assert that the error that was thrown does not prevent subsequent jobs
@@ -75,12 +73,8 @@ const tests = Object.freeze({
     };
 
     queue.register('count', count);
-    let job1 = await queue.publish('count', 0, {
-      queueName: 'serial-queue',
-    });
-    let job2 = await queue.publish('count', 1, {
-      queueName: 'serial-queue',
-    });
+    let job1 = await queue.publish('count', 'count-group', 5, 0);
+    let job2 = await queue.publish('count', 'count-group', 5, 1);
 
     await Promise.all([job2.done, job1.done]);
   },

@@ -100,18 +100,18 @@ module('queue', function (hooks) {
       queue.register('count', count);
       queue2.register('count', count);
 
-      let promiseForJob1 = queue.publish('count', 0, {
-        queueName: 'serial-queue',
-      });
+      let promiseForJob1 = queue.publish('count', 'count-group', 5, 0);
       // start the 2nd job before the first job finishes
       await new Promise((r) => setTimeout(r, 100));
-      let promiseForJob2 = queue2.publish('count', 1, {
-        queueName: 'serial-queue',
-      });
+      let promiseForJob2 = queue2.publish('count', 'count-group', 5, 1);
       let [job1, job2] = await Promise.all([promiseForJob1, promiseForJob2]);
 
       await Promise.all([job1.done, job2.done]);
     });
+
+    // test: job can timeout; timed out job is picked up by another worker
+    // test: jobs can be run concurrently if they have different concurrency group values
+    // test: completed jobs are not re-run
 
     test('different queues are processed concurrently across different queue clients', async function (assert) {
       assert.expect(3);
@@ -130,12 +130,8 @@ module('queue', function (hooks) {
       queue2.register('count', count);
 
       let [job1, job2] = await Promise.all([
-        queue.publish('count', 0, {
-          queueName: 'queue1',
-        }),
-        queue2.publish('count', 0, {
-          queueName: 'queue2',
-        }),
+        queue.publish('count', 'count-group', 5, 0),
+        queue2.publish('count', 'count-group', 5, 0),
       ]);
 
       await Promise.all([job2.done, job1.done]);

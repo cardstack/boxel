@@ -14,9 +14,10 @@ export interface Queue {
   destroy: () => Promise<void>;
   register: <A, T>(category: string, handler: (arg: A) => Promise<T>) => void;
   publish: <T>(
-    category: string,
-    arg: PgPrimitive,
-    opts?: QueueOpts,
+    jobType: string,
+    concurrencyGroup: string | null,
+    timeout: number,
+    args: PgPrimitive,
   ) => Promise<Job<T>>;
 }
 
