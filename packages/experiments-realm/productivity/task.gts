@@ -71,14 +71,22 @@ export class TaskStatusField extends StatusField {
   // loosey goosey pattern
 
   statuses = [
-    { index: 0, label: 'To Do' },
+    { index: 0, label: 'Backlog' },
     {
       index: 1,
-      label: 'In Progress',
+      label: 'Next Sprint',
     },
     {
       index: 2,
-      label: 'Done',
+      label: 'Current Sprint',
+    },
+    {
+      index: 3,
+      label: 'Staged',
+    },
+    {
+      index: 4,
+      label: 'Shipped',
     },
   ];
 
