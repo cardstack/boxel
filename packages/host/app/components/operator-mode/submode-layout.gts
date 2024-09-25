@@ -28,7 +28,7 @@ import ProfileAvatarIcon from '@cardstack/host/components/operator-mode/profile-
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 import ENV from '@cardstack/host/config/environment';
 import type IndexController from '@cardstack/host/controllers';
-import CardController from '@cardstack/host/controllers/card';
+import type CardController from '@cardstack/host/controllers/card';
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -244,7 +244,7 @@ export default class SubmodeLayout extends Component<Signature> {
                 dark-icon=(not this.workspaceChooserOpened)
               }}
               {{on 'click' this.toggleWorkspaceChooser}}
-              data-test-submode-layout-boxel-icon-button
+              data-test-workspace-chooser-toggle
             />
             {{#if this.workspaceChooserOpened}}
               <span

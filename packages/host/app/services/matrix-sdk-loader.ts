@@ -89,6 +89,7 @@ export type ExtendedClient = Pick<
   | 'scrollback'
   | 'sendEvent'
   | 'sendReadReceipt'
+  | 'setAccountData'
   | 'setDisplayName'
   | 'setPassword'
   | 'setPowerLevel'

@@ -103,6 +103,14 @@ export class MockClient implements ExtendedClient {
     throw new Error('Method not implemented.');
   }
 
+  setAccountData<T>(_type: string, _data: T): Promise<{}> {
+    throw new Error('Method not implemented.');
+  }
+
+  getAccountData<T>(_type: string): Promise<T> {
+    throw new Error('Method not implemented.');
+  }
+
   addThreePidOnly(_data: MatrixSDK.IAddThreePidOnlyBody): Promise<{}> {
     throw new Error('Method not implemented.');
   }
