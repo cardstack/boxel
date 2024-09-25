@@ -101,6 +101,12 @@ jobs:
       - name: Wait for ember-cli to be ready
         run: pnpm npx wait-for-localhost 4200
         working-directory: packages/host
+      - name: Start matrix
+        run: pnpm start:synapse
+        working-directory: packages/matrix
+      - name: Initialize matrix data
+        run: pnpm drop-all-dbs
+        working-directory: packages/realm-server
       - name: Start realm servers
         run: MATRIX_REGISTRATION_SHARED_SECRET='xxxx' pnpm start:without-matrix &> /tmp/server.log &
         working-directory: packages/realm-server

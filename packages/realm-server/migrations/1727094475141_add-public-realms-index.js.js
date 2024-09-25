@@ -9,6 +9,7 @@ exports.up = (pgm) => {
       break;
     default:
       pgm.sql(`DELETE FROM realm_user_permissions WHERE realm_url = 'http://localhost:4201/experiments/' AND username = '*' AND read = true`);
+      pgm.sql(`DELETE FROM realm_user_permissions WHERE realm_url = 'http://localhost:4204/' AND username = '*' AND read = true`);
       break;
   }
 };

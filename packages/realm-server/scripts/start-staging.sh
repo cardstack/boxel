@@ -7,7 +7,6 @@ NODE_NO_WARNINGS=1 \
   LOG_LEVELS='perf=debug' \
   MATRIX_URL=https://matrix-staging.stack.cards \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
-  EXCLUDED_PUBLIC_REALMS='https://realms-staging.stack.cards/experiments/,https://realms-staging.stack.cards/seed/,https://cardstack.com/base/' \
   ts-node \
   --transpileOnly main \
   --port=3000 \

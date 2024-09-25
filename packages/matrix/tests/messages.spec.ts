@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { Credentials, putEvent, registerUser } from '../docker/synapse';
+import { Credentials, putEvent, registerUser, updateAccountData } from '../docker/synapse';
 import {
   login,
   logout,

@@ -150,7 +150,7 @@ export class RealmServer {
     router.get('/', healthCheck, this.serveIndex(), this.serveFromRealm);
     router.post('/_server-session', this.createSession());
     router.post('/_create-realm', this.handleCreateRealmRequest());
-    router.get('/_public-realms', this.fetchPublicRealms());
+    router.get('/_catalog-realms', this.fetchCatalogRealms());
 
     let app = new Koa<Koa.DefaultState, Koa.Context>()
       .use(httpLogging)
@@ -604,7 +604,7 @@ export class RealmServer {
     throw new Error(`Can not determine the matrix registration secret`);
   }
 
-  private fetchPublicRealms(): (
+  private fetchCatalogRealms(): (
     ctxt: Koa.Context,
     _next: Koa.Next,
   ) => Promise<any> {
@@ -619,7 +619,7 @@ export class RealmServer {
           }),
         );
         if (response.status != 200) {
-          console.error(
+          console.warn(
             `Failed to fetch realm info for public realm ${realmURL}: ${response.status}`,
           );
           return;
@@ -634,7 +634,7 @@ export class RealmServer {
         }
 
         return {
-          type: 'public-realm',
+          type: 'catalog-realm',
           id: realmURL,
           attributes: json.data.attributes,
         };

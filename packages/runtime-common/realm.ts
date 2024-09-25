@@ -90,6 +90,7 @@ export type RealmInfo = {
   name: string;
   backgroundURL: string | null;
   iconURL: string | null;
+  showAsCatalog: boolean | null;
 };
 
 export interface FileRef {
@@ -574,7 +575,12 @@ export class Realm {
 
   async #startup() {
     await Promise.resolve();
-    await this.#realmIndexUpdater.run();
+    let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
+    let promise = this.#realmIndexUpdater.run();
+    if (isNewIndex) {
+      // we only await the full indexing at boot if this is a brand new index
+      await promise;
+    }
     this.sendServerEvent({ type: 'index', data: { type: 'full' } });
     this.#perfLog.debug(
       `realm server startup in ${Date.now() - this.#startTime}ms`,
@@ -1641,7 +1647,8 @@ export class Realm {
         realmInfo.backgroundURL =
           realmConfigJson.backgroundURL ?? realmInfo.backgroundURL;
         realmInfo.iconURL = realmConfigJson.iconURL ?? realmInfo.iconURL;
-        realmInfo.showAsCatalog = realmConfigJson.showAsCatalog ?? realmInfo.showAsCatalog;
+        realmInfo.showAsCatalog =
+          realmConfigJson.showAsCatalog ?? realmInfo.showAsCatalog;
       } catch (e) {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }

@@ -232,6 +232,7 @@ module('Realm Server', function (hooks) {
                 name: 'Test Realm',
                 backgroundURL: null,
                 iconURL: null,
+                showAsCatalog: null,
               },
               realmURL: testRealmURL.href,
             },
@@ -2049,6 +2050,7 @@ module('Realm Server', function (hooks) {
                 name: 'Test Realm',
                 backgroundURL: null,
                 iconURL: null,
+                showAsCatalog: null,
               },
             },
           },
@@ -2921,6 +2923,7 @@ module('Realm Server', function (hooks) {
                 name: 'Test Realm',
                 backgroundURL: null,
                 iconURL: null,
+                showAsCatalog: null,
               },
               realmURL: testRealmURL.href,
             },
@@ -3062,24 +3065,48 @@ module('Realm Server', function (hooks) {
       });
     });
 
-    test('can fetch public realms', async function (assert) {
+    test('can fetch catalog realms', async function (assert) {
       let response = await request2
-        .get('/_public-realms')
+        .get('/_catalog-realms')
         .set('Accept', 'application/json');
 
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
       assert.deepEqual(response.body, {
         data: [
           {
-            type: 'public-realm',
+            type: 'catalog-realm',
             id: `${testRealm2URL}`,
             attributes: {
               name: 'Test Realm',
               iconURL: null,
               backgroundURL: null,
+              showAsCatalog: null,
             },
           },
         ],
+      });
+    });
+
+    test(`returns 200 with empty data if failed to fetch catalog realm's info`, async function (assert) {
+      virtualNetwork.mount(
+        async (req: Request) => {
+          if (req.url.includes('_info')) {
+            return new Response('Failed to fetch realm info', {
+              status: 500,
+              statusText: 'Internal Server Error',
+            });
+          }
+          return null;
+        },
+        { prepend: true },
+      );
+      let response = await request2
+        .get('/_catalog-realms')
+        .set('Accept', 'application/json');
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.deepEqual(response.body, {
+        data: [],
       });
     });
   });

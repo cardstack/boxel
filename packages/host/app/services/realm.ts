@@ -242,6 +242,7 @@ export default class RealmService extends Service {
         name: 'Unknown Workspace',
         backgroundURL: null,
         iconURL: null,
+        showAsCatalog: null,
       };
     }
 
@@ -251,6 +252,7 @@ export default class RealmService extends Service {
         name: 'Unknown Workspace',
         backgroundURL: null,
         iconURL: null,
+        showAsCatalog: null,
       };
     } else {
       return resource.meta.info;

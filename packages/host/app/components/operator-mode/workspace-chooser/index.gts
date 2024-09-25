@@ -1,10 +1,6 @@
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { trackedFunction } from 'ember-resources/util/function';
-
-import type CardService from '@cardstack/host/services/card-service';
-
 import RealmServerService from '@cardstack/host/services/realm-server';
 
 import Workspace from './workspace';
@@ -15,30 +11,21 @@ interface Signature {
 }
 
 export default class WorkspaceChooser extends Component<Signature> {
-  @service declare cardService: CardService;
   @service declare realmServer: RealmServerService;
 
   private get displayCatalogWorkspaces() {
-    return this.catalogWorkspaceURLs && this.catalogWorkspaceURLs.length > 0;
+    return (
+      this.realmServer.catalogRealmURLs &&
+      this.realmServer.catalogRealmURLs.length > 0
+    );
   }
-
-  private get catalogWorkspaceURLs() {
-    return this.fetchCatalogRealmURLs.value;
-  }
-
-  private fetchCatalogRealmURLs = trackedFunction(this, async () => {
-    return await this.realmServer.fetchPublicRealmURLs();
-  });
 
   <template>
     <div class='workspace-chooser' data-test-workspace-chooser>
       <div class='workspace-chooser__content'>
-        <span
-          class='workspace-chooser__title'
-          data-test-personal-workspaces
-        >Your Workspaces</span>
+        <span class='workspace-chooser__title'>Your Workspaces</span>
         <div class='workspace-list' data-test-workspace-list>
-          {{#each this.cardService.userRealms as |realmURL|}}
+          {{#each this.realmServer.userRealmURLs as |realmURL|}}
             <Workspace
               @realmURL={{realmURL}}
               data-test-workspace={{realmURL}}
@@ -46,12 +33,9 @@ export default class WorkspaceChooser extends Component<Signature> {
           {{/each}}
         </div>
         {{#if this.displayCatalogWorkspaces}}
-          <span
-            class='workspace-chooser__title'
-            data-test-comunity-catalogs
-          >Community Catalogs</span>
-          <div class='workspace-list'>
-            {{#each this.catalogWorkspaceURLs as |realmURL|}}
+          <span class='workspace-chooser__title'>Community Catalogs</span>
+          <div class='workspace-list' data-test-catalog-list>
+            {{#each this.realmServer.catalogRealmURLs as |realmURL|}}
               <Workspace @realmURL={{realmURL}} />
             {{/each}}
           </div>

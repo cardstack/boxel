@@ -168,7 +168,9 @@ export default class MatrixService extends Service {
         this.matrixSDK.ClientEvent.AccountData,
         async (e) => {
           if (e.event.type == 'com.cardstack.boxel.realms') {
-            this.cardService.setRealms(e.event.content.realms);
+            await this.realmServer.setAvailableRealmURLs(
+              e.event.content.realms,
+            );
             await this.loginToRealms();
           }
         },
@@ -249,7 +251,7 @@ export default class MatrixService extends Service {
       )) ?? {};
     realms.push(personalRealmURL.href);
     await this.client.setAccountData('com.cardstack.boxel.realms', { realms });
-    this.cardService.setRealms(realms);
+    await this.realmServer.setAvailableRealmURLs(realms);
     await this.loginToRealms();
   }
 
@@ -318,7 +320,9 @@ export default class MatrixService extends Service {
         let accountDataContent = await this._client.getAccountDataFromServer<{
           realms: string[];
         }>('com.cardstack.boxel.realms');
-        this.cardService.setRealms(accountDataContent?.realms ?? []);
+        await this.realmServer.setAvailableRealmURLs(
+          accountDataContent?.realms ?? [],
+        );
         await this.loginToRealms();
       } catch (e) {
         console.log('Error starting Matrix client', e);
@@ -330,7 +334,7 @@ export default class MatrixService extends Service {
   private async loginToRealms() {
     // This is where we would actually load user-specific choices out of the
     // user's profile based on this.client.getUserId();
-    let activeRealms = this.cardService.userRealms;
+    let activeRealms = this.realmServer.availableRealmURLs;
 
     await Promise.all(
       activeRealms.map(async (realmURL) => {
