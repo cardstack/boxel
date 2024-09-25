@@ -1,0 +1,82 @@
+{
+  "name": "vscode-boxelrealm",
+  "displayName": "BoxelRealm",
+  "description": "Access boxel realm data and code from your vscode workspace.",
+  "version": "0.0.8",
+  "publisher": "boxel",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cardstack/boxel/"
+  },
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onAuthenticationRequest:synapse"
+  ],
+  "main": "./out/src/extension",
+  "contributes": {
+    "commands": [
+      {
+        "command": "boxelrealm.logout",
+        "title": "Logout",
+        "category": "boxelrealm"
+      },
+      {
+        "command": "boxelrealm.createWorkspace",
+        "title": "Create Workspace",
+        "category": "boxelrealm"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "boxelrealm.logout"
+        },
+        {
+          "command": "boxelrealm.createWorkspace"
+        }
+      ]
+    },
+    "configuration": [
+      {
+        "title": "Matrix Server",
+        "properties": {
+          "boxelrealm.matrixServer": {
+            "type": "string",
+            "description": "The matrix server to connect to, leave blank to connect to your boxel.ai realms.",
+            "default": "https://matrix.boxel.ai/"
+          }
+        }
+      }
+    ]
+  },
+  "volta": {
+    "npm": "10.8.3",
+    "node": "20.17.0"
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "vscode:package": "npx vsce package",
+    "compile": "tsc --skipLibCheck -p ./",
+    "lint": "eslint \"src/**/*.ts\"",
+    "watch": "tsc --skipLibCheck  -watch -p ./"
+  },
+  "dependencies": {
+    "matrix-js-sdk": "^31.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.39",
+    "@types/vscode": "^1.73.0",
+    "@typescript-eslint/eslint-plugin": "^7.14.0",
+    "@typescript-eslint/parser": "^7.14.0",
+    "@vscode/vsce": "^3.1.0",
+    "eslint": "^8.26.0",
+    "typescript": "^5.5.2"
+  }
+}
