@@ -57,8 +57,7 @@
     ]
   },
   "volta": {
-    "npm": "10.8.3",
-    "node": "20.17.0"
+    "extends": "../../package.json"
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
