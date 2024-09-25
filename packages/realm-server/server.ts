@@ -95,7 +95,6 @@ export class RealmServer {
   private seedPath: string | undefined;
   private matrixRegistrationSecret: string | undefined;
   private matrixRegistrationSecretFile: string | undefined;
-  private excludedPublicRealms: string[];
 
   constructor({
     serverURL,
@@ -111,7 +110,6 @@ export class RealmServer {
     matrixRegistrationSecret,
     matrixRegistrationSecretFile,
     seedPath,
-    excludedPublicRealms,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -126,7 +124,6 @@ export class RealmServer {
     seedPath?: string;
     matrixRegistrationSecret?: string;
     matrixRegistrationSecretFile?: string;
-    excludedPublicRealms?: string[];
   }) {
     if (!matrixRegistrationSecret && !matrixRegistrationSecretFile) {
       throw new Error(
@@ -149,7 +146,6 @@ export class RealmServer {
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.matrixRegistrationSecretFile = matrixRegistrationSecretFile;
     this.realms = [...realms, ...this.loadRealms()];
-    this.excludedPublicRealms = excludedPublicRealms ?? [];
   }
 
   @Memoize()
@@ -589,9 +585,6 @@ export class RealmServer {
     return async (ctxt: Koa.Context, _next: Koa.Next) => {
       let results = await fetchPublicRealms(this.dbAdapter);
       let promises = results.map(async ({ realm_url: realmURL }) => {
-        if (this.excludedPublicRealms.includes(realmURL)) {
-          return;
-        }
         let response = await this.virtualNetwork.handle(
           new Request(`${realmURL}_info`, {
             headers: {
@@ -600,11 +593,17 @@ export class RealmServer {
           }),
         );
         if (response.status != 200) {
-          throw new Error(
+          console.error(
             `Failed to fetch realm info for public realm ${realmURL}: ${response.status}`,
           );
+          return;
         }
         let json = await response.json();
+        let attributes = json.data.attributes;
+        if (attributes.showAsCatalog != null && attributes.showAsCatalog == false) {
+          return;
+        }
+
         return {
           type: 'public-realm',
           id: realmURL,

@@ -7,7 +7,6 @@ NODE_NO_WARNINGS=1 \
   LOG_LEVELS='*=info' \
   MATRIX_URL=https://matrix.boxel.ai \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
-  EXCLUDED_PUBLIC_REALMS='https://app.boxel.ai/experiments/,https://app.boxel.ai/seed/,https://cardstack.com/base/' \
   ts-node \
   --transpileOnly main \
   --port=3000 \

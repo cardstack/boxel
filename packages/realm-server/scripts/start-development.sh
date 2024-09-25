@@ -15,7 +15,6 @@ NODE_ENV=development \
   REALM_SECRET_SEED="shhh! it's a secret" \
   MATRIX_URL=http://localhost:8008 \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
-  EXCLUDED_PUBLIC_REALMS='http://localhost:4201/seed/,https://cardstack.com/base/,http://localhost:4202/test/,http://localhost:4202/node-test/,http://localhost:4203/,http://localhost:4204/,http://localhost:4205/test/' \
   ts-node \
   --transpileOnly main \
   --port=4201 \
