@@ -953,7 +953,7 @@ test.describe('Room messages', () => {
   }) => {
     const prompt = {
       from: 'user1',
-      message: 'Do I have to use AI with Boxel?', // a prompt on new-session template
+      message: 'Make this more polite.', // a prompt on new-session template
     };
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
