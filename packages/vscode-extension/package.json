@@ -60,7 +60,7 @@
     "extends": "../../package.json"
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "pnpm run compile",
     "vscode:package": "npx vsce package",
     "compile": "tsc --skipLibCheck -p ./",
     "lint": "eslint \"src/**/*.ts\"",
