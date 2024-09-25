@@ -2,23 +2,27 @@
   "data": {
     "type": "card",
     "attributes": {
-      "dueDate": null,
-      "priority": {
-        "code": null,
-        "label": null
-      },
-      "content": null,
-      "completed": false,
+      "taskName": null,
+      "taskDetail": null,
       "status": {
-        "code": null,
+        "index": null,
         "label": "Backlog"
       },
-      "title": null,
+      "priority": {
+        "index": null,
+        "label": null
+      },
+      "dueDate": null,
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
       "assignee": {
+        "links": {
+          "self": null
+        }
+      },
+      "project": {
         "links": {
           "self": null
         }
