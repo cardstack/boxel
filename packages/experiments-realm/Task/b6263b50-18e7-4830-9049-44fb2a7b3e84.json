@@ -2,23 +2,27 @@
   "data": {
     "type": "card",
     "attributes": {
-      "dueDate": null,
-      "priority": {
-        "code": null,
-        "label": null
-      },
-      "content": null,
-      "completed": false,
+      "taskName": "Resolve conflicts with main",
+      "taskDetail": null,
       "status": {
-        "code": null,
+        "index": null,
         "label": "Backlog"
       },
-      "title": null,
+      "priority": {
+        "index": null,
+        "label": null
+      },
+      "dueDate": null,
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
       "assignee": {
+        "links": {
+          "self": "../TeamMember/5c42e6e9-59c8-4585-a721-e3414d7e7c9e"
+        }
+      },
+      "project": {
         "links": {
           "self": null
         }

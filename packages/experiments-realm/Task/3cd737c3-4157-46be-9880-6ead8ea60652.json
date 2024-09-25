@@ -2,23 +2,27 @@
   "data": {
     "type": "card",
     "attributes": {
-      "dueDate": null,
+      "taskName": "Add filter icon in filter section",
+      "taskDetail": null,
+      "status": {
+        "index": 2,
+        "label": "Current Sprint"
+      },
       "priority": {
-        "code": null,
+        "index": null,
         "label": null
       },
-      "content": null,
-      "completed": false,
-      "status": {
-        "code": null,
-        "label": "Backlog"
-      },
-      "title": null,
+      "dueDate": null,
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
       "assignee": {
+        "links": {
+          "self": "../TeamMember/847c1f4e-e0ae-43d3-a012-8ffaa66f5925"
+        }
+      },
+      "project": {
         "links": {
           "self": null
         }

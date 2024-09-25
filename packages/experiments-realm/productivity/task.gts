@@ -151,11 +151,11 @@ export class Issues extends CardDef {
   static displayName = 'Issues';
 }
 
-class Fitted extends Component<typeof AssignedTask> {
+class Fitted extends Component<typeof Task> {
   <template>
     <div class='assigned-task-card'>
       <h3 class='task-title'>{{@model.taskName}}</h3>
-      <p class='task-assignee'>Assigned to: {{@model.assignee.firstName}}</p>
+      <p class='task-assignee'>Assigned to: {{@model.assignee.name}}</p>
       <p class='task-status'>Status: {{@model.status.label}}</p>
       <p class='task-due-date'>Due Date: <@fields.dueDate /></p>
     </div>

@@ -2,15 +2,15 @@
   "data": {
     "type": "card",
     "attributes": {
-      "taskName": "Do Something",
-      "taskDetail": null,
+      "taskName": "Build Multi-Select Component",
+      "taskDetail": "Multi-Select component to be used when filtering ",
       "status": {
         "index": null,
         "label": "Backlog"
       },
       "priority": {
-        "index": null,
-        "label": null
+        "index": 1,
+        "label": "Medium"
       },
       "dueDate": "2024-09-20",
       "description": null,
@@ -19,7 +19,7 @@
     "relationships": {
       "assignee": {
         "links": {
-          "self": null
+          "self": "../TeamMember/847c1f4e-e0ae-43d3-a012-8ffaa66f5925"
         }
       },
       "project": {

@@ -2,11 +2,11 @@
   "data": {
     "type": "card",
     "attributes": {
-      "taskName": null,
+      "taskName": "Add filter icon",
       "taskDetail": null,
       "status": {
-        "index": null,
-        "label": "Backlog"
+        "index": 2,
+        "label": "Current Sprint"
       },
       "priority": {
         "index": null,
