@@ -77,10 +77,8 @@ class AssigneePill extends Component<AssigneePillArgs> {
       .assignee-pill {
         display: flex;
         align-items: center;
-        font-size: var(--boxel-font-size-sm);
-      }
-      .dropdown-item {
         padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
+        font-size: var(--boxel-font-size-sm);
       }
       .assignee-avatar {
         width: var(--boxel-sp-sm);

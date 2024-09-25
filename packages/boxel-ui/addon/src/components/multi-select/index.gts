@@ -38,33 +38,6 @@ export default class BoxelMultiSelect extends Component<Signature> {
   @tracked visibleItemCount = 0;
   @tracked isOpen = false;
 
-  get filteredSelected() {
-    const filtered = this.args.selected.filter(Boolean);
-    return filtered;
-  }
-
-  @action
-  registerAPI(select: SelectAPI) {
-    this.selectAPI = select;
-    this.isOpen = select.isOpen;
-  }
-
-  @action
-  toggleDropdown(event: MouseEvent) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    if (this.selectAPI) {
-      this.isOpen = !this.isOpen;
-
-      if (this.isOpen) {
-        this.selectAPI.actions.open();
-      } else {
-        this.selectAPI.actions.close();
-      }
-    }
-  }
-
   @action
   onClearAll() {
     if (typeof this.args.onChange === 'function') {
@@ -80,7 +53,7 @@ export default class BoxelMultiSelect extends Component<Signature> {
     <div class='boxel-multi-select__wrapper'>
       <PowerSelectMultiple
         @options={{@options}}
-        @selected={{this.filteredSelected}}
+        @selected={{@selected}}
         @selectedItemComponent={{component CustomSelectedItemComponent}}
         @triggerComponent={{component CustomTriggerComponent}}
         @placeholder={{@placeholder}}
@@ -95,12 +68,14 @@ export default class BoxelMultiSelect extends Component<Signature> {
         @searchEnabled={{true}}
         @searchField='name'
         @beforeOptionsComponent={{component BeforeOptions autofocus=false}}
-        @registerAPI={{this.registerAPI}}
         as |option|
       >
         {{yield option}}
       </PowerSelectMultiple>
-      <div class='boxel-multi-select__icons-wrapper'>
+      <div
+        class='boxel-multi-select__icons-wrapper
+          {{if @selected.length "has-selections"}}'
+      >
         {{#if @selected.length}}
           <IconX
             {{on 'click' this.onClearAll}}
@@ -109,7 +84,6 @@ export default class BoxelMultiSelect extends Component<Signature> {
           />
         {{else}}
           <CaretDown
-            {{on 'click' this.toggleDropdown}}
             style='width: 12px; height: 12px; cursor: pointer;'
             aria-label='toggle dropdown'
           />
@@ -156,12 +130,20 @@ export default class BoxelMultiSelect extends Component<Signature> {
       }
 
       .boxel-multi-select__icons-wrapper {
+        position: absolute;
+        right: 0;
+        top: 0;
+        bottom: 0;
         display: flex;
         align-items: center;
         justify-content: center;
         padding: var(--boxel-sp-xxxs) var(--boxel-sp-xxs);
         width: 40px;
-        aspect-ratio: 1/1;
+        pointer-events: none;
+      }
+
+      .boxel-multi-select__icons-wrapper.has-selections {
+        pointer-events: auto;
       }
 
       .boxel-multi-select__clear-all,
@@ -229,10 +211,6 @@ export default class BoxelMultiSelect extends Component<Signature> {
       .boxel-multi-select__dropdown
         .ember-power-select-option--no-matches-message {
         padding: var(--boxel-sp-xxs) var(--boxel-sp-sm);
-      }
-
-      .ember-power-select-status-icon {
-        display: block;
       }
     </style>
   </template>
@@ -321,11 +299,10 @@ class CustomSelectedItemComponent<ItemT> extends Component<
             more
             <IconX
               {{on 'click' (fn this.removeExcessItems)}}
-              style='width: 8px; height: 8px;'
+              style='width: 8px; height: 8px; cursor: pointer; --icon-color: var(--boxel-multi-select-pill-color);'
               aria-label='remove item'
             />
           </span>
-
         {{/if}}
       </div>
     {{else}}
