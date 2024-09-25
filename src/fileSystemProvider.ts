@@ -55,7 +55,7 @@ export class Directory implements vscode.FileStat {
 
 export type Entry = File | Directory;
 
-export class MemFS implements vscode.FileSystemProvider {
+export class RealmFS implements vscode.FileSystemProvider {
   root = new Directory("");
   realmClients: Map<string, RealmAuthClient> = new Map();
   realmsInitialized = false;
@@ -81,10 +81,16 @@ export class MemFS implements vscode.FileSystemProvider {
     const session = await vscode.authentication.getSession("synapse", [], {
       createIfNone: true,
     });
+    const serverUrl = vscode.workspace
+      .getConfiguration("boxelrealm")
+      .get("matrixServer") as string;
+    if (!serverUrl) {
+      throw new Error("No matrix server url found, please check your settings");
+    }
     console.log("Session:", session);
     const decodedAuth = JSON.parse(session.accessToken);
     const matrixClient = createClient({
-      baseUrl: "http://localhost:8008",
+      baseUrl: serverUrl,
       accessToken: decodedAuth.access_token,
       userId: decodedAuth.user_id,
       deviceId: decodedAuth.device_id,

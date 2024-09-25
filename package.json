@@ -2,7 +2,7 @@
   "name": "vscode-boxelrealm",
   "displayName": "BoxelRealm",
   "description": "Access boxel realm data and code from your vscode workspace.",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "publisher": "boxel",
   "private": true,
   "license": "MIT",
@@ -37,48 +37,20 @@
       "commandPalette": [
         {
           "command": "boxelrealm.logout"
-        }
-      ]
-    },
-    "viewsContainers": {
-      "activitybar": [
+        },
         {
-          "id": "boxel-realm-explorer",
-          "title": "BoxelRealm",
-          "icon": "resources/boxel.svg"
+          "command": "boxelrealm.createWorkspace"
         }
       ]
     },
-    "views": {
-      "boxel-realm-explorer": [
-        {
-          "id": "boxel-realm-explorer-sub",
-          "name": "BoxelRealm"
-        }
-      ]
-    },
-    "viewsWelcome": [
-      {
-        "view": "boxel-realm-explorer-sub",
-        "contents": "[Log out of synapse](command:boxelrealm.logout)\n[Create Workspace](command:boxelrealm.createWorkspace)"
-      }
-    ],
     "configuration": [
       {
-        "title": "Realm Password",
+        "title": "Matrix Server",
         "properties": {
-          "boxelrealm.realmPassword": {
+          "boxelrealm.matrixServer": {
             "type": "string",
-            "description": "Realm Password"
-          }
-        }
-      },
-      {
-        "title": "Realm Username",
-        "properties": {
-          "boxelrealm.realmUsername": {
-            "type": "string",
-            "description": "Realm Username"
+            "description": "The matrix server to connect to, leave blank to connect to your boxel.ai realms.",
+            "default": "https://matrix.boxel.ai/"
           }
         }
       }

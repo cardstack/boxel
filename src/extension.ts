@@ -1,7 +1,7 @@
 "use strict";
 
 import * as vscode from "vscode";
-import { MemFS } from "./fileSystemProvider";
+import { RealmFS } from "./fileSystemProvider";
 import { SynapseAuthProvider } from "./synapse-auth-provider";
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -20,22 +20,22 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.showInformationMessage("Logged out of synapse");
   });
 
-  const memFs = new MemFS();
+  const realmFs = new RealmFS();
 
   console.log("Registering file system providers now");
   context.subscriptions.push(
-    vscode.workspace.registerFileSystemProvider("boxelrealm+http", memFs, {
+    vscode.workspace.registerFileSystemProvider("boxelrealm+http", realmFs, {
       isCaseSensitive: true,
     })
   );
   context.subscriptions.push(
-    vscode.workspace.registerFileSystemProvider("boxelrealm+https", memFs, {
+    vscode.workspace.registerFileSystemProvider("boxelrealm+https", realmFs, {
       isCaseSensitive: true,
     })
   );
 
   vscode.commands.registerCommand("boxelrealm.createWorkspace", async (_) => {
-    let realmList = (await memFs.getRealmUrls()).map((url) => ({
+    let realmList = (await realmFs.getRealmUrls()).map((url) => ({
       uri: vscode.Uri.parse(`boxelrealm+${url}`),
       name: `realm-${url}`,
     }));
