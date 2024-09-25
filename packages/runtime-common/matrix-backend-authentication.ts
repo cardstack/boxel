@@ -118,6 +118,7 @@ export class MatrixBackendAuthentication {
           headers: {
             'Content-Type': 'application/json',
             Authorization: jwt,
+            'Access-Control-Expose-Headers': 'Authorization',
           },
         });
       } else {
@@ -217,6 +218,7 @@ export class MatrixBackendAuthentication {
         headers: {
           'Content-Type': 'application/json',
           Authorization: jwt,
+          'Access-Control-Expose-Headers': 'Authorization',
         },
       });
     } else {

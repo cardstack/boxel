@@ -59,6 +59,7 @@ module('realm-auth-client', function (assert) {
     };
     client['challengeRequest'] = async function (): Promise<Response> {
       return {
+        ok: true,
         headers: {
           get() {
             return createJWT('1h');

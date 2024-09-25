@@ -55,7 +55,8 @@ export default class Workspace extends Component<Signature> {
         background-color: var(--boxel-500);
         background-image: var(--workspace-background-image-url);
         background-position: center;
-        background-size: contain;
+        background-size: cover;
+        background-repeat: no-repeat;
 
         position: relative;
         height: 142px;
