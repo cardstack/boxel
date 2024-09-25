@@ -3,12 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as path from 'path';
-import * as vscode from 'vscode';
-import { RealmAuthClient } from './auth';
+import * as path from "path";
+import * as vscode from "vscode";
+import { RealmAuthClient, RealmAuthMatrixClientInterface } from "./auth";
+import { SecretStorage } from "vscode";
+import { createClient } from "matrix-js-sdk";
 
 function getUrl(uri: vscode.Uri) {
-  let scheme = uri.scheme.split('+')[1];
+  let scheme = uri.scheme.split("+")[1];
   let auth = uri.authority;
   let path = uri.path;
   return `${scheme}://${auth}${path}`;
@@ -53,20 +55,95 @@ export class Directory implements vscode.FileStat {
 
 export type Entry = File | Directory;
 
-export class MemFS implements vscode.FileSystemProvider {
-  root = new Directory('');
-  realmClient: RealmAuthClient;
+export class RealmFS implements vscode.FileSystemProvider {
+  root = new Directory("");
+  realmClients: Map<string, RealmAuthClient> = new Map();
+  realmsInitialized = false;
+  jwtPromises: Map<string, Promise<string>> = new Map();
+  secrets: SecretStorage;
 
-  constructor(realmClient: RealmAuthClient) {
-    this.realmClient = realmClient;
+  async getRealmUrls() {
+    if (!this.realmsInitialized) {
+      console.log("No realm clients, setting up realms");
+      await this.setupRealms();
+    }
+    console.log("Realm clients", this.realmClients, this.realmClients.keys());
+    return Array.from(this.realmClients.keys());
   }
 
-  async getJWT() {
-    console.log('Getting JWT', this);
-    if (!this.realmClient) {
-      throw new Error('Realm client not initialized');
+  async getJwtAndDeletePromise(url: string) {
+    let jwt = await this.jwtPromises.get(url);
+    this.jwtPromises.delete(url);
+    return jwt;
+  }
+
+  async setupRealms() {
+    const session = await vscode.authentication.getSession("synapse", [], {
+      createIfNone: true,
+    });
+    const serverUrl = vscode.workspace
+      .getConfiguration("boxelrealm")
+      .get("matrixServer") as string;
+    if (!serverUrl) {
+      throw new Error("No matrix server url found, please check your settings");
     }
-    return await this.realmClient.getJWT();
+    console.log("Session:", session);
+    const decodedAuth = JSON.parse(session.accessToken);
+    const matrixClient = createClient({
+      baseUrl: serverUrl,
+      accessToken: decodedAuth.access_token,
+      userId: decodedAuth.user_id,
+      deviceId: decodedAuth.device_id,
+    });
+    let realmsEventData =
+      (await matrixClient.getAccountDataFromServer(
+        "com.cardstack.boxel.realms"
+      )) || {};
+    console.log("Realms event data:", realmsEventData, typeof realmsEventData);
+    let realms = realmsEventData.realms || [];
+    console.log("Realms:", realms);
+    vscode.window.showInformationMessage(
+      `Boxel - found ${realms.length} realms`
+    );
+    for (const realm of realms) {
+      console.log("new realm:", realm);
+      let newRealmClient = new RealmAuthClient(new URL(realm), matrixClient);
+      console.log("newRealmClient", newRealmClient);
+      this.realmClients.set(realm, newRealmClient);
+      console.log("Realm client set", realm);
+    }
+    console.log("Realm clients setup", this.realmClients);
+    this.realmsInitialized = true;
+  }
+
+  async getJWT(url: string) {
+    console.log("Getting JWT for ", url);
+    if (!this.realmsInitialized) {
+      await this.setupRealms();
+    }
+    // Find the realm client that prefixes the url
+    for (const [realmUrl, realmClient] of this.realmClients.entries()) {
+      if (url.startsWith(realmUrl.toString())) {
+        console.log(
+          "Found realm client for",
+          url,
+          "it's the one for",
+          realmUrl
+        );
+        console.log("Checking if we're currently loading one");
+
+        if (this.jwtPromises.has(realmUrl.toString())) {
+          console.log("We're already loading one, waiting");
+          return this.getJwtAndDeletePromise(realmUrl.toString());
+        } else {
+          console.log("We're not currently loading one, creating");
+          const promise = realmClient.getJWT();
+          this.jwtPromises.set(realmUrl.toString(), promise);
+          return promise;
+        }
+      }
+    }
+    throw new Error("No realm client found for " + url);
   }
 
   async stat(uri: vscode.Uri): Promise<vscode.FileStat> {
@@ -78,7 +155,7 @@ export class MemFS implements vscode.FileSystemProvider {
   }
 
   async readDirectory(uri: vscode.Uri): Promise<[string, vscode.FileType][]> {
-    console.log('Reading directory:', uri);
+    console.log("Reading directory:", uri);
     try {
       const directory = await this._fetchDirectoryEntry(uri);
       return Array.from(directory.entries.entries()).map(([name, entry]) => [
@@ -86,7 +163,7 @@ export class MemFS implements vscode.FileSystemProvider {
         entry.type,
       ]);
     } catch (error) {
-      console.error('Error reading directory:', error);
+      console.error("Error reading directory:", error);
       throw vscode.FileSystemError.Unavailable(uri);
     }
   }
@@ -94,46 +171,48 @@ export class MemFS implements vscode.FileSystemProvider {
   // --- manage file contents
 
   async readFile(uri: vscode.Uri): Promise<Uint8Array> {
-    console.log('Reading file:', uri);
+    console.log("Reading file:", uri);
     const data = (await this._lookupAsFile(uri)).data;
     if (data) {
-      console.log('File data:', data);
+      console.log("File data:", data);
       return data;
     }
-    console.log('File not found:', uri);
+    console.log("File not found:", uri);
     throw vscode.FileSystemError.FileNotFound();
   }
 
   async writeFile(
     uri: vscode.Uri,
     content: Uint8Array,
-    _options: { create: boolean; overwrite: boolean },
+    _options: { create: boolean; overwrite: boolean }
   ): Promise<void> {
-    console.log('Writing file:', uri);
-    let requestType: string = 'POST';
+    console.log("Writing file:", uri);
+
+    let requestType: string = "POST";
     let apiUrl = getUrl(uri);
 
     let headers: Record<string, string> = {
-      'Content-Type': 'text/plain;charset=UTF-8',
-      Authorization: `${await this.getJWT()}`,
+      "Content-Type": "text/plain;charset=UTF-8",
+      Authorization: `${await this.getJWT(apiUrl)}`,
     };
 
     // Add special header for .gts files
-    if (uri.path.endsWith('.gts')) {
-      headers['Accept'] = 'application/vnd.card+source';
-      requestType = 'POST';
-    } else if (uri.path.endsWith('.json')) {
-      //strip the .json from the apiUrl
-      apiUrl = apiUrl.replace('.json', '');
-      requestType = 'PATCH';
-      headers['Accept'] = 'application/vnd.card+json';
+    if (uri.path.endsWith(".gts")) {
+      headers["Accept"] = "application/vnd.card+source";
+      requestType = "POST";
+    } else if (uri.path.endsWith(".json")) {
+      // We cannot write new files so this only works for editing existing ones
+      requestType = "PATCH";
+      apiUrl = apiUrl.replace(".json", "");
+      console.log("API URL:", apiUrl, "requestType:", requestType);
+      headers["Accept"] = "application/vnd.card+json";
     }
 
     try {
       // Convert Uint8Array to text
       const contentText = new TextDecoder().decode(content);
-      console.log('Content text PATCH:', contentText);
-      const response = await fetch(apiUrl, {
+      console.log("Content text:", contentText);
+      let response = await fetch(apiUrl, {
         method: requestType,
         headers: headers,
         body: contentText,
@@ -141,15 +220,15 @@ export class MemFS implements vscode.FileSystemProvider {
 
       if (!response.ok) {
         console.error(
-          'Error writing file:',
+          "Error writing file:",
           response.status,
-          response.statusText,
+          response.statusText
         );
         throw vscode.FileSystemError.FileNotFound(uri);
       }
       this._fireSoon({ type: vscode.FileChangeType.Changed, uri });
     } catch (error) {
-      console.error('Error writing file:', error);
+      console.error("Error writing file:", error);
       throw vscode.FileSystemError.Unavailable(uri);
     }
   }
@@ -159,7 +238,7 @@ export class MemFS implements vscode.FileSystemProvider {
   async rename(
     oldUri: vscode.Uri,
     newUri: vscode.Uri,
-    options: { overwrite: boolean },
+    options: { overwrite: boolean }
   ): Promise<void> {
     const entry = await this._lookup(oldUri);
     if (!entry) {
@@ -180,7 +259,7 @@ export class MemFS implements vscode.FileSystemProvider {
 
     this._fireSoon(
       { type: vscode.FileChangeType.Deleted, uri: oldUri },
-      { type: vscode.FileChangeType.Created, uri: newUri },
+      { type: vscode.FileChangeType.Created, uri: newUri }
     );
   }
 
@@ -196,7 +275,7 @@ export class MemFS implements vscode.FileSystemProvider {
     parent.size -= 1;
     this._fireSoon(
       { type: vscode.FileChangeType.Changed, uri: dirname },
-      { uri, type: vscode.FileChangeType.Deleted },
+      { uri, type: vscode.FileChangeType.Deleted }
     );
   }
 
@@ -211,15 +290,15 @@ export class MemFS implements vscode.FileSystemProvider {
     parent.size += 1;
     this._fireSoon(
       { type: vscode.FileChangeType.Changed, uri: dirname },
-      { type: vscode.FileChangeType.Created, uri },
+      { type: vscode.FileChangeType.Created, uri }
     );
   }
 
   // --- lookup
 
   private async _lookup(uri: vscode.Uri): Promise<Entry | undefined> {
-    const parts = uri.path.split('/').filter((part) => part.length > 0);
-    if (!parts[parts.length - 1].includes('.')) {
+    const parts = uri.path.split("/").filter((part) => part.length > 0);
+    if (!parts[parts.length - 1].includes(".")) {
       return await this._fetchDirectoryEntry(uri);
     }
     // ok we know it's a file.
@@ -228,35 +307,35 @@ export class MemFS implements vscode.FileSystemProvider {
   }
 
   private async _fetchDirectoryEntry(uri: vscode.Uri): Promise<Directory> {
-    console.log('Fetching directory entry:', uri);
+    console.log("Fetching directory entry:", uri);
 
     let apiUrl = getUrl(uri);
     // We can only get the directory contents if we have a trailing slash
-    if (!apiUrl.endsWith('/')) {
-      apiUrl += '/';
+    if (!apiUrl.endsWith("/")) {
+      apiUrl += "/";
     }
-    console.log('API URL:', apiUrl);
+    console.log("API URL:", apiUrl);
     try {
       const response = await fetch(apiUrl, {
         headers: {
-          Accept: 'application/vnd.api+json',
-          Authorization: `${await this.getJWT()}`,
+          Accept: "application/vnd.api+json",
+          Authorization: `${await this.getJWT(apiUrl)}`,
         },
       });
-      console.log('Response!');
+      console.log("Response!");
 
       if (!response.ok) {
-        console.log('Response not ok:', response.status);
+        console.log("Response not ok:", response.status);
         throw vscode.FileSystemError.FileNotFound(uri);
       }
 
       const data: any = await response.json();
-      console.log('Response data:', data);
+      console.log("Response data:", data);
       const directory = new Directory(path.basename(uri.path));
 
       for (const [name, info] of Object.entries(data.data.relationships)) {
         const fileType =
-          (info as { meta: { kind: string } }).meta.kind === 'file'
+          (info as { meta: { kind: string } }).meta.kind === "file"
             ? vscode.FileType.File
             : vscode.FileType.Directory;
         if (fileType === vscode.FileType.File) {
@@ -268,43 +347,43 @@ export class MemFS implements vscode.FileSystemProvider {
 
       return directory;
     } catch (error) {
-      console.error('Error fetching directory:', error);
+      console.error("Error fetching directory:", error);
       throw vscode.FileSystemError.Unavailable(uri);
     }
   }
 
   private async _fetchFileEntry(uri: vscode.Uri): Promise<File> {
-    console.log('Fetching file entry:', uri);
+    console.log("Fetching file entry:", uri);
     let apiUrl = getUrl(uri);
-    console.log('API URL:', apiUrl);
+    console.log("API URL:", apiUrl);
 
     try {
       let headers = {
-        Accept: 'application/vnd.api+json',
-        Authorization: `${await this.getJWT()}`,
+        Accept: "application/vnd.api+json",
+        Authorization: `${await this.getJWT(apiUrl)}`,
       };
 
       // Add special header for .gts files
-      if (uri.path.endsWith('.gts')) {
-        headers['Accept'] = 'application/vnd.card+source';
-      } else if (uri.path.endsWith('.json')) {
-        headers['Accept'] = 'application/vnd.card+json';
+      if (uri.path.endsWith(".gts")) {
+        headers["Accept"] = "application/vnd.card+source";
+      } else if (uri.path.endsWith(".json")) {
+        headers["Accept"] = "application/vnd.card+json";
       }
 
-      console.log('Headers:', headers);
+      console.log("Headers:", headers);
 
       const response = await fetch(apiUrl, { headers });
 
       if (!response.ok) {
-        console.log('Response not ok:', response.status);
+        console.log("Response not ok:", response.status);
         throw vscode.FileSystemError.FileNotFound(uri);
       }
-      console.log('Response:', response);
+      console.log("Response:", response);
 
-      const contentType = response.headers.get('Content-Type');
+      const contentType = response.headers.get("Content-Type");
       let content: Uint8Array;
 
-      if (contentType && contentType.includes('application/json')) {
+      if (contentType && contentType.includes("application/json")) {
         const jsonData = await response.json();
         content = new TextEncoder().encode(JSON.stringify(jsonData, null, 2));
       } else {
@@ -315,10 +394,10 @@ export class MemFS implements vscode.FileSystemProvider {
       file.data = content;
       file.mtime = Date.now();
       file.size = content.byteLength;
-      console.log('File:', file);
+      console.log("File:", file);
       return file;
     } catch (error) {
-      console.error('Error fetching file:', error);
+      console.error("Error fetching file:", error);
       throw vscode.FileSystemError.Unavailable(uri);
     }
   }
