@@ -9,7 +9,7 @@ import type {
 } from 'ember-power-select/components/power-select';
 import PowerSelectMultiple from 'ember-power-select/components/power-select-multiple';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
-import { IconX } from '@cardstack/boxel-ui/icons';
+import { IconX, CaretDown } from '@cardstack/boxel-ui/icons';
 
 export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
   options: ItemT[];
@@ -36,10 +36,33 @@ export default class BoxelMultiSelect extends Component<Signature> {
   @tracked selectAPI: SelectAPI | null = null;
   @tracked showMore = false;
   @tracked visibleItemCount = 0;
+  @tracked isOpen = false;
 
   get filteredSelected() {
     const filtered = this.args.selected.filter(Boolean);
     return filtered;
+  }
+
+  @action
+  registerAPI(select: SelectAPI) {
+    this.selectAPI = select;
+    this.isOpen = select.isOpen;
+  }
+
+  @action
+  toggleDropdown(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (this.selectAPI) {
+      this.isOpen = !this.isOpen;
+
+      if (this.isOpen) {
+        this.selectAPI.actions.open();
+      } else {
+        this.selectAPI.actions.close();
+      }
+    }
   }
 
   @action
@@ -72,6 +95,7 @@ export default class BoxelMultiSelect extends Component<Signature> {
         @searchEnabled={{true}}
         @searchField='name'
         @beforeOptionsComponent={{component BeforeOptions autofocus=false}}
+        @registerAPI={{this.registerAPI}}
         as |option|
       >
         {{yield option}}
@@ -80,8 +104,14 @@ export default class BoxelMultiSelect extends Component<Signature> {
         {{#if @selected.length}}
           <IconX
             {{on 'click' this.onClearAll}}
-            style='width: 12px; height: 12px;'
+            style='width: 12px; height: 12px; cursor: pointer;'
             aria-label='clear all selections'
+          />
+        {{else}}
+          <CaretDown
+            {{on 'click' this.toggleDropdown}}
+            style='width: 12px; height: 12px; cursor: pointer;'
+            aria-label='toggle dropdown'
           />
         {{/if}}
       </div>
@@ -252,15 +282,16 @@ class CustomSelectedItemComponent<ItemT> extends Component<
   }
 
   @action
-  removeItem(item: ItemT) {
+  removeItem(item: ItemT, event: MouseEvent) {
+    event.stopPropagation();
     const newSelected = this.args.select.selected.filter((i) => i !== item);
-
     this.args.select.selected = [...newSelected];
     this.args.select.actions.select(newSelected);
   }
 
   @action
-  removeExcessItems() {
+  removeExcessItems(event: MouseEvent) {
+    event.stopPropagation();
     const newSelected = this.args.select.selected.slice(
       0,
       this.maxVisibleItems,
@@ -277,7 +308,7 @@ class CustomSelectedItemComponent<ItemT> extends Component<
             {{this.itemName item}}
             <IconX
               {{on 'click' (fn this.removeItem item)}}
-              style='width: 8px; height: 8px;'
+              style='width: 8px; height: 8px; cursor: pointer; --icon-color: var(--boxel-multi-select-pill-color);'
               aria-label='remove item'
             />
           </span>

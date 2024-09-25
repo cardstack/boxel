@@ -31,7 +31,6 @@ interface CustomPillArgs {
 
 interface AssigneePillArgs {
   Args: {
-    isInDropdown?: boolean;
     isSelected: boolean;
     option: AssigneeOption;
   };
@@ -59,22 +58,19 @@ class AssigneePill extends Component<AssigneePillArgs> {
   }
 
   <template>
-    <span class='assignee-pill {{if @isInDropdown "dropdown-item"}}'>
-      {{#if @isInDropdown}}
-        <label class='checkbox-label'>
-          <input
-            type='checkbox'
-            checked={{@isSelected}}
-            aria-label='Select {{@option.name}}'
-          />
-          <span class='visually-hidden'>Select {{@option.name}}</span>
-        </label>
-      {{/if}}
-      <span class='assignee-avatar'>{{@option.avatar}}</span>
-      <span class='assignee-name'>{{@option.name}}</span>
-      {{#if @isInDropdown}}
-        <span class='assignee-issues'>{{this.issueText}}</span>
-      {{/if}}
+    <span class='assignee-pill'>
+      <label class='checkbox-label'>
+        <input
+          type='checkbox'
+          checked={{@isSelected}}
+          aria-label='Select {{@option.name}}'
+        />
+        <span class='visually-hidden'>Select {{@option.name}}</span>
+      </label>
+
+      <div class='assignee-avatar'>{{@option.avatar}}</div>
+      <div class='assignee-name'>{{@option.name}}</div>
+      <div class='assignee-issues'>{{this.issueText}}</div>
     </span>
 
     <style scoped>
@@ -183,8 +179,6 @@ export default class BoxelMultiSelectUsage extends Component {
         <:example>
           <BoxelMultiSelect
             @placeholder={{this.placeholder}}
-            @searchEnabled={{true}}
-            @searchField={{'name'}}
             @selected={{this.selectedItems}}
             @onChange={{this.onSelectItems}}
             @options={{this.items}}
@@ -200,13 +194,20 @@ export default class BoxelMultiSelectUsage extends Component {
           </BoxelMultiSelect>
         </:example>
         <:api as |Args|>
-          <Args.Array
+
+          <Args.Object
+            @name='options'
+            @description='An array of objects, to be listed on dropdown'
+            @value={{this.items}}
+            @onInput={{fn (mut this.items)}}
+          />
+          {{!-- <Args.Object
             @name='options'
             @description='An array of items, to be listed on dropdown'
             @required={{true}}
             @items={{this.items}}
             @onChange={{this.onSelectItems}}
-          />
+          /> --}}
           <Args.Action
             @name='onChange'
             @description='Invoke this action to handle selected items'
@@ -280,20 +281,17 @@ export default class BoxelMultiSelectUsage extends Component {
           <BoxelMultiSelect
             aria-labelledby='assignee-multi-select-label'
             @placeholder='Select assignees'
-            @searchEnabled={{true}}
-            @searchField='name'
             @selected={{this.selectedAssignees}}
             @onChange={{this.onSelectAssignees}}
             @options={{this.assignees}}
             @renderInPlace={{this.renderInPlace}}
             @matchTriggerWidth={{true}}
-            @selectedItemComponent={{component AssigneePill isInDropdown=false}}
+            @selectedItemComponent={{component AssigneePill}}
             as |assignee|
           >
             <AssigneePill
               @option={{assignee}}
               @isSelected={{includes this.selectedAssignees assignee}}
-              @isInDropdown={{true}}
             />
           </BoxelMultiSelect>
         </:example>
