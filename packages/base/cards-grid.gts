@@ -243,7 +243,7 @@ class Isolated extends Component<typeof CardsGrid> {
       }
       .list-view {
         --grid-card-width: 100%;
-        --grid-card-height: 11.125rem;
+        --grid-card-height: 6.125rem;
       }
       .list-view .cards {
         flex-direction: column;

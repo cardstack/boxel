@@ -37,9 +37,12 @@ export default class WorkspaceChooser extends Component<Signature> {
           class='workspace-chooser__title'
           data-test-personal-workspaces
         >Your Workspaces</span>
-        <div class='workspace-list'>
+        <div class='workspace-list' data-test-workspace-list>
           {{#each this.cardService.userRealms as |realmURL|}}
-            <Workspace @realmURL={{realmURL}} />
+            <Workspace
+              @realmURL={{realmURL}}
+              data-test-workspace={{realmURL}}
+            />
           {{/each}}
         </div>
         {{#if this.displayCatalogWorkspaces}}

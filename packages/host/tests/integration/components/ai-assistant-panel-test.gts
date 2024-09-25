@@ -1867,6 +1867,63 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-toggle-show-button]').doesNotExist();
   });
 
+  test('it can search for card instances based upon title of card', async function (assert) {
+    let id = `${testRealmURL}Pet/mango.json`;
+    let roomId = await renderAiAssistantPanel(id);
+
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: 'org.boxel.command',
+      body: 'Search for the following card',
+      formatted_body: 'Search for the following card',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'searchCard',
+          arguments: {
+            description: 'Searching for card',
+            filter: {
+              contains: {
+                title: 'Mango',
+              },
+            },
+          },
+        },
+        eventId: 'search1',
+      }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: 'search1',
+      },
+    });
+    await waitFor('[data-test-command-apply]');
+    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+    await waitFor('[data-test-command-result]');
+    await waitFor('.result-list li:nth-child(1)');
+    let commandResultEvent = (await getRoomEvents(roomId)).find(
+      (e) =>
+        e.type === 'm.room.message' &&
+        e.content.msgtype === 'org.boxel.commandResult' &&
+        e.content['m.relates_to']?.rel_type === 'm.annotation',
+    ) as CommandResultEvent;
+    let serializedResults =
+      typeof commandResultEvent?.content?.result === 'string'
+        ? JSON.parse(commandResultEvent.content.result)
+        : commandResultEvent.content.result;
+    serializedResults = Array.isArray(serializedResults)
+      ? serializedResults
+      : [];
+    assert.equal(serializedResults.length, 1, 'number of search results');
+    assert
+      .dom('[data-test-command-message]')
+      .containsText('Search for the following card');
+    assert
+      .dom('[data-test-comand-result-header]')
+      .containsText('Search Results 1 results');
+
+    assert.dom('.result-list li:nth-child(1)').containsText('Mango');
+    assert.dom('[data-test-toggle-show-button]').doesNotExist();
+  });
+
   test('toggle more search results', async function (assert) {
     let id = `${testRealmURL}Person/fadhlan.json`;
     let roomId = await renderAiAssistantPanel(id);

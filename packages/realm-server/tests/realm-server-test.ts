@@ -2155,7 +2155,7 @@ module('Realm Server', function (hooks) {
     test('POST /_create-realm', async function (assert) {
       // we randomize the realm and owner names so that we can isolate matrix
       // test state--there is no "delete user" matrix API
-      let realmName = `test-realm-${uuidv4()}`;
+      let endpoint = `test-realm-${uuidv4()}`;
       let owner = 'mango';
       let ownerUserId = '@mango:boxel.ai';
       let response = await request2
@@ -2171,7 +2171,10 @@ module('Realm Server', function (hooks) {
             data: {
               type: 'realm',
               attributes: {
-                name: realmName,
+                name: 'Test Realm',
+                endpoint,
+                backgroundURL: 'http://example.com/background.jpg',
+                iconURL: 'http://example.com/icon.jpg',
               },
             },
           }),
@@ -2184,20 +2187,27 @@ module('Realm Server', function (hooks) {
         {
           data: {
             type: 'realm',
-            id: `${testRealm2URL.origin}/${owner}/${realmName}/`,
+            id: `${testRealm2URL.origin}/${owner}/${endpoint}/`,
             attributes: {
-              name: realmName,
+              endpoint,
+              name: 'Test Realm',
+              backgroundURL: 'http://example.com/background.jpg',
+              iconURL: 'http://example.com/icon.jpg',
             },
           },
         },
         'realm creation JSON is correct',
       );
 
-      let realmPath = join(dir.name, 'realm_server_2', owner, realmName);
+      let realmPath = join(dir.name, 'realm_server_2', owner, endpoint);
       let realmJSON = readJSONSync(join(realmPath, '.realm.json'));
       assert.deepEqual(
         realmJSON,
-        { name: realmName },
+        {
+          name: 'Test Realm',
+          backgroundURL: 'http://example.com/background.jpg',
+          iconURL: 'http://example.com/icon.jpg',
+        },
         '.realm.json is correct',
       );
       assert.ok(
@@ -2230,7 +2240,7 @@ module('Realm Server', function (hooks) {
         new URL(json.data.id),
       );
       assert.deepEqual(permissions, {
-        [`@realm/mango_${realmName}:localhost`]: [
+        [`@realm/mango_${endpoint}:localhost`]: [
           'read',
           'write',
           'realm-owner',
@@ -2245,7 +2255,7 @@ module('Realm Server', function (hooks) {
       {
         // owner can create an instance
         let response = await request2
-          .post(`/${owner}/${realmName}/`)
+          .post(`/${owner}/${endpoint}/`)
           .send({
             data: {
               type: 'card',
@@ -2329,7 +2339,7 @@ module('Realm Server', function (hooks) {
     });
 
     test('dynamically created realms are not publicly readable or writable', async function (assert) {
-      let realmName = `test-realm-${uuidv4()}`;
+      let endpoint = `test-realm-${uuidv4()}`;
       let owner = 'mango';
       let ownerUserId = '@mango:boxel.ai';
       let response = await request2
@@ -2345,7 +2355,8 @@ module('Realm Server', function (hooks) {
             data: {
               type: 'realm',
               attributes: {
-                name: realmName,
+                name: 'Test Realm',
+                endpoint,
               },
             },
           }),
@@ -2375,7 +2386,7 @@ module('Realm Server', function (hooks) {
         assert.strictEqual(response.status, 403, 'HTTP 403 status');
 
         response = await request2
-          .post(`/${owner}/${realmName}/`)
+          .post(`/${owner}/${endpoint}/`)
           .send({
             data: {
               type: 'card',
@@ -2398,7 +2409,7 @@ module('Realm Server', function (hooks) {
     });
 
     test('can restart a realm that was created dynamically', async function (assert) {
-      let realmName = `test-realm-${uuidv4()}`;
+      let endpoint = `test-realm-${uuidv4()}`;
       let owner = 'mango';
       let ownerUserId = '@mango:boxel.ai';
       let realmURL: string;
@@ -2416,7 +2427,8 @@ module('Realm Server', function (hooks) {
               data: {
                 type: 'realm',
                 attributes: {
-                  name: realmName,
+                  name: 'Test Realm',
+                  endpoint,
                 },
               },
             }),
@@ -2431,7 +2443,7 @@ module('Realm Server', function (hooks) {
       )!;
       {
         let response = await request2
-          .post(`/${owner}/${realmName}/`)
+          .post(`/${owner}/${endpoint}/`)
           .send({
             data: {
               type: 'card',
@@ -2490,7 +2502,7 @@ module('Realm Server', function (hooks) {
     });
 
     test('POST /_create-realm without JWT', async function (assert) {
-      let realmName = `test-realm-${uuidv4()}`;
+      let endpoint = `test-realm-${uuidv4()}`;
       let response = await request2
         .post('/_create-realm')
         .set('Accept', 'application/vnd.api+json')
@@ -2500,7 +2512,8 @@ module('Realm Server', function (hooks) {
             data: {
               type: 'realm',
               attributes: {
-                name: realmName,
+                name: 'Test Realm',
+                endpoint,
               },
             },
           }),
@@ -2515,7 +2528,7 @@ module('Realm Server', function (hooks) {
     });
 
     test('POST /_create-realm with invalid JWT', async function (assert) {
-      let realmName = `test-realm-${uuidv4()}`;
+      let endpoint = `test-realm-${uuidv4()}`;
       let response = await request2
         .post('/_create-realm')
         .set('Accept', 'application/vnd.api+json')
@@ -2526,7 +2539,8 @@ module('Realm Server', function (hooks) {
             data: {
               type: 'realm',
               attributes: {
-                name: realmName,
+                name: 'Test Realm',
+                endpoint,
               },
             },
           }),
@@ -2570,7 +2584,7 @@ module('Realm Server', function (hooks) {
       assert.ok(error.match(/not valid JSON-API/), 'error message is correct');
     });
 
-    test('POST /_create-realm without a realm name', async function (assert) {
+    test('POST /_create-realm without a realm endpoint', async function (assert) {
       let response = await request2
         .post('/_create-realm')
         .set('Accept', 'application/vnd.api+json')
@@ -2583,14 +2597,44 @@ module('Realm Server', function (hooks) {
           JSON.stringify({
             data: {
               type: 'realm',
-              attributes: {},
+              attributes: {
+                name: 'Test Realm',
+              },
             },
           }),
         );
       assert.strictEqual(response.status, 400, 'HTTP 400 status');
       let error = response.body.errors[0];
       assert.ok(
-        error.match(/name must be a string/),
+        error.match(/endpoint is required and must be a string/),
+        'error message is correct',
+      );
+    });
+
+    test('POST /_create-realm without a realm name', async function (assert) {
+      let endpoint = `test-realm-${uuidv4()}`;
+      let response = await request2
+        .post('/_create-realm')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .set(
+          'Authorization',
+          `Bearer ${testRealmServer.createJWT('@mango:boxel.ai')}`,
+        )
+        .send(
+          JSON.stringify({
+            data: {
+              type: 'realm',
+              attributes: {
+                endpoint,
+              },
+            },
+          }),
+        );
+      assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      let error = response.body.errors[0];
+      assert.ok(
+        error.match(/name is required and must be a string/),
         'error message is correct',
       );
     });
@@ -2609,7 +2653,8 @@ module('Realm Server', function (hooks) {
             data: {
               type: 'realm',
               attributes: {
-                name: 'mango-realm',
+                endpoint: 'mango-realm',
+                name: 'Test Realm',
               },
             },
           }),
@@ -2623,7 +2668,7 @@ module('Realm Server', function (hooks) {
     });
 
     test('cannot create a new realm that collides with an existing realm', async function (assert) {
-      let realmName = `test-realm-${uuidv4()}`;
+      let endpoint = `test-realm-${uuidv4()}`;
       let ownerUserId = '@mango:boxel.ai';
       let response = await request2
         .post('/_create-realm')
@@ -2638,7 +2683,8 @@ module('Realm Server', function (hooks) {
             data: {
               type: 'realm',
               attributes: {
-                name: realmName,
+                endpoint,
+                name: 'Test Realm',
               },
             },
           }),
@@ -2658,7 +2704,8 @@ module('Realm Server', function (hooks) {
               data: {
                 type: 'realm',
                 attributes: {
-                  name: realmName,
+                  endpoint,
+                  name: 'Another Test Realm',
                 },
               },
             }),
@@ -2672,7 +2719,7 @@ module('Realm Server', function (hooks) {
       }
     });
 
-    test('cannot create a realm with invalid characters', async function (assert) {
+    test('cannot create a realm with invalid characters in endpoint', async function (assert) {
       let ownerUserId = '@mango:boxel.ai';
       {
         let response = await request2
@@ -2688,7 +2735,8 @@ module('Realm Server', function (hooks) {
               data: {
                 type: 'realm',
                 attributes: {
-                  name: 'invalid_realm_name',
+                  endpoint: 'invalid_realm_endpoint',
+                  name: 'Test Realm',
                 },
               },
             }),
@@ -2714,7 +2762,8 @@ module('Realm Server', function (hooks) {
               data: {
                 type: 'realm',
                 attributes: {
-                  name: 'invalid realm name',
+                  endpoint: 'invalid realm endpoint',
+                  name: 'Test Realm',
                 },
               },
             }),

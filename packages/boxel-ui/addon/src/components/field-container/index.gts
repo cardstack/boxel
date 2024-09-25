@@ -67,7 +67,7 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
       gap: var(--boxel-sp-xxs) 0;
     }
     .vertical .label {
-      --boxel-label-font: 700 var(--boxel-font-xs);
+      --boxel-label-font: 600 var(--boxel-font-xs);
     }
 
     .centered-display {

@@ -55,8 +55,8 @@ export default class CardService extends Service {
   // For tracking requests during the duration of this service. Used for being able to tell when to ignore an incremental indexing SSE event.
   // We want to ignore it when it is a result of our own request so that we don't reload the card and overwrite any unsaved changes made during auto save request and SSE event.
   clientRequestIds = new Set<string>();
-
   loaderToCardAPILoadingCache = new WeakMap<Loader, Promise<typeof CardAPI>>();
+  unresolvedRealmURLs = new TrackedArray<string>([baseRealm.url]);
 
   async getAPI(): Promise<typeof CardAPI> {
     let loader = this.loaderService.loader;
@@ -70,7 +70,12 @@ export default class CardService extends Service {
     return this.loaderToCardAPILoadingCache.get(loader)!;
   }
 
-  unresolvedRealmURLs = new TrackedArray<string>([baseRealm.url]);
+  resetState() {
+    this.subscriber = undefined;
+    this.clientRequestIds = new Set();
+    this.loaderToCardAPILoadingCache = new WeakMap();
+    this.unresolvedRealmURLs = new TrackedArray([baseRealm.url]);
+  }
 
   onSave(subscriber: CardSaveSubscriber) {
     this.subscriber = subscriber;

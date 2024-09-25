@@ -164,7 +164,7 @@ export default class ForgotPassword extends Component<Signature> {
 
     <style scoped>
       .title {
-        font: 700 var(--boxel-font-med);
+        font: 600 var(--boxel-font-med);
         margin-bottom: var(--boxel-sp);
       }
       .info {
