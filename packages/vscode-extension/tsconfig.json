@@ -1,13 +1,20 @@
 {
-	"compilerOptions": {
-		"strictNullChecks": true,
-		"module": "commonjs",
-		"target": "es2020",
-		"lib": ["es2020"],
-		"outDir": "out",
-		"sourceMap": true,
-		"strict": false,
-		"rootDir": "."
-	},
-	"exclude": ["node_modules", ".vscode-test"]
+  "compilerOptions": {
+    "strictNullChecks": true,
+    "module": "es2022",
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true,
+    "target": "es2020",
+    "lib": ["es2020"],
+    "outDir": "out",
+    "sourceMap": true,
+    "strict": true,
+    "experimentalDecorators": true,
+    "skipLibCheck": true,
+    "paths": {
+      "https://cardstack.com/base/*": ["../base/*"]
+    }
+  },
+  "include": ["../base/**/*"],
+  "exclude": ["node_modules", ".vscode-test"]
 }
