@@ -243,8 +243,8 @@ jobs:
           path: /tmp/server.log
           retention-days: 30
 
-  boxel-tools-build:
-    name: Boxel Tools VS Code Extension build
+  boxel-tools-package:
+    name: Boxel Tools VS Code Extension package
     runs-on: ubuntu-latest
     concurrency:
       group: vscode-extension-test-${{ github.head_ref || github.run_id }}
@@ -257,6 +257,9 @@ jobs:
         working-directory: packages/boxel-ui/addon
       - name: Prepublish
         run: pnpm vscode:prepublish
+        working-directory: packages/vscode-extension
+      - name: Package
+        run: pnpm vscode:package
         working-directory: packages/vscode-extension
 
   change-check:
