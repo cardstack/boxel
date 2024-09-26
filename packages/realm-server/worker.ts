@@ -85,7 +85,7 @@ let dist: URL = new URL(distURL);
 
 (async () => {
   let dbAdapter = new PgAdapter();
-  let queue = new PgQueue(dbAdapter);
+  let queue = new PgQueue(dbAdapter, 'realm-worker'); // TODO: update worker ID with ecs task ID
   let manager = new RunnerOptionsManager();
   let { getRunner } = await makeFastBootIndexRunner(
     dist,

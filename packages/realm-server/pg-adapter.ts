@@ -24,7 +24,7 @@ type Config = ReturnType<typeof config>;
 
 export default class PgAdapter implements DBAdapter {
   #isClosed = false;
-  private pool: Pool;
+  pool: Pool;
   private started = this.#startClient();
   private config: Config;
 

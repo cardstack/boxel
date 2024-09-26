@@ -118,7 +118,10 @@ export default class PgQueue implements Queue {
   private jobRunner: WorkLoop | undefined;
   private notificationRunner: WorkLoop | undefined;
 
-  constructor(private pgClient: PgAdapter) {}
+  constructor(
+    private pgClient: PgAdapter,
+    private workerId: string,
+  ) {}
 
   private async query(expression: Expression) {
     return await query(this.pgClient, expression);
@@ -247,9 +250,14 @@ export default class PgQueue implements Queue {
     await this.pgClient.withConnection(async (query) => {
       try {
         while (!workLoop.shuttingDown) {
-          log.debug(`processing jobs`);
+          log.debug(`%s: processing jobs`, this.workerId);
           await query(['BEGIN']);
           await query(['SET TRANSACTION ISOLATION LEVEL SERIALIZABLE']);
+          let allJobs = await query(['SELECT * FROM jobs']);
+          let allJobReservations = await query([
+            'SELECT * FROM job_reservations',
+          ]);
+          console.log({ worker: this.workerId, allJobs, allJobReservations });
           let jobs = (await query([
             // find the queue with the oldest job that isn't running and lock it.
             `WITH
@@ -267,16 +275,20 @@ export default class PgQueue implements Queue {
             LIMIT 1`,
           ])) as unknown as JobsTable[];
           if (jobs.length === 0) {
-            log.debug(`found no work`);
+            log.debug(`%s: found no work`, this.workerId);
             await query(['ROLLBACK']);
             return;
           }
           let jobToRun = jobs[0];
-          log.debug(`found job to run, job id: %s`, jobToRun.id);
+          log.debug(
+            `%s: found job to run, job id: %s`,
+            this.workerId,
+            jobToRun.id,
+          );
           let { nameExpressions, valueExpressions } = asExpressions({
             job_id: jobToRun.id,
             locked_until: new Date(Date.now() + jobToRun.timeout),
-            worker_id: 'TODO', // TODO: figure out how to get this in
+            worker_id: this.workerId,
           } as Pick<
             JobReservationsTable,
             'job_id' | 'locked_until' | 'worker_id'
@@ -288,18 +300,17 @@ export default class PgQueue implements Queue {
             ...addExplicitParens(separatedByCommas(valueExpressions)),
             'RETURNING id',
           ] as Expression)) as Pick<JobReservationsTable, 'id'>[];
-          let commitResult = await query(['COMMIT']);
-          console.log(commitResult);
-          debugger;
+          await query(['COMMIT']); // this should fail in the case of a concurrency conflict
           log.debug(
-            `claimed job %s, reservation %s`,
+            `%s: claimed job %s, reservation %s`,
+            this.workerId,
             jobToRun.id,
             jobReservationId,
           );
           let newStatus: string;
           let result: PgPrimitive;
           try {
-            log.debug(`running %s`, jobToRun.id);
+            log.debug(`%s: running %s`, this.workerId, jobToRun.id);
             result = await this.runJob(jobToRun.job_type, jobToRun.args);
             newStatus = 'resolved';
           } catch (err: any) {
@@ -313,7 +324,12 @@ export default class PgQueue implements Queue {
             result = serializableError(err);
             newStatus = 'rejected';
           }
-          log.debug(`finished %s as %s`, jobToRun.id, newStatus);
+          log.debug(
+            `%s: finished %s as %s`,
+            this.workerId,
+            jobToRun.id,
+            newStatus,
+          );
           await query(['BEGIN']);
           await query(['SET TRANSACTION ISOLATION LEVEL SERIALIZABLE']);
           let [{ status: jobStatus }] = (await query([
@@ -357,17 +373,23 @@ export default class PgQueue implements Queue {
             `, finished_at=now() WHERE id = `,
             param(jobToRun.id),
           ]);
-          await query([`UPDATE job_reservations SET completed_at = now()`]);
+          await query([
+            `UPDATE job_reservations SET completed_at = now() WHERE id = `,
+            param(jobReservationId),
+          ]);
           // NOTIFY takes effect when the transaction actually commits. If it
           // doesn't commit, no notification goes out.
           await query([`NOTIFY jobs_finished`]);
           await query(['COMMIT']);
-          log.debug(`committed job completion, notified jobs_finished`);
+          log.debug(
+            `%s: committed job completion, notified jobs_finished`,
+            this.workerId,
+          );
         }
       } catch (e: any) {
         if (e.code === '40001') {
           // transaction error due to concurrent update
-          log.debug(e);
+          log.debug(this.workerId, e);
           await query(['ROLLBACK']);
           return;
         }

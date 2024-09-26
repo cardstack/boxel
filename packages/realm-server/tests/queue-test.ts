@@ -7,6 +7,7 @@ import PgAdapter from '../pg-adapter';
 import { type Queue } from '@cardstack/runtime-common';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
 import queueTests from '@cardstack/runtime-common/tests/queue-test';
+import { assert } from '@ember/debug';
 
 module('queue', function (hooks) {
   let queue: Queue;
@@ -15,8 +16,8 @@ module('queue', function (hooks) {
   hooks.beforeEach(async function () {
     prepareTestDB();
     adapter = new PgAdapter();
-    queue = new PgQueue(adapter);
-    await queue.start();
+    queue = new PgQueue(adapter, 'q1');
+    // await queue.start();
   });
 
   hooks.afterEach(async function () {
@@ -39,10 +40,11 @@ module('queue', function (hooks) {
   // so these are not tests that are shared with the browser queue implementation.
   module('multiple queue clients', function (nestedHooks) {
     let queue2: Queue;
+    let adapter2: PgAdapter;
     nestedHooks.beforeEach(async function () {
-      let adapter2 = new PgAdapter();
-      queue2 = new PgQueue(adapter2);
-      await queue2.start();
+      adapter2 = new PgAdapter();
+      queue2 = new PgQueue(adapter2, 'q2');
+      // await queue2.start();
 
       // Because we need tight timing control for this test, we don't want any
       // concurrent migrations and their retries altering the timing. This
@@ -107,6 +109,84 @@ module('queue', function (hooks) {
       let [job1, job2] = await Promise.all([promiseForJob1, promiseForJob2]);
 
       await Promise.all([job1.done, job2.done]);
+    });
+
+    test('transaction level behavior', async function (assert) {
+      await adapter.execute(
+        `INSERT INTO jobs (job_type, concurrency_group, timeout, status, args) VALUES ('hello', 'hello', 50000, 'unfulfilled', '{}'::jsonb)`,
+      );
+
+      await adapter.execute('BEGIN');
+      await adapter.execute('SET TRANSACTION ISOLATION LEVEL SERIALIZABLE');
+      await adapter2.execute('BEGIN');
+      await adapter2.execute('SET TRANSACTION ISOLATION LEVEL SERIALIZABLE');
+
+      await adapter.execute('SELECT * FROM jobs');
+      await adapter.execute('SELECT * FROM job_reservations');
+      await adapter.execute(
+        `INSERT INTO job_reservations (job_id, locked_until, worker_id) VALUES (1, '2025-09-25T00:00:00.000Z', 'worker1')`,
+      );
+
+      await adapter2.execute('SELECT * FROM jobs');
+      await adapter2.execute('SELECT * FROM job_reservations');
+      await adapter2.execute(
+        `INSERT INTO job_reservations (job_id, locked_until, worker_id) VALUES (1, '2025-09-26T00:00:00.000Z', 'worker2')`,
+      );
+
+      await adapter.execute('COMMIT');
+      await adapter2.execute('COMMIT');
+    });
+
+    // eslint-disable-next-line qunit/no-only
+    test.only('transaction level behavior withConnection', async function (assert) {
+      await adapter.execute(
+        `INSERT INTO jobs (job_type, concurrency_group, timeout, status, args) VALUES ('hello', 'hello', 50000, 'unfulfilled', '{}'::jsonb)`,
+      );
+
+      await adapter.withConnection(async (query1) => {
+        await adapter2.withConnection(async (query2) => {
+          await query1(['BEGIN']);
+          await query1(['SET TRANSACTION ISOLATION LEVEL SERIALIZABLE']);
+          await query2(['BEGIN']);
+          await query2(['SET TRANSACTION ISOLATION LEVEL SERIALIZABLE']);
+
+          let results1 = await query1([
+            `WITH pending_jobs as (
+      select * from jobs where status='unfulfilled'
+    ), valid_reservations as (
+      select * from job_reservations where locked_until > NOW() and completed_at is null
+    )
+    select j.* from pending_jobs j where j.id not in (select job_id from valid_reservations) ORDER BY j.created_at LIMIT 1
+    `,
+          ]);
+          let results2 = await query2([
+            `WITH pending_jobs as (
+            select * from jobs where status='unfulfilled'
+          ), valid_reservations as (
+            select * from job_reservations where locked_until > NOW() and completed_at is null
+          )
+          select j.* from pending_jobs j where j.id not in (select job_id from valid_reservations) ORDER BY j.created_at LIMIT 1
+          `,
+          ]);
+          console.log({ results2 });
+          console.log({ results1 });
+          if (results1.length > 0) {
+            console.log('inserting job reservation with client1');
+            await query1([
+              `INSERT INTO job_reservations (job_id, locked_until, worker_id) VALUES (1, '2025-09-25T00:00:00.000Z', 'worker1')`,
+            ]);
+          }
+          if (results2.length > 0) {
+            console.log('inserting job reservation with client2');
+            await query2([
+              `INSERT INTO job_reservations (job_id, locked_until, worker_id) VALUES (1, '2025-09-26T00:00:00.000Z', 'worker2')`,
+            ]);
+          }
+          await query1(['COMMIT']);
+          await query2(['COMMIT']);
+        });
+      });
+      assert.ok(true);
     });
 
     // test: job can timeout; timed out job is picked up by another worker
