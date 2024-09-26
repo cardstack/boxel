@@ -1938,7 +1938,7 @@ importers:
         specifier: ^6.1.5
         version: 6.1.5
 
-  packages/vscode-extension:
+  packages/vscode-boxel-tools:
     dependencies:
       matrix-js-sdk:
         specifier: ^31.0.0
