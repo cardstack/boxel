@@ -19,7 +19,7 @@
   "activationEvents": [
     "onAuthenticationRequest:synapse"
   ],
-  "main": "./out/src/extension",
+  "main": "./out/vscode-boxel-tools/src/extension",
   "contributes": {
     "commands": [
       {
