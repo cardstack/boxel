@@ -439,6 +439,7 @@ export class RealmFS implements vscode.FileSystemProvider {
 
   watch(_resource: vscode.Uri): vscode.Disposable {
     // ignore, fires for all changes...
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
     return new vscode.Disposable(() => {});
   }
 
