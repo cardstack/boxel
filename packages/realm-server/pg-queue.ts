@@ -246,9 +246,6 @@ export default class PgQueue implements Queue {
     await this.pgClient.withConnection(async (query) => {
       try {
         while (!workLoop.shuttingDown) {
-          // if (this.workerId === 'q2') {
-          //   await new Promise((resolve) => setTimeout(resolve, 100));
-          // }
           log.debug(`%s: processing jobs`, this.workerId);
 
           await query(['BEGIN']);
@@ -334,7 +331,6 @@ export default class PgQueue implements Queue {
             param(jobToRun.id),
           ])) as Pick<JobsTable, 'status'>[];
           if (jobStatus !== 'unfulfilled') {
-            // someone else processed our job, we're done
             log.debug(
               '%s: rolling back because our job is already marked done',
               this.workerId,
@@ -347,7 +343,6 @@ export default class PgQueue implements Queue {
             param(jobReservationId),
           ])) as unknown as (JobReservationsTable & { expired: boolean })[];
           if (jobReservation.completed_at) {
-            // someone else processed our job, we're done
             log.debug(
               '%s: rolling back because someone else processed our job',
               this.workerId,
@@ -364,7 +359,6 @@ export default class PgQueue implements Queue {
               param(jobReservationId),
             ])) as unknown as { total: number }[];
             if (total > 0) {
-              // someone else is processing our now-expired job, we're done
               log.debug(
                 '%s: rolling back because someone else has reserved our (timed-out) job',
                 this.workerId,
@@ -397,8 +391,10 @@ export default class PgQueue implements Queue {
         }
       } catch (e: any) {
         if (e.code === '40001') {
-          // transaction error due to concurrent update
-          log.debug(this.workerId, e);
+          log.debug(
+            `%s: detected concurrency conflict, rolling back`,
+            this.workerId,
+          );
           await query(['ROLLBACK']);
           return;
         }
