@@ -19,6 +19,6 @@
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"]
   },
-  "include": ["../base/**/*"],
+  "include": ["../base/**/*", "./src/**/*"],
   "exclude": ["node_modules", ".vscode-test"]
 }
