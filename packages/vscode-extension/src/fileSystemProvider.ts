@@ -5,7 +5,10 @@
 
 import * as path from "path";
 import * as vscode from "vscode";
-import { RealmAuthClient, RealmAuthMatrixClientInterface } from "./auth";
+import {
+  RealmAuthClient,
+  RealmAuthMatrixClientInterface,
+} from '@cardstack/runtime-common/realm-auth-client';
 import { SecretStorage } from "vscode";
 import { createClient } from "matrix-js-sdk";
 
