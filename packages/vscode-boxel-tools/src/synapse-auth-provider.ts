@@ -1,5 +1,5 @@
-import * as vscode from "vscode";
-import { createClient } from "matrix-js-sdk";
+import * as vscode from 'vscode';
+import { createClient } from 'matrix-js-sdk';
 
 interface AuthEntry {
   access_token: string;
@@ -9,22 +9,22 @@ interface AuthEntry {
 async function loginWithEmail(
   email: string,
   password: string,
-  matrixURL: string
+  matrixURL: string,
 ) {
-  matrixURL = matrixURL.endsWith("/") ? matrixURL : matrixURL + "/";
+  matrixURL = matrixURL.endsWith('/') ? matrixURL : matrixURL + '/';
   let response = await fetch(`${matrixURL}_matrix/client/v3/login`, {
-    method: "POST",
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       identifier: {
-        type: "m.id.thirdparty",
-        medium: "email",
+        type: 'm.id.thirdparty',
+        medium: 'email',
         address: email,
       },
       password,
-      type: "m.login.password",
+      type: 'm.login.password',
     }),
   });
   if (response.ok) {
@@ -39,7 +39,7 @@ async function loginWithEmail(
 }
 
 async function login(username: string, password: string, matrixUrl: string) {
-  console.log("Login with password", matrixUrl, username, password);
+  console.log('Login with password', matrixUrl, username, password);
   try {
     let client = createClient({
       baseUrl: matrixUrl,
@@ -47,15 +47,15 @@ async function login(username: string, password: string, matrixUrl: string) {
     let login = await client.loginWithPassword(username, password);
     return login;
   } catch (error) {
-    console.log("Login with password failed, trying login with email", error);
+    console.log('Login with password failed, trying login with email', error);
     let login = await loginWithEmail(username, password, matrixUrl);
     return login;
   }
 }
 
 export class SynapseAuthProvider implements vscode.AuthenticationProvider {
-  static id = "synapse";
-  label = "Synapse";
+  static id = 'synapse';
+  label = 'Synapse';
 
   private _sessions: vscode.AuthenticationSession[] = [];
   private _onDidChangeSessions =
@@ -69,7 +69,7 @@ export class SynapseAuthProvider implements vscode.AuthenticationProvider {
   }
 
   async clearAllSessions() {
-    await this.secretsStorage.store("synapse-sessions", "[]");
+    await this.secretsStorage.store('synapse-sessions', '[]');
     this._sessions = [];
     this._onDidChangeSessions.fire({
       added: [],
@@ -82,7 +82,7 @@ export class SynapseAuthProvider implements vscode.AuthenticationProvider {
     if (!this.sessionsLoaded) {
       this.sessionsLoaded = true;
       const existingSessions = await this.secretsStorage.get(
-        "synapse-sessions"
+        'synapse-sessions',
       );
       if (existingSessions) {
         this._sessions = JSON.parse(existingSessions);
@@ -94,16 +94,16 @@ export class SynapseAuthProvider implements vscode.AuthenticationProvider {
   async createSession(scopes: string[]): Promise<vscode.AuthenticationSession> {
     const { username, password } = await promptForCredentials();
     const matrixServer = vscode.workspace
-      .getConfiguration("boxelrealm")
-      .get("matrixServer") as string;
+      .getConfiguration('boxelrealm')
+      .get('matrixServer') as string;
     if (!matrixServer) {
-      throw new Error("No matrix server url found, please check your settings");
+      throw new Error('No matrix server url found, please check your settings');
     }
 
     const { access_token, user_id, device_id } = await login(
       username,
       password,
-      matrixServer
+      matrixServer,
     );
 
     const authToken = JSON.stringify({
@@ -124,8 +124,8 @@ export class SynapseAuthProvider implements vscode.AuthenticationProvider {
     this._sessions = [session];
 
     await this.secretsStorage.store(
-      "synapse-sessions",
-      JSON.stringify(this._sessions)
+      'synapse-sessions',
+      JSON.stringify(this._sessions),
     );
 
     this._onDidChangeSessions.fire({
@@ -139,18 +139,18 @@ export class SynapseAuthProvider implements vscode.AuthenticationProvider {
 
   async removeSession(sessionId: string): Promise<void> {
     const sessionsToRemove = this._sessions.filter(
-      (session) => session.id === sessionId
+      (session) => session.id === sessionId,
     );
     if (sessionsToRemove.length === 0) {
       return;
     }
     this._sessions = this._sessions.filter(
-      (session) => session.id !== sessionId
+      (session) => session.id !== sessionId,
     );
 
     await this.secretsStorage.store(
-      "synapse-sessions",
-      JSON.stringify(this._sessions)
+      'synapse-sessions',
+      JSON.stringify(this._sessions),
     );
 
     this._onDidChangeSessions.fire({
@@ -163,18 +163,18 @@ export class SynapseAuthProvider implements vscode.AuthenticationProvider {
 
 async function promptForCredentials() {
   const username = await vscode.window.showInputBox({
-    prompt: "Enter Matrix username",
+    prompt: 'Enter Matrix username',
   });
   if (!username) {
-    throw new Error("Username is required.");
+    throw new Error('Username is required.');
   }
 
   const password = await vscode.window.showInputBox({
-    prompt: "Enter Matrix password",
+    prompt: 'Enter Matrix password',
     password: true,
   });
   if (!password) {
-    throw new Error("Password is required.");
+    throw new Error('Password is required.');
   }
 
   return { username, password };
