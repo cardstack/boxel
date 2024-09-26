@@ -17,10 +17,7 @@
     }
   },
   "glint": {
-    "environment": ["ember-loose", "ember-template-imports"],
-    "transform": {
-      "include": ["../base/**", "./**", "../boxel-ui/addon/**"]
-    }
+    "environment": ["ember-loose", "ember-template-imports"]
   },
   "include": ["../base/**/*"],
   "exclude": ["node_modules", ".vscode-test"]
