@@ -1,4 +1,4 @@
-# Boxel VS Code Extension
+# Boxel Tools VS Code Extension
 
 This extension allows you to interact with your Boxel Realm from VS Code.
 
@@ -11,19 +11,19 @@ This extension allows you to interact with your Boxel Realm from VS Code.
 
 ## Setup
 
-This project uses volta for toolchain management, and npm for package management.
+This project uses volta for toolchain management, and pnpm for package management.
 
-Install dependencies with npm:
+Install dependencies with pnpm:
 
 ```bash
 
-npm install
+pnpm install
 ```
 
 Build the extension:
 
 ```bash
-npm run vscode:package
+pnpm run vscode:package
 ```
 
 ## Installation
