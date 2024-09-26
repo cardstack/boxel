@@ -1,17 +1,19 @@
-import Component from '@glimmer/component';
-import { action } from '@ember/object';
-import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
+import { CaretDown, IconX } from '@cardstack/boxel-ui/icons';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 import type {
-  Select,
   PowerSelectArgs,
+  Select,
 } from 'ember-power-select/components/power-select';
-import PowerSelectMultiple from 'ember-power-select/components/power-select-multiple';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
-import { IconX, CaretDown } from '@cardstack/boxel-ui/icons';
+import PowerSelectMultiple from 'ember-power-select/components/power-select-multiple';
 
 export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
+  describedBy?: string;
+  labelledBy?: string;
   options: ItemT[];
   selected: ItemT[];
 }
@@ -29,14 +31,12 @@ interface SelectAPI {
     close: () => void;
     open: () => void;
   };
-  isOpen: boolean;
 }
 
 export default class BoxelMultiSelect extends Component<Signature> {
   @tracked selectAPI: SelectAPI | null = null;
   @tracked showMore = false;
   @tracked visibleItemCount = 0;
-  @tracked isOpen = false;
 
   @action
   onClearAll() {
@@ -68,6 +68,8 @@ export default class BoxelMultiSelect extends Component<Signature> {
         @searchEnabled={{true}}
         @searchField='name'
         @beforeOptionsComponent={{component BeforeOptions}}
+        aria-labelledby={{@labelledBy}}
+        aria-describedby={{@describedBy}}
         as |option|
       >
         {{yield option}}
@@ -77,16 +79,18 @@ export default class BoxelMultiSelect extends Component<Signature> {
           {{if @selected.length "has-selections"}}'
       >
         {{#if @selected.length}}
-          <IconX
+          <button
+            type='button'
             {{on 'click' this.onClearAll}}
-            class='boxel-multi-select__clear-icon'
+            class='boxel-multi-select__icon-button boxel-multi-select__icon-button--clear'
             aria-label='clear all selections'
-          />
+          >
+            <IconX class='boxel-multi-select__icon' />
+          </button>
         {{else}}
-          <CaretDown
-            class='boxel-multi-select__caret-icon'
-            aria-label='toggle dropdown'
-          />
+          <span class='boxel-multi-select__icon-wrapper' aria-hidden='true'>
+            <CaretDown class='boxel-multi-select__icon' />
+          </span>
         {{/if}}
       </div>
     </div>
@@ -129,7 +133,17 @@ export default class BoxelMultiSelect extends Component<Signature> {
         margin-left: 10px;
       }
 
-      .boxel-multi-select__icons-wrapper {
+      .boxel-multi-select__icon-button {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0;
+      }
+
+      .boxel-multi-select__icon-wrapper {
+        display: flex;
+        align-items: center;
+        justify-content: center;
         position: absolute;
         right: 0;
         top: 0;
@@ -142,15 +156,29 @@ export default class BoxelMultiSelect extends Component<Signature> {
         pointer-events: none;
       }
 
+      .boxel-multi-select__icon {
+        width: 12px;
+        height: 12px;
+      }
+
+      .boxel-multi-select__icon-button--clear {
+        --icon-color: var(--boxel-multi-select-pill-color);
+      }
+
       .boxel-multi-select__icons-wrapper.has-selections {
         pointer-events: auto;
       }
 
-      .boxel-multi-select__clear-icon,
-      .boxel-multi-select__caret-icon {
-        width: 12px;
-        height: 12px;
+      .boxel-multi-select__clear-all,
+      .boxel-multi-select__caret {
+        position: relative;
+        border: none;
+        background: none;
+        padding: 0;
         cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
 
       .ember-power-select-multiple-options {
@@ -207,6 +235,16 @@ export default class BoxelMultiSelect extends Component<Signature> {
         .ember-power-select-option--no-matches-message {
         padding: var(--boxel-sp-xxs) var(--boxel-sp-sm);
       }
+
+      .boxel-multi-select__icon {
+        width: 12px;
+        height: 12px;
+        cursor: pointer;
+      }
+
+      .boxel-multi-select__icon--clear {
+        --icon-color: var(--boxel-multi-select-pill-color);
+      }
     </style>
   </template>
 }
@@ -242,7 +280,9 @@ class CustomSelectedItemComponent<ItemT> extends Component<
 
   get itemName() {
     return (item: ItemT) => {
-      if (!item) return;
+      if (!item) {
+        return;
+      }
       if (typeof item === 'object' && 'name' in item) {
         return String(item.name);
       }
@@ -281,7 +321,7 @@ class CustomSelectedItemComponent<ItemT> extends Component<
             {{this.itemName item}}
             <IconX
               {{on 'click' (fn this.removeItem item)}}
-              class='boxel-multi-select__remove-icon'
+              class='boxel-multi-select__icon boxel-multi-select__icon--remove'
               aria-label='remove item'
             />
           </span>
@@ -294,7 +334,7 @@ class CustomSelectedItemComponent<ItemT> extends Component<
             more
             <IconX
               {{on 'click' this.removeExcessItems}}
-              class='boxel-multi-select__remove-icon'
+              class='boxel-multi-select__icon boxel-multi-select__icon--remove'
               aria-label='remove item'
             />
           </span>
@@ -305,7 +345,7 @@ class CustomSelectedItemComponent<ItemT> extends Component<
     {{/if}}
 
     <style scoped>
-      .boxel-multi-select__remove-icon {
+      .boxel-multi-select__icon--remove {
         width: 8px;
         height: 8px;
         cursor: pointer;

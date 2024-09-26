@@ -60,11 +60,7 @@ class AssigneePill extends Component<AssigneePillArgs> {
   <template>
     <span class='assignee-pill'>
       <label class='checkbox-label'>
-        <input
-          type='checkbox'
-          checked={{@isSelected}}
-          aria-label='Select {{@option.name}}'
-        />
+        <input type='checkbox' checked={{@isSelected}} />
         <span class='visually-hidden'>Select {{@option.name}}</span>
       </label>
 
@@ -186,6 +182,8 @@ export default class BoxelMultiSelectUsage extends Component {
             @dropdownClass='boxel-multi-select-usage'
             @matchTriggerWidth={{this.matchTriggerWidth}}
             @selectedItemComponent={{component CustomPill}}
+            @labelledBy='multi-select-label'
+            @describedBy='multi-select-description'
             as |item|
           >
             <CustomPill @option={{item}} />
@@ -277,7 +275,6 @@ export default class BoxelMultiSelectUsage extends Component {
       <FreestyleUsage @name='Assignee Multi Select'>
         <:example>
           <BoxelMultiSelect
-            aria-labelledby='assignee-multi-select-label'
             @placeholder='Select assignees'
             @selected={{this.selectedAssignees}}
             @onChange={{this.onSelectAssignees}}
