@@ -243,8 +243,8 @@ jobs:
           path: /tmp/server.log
           retention-days: 30
 
-  vscode-extension-test:
-    name: VS Code Extension test (not really)
+  boxel-tools-build:
+    name: Boxel Tools VS Code Extension build
     runs-on: ubuntu-latest
     concurrency:
       group: vscode-extension-test-${{ github.head_ref || github.run_id }}
