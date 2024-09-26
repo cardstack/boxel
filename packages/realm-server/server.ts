@@ -10,7 +10,7 @@ import {
   createResponse,
   type VirtualNetwork,
   type DBAdapter,
-  type Queue,
+  type QueuePublisher,
   type RealmPermissions,
 } from '@cardstack/runtime-common';
 import { ensureDirSync, writeJSONSync, readdirSync, copySync } from 'fs-extra';
@@ -80,7 +80,7 @@ export class RealmServer {
   private secretSeed: string;
   private realmsRootPath: string;
   private dbAdapter: DBAdapter;
-  private queue: Queue;
+  private queue: QueuePublisher;
   private assetsURL: URL;
   private getIndexHTML: () => Promise<string>;
   private serverURL: URL;
@@ -112,7 +112,7 @@ export class RealmServer {
     secretSeed: string;
     realmsRootPath: string;
     dbAdapter: DBAdapter;
-    queue: Queue;
+    queue: QueuePublisher;
     assetsURL: URL;
     getIndexHTML: () => Promise<string>;
     seedPath?: string;

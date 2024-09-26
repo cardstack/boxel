@@ -1,7 +1,8 @@
 import debounce from 'lodash/debounce';
 
 import {
-  type Queue,
+  type QueueRunner,
+  type QueuePublisher,
   type PgPrimitive,
   Job,
   Deferred,
@@ -9,7 +10,7 @@ import {
 
 let id = 0;
 
-export class BrowserQueue implements Queue {
+export class BrowserQueue implements QueuePublisher, QueueRunner {
   #isDestroyed = false;
   #hasStarted = false;
   #flush: Promise<void> | undefined;
