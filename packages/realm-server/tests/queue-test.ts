@@ -59,19 +59,19 @@ module('queue', function (hooks) {
     test('jobs are processed serially within a particular queue across different queue clients', async function (assert) {
       let events: string[] = [];
 
-      let count = async (jobNum: number) => {
+      let logJob = async (jobNum: number) => {
         events.push(`job${jobNum} start`);
         await new Promise((r) => setTimeout(r, 500));
         events.push(`job${jobNum} finish`);
       };
 
-      queue.register('count', count);
-      queue2.register('count', count);
+      queue.register('logJob', logJob);
+      queue2.register('logJob', logJob);
 
-      let promiseForJob1 = queue.publish('count', 'count-group', 5000, 1);
+      let promiseForJob1 = queue.publish('logJob', 'log-group', 5000, 1);
       // start the 2nd job before the first job finishes
       await new Promise((r) => setTimeout(r, 100));
-      let promiseForJob2 = queue2.publish('count', 'count-group', 5000, 2);
+      let promiseForJob2 = queue2.publish('logJob', 'log-group', 5000, 2);
       let [job1, job2] = await Promise.all([promiseForJob1, promiseForJob2]);
 
       await Promise.all([job1.done, job2.done]);
