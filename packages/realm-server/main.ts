@@ -171,7 +171,7 @@ let dist: URL = new URL(distURL);
 (async () => {
   let realms: Realm[] = [];
   let dbAdapter = new PgAdapter();
-  let queue = new PgQueue(dbAdapter);
+  let queue = new PgQueue(dbAdapter, 'worker-id-here');
   let manager = new RunnerOptionsManager();
   let { getIndexHTML } = await makeFastBootIndexRunner(
     dist,

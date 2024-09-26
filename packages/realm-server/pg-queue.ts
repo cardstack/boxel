@@ -259,13 +259,19 @@ export default class PgQueue implements Queue {
               ),
               valid_reservations AS (
                 SELECT * FROM job_reservations WHERE locked_until > NOW() AND completed_at IS NULL
+              ),
+              active_concurrency_groups AS (
+                SELECT DISTINCT j.concurrency_group FROM jobs j, valid_reservations v WHERE v.job_id = j.id
             )
             SELECT j.* FROM pending_jobs j
-            WHERE j.id NOT IN (
-              SELECT job_id FROM valid_reservations
-            )
-            ORDER BY j.created_at
-            LIMIT 1`,
+              WHERE j.id NOT IN (
+                SELECT job_id FROM valid_reservations
+              )
+              AND j.concurrency_group NOT IN (
+                SELECT concurrency_group FROM active_concurrency_groups
+              )
+              ORDER BY j.created_at
+              LIMIT 1`,
           ])) as unknown as JobsTable[];
           if (jobs.length === 0) {
             log.debug(`%s: found no work`, this.workerId);

@@ -56,6 +56,33 @@ module('queue', function (hooks) {
       await queue2.destroy();
     });
 
+    test('jobs in different concurrency groups can run in parallel', async function (assert) {
+      let events: string[] = [];
+
+      let logJob = async (jobNum: number) => {
+        events.push(`job${jobNum} start`);
+        await new Promise((r) => setTimeout(r, 500));
+        events.push(`job${jobNum} finish`);
+      };
+
+      queue.register('logJob', logJob);
+      queue2.register('logJob', logJob);
+
+      let promiseForJob1 = queue.publish('logJob', 'log-group', 5000, 1);
+      // start the 2nd job before the first job finishes
+      await new Promise((r) => setTimeout(r, 100));
+      let promiseForJob2 = queue2.publish('logJob', 'other-group', 5000, 2);
+      let [job1, job2] = await Promise.all([promiseForJob1, promiseForJob2]);
+
+      await Promise.all([job1.done, job2.done]);
+      assert.deepEqual(events, [
+        'job1 start',
+        'job2 start',
+        'job1 finish',
+        'job2 finish',
+      ]);
+    });
+
     test('jobs are processed serially within a particular queue across different queue clients', async function (assert) {
       let events: string[] = [];
 
@@ -83,38 +110,37 @@ module('queue', function (hooks) {
       ]);
     });
 
-    // test: job can timeout; timed out job is picked up by another worker
-    // test: jobs can be run concurrently if they have different concurrency group values
-    // test: completed jobs are not re-run
-
-    test('different queues are processed concurrently across different queue clients', async function (assert) {
-      assert.expect(3);
-      let completedCount = 0;
-      let count = async (expectedCompletedCount: number) => {
-        assert.strictEqual(
-          completedCount,
-          expectedCompletedCount,
-          `the expected completed count before job run, ${expectedCompletedCount}, is correct`,
-        );
-        await new Promise((r) => setTimeout(r, 500));
-        completedCount++;
+    test('job can timeout; timed out job is picked up by another worker', async function (assert) {
+      let events: string[] = [];
+      let runs = 0;
+      let logJob = async () => {
+        let me = runs;
+        events.push(`job${me} start`);
+        if (runs++ === 0) {
+          await new Promise((r) => setTimeout(r, 2000));
+        }
+        events.push(`job${me} finish`);
+        return me;
       };
 
-      queue.register('count', count);
-      queue2.register('count', count);
+      queue.register('logJob', logJob);
+      queue2.register('logJob', logJob);
 
-      let [job1, job2] = await Promise.all([
-        queue.publish('count', 'count-group', 5, 0),
-        queue2.publish('count', 'count-group', 5, 0),
-      ]);
+      let job = await queue.publish('logJob', 'log-group', 1, null);
 
-      await Promise.all([job2.done, job1.done]);
+      // just after our job has timed out, kick the queue so that another worker
+      // will notice it. Otherwise we'd be stuck until the polling comes around.
+      await new Promise((r) => setTimeout(r, 1100));
+      await adapter.execute('NOTIFY jobs');
 
-      assert.strictEqual(
-        completedCount,
-        2,
-        'the expected completed count after all jobs have run, 2, is correct',
-      );
+      let result = await job.done;
+
+      assert.strictEqual(result, 1);
+
+      // at this point the long-running first job is still stuck. it will
+      // eventually also log "job0 finish", but that is absorbed by our test
+      // afterEach
+      assert.deepEqual(events, ['job0 start', 'job1 start', 'job1 finish']);
     });
   });
 });

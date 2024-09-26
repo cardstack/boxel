@@ -103,7 +103,7 @@ export function setupDB(
   const runBeforeHook = async () => {
     prepareTestDB();
     dbAdapter = new PgAdapter();
-    queue = new PgQueue(dbAdapter);
+    queue = new PgQueue(dbAdapter, 'worker-id-here');
   };
 
   const runAfterHook = async () => {
