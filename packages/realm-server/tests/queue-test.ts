@@ -8,6 +8,7 @@ import { type Queue } from '@cardstack/runtime-common';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
 import queueTests from '@cardstack/runtime-common/tests/queue-test';
 import { assert } from '@ember/debug';
+import { kMaxLength } from 'buffer';
 
 module('queue', function (hooks) {
   let queue: Queue;
@@ -17,7 +18,7 @@ module('queue', function (hooks) {
     prepareTestDB();
     adapter = new PgAdapter();
     queue = new PgQueue(adapter, 'q1');
-    // await queue.start();
+    await queue.start();
   });
 
   hooks.afterEach(async function () {
@@ -44,7 +45,7 @@ module('queue', function (hooks) {
     nestedHooks.beforeEach(async function () {
       adapter2 = new PgAdapter();
       queue2 = new PgQueue(adapter2, 'q2');
-      // await queue2.start();
+      await queue2.start();
 
       // Because we need tight timing control for this test, we don't want any
       // concurrent migrations and their retries altering the timing. This
@@ -57,58 +58,32 @@ module('queue', function (hooks) {
       await queue2.destroy();
     });
 
-    test('jobs are processed serially within a particular queue across different queue clients', async function (assert) {
-      assert.expect(8);
-      let startedCount = 0;
-      let completedCount = 0;
-      let count = async (expectedStartedCount: number) => {
-        assert.strictEqual(
-          startedCount,
-          expectedStartedCount,
-          `For Queue #${
-            expectedStartedCount + 1
-          }, the expected started count before job run, ${expectedStartedCount}, is correct`,
-        );
-        assert.strictEqual(
-          completedCount,
-          expectedStartedCount,
-          `For Queue #${
-            expectedStartedCount + 1
-          }, the expected completed count before job run, ${expectedStartedCount}, is correct`,
-        );
-        startedCount++;
+    // eslint-disable-next-line qunit/no-only
+    test.only('jobs are processed serially within a particular queue across different queue clients', async function (assert) {
+      let events: string[] = [];
+
+      let count = async (jobNum: number) => {
+        events.push(`job${jobNum} start`);
         await new Promise((r) => setTimeout(r, 500));
-        completedCount++;
-        assert.strictEqual(
-          startedCount,
-          expectedStartedCount + 1,
-          `For Queue #${
-            expectedStartedCount + 1
-          }, the expected started count after job run, ${
-            expectedStartedCount + 1
-          }, is correct`,
-        );
-        assert.strictEqual(
-          completedCount,
-          expectedStartedCount + 1,
-          `For Queue #${
-            expectedStartedCount + 1
-          }, the expected completed count after job run, ${
-            expectedStartedCount + 1
-          }, is correct`,
-        );
+        events.push(`job${jobNum} finish`);
       };
 
       queue.register('count', count);
       queue2.register('count', count);
 
-      let promiseForJob1 = queue.publish('count', 'count-group', 5, 0);
+      let promiseForJob1 = queue.publish('count', 'count-group', 5000, 1);
       // start the 2nd job before the first job finishes
       await new Promise((r) => setTimeout(r, 100));
-      let promiseForJob2 = queue2.publish('count', 'count-group', 5, 1);
+      let promiseForJob2 = queue2.publish('count', 'count-group', 5000, 2);
       let [job1, job2] = await Promise.all([promiseForJob1, promiseForJob2]);
 
       await Promise.all([job1.done, job2.done]);
+      assert.deepEqual(events, [
+        'job1 start',
+        'job1 finish',
+        'job2 start',
+        'job2 finish',
+      ]);
     });
 
     test('transaction level behavior', async function (assert) {
@@ -137,8 +112,7 @@ module('queue', function (hooks) {
       await adapter2.execute('COMMIT');
     });
 
-    // eslint-disable-next-line qunit/no-only
-    test.only('transaction level behavior withConnection', async function (assert) {
+    test('transaction level behavior withConnection', async function (assert) {
       await adapter.execute(
         `INSERT INTO jobs (job_type, concurrency_group, timeout, status, args) VALUES ('hello', 'hello', 50000, 'unfulfilled', '{}'::jsonb)`,
       );

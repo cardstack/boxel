@@ -250,7 +250,11 @@ export default class PgQueue implements Queue {
     await this.pgClient.withConnection(async (query) => {
       try {
         while (!workLoop.shuttingDown) {
+          // if (this.workerId === 'q2') {
+          //   await new Promise((resolve) => setTimeout(resolve, 100));
+          // }
           log.debug(`%s: processing jobs`, this.workerId);
+
           await query(['BEGIN']);
           await query(['SET TRANSACTION ISOLATION LEVEL SERIALIZABLE']);
           let allJobs = await query(['SELECT * FROM jobs']);
@@ -258,6 +262,7 @@ export default class PgQueue implements Queue {
             'SELECT * FROM job_reservations',
           ]);
           console.log({ worker: this.workerId, allJobs, allJobReservations });
+
           let jobs = (await query([
             // find the queue with the oldest job that isn't running and lock it.
             `WITH
@@ -285,22 +290,23 @@ export default class PgQueue implements Queue {
             this.workerId,
             jobToRun.id,
           );
-          let { nameExpressions, valueExpressions } = asExpressions({
-            job_id: jobToRun.id,
-            locked_until: new Date(Date.now() + jobToRun.timeout),
-            worker_id: this.workerId,
-          } as Pick<
-            JobReservationsTable,
-            'job_id' | 'locked_until' | 'worker_id'
-          >);
+
           let [{ id: jobReservationId }] = (await this.query([
-            'INSERT INTO job_reservations',
-            ...addExplicitParens(separatedByCommas(nameExpressions)),
-            'VALUES',
-            ...addExplicitParens(separatedByCommas(valueExpressions)),
-            'RETURNING id',
+            'INSERT INTO job_reservations (job_id, locked_until, worker_id) values (',
+            ...separatedByCommas([
+              [param(jobToRun.id)],
+              [
+                '(',
+                param(jobToRun.timeout),
+                ` || ' seconds')::interval + now()`,
+              ],
+              [param(this.workerId)],
+            ]),
+            ') RETURNING id',
           ] as Expression)) as Pick<JobReservationsTable, 'id'>[];
+
           await query(['COMMIT']); // this should fail in the case of a concurrency conflict
+
           log.debug(
             `%s: claimed job %s, reservation %s`,
             this.workerId,
@@ -338,15 +344,23 @@ export default class PgQueue implements Queue {
           ])) as Pick<JobsTable, 'status'>[];
           if (jobStatus !== 'unfulfilled') {
             // someone else processed our job, we're done
+            log.debug(
+              '%s: rolling back because our job is already marked done',
+              this.workerId,
+            );
             await query(['ROLLBACK']);
             return;
           }
           let [jobReservation] = (await query([
-            'SELECT *, locked_until > NOW() as expired FROM job_reservations WHERE id = ',
+            'SELECT *, locked_until < NOW() as expired FROM job_reservations WHERE id = ',
             param(jobReservationId),
           ])) as unknown as (JobReservationsTable & { expired: boolean })[];
           if (jobReservation.completed_at) {
             // someone else processed our job, we're done
+            log.debug(
+              '%s: rolling back because someone else processed our job',
+              this.workerId,
+            );
             await query(['ROLLBACK']);
             return;
           }
@@ -360,6 +374,10 @@ export default class PgQueue implements Queue {
             ])) as unknown as { total: number }[];
             if (total > 0) {
               // someone else is processing our now-expired job, we're done
+              log.debug(
+                '%s: rolling back because someone else has reserved our (timed-out) job',
+                this.workerId,
+              );
               await query(['ROLLBACK']);
               return;
             }
