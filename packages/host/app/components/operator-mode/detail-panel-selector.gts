@@ -282,7 +282,7 @@ export default class Selector extends Component<Signature> {
         }
 
         .exported {
-          font-weight: 700;
+          font-weight: 600;
         }
 
         .non-exported {

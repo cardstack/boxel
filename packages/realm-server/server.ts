@@ -13,14 +13,7 @@ import {
   type Queue,
   type RealmPermissions,
 } from '@cardstack/runtime-common';
-import {
-  ensureDirSync,
-  writeJSONSync,
-  readFileSync,
-  existsSync,
-  readdirSync,
-  copySync,
-} from 'fs-extra';
+import { ensureDirSync, writeJSONSync, readdirSync, copySync } from 'fs-extra';
 import { setupCloseHandler } from './node-realm';
 import {
   livenessCheck,
@@ -80,7 +73,7 @@ const IGNORE_SEED_FILES = [
 ];
 
 export class RealmServer {
-  private log = logger('realm:requests');
+  private log = logger('realm-server');
   private realms: Realm[];
   private virtualNetwork: VirtualNetwork;
   private matrixClient: MatrixClient;
@@ -93,7 +86,9 @@ export class RealmServer {
   private serverURL: URL;
   private seedPath: string | undefined;
   private matrixRegistrationSecret: string | undefined;
-  private matrixRegistrationSecretFile: string | undefined;
+  private getRegistrationSecret:
+    | (() => Promise<string | undefined>)
+    | undefined;
 
   constructor({
     serverURL,
@@ -107,7 +102,7 @@ export class RealmServer {
     assetsURL,
     getIndexHTML,
     matrixRegistrationSecret,
-    matrixRegistrationSecretFile,
+    getRegistrationSecret,
     seedPath,
   }: {
     serverURL: URL;
@@ -122,11 +117,11 @@ export class RealmServer {
     getIndexHTML: () => Promise<string>;
     seedPath?: string;
     matrixRegistrationSecret?: string;
-    matrixRegistrationSecretFile?: string;
+    getRegistrationSecret?: () => Promise<string | undefined>;
   }) {
-    if (!matrixRegistrationSecret && !matrixRegistrationSecretFile) {
+    if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
-        `'matrixRegistrationSecret' or 'matrixRegistrationSecretFile' must be specified`,
+        `'matrixRegistrationSecret' or 'getRegistrationSecret' must be specified`,
       );
     }
     detectRealmCollision(realms);
@@ -143,7 +138,7 @@ export class RealmServer {
     this.assetsURL = assetsURL;
     this.getIndexHTML = getIndexHTML;
     this.matrixRegistrationSecret = matrixRegistrationSecret;
-    this.matrixRegistrationSecretFile = matrixRegistrationSecretFile;
+    this.getRegistrationSecret = getRegistrationSecret;
     this.realms = [...realms, ...this.loadRealms()];
   }
 
@@ -188,6 +183,7 @@ export class RealmServer {
       .use(this.serveFromRealm);
 
     app.on('error', (err, ctx) => {
+      console.error(`Unhandled server error`, err);
       Sentry.withScope((scope) => {
         scope.setSDKProcessingMetadata({ request: ctx.request });
         Sentry.captureException(err);
@@ -248,9 +244,14 @@ export class RealmServer {
     );
 
     return async (ctxt: Koa.Context, _next: Koa.Next) => {
-      let request = await fetchRequestFromContext(ctxt);
-      let response = await matrixBackendAuthentication.createSession(request);
-      await setContextResponse(ctxt, response);
+      try {
+        let request = await fetchRequestFromContext(ctxt);
+        let response = await matrixBackendAuthentication.createSession(request);
+        await setContextResponse(ctxt, response);
+      } catch (e: any) {
+        console.error(`Exception while creating a session on realm server`, e);
+        await sendResponseForSystemError(ctxt, `${e.message}: at ${e.stack}`);
+      }
     };
   }
 
@@ -337,10 +338,19 @@ export class RealmServer {
         return;
       }
 
-      let realmName = json.data.attributes.name;
-      let realm: Realm;
+      let realm: Realm | undefined;
+      let start = Date.now();
+      let indexStart: number | undefined;
       try {
-        realm = await this.createRealm(ownerUserId, realmName);
+        realm = await this.createRealm({
+          ownerUserId,
+          ...json.data.attributes,
+        });
+        this.log.debug(
+          `created new realm ${realm.url} in ${Date.now() - start} ms`,
+        );
+        this.log.debug(`indexing new realm ${realm.url}`);
+        indexStart = Date.now();
         await realm.start();
       } catch (e: any) {
         if ('status' in e && e.status === 400) {
@@ -349,6 +359,14 @@ export class RealmServer {
           await sendResponseForSystemError(ctxt, `${e.message}: at ${e.stack}`);
         }
         return;
+      } finally {
+        if (realm != null && indexStart != null) {
+          this.log.debug(
+            `indexing of new realm ${realm.url} ended in ${
+              Date.now() - indexStart
+            } ms`,
+          );
+        }
       }
 
       let response = createResponse({
@@ -357,9 +375,7 @@ export class RealmServer {
             data: {
               type: 'realm',
               id: realm.url,
-              attributes: {
-                name: realmName,
-              },
+              attributes: { ...json.data.attributes },
             },
           },
           null,
@@ -405,10 +421,19 @@ export class RealmServer {
     }
   }
 
-  private async createRealm(
-    ownerUserId: string, // note matrix userIDs look like "@mango:boxel.ai"
-    realmName: string,
-  ): Promise<Realm> {
+  private async createRealm({
+    ownerUserId,
+    endpoint,
+    name,
+    backgroundURL,
+    iconURL,
+  }: {
+    ownerUserId: string; // note matrix userIDs look like "@mango:boxel.ai"
+    endpoint: string;
+    name: string;
+    backgroundURL?: string;
+    iconURL?: string;
+  }): Promise<Realm> {
     if (
       this.realms.find(
         (r) => new URL(r.url).href.replace(/\/$/, '') === new URL(r.url).origin,
@@ -419,10 +444,10 @@ export class RealmServer {
         `Cannot create a realm: a realm is already mounted at the origin of this server`,
       );
     }
-    if (!realmName.match(/^[a-z0-9-]+$/)) {
+    if (!endpoint.match(/^[a-z0-9-]+$/)) {
       throw errorWithStatus(
         400,
-        `realm name '${realmName}' contains invalid characters`,
+        `realm endpoint '${endpoint}' contains invalid characters`,
       );
     }
 
@@ -431,7 +456,7 @@ export class RealmServer {
       `${this.serverURL.pathname.replace(
         /\/$/,
         '',
-      )}/${ownerUsername}/${realmName}/`,
+      )}/${ownerUsername}/${endpoint}/`,
       this.serverURL,
     ).href;
 
@@ -443,27 +468,30 @@ export class RealmServer {
       );
     }
 
-    let realmPath = resolve(
-      join(this.realmsRootPath, ownerUsername, realmName),
-    );
+    let realmPath = resolve(join(this.realmsRootPath, ownerUsername, endpoint));
     ensureDirSync(realmPath);
     let adapter = new NodeAdapter(resolve(String(realmPath)));
 
-    let username = `realm/${ownerUsername}_${realmName}`;
+    let username = `realm/${ownerUsername}_${endpoint}`;
     let { userId } = await registerUser({
       matrixURL: this.matrixClient.matrixURL,
       displayname: username,
       username,
       password: await passwordFromSeed(username, this.secretSeed),
-      registrationSecret: this.getMatrixRegistrationSecret(),
+      registrationSecret: await this.getMatrixRegistrationSecret(),
     });
+    this.log.debug(`created realm bot user '${userId}' for new realm ${url}`);
 
     await insertPermissions(this.dbAdapter, new URL(url), {
       [userId]: DEFAULT_PERMISSIONS,
       [ownerUserId]: DEFAULT_PERMISSIONS,
     });
 
-    writeJSONSync(join(realmPath, '.realm.json'), { name: realmName });
+    writeJSONSync(join(realmPath, '.realm.json'), {
+      name,
+      ...(iconURL ? { iconURL } : {}),
+      ...(backgroundURL ? { backgroundURL } : {}),
+    });
     if (this.seedPath) {
       let ignoreList = IGNORE_SEED_FILES.map((file) =>
         join(this.seedPath!.replace(/\/$/, ''), file),
@@ -473,6 +501,7 @@ export class RealmServer {
           return !ignoreList.includes(src);
         },
       });
+      this.log.debug(`seed files for new realm ${url} copied to ${realmPath}`);
     }
 
     let realm = new Realm({
@@ -555,15 +584,12 @@ export class RealmServer {
   // client tests leverage a synapse instance that changes multiple times per
   // realm lifespan, and each new synapse instance has a unique registration
   // secret
-  private getMatrixRegistrationSecret() {
-    if (
-      this.matrixRegistrationSecretFile &&
-      existsSync(this.matrixRegistrationSecretFile)
-    ) {
-      let secret = readFileSync(this.matrixRegistrationSecretFile, 'utf8');
+  private async getMatrixRegistrationSecret() {
+    if (this.getRegistrationSecret) {
+      let secret = await this.getRegistrationSecret();
       if (!secret) {
         throw new Error(
-          `The matrix registration secret file '${this.matrixRegistrationSecretFile}' is empty`,
+          `the getRegistrationSecret() function returned no secret`,
         );
       }
       return secret;
@@ -573,7 +599,7 @@ export class RealmServer {
       return this.matrixRegistrationSecret;
     }
 
-    throw new Error('Can not determine the matrix registration secret');
+    throw new Error(`Can not determine the matrix registration secret`);
   }
 }
 
@@ -605,7 +631,10 @@ interface RealmCreationJSON {
   data: {
     type: 'realm';
     attributes: {
+      endpoint: string;
       name: string;
+      backgroundURL?: string;
+      iconURL?: string;
     };
   };
 }
@@ -637,7 +666,23 @@ function assertIsRealmCreationJSON(
   }
   let { attributes } = data;
   if (!('name' in attributes) || typeof attributes.name !== 'string') {
-    throw new Error(`json.data.attributes.name must be a string`);
+    throw new Error(
+      `json.data.attributes.name is required and must be a string`,
+    );
+  }
+  if (!('endpoint' in attributes) || typeof attributes.endpoint !== 'string') {
+    throw new Error(
+      `json.data.attributes.endpoint is required and must be a string`,
+    );
+  }
+  if (
+    'backgroundURL' in attributes &&
+    typeof attributes.backgroundURL !== 'string'
+  ) {
+    throw new Error(`json.data.attributes.backgroundURL must be a string`);
+  }
+  if ('iconURL' in attributes && typeof attributes.iconURL !== 'string') {
+    throw new Error(`json.data.attributes.iconURL must be a string`);
   }
 }
 

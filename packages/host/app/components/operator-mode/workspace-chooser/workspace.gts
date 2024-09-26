@@ -1,17 +1,12 @@
 import { on } from '@ember/modifier';
-import { getOwner } from '@ember/owner';
+import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
-import { restartableTask } from 'ember-concurrency';
-
-import perform from 'ember-concurrency/helpers/perform';
-
 import { cssVar } from '@cardstack/boxel-ui/helpers';
 import { Lock } from '@cardstack/boxel-ui/icons';
 
-import { StackItem } from '@cardstack/host/lib/stack-item';
 import CardService from '@cardstack/host/services/card-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RealmService from '@cardstack/host/services/realm';
@@ -28,7 +23,7 @@ export default class Workspace extends Component<Signature> {
     <button
       class='workspace'
       data-test-workspace={{this.name}}
-      {{on 'click' (perform this.openWorkspace)}}
+      {{on 'click' this.openWorkspace}}
     >
       <div
         class='icon'
@@ -60,7 +55,8 @@ export default class Workspace extends Component<Signature> {
         background-color: var(--boxel-500);
         background-image: var(--workspace-background-image-url);
         background-position: center;
-        background-size: contain;
+        background-size: cover;
+        background-repeat: no-repeat;
 
         position: relative;
         height: 142px;
@@ -137,25 +133,7 @@ export default class Workspace extends Component<Signature> {
     return this.backgroundURL ? `url(${this.backgroundURL})` : '';
   }
 
-  private openWorkspace = restartableTask(async () => {
-    let card = await this.cardService.getCard(this.args.realmURL);
-    let stackItem = new StackItem({
-      owner: this,
-      card,
-      format: 'isolated',
-      stackIndex: 0,
-    });
-    await stackItem.ready();
-    this.operatorModeStateService.clearStacks();
-    this.operatorModeStateService.addItemToStack(stackItem);
-
-    let cardController = getOwner(this)!.lookup('controller:card') as any;
-    if (!cardController) {
-      throw new Error(
-        'Workspace component must be used in the context of a CardController',
-      );
-    }
-
-    cardController.workspaceChooserOpened = false;
-  });
+  @action openWorkspace() {
+    this.operatorModeStateService.openWorkspace.perform(this.args.realmURL);
+  }
 }

@@ -51,7 +51,7 @@ const CardCatalogResultsHeader: TemplateOnlyComponent<Signature> = <template>
     }
     .realm-name {
       display: inline-block;
-      font: 700 var(--boxel-font);
+      font: 600 var(--boxel-font);
     }
     .results-count {
       display: inline-block;

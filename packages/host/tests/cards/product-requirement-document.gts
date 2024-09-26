@@ -205,7 +205,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
       }
       h1 {
         margin: 0;
-        font-weight: 700;
+        font-weight: 600;
         font-size: 1.5rem;
         letter-spacing: var(--boxel-lsp-xs);
       }
@@ -216,7 +216,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
       }
       summary {
         margin: 0;
-        font: 700 var(--boxel-font);
+        font: 600 var(--boxel-font);
         letter-spacing: var(--boxel-lsp-xs);
       }
       summary:hover {
@@ -239,7 +239,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
       }
       .error {
         color: var(--boxel-danger);
-        font-weight: 700;
+        font-weight: 600;
       }
     </style>
   </template>

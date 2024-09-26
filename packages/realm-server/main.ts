@@ -1,9 +1,11 @@
+import './instrument';
 import './setup-logger'; // This should be first
 import {
   Realm,
   VirtualNetwork,
   logger,
   RunnerOptionsManager,
+  Deferred,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
@@ -13,28 +15,12 @@ import { spawn } from 'child_process';
 import { makeFastBootIndexRunner } from './fastboot';
 import { shimExternals } from './lib/externals';
 import * as Sentry from '@sentry/node';
-import { setErrorReporter } from '@cardstack/runtime-common/realm';
 import PgAdapter from './pg-adapter';
 import PgQueue from './pg-queue';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import flattenDeep from 'lodash/flattenDeep';
 
 let log = logger('main');
-const SEED_REALM_USERNAME = 'seed_realm';
-
-if (process.env.REALM_SENTRY_DSN) {
-  log.info('Setting up Sentry.');
-  Sentry.init({
-    dsn: process.env.REALM_SENTRY_DSN,
-    environment: process.env.REALM_SENTRY_ENVIRONMENT || 'development',
-  });
-
-  setErrorReporter(Sentry.captureException);
-} else {
-  log.warn(
-    `No REALM_SENTRY_DSN environment variable found, skipping Sentry setup.`,
-  );
-}
 
 const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
 if (!REALM_SECRET_SEED) {
@@ -79,7 +65,8 @@ let {
   fromUrl: fromUrls,
   toUrl: toUrls,
   username: usernames,
-  matrixRegistrationSecretFile,
+  useRegistrationSecretFunction,
+  seedPath,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
   .options({
@@ -117,6 +104,11 @@ let {
         'the URL of a deployed host app. (This can be provided instead of the --distPath)',
       type: 'string',
     },
+    seedPath: {
+      description:
+        'the path of the seed realm which is used to seed new realms',
+      type: 'string',
+    },
     matrixURL: {
       description: 'The matrix homeserver for the realm',
       demandOption: true,
@@ -127,10 +119,10 @@ let {
       demandOption: true,
       type: 'array',
     },
-    matrixRegistrationSecretFile: {
+    useRegistrationSecretFunction: {
       description:
-        "The path to a file that contains the matrix registration secret (used for matrix tests where the registration secret changes during the realm server's lifespan)",
-      type: 'string',
+        'The flag should be set when running matrix tests where the synapse instance is torn down and restarted multiple times during the life of the realm server.',
+      type: 'boolean',
     },
   })
   .parseSync();
@@ -155,9 +147,9 @@ if (paths.length !== usernames.length) {
   process.exit(-1);
 }
 
-if (!matrixRegistrationSecretFile && !MATRIX_REGISTRATION_SHARED_SECRET) {
+if (!useRegistrationSecretFunction && !MATRIX_REGISTRATION_SHARED_SECRET) {
   console.error(
-    `The MATRIX_REGISTRATION_SHARED_SECRET environment variable is not set. Please make sure this env var has a value (or specify --matrixRegistrationSecretFile)`,
+    `The MATRIX_REGISTRATION_SHARED_SECRET environment variable is not set. Please make sure this env var has a value (or specify --useRegistrationSecretFunction)`,
   );
   process.exit(-1);
 }
@@ -188,7 +180,6 @@ let dist: URL = new URL(distURL);
 
   await startWorker();
 
-  let seedPath: string | undefined;
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
 
@@ -196,9 +187,6 @@ let dist: URL = new URL(distURL);
     if (username.length === 0) {
       console.error(`missing username for realm ${url}`);
       process.exit(-1);
-    }
-    if (username === SEED_REALM_USERNAME) {
-      seedPath = resolve(String(path));
     }
 
     let realmAdapter = new NodeAdapter(resolve(String(path)));
@@ -229,6 +217,18 @@ let dist: URL = new URL(distURL);
     username: REALM_SERVER_MATRIX_USERNAME,
     seed: REALM_SECRET_SEED,
   });
+
+  let registrationSecretDeferred: Deferred<string>;
+  async function getRegistrationSecret() {
+    if (process.send) {
+      registrationSecretDeferred = new Deferred();
+      process.send('get-registration-secret');
+      return registrationSecretDeferred.promise;
+    } else {
+      return undefined;
+    }
+  }
+
   let server = new RealmServer({
     realms,
     virtualNetwork,
@@ -242,7 +242,9 @@ let dist: URL = new URL(distURL);
     serverURL: new URL(serverURL),
     seedPath,
     matrixRegistrationSecret: MATRIX_REGISTRATION_SHARED_SECRET,
-    matrixRegistrationSecretFile,
+    getRegistrationSecret: useRegistrationSecretFunction
+      ? getRegistrationSecret
+      : undefined,
   });
 
   let httpServer = server.listen(port);
@@ -251,11 +253,24 @@ let dist: URL = new URL(distURL);
       console.log(`stopping realm server on port ${port}...`);
       httpServer.closeAllConnections();
       httpServer.close(() => {
+        queue.destroy(); // warning this is async
+        dbAdapter.close(); // warning this is async
         console.log(`realm server on port ${port} has stopped`);
         if (process.send) {
           process.send('stopped');
         }
       });
+    } else if (message === 'kill') {
+      console.log(`Ending server process for ${port}...`);
+      process.exit(0);
+    } else if (
+      typeof message === 'string' &&
+      message.startsWith('registration-secret:') &&
+      registrationSecretDeferred
+    ) {
+      registrationSecretDeferred.fulfill(
+        message.substring('registration-secret:'.length),
+      );
     }
   });
 

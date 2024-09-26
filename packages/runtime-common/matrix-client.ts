@@ -151,7 +151,9 @@ export class MatrixClient {
 
   async setAccountData<T>(type: string, data: T) {
     let response = await this.request(
-      `_matrix/client/v3/user/${this.access!.userId}/account_data/${type}`,
+      `_matrix/client/v3/user/${encodeURIComponent(
+        this.access!.userId,
+      )}/account_data/${type}`,
       'PUT',
       {
         body: JSON.stringify(data),
@@ -169,7 +171,9 @@ export class MatrixClient {
 
   async getAccountData<T>(type: string) {
     let response = await this.request(
-      `_matrix/client/v3/user/${this.access!.userId}/account_data/${type}`,
+      `_matrix/client/v3/user/${encodeURIComponent(
+        this.access!.userId,
+      )}/account_data/${type}`,
     );
     if (response.status === 404) {
       return;

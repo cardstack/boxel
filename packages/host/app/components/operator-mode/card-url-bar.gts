@@ -181,7 +181,7 @@ export default class CardURLBar extends Component<Signature> {
         position: absolute;
         right: 0;
         margin-right: var(--boxel-sp-xxs);
-        font-weight: bold;
+        font-weight: 600;
         color: var(--boxel-highlight);
         border: none;
         background-color: transparent;
