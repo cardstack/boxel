@@ -1,5 +1,4 @@
 import './instrument';
-import isEqual from 'lodash/isEqual';
 import {
   type Queue,
   type PgPrimitive,
@@ -8,14 +7,11 @@ import {
   separatedByCommas,
   addExplicitParens,
   any,
-  every,
   query,
   logger,
   asExpressions,
   Deferred,
-  upsert,
   Job,
-  unixTime,
 } from '@cardstack/runtime-common';
 import PgAdapter from './pg-adapter';
 import * as Sentry from '@sentry/node';
@@ -257,11 +253,6 @@ export default class PgQueue implements Queue {
 
           await query(['BEGIN']);
           await query(['SET TRANSACTION ISOLATION LEVEL SERIALIZABLE']);
-          let allJobs = await query(['SELECT * FROM jobs']);
-          let allJobReservations = await query([
-            'SELECT * FROM job_reservations',
-          ]);
-          console.log({ worker: this.workerId, allJobs, allJobReservations });
 
           let jobs = (await query([
             // find the queue with the oldest job that isn't running and lock it.
@@ -291,7 +282,7 @@ export default class PgQueue implements Queue {
             jobToRun.id,
           );
 
-          let [{ id: jobReservationId }] = (await this.query([
+          let [{ id: jobReservationId }] = (await query([
             'INSERT INTO job_reservations (job_id, locked_until, worker_id) values (',
             ...separatedByCommas([
               [param(jobToRun.id)],
