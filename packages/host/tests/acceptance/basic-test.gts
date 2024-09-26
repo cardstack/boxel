@@ -96,8 +96,9 @@ module('Acceptance | basic tests', function (hooks) {
   test('visiting realm root', async function (assert) {
     await visit('/?card=http://test-realm/test/');
 
-    assert.strictEqual(currentURL(), '/?card=http://test-realm/test/');
-    assert.dom('[data-test-index-card]').containsText('Hello, world');
+    assert
+      .dom('[data-test-operator-mode-stack="0"] [data-test-index-card]')
+      .containsText('Hello, world');
   });
 
   test('glimmer-scoped-css smoke test', async function (assert) {

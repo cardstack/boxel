@@ -16,7 +16,7 @@ Router.map(function () {
   // component exists to support the indexer
   this.route('acceptance-test-setup');
 
-  if (hostsOwnAssets) {
-    this.route('index-card', { path: '/' });
-  }
+  // if (hostsOwnAssets) {
+  //   this.route('index-card', { path: '/' });
+  // }
 });

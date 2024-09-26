@@ -35,8 +35,6 @@ import { type Stack } from '../components/operator-mode/interact-submode';
 
 import type IndexController from '../controllers';
 
-import type CardController from '../controllers/card';
-
 import type CardService from '../services/card-service';
 
 // Below types form a raw POJO representation of operator mode state.
@@ -589,16 +587,10 @@ export default class OperatorModeStateService extends Service {
   // - index controller (viewing the realm server home page and choosing a workspace)
   // We are in the process of removing host mode for viewing cards, so query params in card controller
   // will be removed soon - when we are able to do that, remove this method and just use the index controller
-  get operatorModeController(): CardController | IndexController {
-    let controller: CardController | IndexController;
-
-    if (this.router.currentRouteName === 'index') {
-      controller = getOwner(this)!.lookup(
-        'controller:index',
-      ) as IndexController;
-    } else {
-      controller = getOwner(this)!.lookup('controller:card') as CardController;
-    }
+  get operatorModeController(): IndexController {
+    let controller = getOwner(this)!.lookup(
+      'controller:index',
+    ) as IndexController;
 
     return controller;
   }
