@@ -252,6 +252,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/init
+      - name: Build boxel-ui
+        run: pnpm build
+        working-directory: packages/boxel-ui/addon
       - name: Prepublish
         run: pnpm vscode:prepublish
         working-directory: packages/vscode-extension
