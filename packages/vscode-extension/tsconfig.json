@@ -5,14 +5,21 @@
     "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
     "target": "es2020",
-    "lib": ["es2020"],
     "outDir": "out",
+    "baseUrl": ".",
     "sourceMap": true,
     "strict": true,
     "experimentalDecorators": true,
     "skipLibCheck": true,
     "paths": {
-      "https://cardstack.com/base/*": ["../base/*"]
+      "https://cardstack.com/base/*": ["../base/*"],
+      "*": ["types/*"]
+    }
+  },
+  "glint": {
+    "environment": ["ember-loose", "ember-template-imports"],
+    "transform": {
+      "include": ["../base/**", "./**", "../boxel-ui/addon/**"]
     }
   },
   "include": ["../base/**/*"],
