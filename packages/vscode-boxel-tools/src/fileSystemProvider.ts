@@ -9,7 +9,6 @@ import {
   RealmAuthClient,
   RealmAuthMatrixClientInterface,
 } from '@cardstack/runtime-common/realm-auth-client';
-import { SecretStorage } from "vscode";
 import { createClient } from "matrix-js-sdk";
 
 function getUrl(uri: vscode.Uri) {
@@ -63,7 +62,6 @@ export class RealmFS implements vscode.FileSystemProvider {
   realmClients: Map<string, RealmAuthClient> = new Map();
   realmsInitialized = false;
   jwtPromises: Map<string, Promise<string>> = new Map();
-  secrets: SecretStorage;
 
   async getRealmUrls() {
     if (!this.realmsInitialized) {
@@ -110,7 +108,7 @@ export class RealmFS implements vscode.FileSystemProvider {
     );
     for (const realm of realms) {
       console.log("new realm:", realm);
-      let newRealmClient = new RealmAuthClient(new URL(realm), matrixClient);
+      let newRealmClient = new RealmAuthClient(new URL(realm), matrixClient as unknown as RealmAuthMatrixClientInterface, globalThis.fetch);
       console.log("newRealmClient", newRealmClient);
       this.realmClients.set(realm, newRealmClient);
       console.log("Realm client set", realm);
