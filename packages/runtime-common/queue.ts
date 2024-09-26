@@ -1,29 +1,20 @@
 import { type PgPrimitive } from './index';
 import { Deferred } from './deferred';
 
-export interface QueueOpts {
-  queueName?: string;
+export interface QueueRunner {
+  start: () => Promise<void>;
+  register: <A, T>(category: string, handler: (arg: A) => Promise<T>) => void;
+  destroy: () => Promise<void>;
 }
 
-export interface Queue {
-  isDestroyed: boolean;
-  hasStarted: boolean;
-  // postgres needs time to initialize, so we only start our queue after
-  // postgres is running
-  start: () => Promise<void>; // the queue worker starts the queue
-  destroy: () => Promise<void>;
-  register: <A, T>(category: string, handler: (arg: A) => Promise<T>) => void;
+export interface QueuePublisher {
   publish: <T>(
     jobType: string,
     concurrencyGroup: string | null,
     timeout: number,
     args: PgPrimitive,
   ) => Promise<Job<T>>;
-}
-
-export interface JobNotifier {
-  resolve: Function;
-  reject: Function;
+  destroy: () => Promise<void>;
 }
 
 export class Job<T> {

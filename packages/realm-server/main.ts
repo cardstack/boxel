@@ -16,7 +16,7 @@ import { makeFastBootIndexRunner } from './fastboot';
 import { shimExternals } from './lib/externals';
 import * as Sentry from '@sentry/node';
 import PgAdapter from './pg-adapter';
-import PgQueue from './pg-queue';
+import { PgQueuePublisher } from './pg-queue';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import flattenDeep from 'lodash/flattenDeep';
 
@@ -171,7 +171,7 @@ let dist: URL = new URL(distURL);
 (async () => {
   let realms: Realm[] = [];
   let dbAdapter = new PgAdapter();
-  let queue = new PgQueue(dbAdapter, 'worker-id-here');
+  let queue = new PgQueuePublisher(dbAdapter);
   let manager = new RunnerOptionsManager();
   let { getIndexHTML } = await makeFastBootIndexRunner(
     dist,

@@ -6,7 +6,7 @@ import {
   fetchUserPermissions,
   type Stats,
   type DBAdapter,
-  type Queue,
+  type QueuePublisher,
   type WorkerArgs,
   type FromScratchResult,
   type IncrementalArgs,
@@ -31,7 +31,7 @@ export class RealmIndexUpdater {
     totalIndexEntries: 0,
   };
   #indexWriter: IndexWriter;
-  #queue: Queue;
+  #queue: QueuePublisher;
   #dbAdapter: DBAdapter;
   #indexingDeferred: Deferred<void> | undefined;
 
@@ -42,7 +42,7 @@ export class RealmIndexUpdater {
   }: {
     realm: Realm;
     dbAdapter: DBAdapter;
-    queue: Queue;
+    queue: QueuePublisher;
   }) {
     if (!dbAdapter) {
       throw new Error(

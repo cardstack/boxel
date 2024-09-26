@@ -1,49 +1,55 @@
 import { module, test } from 'qunit';
 import { prepareTestDB } from './helpers';
 
-import PgQueue from '../pg-queue';
+import { PgQueueRunner, PgQueuePublisher } from '../pg-queue';
 import PgAdapter from '../pg-adapter';
 
-import { type Queue } from '@cardstack/runtime-common';
+import {
+  type QueuePublisher,
+  type QueueRunner,
+} from '@cardstack/runtime-common';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
 import queueTests from '@cardstack/runtime-common/tests/queue-test';
 
 module('queue', function (hooks) {
-  let queue: Queue;
+  let publisher: QueuePublisher;
+  let runner: QueueRunner;
   let adapter: PgAdapter;
 
   hooks.beforeEach(async function () {
     prepareTestDB();
     adapter = new PgAdapter();
-    queue = new PgQueue(adapter, 'q1');
-    await queue.start();
+    publisher = new PgQueuePublisher(adapter);
+    runner = new PgQueueRunner(adapter, 'q1');
+    await runner.start();
   });
 
   hooks.afterEach(async function () {
-    await queue.destroy();
+    await runner.destroy();
+    await publisher.destroy();
   });
 
   test('it can run a job', async function (assert) {
-    await runSharedTest(queueTests, assert, { queue });
+    await runSharedTest(queueTests, assert, { runner, publisher });
   });
 
   test(`a job can throw an exception`, async function (assert) {
-    await runSharedTest(queueTests, assert, { queue });
+    await runSharedTest(queueTests, assert, { runner, publisher });
   });
 
   test('jobs are processed serially within a particular queue', async function (assert) {
-    await runSharedTest(queueTests, assert, { queue });
+    await runSharedTest(queueTests, assert, { runner, publisher });
   });
 
   // Concurrency control using different queues is only supported in pg-queue,
   // so these are not tests that are shared with the browser queue implementation.
   module('multiple queue clients', function (nestedHooks) {
-    let queue2: Queue;
+    let runner2: QueueRunner;
     let adapter2: PgAdapter;
     nestedHooks.beforeEach(async function () {
       adapter2 = new PgAdapter();
-      queue2 = new PgQueue(adapter2, 'q2');
-      await queue2.start();
+      runner2 = new PgQueueRunner(adapter2, 'q2');
+      await runner2.start();
 
       // Because we need tight timing control for this test, we don't want any
       // concurrent migrations and their retries altering the timing. This
@@ -53,7 +59,7 @@ module('queue', function (hooks) {
     });
 
     nestedHooks.afterEach(async function () {
-      await queue2.destroy();
+      await runner2.destroy();
     });
 
     test('jobs in different concurrency groups can run in parallel', async function (assert) {
@@ -65,13 +71,13 @@ module('queue', function (hooks) {
         events.push(`job${jobNum} finish`);
       };
 
-      queue.register('logJob', logJob);
-      queue2.register('logJob', logJob);
+      runner.register('logJob', logJob);
+      runner2.register('logJob', logJob);
 
-      let promiseForJob1 = queue.publish('logJob', 'log-group', 5000, 1);
+      let promiseForJob1 = publisher.publish('logJob', 'log-group', 5000, 1);
       // start the 2nd job before the first job finishes
       await new Promise((r) => setTimeout(r, 100));
-      let promiseForJob2 = queue2.publish('logJob', 'other-group', 5000, 2);
+      let promiseForJob2 = publisher.publish('logJob', 'other-group', 5000, 2);
       let [job1, job2] = await Promise.all([promiseForJob1, promiseForJob2]);
 
       await Promise.all([job1.done, job2.done]);
@@ -92,13 +98,13 @@ module('queue', function (hooks) {
         events.push(`job${jobNum} finish`);
       };
 
-      queue.register('logJob', logJob);
-      queue2.register('logJob', logJob);
+      runner.register('logJob', logJob);
+      runner2.register('logJob', logJob);
 
-      let promiseForJob1 = queue.publish('logJob', 'log-group', 5000, 1);
+      let promiseForJob1 = publisher.publish('logJob', 'log-group', 5000, 1);
       // start the 2nd job before the first job finishes
       await new Promise((r) => setTimeout(r, 100));
-      let promiseForJob2 = queue2.publish('logJob', 'log-group', 5000, 2);
+      let promiseForJob2 = publisher.publish('logJob', 'log-group', 5000, 2);
       let [job1, job2] = await Promise.all([promiseForJob1, promiseForJob2]);
 
       await Promise.all([job1.done, job2.done]);
@@ -123,10 +129,10 @@ module('queue', function (hooks) {
         return me;
       };
 
-      queue.register('logJob', logJob);
-      queue2.register('logJob', logJob);
+      runner.register('logJob', logJob);
+      runner2.register('logJob', logJob);
 
-      let job = await queue.publish('logJob', 'log-group', 1, null);
+      let job = await publisher.publish('logJob', 'log-group', 1, null);
 
       // just after our job has timed out, kick the queue so that another worker
       // will notice it. Otherwise we'd be stuck until the polling comes around.

@@ -1,6 +1,7 @@
 import './instrument';
 import {
-  type Queue,
+  type QueuePublisher,
+  type QueueRunner,
   type PgPrimitive,
   type Expression,
   param,
@@ -103,21 +104,14 @@ class WorkLoop {
   }
 }
 
-export default class PgQueue implements Queue {
-  #hasStarted = false;
+export class PgQueuePublisher implements QueuePublisher {
   #isDestroyed = false;
 
   private pollInterval = 10000;
-  private handlers: Map<string, Function> = new Map();
   private notifiers: Map<number, Deferred<any>> = new Map();
-
-  private jobRunner: WorkLoop | undefined;
   private notificationRunner: WorkLoop | undefined;
 
-  constructor(
-    private pgClient: PgAdapter,
-    private workerId: string,
-  ) {}
+  constructor(private pgClient: PgAdapter) {}
 
   private async query(expression: Expression) {
     return await query(this.pgClient, expression);
@@ -177,14 +171,6 @@ export default class PgQueue implements Queue {
     }
   }
 
-  get isDestroyed() {
-    return this.#isDestroyed;
-  }
-
-  get hasStarted() {
-    return this.#hasStarted;
-  }
-
   async publish<T>(
     jobType: string,
     concurrencyGroup: string | null,
@@ -215,13 +201,32 @@ export default class PgQueue implements Queue {
     return job;
   }
 
-  register<A, T>(category: string, handler: (arg: A) => Promise<T>) {
-    this.handlers.set(category, handler);
+  async destroy() {
+    this.#isDestroyed = true;
+    if (this.notificationRunner) {
+      await this.notificationRunner.shutDown();
+    }
+  }
+}
+
+export class PgQueueRunner implements QueueRunner {
+  #isDestroyed = false;
+
+  private pollInterval = 10000;
+  private handlers: Map<string, Function> = new Map();
+  private jobRunner: WorkLoop | undefined;
+
+  constructor(
+    private pgClient: PgAdapter,
+    private workerId: string,
+  ) {}
+
+  register<A, T>(jobType: string, handler: (arg: A) => Promise<T>) {
+    this.handlers.set(jobType, handler);
   }
 
   async start() {
     if (!this.jobRunner && !this.#isDestroyed) {
-      this.#hasStarted = true;
       this.jobRunner = new WorkLoop('jobRunner', this.pollInterval);
       this.jobRunner.run(async (loop) => {
         await this.pgClient.listen('jobs', loop.wake.bind(loop), async () => {
@@ -234,10 +239,10 @@ export default class PgQueue implements Queue {
     }
   }
 
-  private async runJob(category: string, args: PgPrimitive) {
-    let handler = this.handlers.get(category);
+  private async runJob(jobType: string, args: PgPrimitive) {
+    let handler = this.handlers.get(jobType);
     if (!handler) {
-      throw new Error(`unknown job handler ${category}`);
+      throw new Error(`unknown job handler ${jobType}`);
     }
     return await handler(args);
   }
@@ -413,9 +418,6 @@ export default class PgQueue implements Queue {
     this.#isDestroyed = true;
     if (this.jobRunner) {
       await this.jobRunner.shutDown();
-    }
-    if (this.notificationRunner) {
-      await this.notificationRunner.shutDown();
     }
   }
 }

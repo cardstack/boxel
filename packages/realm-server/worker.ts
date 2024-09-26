@@ -12,7 +12,7 @@ import { makeFastBootIndexRunner } from './fastboot';
 import { shimExternals } from './lib/externals';
 import * as Sentry from '@sentry/node';
 import PgAdapter from './pg-adapter';
-import PgQueue from './pg-queue';
+import { PgQueueRunner } from './pg-queue';
 
 let log = logger('worker');
 
@@ -85,7 +85,7 @@ let dist: URL = new URL(distURL);
 
 (async () => {
   let dbAdapter = new PgAdapter();
-  let queue = new PgQueue(dbAdapter, 'realm-worker'); // TODO: update worker ID with ecs task ID
+  let queue = new PgQueueRunner(dbAdapter, 'realm-worker'); // TODO: update worker ID with ecs task ID
   let manager = new RunnerOptionsManager();
   let { getRunner } = await makeFastBootIndexRunner(
     dist,
