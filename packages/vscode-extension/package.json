@@ -1,15 +1,11 @@
 {
-  "name": "vscode-boxelrealm",
-  "displayName": "BoxelRealm",
+  "name": "@cardstack/vscode-boxel-tools",
+  "displayName": "Boxel Tools",
   "description": "Access boxel realm data and code from your vscode workspace.",
   "version": "0.0.8",
   "publisher": "boxel",
   "private": true,
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/cardstack/boxel/"
-  },
   "engines": {
     "vscode": "^1.74.0"
   },
