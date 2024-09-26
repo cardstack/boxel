@@ -25,11 +25,11 @@ interface Signature<ItemT = any> {
 }
 
 interface SelectAPI {
-  isOpen: boolean;
   actions: {
     close: () => void;
     open: () => void;
   };
+  isOpen: boolean;
 }
 
 export default class BoxelMultiSelect extends Component<Signature> {
@@ -67,7 +67,7 @@ export default class BoxelMultiSelect extends Component<Signature> {
         @eventType='click'
         @searchEnabled={{true}}
         @searchField='name'
-        @beforeOptionsComponent={{component BeforeOptions autofocus=false}}
+        @beforeOptionsComponent={{component BeforeOptions}}
         as |option|
       >
         {{yield option}}
@@ -79,19 +79,19 @@ export default class BoxelMultiSelect extends Component<Signature> {
         {{#if @selected.length}}
           <IconX
             {{on 'click' this.onClearAll}}
-            style='width: 12px; height: 12px; cursor: pointer;'
+            class='boxel-multi-select__clear-icon'
             aria-label='clear all selections'
           />
         {{else}}
           <CaretDown
-            style='width: 12px; height: 12px; cursor: pointer;'
+            class='boxel-multi-select__caret-icon'
             aria-label='toggle dropdown'
           />
         {{/if}}
       </div>
     </div>
 
-    <style>
+    <style scoped>
       .boxel-multi-select__wrapper {
         position: relative;
         display: flex;
@@ -146,16 +146,11 @@ export default class BoxelMultiSelect extends Component<Signature> {
         pointer-events: auto;
       }
 
-      .boxel-multi-select__clear-all,
-      .boxel-multi-select__caret {
-        position: relative;
-        border: none;
-        background: none;
-        padding: 0;
+      .boxel-multi-select__clear-icon,
+      .boxel-multi-select__caret-icon {
+        width: 12px;
+        height: 12px;
         cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
       }
 
       .ember-power-select-multiple-options {
@@ -218,13 +213,13 @@ export default class BoxelMultiSelect extends Component<Signature> {
 
 interface CustomSelectedItemComponentArgs<ItemT> {
   option: ItemT;
+  placeholder: string;
   select: {
-    selected: ItemT[];
     actions: {
       select: (items: ItemT[]) => void;
     };
+    selected: ItemT[];
   };
-  placeholder: string;
 }
 
 interface CustomSelectedItemComponentSignature<ItemT> {
@@ -279,14 +274,14 @@ class CustomSelectedItemComponent<ItemT> extends Component<
   }
 
   <template>
-    {{#if this.args.select.selected.length}}
+    {{#if @select.selected.length}}
       <div class='ember-power-select-multiple-options'>
         {{#each this.visibleContent as |item|}}
           <span class='ember-power-select-multiple-option'>
             {{this.itemName item}}
             <IconX
               {{on 'click' (fn this.removeItem item)}}
-              style='width: 8px; height: 8px; cursor: pointer; --icon-color: var(--boxel-multi-select-pill-color);'
+              class='boxel-multi-select__remove-icon'
               aria-label='remove item'
             />
           </span>
@@ -298,8 +293,8 @@ class CustomSelectedItemComponent<ItemT> extends Component<
             {{this.remainingItemsCount}}
             more
             <IconX
-              {{on 'click' (fn this.removeExcessItems)}}
-              style='width: 8px; height: 8px; cursor: pointer; --icon-color: var(--boxel-multi-select-pill-color);'
+              {{on 'click' this.removeExcessItems}}
+              class='boxel-multi-select__remove-icon'
               aria-label='remove item'
             />
           </span>
@@ -308,22 +303,31 @@ class CustomSelectedItemComponent<ItemT> extends Component<
     {{else}}
       <div class='ember-power-select-placeholder'>{{@placeholder}}</div>
     {{/if}}
+
+    <style scoped>
+      .boxel-multi-select__remove-icon {
+        width: 8px;
+        height: 8px;
+        cursor: pointer;
+        --icon-color: var(--boxel-multi-select-pill-color);
+      }
+    </style>
   </template>
 }
 
 interface TriggerComponentSignature<ItemT> {
   Args: {
-    select: Select;
-    placeholder?: string;
-    selectedItemComponent: any;
+    disabled?: boolean;
     extra: Record<string, unknown>;
-    onFocus: (e: FocusEvent) => void;
     onBlur: (e: FocusEvent) => void;
+    onFocus: (e: FocusEvent) => void;
     onKeydown: (e: KeyboardEvent) => void;
+    placeholder?: string;
     searchEnabled?: boolean;
     searchField?: string | null;
-    disabled?: boolean;
+    select: Select;
     selected: ItemT | ItemT[] | null;
+    selectedItemComponent: any;
   };
   Element: HTMLElement;
 }
@@ -337,20 +341,15 @@ class CustomTriggerComponent<ItemT> extends Component<
 
   <template>
     <div class='custom-trigger'>
-      {{#let
-        (component this.args.selectedItemComponent)
-        as |SelectedItemComponent|
-      }}
-        <SelectedItemComponent @select={{this.args.select}} />
+      {{#let (component @selectedItemComponent) as |SelectedItemComponent|}}
+        <SelectedItemComponent @select={{@select}} />
         {{#if this.shouldShowPlaceholder}}
-          <div
-            class='custom-trigger-placeholder'
-          >{{this.args.placeholder}}</div>
+          <div class='custom-trigger-placeholder'>{{@placeholder}}</div>
         {{/if}}
       {{/let}}
     </div>
 
-    <style>
+    <style scoped>
       .custom-trigger-placeholder {
         color: var(--boxel-400);
       }
