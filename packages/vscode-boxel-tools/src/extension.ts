@@ -1,7 +1,7 @@
 'use strict';
 
 import * as vscode from 'vscode';
-import { RealmFS } from './fileSystemProvider';
+import { RealmFS } from './file-system-provider';
 import { SynapseAuthProvider } from './synapse-auth-provider';
 
 export async function activate(context: vscode.ExtensionContext) {
