@@ -106,7 +106,7 @@ const defaultPanelWidths: PanelWidths = {
 
 const CodeModePanelHeights = 'code-mode-panel-heights';
 const ApproximateRecentPanelDefaultFraction =
-  (50 + 43 * 3.5) / (document.documentElement.clientHeight - 430); // room for about 3.5 recent files
+  (43 + 40 * 3.5) / (document.documentElement.clientHeight - 140); // room for about 3.5 recent files
 const defaultPanelHeights: PanelHeights = {
   filePanel: 1 - ApproximateRecentPanelDefaultFraction,
   recentPanel: ApproximateRecentPanelDefaultFraction,
@@ -1008,7 +1008,7 @@ export default class CodeSubmode extends Component<Signature> {
       .choose-file-prompt {
         margin: 0;
         padding: var(--boxel-sp);
-        font: 700 var(--boxel-font);
+        font: 600 var(--boxel-font);
         letter-spacing: var(--boxel-lsp-xs);
       }
 

@@ -252,7 +252,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         margin: 0;
         padding-right: var(--boxel-sp-xl);
         color: var(--boxel-light);
-        font: 700 var(--boxel-font);
+        font: 600 var(--boxel-font);
         letter-spacing: var(--boxel-lsp);
         overflow: hidden;
         text-overflow: ellipsis;

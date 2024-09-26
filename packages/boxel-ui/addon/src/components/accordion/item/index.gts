@@ -35,7 +35,7 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
       --accordion-item-closed-height: 2.75rem;
       --accordion-item-open-height: 8rem;
       --accordion-item-border: var(--accordion-border);
-      --accordion-item-title-font: 700 var(--boxel-font);
+      --accordion-item-title-font: 600 var(--boxel-font);
       --accordion-item-title-letter-spacing: var(--boxel-lsp-xs);
       --accordion-item-title-padding: var(--boxel-sp-xs);
 

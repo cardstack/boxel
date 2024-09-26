@@ -562,7 +562,7 @@ export default class DetailPanel extends Component<Signature> {
         align-items: center;
       }
       .panel-header {
-        font: 700 var(--boxel-font);
+        font: 600 var(--boxel-font);
         letter-spacing: var(--boxel-lsp-xs);
       }
       .number-items {

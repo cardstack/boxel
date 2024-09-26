@@ -86,7 +86,7 @@ export default class SubmodeLayout extends Component<Signature> {
   private suppressSearchClose = false;
   private declare doSearch: (term: string) => void;
 
-  get operatorModeController(): CardController | IndexController {
+  get operatorModeController(): IndexController {
     return this.operatorModeStateService.operatorModeController;
   }
 
@@ -244,7 +244,7 @@ export default class SubmodeLayout extends Component<Signature> {
                 dark-icon=(not this.workspaceChooserOpened)
               }}
               {{on 'click' this.toggleWorkspaceChooser}}
-              data-test-submode-layout-boxel-icon-button
+              data-test-workspace-chooser-toggle
             />
             {{#if this.workspaceChooserOpened}}
               <span

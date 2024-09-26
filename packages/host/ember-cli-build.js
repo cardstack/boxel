@@ -94,6 +94,9 @@ module.exports = function (defaults) {
               stream: require.resolve('stream-browserify'),
               process: false,
             },
+            alias: {
+              'matrix-js-sdk': 'matrix-js-sdk/src/browser-index.ts', // Consume matrix-js-sdk via Typescript ESM so that code splitting works to exlcude massive matrix-sdk-crypto-wasm from the main bundle
+            },
           },
           node: {
             global: true,

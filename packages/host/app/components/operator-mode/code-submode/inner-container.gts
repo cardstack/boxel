@@ -33,6 +33,9 @@ class InnerContainerContent extends Component<ContentSignature> {
         overflow-y: auto;
         height: 100%;
       }
+      .inner-container__header + .inner-container__content {
+        padding-top: 0;
+      }
       .mask {
         scrollbar-color: white white;
       }
@@ -83,7 +86,7 @@ const InnerContainerHeader: TemplateOnlyComponent<HeaderSignature> = <template>
   <style scoped>
     .inner-container__header {
       padding: var(--boxel-sp-sm) var(--boxel-sp-xs);
-      font: 700 var(--boxel-font);
+      font: 600 var(--boxel-font-sm);
       letter-spacing: var(--boxel-lsp-xs);
     }
   </style>

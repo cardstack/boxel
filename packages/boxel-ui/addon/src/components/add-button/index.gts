@@ -78,7 +78,7 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
       border: none;
       border-radius: var(--boxel-form-control-border-radius);
       color: var(--boxel-highlight);
-      font: 700 var(--boxel-font-sm);
+      font: 600 var(--boxel-font-sm);
       letter-spacing: var(--boxel-lsp-xs);
       transition:
         background-color var(--boxel-transition),
@@ -102,7 +102,7 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
       border: none;
       border-radius: var(--boxel-form-control-border-radius);
       color: var(--boxel-light);
-      font: 700 var(--boxel-add-button-pill-font, var(--boxel-font-xs));
+      font: 600 var(--boxel-add-button-pill-font, var(--boxel-font-xs));
       letter-spacing: var(--boxel-lsp-xs);
       transition:
         background-color var(--boxel-transition),

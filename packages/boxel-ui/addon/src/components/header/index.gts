@@ -81,7 +81,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
         border-top-left-radius: calc(
           var(--boxel-header-border-radius, var(--boxel-border-radius)) - 1px
         );
-        font: var(--boxel-header-font-weight, 700)
+        font: var(--boxel-header-font-weight, 600)
           var(--boxel-header-text-font, var(--boxel-font-sm));
         letter-spacing: var(--boxel-header-letter-spacing, normal);
         text-transform: var(--boxel-header-text-transform);
@@ -108,7 +108,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       }
       .large {
         padding: var(--boxel-header-padding, var(--boxel-sp-xl));
-        font: var(--boxel-header-font-weight, 700)
+        font: var(--boxel-header-font-weight, 600)
           var(--boxel-header-text-font, var(--boxel-font-lg));
       }
       .hasBottomBorder {

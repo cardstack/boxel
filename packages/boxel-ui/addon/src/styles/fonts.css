@@ -22,6 +22,17 @@
 }
 @font-face {
   font-family: 'Poppins';
+  src: url('./Poppins-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+}
+@font-face {
+  font-family: 'Poppins';
+  src: url('./Poppins-SemiBoldItalic.woff2') format('woff2');
+  font-weight: 600;
+  font-style: italic;
+}
+@font-face {
+  font-family: 'Poppins';
   src: url('./Poppins-Bold.woff2') format('woff2');
   font-weight: 700;
 }
