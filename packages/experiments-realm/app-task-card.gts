@@ -226,6 +226,7 @@ class Sheet extends GlimmerComponent<SheetSignature> {
 
 export class TaskAppCard extends CardDef {
   static displayName = 'App Task';
+  static prefersWideFormat = true;
   static isolated = TaskAppCardIsolated;
 }
 
