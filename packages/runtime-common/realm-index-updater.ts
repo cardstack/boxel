@@ -3,6 +3,7 @@ import {
   IndexWriter,
   Deferred,
   logger,
+  fetchUserPermissions,
   type Stats,
   type DBAdapter,
   type Queue,
@@ -15,6 +16,7 @@ import { Realm } from './realm';
 import { RealmPaths } from './paths';
 import { Loader } from './loader';
 import ignore, { type Ignore } from 'ignore';
+import { getMatrixUsername } from './matrix-client';
 
 export class RealmIndexUpdater {
   #realm: Realm;
@@ -30,6 +32,7 @@ export class RealmIndexUpdater {
   };
   #indexWriter: IndexWriter;
   #queue: Queue;
+  #dbAdapter: DBAdapter;
   #indexingDeferred: Deferred<void> | undefined;
 
   constructor({
@@ -48,6 +51,7 @@ export class RealmIndexUpdater {
     }
     this.#indexWriter = new IndexWriter(dbAdapter);
     this.#queue = queue;
+    this.#dbAdapter = dbAdapter;
     this.#realm = realm;
     this.#loader = Loader.cloneLoader(this.#realm.loaderTemplate);
   }
@@ -73,15 +77,12 @@ export class RealmIndexUpdater {
     return ignoreMap;
   }
 
+  async isNewIndex(): Promise<boolean> {
+    return await this.#indexWriter.isNewIndex(this.realmURL);
+  }
+
   async run() {
-    let isNewIndex = await this.#indexWriter.isNewIndex(this.realmURL);
-    if (isNewIndex) {
-      // we only await the full indexing at boot if this is a brand new index
-      await this.fullIndex();
-    } else {
-      // this promise is tracked in `this.indexing()` if consumers need it.
-      this.fullIndex();
-    }
+    await this.fullIndex();
   }
 
   indexing() {
@@ -169,27 +170,44 @@ export class RealmIndexUpdater {
   }
 
   private async getRealmUsername(): Promise<string> {
-    // TODO for now we are just using the URL pattern and hard coding test
-    // URLs to figure out the realm username. As part of the ticket to create
-    // dynamic realms this should be updated to look up the realm owner
-    // permission
+    let permissions = await fetchUserPermissions(
+      this.#dbAdapter,
+      this.realmURL,
+    );
+    let owners = Object.entries(permissions)
+      .filter(([_, permissions]) => permissions.includes('realm-owner'))
+      .map(([userId]) => userId);
+    let realmUserId =
+      owners.length === 1
+        ? owners[0]
+        : owners.find((userId) => userId.startsWith('@realm/'));
+    if (realmUserId) {
+      return getMatrixUsername(realmUserId);
+    }
+
+    // hard coded test URLs
     switch (this.realmURL.href) {
       case 'http://127.0.0.1:4441/':
         return 'base_realm';
-
+      case 'http://example.com':
+      case 'http://example.com/':
+      case 'http://example.com/foo':
+      case 'http://test-realm/':
+      case 'http://test-realm/test/':
+      case 'http://test-realm/test2/':
+      case 'http://test-realm/test/root/':
       case 'http://127.0.0.1:4447/':
         return 'test_realm';
-
       case 'http://127.0.0.1:4444/':
       case 'http://127.0.0.1:4445/':
+      case 'http://127.0.0.1:4445/test/':
+      case 'http://127.0.0.1:4446/demo/':
       case 'http://127.0.0.1:4448/':
         return 'node-test_realm';
-
-      default: {
-        let name = this.realmURL.href.replace(/\/$/, '').split('/').pop()!;
-        return `${name}_realm`;
-      }
     }
+    throw new Error(
+      `Cannot determine realm owner for realm ${this.realmURL.href}.`,
+    );
   }
 }
 

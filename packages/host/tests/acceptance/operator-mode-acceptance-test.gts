@@ -2,9 +2,9 @@ import {
   visit,
   currentURL,
   click,
-  triggerEvent,
   waitFor,
   fillIn,
+  triggerEvent,
   waitUntil,
 } from '@ember/test-helpers';
 
@@ -31,10 +31,7 @@ import {
   visitOperatorMode,
   lookupLoaderService,
 } from '../helpers';
-import {
-  MockMatrixService,
-  setupMatrixServiceMock,
-} from '../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
 module('Acceptance | operator mode tests', function (hooks) {
@@ -42,7 +39,10 @@ module('Acceptance | operator mode tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  let { setExpiresInSec } = setupMatrixServiceMock(hooks);
+  let { setExpiresInSec } = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [testRealmURL],
+  });
 
   hooks.beforeEach(async function () {
     setExpiresInSec(60 * 60);
@@ -376,10 +376,8 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
   });
 
-  test('visiting index card and entering operator mode', async function (assert) {
+  test('visiting operator mode', async function (assert) {
     await visit('/');
-
-    assert.strictEqual(currentURL(), '/');
 
     // Enter operator mode
     await triggerEvent(document.body, 'keydown', {
@@ -471,10 +469,6 @@ module('Acceptance | operator mode tests', function (hooks) {
       ],
     })!;
 
-    let matrixService = this.owner.lookup(
-      'service:matrixService',
-    ) as MockMatrixService;
-
     await click('[data-test-profile-icon-button]');
     await click('[data-test-settings-button]');
 
@@ -494,15 +488,9 @@ module('Acceptance | operator mode tests', function (hooks) {
       .dom('[data-test-boxel-input-error-message]')
       .hasText('Name is required');
 
-    await fillIn('[data-test-display-name-field]', 'John');
+    await fillIn('[data-test-display-name-field]', 'MAKEMECRASH');
 
     assert.dom('[data-test-boxel-input-error-message]').doesNotExist();
-
-    let setDisplayNameOriginal = matrixService.setDisplayName;
-
-    matrixService.setDisplayName = async function () {
-      throw new Error('Boom!');
-    };
 
     await click('[data-test-profile-settings-save-button]');
 
@@ -510,8 +498,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       .dom('[data-test-profile-save-error]')
       .hasText('Failed to save profile. Please try again.');
 
-    matrixService.setDisplayName = setDisplayNameOriginal;
-
+    await fillIn('[data-test-display-name-field]', 'John');
     await click('[data-test-profile-settings-save-button]');
 
     assert.dom('[data-test-profile-save-error]').doesNotExist();
@@ -588,7 +575,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     let urlParameters = new URLSearchParams(url);
     assert.false(Boolean(urlParameters.get('workspaceChooserOpened')));
 
-    await click('[data-test-submode-layout-boxel-icon-button]');
+    await click('[data-test-workspace-chooser-toggle]');
 
     assert.dom('[data-test-submode-layout-title]').exists();
     assert.dom('[data-test-workspace-chooser]').exists();
@@ -598,6 +585,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     url = currentURL().split('?')[1].replace(/^\/\?/, '') ?? '';
     urlParameters = new URLSearchParams(url);
     assert.true(Boolean(urlParameters.get('workspaceChooserOpened')));
+    await percySnapshot(assert);
   });
 
   module('2 stacks', function () {

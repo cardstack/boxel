@@ -11,8 +11,12 @@ import {
   realmURL,
   StringField,
   type CardContext,
+  FieldsTypeFor,
 } from 'https://cardstack.com/base/card-api';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { CardContainer } from '@cardstack/boxel-ui/components';
+import { and, bool, cn } from '@cardstack/boxel-ui/helpers';
+import { baseRealm, getCard } from '@cardstack/runtime-common';
+import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
@@ -35,7 +39,6 @@ import {
 
 import {
   codeRefWithAbsoluteURL,
-  type Query,
   type Loader,
   LooseSingleCardDocument,
   isSingleCardDocument,
@@ -43,12 +46,23 @@ import {
   buildQueryString,
   assertQuery,
 } from '@cardstack/runtime-common';
-import { AnyFilter } from '@cardstack/runtime-common/query';
-import { TrackedMap } from 'tracked-built-ins';
 
-const CONFIG = {
-  displayQuery: true,
-};
+export interface TabComponentSignature {
+  activeTab?: Tab;
+  currentRealm: URL;
+  realms: string[];
+  setActiveTab: (tabId: string) => void;
+}
+
+export interface DefaultTabSignature extends TabComponentSignature {
+  model: Partial<AppCard>;
+  context?: CardContext;
+}
+
+interface PrerenderedCard {
+  url: string;
+  component: typeof GlimmerComponent;
+}
 
 export class Tab extends FieldDef {
   @field displayName = contains(StringField);
@@ -68,436 +82,34 @@ interface PillFilter extends PillItem {
   value: string;
 }
 
-class AppCardIsolated extends Component<typeof AppCard> {
-  leftNavFilters: LeftNavFilter[] = [];
-  @tracked activeCategory: LeftNavFilter = this.leftNavFilters[0]; //these types are wrong bcos [0] of empty shud return undefinec
-  pillFilterMap = new TrackedMap<string, PillFilter>();
-
-  async setupInitialTabs() {
-    this.errorMessage = '';
-    if (!this.args.model.moduleId) {
-      this.errorMessage = 'ModuleId is not available.';
-      return;
-    }
-    let loader: Loader = (import.meta as any).loader;
-    let module;
-    try {
-      module = await loader.import(this.args.model.moduleId);
-    } catch (e) {
-      console.error(e);
-      this.errorMessage =
-        e instanceof Error ? `Error: ${e.message}` : 'An error occurred';
-      return;
-    }
-    let exportedCards = Object.entries(module).filter(
-      ([_, declaration]) =>
-        declaration &&
-        typeof declaration === 'function' &&
-        'isCardDef' in declaration &&
-        !AppCard.isPrototypeOf(declaration),
-    );
-    let tabs = [];
-    for (let [name, _declaration] of exportedCards) {
-      tabs.push(
-        new Tab({
-          displayName: name,
-          tabId: name,
-          ref: {
-            name,
-            module: this.args.model.moduleId,
-          },
-          isTable: false,
-        }),
-      );
-    }
-
-    this.args.model.tabs = tabs;
-    this.setActiveTab(0);
-  }
-
-  @action onCategoryChanged(leftNavFilter: LeftNavFilter) {
-    this.activeCategory = leftNavFilter;
-  }
-
-  @action onPillSelect(id: string) {
-    let pillFilter = this.pillFilterMap.get(id);
-    if (!pillFilter) {
-      return;
-    }
-    this.pillFilterMap.set(id, {
-      ...pillFilter,
-      selected: !pillFilter.selected,
-    });
-  }
-
-  get queryDisplay() {
-    if (!CONFIG.displayQuery) {
-      return;
-    }
-    return JSON.stringify(this.query, null, 2);
-  }
-
-  get query(): Query {
-    const categoryFilter =
-      this.categoryFilter !== undefined ? [this.categoryFilter] : [];
-    const pillFilter = this.pillFilter !== undefined ? [this.pillFilter] : [];
-    const titleFilter =
-      this.titleFilter !== undefined ? [this.titleFilter] : [];
-
-    const q = {
-      filter: {
-        on: this.activeTabRef,
-        every: [...categoryFilter, ...pillFilter, ...titleFilter],
-      },
-    };
-    assertQuery(q);
-    return q;
-  }
-
-  //==== codeRef stuff
-  get categoryCodeRef() {
-    return {
-      module: 'http://localhost:4201/experiments/commerce/listing',
-      name: 'Category',
-    };
-  }
-
-  get tagCodeRef() {
-    return {
-      module: 'http://localhost:4201/experiments/commerce/listing',
-      name: 'Tag',
-    };
-  }
-
-  //==== query stuff
-  get categoryQuery() {
-    return {
-      filter: {
-        type: this.categoryCodeRef,
-      },
-    };
-  }
-
-  get tagQuery() {
-    return {
-      filter: {
-        type: this.tagCodeRef,
-      },
-    };
-  }
-
-  get categoryFilter() {
-    if (this.activeCategory === undefined) {
-      //types don't match here
-      return;
-    }
-    return {
-      any: [
-        {
-          // on: this.activeTabRef,
-          eq: { 'primaryCategory.name': this.activeCategory.displayName },
-        },
-        {
-          // on: this.activeTabRef,
-          eq: { 'secondaryCategory.name': this.activeCategory.displayName },
-        },
-      ],
-    } as AnyFilter;
-  }
-
-  get pillFilter() {
-    let selectedPills = this.pillFilters
-      .filter((pill) => pill.selected)
-      .map((pill) => {
-        return {
-          eq: {
-            'tags.value': pill.value,
-          },
-        };
-      });
-    if (selectedPills.length === 0) {
-      return;
-    }
-    return {
-      any: selectedPills,
-    } as AnyFilter;
-  }
-
-  get titleFilter() {
-    if (!this.searchKey || this.searchKey === '') {
-      return;
-    }
-    return {
-      contains: {
-        title: this.searchKey,
-      },
-    };
-  }
-
-  get realms(): string[] {
-    return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
-  }
-
-  //search input
-  @tracked private searchKey = '';
-
-  @action private debouncedSetSearchKey(searchKey: string) {
-    debounce(this, this.setSearchKey, searchKey, 300);
-  }
-
-  @action
-  private setSearchKey(searchKey: string) {
-    this.searchKey = searchKey;
-  }
-
-  checkboxInputs: any = [
-    { id: 'free', label: 'Free', value: false },
-    { id: 'forMembers', label: 'For Members', value: false },
-    { id: 'premium', label: 'Premium', value: false },
-  ];
-
-  @action
-  updateInputValue(id: string, event: Event) {
-    const target = event.target as HTMLInputElement;
-    const input = this.checkboxInputs.find((input: any) => input.id === id);
-    if (input) {
-      input.value = target.checked;
-    }
-  }
-
+class TableView extends GlimmerComponent<{
+  Args: { cards: PrerenderedCard[] };
+}> {
   <template>
-    <section class='app-card'>
-      {{#if this.queryDisplay}}
-        <div>
-          {{this.queryDisplay}}
-        </div>
-      {{/if}}
-      <TabbedHeader
-        @title={{@model.title}}
-        @tabs={{this.tabs}}
-        @onSetActiveTab={{this.setActiveTab}}
-        @activeTabIndex={{this.activeTabIndex}}
-        @headerBackgroundColor={{this.headerColor}}
-      >
-        <:headerIcon>
-          {{#if @model.headerIcon.base64}}
-            <@fields.headerIcon />
-          {{/if}}
-        </:headerIcon>
-      </TabbedHeader>
-
-      <section class='app-card-layout'>
-        <aside class='app-card-filter sidebar'>
-
-          <div class='card-box'>
-            <h5>Categories</h5>
-            {{#if this.loadCategoryFilterList.isRunning}}
-              Loading...
-            {{else}}
-              <FilterList
-                @filters={{this.leftNavFilters}}
-                @activeFilter={{this.activeCategory}}
-                @onChanged={{this.onCategoryChanged}}
-              />
-            {{/if}}
-          </div>
-          <div class='card-box'>
-            <h5>Filters</h5>
-            {{#if this.loadTagFilterList.isRunning}}
-              Loading...
-            {{else}}
-              <div class='search-and-filter-group'>
-
-                <BoxelInput
-                  @type='search'
-                  @placeholder='Filter by name or type'
-                  @state='initial'
-                  @onInput={{this.debouncedSetSearchKey}}
-                  autocomplete='off'
-                  data-test-search-field
-                />
-
-                <PillPicker
-                  @items={{this.pillFilters}}
-                  @onSelect={{this.onPillSelect}}
-                />
-
-                <div class='checkbox-inputs'>
-                  {{#each this.checkboxInputs as |item|}}
-                    <label>
-                      <input
-                        type='checkbox'
-                        checked={{item.isSelected}}
-                        {{on 'change' (fn this.updateInputValue item.id)}}
-                      />
-                      <span>{{item.label}}</span>
-                    </label>
-                  {{/each}}
-                </div>
-
-              </div>
-            {{/if}}
-          </div>
-        </aside>
-        <main class='app-card-content'>
-          {{#if this.activeTab}}
-
-            {{!==  Cards grid component is here (same as packages/base/cards-grid) }}
-            <ul class='cards' data-test-cards-grid-cards>
-              {{#let
-                (component @context.prerenderedCardSearchComponent)
-                as |PrerenderedCardSearch|
-              }}
-                <PrerenderedCardSearch
-                  @query={{this.query}}
-                  @format='fitted'
-                  @realms={{this.realms}}
-                >
-
-                  <:loading>
-                    Loading...
-                  </:loading>
-                  <:response as |cards|>
-                    {{#each cards as |card|}}
-                      <li
-                        class='card'
-                        {{@context.cardComponentModifier
-                          cardId=card.url
-                          format='data'
-                          fieldType=undefined
-                          fieldName=undefined
-                        }}
-                        data-test-cards-grid-item={{removeFileExtension
-                          card.url
-                        }}
-                        {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
-                        data-cards-grid-item={{removeFileExtension card.url}}
-                      >
-                        <CardContainer @displayBoundaries={{true}}>
-                          {{card.component}}
-                        </CardContainer>
-                      </li>
-                    {{/each}}
-                  </:response>
-                </PrerenderedCardSearch>
-              {{/let}}
-            </ul>
-            {{!==  Cards grid component is here (same as packages/base/cards-grid) }}
-
-            {{#if @context.actions.createCard}}
-              <div class='add-card-button'>
-                <Tooltip @placement='left' @offset={{6}}>
-                  <:trigger>
-                    <AddButton {{on 'click' this.createNew}} />
-                  </:trigger>
-                  <:content>
-                    Add a new card to this collection
-                  </:content>
-                </Tooltip>
-              </div>
-            {{/if}}
-          {{/if}}
-        </main>
-      </section>
-    </section>
+    <table class='styled-table'>
+      <thead>
+        <tr>
+          {{#each this.tableData.headers as |header|}}
+            <th class='table-header'>{{header}}</th>
+          {{/each}}
+        </tr>
+      </thead>
+      <tbody>
+        {{#each this.tableData.rows as |row|}}
+          <tr>
+            {{#each row as |cell|}}
+              <td class='table-cell'>
+                <div class='cell-content'>{{cell}}</div>
+              </td>
+            {{/each}}
+          </tr>
+        {{/each}}
+      </tbody>
+    </table>
     <style scoped>
-      /*==These are the cards grid styles*/
-      .cards {
-        list-style-type: none;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--boxel-sp);
-        justify-items: center;
-        flex-grow: 1;
-      }
-      .card {
-        /*investigate why we need put variable to make it work */
-        --grid-card-width: 300px;
-        --grid-card-height: 150px;
-        width: var(--grid-card-width);
-        height: var(--grid-card-height);
-        overflow: hidden;
-        cursor: pointer;
-        container-name: fitted-card;
-        container-type: size;
-        border: 1px solid var(--boxel-100);
-      }
-      /*==These are the cards grid styles*/
-      .app-card {
-        position: relative;
-        min-height: 100%;
-        display: grid;
-        grid-template-rows: auto 1fr;
-        background-color: var(--boxel-light);
-        color: var(--boxel-dark);
-        font: var(--boxel-font);
-        letter-spacing: var(--boxel-lsp);
-      }
-      .app-card-layout {
-        display: grid;
-        grid-template-columns: 300px 1fr;
-        background: var(--boxel-100);
-        gap: var(--boxel-sp);
-        padding: var(--boxel-sp);
-      }
-
-      main.app-card-content {
-        background: var(--boxel-light);
-        border: 1px solid var(--boxel-200);
-        border-radius: var(--boxel-border-radius);
-        width: 100%;
-        margin: 0 auto;
-        padding: var(--boxel-sp-xl) var(--boxel-sp-xl) var(--boxel-sp-xxl);
-      }
-
-      aside.sidebar {
-        padding: 0 var(--boxel-sp);
-      }
-      aside.sidebar > * + * {
-        margin-top: var(--boxel-sp-lg);
-      }
-      aside.sidebar h5 {
-        margin-top: 0;
-      }
-
-      .search-and-filter-group {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp);
-      }
-
-      .search-and-filter-group .search {
-        background-color: var(--boxel-100);
-        color: var(--boxel-dark);
-        --boxel-form-control-border-color: var(--boxel-400);
-      }
-
-      .search-and-filter-group .search::placeholder {
-        color: var(--boxel-dark);
-        opacity: 0.6;
-      }
-
-      .checkbox-inputs {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xxs);
-      }
-      .checkbox-inputs label {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxs);
-        font-size: var(--boxel-font-size-sm);
-      }
-      .checkbox-inputs label span {
-      }
-
-      .table {
-        margin-bottom: 40px;
-      }
       .styled-table {
         width: 100%;
+        margin-bottom: 40px;
         border-collapse: collapse;
         font-size: 0.9em;
         font-family: sans-serif;
@@ -525,24 +137,103 @@ class AppCardIsolated extends Component<typeof AppCard> {
       tr:last-of-type {
         border-bottom: 2px solid #009879;
       }
+    </style>
+  </template>
 
-      .module-input-group {
-        max-width: 800px;
-        margin-top: var(--boxel-sp-xl);
-        display: flex;
-        gap: var(--boxel-sp);
-      }
-      .module-input-group > *:first-child {
-        flex-grow: 1;
-      }
-      .module-input-group > button {
-        margin-top: var(--boxel-sp);
-      }
-      .operator-mode .buried .cards,
-      .operator-mode .buried .add-button {
-        display: none;
-      }
+  @tracked instances?: CardDef[];
 
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+    this._getCards.perform();
+  }
+
+  private _getCards = restartableTask(async () => {
+    let instances: CardDef[] = [];
+    await Promise.all(
+      this.args.cards.map(async (c) => {
+        let result = getCard(new URL(c.url));
+        await result.loaded;
+        if (result.card) {
+          instances.push(result.card);
+        }
+      }),
+    );
+    this.instances = instances;
+  });
+
+  get tableData() {
+    if (!this.instances) {
+      return;
+    }
+    let exampleCard = this.instances[0];
+    let headers: string[] = [];
+    for (let fieldName in exampleCard) {
+      if (
+        fieldName !== 'title' &&
+        fieldName !== 'description' &&
+        fieldName !== 'thumbnailURL' &&
+        fieldName !== 'id'
+      ) {
+        headers.push(fieldName);
+      }
+    }
+    headers.sort();
+
+    let rows = this.instances.map((card) => {
+      let row: string[] = [];
+      for (let header of headers) {
+        row.push((card as any)[header]);
+      }
+      return row;
+    });
+    return {
+      headers,
+      rows,
+    };
+  }
+}
+
+class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
+  <template>
+    <div class='app-card-content'>
+      {{#if this.activeTabRef}}
+        <@context.prerenderedCardSearchComponent
+          @query={{this.query}}
+          @format='fitted'
+          @realms={{@realms}}
+        >
+          <:loading>Loading...</:loading>
+          <:response as |cards|>
+            {{#if @activeTab.isTable}}
+              <TableView @cards={{cards}} />
+            {{else}}
+              <CardsGrid @cards={{cards}} @context={{@context}} />
+            {{/if}}
+          </:response>
+        </@context.prerenderedCardSearchComponent>
+      {{else}}
+        <p>No cards available</p>
+      {{/if}}
+      {{#if (and (bool @context.actions.createCard) (bool this.activeTabRef))}}
+        <div class='add-card-button'>
+          <Tooltip @placement='left' @offset={{6}}>
+            <:trigger>
+              <AddButton {{on 'click' this.createNew}} />
+            </:trigger>
+            <:content>
+              Add a new card to this collection
+            </:content>
+          </Tooltip>
+        </div>
+      {{/if}}
+    </div>
+    <style scoped>
+      .app-card-content {
+        width: 100%;
+        max-width: 70rem;
+        margin: 0 auto;
+        padding: var(--boxel-sp-xl) var(--boxel-sp-xl) var(--boxel-sp-xxl);
+      }
       .add-card-button {
         display: inline-block;
         position: sticky;
@@ -556,132 +247,94 @@ class AppCardIsolated extends Component<typeof AppCard> {
     </style>
   </template>
 
-  @tracked tabs = this.args.model.tabs;
-  @tracked activeTabIndex = 0;
-  @tracked errorMessage = '';
-
   constructor(owner: Owner, args: any) {
     super(owner, args);
-    if (!this.tabs?.length) {
+    if (!this.args.model.tabs?.length) {
       this.setupInitialTabs();
       return;
     }
-    this.setTab();
-    this.setCategories();
-    this.setTags();
   }
 
-  setTab() {
-    let index = this.tabs?.findIndex(
-      (tab: Tab) => tab.tabId === window.location?.hash?.slice(1),
+  async setupInitialTabs() {
+    let module;
+    try {
+      if (!this.args.model.moduleId) {
+        return;
+      }
+      let loader: Loader = (import.meta as any).loader;
+      module = await loader.import(this.args.model.moduleId);
+    } catch (e) {
+      console.error(e);
+      return;
+    }
+    let exportedCards = Object.entries(module).filter(
+      ([_, declaration]) =>
+        declaration &&
+        typeof declaration === 'function' &&
+        'isCardDef' in declaration &&
+        !AppCard.isPrototypeOf(declaration),
     );
-    if (index && index !== -1) {
-      this.activeTabIndex = index;
+    let tabs = [];
+    for (let [name, _declaration] of exportedCards) {
+      tabs.push(
+        new Tab({
+          displayName: name,
+          tabId: name,
+          ref: {
+            name,
+            module: this.args.model.moduleId,
+          },
+          isTable: false,
+        }),
+      );
+    }
+
+    this.args.model.tabs = tabs;
+
+    if (tabs[0]) {
+      this.args.setActiveTab(tabs[0].tabId);
     }
   }
 
-  get currentRealm() {
-    return this.args.model[realmURL];
-  }
-
-  get activeTab() {
-    if (!this.tabs?.length) {
-      return;
-    }
-    let tab = this.tabs[this.activeTabIndex];
-    if (!tab) {
-      return;
-    }
-    let { name, module } = tab.ref;
-    if (!name || !module) {
-      return;
-    }
-    return tab;
+  setTabs(tabs: Tab[]) {
+    this.args.model.tabs = tabs ?? [];
   }
 
   get activeTabRef() {
-    if (!this.activeTab || !this.currentRealm) {
+    if (!this.args.activeTab?.ref?.name || !this.args.activeTab.ref.module) {
       return;
     }
-    return codeRefWithAbsoluteURL(this.activeTab.ref, this.currentRealm);
-  }
-
-  get headerColor() {
-    return (
-      Object.getPrototypeOf(this.args.model).constructor.headerColor ??
-      undefined
+    return codeRefWithAbsoluteURL(
+      this.args.activeTab.ref,
+      this.args.currentRealm,
     );
   }
 
-  @action setActiveTab(index: number) {
-    this.activeTabIndex = index;
-  }
-
-  setCategories() {
-    if (!this.currentRealm) {
+  get query() {
+    if (!this.activeTabRef) {
+      console.error('Can not get cards without a card ref.');
       return;
     }
-    this.loadCategoryFilterList.perform();
-  }
-
-  setTags() {
-    if (!this.currentRealm) {
-      return;
-    }
-    this.loadTagFilterList.perform();
-  }
-
-  private loadCategoryFilterList = restartableTask(async () => {
-    let query = this.categoryQuery;
-    let queryString = buildQueryString(query); //has ? in front of it
-    let searchResults = await this.search(queryString);
-    searchResults.forEach((json: any) => {
-      this.leftNavFilters.push({
-        displayName: json.attributes.title,
-      });
-    });
-    this.activeCategory = this.leftNavFilters[0];
-  });
-
-  get pillFilters() {
-    return Array.from(this.pillFilterMap.values());
-  }
-
-  private loadTagFilterList = restartableTask(async () => {
-    let query = this.tagQuery;
-    let queryString = buildQueryString(query); //has ? in front of it
-    let searchResults = await this.search(queryString);
-    searchResults.forEach((json: any) => {
-      this.pillFilterMap.set(json.id, {
-        id: json.id,
-        kind: json.attributes.kind,
-        value: json.attributes.value,
-        label: json.attributes.value,
-        selected: false,
-      });
-    });
-  });
-
-  async search(queryString: string) {
-    let response = await fetch(`${this.realms[0]}_search${queryString}`, {
-      headers: {
-        Accept: SupportedMimeType.CardJson,
+    return {
+      filter: {
+        every: [
+          { type: this.activeTabRef },
+          { not: { eq: { id: this.args.model.id! } } },
+        ],
       },
-    });
-
-    if (!response.ok) {
-      let responseText = await response.text();
-      let err = new Error(
-        `status: ${response.status} -
-          ${response.statusText}. ${responseText}`,
-      ) as any;
-
-      err.status = response.status;
-      err.responseText = responseText;
-
-      throw err;
-    }
-    return (await response.json()).data;
+      // sorting by title so that we can maintain stability in
+      // the ordering of the search results (server sorts results
+      // by order indexed by default)
+      sort: [
+        {
+          on: {
+            module: `${baseRealm.url}card-api`,
+            name: 'CardDef',
+          },
+          by: 'title',
+        },
+      ],
+    };
   }
 
   @action createNew(value: unknown) {
@@ -695,55 +348,133 @@ class AppCardIsolated extends Component<typeof AppCard> {
 
   private createCard = restartableTask(
     async (doc: LooseSingleCardDocument | undefined = undefined) => {
-      if (!this.activeTabRef) {
-        return;
-      }
       try {
+        if (!this.activeTabRef) {
+          throw new Error('Can not create a card without a card ref.');
+        }
         await this.args.context?.actions?.createCard?.(
           this.activeTabRef,
-          this.currentRealm,
+          this.args.currentRealm,
           { doc },
         );
-      } catch (e) {
-        console.error(e);
-        this.errorMessage =
-          e instanceof Error ? `Error: ${e.message}` : 'An error occurred';
+      } catch (e: unknown) {
+        throw e;
       }
     },
   );
 }
 
-class PillPicker extends GlimmerComponent<{
+export class AppCardTemplate extends GlimmerComponent<{
   Args: {
-    items: PillItem[];
-    onSelect: (id: string) => void;
+    model: Partial<AppCard>;
+    fields: FieldsTypeFor<AppCard>;
+    context?: CardContext;
   };
+  Blocks: { component: [args: TabComponentSignature]; default: [] };
 }> {
   <template>
-    <div class='pill-picker'>
-      {{#each @items as |item|}}
-        <Pill
-          @kind='button'
-          class={{cn selected=(eq item.selected true)}}
-          style='padding: var(--boxel-sp-4xs) var(--boxel-sp-xxs);'
-          {{on 'click' (fn @onSelect item.id)}}
-        >
-          <:default>{{item.label}}</:default>
-        </Pill>
-      {{/each}}
-    </div>
-    <style>
-      .pill-picker {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--boxel-sp-xxs);
-      }
-      .selected {
-        --pill-background-color: var(--boxel-highlight);
+    <section class='app-card'>
+      <TabbedHeader
+        @headerTitle={{@model.title}}
+        @tabs={{@model.tabs}}
+        @setActiveTab={{this.setActiveTab}}
+        @activeTabId={{this.activeTab.tabId}}
+        @headerBackgroundColor={{this.headerColor}}
+      >
+        <:headerIcon>
+          {{#if @model.headerIcon.base64}}
+            <@fields.headerIcon />
+          {{/if}}
+        </:headerIcon>
+      </TabbedHeader>
+      {{yield
+        (hash
+          activeTab=this.activeTab
+          currentRealm=this.currentRealm
+          realms=this.realms
+          setActiveTab=this.setActiveTab
+        )
+        to='component'
+      }}
+    </section>
+    <style scoped>
+      .app-card {
+        position: relative;
+        min-height: 100%;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        background-color: var(--boxel-light);
+        color: var(--boxel-dark);
+        font: var(--boxel-font);
+        letter-spacing: var(--boxel-lsp);
       }
     </style>
   </template>
+
+  @tracked activeTabId?: string;
+  @tracked tabs = this.args.model.tabs ?? [];
+
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+    let hashTab = window.location?.hash?.slice(1);
+    let tabId =
+      hashTab?.length && this.tabs.map((t) => t.tabId)?.includes(hashTab)
+        ? hashTab
+        : this.tabs[0]?.tabId;
+    if (tabId) {
+      this.setActiveTab(tabId);
+    }
+  }
+
+  get headerColor() {
+    return (
+      Object.getPrototypeOf(this.args.model).constructor.headerColor ??
+      undefined
+    );
+  }
+
+  get currentRealm() {
+    return this.args.model[realmURL]!;
+  }
+
+  get realms(): string[] {
+    return [this.currentRealm.href];
+  }
+
+  get activeTab() {
+    return this.tabs.find((t) => t.tabId === this.activeTabId) ?? this.tabs[0];
+  }
+
+  @action setActiveTab(id: string) {
+    this.activeTabId = id;
+  }
 }
+
+export class AppCardIsolated extends Component<typeof AppCard> {
+  <template>
+    <AppCardTemplate
+      @model={{@model}}
+      @fields={{@fields}}
+      @context={{@context}}
+    >
+      <:component as |args|>
+        <DefaultTabTemplate
+          @activeTab={{args.activeTab}}
+          @context={{@context}}
+          @currentRealm={{args.currentRealm}}
+          @model={{@model}}
+          @realms={{args.realms}}
+          @setActiveTab={{args.setActiveTab}}
+        />
+      </:component>
+    </AppCardTemplate>
+  </template>
+}
+
+function removeFileExtension(cardUrl: string) {
+  return cardUrl.replace(/\.[^/.]+$/, '');
+}
+
 export class AppCard extends CardDef {
   static displayName = 'App Card';
   static prefersWideFormat = true;
@@ -754,6 +485,69 @@ export class AppCard extends CardDef {
   static isolated = AppCardIsolated;
 }
 
-function removeFileExtension(cardUrl: string) {
-  return cardUrl.replace(/\.[^/.]+$/, '');
+export class CardsGrid extends GlimmerComponent<{
+  Args: {
+    cards: PrerenderedCard[];
+    context?: CardContext;
+    isListFormat?: boolean;
+  };
+  Element: HTMLElement;
+}> {
+  <template>
+    {{#if @cards.length}}
+      <ul class={{cn 'cards-grid' list-format=@isListFormat}} ...attributes>
+        {{#each @cards as |card|}}
+          <li
+            class='cards-grid-item'
+            {{@context.cardComponentModifier
+              cardId=card.url
+              format='data'
+              fieldType=undefined
+              fieldName=undefined
+            }}
+            data-test-cards-grid-item={{removeFileExtension card.url}}
+            {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
+            data-cards-grid-item={{removeFileExtension card.url}}
+          >
+            <CardContainer class='card' @displayBoundaries={{true}}>
+              {{card.component}}
+            </CardContainer>
+          </li>
+        {{/each}}
+      </ul>
+    {{else}}
+      <p>No cards available</p>
+    {{/if}}
+    <style scoped>
+      .cards-grid {
+        --grid-card-width: 10.25rem; /* 164px */
+        --grid-card-height: 14rem; /* 224px */
+        list-style-type: none;
+        margin: 0;
+        padding: var(--cards-grid-padding, 0);
+        display: grid;
+        grid-template-columns: repeat(auto-fill, var(--grid-card-width));
+        grid-auto-rows: max-content;
+        gap: var(--boxel-sp-xl) var(--boxel-sp-lg);
+      }
+      .cards-grid.list-format {
+        --grid-card-width: 18.75rem; /* 300px */
+        --grid-card-height: 12rem; /* 192px */
+        grid-template-columns: 1fr;
+        gap: var(--boxel-sp);
+      }
+      .cards-grid-item {
+        width: var(--grid-card-width);
+        height: var(--grid-card-height);
+      }
+      .card {
+        height: 100%;
+        width: 100%;
+        container-name: fitted-card;
+        container-type: size;
+      }
+    </style>
+  </template>
+
+  getComponent = (card: CardDef) => card.constructor.getComponent(card);
 }

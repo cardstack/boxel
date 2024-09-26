@@ -96,17 +96,19 @@ export interface FileRef {
   path: LocalPath;
   content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
   lastModified: number;
+  created: number;
+
   [key: symbol]: object;
 }
 
 export interface TokenClaims {
   user: string;
   realm: string;
-  permissions: ('read' | 'write')[];
+  permissions: ('read' | 'write' | 'realm-owner')[];
 }
 
 export interface RealmPermissions {
-  [username: string]: ('read' | 'write')[];
+  [username: string]: ('read' | 'write' | 'realm-owner')[];
 }
 
 export interface RealmAdapter {
@@ -275,7 +277,7 @@ export class Realm {
       adapter,
       getIndexHTML,
       matrix,
-      realmSecretSeed,
+      secretSeed,
       dbAdapter,
       queue,
       virtualNetwork,
@@ -285,7 +287,7 @@ export class Realm {
       adapter: RealmAdapter;
       getIndexHTML: () => Promise<string>;
       matrix: MatrixConfig;
-      realmSecretSeed: string;
+      secretSeed: string;
       dbAdapter: DBAdapter;
       queue: Queue;
       virtualNetwork: VirtualNetwork;
@@ -295,11 +297,11 @@ export class Realm {
   ) {
     this.paths = new RealmPaths(new URL(url));
     let { username, url: matrixURL } = matrix;
-    this.#realmSecretSeed = realmSecretSeed;
+    this.#realmSecretSeed = secretSeed;
     this.#matrixClient = new MatrixClient({
       matrixURL,
       username,
-      seed: realmSecretSeed,
+      seed: secretSeed,
     });
     this.#getIndexHTML = getIndexHTML;
     this.#assetsURL = assetsURL;
@@ -318,7 +320,7 @@ export class Realm {
       authorizationMiddleware(
         new RealmAuthDataSource(
           this.#matrixClient,
-          virtualNetwork.fetch,
+          () => virtualNetwork.fetch,
           this.url,
         ),
       ),
@@ -572,7 +574,12 @@ export class Realm {
 
   async #startup() {
     await Promise.resolve();
-    await this.#realmIndexUpdater.run();
+    let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
+    let promise = this.#realmIndexUpdater.run();
+    if (isNewIndex) {
+      // we only await the full indexing at boot if this is a brand new index
+      await promise;
+    }
     this.sendServerEvent({ type: 'index', data: { type: 'full' } });
     this.#perfLog.debug(
       `realm server startup in ${Date.now() - this.#startTime}ms`,
@@ -817,8 +824,6 @@ export class Realm {
       (_match, g1, g2, g3) => {
         let config = JSON.parse(decodeURIComponent(g2));
         config = merge({}, config, {
-          ownRealmURL: this.url, // unresolved url
-          resolvedOwnRealmURL: this.url,
           hostsOwnAssets: !isNode,
           realmsServed: opts?.realmsServed,
           assetsURL: this.#assetsURL.href,
@@ -841,6 +846,7 @@ export class Realm {
     requestContext: RequestContext,
   ): Promise<ResponseWithNodeStream> {
     let headers = {
+      'x-created': formatRFC7231(ref.created * 1000),
       'last-modified': formatRFC7231(ref.lastModified * 1000),
       ...(Symbol.for('shimmed-module') in ref
         ? { 'X-Boxel-Shimmed-Module': 'true' }
@@ -902,6 +908,11 @@ export class Realm {
 
     try {
       token = this.#adapter.verifyJWT(tokenString, this.#realmSecretSeed);
+
+      // if the client is the realm matrix user then we permit all actions
+      if (token.user === this.#matrixClient.getUserId()) {
+        return;
+      }
 
       let realmPermissionChecker = new RealmPermissionChecker(
         realmPermissions,

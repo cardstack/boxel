@@ -35,6 +35,8 @@
       "include": [
         "../experiments-realm/**",
         "../base/**",
+        "../seed-realm/**",
+        "../catalog-realm/**",
         "../boxel-ui/addon/**"
       ]
     }

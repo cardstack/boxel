@@ -344,7 +344,7 @@ export default class ProfileEmail extends Component<Signature> {
         display: flex;
         align-items: center;
         text-transform: uppercase;
-        font-weight: bold;
+        font-weight: 600;
         padding: var(--boxel-sp-xxs);
         background-color: var(--boxel-warning-100);
         border-top-left-radius: var(--boxel-border-radius);

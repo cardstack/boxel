@@ -186,7 +186,7 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
       .body {
         display: flex;
         flex-direction: column;
-        font-weight: bold;
+        font-weight: 600;
         padding: 0 var(--boxel-sp-sm) 0 var(--boxel-sp-sm);
       }
 
@@ -200,7 +200,7 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
         --boxel-button-padding: 0px;
         --boxel-button-font: var(--boxel-font-xs);
         --icon-stroke-width: 2.5;
-        font-weight: bold;
+        font-weight: 600;
         color: var(--boxel-highlight);
         display: flex;
         gap: var(--boxel-sp-xxxs);

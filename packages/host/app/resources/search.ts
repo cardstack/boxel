@@ -37,7 +37,7 @@ export class Search extends Resource<Args> {
 
   modify(_positional: never[], named: Args['named']) {
     let { query, realms, isLive, doWhileRefreshing } = named;
-    this.realmsToSearch = realms ?? this.cardService.realmURLs;
+    this.realmsToSearch = realms ?? this.cardService.unresolvedRealmURLs;
 
     this.loaded = this.search.perform(query);
     waitForPromise(this.loaded);

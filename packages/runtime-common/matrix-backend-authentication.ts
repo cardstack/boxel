@@ -31,7 +31,11 @@ export class MatrixBackendAuthentication {
         JSON.stringify({ errors: [`Request body is not valid JSON`] }),
       );
     }
-    let { user, challenge } = json as { user?: string; challenge?: string };
+    let { user, challenge, challengeResponse } = json as {
+      user?: string;
+      challenge?: string;
+      challengeResponse?: string;
+    };
     if (!user) {
       return this.utils.badRequest(
         JSON.stringify({ errors: [`Request body missing 'user' property`] }),
@@ -39,13 +43,32 @@ export class MatrixBackendAuthentication {
     }
 
     if (challenge) {
-      return await this.verifyChallenge(user);
+      return await this.verifyChallenge(user, challenge, challengeResponse);
     } else {
       return await this.createChallenge(user);
     }
   }
 
   private async createChallenge(user: string) {
+    let challenge = uuidv4();
+
+    // if the client being authenticated is the same as the realm matrix user,
+    // when we just need to verify that the client can hash the challenge with
+    // the realm user's password
+    if (this.matrixClient.getUserId() === user) {
+      return this.utils.createResponse(
+        JSON.stringify({
+          challenge,
+        }),
+        {
+          status: 401,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+    }
+
     let dmRooms =
       (await this.matrixClient.getAccountData<Record<string, string>>(
         'boxel.session-rooms',
@@ -57,7 +80,6 @@ export class MatrixBackendAuthentication {
       await this.matrixClient.setAccountData('boxel.session-rooms', dmRooms);
     }
 
-    let challenge = uuidv4();
     let hash = new Sha256();
     hash.update(challenge);
     hash.update(this.secretSeed);
@@ -81,7 +103,36 @@ export class MatrixBackendAuthentication {
     );
   }
 
-  private async verifyChallenge(user: string) {
+  private async verifyChallenge(
+    user: string,
+    challenge: string,
+    challengeResponse?: string,
+  ) {
+    if (user === this.matrixClient.getUserId() && challengeResponse) {
+      let successfulChallengeResponse =
+        await this.matrixClient.hashMessageWithSecret(challenge);
+      if (challengeResponse === successfulChallengeResponse) {
+        let jwt = await this.utils.createJWT(user);
+        return this.utils.createResponse(null, {
+          status: 201,
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: jwt,
+            'Access-Control-Expose-Headers': 'Authorization',
+          },
+        });
+      } else {
+        return this.utils.createResponse(
+          JSON.stringify({
+            errors: [`user ${user} failed auth challenge`],
+          }),
+          {
+            status: 401,
+          },
+        );
+      }
+    }
+
     let dmRooms =
       (await this.matrixClient.getAccountData<Record<string, string>>(
         'boxel.session-rooms',
@@ -148,7 +199,7 @@ export class MatrixBackendAuthentication {
       );
     }
 
-    let challenge = latestAuthChallengeMessage.content.body.replace(
+    let lastChallenge = latestAuthChallengeMessage.content.body.replace(
       'auth-challenge: ',
       '',
     );
@@ -160,13 +211,14 @@ export class MatrixBackendAuthentication {
     hash.update(response);
     hash.update(this.secretSeed);
     let hashedResponse = uint8ArrayToHex(await hash.digest());
-    if (hashedResponse === challenge) {
+    if (hashedResponse === lastChallenge) {
       let jwt = await this.utils.createJWT(user);
       return this.utils.createResponse(null, {
         status: 201,
         headers: {
           'Content-Type': 'application/json',
           Authorization: jwt,
+          'Access-Control-Expose-Headers': 'Authorization',
         },
       });
     } else {

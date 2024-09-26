@@ -117,7 +117,7 @@ export class ProfileInfo extends Component<ProfileInfoSignature> {
       .display-name {
         margin-top: var(--boxel-sp-xxxs);
         font-size: var(--boxel-font-size);
-        font-weight: bold;
+        font-weight: 600;
       }
 
       .profile-handle {

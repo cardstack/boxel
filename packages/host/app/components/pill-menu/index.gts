@@ -139,7 +139,7 @@ export default class PillMenu extends Component<Signature> {
         overflow: hidden;
       }
       .menu-header :deep(.title) {
-        font: 700 var(--boxel-font);
+        font: 600 var(--boxel-font);
       }
       .header-button {
         margin: var(--button-outline);
@@ -147,7 +147,7 @@ export default class PillMenu extends Component<Signature> {
         background: none;
         border: none;
         border-radius: var(--boxel-border-radius-xl);
-        font: 700 var(--boxel-font-xs);
+        font: 600 var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-xs);
         display: flex;
         align-items: center;
@@ -196,7 +196,7 @@ export default class PillMenu extends Component<Signature> {
         box-shadow: none;
         border-radius: var(--boxel-border-radius-xl);
         color: var(--boxel-highlight);
-        font: 700 var(--boxel-font-sm);
+        font: 600 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
         transition: color var(--boxel-transition);
       }

@@ -17,9 +17,11 @@ done
 : ${REALM_SECRET_SEED:="shhh! it's a secret"}
 export REALM_SECRET_SEED
 
-ts-node --transpileOnly ./scripts/register-realm-user.ts realm-server
+ts-node --transpileOnly ./scripts/register-realm-user.ts realm_server
 ts-node --transpileOnly ./scripts/register-realm-user.ts node-test_realm-server
 ts-node --transpileOnly ./scripts/register-realm-user.ts base_realm
 ts-node --transpileOnly ./scripts/register-realm-user.ts experiments_realm
+ts-node --transpileOnly ./scripts/register-realm-user.ts seed_realm
+ts-node --transpileOnly ./scripts/register-realm-user.ts catalog_realm
 ts-node --transpileOnly ./scripts/register-realm-user.ts node-test_realm
 ts-node --transpileOnly ./scripts/register-realm-user.ts test_realm

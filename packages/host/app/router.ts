@@ -1,20 +1,11 @@
 import EmberRouter from '@ember/routing/router';
 import config from '@cardstack/host/config/environment';
-const { ownRealmURL, resolvedOwnRealmURL, hostsOwnAssets } = config;
+const { hostsOwnAssets } = config;
 
 export default class Router extends EmberRouter {
   location = config.locationType;
   rootURL = config.rootURL;
 }
-
-// When resolvedOwnRealmURL is available, that is actually the path in the browser.
-// It will not be available when running in fastboot.
-// When paths of resolvedOwnRealmURL and ownRealmURL are not symmetrical,
-// that means that means the resolvedOwnRealmURL should be used instead of ownRealmURL.
-let path = new URL(resolvedOwnRealmURL ?? ownRealmURL).pathname.replace(
-  /\/$/,
-  '',
-);
 
 Router.map(function () {
   this.route('host-freestyle', { path: '/_freestyle' });
@@ -25,7 +16,7 @@ Router.map(function () {
   // component exists to support the indexer
   this.route('acceptance-test-setup');
 
-  if (!path || hostsOwnAssets) {
+  if (hostsOwnAssets) {
     this.route('index-card', { path: '/' });
   }
 });

@@ -35,6 +35,34 @@ test.describe('Login', () => {
     await synapseStop(synapse.synapseId);
   });
 
+  test('it can login on the realm server home page and see the workspace chooser', async ({
+    page,
+  }) => {
+    await page.goto(`http://localhost:4202/`); // realm server index page
+
+    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
+    await page.locator('[data-test-username-field]').fill('user1');
+    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
+    await page.locator('[data-test-password-field]').fill('pass');
+    await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
+    await page.locator('[data-test-login-btn]').click();
+
+    await expect(
+      page.locator('[data-test-workspace="Test Workspace A"]'),
+    ).toHaveCount(1);
+
+    await page.locator('[data-test-workspace="Test Workspace A"]').click();
+
+    await expect(
+      page.locator('[data-test-operator-mode-stack="0"]'),
+    ).toHaveCount(1);
+
+    await logout(page);
+    await assertLoggedOut(page);
+    await page.reload();
+    await assertLoggedOut(page);
+  });
+
   test('it can login', async ({ page }) => {
     await openRoot(page);
     await toggleOperatorMode(page);
@@ -59,7 +87,7 @@ test.describe('Login', () => {
     let claims = jwt.verify(token, REALM_SECRET_SEED) as {
       user: string;
       realm: string;
-      permissions: ('read' | 'write')[];
+      permissions: ('read' | 'write' | 'realm-owner')[];
     };
     expect(claims.user).toStrictEqual('@user1:localhost');
     expect(claims.realm).toStrictEqual(`${testHost}/`);

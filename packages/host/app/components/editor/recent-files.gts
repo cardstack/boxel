@@ -90,8 +90,8 @@ class File extends Component<FileArgs> {
     <style scoped>
       .recent-file {
         background: var(--boxel-light);
-        padding: var(--boxel-sp-xs);
-        font-weight: 700;
+        padding: var(--boxel-sp-xxs);
+        font-weight: 600;
         margin-bottom: var(--boxel-sp-xs);
         border-radius: var(--boxel-border-radius);
         display: flex;

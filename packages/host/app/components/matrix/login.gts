@@ -93,7 +93,7 @@ export default class Login extends Component<Signature> {
         flex-direction: column;
       }
       .title {
-        font: 700 var(--boxel-font-med);
+        font: 600 var(--boxel-font-med);
         margin-bottom: var(--boxel-sp-sm);
         padding: 0;
       }
@@ -196,8 +196,8 @@ export default class Login extends Component<Signature> {
       throw e;
     }
     if (auth) {
-      await this.router.refresh();
       await this.matrixService.start(auth);
+      await this.router.refresh();
     } else {
       throw new Error(
         `bug: should be impossible to get here - successful matrix login with no auth response`,

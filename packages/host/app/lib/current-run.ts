@@ -294,7 +294,7 @@ export class CurrentRun {
       error.deps = [url.href];
       throw error;
     }
-    let { content, lastModified } = fileRef;
+    let { content, lastModified, created } = fileRef;
     if (hasExecutableExtension(url.href)) {
       await this.indexModule(url, fileRef);
     } else {
@@ -327,6 +327,7 @@ export class CurrentRun {
             path: localPath,
             source: content,
             lastModified,
+            resourceCreatedAt: created,
             resource,
             identityContext,
           });
@@ -377,6 +378,7 @@ export class CurrentRun {
       type: 'module',
       source: ref.content,
       lastModified: ref.lastModified,
+      resourceCreatedAt: ref.created,
       deps: new Set(deps),
     });
     this.stats.modulesIndexed++;
@@ -386,12 +388,14 @@ export class CurrentRun {
     path,
     source,
     lastModified,
+    resourceCreatedAt,
     resource,
     identityContext,
   }: {
     path: LocalPath;
     source: string;
     lastModified: number;
+    resourceCreatedAt: number;
     resource: LooseCardResource;
     identityContext: IdentityContextType;
   }): Promise<void> {
@@ -417,6 +421,8 @@ export class CurrentRun {
     let isolatedHtml: string | undefined;
     let atomHtml: string | undefined;
     let card: CardDef | undefined;
+    let embeddedHtml: Record<string, string> | undefined;
+    let fittedHtml: Record<string, string> | undefined;
     try {
       let api = await this.loaderService.loader.import<typeof CardAPI>(
         `${baseRealm.url}card-api`,
@@ -485,6 +491,7 @@ export class CurrentRun {
           id: instanceURL.href,
           meta: {
             lastModified,
+            resourceCreatedAt,
             realmInfo: this.#realmInfo,
             realmURL: this.realmURL.href,
           },
@@ -502,31 +509,27 @@ export class CurrentRun {
       // "_" prefix to make a decent attempt to not pollute the userland
       // namespace for cards
       searchData._cardType = getDisplayName(cardType);
+      typesMaybeError = await this.getTypes(cardType);
+      if (card && typesMaybeError?.type === 'types') {
+        embeddedHtml = await this.buildCardHtml(
+          card,
+          typesMaybeError.types,
+          'embedded',
+          identityContext,
+        );
+      }
+      if (card && typesMaybeError?.type === 'types') {
+        fittedHtml = await this.buildCardHtml(
+          card,
+          typesMaybeError.types,
+          'fitted',
+          identityContext,
+        );
+      }
     } catch (err: any) {
       uncaughtError = err;
     }
-    // if we already encountered an uncaught error then no need to deal with this
-    if (!uncaughtError && cardType) {
-      typesMaybeError = await this.getTypes(cardType);
-    }
-    let embeddedHtml: Record<string, string> | undefined;
-    if (card && typesMaybeError?.type === 'types') {
-      embeddedHtml = await this.buildCardHtml(
-        card,
-        typesMaybeError.types,
-        'embedded',
-        identityContext,
-      );
-    }
-    let fittedHtml: Record<string, string> | undefined;
-    if (card && typesMaybeError?.type === 'types') {
-      fittedHtml = await this.buildCardHtml(
-        card,
-        typesMaybeError.types,
-        'fitted',
-        identityContext,
-      );
-    }
+
     if (searchData && doc && typesMaybeError?.type === 'types') {
       await this.updateEntry(instanceURL, {
         type: 'instance',
@@ -538,6 +541,7 @@ export class CurrentRun {
         embeddedHtml,
         fittedHtml,
         lastModified,
+        resourceCreatedAt,
         types: typesMaybeError.types.map(({ refURL }) => refURL),
         displayNames: typesMaybeError.types.map(
           ({ displayName }) => displayName,

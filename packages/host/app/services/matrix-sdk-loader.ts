@@ -2,15 +2,11 @@ import Service from '@ember/service';
 
 import { service } from '@ember/service';
 
+import * as MatrixSDK from 'matrix-js-sdk';
+
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
-
 import LoaderService from './loader-service';
-
-import type * as MatrixSDK from 'matrix-js-sdk';
-
-const DEFAULT_PAGE_SIZE = 50;
 
 /*
   This abstracts over the matrix SDK, including several extra functions that are
@@ -93,16 +89,14 @@ export type ExtendedClient = Pick<
   | 'scrollback'
   | 'sendEvent'
   | 'sendReadReceipt'
+  | 'setAccountData'
   | 'setDisplayName'
   | 'setPassword'
   | 'setPowerLevel'
   | 'setRoomName'
   | 'startClient'
+  | 'getAccountDataFromServer'
 > & {
-  allRoomMessages(
-    roomId: string,
-    opts?: MessageOptions,
-  ): Promise<DiscreteMatrixEvent[]>;
   requestEmailToken(
     type: 'registration' | 'threepid',
     email: string,
@@ -114,7 +108,15 @@ export type ExtendedClient = Pick<
     password: string,
   ): Promise<MatrixSDK.LoginResponse>;
   createRealmSession(realmURL: URL): Promise<string>;
+  hashMessageWithSecret(message: string): Promise<string>;
 };
+
+async function hashMessageWithSecret(
+  this: ExtendedClient,
+  _fetch: typeof globalThis.fetch,
+) {
+  throw new Error(`This should not be called on the browser client`);
+}
 
 async function createRealmSession(
   this: ExtendedClient,
@@ -124,39 +126,6 @@ async function createRealmSession(
   let realmAuthClient = new RealmAuthClient(realmURL, this, fetch);
 
   return await realmAuthClient.getJWT();
-}
-
-async function allRoomMessages(
-  this: ExtendedClient,
-  fetch: typeof globalThis.fetch,
-  roomId: string,
-  opts?: MessageOptions,
-): Promise<DiscreteMatrixEvent[]> {
-  let messages: DiscreteMatrixEvent[] = [];
-  let from: string | undefined;
-
-  do {
-    let response = await fetch(
-      `${this.baseUrl}/_matrix/client/v3/rooms/${roomId}/messages?dir=${
-        opts?.direction ? opts.direction.slice(0, 1) : 'f'
-      }&limit=${opts?.pageSize ?? DEFAULT_PAGE_SIZE}${
-        from ? '&from=' + from : ''
-      }`,
-      {
-        headers: {
-          Authorization: `Bearer ${this.getAccessToken()}`,
-        },
-      },
-    );
-    let { chunk, end } = await response.json();
-    from = end;
-    let events: DiscreteMatrixEvent[] = chunk;
-    if (opts?.onMessages) {
-      await opts.onMessages(events);
-    }
-    messages.push(...events);
-  } while (from);
-  return messages;
 }
 
 async function requestEmailToken(
@@ -236,8 +205,8 @@ function extendedClient(
     get(target, key, receiver) {
       let extendedTarget = target as unknown as ExtendedClient;
       switch (key) {
-        case 'allRoomMessages':
-          return allRoomMessages.bind(extendedTarget, fetch);
+        case 'hashMessageWithSecret':
+          return hashMessageWithSecret.bind(extendedTarget, fetch);
         case 'requestEmailToken':
           return requestEmailToken.bind(extendedTarget, fetch);
         case 'loginWithEmail':
@@ -253,6 +222,5 @@ function extendedClient(
 
 export interface MessageOptions {
   direction?: 'forward' | 'backward';
-  onMessages?: (messages: DiscreteMatrixEvent[]) => Promise<void>;
   pageSize: number;
 }

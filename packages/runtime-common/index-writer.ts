@@ -61,6 +61,7 @@ export interface InstanceEntry {
   type: 'instance';
   source: string;
   lastModified: number;
+  resourceCreatedAt: number;
   resource: CardResource;
   searchData: Record<string, any>;
   isolatedHtml?: string;
@@ -81,6 +82,7 @@ interface ModuleEntry {
   type: 'module';
   source: string;
   lastModified: number;
+  resourceCreatedAt: number;
   deps: Set<string>;
 }
 
@@ -164,6 +166,7 @@ export class Batch {
               display_names: entry.displayNames,
               source: entry.source,
               last_modified: entry.lastModified,
+              resource_created_at: entry.resourceCreatedAt,
             }
           : entry.type === 'module'
           ? {
@@ -171,6 +174,7 @@ export class Batch {
               deps: [...entry.deps],
               source: entry.source,
               last_modified: entry.lastModified,
+              resource_created_at: entry.resourceCreatedAt,
               transpiled_code: transpileJS(
                 entry.source,
                 new RealmPaths(this.realmURL).local(url),
@@ -227,6 +231,7 @@ export class Batch {
       ...every([
         ['i.realm_url =', param(this.realmURL.href)],
         ['i.type != ', param('error')],
+        ['i.is_deleted != true'],
         realmVersionExpression({ useWorkInProgressIndex: true }),
       ]),
     ] as Expression)) as { total: string }[];

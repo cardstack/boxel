@@ -108,7 +108,7 @@ export default class CardSchemaEditor extends Component<Signature> {
 
       .computed-icon {
         display: inline-flex;
-        font: 700 var(--boxel-font);
+        font: 600 var(--boxel-font);
         line-height: 20px;
         padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs);
         background-color: var(--boxel-200);

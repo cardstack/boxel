@@ -35,7 +35,7 @@ import {
   setupBaseRealm,
   StringField,
 } from '../../helpers/base-realm';
-import { setupMatrixServiceMock } from '../../helpers/mock-matrix-service';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent, renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -55,12 +55,16 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
 
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
+  setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:staging',
+    activeRealms: [testRealmURL],
+    autostart: true,
+  });
   setupBaseRealm(hooks);
   setupCardLogs(
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-  setupMatrixServiceMock(hooks, { autostart: true });
 
   hooks.beforeEach(async function () {
     let permissions: Permissions = {

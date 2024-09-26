@@ -411,7 +411,7 @@ module('Acceptance | code submode tests', function (hooks) {
   setupServerSentEvents(hooks);
   let { setActiveRealms } = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:staging',
-    activeRealms: [baseRealm.url, testRealmURL],
+    activeRealms: [testRealmURL],
   });
 
   hooks.beforeEach(async function () {
@@ -780,11 +780,7 @@ module('Acceptance | code submode tests', function (hooks) {
   });
   module('with connection to test realm', function (hooks) {
     hooks.beforeEach(function () {
-      setActiveRealms([
-        baseRealm.url,
-        testRealmURL,
-        'http://localhost:4202/test/',
-      ]);
+      setActiveRealms([testRealmURL, 'http://localhost:4202/test/']);
     });
     test('code submode handles binary files', async function (assert) {
       await visitOperatorMode({
