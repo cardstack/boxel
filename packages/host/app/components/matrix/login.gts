@@ -198,7 +198,7 @@ export default class Login extends Component<Signature> {
     if (auth) {
       await this.matrixService.start(auth, async () => {
         // do this in a callback to the matrix service, otherwise our component
-        // is town down immediately after this call
+        // is torn down immediately after this call
         await this.router.refresh();
       });
     } else {
