@@ -232,6 +232,11 @@ export class Worker {
             `Error raised during indexing has likely stopped the indexer`,
             e,
           );
+          deferred.reject(
+            new Error(
+              'Rethrowing error from inside registerRunner: ' + e?.message,
+            ),
+          );
         }
       },
     });

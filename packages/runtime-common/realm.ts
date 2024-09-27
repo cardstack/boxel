@@ -574,7 +574,12 @@ export class Realm {
 
   async #startup() {
     await Promise.resolve();
-    await this.#realmIndexUpdater.run();
+    let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
+    let promise = this.#realmIndexUpdater.run();
+    if (isNewIndex) {
+      // we only await the full indexing at boot if this is a brand new index
+      await promise;
+    }
     this.sendServerEvent({ type: 'index', data: { type: 'full' } });
     this.#perfLog.debug(
       `realm server startup in ${Date.now() - this.#startTime}ms`,
