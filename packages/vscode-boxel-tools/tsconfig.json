@@ -1,10 +1,10 @@
 {
   "compilerOptions": {
     "strictNullChecks": true,
-    "module": "es2022",
-    "moduleResolution": "node",
+    "module": "Node16",
+    "moduleResolution": "Node16",
     "allowSyntheticDefaultImports": true,
-    "target": "es2020",
+    "target": "ES2022",
     "outDir": "out",
     "baseUrl": ".",
     "sourceMap": true,
@@ -13,12 +13,18 @@
     "skipLibCheck": true,
     "paths": {
       "https://cardstack.com/base/*": ["../base/*"],
+      "@cardstack/runtime-common/*": ["../runtime-common/*"],
+      "babel-plugin-ember-template-compilation": [
+        "node_modules/babel-plugin-ember-template-compilation/*"
+      ],
+      "dompurify": ["./node_modules/dompurify/*"],
+      "pluralize": ["./node_modules/pluralize/*"],
       "*": ["types/*"]
     }
   },
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"]
   },
-  "include": ["../base/**/*", "./src/**/*"],
+  "include": ["../base/**/*", "./src/**/*", "../runtime-common/**/*"],
   "exclude": ["node_modules", ".vscode-test"]
 }

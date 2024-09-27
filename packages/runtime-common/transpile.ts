@@ -2,8 +2,11 @@ import { preprocessEmbeddedTemplates } from '@cardstack/ember-template-imports/l
 import * as babel from '@babel/core';
 //@ts-ignore type import requires a newer Typescript with node16 moduleResolution
 import makeEmberTemplatePlugin from 'babel-plugin-ember-template-compilation/browser';
+//@ts-ignore type import requires a newer Typescript with node16 moduleResolution
 import type { Options as EmberTemplatePluginOptions } from 'babel-plugin-ember-template-compilation/src/plugin';
+//@ts-ignore type import requires a newer Typescript with node16 moduleResolution
 import type { EmberTemplateCompiler } from 'babel-plugin-ember-template-compilation/src/ember-template-compiler';
+//@ts-ignore type import requires a newer Typescript with node16 moduleResolution
 import type { ExtendedPluginBuilder } from 'babel-plugin-ember-template-compilation/src/js-utils';
 //@ts-ignore no types are available
 import * as etc from 'ember-source/dist/ember-template-compiler';
