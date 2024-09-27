@@ -24,7 +24,6 @@ interface LoginOptions {
   url?: string;
   expectFailure?: true;
   skipOpeningAssistant?: true;
-  skipOpeningOperatorMode?: true;
 }
 
 export async function registerRealmUsers(synapse: SynapseInstance) {
@@ -58,11 +57,6 @@ export async function registerRealmUsers(synapse: SynapseInstance) {
     'node-test_realm',
     await realmPassword('node-test_realm', realmSecretSeed),
   );
-  await registerUser(
-    synapse,
-    'realm_server',
-    await realmPassword('realm_server', realmSecretSeed),
-  );
 }
 
 export async function reloadAndOpenAiAssistant(page: Page) {
@@ -95,13 +89,6 @@ export async function openAiAssistant(page: Page) {
 
 export async function openRoot(page: Page, url = testHost) {
   await page.goto(url);
-  await expect(page.locator('.cards-grid')).toHaveCount(1);
-  let isOperatorMode = !!(await page.evaluate(() =>
-    document.querySelector('dialog.operator-mode'),
-  ));
-  if (!isOperatorMode) {
-    await page.keyboard.press('Control+,');
-  }
 }
 
 export async function clearLocalStorage(page: Page, appURL = testHost) {
@@ -242,14 +229,14 @@ export async function validateEmailForResetPassword(
 
 export async function gotoRegistration(page: Page, appURL = testHost) {
   await openRoot(page, appURL);
-  await toggleOperatorMode(page);
+
   await page.locator('[data-test-register-user]').click();
   await expect(page.locator('[data-test-register-btn]')).toHaveCount(1);
 }
 
 export async function gotoForgotPassword(page: Page, appURL = testHost) {
   await openRoot(page, appURL);
-  await toggleOperatorMode(page);
+
   await page.locator('[data-test-forgot-password]').click();
   await expect(page.locator('[data-test-reset-your-password-btn]')).toHaveCount(
     1,
@@ -262,10 +249,7 @@ export async function login(
   password: string,
   opts?: LoginOptions,
 ) {
-  if (!opts?.skipOpeningOperatorMode) {
-    await openRoot(page, opts?.url);
-    await toggleOperatorMode(page);
-  }
+  await openRoot(page, opts?.url);
 
   await page.waitForFunction(() =>
     document.querySelector('[data-test-username-field]'),
