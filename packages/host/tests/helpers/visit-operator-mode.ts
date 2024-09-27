@@ -22,8 +22,6 @@ export default async function visitOperatorMode({
   let operatorModeStateParam = stringify(operatorModeState)!;
 
   await visit(
-    `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-      operatorModeStateParam,
-    )}`,
+    `/?&operatorModeState=${encodeURIComponent(operatorModeStateParam)}`,
   );
 }

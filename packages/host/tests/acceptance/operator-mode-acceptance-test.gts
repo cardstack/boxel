@@ -645,14 +645,6 @@ module('Acceptance | operator mode tests', function (hooks) {
     test('realm session refreshes within 5 minute window of expiration', async function (assert) {
       await visit('/');
 
-      // Enter operator mode
-      await triggerEvent(document.body, 'keydown', {
-        code: 'Key.',
-        key: '.',
-        ctrlKey: true,
-      });
-
-      await waitFor('[data-test-operator-mode-stack]');
       let originalToken = window.localStorage.getItem(sessionLocalStorageKey);
       await waitUntil(
         () =>
