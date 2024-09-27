@@ -12,7 +12,6 @@ import {
   login,
   logout,
   openRoot,
-  toggleOperatorMode,
   registerRealmUsers,
   testHost,
 } from '../helpers';
@@ -65,7 +64,6 @@ test.describe('Login', () => {
 
   test('it can login', async ({ page }) => {
     await openRoot(page);
-    await toggleOperatorMode(page);
 
     await assertLoggedOut(page);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
@@ -142,7 +140,7 @@ test.describe('Login', () => {
     page,
   }) => {
     await openRoot(page);
-    await toggleOperatorMode(page);
+
     await page.locator('[data-test-username-field]').fill('user1');
     await page.locator('[data-test-password-field]').fill('bad pass');
     await expect(
@@ -166,7 +164,6 @@ test.describe('Login', () => {
 
   test('it reacts to enter keypresses', async ({ page }) => {
     await openRoot(page);
-    await toggleOperatorMode(page);
 
     await page.locator('[data-test-username-field]').fill('user1');
     await page.locator('[data-test-password-field]').fill('pass');

@@ -43,12 +43,6 @@ export default class RenderCard extends Route<Model | null> {
   async beforeModel(transition: Transition) {
     let path = transition.to?.params?.path;
 
-    if (!path) {
-      // This is to satisfy the type checker where to and params could be empty - but I don't know how this can happen - if it was routed here, it means it should have a path
-      await this.router.replaceWith(`index`);
-      return;
-    }
-
     let cardUrl;
 
     if (transition.to?.queryParams?.card) {

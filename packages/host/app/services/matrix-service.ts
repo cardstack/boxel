@@ -1,5 +1,4 @@
 import type Owner from '@ember/owner';
-import { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
@@ -43,7 +42,6 @@ import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
 import { currentRoomIdPersistenceKey } from '@cardstack/host/components/ai-assistant/panel';
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
-import type CardController from '@cardstack/host/controllers/card';
 
 import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
 import { iconURLFor } from '@cardstack/host/lib/utils';

@@ -4,7 +4,6 @@ import {
   click,
   waitFor,
   fillIn,
-  triggerEvent,
   waitUntil,
 } from '@ember/test-helpers';
 
@@ -379,7 +378,6 @@ module('Acceptance | operator mode tests', function (hooks) {
   test('visiting operator mode', async function (assert) {
     await visit('/');
     await click('[data-test-workspace="Test Workspace B"]');
-    // await this.pauseTest();
 
     // await waitFor('[data-test-operator-mode-stack]');
     assert.dom('[data-test-operator-mode-stack]').exists();

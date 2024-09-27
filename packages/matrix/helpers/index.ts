@@ -64,15 +64,6 @@ export async function reloadAndOpenAiAssistant(page: Page) {
   await openAiAssistant(page);
 }
 
-export async function toggleOperatorMode(page: Page) {
-  let isOperatorMode = !!(await page.evaluate(() =>
-    document.querySelector('dialog.operator-mode'),
-  ));
-  if (!isOperatorMode) {
-    await page.locator('[data-test-operator-mode-btn]').click();
-  }
-}
-
 export async function openAiAssistant(page: Page) {
   await page.locator('[data-test-open-ai-assistant]').click();
   await page.waitForFunction(() =>
