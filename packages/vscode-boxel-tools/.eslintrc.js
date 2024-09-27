@@ -11,10 +11,6 @@ module.exports = {
         browser: false,
         node: true,
       },
-      extends: ['plugin:n/recommended'],
-      rules: {
-        '@typescript-eslint/no-var-requires': 'off',
-      },
     },
   ],
 };
