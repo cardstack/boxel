@@ -10,6 +10,7 @@ import type {
 } from 'ember-power-select/components/power-select';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
 import PowerSelectMultiple from 'ember-power-select/components/power-select-multiple';
+import { BoxelButton } from '@cardstack/boxel-ui/components';
 
 export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
   describedBy?: string;
@@ -28,6 +29,7 @@ interface Signature<ItemT = any> {
 
 interface SelectAPI {
   actions: {
+    search: (term: string) => void;
     close: () => void;
     open: () => void;
   };
@@ -37,6 +39,18 @@ export default class BoxelMultiSelect extends Component<Signature> {
   @tracked selectAPI: SelectAPI | null = null;
   @tracked showMore = false;
   @tracked visibleItemCount = 0;
+  @tracked isClosingAllowed = false;
+
+  @action
+  onOpenWrapper(_select: Select, _e: Event) {
+    this.isClosingAllowed = false;
+    return undefined;
+  }
+
+  @action
+  allowClosing() {
+    this.isClosingAllowed = true;
+  }
 
   @action
   onClearAll() {
@@ -58,6 +72,7 @@ export default class BoxelMultiSelect extends Component<Signature> {
         @triggerComponent={{component CustomTriggerComponent}}
         @placeholder={{@placeholder}}
         @onChange={{@onChange}}
+        @onOpen={{this.onOpenWrapper}}
         @onBlur={{@onBlur}}
         @renderInPlace={{@renderInPlace}}
         @verticalPosition={{@verticalPosition}}
@@ -66,8 +81,14 @@ export default class BoxelMultiSelect extends Component<Signature> {
         @matchTriggerWidth={{@matchTriggerWidth}}
         @eventType='click'
         @searchEnabled={{true}}
+        @closeOnSelect={{false}}
         @searchField='name'
-        @beforeOptionsComponent={{component BeforeOptions}}
+        @beforeOptionsComponent={{component CustomBeforeOptionsComponent}}
+        @afterOptionsComponent={{component
+          CustomAfterOptionsComponent
+          allowClosing=this.allowClosing
+        }}
+        ...attributes
         aria-labelledby={{@labelledBy}}
         aria-describedby={{@describedBy}}
         as |option|
@@ -79,14 +100,13 @@ export default class BoxelMultiSelect extends Component<Signature> {
           {{if @selected.length "has-selections"}}'
       >
         {{#if @selected.length}}
-          <button
-            type='button'
-            {{on 'click' this.onClearAll}}
-            class='boxel-multi-select__icon-button boxel-multi-select__icon-button--clear'
-            aria-label='clear all selections'
-          >
-            <IconX class='boxel-multi-select__icon' />
-          </button>
+          <span class='boxel-multi-select__clear-icon-wrapper'>
+            <IconX
+              class='boxel-multi-select__icon'
+              {{on 'click' this.onClearAll}}
+            />
+          </span>
+
         {{else}}
           <span class='boxel-multi-select__icon-wrapper' aria-hidden='true'>
             <CaretDown class='boxel-multi-select__icon' />
@@ -95,7 +115,7 @@ export default class BoxelMultiSelect extends Component<Signature> {
       </div>
     </div>
 
-    <style scoped>
+    <style>
       .boxel-multi-select__wrapper {
         position: relative;
         display: flex;
@@ -138,6 +158,21 @@ export default class BoxelMultiSelect extends Component<Signature> {
         border: none;
         cursor: pointer;
         padding: 0;
+      }
+
+      .boxel-multi-select__clear-icon-wrapper {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: absolute;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xxs);
+        width: 40px;
       }
 
       .boxel-multi-select__icon-wrapper {
@@ -392,6 +427,90 @@ class CustomTriggerComponent<ItemT> extends Component<
     <style scoped>
       .custom-trigger-placeholder {
         color: var(--boxel-400);
+      }
+    </style>
+  </template>
+}
+interface CustomBeforeOptionsComponentArgs {
+  Args: {
+    select: Select;
+    searchEnabled: boolean;
+    onKeydown: (event: KeyboardEvent) => void;
+    onBlur: () => void;
+    onFocus: () => void;
+    onInput: (event: InputEvent) => boolean;
+  };
+  Blocks: {
+    default: [];
+  };
+}
+
+class CustomBeforeOptionsComponent extends Component<CustomBeforeOptionsComponentArgs> {
+  <template>
+    <div class='custom-before-options'>
+      <BeforeOptions
+        @select={{@select}}
+        @searchEnabled={{@searchEnabled}}
+        @onKeydown={{@onKeydown}}
+        @onBlur={{@onBlur}}
+        @onFocus={{@onFocus}}
+        @onInput={{@onInput}}
+      />
+
+    </div>
+  </template>
+}
+
+interface CustomAfterOptionComponentArgs {
+  Args: {
+    select: Select;
+    allowClosing: () => void;
+  };
+}
+
+class CustomAfterOptionsComponent extends Component<CustomAfterOptionComponentArgs> {
+  @action
+  onClearAll() {
+    this.args.select.actions.select([]);
+  }
+
+  @action
+  onClose() {
+    this.args.select.actions.close();
+    this.args.allowClosing();
+  }
+  <template>
+    <div class='control-buttons'>
+
+      <BoxelButton
+        @kind='secondary-light'
+        @size='extra-small'
+        class='control-button'
+        {{on 'click' this.onClearAll}}
+      >
+        Clear
+      </BoxelButton>
+
+      <BoxelButton
+        @kind='secondary-light'
+        @size='extra-small'
+        class='control-button'
+        {{on 'click' this.onClose}}
+      >
+        Close
+      </BoxelButton>
+    </div>
+    <style scoped>
+      .control-buttons {
+        display: flex;
+        justify-content: start;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
+        border-top: 1px solid var(--boxel-100);
+      }
+      .control-button {
+        flex-grow: 1;
       }
     </style>
   </template>

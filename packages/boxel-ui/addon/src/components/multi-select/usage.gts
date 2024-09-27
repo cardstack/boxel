@@ -190,20 +190,12 @@ export default class BoxelMultiSelectUsage extends Component {
           </BoxelMultiSelect>
         </:example>
         <:api as |Args|>
-
           <Args.Object
             @name='options'
             @description='An array of objects, to be listed on dropdown'
             @value={{this.items}}
             @onInput={{fn (mut this.items)}}
           />
-          {{!-- <Args.Object
-            @name='options'
-            @description='An array of items, to be listed on dropdown'
-            @required={{true}}
-            @items={{this.items}}
-            @onChange={{this.onSelectItems}}
-          /> --}}
           <Args.Action
             @name='onChange'
             @description='Invoke this action to handle selected items'
