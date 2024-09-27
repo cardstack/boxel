@@ -104,7 +104,7 @@ export default class FileTree extends Component<Signature> {
         grid-template-columns: auto 1fr auto;
         align-items: center;
         gap: var(--boxel-sp-xxxs);
-        font: 700 var(--boxel-font-sm);
+        font: 600 var(--boxel-font-sm);
       }
 
       .realm-info img {

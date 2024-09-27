@@ -398,7 +398,26 @@ export function getPatchTool(
   };
 }
 
-export function getSearchTool(): Tool {
+const containsFilterProperty = {
+  type: 'object',
+  properties: {
+    title: { type: 'string', description: 'title of the card' },
+  },
+  required: ['title'],
+};
+
+const eqCardTypeFilterProperty = {
+  type: 'object',
+  properties: {
+    _cardType: {
+      type: 'string',
+      description: 'name of the card type',
+    },
+  },
+  required: ['_cardType'],
+};
+
+export function getSearchTool() {
   return {
     type: 'function',
     function: {
@@ -416,30 +435,8 @@ export function getSearchTool(): Tool {
           filter: {
             type: 'object',
             properties: {
-              type: {
-                type: 'object',
-                properties: {
-                  module: {
-                    type: 'string',
-                    description: 'the absolute path of the module',
-                  },
-                  name: {
-                    type: 'string',
-                    description: 'the name of the module',
-                  },
-                },
-                required: ['module', 'name'],
-              },
-              eq: {
-                type: 'object',
-                properties: {
-                  _cardType: {
-                    type: 'string',
-                    description: 'name of the card type',
-                  },
-                },
-                required: ['_cardType'],
-              },
+              contains: containsFilterProperty,
+              eq: eqCardTypeFilterProperty,
             },
           },
         },

@@ -98,11 +98,11 @@ export default class TabbedHeader extends Component<Signature> {
       .app-tab-list a.active {
         color: var(--header-text-color, var(--boxel-dark));
         border-bottom-color: var(--header-text-color, var(--boxel-dark));
-        font-weight: 700;
+        font-weight: 600;
       }
       .app-tab-list a:hover:not(:disabled) {
         color: var(--header-text-color, var(--boxel-dark));
-        font-weight: 700;
+        font-weight: 600;
       }
       /* this prevents layout shift when text turns bold on hover/active */
       .app-tab-list a::after {
@@ -112,7 +112,7 @@ export default class TabbedHeader extends Component<Signature> {
         visibility: hidden;
         user-select: none;
         pointer-events: none;
-        font-weight: 700;
+        font-weight: 600;
       }
     </style>
   </template>

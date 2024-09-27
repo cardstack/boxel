@@ -77,7 +77,7 @@ export default class RenameSession extends Component<Signature> {
         padding: 0 var(--boxel-sp);
       }
       .rename-field :deep(.label) {
-        font: 700 var(--boxel-font-sm);
+        font: 600 var(--boxel-font-sm);
       }
       .footer {
         display: flex;

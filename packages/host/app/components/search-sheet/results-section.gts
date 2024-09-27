@@ -126,7 +126,7 @@ let ResultsSection: TemplateOnlyComponent<Signature> = <template>
       width: 100%;
     }
     .section .boxel-label {
-      font: 700 var(--boxel-font);
+      font: 600 var(--boxel-font);
       padding-right: var(--boxel-sp);
     }
     .section__body {

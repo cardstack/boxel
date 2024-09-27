@@ -1,4 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
+import { hash } from '@ember/helper';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
@@ -304,6 +305,7 @@ export default class CodeEditor extends Component<Signature> {
             initialCursorPosition=this.initialMonacoCursorPosition
             onCursorPositionChange=this.selectDeclarationByMonacoCursorPosition
             readOnly=@isReadOnly
+            editorDisplayOptions=(hash lineNumbersMinChars=3 fontSize=13)
           }}
         ></div>
       {{/if}}

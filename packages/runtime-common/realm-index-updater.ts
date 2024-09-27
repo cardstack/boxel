@@ -77,15 +77,12 @@ export class RealmIndexUpdater {
     return ignoreMap;
   }
 
+  async isNewIndex(): Promise<boolean> {
+    return await this.#indexWriter.isNewIndex(this.realmURL);
+  }
+
   async run() {
-    let isNewIndex = await this.#indexWriter.isNewIndex(this.realmURL);
-    if (isNewIndex) {
-      // we only await the full indexing at boot if this is a brand new index
-      await this.fullIndex();
-    } else {
-      // this promise is tracked in `this.indexing()` if consumers need it.
-      this.fullIndex();
-    }
+    await this.fullIndex();
   }
 
   indexing() {

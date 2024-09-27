@@ -60,7 +60,11 @@ class BaseDefinitionContainer extends Component<BaseSignature> {
             {{#let (this.realm.info @fileURL) as |realmInfo|}}
               <div class='realm-info'>
                 <RealmIcon @realmInfo={{realmInfo}} />
-                <Label class='realm-name' data-test-definition-realm-name>in
+                <Label
+                  class='realm-name'
+                  data-test-definition-realm-name
+                  @ellipsize={{true}}
+                >in
                   {{realmInfo.name}}</Label>
               </div>
             {{/let}}
@@ -121,7 +125,7 @@ class BaseDefinitionContainer extends Component<BaseSignature> {
       }
       .definition-name {
         font-size: var(--boxel-font-size);
-        font-weight: bold;
+        font-weight: 600;
       }
     </style>
   </template>

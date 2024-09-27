@@ -228,7 +228,7 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
 
       .content > :deep(.command-message) {
-        font-weight: 700;
+        font-weight: 600;
         letter-spacing: var(--boxel-lsp-sm);
       }
 
@@ -247,7 +247,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         background-color: var(--boxel-danger);
         color: var(--boxel-light);
-        font: 700 var(--boxel-font-sm);
+        font: 600 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp);
       }
       .error-icon {
