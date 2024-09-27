@@ -261,6 +261,11 @@ jobs:
       - name: Package
         run: pnpm vscode:package
         working-directory: packages/vscode-boxel-tools
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-boxel-tools
+          path: packages/vscode-boxel-tools/boxel-tools*vsix
 
   change-check:
     name: Check which packages changed
