@@ -1,6 +1,6 @@
 import Route from '@ember/routing/route';
 import RouterService from '@ember/routing/router-service';
-import Transition from '@ember/routing/transition';
+
 import { service } from '@ember/service';
 
 import stringify from 'safe-stable-stringify';
@@ -18,9 +18,7 @@ export default class Index extends Route<void> {
     operatorModeState: {
       refreshModel: true, // Enabled so that back-forward navigation works in operator mode
     },
-    // operatorModeEnabled: {
-    //   refreshModel: true,
-    // },
+
     // `sid` and `clientSecret` come from email verification process to reset password
     sid: { refreshModel: true },
     clientSecret: { refreshModel: true },
@@ -33,15 +31,21 @@ export default class Index extends Route<void> {
 
   didMatrixServiceStart = false;
 
-  async beforeModel(transition: Transition): Promise<void> {
-    debugger;
+  async model(params: {
+    card?: string;
+    path: string;
+    operatorModeState: string;
+    operatorModeEnabled: boolean;
+  }): Promise<void> {
+    let { operatorModeState, card } = params;
+
     if (!this.didMatrixServiceStart) {
       await this.matrixService.ready;
       await this.matrixService.start();
       this.didMatrixServiceStart = true;
     }
-    let cardUrl = transition.to!.queryParams.card;
-    let stacks = [];
+    let cardUrl = card;
+    let stacks: { id: string; format: string }[][] = [];
 
     if (cardUrl) {
       stacks = [
@@ -53,7 +57,7 @@ export default class Index extends Route<void> {
         ],
       ];
     }
-    if (!transition.to!.queryParams.operatorModeState) {
+    if (!operatorModeState) {
       this.router.transitionTo('index', {
         queryParams: {
           card: undefined,
@@ -64,10 +68,20 @@ export default class Index extends Route<void> {
           } as OperatorModeSerializedState),
         },
       });
+      return;
     } else {
-      let operatorModeStateObject = JSON.parse(
-        transition.to!.queryParams.operatorModeState as string,
-      );
+      let operatorModeStateObject = JSON.parse(operatorModeState);
+
+      if (this.operatorModeStateService.serialize() === operatorModeState) {
+        // If the operator mode state in the query param is the same as the one we have in memory,
+        // we don't want to restore it again, because it will lead to rerendering of the stack items, which can
+        // bring various annoyances, e.g reloading of the items in the index card.
+        // We will reach this point when the user manipulates the stack and the operator state service will set the
+        // query param, which will trigger a refresh of the model, which will call the model hook again.
+        // The model refresh happens automatically because we have operatorModeState: { refreshModel: true } in the queryParams.
+        // We have that because we want to support back-forward navigation in operator mode.
+        return;
+      }
       await this.operatorModeStateService.restore(
         operatorModeStateObject || { stacks: [] },
       );
