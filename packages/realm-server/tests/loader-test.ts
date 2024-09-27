@@ -49,14 +49,15 @@ module('loader', function (hooks) {
   });
 
   setupDB(hooks, {
-    before: async (dbAdapter, queue) => {
+    before: async (dbAdapter, publisher, runner) => {
       ({ testRealmHttpServer } = await runTestRealmServer({
         virtualNetwork,
         testRealmDir: dir.name,
         realmsRootPath: dir.name,
         realmURL: testRealmURL,
         dbAdapter,
-        queue,
+        publisher,
+        runner,
         matrixURL,
       }));
     },
@@ -154,7 +155,7 @@ module('loader', function (hooks) {
     });
 
     setupDB(hooks, {
-      before: async (dbAdapter, queue) => {
+      before: async (dbAdapter, publisher, runner) => {
         loader2 = createLoader();
         realm = await createRealm({
           withWorker: true,
@@ -168,7 +169,8 @@ module('loader', function (hooks) {
           realmURL: 'http://example.com/',
           virtualNetwork,
           dbAdapter,
-          queue,
+          runner,
+          publisher,
         });
         virtualNetwork.mount(realm.handle.bind(realm));
         await realm.start();
