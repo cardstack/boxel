@@ -102,7 +102,7 @@ export class RealmIndexUpdater {
       let job = await this.#queue.publish<FromScratchResult>(
         `from-scratch-index`,
         'indexing',
-        60,
+        120,
         args,
       );
       let { ignoreData, stats } = await job.done;
@@ -140,7 +140,7 @@ export class RealmIndexUpdater {
       let job = await this.#queue.publish<IncrementalResult>(
         `incremental-index`,
         'indexing',
-        60,
+        120,
         args,
       );
       let { invalidations, ignoreData, stats } = await job.done;
