@@ -9,6 +9,7 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=job_statuses \
   --exclude-table-and-children=jobs \
   --exclude-table-and-children=queues \
+  --exclude-table-and-children=job_reservations \
   --no-tablespaces \
   --no-table-access-method \
   --no-owner \

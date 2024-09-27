@@ -12,7 +12,7 @@ import {
   SupportedMimeType,
   fileContentToText,
   unixTime,
-  type Queue,
+  type QueueRunner,
   type TextFileRef,
   type VirtualNetwork,
   type Relationship,
@@ -118,7 +118,7 @@ export class Worker {
   #runner: IndexRunner;
   runnerOptsMgr: RunnerOptionsManager;
   #indexWriter: IndexWriter;
-  #queue: Queue;
+  #queue: QueueRunner;
   #virtualNetwork: VirtualNetwork;
   #matrixURL: URL;
   #matrixClientCache: Map<string, MatrixClient> = new Map();
@@ -145,7 +145,7 @@ export class Worker {
     secretSeed,
   }: {
     indexWriter: IndexWriter;
-    queue: Queue;
+    queue: QueueRunner;
     indexRunner: IndexRunner;
     runnerOptsManager: RunnerOptionsManager;
     virtualNetwork: VirtualNetwork;
