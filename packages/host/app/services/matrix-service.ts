@@ -231,10 +231,7 @@ export default class MatrixService extends Service {
 
   async initializeNewUser(auth: LoginResponse, displayName: string) {
     displayName = displayName.trim();
-    let cardController = getOwner(this)!.lookup(
-      'controller:card',
-    ) as CardController;
-    cardController.workspaceChooserOpened = true;
+
     this.start(auth);
     this.setDisplayName(displayName);
 
