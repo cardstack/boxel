@@ -196,8 +196,11 @@ export default class Login extends Component<Signature> {
       throw e;
     }
     if (auth) {
-      await this.matrixService.start(auth);
-      await this.router.refresh();
+      await this.matrixService.start(auth, async () => {
+        // do this in a callback to the matrix service, otherwise our component
+        // is town down immediately after this call
+        await this.router.refresh();
+      });
     } else {
       throw new Error(
         `bug: should be impossible to get here - successful matrix login with no auth response`,

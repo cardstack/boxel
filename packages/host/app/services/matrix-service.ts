@@ -261,7 +261,10 @@ export default class MatrixService extends Service {
     await this.profile.load.perform();
   }
 
-  async start(auth?: MatrixSDK.LoginResponse) {
+  async start(
+    auth?: MatrixSDK.LoginResponse,
+    onAfterStart?: () => Promise<void>,
+  ) {
     if (!auth) {
       auth = getAuth();
       if (!auth) {
@@ -323,6 +326,10 @@ export default class MatrixService extends Service {
       } catch (e) {
         console.log('Error starting Matrix client', e);
         await this.logout();
+      }
+
+      if (onAfterStart) {
+        await onAfterStart();
       }
     }
   }

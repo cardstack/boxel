@@ -143,12 +143,24 @@ export default class OperatorModeContainer extends Component<Signature> {
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
     >
       <CardCatalogModal />
-      {{#if (and this.matrixService.isLoggedIn this.isCodeMode)}}
+      {{#if
+        (and
+          this.matrixService.isLoggedIn
+          (not this.operatorModeStateService.cantAccessCards)
+          this.isCodeMode
+        )
+      }}
         <CodeSubmode
           @saveSourceOnClose={{perform this.saveSource}}
           @saveCardOnClose={{perform this.write}}
         />
-      {{else if (and this.matrixService.isLoggedIn (not this.isCodeMode))}}
+      {{else if
+        (and
+          this.matrixService.isLoggedIn
+          (not this.operatorModeStateService.cantAccessCards)
+          (not this.isCodeMode)
+        )
+      }}
         <InteractSubmode @write={{perform this.write}} />
       {{else}}
         <Auth />

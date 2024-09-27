@@ -82,6 +82,7 @@ export default class OperatorModeStateService extends Service {
     codePath: null,
     openDirs: new TrackedMap<string, string[]>(),
   });
+  @tracked cantAccessCards = false;
 
   private cachedRealmURL: URL | null = null;
 
@@ -97,6 +98,22 @@ export default class OperatorModeStateService extends Service {
 
   async restore(rawState: SerializedState) {
     this.state = await this.deserialize(rawState);
+    this.cantAccessCards = Boolean(
+      this.state.stacks.find((stack) =>
+        stack.find((item) => {
+          try {
+            item.card;
+            return false;
+          } catch (e) {
+            // the reason we encounter this is that we are trying to access a
+            // private realm without authorization. we don't want to proceed
+            // past the login page until this state has been cleared
+            console.error(`could not access card ${item?.url?.href}`);
+            return true;
+          }
+        }),
+      ),
+    );
   }
 
   addItemToStack(item: StackItem) {
