@@ -104,12 +104,15 @@ export default class OperatorModeStateService extends Service {
           try {
             item.card;
             return false;
-          } catch (e) {
-            // the reason we encounter this is that we are trying to access a
-            // private realm without authorization. we don't want to proceed
-            // past the login page until this state has been cleared
+          } catch (e: any) {
             console.error(`could not access card ${item?.url?.href}`);
-            return true;
+            if ('status' in e && e.status === 401) {
+              // the reason we encounter this is that we are trying to access a
+              // private realm without authorization. we don't want to proceed
+              // past the login page until this state has been cleared
+              return true;
+            }
+            return false;
           }
         }),
       ),
