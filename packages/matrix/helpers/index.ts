@@ -283,6 +283,17 @@ export async function login(
   }
 }
 
+export async function enterWorkspace(
+  page: Page,
+  workspace = 'Test Workspace A',
+) {
+  await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
+  await expect(
+    page.locator(`[data-test-workspace="${workspace}"]`),
+  ).toHaveCount(1);
+  await page.locator(`[data-test-workspace="${workspace}"]`).click();
+}
+
 export async function logout(page: Page) {
   await page.locator('[data-test-profile-icon-button]').click();
   await page.locator('[data-test-signout-button]').click();

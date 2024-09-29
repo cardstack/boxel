@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import Service from '@ember/service';
 import { service } from '@ember/service';
 
@@ -10,6 +11,7 @@ import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
 import type LoaderService from './loader-service';
 import type { ExtendedClient } from './matrix-sdk-loader';
+import type ResetService from './reset';
 
 interface RealmServerTokenClaims {
   user: string;
@@ -27,9 +29,19 @@ type AuthStatus =
   | { type: 'anonymous' };
 
 export default class RealmServerService extends Service {
-  @service declare loaderService: LoaderService;
+  @service private declare loaderService: LoaderService;
+  @service private declare reset: ResetService;
   private auth: AuthStatus = { type: 'anonymous' };
   private client: ExtendedClient | undefined;
+
+  constructor(owner: Owner) {
+    super(owner);
+    this.reset.register(this);
+  }
+
+  resetState() {
+    this.logout();
+  }
 
   setClient(client: ExtendedClient) {
     this.client = client;
