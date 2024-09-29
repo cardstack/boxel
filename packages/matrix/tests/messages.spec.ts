@@ -694,6 +694,9 @@ test.describe('Room messages', () => {
     test.beforeEach(async ({ page }) => {
       await login(page, 'user1', 'pass');
       await getRoomId(page);
+      await expect(
+        page.locator(`[data-test-boxel-filter-list-button="All Cards"]`),
+      ).toHaveCount(1);
       await page
         .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
         .click();
