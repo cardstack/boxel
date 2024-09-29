@@ -57,12 +57,12 @@ export default class CardService extends Service {
   private subscriber: CardSaveSubscriber | undefined;
   // For tracking requests during the duration of this service. Used for being able to tell when to ignore an incremental indexing SSE event.
   // We want to ignore it when it is a result of our own request so that we don't reload the card and overwrite any unsaved changes made during auto save request and SSE event.
-  private declare clientRequestIds: Set<string>;
   private declare loaderToCardAPILoadingCache: WeakMap<
     Loader,
     Promise<typeof CardAPI>
   >;
-  private declare unresolvedRealmURLs: TrackedArray<string>;
+  declare clientRequestIds: Set<string>;
+  declare unresolvedRealmURLs: TrackedArray<string>;
 
   constructor(owner: Owner) {
     super(owner);
