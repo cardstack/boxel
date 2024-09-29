@@ -1,4 +1,5 @@
 import type Owner from '@ember/owner';
+import { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
@@ -42,6 +43,7 @@ import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
 import { currentRoomIdPersistenceKey } from '@cardstack/host/components/ai-assistant/panel';
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
+import type CardController from '@cardstack/host/controllers/card';
 
 import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
 import { iconURLFor } from '@cardstack/host/lib/utils';
@@ -76,6 +78,7 @@ import type { ExtendedClient, ExtendedMatrixSDK } from './matrix-sdk-loader';
 import type RealmServerService from './realm-server';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
+import type IndexController from '../controllers';
 
 const { matrixURL } = ENV;
 const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
@@ -229,7 +232,10 @@ export default class MatrixService extends Service {
 
   async initializeNewUser(auth: LoginResponse, displayName: string) {
     displayName = displayName.trim();
-
+    let indexController = getOwner(this)!.lookup(
+      'controller:card',
+    ) as IndexController;
+    indexController.workspaceChooserOpened = true;
     this.start(auth);
     this.setDisplayName(displayName);
 
