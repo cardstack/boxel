@@ -146,7 +146,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       {{#if
         (and
           this.matrixService.isLoggedIn
-          (not this.operatorModeStateService.cantAccessCards)
+          (not this.operatorModeStateService.needsAuthorization)
           this.isCodeMode
         )
       }}
@@ -157,7 +157,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       {{else if
         (and
           this.matrixService.isLoggedIn
-          (not this.operatorModeStateService.cantAccessCards)
+          (not this.operatorModeStateService.needsAuthorization)
           (not this.isCodeMode)
         )
       }}
