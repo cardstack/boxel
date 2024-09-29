@@ -1,4 +1,4 @@
-import { visit, currentURL, triggerEvent, waitFor } from '@ember/test-helpers';
+import { visit, currentURL } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -93,5 +93,11 @@ module('Acceptance | permissioned realm tests', function (hooks) {
       },
       permissions: { users: ['read', 'write'] },
     });
+  });
+
+  test('visiting realm root', async function (assert) {
+    await visit('/test/');
+
+    assert.dom('[data-test-workspace-chooser]').exists();
   });
 });

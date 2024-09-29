@@ -30,7 +30,7 @@ export type ErrorModel = {
 
 const { hostsOwnAssets } = ENV;
 
-export default class RenderCard extends Route<Model | null> {
+export default class Card extends Route<Model | null> {
   @service declare cardService: CardService;
   @service declare router: RouterService;
   @service declare operatorModeStateService: OperatorModeStateService;
@@ -42,34 +42,24 @@ export default class RenderCard extends Route<Model | null> {
 
   async beforeModel(transition: Transition) {
     let path = transition.to?.params?.path;
-
-    let cardUrl;
-
-    if (transition.to?.queryParams?.card) {
-      cardUrl = transition.to?.queryParams?.card;
-    } else {
-      if (hostsOwnAssets) {
-        cardUrl = this.realm.defaultReadableRealm.path;
-      } else {
-        cardUrl = `${window.origin}/${path}`;
-      }
-    }
+    let cardUrl = `${window.origin}/${path}`;
 
     await this.router.replaceWith(`index`, {
-      queryParams: {
-        operatorModeEnabled: 'true',
-        operatorModeState: stringify({
-          stacks: [
-            [
-              {
-                id: cardUrl,
-                format: 'isolated',
-              },
-            ],
-          ],
-          submode: Submodes.Interact,
-        } as OperatorModeSerializedState),
-      },
+      queryParams: hostsOwnAssets
+        ? { workspaceChooserOpened: true }
+        : {
+            operatorModeState: stringify({
+              stacks: [
+                [
+                  {
+                    id: cardUrl,
+                    format: 'isolated',
+                  },
+                ],
+              ],
+              submode: Submodes.Interact,
+            } as OperatorModeSerializedState),
+          },
     });
   }
 }
