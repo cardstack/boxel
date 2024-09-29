@@ -227,7 +227,7 @@ export default class MatrixService extends Service {
       this.unbindEventListeners();
       await this.client.logout(true);
       // when user logs out we transition them back to an empty stack with the
-      // workspace chooser open. this was we don't inadvertently leak private
+      // workspace chooser open. this way we don't inadvertently leak private
       // card id's in the URL
       this.router.transitionTo('index', {
         queryParams: {

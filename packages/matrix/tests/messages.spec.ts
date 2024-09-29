@@ -774,6 +774,9 @@ test.describe('Room messages', () => {
     }) => {
       const testCard1 = `${testHost}/jersey`;
       const embeddedCard = `${testHost}/justin`;
+      await expect(
+        page.locator(`[data-test-boxel-filter-list-button="All Cards"]`),
+      ).toHaveCount(1);
       await page
         .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
         .click();
