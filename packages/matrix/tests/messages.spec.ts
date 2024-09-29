@@ -774,9 +774,14 @@ test.describe('Room messages', () => {
       await page
         .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
         .click();
+      await expect(
+        page.locator(
+          `[data-test-stack-item-content] [data-test-cards-grid-item="${testCard1}"]`,
+        ),
+      ).toHaveCount(1);
       await page
         .locator(
-          `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+          `[data-test-stack-item-content] [data-test-cards-grid-item="${testCard1}"]`,
         )
         .click();
       await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
