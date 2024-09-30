@@ -104,7 +104,7 @@ export default class BoxelMultiSelect<ItemT> extends Component<
         }}
         ...attributes
         aria-labelledby={{@labelledBy}}
-        aria-describedby={{@describedBy}}
+        aria-label={{if @labelledBy undefined 'Select items'}}
         as |option|
       >
         {{#if @hasCheckbox}}
@@ -140,8 +140,8 @@ export default class BoxelMultiSelect<ItemT> extends Component<
         {{/if}}
       </div>
     </div>
-
-    <style scoped>
+    {{! template-lint-disable require-scoped-style }}
+    <style>
       .boxel-multi-select__wrapper {
         position: relative;
         display: flex;
@@ -518,7 +518,6 @@ class CustomAfterOptionsComponent extends Component<CustomAfterOptionComponentAr
   }
   <template>
     <div class='control-buttons'>
-
       <BoxelButton
         @kind='secondary-light'
         @size='extra-small'

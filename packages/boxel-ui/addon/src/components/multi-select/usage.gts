@@ -26,6 +26,7 @@ interface AssigneeOption {
 
 interface CustomPillArgs {
   Args: {
+    isSelected: boolean;
     option: Country;
   };
   Element: Element;
@@ -41,7 +42,7 @@ interface AssigneePillArgs {
 
 class CustomPill extends Component<CustomPillArgs> {
   <template>
-    <span class='custom-pill'>
+    <span class='custom-pill' role='option' aria-selected={{@isSelected}}>
       {{@option.name}}
     </span>
     <style scoped>
@@ -60,13 +61,12 @@ class AssigneePill extends Component<AssigneePillArgs> {
   }
 
   <template>
-    <span class='assignee-pill'>
+    <span class='assignee-pill' role='option' aria-selected={{@isSelected}}>
       <div class='assignee-pill-content'>
         <div class='assignee-avatar'>{{@option.avatar}}</div>
         <div class='assignee-name'>{{@option.name}}</div>
       </div>
       <div class='assignee-issues'>{{this.issueText}}</div>
-
     </span>
 
     <style scoped>
@@ -101,7 +101,7 @@ class AssigneePill extends Component<AssigneePillArgs> {
         flex-grow: 1;
       }
       .assignee-issues {
-        color: var(--boxel-orange);
+        color: var(--boxel-dark-teal);
         font-size: var(--boxel-font-size-xs);
       }
     </style>
@@ -164,6 +164,8 @@ export default class BoxelMultiSelectUsage extends Component {
     >
       <FreestyleUsage @name='Multi Select'>
         <:example>
+          <label id='country-select-label' class='visually-hidden'>Select
+            countries</label>
           <BoxelMultiSelect
             @placeholder={{this.placeholder}}
             @selected={{this.selectedItems}}
@@ -176,9 +178,13 @@ export default class BoxelMultiSelectUsage extends Component {
             @matchTriggerWidth={{this.matchTriggerWidth}}
             @selectedItemComponent={{component CustomPill}}
             @hasCheckbox={{this.hasCheckbox}}
+            @labelledBy='country-select-label'
             as |item|
           >
-            <CustomPill @option={{item}} />
+            <CustomPill
+              @option={{item}}
+              @isSelected={{includes this.selectedItems item}}
+            />
           </BoxelMultiSelect>
         </:example>
         <:api as |Args|>
@@ -265,6 +271,8 @@ export default class BoxelMultiSelectUsage extends Component {
 
       <FreestyleUsage @name='Assignee Multi Select'>
         <:example>
+          <label id='assignee-select-label' class='visually-hidden'>Select
+            assignees</label>
           <BoxelMultiSelect
             @placeholder='Select assignees'
             @selected={{this.selectedAssignees}}
@@ -274,6 +282,7 @@ export default class BoxelMultiSelectUsage extends Component {
             @matchTriggerWidth={{true}}
             @selectedItemComponent={{component AssigneePill}}
             @hasCheckbox={{true}}
+            @labelledBy='assignee-select-label'
             as |assignee|
           >
             <AssigneePill
@@ -284,5 +293,15 @@ export default class BoxelMultiSelectUsage extends Component {
         </:example>
       </FreestyleUsage>
     </div>
+    <style scoped>
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+      }
+    </style>
   </template>
 }
