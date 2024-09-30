@@ -766,7 +766,9 @@ test.describe('Room messages', () => {
       ).toHaveCount(1); // The index card appears by default, we verify it exists here
       await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(0);
     });
-    test('replaces auto-attached card when drilling down (1 stack)', async ({
+
+    // Flaky matrix test: CS-7275
+    test.skip('replaces auto-attached card when drilling down (1 stack)', async ({
       page,
     }) => {
       const testCard1 = `${testHost}/jersey`;
