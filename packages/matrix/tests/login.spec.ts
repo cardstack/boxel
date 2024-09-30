@@ -62,6 +62,29 @@ test.describe('Login', () => {
     await assertLoggedOut(page);
   });
 
+  test('it can login after visiting a card and then see the attempted card without choosing a workspace', async ({
+    page,
+  }) => {
+    await page.goto(`http://localhost:4202/test/hassan`);
+
+    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
+    await page.locator('[data-test-username-field]').fill('user1');
+    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
+    await page.locator('[data-test-password-field]').fill('pass');
+    await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
+    await page.locator('[data-test-login-btn]').click();
+
+    await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(0);
+
+    await expect(
+      page.locator('[data-test-operator-mode-stack="0"]'),
+    ).toHaveCount(1);
+
+    await expect(
+      page.locator(`[data-test-stack-card="${testHost}/hassan"]`),
+    ).toHaveCount(1);
+  });
+
   test('it can login', async ({ page }) => {
     await openRoot(page);
 
