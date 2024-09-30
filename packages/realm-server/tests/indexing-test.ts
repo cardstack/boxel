@@ -53,7 +53,7 @@ module('indexing', function (hooks) {
   setupBaseRealmServer(hooks, baseRealmServerVirtualNetwork, matrixURL);
 
   setupDB(hooks, {
-    beforeEach: async (dbAdapter, queue) => {
+    beforeEach: async (dbAdapter, publisher, runner) => {
       let virtualNetwork = createVirtualNetwork();
       dir = dirSync().name;
       realm = await createRealm({
@@ -61,7 +61,8 @@ module('indexing', function (hooks) {
         dir,
         virtualNetwork,
         dbAdapter,
-        queue,
+        publisher,
+        runner,
         fileSystem: {
           'person.gts': `
             import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -867,7 +868,7 @@ module('permissioned realm', function (hooks) {
     },
   ) {
     setupDB(hooks, {
-      beforeEach: async (dbAdapter, queue) => {
+      beforeEach: async (dbAdapter, publisher, runner) => {
         ({ testRealmHttpServer: testRealmServer1 } = await runTestRealmServer({
           virtualNetwork: await createVirtualNetwork(),
           testRealmDir: dirSync().name,
@@ -889,7 +890,8 @@ module('permissioned realm', function (hooks) {
             username: matrixUser1,
           },
           dbAdapter,
-          queue,
+          publisher,
+          runner,
         }));
 
         ({ testRealmHttpServer: testRealmServer2, testRealm: testRealm2 } =
@@ -924,7 +926,8 @@ module('permissioned realm', function (hooks) {
               username: matrixUser2,
             },
             dbAdapter,
-            queue,
+            publisher,
+            runner,
           }));
       },
       afterEach: async () => {
