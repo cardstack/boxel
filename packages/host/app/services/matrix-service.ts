@@ -1,5 +1,4 @@
 import type Owner from '@ember/owner';
-import { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
@@ -77,7 +76,6 @@ import type { ExtendedClient, ExtendedMatrixSDK } from './matrix-sdk-loader';
 import type RealmServerService from './realm-server';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
-import type IndexController from '../controllers';
 
 const { matrixURL } = ENV;
 const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
@@ -231,10 +229,7 @@ export default class MatrixService extends Service {
 
   async initializeNewUser(auth: LoginResponse, displayName: string) {
     displayName = displayName.trim();
-    let indexController = getOwner(this)!.lookup(
-      'controller:card',
-    ) as IndexController;
-    indexController.workspaceChooserOpened = true;
+
     this.start(auth);
     this.setDisplayName(displayName);
 
