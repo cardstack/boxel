@@ -82,7 +82,7 @@ export default class OperatorModeStateService extends Service {
     codePath: null,
     openDirs: new TrackedMap<string, string[]>(),
   });
-  @tracked needsAuthorization = false;
+  @tracked needsRealmAuthorization = false;
 
   private cachedRealmURL: URL | null = null;
 
@@ -98,7 +98,7 @@ export default class OperatorModeStateService extends Service {
 
   async restore(rawState: SerializedState) {
     this.state = await this.deserialize(rawState);
-    this.needsAuthorization = Boolean(
+    this.needsRealmAuthorization = Boolean(
       this.state.stacks.find((stack) =>
         stack.find(
           (item) =>
