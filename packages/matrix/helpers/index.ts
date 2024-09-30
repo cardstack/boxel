@@ -57,6 +57,11 @@ export async function registerRealmUsers(synapse: SynapseInstance) {
     'node-test_realm',
     await realmPassword('node-test_realm', realmSecretSeed),
   );
+  await registerUser(
+    synapse,
+    'realm_server',
+    await realmPassword('realm_server', realmSecretSeed),
+  );
 }
 
 export async function reloadAndOpenAiAssistant(page: Page) {
