@@ -8,6 +8,7 @@ import {
 } from '../docker/synapse';
 import {
   appURL,
+  serverURL,
   startServer as startRealmServer,
   type IsolatedRealmServer,
 } from '../helpers/isolated-realm-server';
@@ -54,7 +55,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await registerRealmUsers(synapse);
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
     await clearLocalStorage(page, appURL);
-    await gotoRegistration(page, appURL);
+    await gotoRegistration(page, serverURL);
 
     await expect(
       page.locator('[data-test-token-field]'),

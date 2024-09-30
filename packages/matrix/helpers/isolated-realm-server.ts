@@ -13,6 +13,7 @@ const seedPath = resolve(join(__dirname, '..', '..', 'seed-realm'));
 const realmServerDir = resolve(join(__dirname, '..', '..', 'realm-server'));
 const matrixDir = resolve(join(__dirname, '..'));
 export const appURL = 'http://localhost:4205/test';
+export const serverURL = 'http://localhost:4205/';
 
 // The isolated realm is fairly expensive to test with. Please use your best
 // judgement to decide if your test really merits an isolated realm for testing
