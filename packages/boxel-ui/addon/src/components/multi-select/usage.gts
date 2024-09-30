@@ -13,11 +13,13 @@ import cssVar from '../../helpers/css-var.ts';
 import BoxelMultiSelect from './index.gts';
 
 interface Country {
+  id: number;
   name: string;
 }
 
 interface AssigneeOption {
   avatar: string;
+  id: number;
   issues: number;
   name: string;
 }
@@ -59,22 +61,30 @@ class AssigneePill extends Component<AssigneePillArgs> {
 
   <template>
     <span class='assignee-pill'>
-      <label class='checkbox-label'>
-        <input type='checkbox' checked={{@isSelected}} />
-        <span class='visually-hidden'>Select {{@option.name}}</span>
-      </label>
-
-      <div class='assignee-avatar'>{{@option.avatar}}</div>
-      <div class='assignee-name'>{{@option.name}}</div>
+      <div class='assignee-pill-content'>
+        <div class='assignee-avatar'>{{@option.avatar}}</div>
+        <div class='assignee-name'>{{@option.name}}</div>
+      </div>
       <div class='assignee-issues'>{{this.issueText}}</div>
+
     </span>
 
     <style scoped>
       .assignee-pill {
         display: flex;
         align-items: center;
-        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
+        justify-content: space-between;
         font-size: var(--boxel-font-size-sm);
+        cursor: pointer;
+        width: 100%;
+      }
+      .assignee-pill.selected {
+        background-color: var(--boxel-highlight);
+      }
+      .assignee-pill-content {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-4xs);
       }
       .assignee-avatar {
         width: var(--boxel-sp-sm);
@@ -94,38 +104,19 @@ class AssigneePill extends Component<AssigneePillArgs> {
         color: var(--boxel-orange);
         font-size: var(--boxel-font-size-xs);
       }
-      input[type='checkbox'] {
-        margin-right: var(--boxel-sp-xs);
-      }
-      .checkbox-label {
-        display: flex;
-        align-items: center;
-        margin-right: var(--boxel-sp-xs);
-      }
-      .visually-hidden {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border: 0;
-      }
     </style>
   </template>
 }
 
 export default class BoxelMultiSelectUsage extends Component {
   @tracked items = [
-    { name: 'United States' },
-    { name: 'Spain' },
-    { name: 'Portugal' },
-    { name: 'Russia' },
-    { name: 'Latvia' },
-    { name: 'Brazil' },
-    { name: 'United Kingdom' },
+    { id: 0, name: 'United States' },
+    { id: 1, name: 'Spain' },
+    { id: 2, name: 'Portugal' },
+    { id: 3, name: 'Russia' },
+    { id: 4, name: 'Latvia' },
+    { id: 5, name: 'Brazil' },
+    { id: 6, name: 'United Kingdom' },
   ] as Array<Country>;
 
   @tracked selectedItems: Country[] = [];
@@ -143,15 +134,17 @@ export default class BoxelMultiSelectUsage extends Component {
   declare boxelMultiSelectPillColor: CSSVariableInfo;
 
   @tracked assignees = [
-    { name: 'No assignee', issues: 28, avatar: '🚫' },
-    { name: 'Current user', issues: 1, avatar: '👤' },
-    { name: 'tintinthong', issues: 1, avatar: '🧑' },
-    { name: 'lucas.law', issues: 1, avatar: '🧑' },
-    { name: 'lukemelia', issues: 2, avatar: '🧑' },
-    { name: 'matic', issues: 2, avatar: '👨' },
+    { id: 0, name: 'No assignee', issues: 28, avatar: '🚫' },
+    { id: 1, name: 'Current user', issues: 1, avatar: '👤' },
+    { id: 2, name: 'tintinthong', issues: 1, avatar: '🧑' },
+    { id: 3, name: 'lucas.law', issues: 1, avatar: '🧑' },
+    { id: 4, name: 'lukemelia', issues: 2, avatar: '🧑' },
+    { id: 5, name: 'matic', issues: 2, avatar: '👨' },
   ] as Array<AssigneeOption>;
 
   @tracked selectedAssignees: AssigneeOption[] = [];
+
+  @tracked hasCheckbox = false;
 
   @action onSelectItems(items: Country[]): void {
     this.selectedItems = items;
@@ -182,8 +175,7 @@ export default class BoxelMultiSelectUsage extends Component {
             @dropdownClass='boxel-multi-select-usage'
             @matchTriggerWidth={{this.matchTriggerWidth}}
             @selectedItemComponent={{component CustomPill}}
-            @labelledBy='multi-select-label'
-            @describedBy='multi-select-description'
+            @hasCheckbox={{this.hasCheckbox}}
             as |item|
           >
             <CustomPill @option={{item}} />
@@ -245,6 +237,13 @@ export default class BoxelMultiSelectUsage extends Component {
             @onInput={{fn (mut this.disabled)}}
             @description='When truthy the component cannot be interacted'
           />
+          <Args.Bool
+            @name='hasCheckbox'
+            @defaultValue={{false}}
+            @value={{this.hasCheckbox}}
+            @onInput={{fn (mut this.hasCheckbox)}}
+            @description='When true, displays a checkbox for each option'
+          />
         </:api>
         <:cssVars as |Css|>
           <Css.Basic
@@ -274,6 +273,7 @@ export default class BoxelMultiSelectUsage extends Component {
             @renderInPlace={{this.renderInPlace}}
             @matchTriggerWidth={{true}}
             @selectedItemComponent={{component AssigneePill}}
+            @hasCheckbox={{true}}
             as |assignee|
           >
             <AssigneePill

@@ -1,4 +1,6 @@
+import { BoxelButton } from '@cardstack/boxel-ui/components';
 import { CaretDown, IconX } from '@cardstack/boxel-ui/icons';
+import { CheckMark } from '@cardstack/boxel-ui/icons';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -10,10 +12,12 @@ import type {
 } from 'ember-power-select/components/power-select';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
 import PowerSelectMultiple from 'ember-power-select/components/power-select-multiple';
-import { BoxelButton } from '@cardstack/boxel-ui/components';
+
+import cn from '../../helpers/cn.ts';
 
 export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
   describedBy?: string;
+  hasCheckbox?: boolean;
   labelledBy?: string;
   options: ItemT[];
   selected: ItemT[];
@@ -29,13 +33,15 @@ interface Signature<ItemT = any> {
 
 interface SelectAPI {
   actions: {
-    search: (term: string) => void;
     close: () => void;
     open: () => void;
+    search: (term: string) => void;
   };
 }
 
-export default class BoxelMultiSelect extends Component<Signature> {
+export default class BoxelMultiSelect<ItemT> extends Component<
+  Signature<ItemT>
+> {
   @tracked selectAPI: SelectAPI | null = null;
   @tracked showMore = false;
   @tracked visibleItemCount = 0;
@@ -61,6 +67,14 @@ export default class BoxelMultiSelect extends Component<Signature> {
         actions: this.selectAPI?.actions || {},
       } as Select);
     }
+  }
+
+  get isOptionSelected() {
+    return (option: ItemT) => {
+      return (
+        Array.isArray(this.args.selected) && this.args.selected.includes(option)
+      );
+    };
   }
 
   <template>
@@ -93,6 +107,19 @@ export default class BoxelMultiSelect extends Component<Signature> {
         aria-describedby={{@describedBy}}
         as |option|
       >
+        {{#if @hasCheckbox}}
+          <div class='checkbox-indicator'>
+            <span
+              class={{cn
+                'check-icon'
+                check-icon--selected=(this.isOptionSelected option)
+              }}
+            >
+              <CheckMark width='12' height='12' />
+            </span>
+          </div>
+        {{/if}}
+
         {{yield option}}
       </PowerSelectMultiple>
       <div
@@ -106,7 +133,6 @@ export default class BoxelMultiSelect extends Component<Signature> {
               {{on 'click' this.onClearAll}}
             />
           </span>
-
         {{else}}
           <span class='boxel-multi-select__icon-wrapper' aria-hidden='true'>
             <CaretDown class='boxel-multi-select__icon' />
@@ -115,7 +141,7 @@ export default class BoxelMultiSelect extends Component<Signature> {
       </div>
     </div>
 
-    <style>
+    <style scoped>
       .boxel-multi-select__wrapper {
         position: relative;
         display: flex;
@@ -125,7 +151,6 @@ export default class BoxelMultiSelect extends Component<Signature> {
         border: 1px solid var(--boxel-border-color);
         border-radius: var(--boxel-border-radius-sm);
       }
-
       .boxel-multi-select {
         background: none;
         border: 0;
@@ -133,7 +158,6 @@ export default class BoxelMultiSelect extends Component<Signature> {
         padding: var(--boxel-sp-xxxs);
         cursor: pointer;
       }
-
       .ember-basic-dropdown-trigger {
         padding: var(--boxel-sp-xxxs);
         display: flex;
@@ -141,25 +165,21 @@ export default class BoxelMultiSelect extends Component<Signature> {
         flex-grow: 1;
         border: none;
       }
-
       .ember-power-select-trigger:focus,
       .ember-power-select-trigger--active {
         border: none;
         box-shadow: none;
         outline: none;
       }
-
       .ember-power-select-trigger:after {
         margin-left: 10px;
       }
-
       .boxel-multi-select__icon-button {
         background: none;
         border: none;
         cursor: pointer;
         padding: 0;
       }
-
       .boxel-multi-select__clear-icon-wrapper {
         display: flex;
         align-items: center;
@@ -174,7 +194,6 @@ export default class BoxelMultiSelect extends Component<Signature> {
         padding: var(--boxel-sp-xxxs) var(--boxel-sp-xxs);
         width: 40px;
       }
-
       .boxel-multi-select__icon-wrapper {
         display: flex;
         align-items: center;
@@ -190,20 +209,16 @@ export default class BoxelMultiSelect extends Component<Signature> {
         width: 40px;
         pointer-events: none;
       }
-
       .boxel-multi-select__icon {
         width: 12px;
         height: 12px;
       }
-
       .boxel-multi-select__icon-button--clear {
         --icon-color: var(--boxel-multi-select-pill-color);
       }
-
       .boxel-multi-select__icons-wrapper.has-selections {
         pointer-events: auto;
       }
-
       .boxel-multi-select__clear-all,
       .boxel-multi-select__caret {
         position: relative;
@@ -215,7 +230,6 @@ export default class BoxelMultiSelect extends Component<Signature> {
         align-items: center;
         justify-content: center;
       }
-
       .ember-power-select-multiple-options {
         list-style: none;
         gap: var(--boxel-sp-xxxs);
@@ -234,7 +248,6 @@ export default class BoxelMultiSelect extends Component<Signature> {
         );
         margin: 0;
       }
-
       .boxel-multi-select__dropdown {
         box-shadow: var(--boxel-box-shadow);
         border-radius: var(--boxel-form-control-border-radius);
@@ -248,43 +261,67 @@ export default class BoxelMultiSelect extends Component<Signature> {
       .boxel-multi-select__dropdown li {
         padding: var(--boxel-sp-5xs) var(--boxel-sp-4xs);
       }
-
+      .boxel-multi-select__dropdown .ember-power-select-option {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
+      }
       .boxel-multi-select__dropdown
         .ember-power-select-option[aria-selected='true'] {
-        background: var(--boxel-200);
+        background: var(--boxel-100);
       }
-
       .boxel-multi-select__dropdown
         .ember-power-select-option[aria-current='true'] {
         color: black;
-        background: var(--boxel-200);
+        background: var(--boxel-100);
       }
-
       .boxel-multi-select__dropdown .ember-power-select-search-input:focus {
         border: 1px solid var(--boxel-outline-color);
         box-shadow: var(--boxel-box-shadow-hover);
         outline: var(--boxel-outline);
       }
-
       .boxel-multi-select__dropdown
         .ember-power-select-option--no-matches-message {
         padding: var(--boxel-sp-xxs) var(--boxel-sp-sm);
       }
-
       .boxel-multi-select__icon {
         width: 12px;
         height: 12px;
         cursor: pointer;
       }
-
       .boxel-multi-select__icon--clear {
         --icon-color: var(--boxel-multi-select-pill-color);
+      }
+      .boxel-multi-select__dropdown .checkbox-indicator {
+        width: 16px;
+        height: 16px;
+        border: 1px solid var(--boxel-500);
+        border-radius: 3px;
+        margin-right: var(--boxel-sp-xs);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .boxel-multi-select__dropdown .checkbox-indicator:hover,
+      .boxel-multi-select__dropdown .checkbox-indicator:focus {
+        box-shadow: 0 0 0 2px var(--boxel-dark-teal);
+      }
+      .boxel-multi-select__dropdown .check-icon {
+        --icon-color: var(--boxel-dark-teal);
+        visibility: collapse;
+        display: contents;
+      }
+
+      .boxel-multi-select__dropdown .check-icon--selected {
+        visibility: visible;
       }
     </style>
   </template>
 }
 
 interface CustomSelectedItemComponentArgs<ItemT> {
+  hasCheckbox?: boolean;
   option: ItemT;
   placeholder: string;
   select: {
@@ -433,12 +470,12 @@ class CustomTriggerComponent<ItemT> extends Component<
 }
 interface CustomBeforeOptionsComponentArgs {
   Args: {
-    select: Select;
-    searchEnabled: boolean;
-    onKeydown: (event: KeyboardEvent) => void;
     onBlur: () => void;
     onFocus: () => void;
     onInput: (event: InputEvent) => boolean;
+    onKeydown: (event: KeyboardEvent) => void;
+    searchEnabled: boolean;
+    select: Select;
   };
   Blocks: {
     default: [];
@@ -463,8 +500,8 @@ class CustomBeforeOptionsComponent extends Component<CustomBeforeOptionsComponen
 
 interface CustomAfterOptionComponentArgs {
   Args: {
-    select: Select;
     allowClosing: () => void;
+    select: Select;
   };
 }
 
