@@ -40,17 +40,10 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   }
 
   get assignedTaskCodeRef() {
-    // use the username from the realm url
-    const realmUrlParts = this.args.model[realmURL]?.href.split('/') ?? [];
-    const username = realmUrlParts[3] ?? 'default';
-    if (username) {
-      return {
-        module: `http://localhost:4201/experiments/productivity/task`,
-        name: 'Task',
-      };
-    }
-
-    return;
+    return {
+      module: `${this.args.model[realmURL]?.href}productivity/task`, //this is problematic when copying cards bcos of the way they are copied
+      name: 'Task',
+    };
   }
 
   getQueryForStatus(status: string) {
