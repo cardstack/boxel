@@ -40,8 +40,6 @@ export default class Card extends Route<Model | null> {
   @service declare realm: Realm;
   @service declare realmInfoService: RealmInfoService;
 
-  hasLoadMatrixBeenExecuted = false;
-
   async beforeModel(transition: Transition) {
     let path = transition.to?.params?.path;
     let cardUrl;
@@ -49,7 +47,7 @@ export default class Card extends Route<Model | null> {
     if (!hostsOwnAssets) {
       let resource = getCard(this, () => `${window.origin}/${path}`);
       await resource.loaded;
-      cardUrl = resource?.card?.id; // We are fetching the card to get its canonical URL
+      cardUrl = resource?.card?.id; // This is to make sure we put the canonical URL on the stack
     }
 
     const queryParams = cardUrl
