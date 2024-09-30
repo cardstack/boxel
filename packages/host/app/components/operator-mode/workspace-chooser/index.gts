@@ -3,6 +3,7 @@ import Component from '@glimmer/component';
 
 import type CardService from '@cardstack/host/services/card-service';
 
+import AddWorkspace from './add-workspace';
 import Workspace from './workspace';
 
 interface Signature {
@@ -20,6 +21,7 @@ export default class WorkspaceChooser extends Component<Signature> {
         {{#each this.cardService.userRealms as |realmURL|}}
           <Workspace @realmURL={{realmURL}} data-test-workspace={{realmURL}} />
         {{/each}}
+        <AddWorkspace />
       </div>
       {{! TODO: [CS-7199] Include "Community Catalogs" if there are catalogs to show }}
       <span class='workspace-chooser__title'>Community Catalogs</span>
