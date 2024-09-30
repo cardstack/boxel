@@ -1,10 +1,8 @@
-import { visit, currentURL } from '@ember/test-helpers';
+import { visit } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
-
-import { Submodes } from '@cardstack/host/components/submode-switcher';
 
 import {
   setupLocalIndexing,

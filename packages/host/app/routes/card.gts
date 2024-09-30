@@ -18,8 +18,9 @@ import RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
-import type CardService from '../services/card-service';
 import { getCard } from '../resources/card-resource';
+
+import type CardService from '../services/card-service';
 
 export type Model = CardDef | null;
 
