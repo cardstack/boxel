@@ -8,29 +8,10 @@ import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import GlimmerComponent from '@glimmer/component';
 import { CardContainer } from '@cardstack/boxel-ui/components';
-
-import {
-  BoxelInput,
-  Modal as BoxelModal,
-  BoxelButton,
-  BoxelDropdown,
-  Menu as BoxelMenu,
-} from '@cardstack/boxel-ui/components';
-import { DropdownArrowFilled, IconPlus } from '@cardstack/boxel-ui/icons';
-import { menuItem } from '@cardstack/boxel-ui/helpers';
-import { fn, array } from '@ember/helper';
-import { action } from '@ember/object';
-import { type Query } from '@cardstack/runtime-common';
+import { Query } from '@cardstack/runtime-common';
 
 class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
   @tracked isSheetOpen = false;
-  @tracked selectedFilter = '';
-  @tracked isModalOpen = false;
-  @tracked taskDescription = '';
-  @tracked errorMessage = '';
-  @tracked triggerStatus = '';
-
-  filterOptions = ['All', 'Status Type', 'Assignee', 'Project'];
 
   get realms(): string[] {
     return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
@@ -73,78 +54,10 @@ class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
     };
   }
 
-  @action
-  updateFilter(type: string, value: string) {
-    switch (type) {
-      case 'Status':
-        this.selectedFilter = value;
-        break;
-      case 'Assignee':
-        this.selectedFilter = value;
-        break;
-      case 'Project':
-        this.selectedFilter = value;
-        break;
-      default:
-        console.warn(`Unknown filter type: ${type}`);
-    }
-  }
-
-  @action
-  triggerAddTaskModal(status: string) {
-    this.triggerStatus = status;
-    console.log(this.triggerStatus);
-    this.isModalOpen = true;
-  }
-
-  @action
-  closeModal() {
-    this.triggerStatus = '';
-    this.isModalOpen = false;
-    this.taskDescription = ''; // 重置任务描述
-  }
-
-  @action
-  updateTaskDescription(value: string) {
-    this.taskDescription = value;
-  }
-
-  @action
-  createNewTask() {}
-
   <template>
     <div class='task-app'>
       <div class='filter-section'>
-        <BoxelDropdown>
-          <:trigger as |bindings|>
-            <BoxelButton {{bindings}}>
-              {{#if this.selectedFilter.length}}
-                {{this.selectedFilter}}
-              {{else}}
-                Filter
-                <DropdownArrowFilled
-                  width='10'
-                  height='10'
-                  style='margin-left: 5px;'
-                />
-              {{/if}}
-            </BoxelButton>
-          </:trigger>
-          <:content as |dd|>
-            <BoxelMenu
-              @closeMenu={{dd.close}}
-              @items={{array
-                (menuItem 'All' (fn this.updateFilter 'Status' 'All'))
-                (menuItem
-                  'Status Type' (fn this.updateFilter 'Status' 'Status Type')
-                )
-                (menuItem 'Assignee' (fn this.updateFilter 'Status' 'Assignee'))
-                (menuItem 'Project' (fn this.updateFilter 'Status' 'Project'))
-              }}
-            />
-          </:content>
-        </BoxelDropdown>
-
+        <div>Filter Section</div>
         <button class='sheet-toggle' {{on 'click' this.toggleSheet}}>
           {{if this.isSheetOpen 'Close' 'Open'}}
           Sheet
@@ -156,42 +69,36 @@ class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
           @realms={{this.realms}}
           @query={{this.backlogQuery}}
           @title='Backlog'
-          @triggerAddTaskModal={{this.triggerAddTaskModal}}
         />
         <ColumnQuery
           @context={{@context}}
           @realms={{this.realms}}
           @query={{this.nextSprintQuery}}
           @title='Next Sprint'
-          @triggerAddTaskModal={{this.triggerAddTaskModal}}
         />
         <ColumnQuery
           @context={{@context}}
           @realms={{this.realms}}
           @query={{this.nextSprintQuery}}
           @title='Current Sprint'
-          @triggerAddTaskModal={{this.triggerAddTaskModal}}
         />
         <ColumnQuery
           @context={{@context}}
           @realms={{this.realms}}
           @query={{this.nextSprintQuery}}
           @title='In Review'
-          @triggerAddTaskModal={{this.triggerAddTaskModal}}
         />
         <ColumnQuery
           @context={{@context}}
           @realms={{this.realms}}
           @query={{this.nextSprintQuery}}
           @title='Staged'
-          @triggerAddTaskModal={{this.triggerAddTaskModal}}
         />
         <ColumnQuery
           @context={{@context}}
           @realms={{this.realms}}
           @query={{this.nextSprintQuery}}
           @title='Shipped'
-          @triggerAddTaskModal={{this.triggerAddTaskModal}}
         />
       </div>
       <Sheet @onClose={{this.toggleSheet}} @isOpen={{this.isSheetOpen}}>
@@ -199,33 +106,6 @@ class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
         <p>This is the content of the sheet.</p>
       </Sheet>
     </div>
-
-    <BoxelModal
-      @isOpen={{this.isModalOpen}}
-      @onClose={{this.closeModal}}
-      @size='small'
-      @centered={{true}}
-    >
-      <div class='modal-content'>
-        <h2>{{this.triggerStatus}} - Add New Task</h2>
-        <BoxelInput
-          @type='textarea'
-          @value={{this.taskDescription}}
-          @onChange={{this.updateTaskDescription}}
-          @placeholder='Enter task description...'
-          style='--boxel-input-height: 200px'
-        />
-        <div class='button-container'>
-          <BoxelButton @kind='primary' {{on 'click' this.createNewTask}}>Create
-            New Task</BoxelButton>
-          <BoxelButton
-            @kind='secondary'
-            {{on 'click' this.closeModal}}
-          >Cancel</BoxelButton>
-        </div>
-      </div>
-    </BoxelModal>
-
     <style>
       .task-app {
         display: flex;
@@ -233,14 +113,15 @@ class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
         flex-direction: column;
         height: 100vh;
         font: var(--boxel-font);
-        overflow: hidden;
+        overflow: hidden; /* Add this to prevent scrolling when sheet is open */
       }
 
       .filter-section {
-        padding: var(--boxel-sp-xs) var(--boxel-sp);
+        flex-shrink: 0;
+        padding: var(--boxel-sp);
+        border-bottom: var(--boxel-border);
         display: flex;
         justify-content: space-between;
-        gap: var(--boxel-sp);
         align-items: center;
       }
 
@@ -265,24 +146,6 @@ class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
         padding: var(--boxel-sp);
         margin-bottom: var(--boxel-sp);
         background-color: var(--boxel-light);
-      }
-
-      .modal-content {
-        background-color: white;
-        padding: var(--boxel-sp);
-        border-radius: var(--boxel-border-radius);
-      }
-
-      .button-container {
-        display: flex;
-        justify-content: flex-end;
-        gap: var(--boxel-sp);
-        margin-top: var(--boxel-sp);
-      }
-
-      .error-message {
-        color: var(--boxel-error);
-        margin-top: var(--boxel-sp);
       }
     </style>
   </template>
@@ -367,13 +230,16 @@ export class TaskAppCard extends CardDef {
   static isolated = TaskAppCardIsolated;
 }
 
-interface ColumnQuerySignature {
+function removeFileExtension(cardUrl: string) {
+  return cardUrl.replace(/\.[^/.]+$/, '');
+}
+
+export interface ColumnQuerySignature {
   Args: {
     context: CardContext | undefined;
     realms: string[];
     query: Query;
     title: string;
-    triggerAddTaskModal: (status: string) => void;
   };
   Blocks: {
     default: [];
@@ -382,23 +248,9 @@ interface ColumnQuerySignature {
 }
 
 class ColumnQuery extends GlimmerComponent<ColumnQuerySignature> {
-  @tracked taskDescription = '';
-
-  @action updateTaskDescription(value: string) {
-    this.taskDescription = value;
-  }
-
   <template>
     <div class='column'>
-      <div class='column-title'>
-        <span>{{@title}}</span>
-        <IconPlus
-          width='12'
-          height='12'
-          {{on 'click' (fn @triggerAddTaskModal @title)}}
-          style='cursor: pointer;'
-        />
-      </div>
+      <div class='column-title'>{{@title}}</div>
       <div class='column-data'>
         <ul class='cards' data-test-cards-grid-cards>
           {{#let
@@ -410,10 +262,24 @@ class ColumnQuery extends GlimmerComponent<ColumnQuerySignature> {
               @format='fitted'
               @realms={{@realms}}
             >
-              <:loading>Loading...</:loading>
+
+              <:loading>
+                Loading...
+              </:loading>
               <:response as |cards|>
                 {{#each cards as |card|}}
-                  <li class='card'>
+                  <li
+                    class='card'
+                    {{@context.cardComponentModifier
+                      cardId=card.url
+                      format='data'
+                      fieldType=undefined
+                      fieldName=undefined
+                    }}
+                    data-test-cards-grid-item={{removeFileExtension card.url}}
+                    {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
+                    data-cards-grid-item={{removeFileExtension card.url}}
+                  >
                     <CardContainer @displayBoundaries={{true}}>
                       {{card.component}}
                     </CardContainer>
@@ -441,9 +307,6 @@ class ColumnQuery extends GlimmerComponent<ColumnQuerySignature> {
         background-color: var(--boxel-100);
         padding: var(--boxel-sp-xs) var(--boxel-sp);
         font: var(--boxel-font-sm);
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
       }
 
       .column-data {
@@ -461,17 +324,6 @@ class ColumnQuery extends GlimmerComponent<ColumnQuerySignature> {
       }
       .card {
         padding: 10px; /* Add padding here so scroll works */
-      }
-      .modal-content {
-        background-color: white;
-        padding: var(--boxel-sp);
-        border-radius: var(--boxel-border-radius);
-      }
-      .button-container {
-        display: flex;
-        justify-content: flex-end;
-        gap: var(--boxel-sp);
-        margin-top: var(--boxel-sp);
       }
     </style>
   </template>
