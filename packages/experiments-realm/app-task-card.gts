@@ -8,104 +8,232 @@ import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import GlimmerComponent from '@glimmer/component';
 import { CardContainer } from '@cardstack/boxel-ui/components';
-import { Query } from '@cardstack/runtime-common';
+import {
+  BoxelButton,
+  BoxelDropdown,
+  Menu as BoxelMenu,
+} from '@cardstack/boxel-ui/components';
+import { DropdownArrowFilled, IconPlus } from '@cardstack/boxel-ui/icons';
+import { menuItem } from '@cardstack/boxel-ui/helpers';
+import { fn, array } from '@ember/helper';
+import { action } from '@ember/object';
+import {
+  // baseRealm,
+  // isCardInstance,
+  // SupportedMimeType,
+  type Query,
+} from '@cardstack/runtime-common';
+import { restartableTask } from 'ember-concurrency';
+
+interface ColumnData {
+  status: string;
+  index: number;
+  query: any;
+}
 
 class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
   @tracked isSheetOpen = false;
+  @tracked selectedFilter = '';
+  @tracked taskDescription = '';
+  @tracked errorMessage = '';
+  @tracked triggerStatus = '';
+
+  filterOptions = ['All', 'Status Type', 'Assignee', 'Project'];
 
   get realms(): string[] {
     return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
   }
 
   get assignedTaskCodeRef() {
+    // use the username from the realm url
+    const realmUrlParts = this.args.model[realmURL]?.href.split('/') ?? [];
+    const username = realmUrlParts[3] ?? 'default';
+    if (username) {
+      return {
+        module: `http://localhost:4201/experiments/productivity/task`,
+        name: 'Task',
+      };
+    }
+
+    return;
+  }
+
+  getQueryForStatus(status: string) {
     return {
-      module: 'http://localhost:4201/experiments/productivity/task',
-      name: 'Task',
+      filter: {
+        on: this.assignedTaskCodeRef,
+        any: [
+          {
+            eq: {
+              'status.label': status,
+            },
+          },
+        ],
+      },
     };
   }
 
   get backlogQuery() {
-    return {
-      filter: {
-        on: this.assignedTaskCodeRef,
-        any: [
-          {
-            eq: {
-              'status.label': 'Backlog',
-            },
-          },
-        ],
-      },
-    };
+    return this.getQueryForStatus('Backlog');
   }
 
   get nextSprintQuery() {
-    return {
-      filter: {
-        on: this.assignedTaskCodeRef,
-        any: [
-          {
-            eq: {
-              'status.label': 'Next Sprint',
-            },
-          },
-        ],
+    return this.getQueryForStatus('Next Sprint');
+  }
+
+  get currentSprintQuery() {
+    return this.getQueryForStatus('Current Sprint');
+  }
+
+  get inReviewQuery() {
+    return this.getQueryForStatus('In Review');
+  }
+
+  get stagedQuery() {
+    return this.getQueryForStatus('Staged');
+  }
+
+  get shippedQuery() {
+    return this.getQueryForStatus('Shipped');
+  }
+
+  columnData: ColumnData[] = [
+    {
+      status: 'Backlog',
+      index: 0,
+      query: this.backlogQuery,
+    },
+    {
+      status: 'Next Sprint',
+      index: 1,
+      query: this.nextSprintQuery,
+    },
+    {
+      status: 'Current Sprint',
+      index: 2,
+      query: this.currentSprintQuery,
+    },
+    {
+      status: 'In Review',
+      index: 3,
+      query: this.inReviewQuery,
+    },
+    {
+      status: 'Staged',
+      index: 4,
+      query: this.stagedQuery,
+    },
+    {
+      status: 'Shipped',
+      index: 5,
+      query: this.shippedQuery,
+    },
+  ];
+
+  private createCard = restartableTask(async () => {
+    let cardRef = this.assignedTaskCodeRef;
+
+    if (!cardRef) {
+      return;
+    }
+
+    const newCard: any = await this.args.context?.actions?.createCard?.(
+      cardRef,
+      new URL(cardRef.module),
+      {
+        realmURL: this.args.model[realmURL],
       },
-    };
+    );
+
+    if (newCard) {
+      try {
+        console.log(newCard.status, this.triggerStatus);
+        newCard.status.index = 1;
+        newCard.status.label = this.triggerStatus;
+      } catch (viewCardError) {}
+    }
+  });
+
+  @action
+  updateFilter(type: string, value: string) {
+    switch (type) {
+      case 'Status':
+        this.selectedFilter = value;
+        break;
+      case 'Assignee':
+        this.selectedFilter = value;
+        break;
+      case 'Project':
+        this.selectedFilter = value;
+        break;
+      default:
+        console.warn(`Unknown filter type: ${type}`);
+    }
+  }
+
+  @action
+  createNewTask(status: string) {
+    console.log(status);
+    this.triggerStatus = status;
+    this.createCard.perform();
   }
 
   <template>
     <div class='task-app'>
       <div class='filter-section'>
-        <div>Filter Section</div>
+        <BoxelDropdown>
+          <:trigger as |bindings|>
+            <BoxelButton {{bindings}}>
+              {{#if this.selectedFilter.length}}
+                {{this.selectedFilter}}
+              {{else}}
+                Filter
+                <DropdownArrowFilled
+                  width='10'
+                  height='10'
+                  style='margin-left: 5px;'
+                />
+              {{/if}}
+            </BoxelButton>
+          </:trigger>
+          <:content as |dd|>
+            <BoxelMenu
+              @closeMenu={{dd.close}}
+              @items={{array
+                (menuItem 'All' (fn this.updateFilter 'Status' 'All'))
+                (menuItem
+                  'Status Type' (fn this.updateFilter 'Status' 'Status Type')
+                )
+                (menuItem 'Assignee' (fn this.updateFilter 'Status' 'Assignee'))
+                (menuItem 'Project' (fn this.updateFilter 'Status' 'Project'))
+              }}
+            />
+          </:content>
+        </BoxelDropdown>
+
         <button class='sheet-toggle' {{on 'click' this.toggleSheet}}>
           {{if this.isSheetOpen 'Close' 'Open'}}
           Sheet
         </button>
       </div>
       <div class='columns-container'>
-        <ColumnQuery
-          @context={{@context}}
-          @realms={{this.realms}}
-          @query={{this.backlogQuery}}
-          @title='Backlog'
-        />
-        <ColumnQuery
-          @context={{@context}}
-          @realms={{this.realms}}
-          @query={{this.nextSprintQuery}}
-          @title='Next Sprint'
-        />
-        <ColumnQuery
-          @context={{@context}}
-          @realms={{this.realms}}
-          @query={{this.nextSprintQuery}}
-          @title='Current Sprint'
-        />
-        <ColumnQuery
-          @context={{@context}}
-          @realms={{this.realms}}
-          @query={{this.nextSprintQuery}}
-          @title='In Review'
-        />
-        <ColumnQuery
-          @context={{@context}}
-          @realms={{this.realms}}
-          @query={{this.nextSprintQuery}}
-          @title='Staged'
-        />
-        <ColumnQuery
-          @context={{@context}}
-          @realms={{this.realms}}
-          @query={{this.nextSprintQuery}}
-          @title='Shipped'
-        />
+        {{#each this.columnData as |column|}}
+          <ColumnQuery
+            @context={{@context}}
+            @realms={{this.realms}}
+            @query={{column.query}}
+            @title={{column.status}}
+            @index={{column.index}}
+            @createNewTask={{this.createNewTask}}
+          />
+        {{/each}}
       </div>
       <Sheet @onClose={{this.toggleSheet}} @isOpen={{this.isSheetOpen}}>
         <h2>Sheet Content</h2>
         <p>This is the content of the sheet.</p>
       </Sheet>
     </div>
+
     <style>
       .task-app {
         display: flex;
@@ -113,15 +241,14 @@ class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
         flex-direction: column;
         height: 100vh;
         font: var(--boxel-font);
-        overflow: hidden; /* Add this to prevent scrolling when sheet is open */
+        overflow: hidden;
       }
 
       .filter-section {
-        flex-shrink: 0;
-        padding: var(--boxel-sp);
-        border-bottom: var(--boxel-border);
+        padding: var(--boxel-sp-xs) var(--boxel-sp);
         display: flex;
         justify-content: space-between;
+        gap: var(--boxel-sp);
         align-items: center;
       }
 
@@ -146,6 +273,18 @@ class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
         padding: var(--boxel-sp);
         margin-bottom: var(--boxel-sp);
         background-color: var(--boxel-light);
+      }
+
+      .button-container {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--boxel-sp);
+        margin-top: var(--boxel-sp);
+      }
+
+      .error-message {
+        color: var(--boxel-error);
+        margin-top: var(--boxel-sp);
       }
     </style>
   </template>
@@ -230,16 +369,15 @@ export class TaskAppCard extends CardDef {
   static isolated = TaskAppCardIsolated;
 }
 
-function removeFileExtension(cardUrl: string) {
-  return cardUrl.replace(/\.[^/.]+$/, '');
-}
-
-export interface ColumnQuerySignature {
+interface ColumnQuerySignature {
   Args: {
     context: CardContext | undefined;
     realms: string[];
     query: Query;
     title: string;
+    index: number;
+    column: any;
+    createNewTask: (status: any) => void;
   };
   Blocks: {
     default: [];
@@ -248,9 +386,23 @@ export interface ColumnQuerySignature {
 }
 
 class ColumnQuery extends GlimmerComponent<ColumnQuerySignature> {
+  @tracked taskDescription = '';
+
+  @action updateTaskDescription(value: string) {
+    this.taskDescription = value;
+  }
+
   <template>
     <div class='column'>
-      <div class='column-title'>{{@title}}</div>
+      <div class='column-title'>
+        <span>{{@title}}</span>
+        <IconPlus
+          width='12'
+          height='12'
+          {{on 'click' (fn @createNewTask @column)}}
+          style='cursor: pointer;'
+        />
+      </div>
       <div class='column-data'>
         <ul class='cards' data-test-cards-grid-cards>
           {{#let
@@ -262,7 +414,6 @@ class ColumnQuery extends GlimmerComponent<ColumnQuerySignature> {
               @format='fitted'
               @realms={{@realms}}
             >
-
               <:loading>
                 Loading...
               </:loading>
@@ -307,6 +458,9 @@ class ColumnQuery extends GlimmerComponent<ColumnQuerySignature> {
         background-color: var(--boxel-100);
         padding: var(--boxel-sp-xs) var(--boxel-sp);
         font: var(--boxel-font-sm);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
       }
 
       .column-data {
@@ -325,6 +479,21 @@ class ColumnQuery extends GlimmerComponent<ColumnQuerySignature> {
       .card {
         padding: 10px; /* Add padding here so scroll works */
       }
+      .modal-content {
+        background-color: white;
+        padding: var(--boxel-sp);
+        border-radius: var(--boxel-border-radius);
+      }
+      .button-container {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--boxel-sp);
+        margin-top: var(--boxel-sp);
+      }
     </style>
   </template>
+}
+
+function removeFileExtension(cardUrl: string) {
+  return cardUrl.replace(/\.[^/.]+$/, '');
 }
