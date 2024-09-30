@@ -19,6 +19,7 @@ import RealmInfoService from '@cardstack/host/services/realm-info-service';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
 import type CardService from '../services/card-service';
+import { getCard } from '../resources/card-resource';
 
 export type Model = CardDef | null;
 
@@ -42,24 +43,23 @@ export default class Card extends Route<Model | null> {
 
   async beforeModel(transition: Transition) {
     let path = transition.to?.params?.path;
-    let cardUrl = `${window.origin}/${path}`;
+    let cardUrl;
 
-    await this.router.replaceWith(`index`, {
-      queryParams: hostsOwnAssets
-        ? { workspaceChooserOpened: true }
-        : {
-            operatorModeState: stringify({
-              stacks: [
-                [
-                  {
-                    id: cardUrl,
-                    format: 'isolated',
-                  },
-                ],
-              ],
-              submode: Submodes.Interact,
-            } as OperatorModeSerializedState),
-          },
-    });
+    if (!hostsOwnAssets) {
+      let resource = getCard(this, () => `${window.origin}/${path}`);
+      await resource.loaded;
+      cardUrl = resource?.card?.id; // We are fetching the card to get its canonical URL
+    }
+
+    const queryParams = cardUrl
+      ? {
+          operatorModeState: stringify({
+            stacks: [[{ id: cardUrl, format: 'isolated' }]],
+            submode: Submodes.Interact,
+          } as OperatorModeSerializedState),
+        }
+      : { workspaceChooserOpened: true };
+
+    await this.router.replaceWith('index', { queryParams });
   }
 }
