@@ -84,7 +84,8 @@ export default class OperatorModeStateService extends Service {
     codePath: null,
     openDirs: new TrackedMap<string, string[]>(),
   });
-  @tracked needsAuthorization = false;
+  @tracked needsRealmAuthorization = false;
+
   private cachedRealmURL: URL | null = null;
   private openFileSubscribers: OpenFileSubscriber[] = [];
 
@@ -109,7 +110,7 @@ export default class OperatorModeStateService extends Service {
       codePath: null,
       openDirs: new TrackedMap<string, string[]>(),
     });
-    this.needsAuthorization = false;
+    this.needsRealmAuthorization = false;
     this.cachedRealmURL = null;
     this.openFileSubscribers = [];
     this.schedulePersist();
@@ -117,7 +118,7 @@ export default class OperatorModeStateService extends Service {
 
   async restore(rawState: SerializedState) {
     this.state = await this.deserialize(rawState);
-    this.needsAuthorization = Boolean(
+    this.needsRealmAuthorization = Boolean(
       this.state.stacks.find((stack) =>
         stack.find(
           (item) =>

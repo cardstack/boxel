@@ -133,6 +133,15 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.operatorModeStateService.state?.submode === Submodes.Code;
   }
 
+  // Note that there is a moment of time where you have logged into matrix but
+  // have not yet obtained realm authorization. We guard for that scenario here.
+  private get hasIdentityWithRealmAuthorization() {
+    return (
+      this.matrixService.isLoggedIn &&
+      !this.operatorModeStateService.needsRealmAuthorization
+    );
+  }
+
   <template>
     <Modal
       class='operator-mode'
@@ -143,23 +152,13 @@ export default class OperatorModeContainer extends Component<Signature> {
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
     >
       <CardCatalogModal />
-      {{#if
-        (and
-          this.matrixService.isLoggedIn
-          (not this.operatorModeStateService.needsAuthorization)
-          this.isCodeMode
-        )
-      }}
+      {{#if (and this.hasIdentityWithRealmAuthorization this.isCodeMode)}}
         <CodeSubmode
           @saveSourceOnClose={{perform this.saveSource}}
           @saveCardOnClose={{perform this.write}}
         />
       {{else if
-        (and
-          this.matrixService.isLoggedIn
-          (not this.operatorModeStateService.needsAuthorization)
-          (not this.isCodeMode)
-        )
+        (and this.hasIdentityWithRealmAuthorization (not this.isCodeMode))
       }}
         <InteractSubmode @write={{perform this.write}} />
       {{else}}
