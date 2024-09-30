@@ -13,3 +13,19 @@ exports.up = (pgm) => {
       break;
   }
 };
+
+exports.down = (pgm) => {
+  pgm.dropIndex('realm_user_permissions', ['username', 'read']);
+  switch (process.env.REALM_SENTRY_ENVIRONMENT) {
+    case 'staging':
+      pgm.sql(`INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner) VALUES ('https://realms-staging.stack.cards/experiments/', '*', true, false, false)`);
+      break;
+    case 'production':
+      pgm.sql(`INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner) VALUES ('https://app.boxel.ai/experiments/', '*', true, false, false)`);
+      break;
+    default:
+      pgm.sql(`INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner) 
+               VALUES ('http://localhost:4201/experiments/', '*', true, false, false), ('http://localhost:4204/', '*', true, false, false)`);
+      break;
+  }
+};
