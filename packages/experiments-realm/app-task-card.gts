@@ -17,12 +17,7 @@ import { DropdownArrowFilled, IconPlus } from '@cardstack/boxel-ui/icons';
 import { menuItem } from '@cardstack/boxel-ui/helpers';
 import { fn, array } from '@ember/helper';
 import { action } from '@ember/object';
-import {
-  // baseRealm,
-  // isCardInstance,
-  // SupportedMimeType,
-  type Query,
-} from '@cardstack/runtime-common';
+import { type Query } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 
 interface ColumnData {
@@ -31,7 +26,7 @@ interface ColumnData {
   query: any;
 }
 
-class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
+class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   @tracked isSheetOpen = false;
   @tracked selectedFilter = '';
   @tracked taskDescription = '';
@@ -364,10 +359,10 @@ class Sheet extends GlimmerComponent<SheetSignature> {
   </template>
 }
 
-export class TaskAppCard extends CardDef {
+export class AppTaskCard extends CardDef {
   static displayName = 'App Task';
   static prefersWideFormat = true;
-  static isolated = TaskAppCardIsolated;
+  static isolated = AppTaskCardIsolated;
 }
 
 interface ColumnQuerySignature {

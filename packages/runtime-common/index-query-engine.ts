@@ -917,10 +917,6 @@ export class IndexQueryEngine {
     let api = await loader.import<typeof CardAPI>(
       'https://cardstack.com/base/card-api',
     );
-    console.log('===')
-    console.log(path)
-    console.log(isLeaf)
-    console.log(currentSegment)
     if (!api) {
       throw new Error(`could not load card API`);
     }

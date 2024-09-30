@@ -9,7 +9,7 @@
     "meta": {
       "adoptsFrom": {
         "module": "../app-task-card",
-        "name": "TaskAppCard"
+        "name": "AppTaskCard"
       }
     }
   }
