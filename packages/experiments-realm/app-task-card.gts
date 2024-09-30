@@ -224,6 +224,7 @@ class TaskAppCardIsolated extends Component<typeof TaskAppCard> {
             @query={{column.query}}
             @title={{column.status}}
             @index={{column.index}}
+            @column={{column}}
             @createNewTask={{this.createNewTask}}
           />
         {{/each}}
@@ -376,7 +377,7 @@ interface ColumnQuerySignature {
     query: Query;
     title: string;
     index: number;
-    column: any;
+    column: ColumnData;
     createNewTask: (status: any) => void;
   };
   Blocks: {
