@@ -1,24 +1,22 @@
+import type { QueuePublisher, QueueRunner } from '../queue';
 import { type SharedTests } from '../helpers';
-import { type Queue } from '../index';
 
 const tests = Object.freeze({
-  'it can run a job': async (assert, { queue }) => {
-    let job = await queue.publish<number>('increment', 17, {
-      queueName: 'increment-queue',
-    });
-    queue.register('increment', async (a: number) => a + 1);
+  'it can run a job': async (assert, { publisher, runner }) => {
+    let job = await publisher.publish<number>('increment', null, 5, 17);
+    runner.register('increment', async (a: number) => a + 1);
     let result = await job.done;
     assert.strictEqual(result, 18);
   },
 
-  'a job can throw an exception': async (assert, { queue }) => {
-    queue.register('increment', async (a: number) => a + 1);
-    queue.register('boom', async () => {
+  'a job can throw an exception': async (assert, { publisher, runner }) => {
+    runner.register('increment', async (a: number) => a + 1);
+    runner.register('boom', async () => {
       throw new Error('boom!');
     });
     let [errorJob, nonErrorJob] = await Promise.all([
-      queue.publish<number>('boom', null),
-      queue.publish<number>('increment', 17),
+      publisher.publish<number>('boom', null, 5, null),
+      publisher.publish<number>('increment', null, 5, 17),
     ]);
 
     // assert that the error that was thrown does not prevent subsequent jobs
@@ -41,7 +39,7 @@ const tests = Object.freeze({
 
   'jobs are processed serially within a particular queue': async (
     assert,
-    { queue },
+    { publisher, runner },
   ) => {
     assert.expect(8);
     let startedCount = 0;
@@ -74,16 +72,12 @@ const tests = Object.freeze({
       );
     };
 
-    queue.register('count', count);
-    let job1 = await queue.publish('count', 0, {
-      queueName: 'serial-queue',
-    });
-    let job2 = await queue.publish('count', 1, {
-      queueName: 'serial-queue',
-    });
+    runner.register('count', count);
+    let job1 = await publisher.publish('count', 'count-group', 5, 0);
+    let job2 = await publisher.publish('count', 'count-group', 5, 1);
 
     await Promise.all([job2.done, job1.done]);
   },
-} as SharedTests<{ queue: Queue }>);
+} as SharedTests<{ publisher: QueuePublisher; runner: QueueRunner }>);
 
 export default tests;

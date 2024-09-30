@@ -32,7 +32,7 @@ import {
   type ResourceObjectWithId,
   type DirectoryEntryRelationship,
   type DBAdapter,
-  type Queue,
+  type QueuePublisher,
   type FileMeta,
   type DirectoryMeta,
 } from './index';
@@ -290,7 +290,7 @@ export class Realm {
       matrix: MatrixConfig;
       secretSeed: string;
       dbAdapter: DBAdapter;
-      queue: Queue;
+      queue: QueuePublisher;
       virtualNetwork: VirtualNetwork;
       assetsURL: URL;
     },

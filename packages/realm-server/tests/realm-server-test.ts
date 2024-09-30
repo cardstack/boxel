@@ -27,9 +27,10 @@ import {
   RealmPermissions,
   fetchUserPermissions,
   baseCardRef,
-  type Queue,
   type LooseSingleCardDocument,
   type SingleCardDocument,
+  type QueuePublisher,
+  type QueueRunner,
 } from '@cardstack/runtime-common';
 import { stringify } from 'qs';
 import { v4 as uuidv4 } from 'uuid';
@@ -141,7 +142,7 @@ module('Realm Server', function (hooks) {
     fileSystem?: Record<string, string | LooseSingleCardDocument>,
   ) {
     setupDB(hooks, {
-      beforeEach: async (dbAdapter, queue) => {
+      beforeEach: async (dbAdapter, publisher, runner) => {
         dir = dirSync();
         let testRealmDir = join(dir.name, 'realm_server_1', 'test');
         ensureDirSync(testRealmDir);
@@ -159,7 +160,8 @@ module('Realm Server', function (hooks) {
             realmURL: testRealmURL,
             permissions,
             dbAdapter,
-            queue,
+            runner,
+            publisher,
             matrixURL,
             fileSystem,
           }));
@@ -2108,7 +2110,8 @@ module('Realm Server', function (hooks) {
     let testRealmServer2: RealmServer;
     let testRealm2: Realm;
     let dbAdapter: PgAdapter;
-    let queue: Queue;
+    let publisher: QueuePublisher;
+    let runner: QueueRunner;
     let request2: SuperTest<Test>;
     let testRealmDir: string;
 
@@ -2120,7 +2123,11 @@ module('Realm Server', function (hooks) {
       '*': ['read', 'write'],
     });
 
-    async function startRealmServer(dbAdapter: PgAdapter, queue: Queue) {
+    async function startRealmServer(
+      dbAdapter: PgAdapter,
+      publisher: QueuePublisher,
+      runner: QueueRunner,
+    ) {
       if (testRealm2) {
         virtualNetwork.unmount(testRealm2.handle);
       }
@@ -2134,20 +2141,22 @@ module('Realm Server', function (hooks) {
         realmsRootPath: join(dir.name, 'realm_server_2'),
         realmURL: testRealm2URL,
         dbAdapter,
-        queue,
+        publisher,
+        runner,
         matrixURL,
       }));
       request2 = supertest(testRealmHttpServer2);
     }
 
     setupDB(hooks, {
-      beforeEach: async (_dbAdapter, _queue) => {
+      beforeEach: async (_dbAdapter, _publisher, _runner) => {
         dbAdapter = _dbAdapter;
-        queue = _queue;
+        publisher = _publisher;
+        runner = _runner;
         testRealmDir = join(dir.name, 'realm_server_2', 'test');
         ensureDirSync(testRealmDir);
         copySync(join(__dirname, 'cards'), testRealmDir);
-        await startRealmServer(dbAdapter, queue);
+        await startRealmServer(dbAdapter, publisher, runner);
       },
       afterEach: async () => {
         await closeServer(testRealmHttpServer2);
@@ -2477,7 +2486,7 @@ module('Realm Server', function (hooks) {
       // Stop and restart the server
       testRealmServer2.testingOnlyUnmountRealms();
       await closeServer(testRealmHttpServer2);
-      await startRealmServer(dbAdapter, queue);
+      await startRealmServer(dbAdapter, publisher, runner);
       await testRealmServer2.start();
 
       {
@@ -3184,7 +3193,7 @@ module('Realm Server serving from root', function (hooks) {
   });
 
   setupDB(hooks, {
-    beforeEach: async (dbAdapter, queue) => {
+    beforeEach: async (dbAdapter, publisher, runner) => {
       let testRealmDir = join(dir.name, 'realm_server_3', 'test');
       ensureDirSync(testRealmDir);
       copySync(join(__dirname, 'cards'), testRealmDir);
@@ -3195,7 +3204,8 @@ module('Realm Server serving from root', function (hooks) {
           realmsRootPath: join(dir.name, 'realm_server_3'),
           realmURL: testRealmURL,
           dbAdapter,
-          queue,
+          publisher,
+          runner,
           matrixURL,
         })
       ).testRealmHttpServer;
@@ -3400,7 +3410,7 @@ module('Realm server serving multiple realms', function (hooks) {
   });
 
   setupDB(hooks, {
-    beforeEach: async (dbAdapter, queue) => {
+    beforeEach: async (dbAdapter, publisher, runner) => {
       let localBaseRealmURL = new URL('http://127.0.0.1:4446/base/');
       virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
 
@@ -3409,7 +3419,8 @@ module('Realm server serving multiple realms', function (hooks) {
         dir: basePath,
         realmURL: baseRealm.url,
         virtualNetwork,
-        queue,
+        publisher,
+        runner,
         dbAdapter,
         deferStartUp: true,
       });
@@ -3420,7 +3431,8 @@ module('Realm server serving multiple realms', function (hooks) {
         dir: join(dir.name, 'demo'),
         virtualNetwork,
         realmURL: 'http://127.0.0.1:4446/demo/',
-        queue,
+        publisher,
+        runner,
         dbAdapter,
         deferStartUp: true,
       });
@@ -3440,7 +3452,7 @@ module('Realm server serving multiple realms', function (hooks) {
         matrixRegistrationSecret,
         realmsRootPath: dir.name,
         dbAdapter,
-        queue,
+        queue: publisher,
         getIndexHTML,
         seedPath,
         serverURL: new URL('http://127.0.0.1:4446'),
@@ -3512,7 +3524,7 @@ module('Realm Server serving from a subdirectory', function (hooks) {
   });
 
   setupDB(hooks, {
-    beforeEach: async (dbAdapter, queue) => {
+    beforeEach: async (dbAdapter, publisher, runner) => {
       dir = dirSync();
       let testRealmDir = join(dir.name, 'realm_server_4', 'test');
       ensureDirSync(testRealmDir);
@@ -3524,7 +3536,8 @@ module('Realm Server serving from a subdirectory', function (hooks) {
           realmsRootPath: join(dir.name, 'realm_server_4'),
           realmURL: new URL('http://127.0.0.1:4446/demo/'),
           dbAdapter,
-          queue,
+          publisher,
+          runner,
           matrixURL,
         })
       ).testRealmHttpServer;
@@ -3579,7 +3592,7 @@ module('Realm server authentication', function (hooks) {
   });
 
   setupDB(hooks, {
-    beforeEach: async (dbAdapter, queue) => {
+    beforeEach: async (dbAdapter, publisher, runner) => {
       let testRealmDir = join(dir.name, 'realm_server_5', 'test');
       ensureDirSync(testRealmDir);
       copySync(join(__dirname, 'cards'), testRealmDir);
@@ -3590,7 +3603,8 @@ module('Realm server authentication', function (hooks) {
           realmsRootPath: join(dir.name, 'realm_server_5'),
           realmURL: testRealmURL,
           dbAdapter,
-          queue,
+          publisher,
+          runner,
           matrixURL,
         })
       ).testRealmHttpServer;
