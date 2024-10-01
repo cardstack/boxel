@@ -48,6 +48,8 @@ import type MessageService from '@cardstack/host/services/message-service';
 
 import type QueueService from '@cardstack/host/services/queue';
 
+import RealmServerService from '@cardstack/host/services/realm-server';
+
 import {
   type CardDef,
   type FieldDef,
@@ -480,9 +482,9 @@ async function setupTestRealm({
 
   realmURL = realmURL ?? testRealmURL;
 
-  let cardService = owner.lookup('service:card-service') as CardService;
-  if (!cardService.unresolvedRealmURLs.includes(realmURL)) {
-    cardService.unresolvedRealmURLs.push(realmURL);
+  let realmServer = owner.lookup('service:realm-server') as RealmServerService;
+  if (!realmServer.availableRealmURLs.includes(realmURL)) {
+    realmServer.setAvailableRealmURLs([realmURL]);
   }
 
   if (isAcceptanceTest) {

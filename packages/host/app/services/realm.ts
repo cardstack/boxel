@@ -84,6 +84,10 @@ class RealmResource {
     return this.meta?.info;
   }
 
+  get isPublic() {
+    return this.meta?.isPublic;
+  }
+
   get claims(): JWTPayload | undefined {
     if (this.auth.type === 'logged-in') {
       return this.auth.claims;
@@ -238,6 +242,7 @@ export default class RealmService extends Service {
         name: 'Unknown Workspace',
         backgroundURL: null,
         iconURL: null,
+        showAsCatalog: null,
       };
     }
 
@@ -247,10 +252,15 @@ export default class RealmService extends Service {
         name: 'Unknown Workspace',
         backgroundURL: null,
         iconURL: null,
+        showAsCatalog: null,
       };
     } else {
       return resource.meta.info;
     }
+  };
+
+  isPublic = (url: string): boolean => {
+    return this.knownRealm(url)?.isPublic ?? false;
   };
 
   canRead = (url: string): boolean => {

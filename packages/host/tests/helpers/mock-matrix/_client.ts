@@ -2,7 +2,7 @@ import { MatrixEvent } from 'matrix-js-sdk';
 
 import * as MatrixSDK from 'matrix-js-sdk';
 
-import { unixTime } from '@cardstack/runtime-common';
+import { baseRealm, unixTime } from '@cardstack/runtime-common';
 
 import type { ExtendedClient } from '@cardstack/host/services/matrix-sdk-loader';
 
@@ -21,6 +21,8 @@ let nonce = 0;
 type Plural<T> = {
   [K in keyof T]: T[K][];
 };
+
+const publicRealmURLs = [baseRealm.url, 'http://localhost:4201/catalog/'];
 
 export class MockClient implements ExtendedClient {
   private listeners: Partial<Plural<MatrixSDK.ClientEventHandlerMap>> = {};
@@ -68,6 +70,13 @@ export class MockClient implements ExtendedClient {
     let nowInSeconds = unixTime(Date.now());
     let expires = nowInSeconds + (this.sdkOpts.expiresInSec ?? 60 * 60);
     let header = { alg: 'none', typ: 'JWT' };
+    let permissions = (this.sdkOpts.realmPermissions ?? {})[realmURL.href] ?? [
+      'read',
+      'write',
+    ];
+    if (publicRealmURLs.includes(realmURL.href)) {
+      permissions = ['read'];
+    }
     let payload = {
       iat: nowInSeconds,
       exp: expires,
@@ -76,10 +85,7 @@ export class MockClient implements ExtendedClient {
       // adding a nonce to the test token so that we can tell the difference
       // between different tokens created in the same second
       nonce: nonce++,
-      permissions: (this.sdkOpts.realmPermissions ?? {})[realmURL.href] ?? [
-        'read',
-        'write',
-      ],
+      permissions,
     };
     let stringifiedHeader = JSON.stringify(header);
     let stringifiedPayload = JSON.stringify(payload);

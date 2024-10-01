@@ -62,7 +62,7 @@ let availableSortOptions: SortOption[] = [
     ],
   },
   {
-    displayName: 'Updated at',
+    displayName: 'Date Updated',
     sort: [
       {
         by: 'lastModified',
@@ -71,7 +71,7 @@ let availableSortOptions: SortOption[] = [
     ],
   },
   {
-    displayName: 'Created at',
+    displayName: 'Date Created',
     sort: [
       {
         by: 'createdAt',
