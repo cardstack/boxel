@@ -562,8 +562,10 @@ module('Acceptance | operator mode tests', function (hooks) {
         );
         if (isOnWorkspaceChooser && req.url.includes('_info')) {
           assert
-            .dom(`[data-test-workspace-list] [data-test-workspace]`)
-            .hasClass('is-loading');
+            .dom(
+              `[data-test-workspace-list] [data-test-workspace-loading-indicator]`,
+            )
+            .exists();
         }
         return null;
       },
@@ -595,8 +597,8 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.dom('[data-test-submode-layout-title]').exists();
     assert.dom('[data-test-workspace-chooser]').exists();
     assert
-      .dom(`[data-test-workspace-list] [data-test-workspace]`)
-      .hasNoClass('is-loading');
+      .dom(`[data-test-workspace-list] [data-test-workspace-loading-indicator]`)
+      .doesNotExist();
     assert
       .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
       .doesNotExist();

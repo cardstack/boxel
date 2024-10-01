@@ -6,13 +6,14 @@ import { cached } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 
-import { LoadingIndicator } from '@cardstack/boxel-ui/components';
-import { cn, cssVar } from '@cardstack/boxel-ui/helpers';
+import { cssVar } from '@cardstack/boxel-ui/helpers';
 import { Lock } from '@cardstack/boxel-ui/icons';
 
 import CardService from '@cardstack/host/services/card-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RealmService from '@cardstack/host/services/realm';
+
+import WorkspaceLoadingIndicator from './workspace-loading-indicator';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -23,15 +24,14 @@ interface Signature {
 
 export default class Workspace extends Component<Signature> {
   <template>
-    <button
-      class={{cn 'workspace' is-loading=this.loadRealmTask.isRunning}}
-      data-test-workspace={{this.name}}
-      {{on 'click' this.openWorkspace}}
-    >
-      {{#if this.loadRealmTask.isRunning}}
-        <div class='loading-small-icon' />
-        <LoadingIndicator @color='var(--boxel-light)' />
-      {{else}}
+    {{#if this.loadRealmTask.isRunning}}
+      <WorkspaceLoadingIndicator />
+    {{else}}
+      <button
+        class='workspace'
+        data-test-workspace={{this.name}}
+        {{on 'click' this.openWorkspace}}
+      >
         <div
           class='icon'
           style={{cssVar
@@ -52,8 +52,8 @@ export default class Workspace extends Component<Signature> {
             }}</span>
           <span class='type'>{{if this.isPublic 'Catalog' 'Personal'}}</span>
         </div>
-      {{/if}}
-    </button>
+      </button>
+    {{/if}}
     <style scoped>
       .workspace {
         min-width: 251.6px;
@@ -65,24 +65,6 @@ export default class Workspace extends Component<Signature> {
         border: solid 1px rgba(255, 255, 255, 0.5);
         overflow: hidden;
         padding: 0;
-      }
-      .is-loading {
-        justify-content: center;
-        align-items: center;
-        border: none;
-        background-color: rgba(0, 0, 0, 0.5);
-        position: relative;
-
-        --icon-color: var(--boxel-light);
-      }
-      .loading-small-icon {
-        position: absolute;
-        width: 20px;
-        height: 20px;
-        top: var(--boxel-sp-xs);
-        left: var(--boxel-sp-xs);
-        background: var(--boxel-dark);
-        border-radius: 5px;
       }
       .icon {
         background-color: var(--boxel-500);

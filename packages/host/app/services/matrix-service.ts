@@ -239,11 +239,15 @@ export default class MatrixService extends Service {
     cardController.workspaceChooserOpened = true;
     this.start(auth);
     this.setDisplayName(displayName);
+    await this.initializeNewUserRealm.perform(displayName);
+    await this.loginToRealms();
+  }
 
+  initializeNewUserRealm = task(async (realmName: string) => {
     let personalRealmURL = await this.realmServer.createRealm({
       endpoint: 'personal',
-      name: `${displayName}'s Workspace`,
-      iconURL: iconURLFor(displayName),
+      name: `${realmName}'s Workspace`,
+      iconURL: iconURLFor(realmName),
     });
     let { realms = [] } =
       (await this.client.getAccountDataFromServer<{ realms: string[] }>(
@@ -252,8 +256,7 @@ export default class MatrixService extends Service {
     realms.push(personalRealmURL.href);
     await this.client.setAccountData('com.cardstack.boxel.realms', { realms });
     await this.realmServer.setAvailableRealmURLs(realms);
-    await this.loginToRealms();
-  }
+  });
 
   async setDisplayName(displayName: string) {
     await this.client.setDisplayName(displayName);
