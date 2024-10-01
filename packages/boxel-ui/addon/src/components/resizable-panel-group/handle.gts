@@ -90,11 +90,11 @@ export default class Handle extends Component<Signature> {
       }
 
       .resize-handle.horizontal {
-        cursor: col-resize;
+        cursor: unset;
       }
 
       .resize-handle.vertical {
-        cursor: row-resize;
+        cursor: unset;
       }
 
       .resize-handle.hidden {
