@@ -52,7 +52,6 @@ export default class Index extends Route<void> {
       await resource.loaded;
       cardUrl = resource?.card?.id; // This is to make sure we put the canonical URL of the card on the stack
     }
-    cardUrl = card;
 
     let stacks: { id: string; format: string }[][] = [];
 
