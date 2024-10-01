@@ -62,7 +62,7 @@
   "scripts": {
     "vscode:prepublish": "pnpm run compile",
     "vscode:package": "pnpm vsce package --no-dependencies",
-    "compile": "glint --build -p ./ && node esbuild.js --production",
+    "compile": "glint --build -p ./ && node esbuild.mjs --production",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:js": "eslint . --cache",
