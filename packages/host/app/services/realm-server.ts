@@ -129,20 +129,12 @@ export default class RealmServerService extends Service {
   }
 
   private async fetchCatalogRealmURLs() {
-    let realmServerURL = new URL(window.location.href);
-    if (
-      realmServerURL.origin === 'http://localhost:4200' ||
-      realmServerURL.origin === 'http://localhost:7357'
-    ) {
-      realmServerURL = new URL('http://localhost:4201');
-    }
-
     let response = await this.loaderService.loader.fetch(
-      `${realmServerURL.origin}/_catalog-realms`,
+      `${this.url.origin}/_catalog-realms`,
     );
     if (response.status !== 200) {
       throw new Error(
-        `Failed to fetch public realms for realm server ${realmServerURL.origin}: ${response.status}`,
+        `Failed to fetch public realms for realm server ${this.url.origin}: ${response.status}`,
       );
     }
 
@@ -158,7 +150,10 @@ export default class RealmServerService extends Service {
     let url = globalThis.location.origin;
     // the ember CLI hosted app will use the dev env realm server
     // http://localhost:4201
-    url = url === 'http://localhost:4200' ? 'http://localhost:4201' : url;
+    url =
+      url === 'http://localhost:4200' || url === 'http://localhost:7357'
+        ? 'http://localhost:4201'
+        : url;
     return new URL(url);
   }
 
