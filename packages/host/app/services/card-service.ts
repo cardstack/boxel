@@ -293,7 +293,11 @@ export default class CardService extends Service {
       ${JSON.stringify(json, null, 2)}`,
       );
     }
-    let card = await this.createFromSerialized(json.data, json, url);
+    let card = await this.createFromSerialized(
+      json.data,
+      json,
+      new URL(json.data.id),
+    );
     return card;
   }
 

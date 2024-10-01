@@ -237,7 +237,7 @@ export default class MatrixService extends Service {
       'controller:card',
     ) as CardController;
     cardController.workspaceChooserOpened = true;
-    this.start(auth);
+    this.start({ auth });
     this.setDisplayName(displayName);
 
     let personalRealmURL = await this.realmServer.createRealm({
@@ -263,7 +263,13 @@ export default class MatrixService extends Service {
     await this.profile.load.perform();
   }
 
-  async start(auth?: MatrixSDK.LoginResponse) {
+  async start(
+    opts: {
+      auth?: MatrixSDK.LoginResponse;
+      refreshRoutes?: true;
+    } = {},
+  ) {
+    let { auth, refreshRoutes } = opts;
     if (!auth) {
       auth = getAuth();
       if (!auth) {
@@ -327,6 +333,10 @@ export default class MatrixService extends Service {
       } catch (e) {
         console.log('Error starting Matrix client', e);
         await this.logout();
+      }
+
+      if (refreshRoutes) {
+        await this.router.refresh();
       }
     }
   }
