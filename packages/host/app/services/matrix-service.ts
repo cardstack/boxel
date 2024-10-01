@@ -255,11 +255,26 @@ export default class MatrixService extends Service {
     cardController.workspaceChooserOpened = true;
     this.start({ auth });
     this.setDisplayName(displayName);
-
-    let personalRealmURL = await this.realmServer.createRealm({
+    await this.createPersonalRealmForUser({
       endpoint: 'personal',
       name: `${displayName}'s Workspace`,
       iconURL: iconURLFor(displayName),
+    });
+  }
+
+  public async createPersonalRealmForUser({
+    endpoint,
+    name,
+    iconURL,
+  }: {
+    endpoint: string;
+    name: string;
+    iconURL: string | undefined;
+  }) {
+    let personalRealmURL = await this.realmServer.createRealm({
+      endpoint,
+      name,
+      iconURL,
     });
     let { realms = [] } =
       (await this.client.getAccountDataFromServer<{ realms: string[] }>(
