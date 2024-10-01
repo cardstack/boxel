@@ -1,20 +1,29 @@
 import type Owner from '@ember/owner';
-import Service from '@ember/service';
+import Service, { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 
 import window from 'ember-window-mock';
 import { TrackedMap } from 'tracked-built-ins';
 
+import type ResetService from './reset';
+
 export default class ScrollPositionService extends Service {
-  @tracked private keyToScrollPosition = new TrackedMap<
+  @service private declare reset: ResetService;
+  @tracked private declare keyToScrollPosition: TrackedMap<
     string,
     [string, number]
-  >();
+  >;
 
   constructor(owner: Owner) {
     super(owner);
+    this.resetState();
+    this.reset.register(this);
     this.extractFromStorage();
+  }
+
+  resetState() {
+    this.keyToScrollPosition = new TrackedMap();
   }
 
   containerHasScrollPosition(container: string) {
