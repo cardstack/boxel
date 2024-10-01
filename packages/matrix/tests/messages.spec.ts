@@ -298,6 +298,11 @@ test.describe('Room messages', () => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomId(page);
     await showAllCards(page);
+    await page
+      .locator(
+        `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${testHost}/mango"]`,
+      )
+      .click();
     await expect(
       page.locator(`[data-test-stack-card="${testHost}/mango"]`),
     ).toHaveCount(1);
