@@ -451,11 +451,13 @@ export default class CardService extends Service {
     return card[api.realmInfo];
   }
 
-  async getRealmURL(card: CardDef) {
+  async getRealmURL(card?: CardDef) {
     let api = await this.getAPI();
     // in the case where we get no realm URL from the card, we are dealing with
     // a new card instance that does not have a realm URL yet.
-    return card[api.realmURL] ?? new URL(this.realm.defaultReadableRealm.path);
+    return (
+      card?.[api.realmURL] ?? new URL(this.realm.defaultReadableRealm.path)
+    );
   }
 
   async cardsSettled() {

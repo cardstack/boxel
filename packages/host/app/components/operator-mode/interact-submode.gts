@@ -423,18 +423,10 @@ export default class InteractSubmode extends Component<Signature> {
   // dropTask will ignore any subsequent copy requests until the one in progress is done
   private _copyCard = dropTask(async (card: CardDef) => {
     let topItems = this.operatorModeStateService.topMostStackItems();
-    let realm: string | undefined;
     // use existing card in stack to determine destination realm url,
-    // if no cards are open, get user's realms and pick the first writable realm
-    if (topItems?.[0]?.card) {
-      realm = (await this.cardService.getRealmURL(topItems[0].card))?.href;
-    } else {
-      realm = this.cardService.writableUserRealms?.[0];
-    }
-    if (!realm) {
-      throw new Error('Could not find a writable realm for user.');
-    }
-    let newCard = await this.cardService.copyCard(card, new URL(realm));
+    // if no cards are open, this returns user's first writable realm
+    let realm = await this.cardService.getRealmURL(topItems?.[0]?.card);
+    let newCard = await this.cardService.copyCard(card, realm);
     if (!newCard) {
       throw new Error(`Could not copy card "${card.id}" to workspace.`);
     }
