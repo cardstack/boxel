@@ -73,7 +73,7 @@ export default class CommandService extends Service {
             ),
           ),
         );
-        res = await Promise.all(
+        await Promise.all(
           instances.map((c) => this.cardService.serializeCard(c)),
         );
         let commandResultArgs = {
@@ -84,11 +84,7 @@ export default class CommandService extends Service {
         let commandResultCard = await this.createCommandResult(
           commandResultArgs,
         );
-        await this.cardService.saveModel(this, commandResultCard);
-        if (res) {
-          command['commandResultId'] = commandResultCard.id;
-        }
-        res = await this.cardService.saveModel(this, command);
+        res = await this.cardService.saveModel(this, commandResultCard);
       } else if (command.name === 'generateAppModule') {
         let defaultWritableRealm = this.realm.defaultWritableRealm;
 

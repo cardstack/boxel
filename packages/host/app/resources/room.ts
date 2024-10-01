@@ -295,32 +295,17 @@ export class RoomResource extends Resource<Args> {
             ? annotation?.content['m.relates_to'].key
             : 'ready';
 
-        let commandCard: CommandCard | undefined;
-        if (!resultId) {
-          let commandCardArgs = {
-            toolCallId: command.id,
-            eventId: event_id,
-            name: command.name,
-            payload: JSON.stringify(command.arguments),
-            status,
-          };
-          commandCard = await this.commandService.createCommand(
-            commandCardArgs,
-          );
-        } else {
-          let resource = getCard(new URL(`${resultId}.json`));
-          await resource.loaded;
-          if (resource.card) {
-            commandCard = resource.card as CommandCard;
-            if (commandCard.status !== status) {
-              commandCard['status'] = status;
-              await this.cardService.saveModel(this, commandCard);
-            }
-          } else {
-            console.error('No card found', resource);
-            // TODO: card error
-          }
-        }
+        let commandCardArgs = {
+          toolCallId: command.id,
+          eventId: event_id,
+          name: command.name,
+          payload: JSON.stringify(command.arguments),
+          status,
+          commandResultId: resultId,
+        };
+        let commandCard = await this.commandService.createCommand(
+          commandCardArgs,
+        );
 
         messageField = new Message({
           ...messageArgs,
@@ -344,11 +329,14 @@ export class RoomResource extends Resource<Args> {
           let d2 = messageField.created!;
           messageField.created = d1 < d2 ? d1 : d2;
         }
-
-        this._messageCache.set(
-          (event.content as CardMessageContent).clientGeneratedId ?? event_id,
-          messageField as any,
-        );
+        // TODO: investigate why an empty event content is replacing the previous content
+        // added the if condition below to prevent this
+        if (Object.entries(event.content)?.length) {
+          this._messageCache.set(
+            (event.content as CardMessageContent).clientGeneratedId ?? event_id,
+            messageField as any,
+          );
+        }
       }
     }
   }
