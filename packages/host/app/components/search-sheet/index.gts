@@ -211,7 +211,7 @@ export default class SearchSheet extends Component<Signature> {
     ) {
       return 'invalid';
     } else {
-      return 'initial';
+      return 'none';
     }
   }
 
@@ -299,6 +299,11 @@ export default class SearchSheet extends Component<Signature> {
       .closed {
         height: var(--search-sheet-closed-height);
         width: var(--search-sheet-closed-width);
+      }
+
+      .closed .search-sheet__search-input-group {
+        outline: var(--boxel-border-flexible);
+        border-radius: var(--boxel-border-radius-xxl);
       }
 
       .search-sheet.closed .search-sheet-content {
