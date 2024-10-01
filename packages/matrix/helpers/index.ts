@@ -301,7 +301,7 @@ export async function showAllCards(page: Page) {
   // rerender of the cards grid with its initial state. There is some mystery
   // async that we need to await before we can actually click on the all cards
   // button
-  await new Promise((r) => setTimeout(r, 500)); // TODO figure out what we need to wait on here
+  await new Promise((r) => setTimeout(r, 1000)); // TODO figure out what we need to wait on here
   await expect(
     page.locator(`[data-test-boxel-filter-list-button="All Cards"]`),
   ).toHaveCount(1);
