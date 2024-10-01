@@ -20,8 +20,10 @@ export default class Card extends Route<void> {
     let path = transition.to?.params?.path;
 
     if (hostsOwnAssets) {
-      await this.router.replaceWith('index', {});
+      // It shouldn’t be possible to view a card in host directly. If there's a card path present, we don't know its full URL, so we just redirect to the workspace chooser
+      await this.router.replaceWith('index');
     } else {
+      // In this case, host app is served by the realm server, so we can construct the full card URL from the path and redirect to index where the index route will put this card on the stack
       await this.router.replaceWith('index', {
         queryParams: { card: `${window.origin}/${path}` },
       });
