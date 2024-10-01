@@ -581,12 +581,7 @@ export default class OperatorModeStateService extends Service {
     this.operatorModeController.workspaceChooserOpened = workspaceChooserOpened;
   }
 
-  // Operator mode state is persisted in a query param, which lives in a controller.
-  // Currently, we have two controllers that could contain operator mode state:
-  // - card controller (viewing a card and entering operator mode from there)
-  // - index controller (viewing the realm server home page and choosing a workspace)
-  // We are in the process of removing host mode for viewing cards, so query params in card controller
-  // will be removed soon - when we are able to do that, remove this method and just use the index controller
+  // Operator mode state is persisted in a query param, which lives in the index controller
   get operatorModeController(): IndexController {
     let controller = getOwner(this)!.lookup(
       'controller:index',
