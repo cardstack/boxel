@@ -100,6 +100,9 @@ export default class RealmServerService extends Service {
     this.token = undefined;
     this.client = undefined;
     this.loggingIn = undefined;
+    this.auth = { type: 'anonymous' };
+    this._userRealmURLs = new TrackedArray<string>([baseRealm.url]);
+    this._catalogRealmURLs = new TrackedArray<string>();
     window.localStorage.removeItem(sessionLocalStorageKey);
   }
 
