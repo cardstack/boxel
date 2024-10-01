@@ -109,6 +109,13 @@ export class RealmIndexQueryEngine {
     return results;
   }
 
+  // This is only used for testing
+  async fetchDeletedEntries() {
+    return await this.#indexQueryEngine.fetchDeletedEntries(
+      new URL(this.#realm.url),
+    );
+  }
+
   async searchPrerendered(query: Query, opts?: Options) {
     let results = await this.#indexQueryEngine.searchPrerendered(
       new URL(this.#realm.url),

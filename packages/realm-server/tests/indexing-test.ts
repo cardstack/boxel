@@ -285,6 +285,10 @@ module('indexing', function (hooks) {
               },
             },
           },
+          'random-file.txt': 'hello',
+          'random-image.png': 'i am an image',
+          '.DS_Store':
+            'In  macOS, .DS_Store is a file that stores custom attributes of its containing folder',
         },
       });
       await realm.start();
@@ -833,6 +837,15 @@ module('indexing', function (hooks) {
 
     dependencies.forEach(({ pattern, fileName }) => {
       assertCssDependency(entry.deps, pattern, fileName);
+    });
+  });
+
+  test('will not invalidate non-json/non-executable files', async function (assert) {
+    let deletedEntries =
+      await realm.realmIndexQueryEngine.fetchDeletedEntries();
+
+    ['random-file.txt', 'random-image.png', '.DS_Store'].forEach((file) => {
+      assert.notOk(deletedEntries.includes(file));
     });
   });
 });

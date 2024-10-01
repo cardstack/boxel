@@ -511,6 +511,16 @@ export class IndexQueryEngine {
     return (results[0]?.value ?? []) as unknown as CardTypeSummary[];
   }
 
+  // This is only used for testing
+  async fetchDeletedEntries(realmURL: URL): Promise<string[]> {
+    let results = (await this.query([
+      'SELECT url FROM boxel_index WHERE realm_url =',
+      param(realmURL.href),
+      'AND is_deleted = TRUE',
+    ])) as Pick<BoxelIndexTable, 'url'>[];
+    return results.map(({ url }) => url);
+  }
+
   private async fetchCurrentRealmVersion(realmURL: URL) {
     let [{ current_version }] = (await this.query([
       'SELECT current_version FROM realm_versions WHERE realm_url =',
