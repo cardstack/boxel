@@ -22,6 +22,7 @@ import {
   login,
   registerRealmUsers,
   enterWorkspace,
+  showAllCards,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 
@@ -123,9 +124,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await expect(
       page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toHaveCount(1);
-    await page
-      .locator('[data-test-boxel-filter-list-button="All Cards"]')
-      .click();
+    await showAllCards(page);
     await expect(
       page.locator(`[data-test-cards-grid-item="${newRealmURL}hello-world"]`),
     ).toHaveCount(1);

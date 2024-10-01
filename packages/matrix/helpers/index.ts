@@ -294,6 +294,22 @@ export async function enterWorkspace(
   await page.locator(`[data-test-workspace="${workspace}"]`).click();
 }
 
+export async function showAllCards(page: Page) {
+  // TODO: there seems to be something off with show all cards for cards grid.
+  // sometimes after clicking on it in our matrix tests, the cards grid goes
+  // back to displaying favorite cards--like some async thing is triggering a
+  // rerender of the cards grid with its initial state. There is some mystery
+  // async that we need to await before we can actually click on the all cards
+  // button
+  await new Promise((r) => setTimeout(r, 500)); // TODO figure out what we need to wait on here
+  await expect(
+    page.locator(`[data-test-boxel-filter-list-button="All Cards"]`),
+  ).toHaveCount(1);
+  await page
+    .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
+    .click();
+}
+
 export async function logout(page: Page) {
   await page.locator('[data-test-profile-icon-button]').click();
   await page.locator('[data-test-signout-button]').click();
