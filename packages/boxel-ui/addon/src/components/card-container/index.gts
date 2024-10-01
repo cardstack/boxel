@@ -42,8 +42,6 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
   {{/let}}
   <style scoped>
     .boxel-card-container {
-      width: 100%;
-      height: 100%;
       position: relative;
       background-color: var(--boxel-light);
       border-radius: var(--boxel-border-radius);
