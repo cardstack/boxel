@@ -217,9 +217,13 @@ export default class InteractSubmode extends Component<Signature> {
           }),
         );
       },
-      saveCard(card: CardDef, dismissItem: boolean): void {
+      saveCard(
+        card: CardDef,
+        dismissItem: boolean,
+        afterSave?: () => void,
+      ): void {
         let item = here.findCardInStack(card, stackIndex);
-        here.save.perform(item, dismissItem);
+        here.save.perform(item, dismissItem, afterSave);
       },
       delete: async (card: CardDef | URL | string): Promise<void> => {
         let loadedCard: CardDef;
@@ -328,24 +332,34 @@ export default class InteractSubmode extends Component<Signature> {
     }
   });
 
-  private save = task(async (item: StackItem, dismissStackItem: boolean) => {
-    let { request } = item;
-    let updatedCard = await this.args.write(item.card);
+  private save = task(
+    async (
+      item: StackItem,
+      dismissStackItem: boolean,
+      afterSave?: () => void,
+    ) => {
+      let { request } = item;
+      let updatedCard = await this.args.write(item.card);
 
-    if (updatedCard) {
-      request?.fulfill(updatedCard);
-      if (!dismissStackItem) {
-        return;
+      if (afterSave) {
+        afterSave();
       }
-      this.operatorModeStateService.replaceItemInStack(
-        item,
-        item.clone({
-          request,
-          format: 'isolated',
-        }),
-      );
-    }
-  });
+
+      if (updatedCard) {
+        request?.fulfill(updatedCard);
+        if (!dismissStackItem) {
+          return;
+        }
+        this.operatorModeStateService.replaceItemInStack(
+          item,
+          item.clone({
+            request,
+            format: 'isolated',
+          }),
+        );
+      }
+    },
+  );
 
   private runCommand = restartableTask(
     async (card: CardDef, skillCardId: string, message: string) => {
