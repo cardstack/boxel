@@ -481,6 +481,7 @@ module('Integration | operator-mode', function (hooks) {
       }
       assert.strictEqual(json.data.attributes?.firstName, 'EditedName');
     });
+    // TODO assert saving message
     await fillIn('[data-test-boxel-input]', 'EditedName');
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
 
@@ -488,6 +489,10 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-person]').hasText('EditedName');
     assert.dom('[data-test-first-letter-of-the-name]').hasText('E');
   });
+
+  test<TestContextWithSave>('it auto saves when exiting edit mode when there are unsaved changed', async function (assert) {});
+
+  test<TestContextWithSave>('it does not auto save when exiting edit mode when there are no changes made', async function (assert) {});
 
   // TODO CS-6268 visual indicator for failed auto-save should build off of this test
   test('an error in auto-save is handled gracefully', async function (assert) {
