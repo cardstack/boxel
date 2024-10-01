@@ -10,7 +10,7 @@ import {
   createResponse,
   type VirtualNetwork,
   type DBAdapter,
-  type Queue,
+  type QueuePublisher,
   type RealmPermissions,
 } from '@cardstack/runtime-common';
 import { ensureDirSync, writeJSONSync, readdirSync, copySync } from 'fs-extra';
@@ -80,7 +80,7 @@ export class RealmServer {
   private secretSeed: string;
   private realmsRootPath: string;
   private dbAdapter: DBAdapter;
-  private queue: Queue;
+  private queue: QueuePublisher;
   private assetsURL: URL;
   private getIndexHTML: () => Promise<string>;
   private serverURL: URL;
@@ -112,7 +112,7 @@ export class RealmServer {
     secretSeed: string;
     realmsRootPath: string;
     dbAdapter: DBAdapter;
-    queue: Queue;
+    queue: QueuePublisher;
     assetsURL: URL;
     getIndexHTML: () => Promise<string>;
     seedPath?: string;
@@ -249,7 +249,7 @@ export class RealmServer {
         let response = await matrixBackendAuthentication.createSession(request);
         await setContextResponse(ctxt, response);
       } catch (e: any) {
-        console.error(`Exception while creating a session on realm server`, e);
+        this.log.error(`Exception while creating a session on realm server`, e);
         await sendResponseForSystemError(ctxt, `${e.message}: at ${e.stack}`);
       }
     };
@@ -356,6 +356,10 @@ export class RealmServer {
         if ('status' in e && e.status === 400) {
           await sendResponseForBadRequest(ctxt, e.message);
         } else {
+          this.log.error(
+            `Error creating realm '${json.data.attributes.name}' for user ${ownerUserId}`,
+            e,
+          );
           await sendResponseForSystemError(ctxt, `${e.message}: at ${e.stack}`);
         }
         return;

@@ -44,7 +44,7 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
       @width='40px'
       @height='40px'
       class='add-button'
-      title='Add'
+      aria-label='Add'
       data-test-create-new-card-button
       ...attributes
     />
