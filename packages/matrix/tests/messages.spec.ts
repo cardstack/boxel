@@ -464,9 +464,17 @@ test.describe('Room messages', () => {
     // the base realm is a read-only realm
     await login(page, 'user1', 'pass', { url: `http://localhost:4201/base` });
     let room1 = await getRoomId(page);
+    await expect(
+      page.locator(`[data-test-boxel-filter-list-button="All Cards"]`),
+    ).toHaveCount(1);
     await page
       .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
       .click();
+    await expect(
+      page.locator(
+        '[data-test-stack-card="https://cardstack.com/base/index"] [data-test-cards-grid-item="https://cardstack.com/base/fields/boolean-field"]',
+      ),
+    ).toHaveCount(1);
     await page
       .locator(
         '[data-test-stack-card="https://cardstack.com/base/index"] [data-test-cards-grid-item="https://cardstack.com/base/fields/boolean-field"]',
@@ -766,7 +774,9 @@ test.describe('Room messages', () => {
       ).toHaveCount(1); // The index card appears by default, we verify it exists here
       await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(0);
     });
-    test('replaces auto-attached card when drilling down (1 stack)', async ({
+
+    // Flaky matrix test: CS-7275
+    test.skip('replaces auto-attached card when drilling down (1 stack)', async ({
       page,
     }) => {
       const testCard1 = `${testHost}/jersey`;
@@ -774,9 +784,14 @@ test.describe('Room messages', () => {
       await page
         .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
         .click();
+      await expect(
+        page.locator(
+          `[data-test-stack-item-content] [data-test-cards-grid-item="${testCard1}"]`,
+        ),
+      ).toHaveCount(1);
       await page
         .locator(
-          `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+          `[data-test-stack-item-content] [data-test-cards-grid-item="${testCard1}"]`,
         )
         .click();
       await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);

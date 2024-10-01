@@ -89,6 +89,7 @@
     "start:staging": "./scripts/start-staging.sh",
     "start:development": "./scripts/start-development.sh",
     "start:production": "./scripts/start-production.sh",
+    "start:services-for-matrix-tests": "./scripts/start-services-for-matrix-tests.sh",
     "wait": "sleep 10000000",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
