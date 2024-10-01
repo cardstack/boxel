@@ -90,6 +90,7 @@ export type RealmInfo = {
   name: string;
   backgroundURL: string | null;
   iconURL: string | null;
+  showAsCatalog: boolean | null;
 };
 
 export interface FileRef {
@@ -158,10 +159,6 @@ export interface RealmAdapter {
 
 interface Options {
   disableModuleCaching?: true;
-}
-
-interface IndexHTMLOptions {
-  realmsServed?: string[];
 }
 
 interface UpdateItem {
@@ -234,7 +231,6 @@ export class Realm {
   #log = logger('realm');
   #perfLog = logger('perf');
   #startTime = Date.now();
-  #getIndexHTML: () => Promise<string>;
   #updateItems: UpdateItem[] = [];
   #flushUpdateEvents: Promise<void> | undefined;
   #recentWrites: Map<string, number> = new Map();
@@ -251,7 +247,6 @@ export class Realm {
       new Map([['GET' as Method, new Map([['/_readiness-check', true]])]]),
     ],
   ]);
-  #assetsURL: URL;
   #dbAdapter: DBAdapter;
 
   // This loader is not meant to be used operationally, rather it serves as a
@@ -275,23 +270,19 @@ export class Realm {
     {
       url,
       adapter,
-      getIndexHTML,
       matrix,
       secretSeed,
       dbAdapter,
       queue,
       virtualNetwork,
-      assetsURL,
     }: {
       url: string;
       adapter: RealmAdapter;
-      getIndexHTML: () => Promise<string>;
       matrix: MatrixConfig;
       secretSeed: string;
       dbAdapter: DBAdapter;
       queue: QueuePublisher;
       virtualNetwork: VirtualNetwork;
-      assetsURL: URL;
     },
     opts?: Options,
   ) {
@@ -303,8 +294,6 @@ export class Realm {
       username,
       seed: secretSeed,
     });
-    this.#getIndexHTML = getIndexHTML;
-    this.#assetsURL = assetsURL;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
 
     let fetch = fetcher(virtualNetwork.fetch, [
@@ -403,7 +392,6 @@ export class Realm {
         SupportedMimeType.DirectoryListing,
         this.getDirectoryListing.bind(this),
       )
-      .get('/.*', SupportedMimeType.HTML, this.respondWithHTML.bind(this))
       .get(
         '/_readiness-check',
         SupportedMimeType.RealmInfo,
@@ -816,29 +804,6 @@ export class Realm {
     } finally {
       this.#logRequestPerformance(request, start, 'cache miss');
     }
-  }
-
-  async getIndexHTML(opts?: IndexHTMLOptions): Promise<string> {
-    let indexHTML = (await this.#getIndexHTML()).replace(
-      /(<meta name="@cardstack\/host\/config\/environment" content=")([^"].*)(">)/,
-      (_match, g1, g2, g3) => {
-        let config = JSON.parse(decodeURIComponent(g2));
-        config = merge({}, config, {
-          hostsOwnAssets: !isNode,
-          realmsServed: opts?.realmsServed,
-          assetsURL: this.#assetsURL.href,
-        });
-        return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
-      },
-    );
-
-    if (isNode) {
-      indexHTML = indexHTML.replace(
-        /(src|href)="\//g,
-        `$1="${this.#assetsURL.href}`,
-      );
-    }
-    return indexHTML;
   }
 
   private async serveLocalFile(
@@ -1633,6 +1598,7 @@ export class Realm {
       name: 'Unnamed Workspace',
       backgroundURL: null,
       iconURL: null,
+      showAsCatalog: null,
     };
     if (!realmConfig) {
       return realmInfo;
@@ -1645,6 +1611,8 @@ export class Realm {
         realmInfo.backgroundURL =
           realmConfigJson.backgroundURL ?? realmInfo.backgroundURL;
         realmInfo.iconURL = realmConfigJson.iconURL ?? realmInfo.iconURL;
+        realmInfo.showAsCatalog =
+          realmConfigJson.showAsCatalog ?? realmInfo.showAsCatalog;
       } catch (e) {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }
@@ -1801,19 +1769,6 @@ export class Realm {
     await Promise.allSettled(
       this.listeningClients.map((client) => writeToStream(client, chunk)),
     );
-  }
-
-  private async respondWithHTML(
-    _request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
-    return createResponse({
-      body: await this.getIndexHTML(),
-      init: {
-        headers: { 'content-type': 'text/html' },
-      },
-      requestContext,
-    });
   }
 
   private async createRequestContext(): Promise<RequestContext> {
