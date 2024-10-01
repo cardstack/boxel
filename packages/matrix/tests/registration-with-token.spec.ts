@@ -21,6 +21,8 @@ import {
   logout,
   login,
   registerRealmUsers,
+  enterWorkspace,
+  showAllCards,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 
@@ -117,14 +119,12 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     ).toHaveAttribute('src', 'https://i.postimg.cc/Rq550Bwv/T.png');
 
     let newRealmURL = new URL('user1/personal/', new URL(appURL).origin).href;
-    await page.locator(`[data-test-workspace="Test User's Workspace"]`).click();
+    await enterWorkspace(page, "Test User's Workspace");
 
     await expect(
       page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toHaveCount(1);
-    await page
-      .locator('[data-test-boxel-filter-list-button="All Cards"]')
-      .click();
+    await showAllCards(page);
     await expect(
       page.locator(`[data-test-cards-grid-item="${newRealmURL}hello-world"]`),
     ).toHaveCount(1);
@@ -134,14 +134,20 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await assertLoggedOut(page);
 
     // assert workspaces state don't leak into other sessions
-    await login(page, 'user2', 'pass', { url: appURL });
+    await login(page, 'user2', 'pass', {
+      url: appURL,
+      skipOpeningOperatorMode: true,
+      skipOpeningAssistant: true,
+    });
     await assertLoggedIn(page, {
       userId: '@user2:localhost',
       displayName: 'user2',
     });
-    await page.locator('[data-test-workspace-chooser-toggle]').click();
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
-    await expect(page.locator(`[data-test-workspace-list] [data-test-workspace]`)).toHaveCount(0);
+    await expect(page.locator(`[data-test-workspace-list]`)).toHaveCount(1);
+    await expect(
+      page.locator(`[data-test-workspace-list] [data-test-workspace]`),
+    ).toHaveCount(0);
     await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"]`),
     ).toHaveCount(0);
@@ -149,14 +155,16 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     // assert newly registered user can login with their credentials
     await logout(page);
     await assertLoggedOut(page);
-    await login(page, 'user1', 'mypassword1!', { url: appURL });
+    await login(page, 'user1', 'mypassword1!', {
+      url: appURL,
+      skipOpeningOperatorMode: true,
+      skipOpeningAssistant: true,
+    });
     await assertLoggedIn(page, { displayName: 'Test User' });
-    await page.locator('[data-test-workspace-chooser-toggle]').click();
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
     await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"]`),
     ).toHaveCount(1);
-
     await page.reload();
     await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"]`),

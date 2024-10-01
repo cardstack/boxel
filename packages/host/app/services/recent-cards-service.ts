@@ -1,5 +1,5 @@
 import type Owner from '@ember/owner';
-import Service from '@ember/service';
+import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
@@ -10,16 +10,25 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
+import type ResetService from './reset';
+
 export default class RecentCardsService extends Service {
-  @tracked recentCards = new TrackedArray<CardDef>([]);
+  @service private declare reset: ResetService;
+  @tracked declare recentCards: TrackedArray<CardDef>;
 
   constructor(owner: Owner) {
     super(owner);
+    this.resetState();
+    this.reset.register(this);
     this.constructRecentCards.perform();
   }
 
   get any() {
     return this.recentCards.length > 0;
+  }
+
+  resetState() {
+    this.recentCards = new TrackedArray([]);
   }
 
   add(card: CardDef) {
