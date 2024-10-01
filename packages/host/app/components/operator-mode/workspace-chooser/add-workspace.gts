@@ -22,7 +22,7 @@ import { IconPlus } from '@cardstack/boxel-ui/icons';
 
 import MatrixService from '@cardstack/host/services/matrix-service';
 
-import { iconURLFor } from '../../../lib/utils';
+import { getRandomBackgroundURL, iconURLFor } from '../../../lib/utils';
 
 import ModalContainer from '../../modal-container';
 
@@ -54,6 +54,7 @@ export default class AddWorkspace extends Component<Signature> {
         endpoint: this.endpoint,
         name: this.displayName,
         iconURL: iconURLFor(this.displayName),
+        backgroundURL: getRandomBackgroundURL(),
       });
       this.closeModal();
     } catch (e: any) {
