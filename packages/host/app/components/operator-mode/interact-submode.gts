@@ -10,6 +10,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { dropTask, restartableTask, task, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+import { provide } from 'ember-provide-consume-context';
 
 import { isEqual } from 'lodash';
 import get from 'lodash/get';
@@ -21,6 +22,7 @@ import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { IconPlus, Download } from '@cardstack/boxel-ui/icons';
 
 import {
+  CardContextName,
   aiBotUsername,
   Deferred,
   baseCardRef,
@@ -217,6 +219,9 @@ export default class InteractSubmode extends Component<Signature> {
             format: 'edit',
           }),
         );
+      },
+      copyCard: async (card: CardDef): Promise<CardDef | void> => {
+        return await here._copyCard.perform(card);
       },
       saveCard(card: CardDef, dismissItem: boolean): void {
         let item = here.findCardInStack(card, stackIndex);
@@ -416,6 +421,27 @@ export default class InteractSubmode extends Component<Signature> {
   }
 
   // dropTask will ignore any subsequent copy requests until the one in progress is done
+  private _copyCard = dropTask(async (card: CardDef) => {
+    let topItems = this.operatorModeStateService.topMostStackItems();
+    let realm: string | undefined;
+    // use existing card in stack to determine destination realm url,
+    // if no cards are open, get user's realms and pick the first writable realm
+    if (topItems?.[0]?.card) {
+      realm = (await this.cardService.getRealmURL(topItems[0].card))?.href;
+    } else {
+      realm = this.cardService.writableUserRealms?.[0];
+    }
+    if (!realm) {
+      throw new Error('Could not find a writable realm for user.');
+    }
+    let newCard = await this.cardService.copyCard(card, new URL(realm));
+    if (!newCard) {
+      throw new Error(`Could not copy card "${card.id}" to workspace.`);
+    }
+    return newCard;
+  });
+
+  // dropTask will ignore any subsequent copy requests until the one in progress is done
   private copy = dropTask(
     async (
       sources: CardDef[],
@@ -612,6 +638,14 @@ export default class InteractSubmode extends Component<Signature> {
       this.searchSheetTrigger = searchSheetTrigger;
     }
     openSearchCallback();
+  }
+
+  @provide(CardContextName)
+  // @ts-ignore "cardContext is declared but not used"
+  private get cardContext() {
+    return {
+      actions: this.publicAPI(this, this.stacks[0]?.length ? 1 : 0),
+    };
   }
 
   <template>

@@ -6,9 +6,12 @@ import { Resource } from 'ember-resources';
 
 import { TrackedMap, TrackedObject } from 'tracked-built-ins';
 
-import { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import {
+  getCard,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 
-import { CommandStatus } from 'https://cardstack.com/base/command';
+import { CommandStatus, CommandCard } from 'https://cardstack.com/base/command';
 import type {
   CardFragmentContent,
   CardMessageContent,
@@ -182,13 +185,11 @@ export class RoomResource extends Resource<Args> {
 
   private async loadRoomMessages(roomId: string) {
     let index = this._messageCache.size;
+
     for (let event of this.events) {
       if (event.type !== 'm.room.message') {
         continue;
       }
-      // if (event?.content?.body?.includes('slow')) {
-      //   debugger;
-      // }
       let event_id = event.event_id;
       let update = false;
       if (event.content['m.relates_to']?.rel_type == 'm.annotation') {
@@ -286,35 +287,45 @@ export class RoomResource extends Resource<Args> {
             e.content['m.relates_to'].event_id ===
               commandEvent.content.data.eventId,
         ) as CommandResultEvent;
-        let r = commandResultEvent?.content?.result
-          ? await this.commandService.createCommandResultArgs(
-              commandEvent,
-              commandResultEvent,
-            )
-          : undefined;
+
+        let resultId = commandResultEvent?.content?.result;
 
         let status: CommandStatus =
           annotation?.content['m.relates_to'].key === 'applied'
             ? annotation?.content['m.relates_to'].key
             : 'ready';
 
-        let commandFieldArgs = {
-          toolCallId: command.id,
-          eventId: event_id,
-          name: command.name,
-          payload: command.arguments,
-          status,
-          result: r,
-        };
-
-        let commandField = await this.commandService.createCommand(
-          commandFieldArgs,
-        );
+        let commandCard: CommandCard | undefined;
+        if (!resultId) {
+          let commandCardArgs = {
+            toolCallId: command.id,
+            eventId: event_id,
+            name: command.name,
+            payload: JSON.stringify(command.arguments),
+            status,
+          };
+          commandCard = await this.commandService.createCommand(
+            commandCardArgs,
+          );
+        } else {
+          let resource = getCard(new URL(`${resultId}.json`));
+          await resource.loaded;
+          if (resource.card) {
+            commandCard = resource.card as CommandCard;
+            if (commandCard.status !== status) {
+              commandCard['status'] = status;
+              await this.cardService.saveModel(this, commandCard);
+            }
+          } else {
+            console.error('No card found', resource);
+            // TODO: card error
+          }
+        }
 
         messageField = new Message({
           ...messageArgs,
           formattedMessage: `<p data-test-command-message class="command-message">${event.content.formatted_body}</p>`,
-          command: commandField,
+          command: commandCard,
           isStreamingFinished: true,
         });
       } else {

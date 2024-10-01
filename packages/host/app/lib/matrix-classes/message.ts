@@ -4,7 +4,7 @@ import { getCard } from '@cardstack/runtime-common';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { CommandField } from 'https://cardstack.com/base/command';
+import type { CommandCard } from 'https://cardstack.com/base/command';
 
 import { RoomMember } from './member';
 
@@ -38,7 +38,7 @@ interface RoomMessageOptional {
   index?: number;
   errorMessage?: string;
   clientGeneratedId?: string | null;
-  command?: CommandField | null;
+  command?: CommandCard | null;
 }
 
 export class Message implements RoomMessageInterface {
@@ -49,7 +49,7 @@ export class Message implements RoomMessageInterface {
   isStreamingFinished?: boolean;
   errorMessage?: string;
   clientGeneratedId?: string;
-  command?: CommandField | null;
+  command?: CommandCard | null;
 
   author: RoomMember;
   formattedMessage: string;

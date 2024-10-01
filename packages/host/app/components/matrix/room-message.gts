@@ -7,7 +7,7 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
-import { task } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import Modifier, { modifier, type NamedArgs } from 'ember-modifier';
 
@@ -18,7 +18,7 @@ import { MatrixEvent } from 'matrix-js-sdk';
 import { Button } from '@cardstack/boxel-ui/components';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
-import { markdownToHtml } from '@cardstack/runtime-common';
+import { getCard, markdownToHtml } from '@cardstack/runtime-common';
 
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
@@ -30,7 +30,7 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-import { type CommandField } from 'https://cardstack.com/base/command';
+import { type CommandCard } from 'https://cardstack.com/base/command';
 
 import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
@@ -110,9 +110,16 @@ export default class RoomMessage extends Component<Signature> {
     super(owner, args);
 
     this.checkStreamingTimeout.perform();
+
+    if (this.args.message.command?.commandResultId) {
+      this._loadCommandResultCard.perform(
+        this.args.message.command.commandResultId,
+      );
+    }
   }
 
   @tracked streamingTimeout = false;
+  @tracked commandResult: any;
 
   checkStreamingTimeout = task(async () => {
     if (!this.isFromAssistant || !this.args.isStreaming) {
@@ -135,8 +142,21 @@ export default class RoomMessage extends Component<Signature> {
     return this.args.message.author.userId === aiBotUserId;
   }
 
+  private _loadCommandResultCard = restartableTask(async (id: string) => {
+    let resource = getCard(new URL(`${id}.json`));
+    await resource.loaded;
+    if (!resource.card) {
+      console.error(`Resource has no loaded card`, resource, resource.card);
+      return;
+    }
+    this.commandResult = resource.card;
+  });
+
   get getComponent() {
-    return this.commandService.getCommandResultComponent(this.args.message);
+    if (!this.commandResult) {
+      return undefined;
+    }
+    return this.commandResult.constructor.getComponent(this.commandResult);
   }
 
   <template>
@@ -235,7 +255,9 @@ export default class RoomMessage extends Component<Signature> {
             </div>
           {{/if}}
           {{#let this.getComponent as |Component|}}
-            <Component @format='embedded' />
+            {{#if Component}}
+              <Component @format='embedded' />
+            {{/if}}
           {{/let}}
         {{/if}}
       </AiAssistantMessage>
@@ -385,6 +407,9 @@ export default class RoomMessage extends Component<Signature> {
       return JSON.stringify({}, null, 2);
     }
     let { name, payload } = this.command;
+    if (typeof payload === 'string') {
+      payload = JSON.parse(payload);
+    }
     return JSON.stringify({ name, payload }, null, 2);
   }
 
@@ -400,7 +425,7 @@ export default class RoomMessage extends Component<Signature> {
     return this.matrixService.failedCommandState.get(this.command.eventId);
   }
 
-  run = task(async (command: CommandField, roomId: string) => {
+  run = task(async (command: CommandCard, roomId: string) => {
     return this.commandService.run.unlinked().perform(command, roomId);
   });
 

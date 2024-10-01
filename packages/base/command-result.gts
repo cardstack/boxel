@@ -1,24 +1,34 @@
-import { getCard, primitive } from '@cardstack/runtime-common';
+import { array } from '@ember/helper';
+import type Owner from '@ember/owner';
+import { getCard } from '@cardstack/runtime-common';
 import {
   BaseDef,
   CardDef,
   Component,
-  FieldDef,
   StringField,
   contains,
   containsMany,
   field,
 } from './card-api';
-import { cached, tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import {
+  ArrowLeft,
   IconMinusCircle,
   IconPlus,
   IconSearch,
   ThreeDotsHorizontal,
 } from '@cardstack/boxel-ui/icons';
-import { Button, Header, IconButton } from '@cardstack/boxel-ui/components';
+import {
+  BoxelDropdown,
+  Button,
+  Header,
+  IconButton,
+  Menu,
+} from '@cardstack/boxel-ui/components';
+import { menuItem } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
+import { restartableTask } from 'ember-concurrency';
 
 type AttachedCardResource = {
   card: CardDef | undefined;
@@ -30,28 +40,40 @@ function getComponent(cardOrField: BaseDef) {
 }
 
 class CommandResultEmbeddedView extends Component<typeof CommandResult> {
+  @tracked attachedResources: AttachedCardResource[] | undefined = [];
   @tracked showAllResults = false;
 
-  @cached
-  get attachedResources(): AttachedCardResource[] | undefined {
-    if (!this.cardIdsToDisplay.length) {
-      return undefined;
-    }
-    let cards = this.cardIdsToDisplay.map((id) => {
-      let card = getCard(new URL(id));
-      if (!card) {
-        return {
-          card: undefined,
-          cardError: {
-            id,
-            error: new Error(`cannot find card for id "${id}"`),
-          },
-        };
-      }
-      return card;
-    });
-    return cards;
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+    this._getAttachments.perform();
   }
+
+  private _getAttachments = restartableTask(async () => {
+    try {
+      if (!this.cardIdsToDisplay.length) {
+        return undefined;
+      }
+      let cards = await Promise.all(
+        this.cardIdsToDisplay.map(async (id) => {
+          let card = getCard(new URL(id));
+          await card.loaded;
+          if (!card) {
+            return {
+              card: undefined,
+              cardError: {
+                id,
+                error: new Error(`cannot find card for id "${id}"`),
+              },
+            };
+          }
+          return card;
+        }),
+      );
+      this.attachedResources = cards;
+    } catch (e) {
+      throw e;
+    }
+  });
 
   get cardIdsToDisplay() {
     if (!this.args.model.cardIds?.length) {
@@ -107,14 +129,30 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
           </div>
         </:icon>
         <:actions>
-          <IconButton
-            @icon={{ThreeDotsHorizontal}}
-            @width='20px'
-            @height='20px'
-            class='icon-button'
-            aria-label='Options'
-            data-test-more-options-button
-          />
+          <BoxelDropdown>
+            <:trigger as |bindings|>
+              <IconButton
+                @icon={{ThreeDotsHorizontal}}
+                @width='20px'
+                @height='20px'
+                class='icon-button'
+                aria-label='Options'
+                data-test-more-options-button
+                {{bindings}}
+              />
+            </:trigger>
+            <:content as |dd|>
+              <Menu
+                class='options-menu'
+                @items={{array
+                  (menuItem
+                    'Copy to Workspace' this.copyToWorkspace icon=ArrowLeft
+                  )
+                }}
+                @closeMenu={{dd.close}}
+              />
+            </:content>
+          </BoxelDropdown>
         </:actions>
       </Header>
       <div class='body'>
@@ -183,6 +221,22 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
         --boxel-header-padding: var(--boxel-sp-xxxs) var(--boxel-sp-xxxs) 0
           var(--left-padding);
       }
+      .header :deep(.content) {
+        gap: 0;
+      }
+      .icon-button {
+        --icon-color: var(--boxel-dark);
+      }
+      .icon-button:hover {
+        --icon-color: var(--boxel-highlight);
+      }
+      .options-menu :deep(.boxel-menu__item__content) {
+        padding-right: var(--boxel-sp-xxs);
+        padding-left: var(--boxel-sp-xxs);
+      }
+      .options-menu :deep(.check-icon) {
+        display: none;
+      }
       .body {
         display: flex;
         flex-direction: column;
@@ -215,23 +269,22 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
       }
     </style>
   </template>
+
+  @action async copyToWorkspace() {
+    let newCard = await this.args.context?.actions?.copyCard?.(
+      this.args.model as CardDef,
+    );
+    if (!newCard) {
+      console.error('Could not copy card to workspace.');
+      return;
+    }
+    this.args.context?.actions?.viewCard(newCard);
+  }
 }
 
-type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
-
-type JSONObject = { [x: string]: JSONValue };
-
-type JSONArray = JSONValue[];
-
-type ToolCallResultObj = JSONObject | JSONArray;
-
-class ToolCallResult extends FieldDef {
-  static [primitive]: ToolCallResultObj;
-}
-
-export class CommandResult extends FieldDef {
+export class CommandResult extends CardDef {
   @field toolCallId = contains(StringField);
-  @field toolCallResults = contains(ToolCallResult);
+  @field toolCall = contains(StringField);
   @field cardIds = containsMany(StringField);
 
   static embedded = CommandResultEmbeddedView;
