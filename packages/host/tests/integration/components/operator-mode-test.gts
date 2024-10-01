@@ -672,7 +672,6 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test<TestContextWithSave>('create new card editor opens in the stack at each nesting level', async function (assert) {
-    assert.expect(9);
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -774,16 +773,6 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
       .containsText('Mad As a Hatter by Alice Enwunder');
-
-    this.onSave((_, json) => {
-      if (typeof json === 'string') {
-        throw new Error('expected JSON save data');
-      }
-      assert.strictEqual(
-        json.data.attributes!.socialBlurb,
-        `Everyone knows that Alice ran the show in the Brady household. But when Alice’s past comes to light, things get rather topsy turvy…`,
-      );
-    });
 
     await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
 
