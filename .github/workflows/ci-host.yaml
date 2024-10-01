@@ -30,6 +30,8 @@ jobs:
       - name: Build boxel-ui
         run: pnpm build
         working-directory: packages/boxel-ui/addon
+      - name: Disable TCP/UDP network offloading
+        run: sudo ethtool -K eth0 tx off rx off
       - name: Start host to serve assets for fastboot
         run: pnpm start &
         env:
