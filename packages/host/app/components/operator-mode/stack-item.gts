@@ -657,7 +657,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
       .buried .header {
         cursor: pointer;
-        font: 700 var(--boxel-font);
+        font: 600 var(--boxel-font);
         gap: var(--boxel-sp-xxxs);
         --boxel-header-padding: var(--boxel-sp-xs);
         --boxel-header-text-font: var(--boxel-font-size);

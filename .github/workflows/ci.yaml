@@ -102,7 +102,7 @@ jobs:
         run: pnpm npx wait-for-localhost 4200
         working-directory: packages/host
       - name: Start realm servers
-        run: pnpm start:without-matrix &> /tmp/server.log &
+        run: MATRIX_REGISTRATION_SHARED_SECRET='xxxx' pnpm start:services-for-matrix-tests &> /tmp/server.log &
         working-directory: packages/realm-server
       - name: Run Playwright tests
         run: pnpm test:group ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}

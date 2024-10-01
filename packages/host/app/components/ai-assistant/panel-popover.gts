@@ -34,7 +34,7 @@ const AiAssistantPanelPopover: TemplateOnlyComponent<Signature> = <template>
       position: relative;
       padding: var(--boxel-sp);
       font-size: 1.125rem;
-      font-weight: 700;
+      font-weight: 600;
       letter-spacing: var(--boxel-lsp-xs);
       line-height: 1.2;
     }

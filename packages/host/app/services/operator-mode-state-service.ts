@@ -1,11 +1,12 @@
 import { getOwner } from '@ember/application';
+import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { scheduleOnce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 
-import { task } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
 import { mergeWith } from 'lodash';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
@@ -33,7 +34,12 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { type Stack } from '../components/operator-mode/interact-submode';
 
-import type CardService from '../services/card-service';
+import type CardService from './card-service';
+import type ResetService from './reset';
+
+import type IndexController from '../controllers';
+
+import type CardController from '../controllers/card';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
@@ -78,21 +84,51 @@ export default class OperatorModeStateService extends Service {
     codePath: null,
     openDirs: new TrackedMap<string, string[]>(),
   });
+  @tracked needsRealmAuthorization = false;
 
   private cachedRealmURL: URL | null = null;
-
-  @service declare cardService: CardService;
-  @service declare loaderService: LoaderService;
-  @service declare messageService: MessageService;
-  @service declare realm: Realm;
-  @service declare recentCardsService: RecentCardsService;
-  @service declare recentFilesService: RecentFilesService;
-  @service declare router: RouterService;
-
   private openFileSubscribers: OpenFileSubscriber[] = [];
+
+  @service private declare cardService: CardService;
+  @service private declare loaderService: LoaderService;
+  @service private declare messageService: MessageService;
+  @service private declare realm: Realm;
+  @service private declare recentCardsService: RecentCardsService;
+  @service private declare recentFilesService: RecentFilesService;
+  @service private declare router: RouterService;
+  @service private declare reset: ResetService;
+
+  constructor(owner: Owner) {
+    super(owner);
+    this.reset.register(this);
+  }
+
+  resetState() {
+    this.state = new TrackedObject({
+      stacks: new TrackedArray([]),
+      submode: Submodes.Interact,
+      codePath: null,
+      openDirs: new TrackedMap<string, string[]>(),
+    });
+    this.needsRealmAuthorization = false;
+    this.cachedRealmURL = null;
+    this.openFileSubscribers = [];
+    this.schedulePersist();
+  }
 
   async restore(rawState: SerializedState) {
     this.state = await this.deserialize(rawState);
+    this.needsRealmAuthorization = Boolean(
+      this.state.stacks.find((stack) =>
+        stack.find(
+          (item) =>
+            // the reason we encounter this is that we are trying to access a
+            // private realm without authorization. we don't want to proceed
+            // past the login page until this state has been cleared
+            item.cardError?.status === 401,
+        ),
+      ),
+    );
   }
 
   addItemToStack(item: StackItem) {
@@ -364,15 +400,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   private persist() {
-    let cardController = getOwner(this)!.lookup('controller:card') as any;
-    if (!cardController) {
-      throw new Error(
-        'OperatorModeStateService must be used in the context of a CardController',
-      );
-    }
-
-    // Setting this property will trigger a query param update on the controller, which will reload the route
-    cardController.operatorModeState = this.serialize();
+    this.operatorModeController.operatorModeState = this.serialize();
   }
 
   // Serialized POJO version of state, with only cards that have been saved.
@@ -562,5 +590,48 @@ export default class OperatorModeStateService extends Service {
     await newItem.ready();
     this.addItemToStack(newItem);
     this.updateSubmode(Submodes.Interact);
+  }
+
+  openWorkspace = restartableTask(async (realmUrl: string) => {
+    let card = await this.cardService.getCard(realmUrl); // Will return the workspace's index card
+    let stackItem = new StackItem({
+      owner: this,
+      card,
+      format: 'isolated',
+      stackIndex: 0,
+    });
+    await stackItem.ready();
+    this.clearStacks();
+    this.addItemToStack(stackItem);
+
+    this.operatorModeController.workspaceChooserOpened = false;
+  });
+
+  get workspaceChooserOpened() {
+    return this.operatorModeController.workspaceChooserOpened;
+  }
+
+  set workspaceChooserOpened(workspaceChooserOpened: boolean) {
+    this.operatorModeController.workspaceChooserOpened = workspaceChooserOpened;
+  }
+
+  // Operator mode state is persisted in a query param, which lives in a controller.
+  // Currently, we have two controllers that could contain operator mode state:
+  // - card controller (viewing a card and entering operator mode from there)
+  // - index controller (viewing the realm server home page and choosing a workspace)
+  // We are in the process of removing host mode for viewing cards, so query params in card controller
+  // will be removed soon - when we are able to do that, remove this method and just use the index controller
+  get operatorModeController(): CardController | IndexController {
+    let controller: CardController | IndexController;
+
+    if (this.router.currentRouteName === 'index') {
+      controller = getOwner(this)!.lookup(
+        'controller:index',
+      ) as IndexController;
+    } else {
+      controller = getOwner(this)!.lookup('controller:card') as CardController;
+    }
+
+    return controller;
   }
 }

@@ -41,7 +41,7 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
         color: var(--pill-font-color, var(--boxel-dark));
         border: 1px solid var(--boxel-400);
         border-radius: var(--boxel-border-radius-sm);
-        font: 700 var(--boxel-font-sm);
+        font: 600 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
       }
 

@@ -1,4 +1,5 @@
 import { associateDestroyableChild } from '@ember/destroyable';
+import type Owner from '@ember/owner';
 import { setOwner, getOwner } from '@ember/owner';
 import Service from '@ember/service';
 
@@ -14,7 +15,7 @@ import window from 'ember-window-mock';
 
 import { TrackedSet } from 'tracked-built-ins';
 
-import { logger } from '@cardstack/runtime-common';
+import { Deferred, logger } from '@cardstack/runtime-common';
 
 import {
   Permissions,
@@ -27,6 +28,7 @@ import ENV from '@cardstack/host/config/environment';
 
 import type MatrixService from './matrix-service';
 import type NetworkService from './network';
+import type ResetService from './reset';
 
 const log = logger('service:realm');
 
@@ -84,6 +86,10 @@ class RealmResource {
     return this.meta?.info;
   }
 
+  get isPublic() {
+    return this.meta?.isPublic;
+  }
+
   get claims(): JWTPayload | undefined {
     if (this.auth.type === 'logged-in') {
       return this.auth.claims;
@@ -130,9 +136,11 @@ class RealmResource {
   logout(): void {
     this.token = undefined;
     this.loginTask.cancelAll();
+    this.tokenRefresher.cancelAll();
     this.loggingIn = undefined;
     this.fetchMetaTask.cancelAll();
     this.fetchingMeta = undefined;
+    window.localStorage.removeItem(sessionLocalStorageKey);
   }
 
   private fetchingMeta: Promise<void> | undefined;
@@ -151,6 +159,9 @@ class RealmResource {
       }
       let headers: Record<string, string> = {
         Accept: SupportedMimeType.RealmInfo,
+        ...(this.auth.type === 'logged-in'
+          ? { Authorization: `Bearer ${this.token}` }
+          : {}),
       };
       let response = await this.network.authedFetch(`${this.realmURL}_info`, {
         headers,
@@ -197,6 +208,7 @@ class RealmResource {
 
 export default class RealmService extends Service {
   @service private declare network: NetworkService;
+  @service private declare reset: ResetService;
 
   // This is not a TrackedMap, it's a regular Map. Conceptually, we want it to
   // be tracked, but we're using it as a read-through cache and glimmer/tracking
@@ -205,8 +217,18 @@ export default class RealmService extends Service {
   // tracked reads from `currentKnownRealms` to establish dependencies.
   private realms: Map<string, RealmResource> = this.restoreSessions();
   private currentKnownRealms = new TrackedSet<string>();
+  private reauthentications = new Map<string, Promise<string | undefined>>();
 
   @tracked private identifyRealmTracker = 0;
+
+  constructor(owner: Owner) {
+    super(owner);
+    this.reset.register(this);
+  }
+
+  resetState() {
+    this.logout();
+  }
 
   async ensureRealmMeta(realmURL: string): Promise<void> {
     let resource = this.getOrCreateRealmResource(realmURL);
@@ -229,6 +251,7 @@ export default class RealmService extends Service {
         name: 'Unknown Workspace',
         backgroundURL: null,
         iconURL: null,
+        showAsCatalog: null,
       };
     }
 
@@ -238,10 +261,15 @@ export default class RealmService extends Service {
         name: 'Unknown Workspace',
         backgroundURL: null,
         iconURL: null,
+        showAsCatalog: null,
       };
     } else {
       return resource.meta.info;
     }
+  };
+
+  isPublic = (url: string): boolean => {
+    return this.knownRealm(url)?.isPublic ?? false;
   };
 
   canRead = (url: string): boolean => {
@@ -362,10 +390,26 @@ export default class RealmService extends Service {
   }
 
   async reauthenticate(realmURL: string): Promise<string | undefined> {
+    if (this.reauthentications.has(realmURL)) {
+      return;
+    }
+    let inProgressAuthentication = this.reauthentications.get(realmURL);
+    if (inProgressAuthentication) {
+      return inProgressAuthentication;
+    }
+    let deferred = new Deferred<string | undefined>();
+    this.reauthentications.set(realmURL, deferred.promise);
+
     let resource = this.getOrCreateRealmResource(realmURL);
     resource.logout();
     await resource.login();
-    return resource.token;
+    let result = resource.token;
+    deferred.fulfill(result);
+    try {
+      return result;
+    } finally {
+      this.reauthentications.delete(realmURL);
+    }
   }
 
   private createRealmResource(

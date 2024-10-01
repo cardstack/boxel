@@ -87,7 +87,7 @@ export class CatalogEntry extends CardDef {
         }
 
         .title {
-          font: 700 var(--boxel-font-sm);
+          font: 600 var(--boxel-font-sm);
         }
 
         .description {

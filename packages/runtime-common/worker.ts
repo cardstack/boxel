@@ -12,7 +12,7 @@ import {
   SupportedMimeType,
   fileContentToText,
   unixTime,
-  type Queue,
+  type QueueRunner,
   type TextFileRef,
   type VirtualNetwork,
   type Relationship,
@@ -118,9 +118,10 @@ export class Worker {
   #runner: IndexRunner;
   runnerOptsMgr: RunnerOptionsManager;
   #indexWriter: IndexWriter;
-  #queue: Queue;
+  #queue: QueueRunner;
   #virtualNetwork: VirtualNetwork;
   #matrixURL: URL;
+  #matrixClientCache: Map<string, MatrixClient> = new Map();
   #secretSeed: string;
   #fromScratch:
     | ((realmURL: URL, boom?: true) => Promise<IndexResults>)
@@ -144,7 +145,7 @@ export class Worker {
     secretSeed,
   }: {
     indexWriter: IndexWriter;
-    queue: Queue;
+    queue: QueueRunner;
     indexRunner: IndexRunner;
     runnerOptsManager: RunnerOptionsManager;
     virtualNetwork: VirtualNetwork;
@@ -173,11 +174,24 @@ export class Worker {
     run: () => Promise<T>,
   ): Promise<T> {
     let deferred = new Deferred<T>();
-    let matrixClient = new MatrixClient({
-      matrixURL: new URL(this.#matrixURL),
-      username: args.realmUsername,
-      seed: this.#secretSeed,
-    });
+    let matrixClient: MatrixClient;
+
+    if (this.#matrixClientCache.has(args.realmUsername)) {
+      matrixClient = this.#matrixClientCache.get(args.realmUsername)!;
+
+      if (!(await matrixClient.isTokenValid())) {
+        await matrixClient.login();
+      }
+    } else {
+      matrixClient = new MatrixClient({
+        matrixURL: new URL(this.#matrixURL),
+        username: args.realmUsername,
+        seed: this.#secretSeed,
+      });
+
+      this.#matrixClientCache.set(args.realmUsername, matrixClient);
+    }
+
     let _fetch: typeof globalThis.fetch | undefined;
     function getFetch() {
       return _fetch!;
@@ -217,6 +231,11 @@ export class Worker {
           console.error(
             `Error raised during indexing has likely stopped the indexer`,
             e,
+          );
+          deferred.reject(
+            new Error(
+              'Rethrowing error from inside registerRunner: ' + e?.message,
+            ),
           );
         }
       },

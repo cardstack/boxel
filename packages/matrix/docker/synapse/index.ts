@@ -243,21 +243,6 @@ export async function registerUser(
     })
   ).json();
 
-  // TODO eventually we will need to remove the public realms from this list
-  // (CS-7199), as they will come from the /_public-realms endpoint
-  await updateAccountData(
-    response.user_id,
-    response.access_token,
-    'com.cardstack.boxel.realms',
-    JSON.stringify({
-      realms: [
-        'http://localhost:4202/test/',
-        'http://localhost:4201/experiments/',
-        'https://cardstack.com/base/',
-      ],
-    }),
-  );
-
   return {
     homeServer: response.home_server,
     accessToken: response.access_token,
@@ -412,6 +397,23 @@ export async function updateAccountData(
       response.statusText
     }, ${JSON.stringify(await response.json())}`,
   );
+}
+
+export async function getAccountData<T>(
+  userId: string,
+  accessToken: string,
+  type: string,
+): Promise<T> {
+  let response = await fetch(
+    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/user/${userId}/account_data/${type}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+  let json = await response.json();
+  return json as T;
 }
 
 export async function getJoinedRooms(accessToken: string) {

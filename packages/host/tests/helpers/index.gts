@@ -49,6 +49,8 @@ import type NetworkService from '@cardstack/host/services/network';
 
 import type QueueService from '@cardstack/host/services/queue';
 
+import RealmServerService from '@cardstack/host/services/realm-server';
+
 import {
   type CardDef,
   type FieldDef,
@@ -486,9 +488,9 @@ async function setupTestRealm({
 
   realmURL = realmURL ?? testRealmURL;
 
-  let cardService = owner.lookup('service:card-service') as CardService;
-  if (!cardService.unresolvedRealmURLs.includes(realmURL)) {
-    cardService.unresolvedRealmURLs.push(realmURL);
+  let realmServer = owner.lookup('service:realm-server') as RealmServerService;
+  if (!realmServer.availableRealmURLs.includes(realmURL)) {
+    realmServer.setAvailableRealmURLs([realmURL]);
   }
 
   if (isAcceptanceTest) {
@@ -525,14 +527,11 @@ async function setupTestRealm({
   realm = new Realm({
     url: realmURL,
     adapter,
-    getIndexHTML: async () =>
-      `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
     matrix: testMatrix,
     secretSeed: testRealmSecretSeed,
     virtualNetwork,
     dbAdapter,
     queue,
-    assetsURL: new URL(`http://example.com/notional-assets-host/`),
   });
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
   virtualNetwork.mount(realm.maybeHandle);

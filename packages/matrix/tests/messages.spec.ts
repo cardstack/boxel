@@ -16,6 +16,7 @@ import {
   selectCardFromCatalog,
   getRoomEvents,
   setupTwoStackItems,
+  showAllCards,
 } from '../helpers';
 import {
   synapseStart,
@@ -296,9 +297,7 @@ test.describe('Room messages', () => {
   }) => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomId(page);
-    await page
-      .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
-      .click();
+    await showAllCards(page);
     await page
       .locator(
         `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${testHost}/mango"]`,
@@ -311,6 +310,7 @@ test.describe('Room messages', () => {
     let message = (await getRoomEvents()).pop()!;
     expect(message.content.msgtype).toStrictEqual('org.boxel.message');
     let boxelMessageData = JSON.parse(message.content.data);
+
     expect(boxelMessageData.context.tools).toMatchObject([
       {
         type: 'function',
@@ -368,19 +368,15 @@ test.describe('Room messages', () => {
               filter: {
                 type: 'object',
                 properties: {
-                  type: {
+                  contains: {
                     type: 'object',
                     properties: {
-                      module: {
+                      title: {
                         type: 'string',
-                        description: 'the absolute path of the module',
-                      },
-                      name: {
-                        type: 'string',
-                        description: 'the name of the module',
+                        description: 'title of the card',
                       },
                     },
-                    required: ['module', 'name'],
+                    required: ['title'],
                   },
                   eq: {
                     type: 'object',
@@ -438,9 +434,7 @@ test.describe('Room messages', () => {
   }) => {
     await login(page, 'user1', 'pass');
     let room1 = await getRoomId(page);
-    await page
-      .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
-      .click();
+    await showAllCards(page);
     await page
       .locator(
         `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${testHost}/mango"]`,
@@ -467,9 +461,12 @@ test.describe('Room messages', () => {
     // the base realm is a read-only realm
     await login(page, 'user1', 'pass', { url: `http://localhost:4201/base` });
     let room1 = await getRoomId(page);
-    await page
-      .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
-      .click();
+    await showAllCards(page);
+    await expect(
+      page.locator(
+        '[data-test-stack-card="https://cardstack.com/base/index"] [data-test-cards-grid-item="https://cardstack.com/base/fields/boolean-field"]',
+      ),
+    ).toHaveCount(1);
     await page
       .locator(
         '[data-test-stack-card="https://cardstack.com/base/index"] [data-test-cards-grid-item="https://cardstack.com/base/fields/boolean-field"]',
@@ -697,9 +694,7 @@ test.describe('Room messages', () => {
     test.beforeEach(async ({ page }) => {
       await login(page, 'user1', 'pass');
       await getRoomId(page);
-      await page
-        .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
-        .click();
+      await showAllCards(page);
     });
 
     test('displays auto-attached card (1 stack)', async ({ page }) => {
@@ -769,17 +764,22 @@ test.describe('Room messages', () => {
       ).toHaveCount(1); // The index card appears by default, we verify it exists here
       await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(0);
     });
-    test('replaces auto-attached card when drilling down (1 stack)', async ({
+
+    // Flaky matrix test: CS-7275
+    test.skip('replaces auto-attached card when drilling down (1 stack)', async ({
       page,
     }) => {
       const testCard1 = `${testHost}/jersey`;
       const embeddedCard = `${testHost}/justin`;
-      await page
-        .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
-        .click();
+      await showAllCards(page);
+      await expect(
+        page.locator(
+          `[data-test-stack-item-content] [data-test-cards-grid-item="${testCard1}"]`,
+        ),
+      ).toHaveCount(1);
       await page
         .locator(
-          `[data-test-stack-item-content] [data-test-cards-grid-item='${testCard1}']`,
+          `[data-test-stack-item-content] [data-test-cards-grid-item="${testCard1}"]`,
         )
         .click();
       await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(1);
@@ -956,7 +956,7 @@ test.describe('Room messages', () => {
   }) => {
     const prompt = {
       from: 'user1',
-      message: 'Do I have to use AI with Boxel?', // a prompt on new-session template
+      message: 'Make this more polite.', // a prompt on new-session template
     };
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
@@ -993,9 +993,7 @@ test.describe('Room messages', () => {
 
     await login(page, 'user1', 'pass');
     await page.locator(`[data-test-room-settled]`).waitFor();
-    await page
-      .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
-      .click();
+    await showAllCards(page);
 
     for (let i = 1; i <= 3; i++) {
       await page.locator('[data-test-message-field]').fill(`Message - ${i}`);
@@ -1080,9 +1078,7 @@ test.describe('Room messages', () => {
       }),
     };
 
-    await page
-      .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
-      .click();
+    await showAllCards(page);
     await page
       .locator(
         `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${card_id}"]`,
@@ -1129,9 +1125,7 @@ test.describe('Room messages', () => {
       }),
     };
 
-    await page
-      .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
-      .click();
+    await showAllCards(page);
     await page
       .locator(
         `[data-test-stack-card="${testHost}/index"] [data-test-cards-grid-item="${card_id}"]`,

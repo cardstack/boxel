@@ -1,23 +1,20 @@
 import { on } from '@ember/modifier';
-import { getOwner } from '@ember/owner';
+import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
-import { restartableTask } from 'ember-concurrency';
-
-import perform from 'ember-concurrency/helpers/perform';
-
-import { cssVar } from '@cardstack/boxel-ui/helpers';
+import { cssVar, not } from '@cardstack/boxel-ui/helpers';
 import { Lock } from '@cardstack/boxel-ui/icons';
 
-import { StackItem } from '@cardstack/host/lib/stack-item';
 import CardService from '@cardstack/host/services/card-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RealmService from '@cardstack/host/services/realm';
 
+import ItemContainer from './item-container';
+
 interface Signature {
-  Element: HTMLDivElement;
+  Element: HTMLButtonElement;
   Args: {
     realmURL: string;
   };
@@ -25,42 +22,33 @@ interface Signature {
 
 export default class Workspace extends Component<Signature> {
   <template>
-    <button
-      class='workspace'
+    <ItemContainer
       data-test-workspace={{this.name}}
-      {{on 'click' (perform this.openWorkspace)}}
+      {{on 'click' this.openWorkspace}}
     >
       <div
         class='icon'
         style={{cssVar workspace-background-image-url=this.backgroundImageURL}}
       >
         <img src={{this.iconURL}} alt='Workspace Icon' />
-        <div class='small-icon'>
-          <Lock width='11px' height='11px' />
-        </div>
+        {{#if (not this.isPublic)}}
+          <div class='small-icon'>
+            <Lock width='11px' height='11px' />
+          </div>
+        {{/if}}
       </div>
       <div class='info'>
         <span class='name' data-test-workspace-name>{{this.name}}</span>
-        <span class='type'>Personal</span>
+        <span class='type'>{{if this.isPublic 'Catalog' 'Personal'}}</span>
       </div>
-    </button>
+    </ItemContainer>
     <style scoped>
-      .workspace {
-        min-width: 251.6px;
-        width: 251.6px;
-        height: 215.3px;
-        display: flex;
-        flex-direction: column;
-        border-radius: 15px;
-        border: solid 1px rgba(255, 255, 255, 0.5);
-        overflow: hidden;
-        padding: 0;
-      }
       .icon {
         background-color: var(--boxel-500);
         background-image: var(--workspace-background-image-url);
         background-position: center;
-        background-size: contain;
+        background-size: cover;
+        background-repeat: no-repeat;
 
         position: relative;
         height: 142px;
@@ -121,6 +109,11 @@ export default class Workspace extends Component<Signature> {
     return this.realm.info(this.args.realmURL);
   }
 
+  @cached
+  private get isPublic() {
+    return this.realm.isPublic(this.args.realmURL);
+  }
+
   private get name() {
     return this.realmInfo.name;
   }
@@ -137,25 +130,7 @@ export default class Workspace extends Component<Signature> {
     return this.backgroundURL ? `url(${this.backgroundURL})` : '';
   }
 
-  private openWorkspace = restartableTask(async () => {
-    let card = await this.cardService.getCard(this.args.realmURL);
-    let stackItem = new StackItem({
-      owner: this,
-      card,
-      format: 'isolated',
-      stackIndex: 0,
-    });
-    await stackItem.ready();
-    this.operatorModeStateService.clearStacks();
-    this.operatorModeStateService.addItemToStack(stackItem);
-
-    let cardController = getOwner(this)!.lookup('controller:card') as any;
-    if (!cardController) {
-      throw new Error(
-        'Workspace component must be used in the context of a CardController',
-      );
-    }
-
-    cardController.workspaceChooserOpened = false;
-  });
+  @action openWorkspace() {
+    this.operatorModeStateService.openWorkspace.perform(this.args.realmURL);
+  }
 }

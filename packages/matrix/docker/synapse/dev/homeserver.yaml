@@ -19,6 +19,9 @@ database:
 
 log_config: "/data/log.config"
 
+presence:
+  enabled: false
+
 rc_messages_per_second: 10000
 rc_message_burst_count: 10000
 rc_registration:

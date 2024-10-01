@@ -2,6 +2,8 @@ import { expect, test } from '@playwright/test';
 import {
   synapseStart,
   synapseStop,
+  getAccountData,
+  loginUser,
   type SynapseInstance,
 } from '../docker/synapse';
 import {
@@ -17,7 +19,10 @@ import {
   assertLoggedIn,
   assertLoggedOut,
   logout,
+  login,
   registerRealmUsers,
+  enterWorkspace,
+  showAllCards,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 
@@ -28,6 +33,9 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
   let realmServer: IsolatedRealmServer;
 
   test.beforeEach(async () => {
+    // synapse defaults to 30s for beforeEach to finish, we need a bit more time
+    // to safely start the realm
+    test.setTimeout(60_000);
     synapse = await synapseStart({
       template: 'test',
     });
@@ -42,7 +50,9 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
   });
 
   test('it can register a user with a registration token', async ({ page }) => {
+    test.setTimeout(120_000);
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
+    await registerUser(synapse, 'user2', 'pass');
     await registerRealmUsers(synapse);
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
     await clearLocalStorage(page, appURL);
@@ -99,9 +109,106 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       displayName: 'Test User',
     });
 
+    await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
+    await expect(
+      page.locator('[data-test-workspace-list] [data-test-workspace-name]'),
+    ).toContainText("Test User's Workspace", { timeout: 30_000 });
+    await expect(
+      page.locator(`[data-test-workspace="Test User's Workspace"] img`),
+      'the "T" icon URL is shown',
+    ).toHaveAttribute('src', 'https://i.postimg.cc/Rq550Bwv/T.png');
+    await expect(
+      page.locator(`[data-test-workspace="Test User's Workspace"] .icon`),
+      'has background image',
+    ).toHaveAttribute('style', /--workspace-background-image-url:/);
+
+    let newRealmURL = new URL('user1/personal/', new URL(appURL).origin).href;
+    await enterWorkspace(page, "Test User's Workspace");
+
+    await expect(
+      page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
+    ).toHaveCount(1);
+    await showAllCards(page);
+    await expect(
+      page.locator(`[data-test-cards-grid-item="${newRealmURL}hello-world"]`),
+    ).toHaveCount(1);
+
     // assert that the registration mode state is cleared properly
     await logout(page);
     await assertLoggedOut(page);
+
+    // assert workspaces state don't leak into other sessions
+    await login(page, 'user2', 'pass', {
+      url: appURL,
+      skipOpeningOperatorMode: true,
+      skipOpeningAssistant: true,
+    });
+    await assertLoggedIn(page, {
+      userId: '@user2:localhost',
+      displayName: 'user2',
+    });
+    await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
+    await expect(page.locator(`[data-test-workspace-list]`)).toHaveCount(1);
+    await expect(
+      page.locator(`[data-test-workspace-list] [data-test-workspace]`),
+    ).toHaveCount(0);
+    await expect(
+      page.locator(`[data-test-workspace="Test User's Workspace"]`),
+    ).toHaveCount(0);
+
+    // assert newly registered user can login with their credentials
+    await logout(page);
+    await assertLoggedOut(page);
+    await login(page, 'user1', 'mypassword1!', {
+      url: appURL,
+      skipOpeningOperatorMode: true,
+      skipOpeningAssistant: true,
+    });
+    await assertLoggedIn(page, { displayName: 'Test User' });
+    await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
+    await expect(
+      page.locator(`[data-test-workspace="Test User's Workspace"]`),
+    ).toHaveCount(1);
+    await page.reload();
+    await expect(
+      page.locator(`[data-test-workspace="Test User's Workspace"]`),
+    ).toHaveCount(1);
+
+    // we're including the following assertions in this test because the
+    // isolated realm is so expensive, otherwise it would be desireable to have
+    // these assertions in their own test
+
+    // assert that logged in user can navigate directly to card in private realm without
+    // being asked to login
+    await page.goto(`${newRealmURL}hello-world`);
+    await expect(
+      page.locator(`[data-test-card="${newRealmURL}hello-world"]`),
+    ).toContainText('Hello World');
+
+    // assert that non-logged in user is prompted to login before navigating
+    // directly to card in private repo
+    await logout(page);
+    await assertLoggedOut(page);
+    await page.goto(`${newRealmURL}hello-world`);
+    await login(page, 'user1', 'mypassword1!', {
+      url: appURL,
+      skipOpeningOperatorMode: true,
+      skipOpeningAssistant: true,
+    });
+    await assertLoggedIn(page, { displayName: 'Test User' });
+    await expect(
+      page.locator(`[data-test-card="${newRealmURL}hello-world"]`),
+    ).toContainText('Hello World');
+
+    let auth = await loginUser(`user1`, 'mypassword1!');
+    let realms = await getAccountData<{ realms: string[] } | undefined>(
+      auth.userId,
+      auth.accessToken,
+      'com.cardstack.boxel.realms',
+    );
+    expect(realms).toEqual({
+      realms: ['http://localhost:4205/user1/personal/'],
+    });
   });
 
   test(`it can resend email validation message`, async ({ page }) => {

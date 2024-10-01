@@ -16,6 +16,7 @@ import get from 'lodash/get';
 
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
+import { Tooltip } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { IconPlus, Download } from '@cardstack/boxel-ui/icons';
 
@@ -586,6 +587,8 @@ export default class InteractSubmode extends Component<Signature> {
             }
           }
         }
+
+        this.operatorModeStateService.workspaceChooserOpened = false;
       } finally {
         waiter.endAsync(waiterToken);
       }
@@ -618,81 +621,98 @@ export default class InteractSubmode extends Component<Signature> {
       as |search|
     >
       <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
-        {{#if (eq this.allStackItems.length 0)}}
-          <div class='no-cards' data-test-empty-stack>
-            <p class='add-card-title'>
-              Add a card to get started
-            </p>
-
-            <button
-              class='add-card-button'
-              {{on 'click' (fn (perform this.addCard))}}
-              data-test-add-card-button
-            >
-              <IconPlus width='36px' height='36px' />
-            </button>
-          </div>
-        {{else}}
-          {{#each this.stacks as |stack stackIndex|}}
-            {{#let
-              (get
-                this.stackBackgroundsState.differingBackgroundImageURLs
-                stackIndex
-              )
-              as |backgroundImageURLSpecificToThisStack|
-            }}
-              <OperatorModeStack
-                data-test-operator-mode-stack={{stackIndex}}
-                class={{cn
-                  'operator-mode-stack'
-                  (if backgroundImageURLSpecificToThisStack 'with-bg-image')
-                }}
-                style={{if
-                  backgroundImageURLSpecificToThisStack
-                  (htmlSafe
-                    (concat
-                      'background-image: url('
-                      backgroundImageURLSpecificToThisStack
-                      ')'
-                    )
-                  )
-                }}
-                @stackItems={{stack}}
-                @stackIndex={{stackIndex}}
-                @publicAPI={{this.publicAPI this stackIndex}}
-                @close={{perform this.close}}
-                @onSelectedCards={{this.onSelectedCards}}
-                @setupStackItem={{this.setupStackItem}}
-              />
-            {{/let}}
-          {{/each}}
-
-          <CopyButton
-            @selectedCards={{this.selectedCards}}
-            @copy={{fn (perform this.copy)}}
-            @isCopying={{this.copy.isRunning}}
-          />
-        {{/if}}
-
         {{#if this.canCreateNeighborStack}}
-          <NeighborStackTriggerButton
-            data-test-add-card-left-stack
-            @triggerSide={{SearchSheetTriggers.DropCardToLeftNeighborStackButton}}
-            @activeTrigger={{this.searchSheetTrigger}}
-            @onTrigger={{fn
-              this.showSearchWithTrigger
-              search.openSearchToPrompt
-            }}
-          />
-          <NeighborStackTriggerButton
-            data-test-add-card-right-stack
-            @triggerSide={{SearchSheetTriggers.DropCardToRightNeighborStackButton}}
-            @activeTrigger={{this.searchSheetTrigger}}
-            @onTrigger={{fn
-              this.showSearchWithTrigger
-              search.openSearchToPrompt
-            }}
-          />
+          <Tooltip @placement='right'>
+            <:trigger>
+              <NeighborStackTriggerButton
+                data-test-add-card-left-stack
+                @triggerSide={{SearchSheetTriggers.DropCardToLeftNeighborStackButton}}
+                @activeTrigger={{this.searchSheetTrigger}}
+                @onTrigger={{fn
+                  this.showSearchWithTrigger
+                  search.openSearchToPrompt
+                }}
+              />
+            </:trigger>
+            <:content>
+              {{neighborStackTooltipMessage 'left'}}
+            </:content>
+          </Tooltip>
+        {{/if}}
+        <div class='stacks'>
+          {{#if (eq this.allStackItems.length 0)}}
+            <div class='no-cards' data-test-empty-stack>
+              <p class='add-card-title'>
+                Add a card to get started
+              </p>
+
+              <button
+                class='add-card-button'
+                {{on 'click' (fn (perform this.addCard))}}
+                data-test-add-card-button
+              >
+                <IconPlus width='36px' height='36px' />
+              </button>
+            </div>
+          {{else}}
+            {{#each this.stacks as |stack stackIndex|}}
+              {{#let
+                (get
+                  this.stackBackgroundsState.differingBackgroundImageURLs
+                  stackIndex
+                )
+                as |backgroundImageURLSpecificToThisStack|
+              }}
+                <OperatorModeStack
+                  data-test-operator-mode-stack={{stackIndex}}
+                  class={{cn
+                    'operator-mode-stack'
+                    (if backgroundImageURLSpecificToThisStack 'with-bg-image')
+                  }}
+                  style={{if
+                    backgroundImageURLSpecificToThisStack
+                    (htmlSafe
+                      (concat
+                        'background-image: url('
+                        backgroundImageURLSpecificToThisStack
+                        ')'
+                      )
+                    )
+                  }}
+                  @stackItems={{stack}}
+                  @stackIndex={{stackIndex}}
+                  @publicAPI={{this.publicAPI this stackIndex}}
+                  @close={{perform this.close}}
+                  @onSelectedCards={{this.onSelectedCards}}
+                  @setupStackItem={{this.setupStackItem}}
+                />
+              {{/let}}
+            {{/each}}
+
+            <CopyButton
+              @selectedCards={{this.selectedCards}}
+              @copy={{fn (perform this.copy)}}
+              @isCopying={{this.copy.isRunning}}
+            />
+          {{/if}}
+        </div>
+        {{#if this.canCreateNeighborStack}}
+          <Tooltip @placement='left'>
+            <:trigger>
+              <NeighborStackTriggerButton
+                data-test-add-card-right-stack
+                @triggerSide={{SearchSheetTriggers.DropCardToRightNeighborStackButton}}
+                @activeTrigger={{this.searchSheetTrigger}}
+                @onTrigger={{fn
+                  this.showSearchWithTrigger
+                  search.openSearchToPrompt
+                }}
+              />
+            </:trigger>
+            <:content>
+              {{neighborStackTooltipMessage 'right'}}
+            </:content>
+          </Tooltip>
         {{/if}}
         {{#if this.itemToDelete}}
           <DeleteModal
@@ -715,9 +735,18 @@ export default class InteractSubmode extends Component<Signature> {
         background-size: cover;
         height: 100%;
       }
+      .operator-mode__main .stacks {
+        flex: 1;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      .operator-mode__main .add-card-to-neighbor-stack {
+        flex: 0;
+        flex-basis: var(--container-button-size);
+      }
       .no-cards {
-        height: calc(100% -var(--search-sheet-closed-height));
-        width: 100%;
         max-width: 50rem;
         display: flex;
         flex-direction: column;
@@ -742,7 +771,6 @@ export default class InteractSubmode extends Component<Signature> {
       }
       .add-card-to-neighbor-stack {
         --icon-color: var(--boxel-highlight-hover);
-        position: absolute;
         width: var(--container-button-size);
         height: var(--container-button-size);
         padding: 0;
@@ -750,6 +778,7 @@ export default class InteractSubmode extends Component<Signature> {
         background-color: var(--boxel-light-100);
         border-color: transparent;
         box-shadow: var(--boxel-deep-box-shadow);
+        z-index: var(--boxel-layer-floating-button);
       }
       .add-card-to-neighbor-stack:hover,
       .add-card-to-neighbor-stack--active {
@@ -757,11 +786,15 @@ export default class InteractSubmode extends Component<Signature> {
         background-color: var(--boxel-light);
       }
       .add-card-to-neighbor-stack--left {
-        left: var(--boxel-sp);
+        margin-left: var(--boxel-sp);
       }
       .add-card-to-neighbor-stack--right {
-        right: var(--boxel-sp);
+        margin-right: var(--boxel-sp);
       }
     </style>
   </template>
 }
+
+const neighborStackTooltipMessage = (side: 'left' | 'right') => {
+  return `Open a card to the ${side} of the current card`;
+};

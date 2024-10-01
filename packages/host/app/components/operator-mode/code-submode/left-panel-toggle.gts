@@ -35,7 +35,7 @@ const ToggleButton: TemplateOnlyComponent<ToggleButtonSignature> = <template>
   <style scoped>
     .toggle-button {
       --boxel-button-border: 1px solid var(--boxel-400);
-      --boxel-button-font: 700 var(--boxel-font-xs);
+      --boxel-button-font: 600 var(--boxel-font-xs);
       --boxel-button-letter-spacing: var(--boxel-lsp-xs);
       --boxel-button-min-width: 6rem;
       --boxel-button-padding: 0;
