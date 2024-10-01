@@ -15,6 +15,7 @@ import type { Query } from '@cardstack/runtime-common/query';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import type CardService from '../services/card-service';
+import type RealmServerService from '../services/realm-server';
 
 interface Args {
   named: {
@@ -27,6 +28,7 @@ interface Args {
 
 export class Search extends Resource<Args> {
   @service private declare cardService: CardService;
+  @service private declare realmServer: RealmServerService;
   @tracked private _instances: CardDef[] = [];
   @tracked private _instancesByRealm: RealmCards[] = [];
   @tracked private staleInstances: CardDef[] = [];
@@ -37,7 +39,7 @@ export class Search extends Resource<Args> {
 
   modify(_positional: never[], named: Args['named']) {
     let { query, realms, isLive, doWhileRefreshing } = named;
-    this.realmsToSearch = realms ?? this.cardService.unresolvedRealmURLs;
+    this.realmsToSearch = realms ?? this.realmServer.availableRealmURLs;
 
     this.loaded = this.search.perform(query);
     waitForPromise(this.loaded);

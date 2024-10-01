@@ -12,6 +12,8 @@ import {
   type DBAdapter,
   type QueuePublisher,
   type RealmPermissions,
+  fetchPublicRealms,
+  RealmInfo,
 } from '@cardstack/runtime-common';
 import { ensureDirSync, writeJSONSync, readdirSync, copySync } from 'fs-extra';
 import { setupCloseHandler } from './node-realm';
@@ -72,6 +74,12 @@ const IGNORE_SEED_FILES = [
   'tsconfig.json',
 ];
 
+type CatalogRealm = {
+  type: 'catalog-realm';
+  id: string;
+  attributes: RealmInfo;
+};
+
 export class RealmServer {
   private log = logger('realm-server');
   private realms: Realm[];
@@ -89,6 +97,7 @@ export class RealmServer {
   private getRegistrationSecret:
     | (() => Promise<string | undefined>)
     | undefined;
+  private catalogRealms: CatalogRealm[] | null = null;
 
   constructor({
     serverURL,
@@ -149,6 +158,7 @@ export class RealmServer {
     router.get('/', healthCheck, this.serveIndex(), this.serveFromRealm);
     router.post('/_server-session', this.createSession());
     router.post('/_create-realm', this.handleCreateRealmRequest());
+    router.get('/_catalog-realms', this.fetchCatalogRealms());
 
     let app = new Koa<Koa.DefaultState, Koa.Context>()
       .use(httpLogging)
@@ -604,6 +614,59 @@ export class RealmServer {
     }
 
     throw new Error(`Can not determine the matrix registration secret`);
+  }
+
+  private fetchCatalogRealms(): (
+    ctxt: Koa.Context,
+    _next: Koa.Next,
+  ) => Promise<any> {
+    return async (ctxt: Koa.Context, _next: Koa.Next) => {
+      let catalogRealms = this.catalogRealms;
+      if (!catalogRealms) {
+        let publicRealms = await fetchPublicRealms(this.dbAdapter);
+        catalogRealms = (
+          await Promise.all(
+            publicRealms.map(async ({ realm_url: realmURL }) => {
+              let realmInfoResponse = await this.virtualNetwork.handle(
+                new Request(`${realmURL}_info`, {
+                  headers: {
+                    Accept: SupportedMimeType.RealmInfo,
+                  },
+                }),
+              );
+              if (realmInfoResponse.status != 200) {
+                console.warn(
+                  `Failed to fetch realm info for public realm ${realmURL}: ${realmInfoResponse.status}`,
+                );
+                return null;
+              }
+              let json = await realmInfoResponse.json();
+              let attributes = json.data.attributes;
+              if (
+                attributes.showAsCatalog != null &&
+                attributes.showAsCatalog == false
+              ) {
+                return null;
+              }
+
+              return {
+                type: 'catalog-realm',
+                id: realmURL,
+                attributes: json.data.attributes,
+              };
+            }),
+          )
+        ).filter(Boolean) as CatalogRealm[];
+        this.catalogRealms = catalogRealms;
+      }
+
+      return setContextResponse(
+        ctxt,
+        new Response(JSON.stringify({ data: catalogRealms }), {
+          headers: { 'content-type': SupportedMimeType.JSONAPI },
+        }),
+      );
+    };
   }
 }
 

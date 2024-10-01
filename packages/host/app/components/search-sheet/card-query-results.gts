@@ -8,13 +8,13 @@ import { eq, gt, or } from '@cardstack/boxel-ui/helpers';
 
 import { catalogEntryRef } from '@cardstack/runtime-common';
 
+import RealmServerService from '@cardstack/host/services/realm-server';
+
 import PrerenderedCardSearch from '../prerendered-card-search';
 
 import ResultsSection from './results-section';
 
 import { getCodeRefFromSearchKey } from './utils';
-
-import type CardService from '../../services/card-service';
 
 interface Signature {
   Element: HTMLElement;
@@ -27,10 +27,10 @@ interface Signature {
 }
 
 export default class CardQueryResults extends Component<Signature> {
-  @service declare cardService: CardService;
+  @service declare realmServer: RealmServerService;
 
   get realms() {
-    return this.cardService.unresolvedRealmURLs;
+    return this.realmServer.availableRealmURLs;
   }
   get query() {
     let { searchKey } = this.args;
