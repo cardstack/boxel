@@ -146,7 +146,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       displayName: 'user2',
     });
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
-    await expect(page.locator(`[data-test-workspace]`)).toHaveCount(2);
+    await expect(page.locator(`[data-test-workspace-list] [data-test-workspace]`)).toHaveCount(0);
     await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"]`),
     ).toHaveCount(0);

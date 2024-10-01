@@ -90,6 +90,7 @@ export type RealmInfo = {
   name: string;
   backgroundURL: string | null;
   iconURL: string | null;
+  showAsCatalog: boolean | null;
 };
 
 export interface FileRef {
@@ -1597,6 +1598,7 @@ export class Realm {
       name: 'Unnamed Workspace',
       backgroundURL: null,
       iconURL: null,
+      showAsCatalog: null,
     };
     if (!realmConfig) {
       return realmInfo;
@@ -1609,6 +1611,8 @@ export class Realm {
         realmInfo.backgroundURL =
           realmConfigJson.backgroundURL ?? realmInfo.backgroundURL;
         realmInfo.iconURL = realmConfigJson.iconURL ?? realmInfo.iconURL;
+        realmInfo.showAsCatalog =
+          realmConfigJson.showAsCatalog ?? realmInfo.showAsCatalog;
       } catch (e) {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }

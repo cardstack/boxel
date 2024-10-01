@@ -6,7 +6,9 @@ import { task, restartableTask, rawTimeout } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
 
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import { TrackedArray } from 'tracked-built-ins/.';
+
+import { baseRealm, SupportedMimeType } from '@cardstack/runtime-common';
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
 import type LoaderService from './loader-service';
@@ -33,6 +35,8 @@ export default class RealmServerService extends Service {
   @service private declare reset: ResetService;
   private auth: AuthStatus = { type: 'anonymous' };
   private client: ExtendedClient | undefined;
+  private _userRealmURLs = new TrackedArray<string>([baseRealm.url]);
+  private _catalogRealmURLs = new TrackedArray<string>();
 
   constructor(owner: Owner) {
     super(owner);
@@ -99,11 +103,69 @@ export default class RealmServerService extends Service {
     window.localStorage.removeItem(sessionLocalStorageKey);
   }
 
+  get availableRealmURLs() {
+    return [...this._userRealmURLs, ...this._catalogRealmURLs];
+  }
+
+  get userRealmURLs() {
+    return this._userRealmURLs.filter((realmURL) => realmURL != baseRealm.url);
+  }
+
+  get catalogRealmURLs() {
+    return this._catalogRealmURLs;
+  }
+
+  async setAvailableRealmURLs(userRealmURLs: string[]) {
+    userRealmURLs.forEach((userRealmURL) => {
+      if (!this._userRealmURLs.includes(userRealmURL)) {
+        this._userRealmURLs.push(userRealmURL);
+      }
+    });
+
+    this._userRealmURLs.forEach((userRealmURL) => {
+      if (!userRealmURLs.includes(userRealmURL)) {
+        this._userRealmURLs.splice(
+          this._userRealmURLs.indexOf(userRealmURL),
+          1,
+        );
+      }
+    });
+
+    let baseRealmUrl = baseRealm.url;
+
+    if (!this._userRealmURLs.includes(baseRealmUrl)) {
+      this._userRealmURLs.unshift(baseRealmUrl);
+    }
+
+    await this.fetchCatalogRealmURLs();
+  }
+
+  private async fetchCatalogRealmURLs() {
+    let response = await this.loaderService.loader.fetch(
+      `${this.url.origin}/_catalog-realms`,
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Failed to fetch public realms for realm server ${this.url.origin}: ${response.status}`,
+      );
+    }
+
+    let { data } = await response.json();
+    data.forEach((publicRealm: { id: string }) => {
+      if (!this._catalogRealmURLs.includes(publicRealm.id)) {
+        this._catalogRealmURLs.push(publicRealm.id);
+      }
+    });
+  }
+
   get url() {
     let url = globalThis.location.origin;
     // the ember CLI hosted app will use the dev env realm server
     // http://localhost:4201
-    url = url === 'http://localhost:4200' ? 'http://localhost:4201' : url;
+    url =
+      url === 'http://localhost:4200' || url === 'http://localhost:7357'
+        ? 'http://localhost:4201'
+        : url;
     return new URL(url);
   }
 

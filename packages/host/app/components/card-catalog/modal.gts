@@ -9,7 +9,6 @@ import Component from '@glimmer/component';
 import { restartableTask, task, timeout } from 'ember-concurrency';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 
-import { trackedFunction } from 'ember-resources/util/function';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
 import { Button, BoxelInput } from '@cardstack/boxel-ui/components';
@@ -40,6 +39,9 @@ import {
 } from '@cardstack/runtime-common/query';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
+import RealmService from '@cardstack/host/services/realm';
+import RealmServerService from '@cardstack/host/services/realm-server';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -247,6 +249,8 @@ export default class CardCatalogModal extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
   @service declare operatorModeStateService: OperatorModeStateService;
+  @service declare realmServer: RealmServerService;
+  @service declare realm: RealmService;
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);
@@ -267,28 +271,15 @@ export default class CardCatalogModal extends Component<Signature> {
     return [];
   }
 
-  fetchAvailableRealms = trackedFunction(this, async () => {
-    let realmInfos: Record<string, RealmInfo> = Object.fromEntries(
-      this.state?.availableRealmUrls.map((url) => [
-        url,
-        { name: '', backgroundURL: '', iconURL: '' },
-      ]) ?? [],
-    );
-    let promises = this.state?.availableRealmUrls.map(async (url) => {
-      let info = await this.cardService.getRealmInfoByRealmURL(new URL(url));
-      realmInfos[url] = info;
-    });
-    if (promises) {
-      await Promise.all(promises);
-    }
-    return realmInfos;
-  });
-
   get availableRealms(): Record<string, RealmInfo> | undefined {
-    if (this.fetchAvailableRealms.value) {
-      return this.fetchAvailableRealms.value;
+    let items: Record<string, RealmInfo> = {};
+    for (let [url, realmMeta] of Object.entries(this.realm.allRealmsMeta)) {
+      if (this.state == null || !this.state.availableRealmUrls.includes(url)) {
+        continue;
+      }
+      items[url] = realmMeta.info;
     }
-    return undefined;
+    return items;
   }
 
   get cardRefName() {
@@ -395,8 +386,8 @@ export default class CardCatalogModal extends Component<Signature> {
         dismissModal: false,
         query,
         originalQuery: query,
-        availableRealmUrls: this.cardService.unresolvedRealmURLs,
-        selectedRealmUrls: this.cardService.unresolvedRealmURLs,
+        availableRealmUrls: this.realmServer.availableRealmURLs,
+        selectedRealmUrls: this.realmServer.availableRealmURLs,
       });
       this.stateStack.push(cardCatalogState);
 

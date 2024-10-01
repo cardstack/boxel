@@ -3,11 +3,9 @@ import Service, { service } from '@ember/service';
 
 import { stringify } from 'qs';
 
-import { TrackedArray } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
-  baseRealm,
   SupportedMimeType,
   type LooseCardResource,
   isSingleCardDocument,
@@ -62,7 +60,6 @@ export default class CardService extends Service {
     Promise<typeof CardAPI>
   >;
   declare clientRequestIds: Set<string>;
-  declare unresolvedRealmURLs: TrackedArray<string>;
 
   constructor(owner: Owner) {
     super(owner);
@@ -86,7 +83,6 @@ export default class CardService extends Service {
     this.subscriber = undefined;
     this.clientRequestIds = new Set();
     this.loaderToCardAPILoadingCache = new WeakMap();
-    this.unresolvedRealmURLs = new TrackedArray([baseRealm.url]);
   }
 
   onSave(subscriber: CardSaveSubscriber) {
@@ -95,39 +91,6 @@ export default class CardService extends Service {
 
   unregisterSaveSubscriber() {
     this.subscriber = undefined;
-  }
-
-  get searchRealms() {
-    return this.unresolvedRealmURLs;
-  }
-
-  get userRealms() {
-    return this.unresolvedRealmURLs.filter(
-      (realmURL) => realmURL != baseRealm.url,
-    );
-  }
-
-  setRealms(realms: string[]) {
-    realms.forEach((realm) => {
-      if (!this.unresolvedRealmURLs.includes(realm)) {
-        this.unresolvedRealmURLs.push(realm);
-      }
-    });
-
-    this.unresolvedRealmURLs.forEach((realm) => {
-      if (!realms.includes(realm)) {
-        this.unresolvedRealmURLs.splice(
-          this.unresolvedRealmURLs.indexOf(realm),
-          1,
-        );
-      }
-    });
-
-    let baseRealmUrl = baseRealm.url;
-
-    if (!this.unresolvedRealmURLs.includes(baseRealmUrl)) {
-      this.unresolvedRealmURLs.unshift(baseRealmUrl);
-    }
   }
 
   async fetchJSON(
