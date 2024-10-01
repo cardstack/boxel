@@ -3,7 +3,7 @@
 module.exports = {
   overrides: [
     {
-      files: ['./.eslintrc.js'],
+      files: ['./.eslintrc.js', 'esbuild.js'],
       parserOptions: {
         sourceType: 'script',
       },
