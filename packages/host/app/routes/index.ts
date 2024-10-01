@@ -45,12 +45,22 @@ export default class Index extends Route<void> {
       await this.matrixService.start();
       this.didMatrixServiceStart = true;
     }
+
+    if (!this.matrixService.isLoggedIn) {
+      this.didMatrixServiceStart = false;
+      return;
+    }
+
     let cardUrl;
 
     if (card) {
       let resource = getCard(this, () => card);
       await resource.loaded;
       cardUrl = resource?.card?.id; // This is to make sure we put the canonical URL of the card on the stack
+      // TODO: what to do if card is not found, or not accessible?
+      if (!cardUrl) {
+        alert('Card not found');
+      }
     }
 
     let stacks: { id: string; format: string }[][] = [];
