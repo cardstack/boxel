@@ -24,6 +24,7 @@ export default class Card extends Route<void> {
       await this.router.replaceWith('index');
     } else {
       // In this case, host app is served by the realm server, so we can construct the full card URL from the path and redirect to index where the index route will put this card on the stack
+      // (for example we will come here when visiting the link given to us by clicking "Copy card URL")
       await this.router.replaceWith('index', {
         queryParams: { card: `${window.origin}/${path}` },
       });
