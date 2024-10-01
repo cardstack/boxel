@@ -17,21 +17,21 @@ import { DropdownArrowFilled, IconPlus } from '@cardstack/boxel-ui/icons';
 import { menuItem } from '@cardstack/boxel-ui/helpers';
 import { fn, array } from '@ember/helper';
 import { action } from '@ember/object';
-import { type Query } from '@cardstack/runtime-common';
+import { LooseSingleCardDocument, type Query } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 
 interface ColumnData {
-  status: string;
-  index: number;
-  query: any;
+  status: {
+    label: string;
+    index: number;
+  };
+  query: Query;
 }
 
 class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   @tracked isSheetOpen = false;
   @tracked selectedFilter = '';
   @tracked taskDescription = '';
-  @tracked errorMessage = '';
-  @tracked triggerStatus = '';
 
   filterOptions = ['All', 'Status Type', 'Assignee', 'Project'];
 
@@ -87,58 +87,100 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
 
   columnData: ColumnData[] = [
     {
-      status: 'Backlog',
-      index: 0,
+      status: {
+        label: 'Backlog',
+        index: 0,
+      },
       query: this.backlogQuery,
     },
     {
-      status: 'Next Sprint',
-      index: 1,
+      status: {
+        label: 'Next Sprint',
+        index: 1,
+      },
       query: this.nextSprintQuery,
     },
     {
-      status: 'Current Sprint',
-      index: 2,
+      status: {
+        label: 'Current Sprint',
+        index: 2,
+      },
       query: this.currentSprintQuery,
     },
     {
-      status: 'In Review',
-      index: 3,
+      status: {
+        label: 'In Review',
+        index: 3,
+      },
       query: this.inReviewQuery,
     },
     {
-      status: 'Staged',
-      index: 4,
+      status: {
+        label: 'Staged',
+        index: 4,
+      },
       query: this.stagedQuery,
     },
     {
-      status: 'Shipped',
-      index: 5,
+      status: {
+        label: 'Shipped',
+        index: 5,
+      },
       query: this.shippedQuery,
     },
   ];
 
-  private createCard = restartableTask(async () => {
+  private createCard = restartableTask(async (columnData: ColumnData) => {
     let cardRef = this.assignedTaskCodeRef;
 
     if (!cardRef) {
       return;
     }
 
+    let doc: LooseSingleCardDocument = {
+      data: {
+        type: 'card',
+        attributes: {
+          taskName: null,
+          taskDetail: null,
+          status: columnData.status,
+          priority: {
+            index: null,
+            label: null,
+          },
+          dueDate: null,
+          description: null,
+          thumbnailURL: null,
+        },
+        relationships: {
+          assignee: {
+            links: {
+              self: null,
+            },
+          },
+          project: {
+            links: {
+              self: null,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: this.assignedTaskCodeRef,
+        },
+      },
+    };
+
     const newCard: any = await this.args.context?.actions?.createCard?.(
       cardRef,
       new URL(cardRef.module),
       {
         realmURL: this.args.model[realmURL],
+        doc,
       },
     );
-
     if (newCard) {
-      try {
-        console.log(newCard.status, this.triggerStatus);
-        newCard.status.index = 1;
-        newCard.status.label = this.triggerStatus;
-      } catch (viewCardError) {}
+      console.log(newCard.status);
+      console.log(newCard.id);
     }
   });
 
@@ -160,10 +202,8 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
   }
 
   @action
-  createNewTask(status: string) {
-    console.log(status);
-    this.triggerStatus = status;
-    this.createCard.perform();
+  createNewTask(status: ColumnData) {
+    this.createCard.perform(status);
   }
 
   <template>
@@ -210,8 +250,6 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
             @context={{@context}}
             @realms={{this.realms}}
             @query={{column.query}}
-            @title={{column.status}}
-            @index={{column.index}}
             @column={{column}}
             @createNewTask={{this.createNewTask}}
           />
@@ -268,11 +306,6 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
         display: flex;
         justify-content: flex-end;
         gap: var(--boxel-sp);
-        margin-top: var(--boxel-sp);
-      }
-
-      .error-message {
-        color: var(--boxel-error);
         margin-top: var(--boxel-sp);
       }
     </style>
@@ -363,10 +396,8 @@ interface ColumnQuerySignature {
     context: CardContext | undefined;
     realms: string[];
     query: Query;
-    title: string;
-    index: number;
     column: ColumnData;
-    createNewTask: (status: any) => void;
+    createNewTask: (status: ColumnData) => void;
   };
   Blocks: {
     default: [];
@@ -375,16 +406,10 @@ interface ColumnQuerySignature {
 }
 
 class ColumnQuery extends GlimmerComponent<ColumnQuerySignature> {
-  @tracked taskDescription = '';
-
-  @action updateTaskDescription(value: string) {
-    this.taskDescription = value;
-  }
-
   <template>
     <div class='column'>
       <div class='column-title'>
-        <span>{{@title}}</span>
+        <span>{{@column.status.label}}</span>
         <IconPlus
           width='12'
           height='12'
