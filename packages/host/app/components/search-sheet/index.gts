@@ -21,8 +21,9 @@ import {
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
-import CardService from '@cardstack/host/services/card-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
+import RealmServerService from '@cardstack/host/services/realm-server';
 
 import CardQueryResults from './card-query-results';
 import CardURLResults from './card-url-results';
@@ -72,7 +73,7 @@ export default class SearchSheet extends Component<Signature> {
 
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare loaderService: LoaderService;
-  @service declare cardService: CardService;
+  @service declare realmServer: RealmServerService;
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -174,7 +175,7 @@ export default class SearchSheet extends Component<Signature> {
     }
     let cardURL = this.searchKey;
 
-    let maybeIndexCardURL = this.cardService.unresolvedRealmURLs.find(
+    let maybeIndexCardURL = this.realmServer.availableRealmURLs.find(
       (u) => u === cardURL + '/',
     );
     let cardResource = getCard(this, () => maybeIndexCardURL ?? cardURL, {
@@ -298,6 +299,10 @@ export default class SearchSheet extends Component<Signature> {
       .closed {
         height: var(--search-sheet-closed-height);
         width: var(--search-sheet-closed-width);
+      }
+
+      .closed .search-sheet__search-input-group {
+        outline: var(--boxel-border-flexible);
       }
 
       .search-sheet.closed .search-sheet-content {
