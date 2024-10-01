@@ -93,7 +93,14 @@ export default class AddWorkspace extends Component<Signature> {
       <:content>
         {{#if this.isModalOpen}}
           {{#if this.createWorkspaceTask.isRunning}}
-            <LoadingIndicator />
+            <div class='spinner-container'>
+              <div class='spinner-inner-container'>
+                <LoadingIndicator class='spinner' />
+                <div>
+                  Creating workspace...
+                </div>
+              </div>
+            </div>
           {{else}}
             <FieldContainer @label='Display Name' @tag='label' class='field'>
               <BoxelInput
@@ -196,6 +203,23 @@ export default class AddWorkspace extends Component<Signature> {
       .error-message {
         color: var(--boxel-error-100);
         margin-top: var(--boxel-sp-lg);
+      }
+      .spinner-container {
+        align-items: center;
+        display: flex;
+        height: 12rem;
+        justify-content: center;
+      }
+      .spinner-inner-container {
+        align-items: center;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        justify-content: center;
+        text-align: center;
+      }
+      .spinner {
+        --boxel-loading-indicator-size: 2.5rem;
       }
     </style>
   </template>
