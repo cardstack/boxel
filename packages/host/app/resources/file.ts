@@ -135,21 +135,28 @@ class _FileResource extends Resource<Args> {
   }
 
   private read = restartableTask(async () => {
-    let response = await this.network.authedFetch(this._url, {
-      headers: { Accept: SupportedMimeType.CardSource },
-    });
+    let response;
+    try {
+      response = await this.network.authedFetch(this._url, {
+        headers: { Accept: SupportedMimeType.CardSource },
+      });
 
-    if (!response.ok) {
-      log.error(
-        `Could not get file ${this._url}, status ${response.status}: ${
-          response.statusText
-        } - ${await response.text()}`,
-      );
-      if (response.status === 404) {
-        this.updateState({ state: 'not-found', url: this._url });
-      } else {
-        this.updateState({ state: 'server-error', url: this._url });
+      if (!response.ok) {
+        log.error(
+          `Could not get file ${this._url}, status ${response.status}: ${
+            response.statusText
+          } - ${await response.text()}`,
+        );
+        if (response.status === 404) {
+          this.updateState({ state: 'not-found', url: this._url });
+        } else {
+          this.updateState({ state: 'server-error', url: this._url });
+        }
+        return;
       }
+    } catch (err: any) {
+      log.error(`Could not get file ${this._url}, err: ${err.message}`);
+      this.updateState({ state: 'not-found', url: this._url });
       return;
     }
 

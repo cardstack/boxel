@@ -577,12 +577,16 @@ export default class CreateFileModal extends Component<Signature> {
     )}.gts`.replace(/^\//, '');
     let url = realmPath.fileURL(fileName);
 
-    let response = await this.network.authedFetch(url, {
-      headers: { Accept: SupportedMimeType.CardSource },
-    });
-    if (response.ok) {
-      this.fileNameError = `This file already exists`;
-      return;
+    try {
+      let response = await this.network.authedFetch(url, {
+        headers: { Accept: SupportedMimeType.CardSource },
+      });
+      if (response.ok) {
+        this.fileNameError = `This file already exists`;
+        return;
+      }
+    } catch (err: any) {
+      // we expect a 404 here
     }
 
     let {

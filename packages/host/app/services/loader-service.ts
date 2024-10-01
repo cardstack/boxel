@@ -23,7 +23,7 @@ export default class LoaderService extends Service {
 
   @tracked loader = this.makeInstance();
 
-  private isIndexing = false;
+  public isIndexing = false;
 
   reset() {
     if (this.loader) {

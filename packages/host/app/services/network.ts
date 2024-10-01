@@ -12,6 +12,7 @@ import config from '@cardstack/host/config/environment';
 
 import { shimExternals } from '../lib/externals';
 
+import type LoaderService from './loader-service';
 import type RealmService from './realm';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
@@ -34,6 +35,7 @@ function getNativeFetch(): typeof fetch {
 export default class NetworkService extends Service {
   @service declare fastboot: { isFastBoot: boolean };
   @service declare realm: RealmService;
+  @service declare loaderService: LoaderService;
 
   virtualNetwork = this.makeVirtualNetwork();
 
@@ -53,7 +55,15 @@ export default class NetworkService extends Service {
     if (this.fastboot.isFastBoot) {
       return this.fetch; // "nativeFetch" already handles auth
     }
-    return fetcher(this.fetch, [authorizationMiddleware(this.realm)]);
+    return fetcher(this.fetch, [
+      async (req, next) => {
+        if (this.loaderService.isIndexing) {
+          req.headers.set('X-Boxel-Building-Index', 'true');
+        }
+        return next(req);
+      },
+      authorizationMiddleware(this.realm),
+    ]);
   }
 
   get mount() {
