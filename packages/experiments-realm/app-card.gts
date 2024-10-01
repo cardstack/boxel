@@ -19,22 +19,15 @@ import { baseRealm, getCard } from '@cardstack/runtime-common';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { fn } from '@ember/helper';
 import type Owner from '@ember/owner';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
-import { debounce } from '@ember/runloop';
 
 import {
   AddButton,
   Tooltip,
   TabbedHeader,
-  FilterList,
-  type Filter as LeftNavFilter,
-  Pill,
-  BoxelInput,
-  CardContainer,
 } from '@cardstack/boxel-ui/components';
 
 import {
@@ -42,9 +35,6 @@ import {
   type Loader,
   LooseSingleCardDocument,
   isSingleCardDocument,
-  SupportedMimeType,
-  buildQueryString,
-  assertQuery,
 } from '@cardstack/runtime-common';
 
 export interface TabComponentSignature {
@@ -69,17 +59,6 @@ export class Tab extends FieldDef {
   @field tabId = contains(StringField);
   @field ref = contains(CodeRefField);
   @field isTable = contains(BooleanField);
-}
-
-interface PillItem {
-  id: string;
-  selected: boolean;
-  label: string;
-}
-
-interface PillFilter extends PillItem {
-  kind: string;
-  value: string;
 }
 
 class TableView extends GlimmerComponent<{

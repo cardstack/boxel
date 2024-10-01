@@ -46,7 +46,6 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import { withPreventDefault } from '../helpers/with-prevent-default';
 import {
   getLiveSearchResults,
-  getLiveSearchResults2,
   getSearchResults,
   type Search,
 } from '../resources/search';
@@ -110,22 +109,6 @@ class CardRouteComponent extends Component<CardRouteSignature> {
       doWhileRefreshing ? () => doWhileRefreshing : undefined,
     );
   }
-
-  @action
-  getLiveCards2(
-    query: () => Query,
-    realms?: string[],
-    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
-  ): Search {
-    return getLiveSearchResults2(
-      this,
-      query,
-      realms,
-      doWhileRefreshing ? () => doWhileRefreshing : undefined,
-    );
-  }
-
-  // getLiveCards3(query: Query, realms?: string[], doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
 
   @onKey('Ctrl+.')
   // Ctrl+. doesn't work in ubuntu

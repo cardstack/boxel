@@ -1544,10 +1544,6 @@ export class Realm {
     );
 
     let cardsQuery = qs.parse(new URL(request.url).search.slice(1));
-    let cardsQuery2 = qs.parse(new URL(request.url).search.slice(1), {allowDots: true});
-    let cardsQuery3 = qs.parse(new URL(request.url).search.slice(1), {allowDots: false});
-    let cardsQuery4 = qs.parse(new URL(request.url).search.slice(1), {decodeDotInKeys: true});
-    let cardsQuery5 = new URLSearchParams(new URL(request.url).search.slice(1))
     assertQuery(cardsQuery);
 
     let doc = await this.#realmIndexQueryEngine.search(cardsQuery, {

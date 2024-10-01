@@ -154,19 +154,3 @@ export function getLiveSearchResults(
     },
   })) as Search;
 }
-
-export function getLiveSearchResults2(
-  parent: object,
-  query: () => Query,
-  realms?: string[],
-  doWhileRefreshing?: () => (ready: Promise<void> | undefined) => Promise<void>,
-) {
-  return Search.from(parent, () => ({
-    named: {
-      isLive: true,
-      query: query(),
-      realms: realms ?? undefined,
-      doWhileRefreshing: doWhileRefreshing ? doWhileRefreshing() : undefined,
-    },
-  })) as Search;
-}
