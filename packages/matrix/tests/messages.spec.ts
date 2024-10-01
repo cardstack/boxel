@@ -464,9 +464,17 @@ test.describe('Room messages', () => {
     // the base realm is a read-only realm
     await login(page, 'user1', 'pass', { url: `http://localhost:4201/base` });
     let room1 = await getRoomId(page);
+    await expect(
+      page.locator(`[data-test-boxel-filter-list-button="All Cards"]`),
+    ).toHaveCount(1);
     await page
       .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
       .click();
+    await expect(
+      page.locator(
+        '[data-test-stack-card="https://cardstack.com/base/index"] [data-test-cards-grid-item="https://cardstack.com/base/fields/boolean-field"]',
+      ),
+    ).toHaveCount(1);
     await page
       .locator(
         '[data-test-stack-card="https://cardstack.com/base/index"] [data-test-cards-grid-item="https://cardstack.com/base/fields/boolean-field"]',
