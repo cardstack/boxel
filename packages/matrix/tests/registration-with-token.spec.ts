@@ -141,7 +141,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     });
     await page.locator('[data-test-workspace-chooser-toggle]').click();
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
-    await expect(page.locator(`[data-test-workspace]`)).toHaveCount(2);
+    await expect(page.locator(`[data-test-workspace-list] [data-test-workspace]`)).toHaveCount(0);
     await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"]`),
     ).toHaveCount(0);
@@ -161,6 +161,32 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"]`),
     ).toHaveCount(1);
+
+    // we're including the following assertions in this test because the
+    // isolated realm is so expensive, otherwise it would be desireable to have
+    // these assertions in their own test
+
+    // assert that logged in user can navigate directly to card in private realm without
+    // being asked to login
+    await page.goto(`${newRealmURL}hello-world`);
+    await expect(
+      page.locator(`[data-test-card="${newRealmURL}hello-world"]`),
+    ).toContainText('Hello World');
+
+    // assert that non-logged in user is prompted to login before navigating
+    // directly to card in private repo
+    await logout(page);
+    await assertLoggedOut(page);
+    await page.goto(`${newRealmURL}hello-world`);
+    await login(page, 'user1', 'mypassword1!', {
+      url: appURL,
+      skipOpeningOperatorMode: true,
+      skipOpeningAssistant: true,
+    });
+    await assertLoggedIn(page, { displayName: 'Test User' });
+    await expect(
+      page.locator(`[data-test-card="${newRealmURL}hello-world"]`),
+    ).toContainText('Hello World');
 
     let auth = await loginUser(`user1`, 'mypassword1!');
     let realms = await getAccountData<{ realms: string[] } | undefined>(

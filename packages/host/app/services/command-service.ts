@@ -31,6 +31,7 @@ import {
 import { Message } from '../lib/matrix-classes/message';
 
 import CardService from './card-service';
+import RealmServerService from './realm-server';
 
 function getComponent(cardOrField: BaseDef) {
   return cardOrField.constructor.getComponent(cardOrField);
@@ -41,6 +42,7 @@ export default class CommandService extends Service {
   @service private declare matrixService: MatrixService;
   @service private declare cardService: CardService;
   @service private declare realm: Realm;
+  @service private declare realmServer: RealmServerService;
 
   //TODO: Convert to non-EC async method after fixing CS-6987
   run = task(async (command: CommandField, roomId: string) => {
@@ -68,7 +70,7 @@ export default class CommandService extends Service {
           );
         }
         let query = { filter: payload.filter };
-        let realmUrls = this.cardService.unresolvedRealmURLs;
+        let realmUrls = this.realmServer.availableRealmURLs;
         let instances: CardDef[] = flatMap(
           await Promise.all(
             realmUrls.map(

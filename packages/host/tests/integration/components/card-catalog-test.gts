@@ -196,8 +196,8 @@ module('Integration | card-catalog', function (hooks) {
 
     test('can filter cards by selecting a realm', async function (assert) {
       await click('[data-test-realm-filter-button]');
-      assert.dom('[data-test-boxel-menu-item]').exists({ count: 2 });
-      assert.dom('[data-test-boxel-menu-item-selected]').exists({ count: 2 }); // All realms are selected by default
+      assert.dom('[data-test-boxel-menu-item]').exists({ count: 3 });
+      assert.dom('[data-test-boxel-menu-item-selected]').exists({ count: 3 }); // All realms are selected by default
       assert
         .dom('[data-test-realm-filter-button]')
         .includesText('Workspace: All');
@@ -205,7 +205,10 @@ module('Integration | card-catalog', function (hooks) {
       await click(`[data-test-boxel-menu-item-text="Local Workspace"]`); // Unselect Local Workspace
       assert
         .dom('[data-test-realm-filter-button]')
-        .hasText(`Workspace: Base Workspace`, 'Only base realm is selected');
+        .hasText(
+          `Workspace: Base Workspace, Boxel Catalog`,
+          'base realm and boxel catalog are selected',
+        );
       assert
         .dom(`[data-test-realm="Base Workspace"] [data-test-card-catalog-item]`)
         .exists({ count: baseRealmCardCount });
@@ -213,7 +216,7 @@ module('Integration | card-catalog', function (hooks) {
       assert.dom(`[data-test-realm="${realmName}"]`).doesNotExist();
 
       await click('[data-test-realm-filter-button]');
-      assert.dom('[data-test-boxel-menu-item-selected]').exists({ count: 1 });
+      assert.dom('[data-test-boxel-menu-item-selected]').exists({ count: 2 });
       assert
         .dom('[data-test-boxel-menu-item-selected]')
         .hasText('Base Workspace');
