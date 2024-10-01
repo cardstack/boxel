@@ -54,7 +54,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await registerRealmUsers(synapse);
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
     await clearLocalStorage(page, appURL);
-    await gotoRegistration(page, new URL(appURL).origin); // Register on realm server root page so that we can test the primary registration flow
+    await gotoRegistration(page, new URL(appURL).origin); // Register on realm server root page so that we can test the workspace chooser too
 
     await expect(
       page.locator('[data-test-token-field]'),

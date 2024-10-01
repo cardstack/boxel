@@ -599,7 +599,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     window.localStorage.setItem(
       'code-mode-panel-widths',
       JSON.stringify({ leftPanel: 200 }),
-    ); // make it wide enough for the contents to show without wrapping which causes makes height of the folder list unpredictable
+    ); // make it wide enough for the directory contents to show without wrapping which causes makes height of the folder list to be unpredictable
     await visitOperatorMode({
       stacks: [
         [

@@ -379,7 +379,6 @@ module('Acceptance | operator mode tests', function (hooks) {
     await visit('/');
     await click('[data-test-workspace="Test Workspace B"]');
 
-    // await waitFor('[data-test-operator-mode-stack]');
     assert.dom('[data-test-operator-mode-stack]').exists();
     assert.dom('[data-test-stack-card-index="0"]').exists(); // Index card opens in the stack
     await click('[data-test-boxel-filter-list-button="All Cards"]');
