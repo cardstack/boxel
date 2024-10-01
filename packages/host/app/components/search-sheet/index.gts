@@ -301,6 +301,10 @@ export default class SearchSheet extends Component<Signature> {
         width: var(--search-sheet-closed-width);
       }
 
+      .closed .search-sheet__search-input-group {
+        outline: var(--boxel-border-flexible);
+      }
+
       .search-sheet.closed .search-sheet-content {
         display: none;
       }

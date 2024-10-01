@@ -16,6 +16,7 @@ import {
   type IEvent,
   type ISendEventResponse,
 } from 'matrix-js-sdk';
+import stringify from 'safe-stable-stringify';
 import { md5 } from 'super-fast-md5';
 import { TrackedMap, TrackedObject } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
@@ -40,7 +41,10 @@ import {
 import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
 
 import { currentRoomIdPersistenceKey } from '@cardstack/host/components/ai-assistant/panel';
-import { Submode } from '@cardstack/host/components/submode-switcher';
+import {
+  type Submode,
+  Submodes,
+} from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
 import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
@@ -66,14 +70,15 @@ import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
 
-import RealmService from './realm';
+import { type SerializedState as OperatorModeSerializedState } from './operator-mode-state-service';
 
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
-
 import type MatrixSDKLoader from './matrix-sdk-loader';
 import type { ExtendedClient, ExtendedMatrixSDK } from './matrix-sdk-loader';
+import type RealmService from './realm';
 import type RealmServerService from './realm-server';
+import type ResetService from './reset';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
@@ -100,6 +105,7 @@ export default class MatrixService extends Service {
   @service private declare matrixSdkLoader: MatrixSDKLoader;
   @service private declare realmServer: RealmServerService;
   @service private declare router: RouterService;
+  @service private declare reset: ResetService;
   @tracked private _client: ExtendedClient | undefined;
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
@@ -217,11 +223,21 @@ export default class MatrixService extends Service {
       await this.flushMembership;
       await this.flushTimeline;
       clearAuth();
-      this.realm.logout();
-      this.realmServer.logout();
-      this.cardService.resetState();
+      this.reset.resetAll();
       this.unbindEventListeners();
       await this.client.logout(true);
+      // when user logs out we transition them back to an empty stack with the
+      // workspace chooser open. this way we don't inadvertently leak private
+      // card id's in the URL
+      this.router.transitionTo('index', {
+        queryParams: {
+          workspaceChooserOpened: 'true',
+          operatorModeState: stringify({
+            stacks: [],
+            submode: Submodes.Interact,
+          } as OperatorModeSerializedState),
+        },
+      });
     } catch (e) {
       console.log('Error logging out of Matrix', e);
     } finally {

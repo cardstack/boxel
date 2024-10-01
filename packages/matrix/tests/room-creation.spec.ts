@@ -22,6 +22,7 @@ import {
   isInRoom,
   getRoomsFromSync,
   initialRoomName,
+  enterWorkspace,
 } from '../helpers';
 
 test.describe('Room creation', () => {
@@ -217,6 +218,7 @@ test.describe('Room creation', () => {
     await login(page, 'xuser', 'pass', {
       skipOpeningAssistant: true,
     });
+    await enterWorkspace(page);
 
     // Open assistant without waiting for [data-test-room] which won’t show on a new account
     await page.locator('[data-test-open-ai-assistant]').click();

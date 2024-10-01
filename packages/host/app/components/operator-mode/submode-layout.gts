@@ -414,7 +414,9 @@ export default class SubmodeLayout extends Component<Signature> {
 
       .workspace-button {
         border: none;
+        outline: var(--boxel-border-flexible);
         margin-right: var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius);
       }
       .dark-icon {
         --icon-bg-opacity: 1;

@@ -5,9 +5,8 @@ import { service } from '@ember/service';
 
 import stringify from 'safe-stable-stringify';
 
-import OperatorModeStateService, {
-  SerializedState as OperatorModeSerializedState,
-} from '@cardstack/host/services/operator-mode-state-service';
+import { type SerializedState as OperatorModeSerializedState } from '@cardstack/host/services/operator-mode-state-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { Submodes } from '../components/submode-switcher';
 import { getCard } from '../resources/card-resource';
