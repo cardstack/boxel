@@ -2,7 +2,6 @@
   "compilerOptions": {
     "strictNullChecks": true,
     "module": "Node16",
-    "moduleResolution": "Node16",
     "allowSyntheticDefaultImports": true,
     "target": "ES2022",
     "outDir": "out",
@@ -17,8 +16,6 @@
       "babel-plugin-ember-template-compilation": [
         "node_modules/babel-plugin-ember-template-compilation/*"
       ],
-      "dompurify": ["./node_modules/dompurify/*"],
-      "pluralize": ["./node_modules/pluralize/*"],
       "*": ["types/*"]
     }
   },
