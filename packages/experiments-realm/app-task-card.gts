@@ -249,7 +249,6 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
           <ColumnQuery
             @context={{@context}}
             @realms={{this.realms}}
-            @query={{column.query}}
             @column={{column}}
             @createNewTask={{this.createNewTask}}
           />
@@ -395,7 +394,6 @@ interface ColumnQuerySignature {
   Args: {
     context: CardContext | undefined;
     realms: string[];
-    query: Query;
     column: ColumnData;
     createNewTask: (status: ColumnData) => void;
   };
@@ -424,7 +422,7 @@ class ColumnQuery extends GlimmerComponent<ColumnQuerySignature> {
             as |PrerenderedCardSearch|
           }}
             <PrerenderedCardSearch
-              @query={{@query}}
+              @query={{@column.query}}
               @format='fitted'
               @realms={{@realms}}
             >
