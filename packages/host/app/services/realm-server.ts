@@ -11,8 +11,8 @@ import { TrackedArray } from 'tracked-built-ins/.';
 import { baseRealm, SupportedMimeType } from '@cardstack/runtime-common';
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
-import type LoaderService from './loader-service';
 import type { ExtendedClient } from './matrix-sdk-loader';
+import type NetworkService from './network';
 import type ResetService from './reset';
 
 interface RealmServerTokenClaims {
@@ -31,7 +31,7 @@ type AuthStatus =
   | { type: 'anonymous' };
 
 export default class RealmServerService extends Service {
-  @service private declare loaderService: LoaderService;
+  @service private declare network: NetworkService;
   @service private declare reset: ResetService;
   private auth: AuthStatus = { type: 'anonymous' };
   private client: ExtendedClient | undefined;
@@ -67,7 +67,7 @@ export default class RealmServerService extends Service {
       throw new Error('Could not login to realm server');
     }
 
-    let response = await this.loaderService.loader.fetch(
+    let response = await this.network.authedFetch(
       `${this.url.href}_create-realm`,
       {
         method: 'POST',
@@ -144,7 +144,7 @@ export default class RealmServerService extends Service {
   }
 
   private async fetchCatalogRealmURLs() {
-    let response = await this.loaderService.loader.fetch(
+    let response = await this.network.authedFetch(
       `${this.url.origin}/_catalog-realms`,
     );
     if (response.status !== 200) {
@@ -242,7 +242,7 @@ export default class RealmServerService extends Service {
       let realmAuthClient = new RealmAuthClient(
         this.url,
         this.client,
-        this.loaderService.loader.fetch.bind(this.loaderService.loader),
+        this.network.authedFetch.bind(this.network),
         {
           authWithRealmServer: true,
         },

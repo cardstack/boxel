@@ -38,8 +38,10 @@ test.describe('Create Realm via Dashboard', () => {
   }) => {
     let serverIndexUrl = new URL(appURL).origin;
     await clearLocalStorage(page, serverIndexUrl);
-    await login(page, 'user1', 'pass', { url: serverIndexUrl });
-    await page.locator('[data-test-workspace-chooser-toggle]').click();
+    await login(page, 'user1', 'pass', {
+      url: serverIndexUrl,
+      skipOpeningAssistant: true,
+    });
     await page.locator('[data-test-add-workspace]').click();
     await page.locator('[data-test-display-name-field]').fill('New Workspace');
     await page.locator('[data-test-endpoint-field]').fill('new-workspace');

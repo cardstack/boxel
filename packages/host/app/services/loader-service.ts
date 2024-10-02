@@ -3,51 +3,27 @@ import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import {
-  VirtualNetwork,
-  baseRealm,
   fetcher,
   maybeHandleScopedCSSRequest,
-  RunnerOpts,
   FetcherMiddlewareHandler,
   authorizationMiddleware,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import config from '@cardstack/host/config/environment';
-
+import NetworkService from '@cardstack/host/services/network';
 import RealmInfoService from '@cardstack/host/services/realm-info-service';
 
-import { shimExternals } from '../lib/externals';
-
 import type RealmService from './realm';
-
-const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
-
-function getNativeFetch(): typeof fetch {
-  if (isFastBoot) {
-    let optsId = (globalThis as any).runnerOptsId;
-    if (optsId == null) {
-      throw new Error(`Runner Options Identifier was not set`);
-    }
-    let getRunnerOpts = (globalThis as any).getRunnerOpts as (
-      optsId: number,
-    ) => RunnerOpts;
-    return getRunnerOpts(optsId)._fetch;
-  } else {
-    return fetch;
-  }
-}
 
 export default class LoaderService extends Service {
   @service declare fastboot: { isFastBoot: boolean };
   @service declare realmInfoService: RealmInfoService;
   @service declare realm: RealmService;
+  @service declare network: NetworkService;
 
   @tracked loader = this.makeInstance();
 
-  private isIndexing = false;
-
-  virtualNetwork = this.makeVirtualNetwork();
+  public isIndexing = false;
 
   reset() {
     if (this.loader) {
@@ -59,18 +35,6 @@ export default class LoaderService extends Service {
 
   setIsIndexing(value: boolean) {
     this.isIndexing = value;
-  }
-
-  private makeVirtualNetwork() {
-    let virtualNetwork = new VirtualNetwork(getNativeFetch());
-    if (!this.fastboot.isFastBoot) {
-      virtualNetwork.addURLMapping(
-        new URL(baseRealm.url),
-        new URL(config.resolvedBaseRealmURL),
-      );
-    }
-    shimExternals(virtualNetwork);
-    return virtualNetwork;
   }
 
   private makeInstance() {
@@ -88,8 +52,8 @@ export default class LoaderService extends Service {
     if (!this.fastboot.isFastBoot) {
       middlewareStack.push(authorizationMiddleware(this.realm));
     }
-    let fetch = fetcher(this.virtualNetwork.fetch, middlewareStack);
-    let loader = new Loader(fetch, this.virtualNetwork.resolveImport);
+    let fetch = fetcher(this.network.fetch, middlewareStack);
+    let loader = new Loader(fetch, this.network.resolveImport);
     return loader;
   }
 }
