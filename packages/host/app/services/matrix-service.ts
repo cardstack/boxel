@@ -81,6 +81,8 @@ import type RealmServerService from './realm-server';
 import type ResetService from './reset';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
+import { getOwner } from '@ember/owner';
+import IndexController from '../controllers';
 
 const { matrixURL } = ENV;
 const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
@@ -247,6 +249,10 @@ export default class MatrixService extends Service {
 
   async initializeNewUser(auth: LoginResponse, displayName: string) {
     displayName = displayName.trim();
+    let controller = getOwner(this)!.lookup(
+      'controller:index',
+    ) as IndexController;
+    controller.workspaceChooserOpened = true;
     this.start({ auth });
     this.setDisplayName(displayName);
 
