@@ -130,9 +130,9 @@ export {
   isSingleCardDocument,
   isCardDocumentString,
 } from './card-document';
-export { sanitizeHtml } from './dompurify';
+export { sanitizeHtml } from './dompurify-runtime';
 export { markedSync, markdownToHtml } from './marked-sync';
-export { getPlural } from './pluralize';
+export { getPlural } from './pluralize-runtime';
 
 import type {
   CardDef,

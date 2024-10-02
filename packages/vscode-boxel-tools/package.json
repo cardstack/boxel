@@ -1,0 +1,88 @@
+{
+  "name": "boxel-tools",
+  "displayName": "Boxel Tools",
+  "description": "Access boxel realm data and code from your vscode workspace.",
+  "version": "0.0.8",
+  "publisher": "boxel",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cardstack/boxel.git"
+  },
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onAuthenticationRequest:synapse"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "boxelrealm.logout",
+        "title": "Logout",
+        "category": "boxelrealm"
+      },
+      {
+        "command": "boxelrealm.createWorkspace",
+        "title": "Create Workspace",
+        "category": "boxelrealm"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "boxelrealm.logout"
+        },
+        {
+          "command": "boxelrealm.createWorkspace"
+        }
+      ]
+    },
+    "configuration": [
+      {
+        "title": "Matrix Server",
+        "properties": {
+          "boxelrealm.matrixServer": {
+            "type": "string",
+            "description": "The matrix server to connect to, leave blank to connect to your boxel.ai realms.",
+            "default": "https://matrix.boxel.ai/"
+          }
+        }
+      }
+    ]
+  },
+  "volta": {
+    "extends": "../../package.json"
+  },
+  "scripts": {
+    "vscode:prepublish": "pnpm run compile",
+    "vscode:package": "pnpm vsce package --no-dependencies",
+    "compile": "glint --build -p ./ && node esbuild.js --production",
+    "lint": "eslint \"src/**/*.ts\"",
+    "watch": "glint --watch -p ./ # FIXME does this still work?"
+  },
+  "dependencies": {
+    "matrix-js-sdk": "^31.0.0"
+  },
+  "devDependencies": {
+    "@babel/preset-typescript": "^7.24.7",
+    "@cardstack/runtime-common": "workspace:*",
+    "@glint/core": "^1.3.0",
+    "@glint/environment-ember-loose": "^1.3.0",
+    "@glint/environment-ember-template-imports": "^1.3.0",
+    "@glint/template": "^1.3.0",
+    "@types/node": "^18.19.39",
+    "@types/vscode": "^1.73.0",
+    "@typescript-eslint/eslint-plugin": "^7.14.0",
+    "@typescript-eslint/parser": "^7.14.0",
+    "@vscode/vsce": "^3.1.0",
+    "esbuild": "^0.24.0",
+    "eslint": "^8.26.0",
+    "typescript": "~5.1.6"
+  }
+}
