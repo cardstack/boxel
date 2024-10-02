@@ -40,30 +40,29 @@ export default class CommandService extends Service {
   //TODO: Convert to non-EC async method after fixing CS-6987
   run = task(async (command: CommandCard, roomId: string) => {
     let { payload, eventId } = command;
-    let parsedPayload = JSON.parse(payload);
     let res: any;
     try {
       this.matrixService.failedCommandState.delete(eventId);
       if (command.name === 'patchCard') {
-        if (!hasPatchData(parsedPayload)) {
+        if (!hasPatchData(payload)) {
           throw new Error(
             "Patch command can't run because it doesn't have all the fields in arguments returned by open ai",
           );
         }
         res = await this.operatorModeStateService.patchCard.perform(
-          parsedPayload.card_id,
+          payload.card_id,
           {
-            attributes: parsedPayload.attributes,
-            relationships: parsedPayload.relationships,
+            attributes: payload.attributes,
+            relationships: payload.relationships,
           },
         );
       } else if (command.name === 'searchCard') {
-        if (!hasSearchData(parsedPayload)) {
+        if (!hasSearchData(payload)) {
           throw new Error(
             "Search command can't run because it doesn't have all the arguments returned by open ai",
           );
         }
-        let query = { filter: parsedPayload.filter };
+        let query = { filter: payload.filter };
         let realmUrls = this.realmServer.availableRealmURLs;
         let instances: CardDef[] = flatMap(
           await Promise.all(
@@ -73,18 +72,9 @@ export default class CommandService extends Service {
             ),
           ),
         );
-        await Promise.all(
+        res = await Promise.all(
           instances.map((c) => this.cardService.serializeCard(c)),
         );
-        let commandResultArgs = {
-          toolCallId: command.toolCallId,
-          toolCall: command.payload,
-          cardIds: instances.map((i) => i.id),
-        };
-        let commandResultCard = await this.createCommandResult(
-          commandResultArgs,
-        );
-        res = await this.cardService.saveModel(this, commandResultCard);
       } else if (command.name === 'generateAppModule') {
         let defaultWritableRealm = this.realm.defaultWritableRealm;
 
@@ -97,32 +87,27 @@ export default class CommandService extends Service {
         let realmURL = defaultWritableRealm.path;
         let timestamp = Date.now();
         let fileName =
-          (parsedPayload.appTitle as string)
-            ?.replace(/ /g, '-')
-            .toLowerCase() ?? `untitled-app-${timestamp}`;
+          (payload.appTitle as string)?.replace(/ /g, '-').toLowerCase() ??
+          `untitled-app-${timestamp}`;
         let moduleId = `${realmURL}AppModules/${fileName}-${timestamp}`;
-        let content = (parsedPayload.moduleCode as string) ?? '';
+        let content = (payload.moduleCode as string) ?? '';
         res = await this.cardService.saveSource(
           new URL(`${moduleId}.gts`),
           content,
         );
-        if (!parsedPayload.attached_card_id) {
+        if (!payload.attached_card_id) {
           throw new Error(
             `Could not update 'moduleURL' with a link to the generated module.`,
           );
         }
         await this.operatorModeStateService.patchCard.perform(
-          String(parsedPayload.attached_card_id),
+          String(payload.attached_card_id),
           { attributes: { moduleURL: moduleId } },
         );
       }
       await this.matrixService.sendReactionEvent(roomId, eventId, 'applied');
       if (res) {
-        await this.matrixService.sendCommandResultMessage(
-          roomId,
-          eventId,
-          res.id,
-        );
+        await this.matrixService.sendCommandResultMessage(roomId, eventId, res);
       }
     } catch (e) {
       let error =
@@ -165,20 +150,22 @@ export default class CommandService extends Service {
 
   async createCommandResultArgs(
     commandEvent: CommandEvent,
-    event: CommandResultEvent,
+    commandResultEvent: CommandResultEvent,
   ) {
     let toolCall = commandEvent.content.data.toolCall;
-    let results = this.deserializeResults(event);
+    let results = this.deserializeResults(commandResultEvent);
     if (toolCall.name === 'searchCard') {
       return {
+        toolCallName: toolCall.name,
         toolCallId: toolCall.id,
-        toolCallResults: event?.content?.result,
+        toolCallArgs: toolCall.arguments,
         cardIds: results.map((r) => r.data.id),
       };
     } else if (toolCall.name === 'patchCard') {
       return {
+        toolCallName: toolCall.name,
         toolCallId: toolCall.id,
-        toolCallResults: event?.content?.result,
+        toolCallArgs: toolCall.arguments,
       };
     }
     return;

@@ -26,10 +26,13 @@ import {
   BaseDef,
   CardDef,
   Component,
+  FieldDef,
   StringField,
   contains,
   containsMany,
   field,
+  primitive,
+  queryableValue,
   type CardContext,
   type Format,
 } from './card-api';
@@ -398,34 +401,39 @@ class CommandResultIsolated extends CommandResultEmbeddedView {
   </template>
 }
 
+export class CommandObjectField extends FieldDef {
+  static [primitive]: Record<string, any>;
+  static [queryableValue](value: Record<string, any> | undefined) {
+    return value && typeof value === 'object'
+      ? JSON.stringify(value)
+      : undefined;
+  }
+}
+
 export class CommandResult extends CardDef {
   static displayName = 'Command Result';
+  @field toolCallName = contains(StringField);
   @field toolCallId = contains(StringField);
-  @field toolCall = contains(StringField);
+  @field toolCallArgs = contains(CommandObjectField);
   @field cardIds = containsMany(StringField);
   @field title = contains(StringField, {
     computeVia: function (this: CommandResult) {
-      return this.tool?.filter ? 'Search Results' : 'Command Result';
+      return this.toolCallName === 'searchCard'
+        ? 'Search Results'
+        : 'Command Result';
     },
   });
   @field description = contains(StringField, {
     computeVia: function (this: CommandResult) {
-      return this.tool?.description;
+      return this.toolCallArgs?.description;
     },
   });
 
-  get tool() {
-    if (!this.toolCall) {
-      return;
-    }
-    return JSON.parse(this.toolCall);
-  }
-
   get filterString() {
-    if (!this.tool.filter) {
+    if (!this.toolCallArgs?.filter) {
       return;
     }
-    return JSON.stringify(this.tool.filter, null, 2);
+    return JSON.stringify(this.toolCallArgs.filter, null, 2);
   }
 
   static embedded = CommandResultEmbeddedView;

@@ -6,12 +6,9 @@ import { Resource } from 'ember-resources';
 
 import { TrackedMap, TrackedObject } from 'tracked-built-ins';
 
-import {
-  getCard,
-  type LooseSingleCardDocument,
-} from '@cardstack/runtime-common';
+import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 
-import { CommandStatus, CommandCard } from 'https://cardstack.com/base/command';
+import { CommandStatus } from 'https://cardstack.com/base/command';
 import type {
   CardFragmentContent,
   CardMessageContent,
@@ -287,8 +284,12 @@ export class RoomResource extends Resource<Args> {
             e.content['m.relates_to'].event_id ===
               commandEvent.content.data.eventId,
         ) as CommandResultEvent;
-
-        let resultId = commandResultEvent?.content?.result;
+        let r = commandResultEvent?.content?.result
+          ? await this.commandService.createCommandResultArgs(
+              commandEvent,
+              commandResultEvent,
+            )
+          : undefined;
 
         let status: CommandStatus =
           annotation?.content['m.relates_to'].key === 'applied'
@@ -299,18 +300,22 @@ export class RoomResource extends Resource<Args> {
           toolCallId: command.id,
           eventId: event_id,
           name: command.name,
-          payload: JSON.stringify(command.arguments),
+          payload: command.arguments,
           status,
-          commandResultId: resultId,
+          // result: commandResultEvent?.content?.result, //TODO
         };
         let commandCard = await this.commandService.createCommand(
           commandCardArgs,
         );
+        let commandResult = r
+          ? await this.commandService.createCommandResult(r)
+          : undefined;
 
         messageField = new Message({
           ...messageArgs,
           formattedMessage: `<p data-test-command-message class="command-message">${event.content.formatted_body}</p>`,
           command: commandCard,
+          commandResult,
           isStreamingFinished: true,
         });
       } else {
@@ -329,9 +334,10 @@ export class RoomResource extends Resource<Args> {
           let d2 = messageField.created!;
           messageField.created = d1 < d2 ? d1 : d2;
         }
-        // TODO: investigate why an empty event content is replacing the previous content
-        // added the if condition below to prevent this
-        if (Object.entries(event.content)?.length) {
+        if (!Object.entries(event.content)?.length) {
+          // TODO: investigate why an empty event content is replacing the previous content
+          debugger;
+        } else {
           this._messageCache.set(
             (event.content as CardMessageContent).clientGeneratedId ?? event_id,
             messageField as any,

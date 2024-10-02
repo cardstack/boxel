@@ -7,7 +7,7 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
-import { restartableTask, task } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import Modifier, { modifier, type NamedArgs } from 'ember-modifier';
 
@@ -18,7 +18,7 @@ import { MatrixEvent } from 'matrix-js-sdk';
 import { Button } from '@cardstack/boxel-ui/components';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
-import { getCard, markdownToHtml } from '@cardstack/runtime-common';
+import { isCardInstance, markdownToHtml } from '@cardstack/runtime-common';
 
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
@@ -110,12 +110,6 @@ export default class RoomMessage extends Component<Signature> {
     super(owner, args);
 
     this.checkStreamingTimeout.perform();
-
-    if (this.args.message.command?.commandResultId) {
-      this._loadCommandResultCard.perform(
-        this.args.message.command.commandResultId,
-      );
-    }
   }
 
   @tracked streamingTimeout = false;
@@ -142,21 +136,12 @@ export default class RoomMessage extends Component<Signature> {
     return this.args.message.author.userId === aiBotUserId;
   }
 
-  private _loadCommandResultCard = restartableTask(async (id: string) => {
-    let resource = getCard(new URL(`${id}.json`));
-    await resource.loaded;
-    if (!resource.card) {
-      console.error(`Resource has no loaded card`, resource, resource.card);
-      return;
-    }
-    this.commandResult = resource.card;
-  });
-
   get getComponent() {
-    if (!this.commandResult) {
+    let { commandResult } = this.args.message;
+    if (!commandResult || !isCardInstance(commandResult)) {
       return undefined;
     }
-    return this.commandResult.constructor.getComponent(this.commandResult);
+    return commandResult.constructor.getComponent(commandResult);
   }
 
   <template>
