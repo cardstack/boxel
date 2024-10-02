@@ -1,6 +1,4 @@
-import { visit } from '@ember/test-helpers';
-
-import { module, test } from 'qunit';
+import { module } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
