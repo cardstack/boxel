@@ -246,9 +246,6 @@ jobs:
   vscode-boxel-tools-package:
     name: Boxel Tools VS Code Extension package
     runs-on: ubuntu-latest
-    if: ${{ needs.change-check.outputs.vscode-boxel-tools == 'true' }}
-    needs:
-      - change-check
     concurrency:
       group: vscode-boxel-tools-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -276,7 +273,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       boxel: ${{ steps.filter.outputs.boxel }}
-      vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
+      ai-bot: ${{ steps.filter.outputs.ai-bot }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -295,10 +292,6 @@ jobs:
               - 'packages/realm-server/**'
               - 'packages/runtime-common/**'
               - 'pnpm-lock.yaml'
-            vscode-boxel-tools:
-              - '.github/workflows/ci.yaml'
-              - 'packages/realm-server/**'
-              - 'packages/vscode-boxel-tools/**'
 
   deploy:
     name: Deploy boxel to staging
