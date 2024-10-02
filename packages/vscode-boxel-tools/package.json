@@ -62,13 +62,13 @@
   "scripts": {
     "vscode:prepublish": "pnpm run compile",
     "vscode:package": "pnpm vsce package --no-dependencies",
-    "compile": "glint --build -p ./ && node esbuild.mjs --production",
+    "compile": "node esbuild.mjs --production",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:js": "eslint . --cache",
     "lint:js:fix": "eslint . --fix",
     "lint:glint": "glint",
-    "watch": "glint --watch -p ./ # FIXME does this still work?"
+    "watch": "node esbuild.mjs --watch"
   },
   "dependencies": {
     "matrix-js-sdk": "^31.0.0"
