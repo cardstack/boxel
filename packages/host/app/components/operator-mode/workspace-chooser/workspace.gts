@@ -4,15 +4,17 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
-import { cssVar } from '@cardstack/boxel-ui/helpers';
+import { cssVar, not } from '@cardstack/boxel-ui/helpers';
 import { Lock } from '@cardstack/boxel-ui/icons';
 
 import CardService from '@cardstack/host/services/card-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RealmService from '@cardstack/host/services/realm';
 
+import ItemContainer from './item-container';
+
 interface Signature {
-  Element: HTMLDivElement;
+  Element: HTMLButtonElement;
   Args: {
     realmURL: string;
   };
@@ -20,8 +22,7 @@ interface Signature {
 
 export default class Workspace extends Component<Signature> {
   <template>
-    <button
-      class='workspace'
+    <ItemContainer
       data-test-workspace={{this.name}}
       {{on 'click' this.openWorkspace}}
     >
@@ -30,27 +31,18 @@ export default class Workspace extends Component<Signature> {
         style={{cssVar workspace-background-image-url=this.backgroundImageURL}}
       >
         <img src={{this.iconURL}} alt='Workspace Icon' />
-        <div class='small-icon'>
-          <Lock width='11px' height='11px' />
-        </div>
+        {{#if (not this.isPublic)}}
+          <div class='small-icon'>
+            <Lock width='11px' height='11px' />
+          </div>
+        {{/if}}
       </div>
       <div class='info'>
         <span class='name' data-test-workspace-name>{{this.name}}</span>
-        <span class='type'>Personal</span>
+        <span class='type'>{{if this.isPublic 'Catalog' 'Personal'}}</span>
       </div>
-    </button>
+    </ItemContainer>
     <style scoped>
-      .workspace {
-        min-width: 251.6px;
-        width: 251.6px;
-        height: 215.3px;
-        display: flex;
-        flex-direction: column;
-        border-radius: 15px;
-        border: solid 1px rgba(255, 255, 255, 0.5);
-        overflow: hidden;
-        padding: 0;
-      }
       .icon {
         background-color: var(--boxel-500);
         background-image: var(--workspace-background-image-url);
@@ -115,6 +107,11 @@ export default class Workspace extends Component<Signature> {
   @cached
   private get realmInfo() {
     return this.realm.info(this.args.realmURL);
+  }
+
+  @cached
+  private get isPublic() {
+    return this.realm.isPublic(this.args.realmURL);
   }
 
   private get name() {

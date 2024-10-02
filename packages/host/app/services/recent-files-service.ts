@@ -10,7 +10,8 @@ import { TrackedArray } from 'tracked-built-ins';
 import { RealmPaths } from '@cardstack/runtime-common';
 import { LocalPath } from '@cardstack/runtime-common/paths';
 
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type OperatorModeStateService from './operator-mode-state-service';
+import type ResetService from './reset';
 
 type SerialRecentFile = [URL, string];
 
@@ -22,13 +23,20 @@ export interface RecentFile {
 export default class RecentFilesService extends Service {
   // we shouldn't be making assumptions about what realm the files are coming
   // from, the caller should just tell us
-  @service declare operatorModeStateService: OperatorModeStateService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare reset: ResetService;
 
-  @tracked recentFiles = new TrackedArray<RecentFile>([]);
+  @tracked declare recentFiles: TrackedArray<RecentFile>;
 
   constructor(owner: Owner) {
     super(owner);
+    this.resetState();
+    this.reset.register(this);
     this.extractRecentFilesFromStorage();
+  }
+
+  resetState() {
+    this.recentFiles = new TrackedArray([]);
   }
 
   removeRecentFile(file: LocalPath) {

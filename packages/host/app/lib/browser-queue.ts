@@ -1,7 +1,8 @@
 import debounce from 'lodash/debounce';
 
 import {
-  type Queue,
+  type QueueRunner,
+  type QueuePublisher,
   type PgPrimitive,
   Job,
   Deferred,
@@ -9,7 +10,7 @@ import {
 
 let id = 0;
 
-export class BrowserQueue implements Queue {
+export class BrowserQueue implements QueuePublisher, QueueRunner {
   #isDestroyed = false;
   #hasStarted = false;
   #flush: Promise<void> | undefined;
@@ -19,11 +20,11 @@ export class BrowserQueue implements Queue {
 
   private jobs: {
     jobId: number;
-    category: string;
+    jobType: string;
     arg: PgPrimitive;
     notifier: Deferred<any>;
   }[] = [];
-  private categories: Map<string, (arg: any) => Promise<any>> = new Map();
+  private types: Map<string, (arg: any) => Promise<any>> = new Map();
 
   get isDestroyed() {
     return this.#isDestroyed;
@@ -45,11 +46,16 @@ export class BrowserQueue implements Queue {
     if (this.isDestroyed) {
       throw new Error(`Cannot register category on a destroyed Queue`);
     }
-    this.categories.set(category, handler);
+    this.types.set(category, handler);
     this.debouncedDrainJobs();
   }
 
-  async publish<T>(category: string, arg: PgPrimitive): Promise<Job<T>> {
+  async publish<T>(
+    jobType: string,
+    _concurrencyGroup: string | null,
+    _timeout: number,
+    arg: PgPrimitive,
+  ): Promise<Job<T>> {
     if (this.isDestroyed) {
       throw new Error(`Cannot publish job on a destroyed Queue`);
     }
@@ -59,7 +65,7 @@ export class BrowserQueue implements Queue {
     this.jobs.push({
       jobId,
       notifier,
-      category,
+      jobType,
       arg,
     });
     this.debouncedDrainJobs();
@@ -78,8 +84,8 @@ export class BrowserQueue implements Queue {
     let jobs = [...this.jobs];
     this.jobs = [];
     for (let workItem of jobs) {
-      let { jobId, category, notifier, arg } = workItem;
-      let handler = this.categories.get(category);
+      let { jobId, jobType, notifier, arg } = workItem;
+      let handler = this.types.get(jobType);
       if (!handler) {
         // no handler for this job, add it back to the queue
         this.jobs.push(workItem);
