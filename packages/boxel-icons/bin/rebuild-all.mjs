@@ -3,8 +3,11 @@ import fs from 'fs';
 import path from 'path';
 import { optimize } from 'svgo';
 
-const srcDir = new URL('../node_modules/lucide-static/icons', import.meta.url)
-  .pathname;
+const srcDirs = [
+  new URL('../node_modules/lucide-static/icons', import.meta.url).pathname,
+  new URL('../node_modules/@lucide/lab/icons', import.meta.url).pathname,
+];
+
 const destDir = new URL('../src', import.meta.url).pathname;
 
 const PREFIX = `
@@ -22,24 +25,31 @@ const SUFFIX = `
 IconComponent.name = "__ICON_COMPONENT_NAME__";
 export default IconComponent;
 `;
-let componentsToGenerate = fs
-  .readdirSync(srcDir)
-  .filter((filename) => filename.endsWith('.svg'))
-  .map((filename) => {
-    return {
-      name: toPascalCase(path.parse(filename).name),
-      rawName: path.parse(filename).name,
-      sourceFile: filename,
-      outFile: filename.replace('.svg', '.gts'),
-    };
-  });
+let componentsToGenerate = [];
+for (const srcDir of srcDirs) {
+  let batch = fs
+    .readdirSync(srcDir)
+    .filter((filename) => filename.endsWith('.svg'))
+    .map((filename) => {
+      return {
+        name: toPascalCase(path.parse(filename).name),
+        rawName: path.parse(filename).name,
+        sourceFile: filename,
+        fullPath: path.resolve(srcDir, filename),
+        outFile: filename.replace('.svg', '.gts'),
+      };
+    });
+  batch = batch.filter(
+    (c) => !componentsToGenerate.find((c2) => c2.rawName === c.rawName),
+  );
+  componentsToGenerate = componentsToGenerate.concat(batch);
+}
 componentsToGenerate.sort((a, b) => a.name.localeCompare(b.name));
 
 for (const c of componentsToGenerate) {
-  let fullPath = path.resolve(srcDir, c.sourceFile);
-  let contents = fs.readFileSync(fullPath, 'utf-8');
+  let contents = fs.readFileSync(c.fullPath, 'utf-8');
   contents = optimize(contents, {
-    path: fullPath,
+    path: c.fullPath,
     plugins: [
       {
         name: 'preset-default',
