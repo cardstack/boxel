@@ -18,16 +18,18 @@ import { CurrentRun } from '../lib/current-run';
 
 import type LoaderService from '../services/loader-service';
 import type LocalIndexer from '../services/local-indexer';
+import type NetworkService from '../services/network';
 import type RenderService from '../services/render-service';
 
 // This component is used in a node/Fastboot context to perform
 // server-side rendering for indexing as well as by the TestRealm
 // to perform rendering for indexing in Ember test contexts.
 export default class CardPrerender extends Component {
-  @service declare loaderService: LoaderService;
-  @service declare renderService: RenderService;
-  @service declare fastboot: { isFastBoot: boolean };
-  @service declare localIndexer: LocalIndexer;
+  @service private declare loaderService: LoaderService;
+  @service private declare network: NetworkService;
+  @service private declare renderService: RenderService;
+  @service private declare fastboot: { isFastBoot: boolean };
+  @service private declare localIndexer: LocalIndexer;
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);
@@ -162,10 +164,7 @@ export default class CardPrerender extends Component {
       };
     } else {
       return {
-        reader: getReader(
-          this.loaderService.loader.fetch.bind(this.loaderService.loader),
-          realmURL,
-        ),
+        reader: getReader(this.network.authedFetch, realmURL),
         indexWriter: this.localIndexer.indexWriter,
       };
     }
