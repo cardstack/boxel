@@ -136,7 +136,6 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     // assert workspaces state don't leak into other sessions
     await login(page, 'user2', 'pass', {
       url: appURL,
-      skipOpeningOperatorMode: true,
       skipOpeningAssistant: true,
     });
     await assertLoggedIn(page, {
@@ -157,7 +156,6 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await assertLoggedOut(page);
     await login(page, 'user1', 'mypassword1!', {
       url: appURL,
-      skipOpeningOperatorMode: true,
       skipOpeningAssistant: true,
     });
     await assertLoggedIn(page, { displayName: 'Test User' });
@@ -188,7 +186,6 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await page.goto(`${newRealmURL}hello-world`);
     await login(page, 'user1', 'mypassword1!', {
       url: appURL,
-      skipOpeningOperatorMode: true,
       skipOpeningAssistant: true,
     });
     await assertLoggedIn(page, { displayName: 'Test User' });
