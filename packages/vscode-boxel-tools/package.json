@@ -3,7 +3,7 @@
   "displayName": "Boxel Tools",
   "description": "Access boxel realm data and code from your vscode workspace.",
   "version": "0.0.9",
-  "publisher": "boxel",
+  "publisher": "cardstack",
   "private": true,
   "license": "MIT",
   "repository": {
