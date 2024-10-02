@@ -4,6 +4,35 @@ import { Tooltip } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 
+function importStatement(name: string): string {
+  return `import ${toPascalCase(name)} from '@cardstack/boxel-icons/${name}';`;
+}
+
+function toPascalCase(text: string): string {
+  return text.replace(/(^\w|-\w)/g, clearAndUpper);
+}
+
+function clearAndUpper(text: string): string {
+  return text.replace(/-/, '').toUpperCase();
+}
+
+class Copyable {
+  @tracked recentlyCopied = false;
+  copyToClipboard = (text: string) => {
+    return (_ev: Event) => {
+      navigator.clipboard.writeText(text);
+      this.recentlyCopied = true;
+      setTimeout(() => {
+        this.recentlyCopied = false;
+      }, 2000);
+    };
+  };
+}
+
+function makeCopyable() {
+  return new Copyable();
+}
+
 export default class IconsGridComponent extends Component {
   get allBoxelIconsComponents() {
     return ALL_ICON_COMPONENTS.map((c) => {
@@ -42,20 +71,33 @@ export default class IconsGridComponent extends Component {
       </div>
       <div class='boxel-icons-grid'>
         {{#each this.boxelIconsComponents as |c|}}
-          <div title={{c.name}}>
-            <Tooltip>
-              <:trigger>
-                <c.component />
-              </:trigger>
-              <:content>
-                {{c.name}}
-              </:content>
-            </Tooltip>
+          <div>
+            {{#let (makeCopyable) as |copyable|}}
+              <Tooltip>
+                <:trigger>
+                  <c.component
+                    {{on
+                      'click'
+                      (copyable.copyToClipboard (importStatement c.name))
+                    }}
+                  />
+                </:trigger>
+                <:content>
+                  {{#if copyable.recentlyCopied}}
+                    Copied!
+                  {{else}}
+                    {{c.name}}
+                    <br />
+                    <code>{{importStatement c.name}}</code>
+                  {{/if}}
+                </:content>
+              </Tooltip>
+            {{/let}}
           </div>
         {{/each}}
       </div>
     </div>
-    <style>
+    <style scoped>
       .boxel-icons-header {
         padding: 1rem;
         display: flex;
