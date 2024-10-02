@@ -42,7 +42,6 @@ export default class Index extends Route<void> {
     operatorModeState: string;
     operatorModeEnabled: boolean;
   }): Promise<void> {
-    debugger;
     let { operatorModeState, cardPath } = params;
 
     if (!this.didMatrixServiceStart) {
