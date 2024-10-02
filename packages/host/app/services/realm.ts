@@ -1,4 +1,5 @@
 import { associateDestroyableChild } from '@ember/destroyable';
+import type Owner from '@ember/owner';
 import { setOwner, getOwner } from '@ember/owner';
 import Service from '@ember/service';
 
@@ -27,6 +28,7 @@ import ENV from '@cardstack/host/config/environment';
 
 import type LoaderService from './loader-service';
 import type MatrixService from './matrix-service';
+import type ResetService from './reset';
 
 const log = logger('service:realm');
 
@@ -208,7 +210,8 @@ class RealmResource {
 }
 
 export default class RealmService extends Service {
-  @service declare loaderService: LoaderService;
+  @service private declare loaderService: LoaderService;
+  @service private declare reset: ResetService;
 
   // This is not a TrackedMap, it's a regular Map. Conceptually, we want it to
   // be tracked, but we're using it as a read-through cache and glimmer/tracking
@@ -220,6 +223,15 @@ export default class RealmService extends Service {
   private reauthentications = new Map<string, Promise<string | undefined>>();
 
   @tracked private identifyRealmTracker = 0;
+
+  constructor(owner: Owner) {
+    super(owner);
+    this.reset.register(this);
+  }
+
+  resetState() {
+    this.logout();
+  }
 
   async ensureRealmMeta(realmURL: string): Promise<void> {
     let resource = this.getOrCreateRealmResource(realmURL);

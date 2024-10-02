@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
 import { stringify } from 'qs';
@@ -36,6 +37,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { trackCard } from '../resources/card-resource';
 
 import type LoaderService from './loader-service';
+import type ResetService from './reset';
 
 export type CardSaveSubscriber = (
   url: URL,
@@ -48,12 +50,22 @@ export default class CardService extends Service {
   @service private declare loaderService: LoaderService;
   @service private declare messageService: MessageService;
   @service private declare realm: Realm;
+  @service private declare reset: ResetService;
 
   private subscriber: CardSaveSubscriber | undefined;
   // For tracking requests during the duration of this service. Used for being able to tell when to ignore an incremental indexing SSE event.
   // We want to ignore it when it is a result of our own request so that we don't reload the card and overwrite any unsaved changes made during auto save request and SSE event.
-  clientRequestIds = new Set<string>();
-  loaderToCardAPILoadingCache = new WeakMap<Loader, Promise<typeof CardAPI>>();
+  private declare loaderToCardAPILoadingCache: WeakMap<
+    Loader,
+    Promise<typeof CardAPI>
+  >;
+  declare clientRequestIds: Set<string>;
+
+  constructor(owner: Owner) {
+    super(owner);
+    this.resetState();
+    this.reset.register(this);
+  }
 
   async getAPI(): Promise<typeof CardAPI> {
     let loader = this.loaderService.loader;
@@ -293,7 +305,11 @@ export default class CardService extends Service {
       ${JSON.stringify(json, null, 2)}`,
       );
     }
-    let card = await this.createFromSerialized(json.data, json, url);
+    let card = await this.createFromSerialized(
+      json.data,
+      json,
+      new URL(json.data.id),
+    );
     return card;
   }
 

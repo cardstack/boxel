@@ -4,6 +4,7 @@ import Component from '@glimmer/component';
 import MatrixService from '@cardstack/host/services/matrix-service';
 import RealmServerService from '@cardstack/host/services/realm-server';
 
+import AddWorkspace from './add-workspace';
 import Workspace from './workspace';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';
 
@@ -34,9 +35,10 @@ export default class WorkspaceChooser extends Component<Signature> {
               data-test-workspace={{realmURL}}
             />
           {{/each}}
-          {{#if this.matrixService.initializeNewUserRealm.isRunning}}
+          {{#if this.matrixService.isInitializingNewUser}}
             <WorkspaceLoadingIndicator />
           {{/if}}
+          <AddWorkspace />
         </div>
         {{#if this.displayCatalogWorkspaces}}
           <span class='workspace-chooser__title'>Community Catalogs</span>

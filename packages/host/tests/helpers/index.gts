@@ -521,14 +521,11 @@ async function setupTestRealm({
   realm = new Realm({
     url: realmURL,
     adapter,
-    getIndexHTML: async () =>
-      `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
     matrix: testMatrix,
     secretSeed: testRealmSecretSeed,
     virtualNetwork,
     dbAdapter,
     queue,
-    assetsURL: new URL(`http://example.com/notional-assets-host/`),
   });
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
   virtualNetwork.mount(realm.maybeHandle);

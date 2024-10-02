@@ -13,10 +13,11 @@ import CardService from '@cardstack/host/services/card-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RealmService from '@cardstack/host/services/realm';
 
+import ItemContainer from './item-container';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';
 
 interface Signature {
-  Element: HTMLDivElement;
+  Element: HTMLButtonElement;
   Args: {
     realmURL: string;
   };
@@ -27,8 +28,7 @@ export default class Workspace extends Component<Signature> {
     {{#if this.loadRealmTask.isRunning}}
       <WorkspaceLoadingIndicator />
     {{else}}
-      <button
-        class='workspace'
+      <ItemContainer
         data-test-workspace={{this.name}}
         {{on 'click' this.openWorkspace}}
       >
@@ -43,29 +43,14 @@ export default class Workspace extends Component<Signature> {
           <div class='small-icon'>
             <Lock width='100%' height='100%' />
           </div>
-          {{!-- {{/if}} --}}
         </div>
         <div class='info'>
-          <span class='name' data-test-workspace-name>{{if
-              'Fetching...'
-              this.name
-            }}</span>
+          <span class='name' data-test-workspace-name>{{this.name}}</span>
           <span class='type'>{{if this.isPublic 'Catalog' 'Personal'}}</span>
         </div>
-      </button>
+      </ItemContainer>
     {{/if}}
     <style scoped>
-      .workspace {
-        min-width: 251.6px;
-        width: 251.6px;
-        height: 215.3px;
-        display: flex;
-        flex-direction: column;
-        border-radius: 15px;
-        border: solid 1px rgba(255, 255, 255, 0.5);
-        overflow: hidden;
-        padding: 0;
-      }
       .icon {
         background-color: var(--boxel-500);
         background-image: var(--workspace-background-image-url);
