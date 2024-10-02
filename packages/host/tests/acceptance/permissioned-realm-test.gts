@@ -92,10 +92,4 @@ module('Acceptance | permissioned realm tests', function (hooks) {
       permissions: { users: ['read', 'write'] },
     });
   });
-
-  test('visiting realm root', async function (assert) {
-    await visit('/test/');
-
-    assert.dom('[data-test-workspace-chooser]').exists();
-  });
 });

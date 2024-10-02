@@ -8,7 +8,7 @@ export default class IndexController extends Controller {
     'sid',
     'clientSecret',
     'workspaceChooserOpened',
-    'card',
+    'cardPath',
   ];
 
   @tracked operatorModeState: string | null = null;

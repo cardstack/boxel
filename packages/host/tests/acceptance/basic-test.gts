@@ -1,4 +1,4 @@
-import { find, visit } from '@ember/test-helpers';
+import { click, find, visit } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -94,7 +94,10 @@ module('Acceptance | basic tests', function (hooks) {
   });
 
   test('visiting realm root', async function (assert) {
-    await visit('/?card=http://test-realm/test/');
+    await visit('/');
+
+    assert.dom('[data-test-workspace-chooser]').exists();
+    await click('[data-test-workspace="Unnamed Workspace"]');
 
     assert
       .dom('[data-test-operator-mode-stack="0"] [data-test-index-card]')

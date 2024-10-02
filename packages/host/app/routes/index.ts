@@ -5,6 +5,7 @@ import { service } from '@ember/service';
 
 import stringify from 'safe-stable-stringify';
 
+import ENV from '@cardstack/host/config/environment';
 import { type SerializedState as OperatorModeSerializedState } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -12,6 +13,9 @@ import { Submodes } from '../components/submode-switcher';
 import { getCard } from '../resources/card-resource';
 import CardService from '../services/card-service';
 import MatrixService from '../services/matrix-service';
+import RealmService from '../services/realm';
+
+const { hostsOwnAssets } = ENV;
 
 export default class Index extends Route<void> {
   queryParams = {
@@ -28,16 +32,18 @@ export default class Index extends Route<void> {
   @service private declare cardService: CardService;
   @service private declare router: RouterService;
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service declare realm: RealmService;
 
   didMatrixServiceStart = false;
 
   async model(params: {
-    card?: string;
+    cardPath?: string;
     path: string;
     operatorModeState: string;
     operatorModeEnabled: boolean;
   }): Promise<void> {
-    let { operatorModeState, card } = params;
+    debugger;
+    let { operatorModeState, cardPath } = params;
 
     if (!this.didMatrixServiceStart) {
       await this.matrixService.ready;
@@ -46,19 +52,26 @@ export default class Index extends Route<void> {
     }
 
     if (!this.matrixService.isLoggedIn) {
-      this.didMatrixServiceStart = false;
       return;
     }
 
-    let cardUrl;
+    let cardUrl: string | undefined;
 
-    if (card) {
-      let resource = getCard(this, () => card);
+    if (cardPath) {
+      if (hostsOwnAssets) {
+        cardUrl = new URL(`/${cardPath}`, this.realm.defaultReadableRealm.path)
+          .href;
+      } else {
+        cardUrl = new URL(cardPath, window.location.origin).href;
+      }
+
+      let resource = getCard(this, () => cardUrl);
       await resource.loaded;
       cardUrl = resource?.card?.id; // This is to make sure we put the canonical URL of the card on the stack
+
       // TODO: what to do if card is not found, or not accessible?
       if (!cardUrl) {
-        alert('Card not found');
+        // TODO: there is a race condition after user logs, the route refreshes and this hook triggers - loading of the card will fail with 401
       }
     }
 
@@ -77,7 +90,7 @@ export default class Index extends Route<void> {
     if (!operatorModeState) {
       this.router.transitionTo('index', {
         queryParams: {
-          card: undefined,
+          cardPath: undefined,
           workspaceChooserOpened: stacks.length === 0,
           operatorModeState: stringify({
             stacks,
