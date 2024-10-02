@@ -41,16 +41,35 @@ export default class RadioInputUsage extends Component {
       text: 'L',
     },
   ];
+  @tracked ratings = [
+    { id: '1', text: '1' },
+    { id: '2', text: '2' },
+    { id: '3', text: '3' },
+    { id: '4', text: '4' },
+    { id: '5', text: '5' },
+  ];
   @tracked groupDescription =
     'Select one of these options for breakfast sandwiches';
-  @tracked checkedId = this.items[0]?.id;
+  @tracked checkedIdItems = this.items[0]?.id; // Separate checkedId for items
+  @tracked checkedIdTshirts = this.tshirts[0]?.id; // Separate checkedId for tshirts
+  @tracked selectedRating = this.ratings[0]?.id; // Default selected rating
   @tracked disabled = false;
   @tracked hideRadio = false;
   @tracked hideBorder = false;
   @tracked spacing = '';
   @tracked orientation = 'horizontal';
-  @action onChange(id: string): void {
-    this.checkedId = id;
+
+  @action onChangeItems(id: string): void {
+    this.checkedIdItems = id;
+  }
+
+  @action onChangeTshirts(id: string): void {
+    this.checkedIdTshirts = id;
+  }
+
+  @action
+  onChangeRating(id: string): void {
+    this.selectedRating = id;
   }
 
   cssClassName = 'boxel-radio-input';
@@ -67,7 +86,7 @@ export default class RadioInputUsage extends Component {
           @groupDescription={{this.groupDescription}}
           @items={{this.items}}
           @name='example-radio-usage'
-          @checkedId={{this.checkedId}}
+          @checkedId={{this.checkedIdItems}}
           @disabled={{this.disabled}}
           @orientation={{this.orientation}}
           @spacing={{this.spacing}}
@@ -79,7 +98,7 @@ export default class RadioInputUsage extends Component {
           }}
           as |item|
         >
-          <item.component @onChange={{fn this.onChange item.data.id}}>
+          <item.component @onChange={{fn this.onChangeItems item.data.id}}>
             {{item.data.text}}
           </item.component>
         </RadioInput>
@@ -101,8 +120,8 @@ export default class RadioInputUsage extends Component {
         <Args.String
           @name='checkedId'
           @description='The id of the currently checked/selected item'
-          @value={{this.checkedId}}
-          @onInput={{fn (mut this.checkedId)}}
+          @value={{this.checkedIdItems}}
+          @onInput={{fn (mut this.checkedIdItems)}}
           @optional={{true}}
         />
         <Args.Bool
@@ -167,54 +186,75 @@ export default class RadioInputUsage extends Component {
       </:cssVars>
     </FreestyleUsage>
 
-      <FreestyleUsage @name='Multiple Choice Example'>
-        <:example>
-          <RadioInput
-            @groupDescription={{this.groupDescription}}
-            @items={{this.items}}
-            @name='example-radio-usage'
-            @checkedId={{this.checkedId}}
-            @disabled={{this.disabled}}
-            @orientation={{'vertical'}}
-            @spacing={{'compact'}}
-            @hideRadio={{false}}
-            @hideBorder={{true}}
-            style={{cssVar
-              boxel-radio-input-option-padding=this.boxelRadioInputOptionPadding.value
-              boxel-radio-input-option-gap=this.boxelRadioInputOptionGap.value
-            }}
-            as |item|
-          >
-            <item.component @onChange={{fn this.onChange item.data.id}}>
-              {{item.data.text}}
-            </item.component>
-          </RadioInput>
-        </:example>
-      </FreestyleUsage>
+    <FreestyleUsage @name='Multiple Choice Example'>
+      <:example>
+        <RadioInput
+          @groupDescription={{this.groupDescription}}
+          @items={{this.items}}
+          @name='example-radio-usage'
+          @checkedId={{this.checkedIdItems}}
+          @disabled={{this.disabled}}
+          @orientation={{'vertical'}}
+          @spacing={{'compact'}}
+          @hideRadio={{false}}
+          @hideBorder={{true}}
+          style={{cssVar
+            boxel-radio-input-option-padding=this.boxelRadioInputOptionPadding.value
+            boxel-radio-input-option-gap=this.boxelRadioInputOptionGap.value
+          }}
+          as |item|
+        >
+          <item.component @onChange={{fn this.onChangeItems item.data.id}}>
+            {{item.data.text}}
+          </item.component>
+        </RadioInput>
+      </:example>
+    </FreestyleUsage>
 
-      <FreestyleUsage @name='T Shirt Variants Example'>
-        <:example>
-          <RadioInput
-            @groupDescription={{this.groupDescription}}
-            @items={{this.tshirts}}
-            @name='example-radio-usage'
-            @checkedId={{this.checkedId}}
-            @disabled={{this.disabled}}
-            @orientation={{'horizontal'}}
-            @spacing={{'default'}}
-            @hideRadio={{true}}
-            @hideBorder={{false}}
-            style={{cssVar
-              boxel-radio-input-option-padding=this.boxelRadioInputOptionPadding.value
-              boxel-radio-input-option-gap=this.boxelRadioInputOptionGap.value
-            }}
-            as |item|
-          >
-            <item.component @onChange={{fn this.onChange item.data.id}}>
-              {{item.data.text}}
-            </item.component>
-          </RadioInput>
-        </:example>
-      </FreestyleUsage>
+    <FreestyleUsage @name='T Shirt Variants Example'>
+      <:example>
+        <RadioInput
+          @groupDescription={{this.groupDescription}}
+          @items={{this.tshirts}}
+          @name='example-radio-usage'
+          @checkedId={{this.checkedIdTshirts}}
+          @disabled={{this.disabled}}
+          @orientation={{'horizontal'}}
+          @spacing={{'default'}}
+          @hideRadio={{true}}
+          @hideBorder={{false}}
+          style={{cssVar
+            boxel-radio-input-option-padding=this.boxelRadioInputOptionPadding.value
+            boxel-radio-input-option-gap=this.boxelRadioInputOptionGap.value
+          }}
+          as |item|
+        >
+          <item.component @onChange={{fn this.onChangeTshirts item.data.id}}>
+            {{item.data.text}}
+          </item.component>
+        </RadioInput>
+      </:example>
+    </FreestyleUsage>
+
+    <FreestyleUsage @name='Rating Scale Example'>
+      <:description>
+        A simple rating scale using radio buttons.
+      </:description>
+      <:example>
+        <RadioInput
+          @groupDescription='Rate your experience'
+          @items={{this.ratings}}
+          @name='rating-scale'
+          @checkedId={{this.selectedRating}}
+          @orientation='horizontal'
+          @spacing='default'
+          as |item|
+        >
+          <item.component @onChange={{fn this.onChangeRating item.data.id}}>
+            {{item.data.text}}
+          </item.component>
+        </RadioInput>
+      </:example>
+    </FreestyleUsage>
   </template>
 }
