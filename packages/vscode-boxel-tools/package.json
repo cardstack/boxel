@@ -62,13 +62,13 @@
   "scripts": {
     "vscode:prepublish": "pnpm run compile",
     "vscode:package": "pnpm vsce package --no-dependencies",
+    "vscode:publish": "pnpm vsce publish --no-dependencies",
     "compile": "node esbuild.mjs --production",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:js": "eslint . --cache",
     "lint:js:fix": "eslint . --fix",
     "lint:glint": "glint",
-    "publish": "pnpm vsce publish --no-dependencies",
     "watch": "node esbuild.mjs --watch"
   },
   "dependencies": {
@@ -89,6 +89,7 @@
     "concurrently": "^8.0.1",
     "esbuild": "^0.24.0",
     "eslint": "^8.26.0",
+    "semver": "^7.6.3",
     "typescript": "~5.1.6"
   }
 }

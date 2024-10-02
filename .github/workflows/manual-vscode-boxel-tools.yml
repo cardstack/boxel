@@ -30,6 +30,6 @@ jobs:
         working-directory: packages/vscode-boxel-tools
       - name: Publish
         if: success()
-        run: pnpm publish
+        run: pnpm vscode:publish
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
