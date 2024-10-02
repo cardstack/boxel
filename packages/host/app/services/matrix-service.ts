@@ -1,4 +1,5 @@
 import type Owner from '@ember/owner';
+import { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
@@ -65,6 +66,7 @@ import type {
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import { Skill } from '../components/ai-assistant/skill-menu';
+import IndexController from '../controllers';
 import { getCard } from '../resources/card-resource';
 import { importResource } from '../resources/import';
 
@@ -81,8 +83,6 @@ import type RealmServerService from './realm-server';
 import type ResetService from './reset';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
-import { getOwner } from '@ember/owner';
-import IndexController from '../controllers';
 
 const { matrixURL } = ENV;
 const AI_BOT_POWER_LEVEL = 50; // this is required to set the room name
