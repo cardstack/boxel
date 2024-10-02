@@ -17,6 +17,7 @@ import {
   timeout,
   waitForProperty,
 } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
 import { provide } from 'ember-provide-consume-context';
 import { trackedFunction } from 'ember-resources/util/function';
@@ -324,12 +325,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.hasUnsavedChanges = true;
     await timeout(this.environmentService.autoSaveDelayMs);
     this.isSaving = true;
-    this.args.publicAPI.saveCard(this.card, false, () => {
-      this.hasUnsavedChanges = false;
-      this.isSaving = false;
-      this.lastSaved = Date.now();
-      this.calculateLastSavedMsg();
-    });
+    await this.args.publicAPI.saveCard(this.card, false);
+    this.hasUnsavedChanges = false;
+    this.isSaving = false;
+    this.lastSaved = Date.now();
+    this.calculateLastSavedMsg();
   });
 
   private calculateLastSavedMsg() {
@@ -348,10 +348,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
     }
   }
 
-  private doneEditing = () => {
+  private doneEditing = restartableTask(async () => {
     // if the card is actually different do the save and dismiss, otherwise
     // just change the stack item's format to isolated
     if (this.hasUnsavedChanges) {
+      // we dont want to have the user wait for the save to complete before
+      // dismissing edit mode so intentionally not awaiting here
       this.args.publicAPI.saveCard(this.card, true);
     } else {
       let { request } = this.args.item;
@@ -363,7 +365,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         }),
       );
     }
-  };
+  });
 
   private doWithStableScroll = restartableTask(
     async (changeSizeCallback: () => Promise<void>) => {
@@ -500,7 +502,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                         @height='20px'
                         class='icon-save'
                         aria-label='Finish Editing'
-                        {{on 'click' this.doneEditing}}
+                        {{on 'click' (perform this.doneEditing)}}
                         data-test-edit-button
                       />
                     </:trigger>

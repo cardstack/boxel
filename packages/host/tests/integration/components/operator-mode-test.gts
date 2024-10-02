@@ -462,7 +462,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test<TestContextWithSave>('it auto saves the field value', async function (assert) {
-    assert.expect(3);
+    assert.expect(7);
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
 
     await renderComponent(
@@ -475,13 +475,44 @@ module('Integration | operator-mode', function (hooks) {
     );
     await waitFor('[data-test-person]');
     await click('[data-test-edit-button]');
+    let finishedSaving = false;
     this.onSave((_, json) => {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
+      finishedSaving = true;
       assert.strictEqual(json.data.attributes?.firstName, 'EditedName');
     });
-    await fillIn('[data-test-boxel-input]', 'EditedName');
+
+    // not awaiting so that we can test in-between the test waiter
+    fillIn('[data-test-boxel-input]', 'EditedName');
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-auto-save-indicator]')
+          ?.textContent?.trim() === 'Saving…',
+    );
+    assert.dom('[data-test-auto-save-indicator]').containsText('Saving…');
+    assert.strictEqual(
+      finishedSaving,
+      false,
+      'save in-flight message is correct',
+    );
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-auto-save-indicator]')
+          ?.textContent?.trim() == 'Saved less than a minute ago',
+    );
+    assert.strictEqual(
+      finishedSaving,
+      true,
+      'finished saving message is correct',
+    );
+    assert
+      .dom('[data-test-auto-save-indicator]')
+      .containsText('Saved less than a minute ago');
+
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
 
     await waitFor('[data-test-person="EditedName"]');
