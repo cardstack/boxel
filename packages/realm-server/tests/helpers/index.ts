@@ -15,7 +15,8 @@ import {
   insertPermissions,
   IndexWriter,
   type MatrixConfig,
-  type Queue,
+  type QueuePublisher,
+  type QueueRunner,
   type IndexRunner,
 } from '@cardstack/runtime-common';
 import { dirSync } from 'tmp';
@@ -24,7 +25,7 @@ import { makeFastBootIndexRunner } from '../../fastboot';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { RealmServer } from '../../server';
 import PgAdapter from '../../pg-adapter';
-import PgQueue from '../../pg-queue';
+import { PgQueueRunner, PgQueuePublisher } from '../../pg-queue';
 import { Server } from 'http';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { shimExternals } from '../../lib/externals';
@@ -85,7 +86,8 @@ export async function closeServer(server: Server) {
 
 type BeforeAfterCallback = (
   dbAdapter: PgAdapter,
-  queue: Queue,
+  publisher: QueuePublisher,
+  runner: QueueRunner,
 ) => Promise<void>;
 
 export function setupDB(
@@ -98,16 +100,19 @@ export function setupDB(
   } = {},
 ) {
   let dbAdapter: PgAdapter;
-  let queue: Queue;
+  let publisher: QueuePublisher;
+  let runner: QueueRunner;
 
   const runBeforeHook = async () => {
     prepareTestDB();
     dbAdapter = new PgAdapter();
-    queue = new PgQueue(dbAdapter);
+    publisher = new PgQueuePublisher(dbAdapter);
+    runner = new PgQueueRunner(dbAdapter, 'test-worker');
   };
 
   const runAfterHook = async () => {
-    await queue?.destroy();
+    await publisher?.destroy();
+    await runner?.destroy();
     await dbAdapter?.close();
   };
 
@@ -123,11 +128,11 @@ export function setupDB(
     }
     hooks.before(async function () {
       await runBeforeHook();
-      await args.before!(dbAdapter, queue);
+      await args.before!(dbAdapter, publisher, runner);
     });
 
     hooks.after(async function () {
-      await args.after?.(dbAdapter, queue);
+      await args.after?.(dbAdapter, publisher, runner);
       await runAfterHook();
     });
   }
@@ -140,11 +145,11 @@ export function setupDB(
     }
     hooks.beforeEach(async function () {
       await runBeforeHook();
-      await args.beforeEach!(dbAdapter, queue);
+      await args.beforeEach!(dbAdapter, publisher, runner);
     });
 
     hooks.afterEach(async function () {
-      await args.afterEach?.(dbAdapter, queue);
+      await args.afterEach?.(dbAdapter, publisher, runner);
       await runAfterHook();
     });
   }
@@ -166,7 +171,8 @@ export async function createRealm({
   realmURL = testRealm,
   permissions = { '*': ['read'] },
   virtualNetwork,
-  queue,
+  runner,
+  publisher,
   dbAdapter,
   matrixConfig = testMatrix,
   withWorker,
@@ -177,7 +183,8 @@ export async function createRealm({
   permissions?: RealmPermissions;
   virtualNetwork: VirtualNetwork;
   matrixConfig?: MatrixConfig;
-  queue: Queue;
+  publisher: QueuePublisher;
+  runner?: QueueRunner;
   dbAdapter: PgAdapter;
   deferStartUp?: true;
   // if you are creating a realm  to test it directly without a server, you can
@@ -194,14 +201,16 @@ export async function createRealm({
     }
   }
 
-  let getIndexHTML = (await getFastbootState()).getIndexHTML;
   let adapter = new NodeAdapter(dir);
   let worker: Worker | undefined;
   if (withWorker) {
+    if (!runner) {
+      throw new Error(`must provider a QueueRunner when using withWorker`);
+    }
     let indexRunner = (await getFastbootState()).getRunner;
     worker = new Worker({
       indexWriter: new IndexWriter(dbAdapter),
-      queue,
+      queue: runner,
       runnerOptsManager: manager,
       indexRunner,
       virtualNetwork,
@@ -212,13 +221,11 @@ export async function createRealm({
   let realm = new Realm({
     url: realmURL,
     adapter,
-    getIndexHTML,
     matrix: matrixConfig,
     secretSeed,
     virtualNetwork,
     dbAdapter,
-    queue,
-    assetsURL: new URL(`http://example.com/notional-assets-host/`),
+    queue: publisher,
   });
   if (worker) {
     virtualNetwork.mount(realm.handle);
@@ -234,11 +241,12 @@ export function setupBaseRealmServer(
 ) {
   let baseRealmServer: Server;
   setupDB(hooks, {
-    before: async (dbAdapter, queue) => {
+    before: async (dbAdapter, publisher, runner) => {
       let dir = dirSync();
       baseRealmServer = await runBaseRealmServer(
         virtualNetwork,
-        queue,
+        publisher,
+        runner,
         dbAdapter,
         matrixURL,
         dir.name,
@@ -252,7 +260,8 @@ export function setupBaseRealmServer(
 
 export async function runBaseRealmServer(
   virtualNetwork: VirtualNetwork,
-  queue: Queue,
+  publisher: QueuePublisher,
+  runner: QueueRunner,
   dbAdapter: PgAdapter,
   matrixURL: URL,
   realmsRootPath: string,
@@ -264,7 +273,7 @@ export async function runBaseRealmServer(
   let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
-    queue,
+    queue: runner,
     runnerOptsManager: manager,
     indexRunner,
     virtualNetwork,
@@ -275,7 +284,7 @@ export async function runBaseRealmServer(
     dir: basePath,
     realmURL: baseRealm.url,
     virtualNetwork,
-    queue,
+    publisher,
     dbAdapter,
     permissions,
   });
@@ -296,7 +305,7 @@ export async function runBaseRealmServer(
     matrixRegistrationSecret,
     realmsRootPath,
     dbAdapter,
-    queue,
+    queue: publisher,
     getIndexHTML,
     serverURL: new URL(localBaseRealmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
@@ -310,7 +319,8 @@ export async function runTestRealmServer({
   fileSystem,
   realmURL,
   virtualNetwork,
-  queue,
+  publisher,
+  runner,
   dbAdapter,
   matrixConfig,
   matrixURL,
@@ -322,7 +332,8 @@ export async function runTestRealmServer({
   realmURL: URL;
   permissions?: RealmPermissions;
   virtualNetwork: VirtualNetwork;
-  queue: Queue;
+  publisher: QueuePublisher;
+  runner: QueueRunner;
   dbAdapter: PgAdapter;
   matrixURL: URL;
   matrixConfig?: MatrixConfig;
@@ -330,7 +341,7 @@ export async function runTestRealmServer({
   let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
-    queue,
+    queue: runner,
     runnerOptsManager: manager,
     indexRunner,
     virtualNetwork,
@@ -345,7 +356,7 @@ export async function runTestRealmServer({
     permissions,
     virtualNetwork,
     matrixConfig,
-    queue,
+    publisher,
     dbAdapter,
   });
   virtualNetwork.mount(testRealm.handle);
@@ -362,7 +373,7 @@ export async function runTestRealmServer({
     matrixRegistrationSecret,
     realmsRootPath,
     dbAdapter,
-    queue,
+    queue: publisher,
     getIndexHTML,
     seedPath,
     serverURL: new URL(realmURL.origin),

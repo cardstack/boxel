@@ -6,7 +6,7 @@ import {
   fetchUserPermissions,
   type Stats,
   type DBAdapter,
-  type Queue,
+  type QueuePublisher,
   type WorkerArgs,
   type FromScratchResult,
   type IncrementalArgs,
@@ -31,7 +31,7 @@ export class RealmIndexUpdater {
     totalIndexEntries: 0,
   };
   #indexWriter: IndexWriter;
-  #queue: Queue;
+  #queue: QueuePublisher;
   #dbAdapter: DBAdapter;
   #indexingDeferred: Deferred<void> | undefined;
 
@@ -42,7 +42,7 @@ export class RealmIndexUpdater {
   }: {
     realm: Realm;
     dbAdapter: DBAdapter;
-    queue: Queue;
+    queue: QueuePublisher;
   }) {
     if (!dbAdapter) {
       throw new Error(
@@ -101,6 +101,8 @@ export class RealmIndexUpdater {
       };
       let job = await this.#queue.publish<FromScratchResult>(
         `from-scratch-index`,
+        'indexing',
+        4 * 60,
         args,
       );
       let { ignoreData, stats } = await job.done;
@@ -137,6 +139,8 @@ export class RealmIndexUpdater {
       };
       let job = await this.#queue.publish<IncrementalResult>(
         `incremental-index`,
+        'indexing',
+        4 * 60,
         args,
       );
       let { invalidations, ignoreData, stats } = await job.done;

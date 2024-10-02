@@ -8,9 +8,12 @@ import {
   SupportedMimeType,
   insertPermissions,
   createResponse,
+  Deferred,
+  fetchPublicRealms,
+  RealmInfo,
   type VirtualNetwork,
   type DBAdapter,
-  type Queue,
+  type QueuePublisher,
   type RealmPermissions,
 } from '@cardstack/runtime-common';
 import { ensureDirSync, writeJSONSync, readdirSync, copySync } from 'fs-extra';
@@ -28,6 +31,7 @@ import { registerUser } from './synapse';
 import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp';
 import { NodeAdapter } from './node-realm';
 import { resolve, join } from 'path';
+import merge from 'lodash/merge';
 
 import './lib/externals';
 import {
@@ -72,6 +76,12 @@ const IGNORE_SEED_FILES = [
   'tsconfig.json',
 ];
 
+type CatalogRealm = {
+  type: 'catalog-realm';
+  id: string;
+  attributes: RealmInfo;
+};
+
 export class RealmServer {
   private log = logger('realm-server');
   private realms: Realm[];
@@ -80,15 +90,17 @@ export class RealmServer {
   private secretSeed: string;
   private realmsRootPath: string;
   private dbAdapter: DBAdapter;
-  private queue: Queue;
+  private queue: QueuePublisher;
   private assetsURL: URL;
   private getIndexHTML: () => Promise<string>;
   private serverURL: URL;
   private seedPath: string | undefined;
   private matrixRegistrationSecret: string | undefined;
+  private promiseForIndexHTML: Promise<string> | undefined;
   private getRegistrationSecret:
     | (() => Promise<string | undefined>)
     | undefined;
+  private catalogRealms: CatalogRealm[] | null = null;
 
   constructor({
     serverURL,
@@ -112,7 +124,7 @@ export class RealmServer {
     secretSeed: string;
     realmsRootPath: string;
     dbAdapter: DBAdapter;
-    queue: Queue;
+    queue: QueuePublisher;
     assetsURL: URL;
     getIndexHTML: () => Promise<string>;
     seedPath?: string;
@@ -146,9 +158,10 @@ export class RealmServer {
   get app() {
     let router = new Router();
     router.head('/', livenessCheck);
-    router.get('/', healthCheck, this.serveIndex(), this.serveFromRealm);
+    router.get('/', healthCheck, this.serveIndex, this.serveFromRealm);
     router.post('/_server-session', this.createSession());
-    router.post('/_create-realm', this.handleCreateRealmRequest());
+    router.post('/_create-realm', this.handleCreateRealmRequest);
+    router.get('/_catalog-realms', this.fetchCatalogRealms);
 
     let app = new Koa<Koa.DefaultState, Koa.Context>()
       .use(httpLogging)
@@ -180,6 +193,7 @@ export class RealmServer {
       .use(convertAcceptHeaderQueryParam)
       .use(httpBasicAuth)
       .use(router.routes())
+      .use(this.serveIndex)
       .use(this.serveFromRealm);
 
     app.on('error', (err, ctx) => {
@@ -249,7 +263,7 @@ export class RealmServer {
         let response = await matrixBackendAuthentication.createSession(request);
         await setContextResponse(ctxt, response);
       } catch (e: any) {
-        console.error(`Exception while creating a session on realm server`, e);
+        this.log.error(`Exception while creating a session on realm server`, e);
         await sendResponseForSystemError(ctxt, `${e.message}: at ${e.stack}`);
       }
     };
@@ -261,17 +275,44 @@ export class RealmServer {
     });
   }
 
-  private serveIndex(): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
-    return async (ctxt: Koa.Context, next: Koa.Next) => {
-      if (ctxt.header.accept?.includes('text/html') && this.realms.length > 0) {
-        ctxt.type = 'html';
-        ctxt.body = await this.realms[0].getIndexHTML({
-          realmsServed: this.realms.map((r) => r.url),
+  private serveIndex = async (ctxt: Koa.Context, next: Koa.Next) => {
+    if (ctxt.header.accept?.includes('text/html')) {
+      ctxt.type = 'html';
+      ctxt.body = await this.retrieveIndexHTML();
+      return;
+    }
+    return next();
+  };
+
+  private async retrieveIndexHTML(): Promise<string> {
+    if (this.promiseForIndexHTML) {
+      // This is optimized for production, in that we won't be changing index
+      // HTML after we start. However, in development this might be annoying
+      // because it means restarting the realm server to pick up ember-cli
+      // rebuilds in the case where you want to test with the the realm server
+      // specifically and not ember cli hosted app.
+      return this.promiseForIndexHTML;
+    }
+    let deferred = new Deferred<string>();
+    this.promiseForIndexHTML = deferred.promise;
+    let indexHTML = (await this.getIndexHTML()).replace(
+      /(<meta name="@cardstack\/host\/config\/environment" content=")([^"].*)(">)/,
+      (_match, g1, g2, g3) => {
+        let config = JSON.parse(decodeURIComponent(g2));
+        config = merge({}, config, {
+          hostsOwnAssets: false,
+          assetsURL: this.assetsURL.href,
         });
-        return;
-      }
-      return next();
-    };
+        return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
+      },
+    );
+
+    indexHTML = indexHTML.replace(
+      /(src|href)="\//g,
+      `$1="${this.assetsURL.href}`,
+    );
+    deferred.fulfill(indexHTML);
+    return indexHTML;
   }
 
   private serveFromRealm = async (ctxt: Koa.Context, _next: Koa.Next) => {
@@ -291,113 +332,115 @@ export class RealmServer {
     await setContextResponse(ctxt, realmResponse);
   };
 
-  private handleCreateRealmRequest(): (
+  private handleCreateRealmRequest = async (
     ctxt: Koa.Context,
-    next: Koa.Next,
-  ) => Promise<void> {
-    return async (ctxt: Koa.Context, _next: Koa.Next) => {
-      let request = await fetchRequestFromContext(ctxt);
+    _next: Koa.Next,
+  ) => {
+    let request = await fetchRequestFromContext(ctxt);
 
-      let token: RealmServerTokenClaim;
-      try {
-        // Currently the only permission possible for the realm-server is the
-        // permission to create a realm which is available for any matrix user,
-        // as such we are only checking that the jwt is valid as opposed to
-        // fetching permissions and comparing the JWT to what is configured on
-        // the server. If we introduce another type of realm-server permission,
-        // then we will need to compare the token with what is configured on the
-        // server.
-        token = this.getJwtToken(request);
-      } catch (e) {
-        if (e instanceof AuthenticationError) {
-          await sendResponseForForbiddenRequest(ctxt, e.message);
-          return;
-        }
-        throw e;
-      }
-
-      let { user: ownerUserId } = token;
-      let body = await request.text();
-      let json: Record<string, any>;
-      try {
-        json = JSON.parse(body);
-      } catch (e) {
-        await sendResponseForBadRequest(
-          ctxt,
-          'Request body is not valid JSON-API - invalid JSON',
-        );
+    let token: RealmServerTokenClaim;
+    try {
+      // Currently the only permission possible for the realm-server is the
+      // permission to create a realm which is available for any matrix user,
+      // as such we are only checking that the jwt is valid as opposed to
+      // fetching permissions and comparing the JWT to what is configured on
+      // the server. If we introduce another type of realm-server permission,
+      // then we will need to compare the token with what is configured on the
+      // server.
+      token = this.getJwtToken(request);
+    } catch (e) {
+      if (e instanceof AuthenticationError) {
+        await sendResponseForForbiddenRequest(ctxt, e.message);
         return;
       }
-      try {
-        assertIsRealmCreationJSON(json);
-      } catch (e: any) {
-        await sendResponseForBadRequest(
-          ctxt,
-          `Request body is not valid JSON-API - ${e.message}`,
-        );
-        return;
-      }
+      throw e;
+    }
 
-      let realm: Realm | undefined;
-      let start = Date.now();
-      let indexStart: number | undefined;
-      try {
-        realm = await this.createRealm({
-          ownerUserId,
-          ...json.data.attributes,
-        });
-        this.log.debug(
-          `created new realm ${realm.url} in ${Date.now() - start} ms`,
-        );
-        this.log.debug(`indexing new realm ${realm.url}`);
-        indexStart = Date.now();
-        await realm.start();
-      } catch (e: any) {
-        if ('status' in e && e.status === 400) {
-          await sendResponseForBadRequest(ctxt, e.message);
-        } else {
-          await sendResponseForSystemError(ctxt, `${e.message}: at ${e.stack}`);
-        }
-        return;
-      } finally {
-        if (realm != null && indexStart != null) {
-          this.log.debug(
-            `indexing of new realm ${realm.url} ended in ${
-              Date.now() - indexStart
-            } ms`,
-          );
-        }
-      }
-
-      let response = createResponse({
-        body: JSON.stringify(
-          {
-            data: {
-              type: 'realm',
-              id: realm.url,
-              attributes: { ...json.data.attributes },
-            },
-          },
-          null,
-          2,
-        ),
-        init: {
-          status: 201,
-          headers: {
-            'content-type': SupportedMimeType.JSONAPI,
-          },
-        },
-        requestContext: {
-          realm,
-          permissions: {
-            [ownerUserId]: DEFAULT_PERMISSIONS,
-          },
-        },
-      });
-      await setContextResponse(ctxt, response);
+    let { user: ownerUserId } = token;
+    let body = await request.text();
+    let json: Record<string, any>;
+    try {
+      json = JSON.parse(body);
+    } catch (e) {
+      await sendResponseForBadRequest(
+        ctxt,
+        'Request body is not valid JSON-API - invalid JSON',
+      );
       return;
-    };
-  }
+    }
+    try {
+      assertIsRealmCreationJSON(json);
+    } catch (e: any) {
+      await sendResponseForBadRequest(
+        ctxt,
+        `Request body is not valid JSON-API - ${e.message}`,
+      );
+      return;
+    }
+
+    let realm: Realm | undefined;
+    let start = Date.now();
+    let indexStart: number | undefined;
+    try {
+      realm = await this.createRealm({
+        ownerUserId,
+        ...json.data.attributes,
+      });
+      this.log.debug(
+        `created new realm ${realm.url} in ${Date.now() - start} ms`,
+      );
+      this.log.debug(`indexing new realm ${realm.url}`);
+      indexStart = Date.now();
+      await realm.start();
+    } catch (e: any) {
+      if ('status' in e && e.status === 400) {
+        await sendResponseForBadRequest(ctxt, e.message);
+      } else {
+        this.log.error(
+          `Error creating realm '${json.data.attributes.name}' for user ${ownerUserId}`,
+          e,
+        );
+        await sendResponseForSystemError(ctxt, `${e.message}: at ${e.stack}`);
+      }
+      return;
+    } finally {
+      if (realm != null && indexStart != null) {
+        this.log.debug(
+          `indexing of new realm ${realm.url} ended in ${
+            Date.now() - indexStart
+          } ms`,
+        );
+      }
+    }
+
+    let response = createResponse({
+      body: JSON.stringify(
+        {
+          data: {
+            type: 'realm',
+            id: realm.url,
+            attributes: { ...json.data.attributes },
+          },
+        },
+        null,
+        2,
+      ),
+      init: {
+        status: 201,
+        headers: {
+          'content-type': SupportedMimeType.JSONAPI,
+        },
+      },
+      requestContext: {
+        realm,
+        permissions: {
+          [ownerUserId]: DEFAULT_PERMISSIONS,
+        },
+      },
+    });
+    await setContextResponse(ctxt, response);
+    return;
+  };
 
   private getJwtToken(request: Request) {
     let authorizationString = request.headers.get('Authorization');
@@ -507,12 +550,10 @@ export class RealmServer {
     let realm = new Realm({
       url,
       adapter,
-      getIndexHTML: this.getIndexHTML,
       secretSeed: this.secretSeed,
       virtualNetwork: this.virtualNetwork,
       dbAdapter: this.dbAdapter,
       queue: this.queue,
-      assetsURL: this.assetsURL,
       matrix: {
         url: this.matrixClient.matrixURL,
         username,
@@ -561,12 +602,10 @@ export class RealmServer {
           let realm = new Realm({
             url,
             adapter,
-            getIndexHTML: this.getIndexHTML,
             secretSeed: this.secretSeed,
             virtualNetwork: this.virtualNetwork,
             dbAdapter: this.dbAdapter,
             queue: this.queue,
-            assetsURL: this.assetsURL,
             matrix: {
               url: this.matrixClient.matrixURL,
               username,
@@ -601,6 +640,54 @@ export class RealmServer {
 
     throw new Error(`Can not determine the matrix registration secret`);
   }
+
+  private fetchCatalogRealms = async (ctxt: Koa.Context, _next: Koa.Next) => {
+    let catalogRealms = this.catalogRealms;
+    if (!catalogRealms) {
+      let publicRealms = await fetchPublicRealms(this.dbAdapter);
+      catalogRealms = (
+        await Promise.all(
+          publicRealms.map(async ({ realm_url: realmURL }) => {
+            let realmInfoResponse = await this.virtualNetwork.handle(
+              new Request(`${realmURL}_info`, {
+                headers: {
+                  Accept: SupportedMimeType.RealmInfo,
+                },
+              }),
+            );
+            if (realmInfoResponse.status != 200) {
+              this.log.warn(
+                `Failed to fetch realm info for public realm ${realmURL}: ${realmInfoResponse.status}`,
+              );
+              return null;
+            }
+            let json = await realmInfoResponse.json();
+            let attributes = json.data.attributes;
+            if (
+              attributes.showAsCatalog != null &&
+              attributes.showAsCatalog == false
+            ) {
+              return null;
+            }
+
+            return {
+              type: 'catalog-realm',
+              id: realmURL,
+              attributes: json.data.attributes,
+            };
+          }),
+        )
+      ).filter(Boolean) as CatalogRealm[];
+      this.catalogRealms = catalogRealms;
+    }
+
+    return setContextResponse(
+      ctxt,
+      new Response(JSON.stringify({ data: catalogRealms }), {
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
+      }),
+    );
+  };
 }
 
 function detectRealmCollision(realms: Realm[]): void {

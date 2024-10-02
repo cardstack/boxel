@@ -30,6 +30,11 @@ jobs:
       - name: Build boxel-ui
         run: pnpm build
         working-directory: packages/boxel-ui/addon
+      # this is to hopefully address the CI network flakiness that we
+      # occasionally see in host tests.
+      # https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
+      - name: Disable TCP/UDP network offloading
+        run: sudo ethtool -K eth0 tx off rx off
       - name: Start host to serve assets for fastboot
         run: pnpm start &
         env:

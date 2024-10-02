@@ -25,7 +25,7 @@ const AiAssistantButton: TemplateOnlyComponent<Signature> = <template>
       right: var(--boxel-sp);
       border-radius: var(--boxel-border-radius);
       background-color: var(--boxel-dark);
-      border: 1px solid rgba(255, 255, 255, 0.35);
+      border: var(--boxel-border-flexible);
 
       background-image: image-set(
         url('./ai-assist-icon.webp') 1x,

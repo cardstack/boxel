@@ -249,7 +249,7 @@ export class CardResource extends Resource<Args> {
       let card = await this.cardService.createFromSerialized(
         json.data,
         json,
-        url,
+        new URL(json.data.id),
       );
       return card;
     } catch (error: any) {
