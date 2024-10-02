@@ -68,6 +68,7 @@
     "lint:js": "eslint . --cache",
     "lint:js:fix": "eslint . --fix",
     "lint:glint": "glint",
+    "publish": "pnpm vsce publish --no-dependencies",
     "watch": "node esbuild.mjs --watch"
   },
   "dependencies": {

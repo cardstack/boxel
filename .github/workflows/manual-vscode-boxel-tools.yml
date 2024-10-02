@@ -1,0 +1,33 @@
+name: Manual Deploy [vscode-boxel-tools]
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: false
+        default: staging
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+
+jobs:
+  publish:
+    name: Package and publish VS Code Boxel Tools extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/init
+      - name: Build boxel-ui
+        run: pnpm build
+        working-directory: packages/boxel-ui/addon
+      - name: Package
+        run: pnpm vscode:package
+        working-directory: packages/vscode-boxel-tools
+      - name: Publish
+        if: success()
+        run: pnpm publish
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
