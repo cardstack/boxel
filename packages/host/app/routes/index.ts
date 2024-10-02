@@ -36,6 +36,12 @@ export default class Index extends Route<void> {
 
   didMatrixServiceStart = false;
 
+  async fetchCard(url: string) {
+    let resource = getCard(this, () => url);
+    await resource.loaded;
+    return resource.card;
+  }
+
   async model(params: {
     cardPath?: string;
     path: string;
@@ -51,7 +57,7 @@ export default class Index extends Route<void> {
     }
 
     if (!this.matrixService.isLoggedIn) {
-      return;
+      return; // Show login component
     }
 
     let cardUrl: string | undefined;
@@ -64,14 +70,26 @@ export default class Index extends Route<void> {
         cardUrl = new URL(cardPath, window.location.origin).href;
       }
 
-      let resource = getCard(this, () => cardUrl);
-      await resource.loaded;
-      cardUrl = resource?.card?.id; // This is to make sure we put the canonical URL of the card on the stack
+      let card = await this.fetchCard(cardUrl); // We are fetching the card here to make sure we have the canonical URL for the card
 
-      // TODO: what to do if card is not found, or not accessible?
-      if (!cardUrl) {
-        // TODO: there is a race condition after user logs, the route refreshes and this hook triggers - loading of the card will fail with 401
+      if (!card) {
+        // This is a temporary workaround to fix a strange race condition that happens after user tries to see a
+        // card but has to login first. Immediately after login the route will refresh this.fetchCard(cardUrl) will sometimes fail
+        // with a 401 even when the user has permissions to access the card. There has to be a race condition where this happens before
+        // the realm session is established.
+        // TODO: fix the root cause instead of this hack
+        await new Promise((resolve) => setTimeout(resolve, 500)); // Wait for a bit to so that the realm session is established
+        card = await this.fetchCard(cardUrl);
       }
+
+      let canonicalCardUrl = card?.id;
+
+      if (!canonicalCardUrl) {
+        // TODO: what to do if card is not found, or not accessible?
+        alert(`Card not found: ${cardUrl}`);
+      }
+
+      cardUrl = canonicalCardUrl;
     }
 
     let stacks: { id: string; format: string }[][] = [];
