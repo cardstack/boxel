@@ -502,7 +502,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       });
 
       await click('[data-test-operator-mode-stack] [data-test-pet="Mango"]');
-      let expectedURL = `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+      let expectedURL = `/?operatorModeState=${encodeURIComponent(
         stringify({
           stacks: [
             [
@@ -529,7 +529,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       // The edit format should be reflected in the URL
       assert.strictEqual(
         currentURL(),
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        `/?operatorModeState=${encodeURIComponent(
           stringify({
             stacks: [
               [

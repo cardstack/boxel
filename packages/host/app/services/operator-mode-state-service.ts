@@ -39,8 +39,6 @@ import type ResetService from './reset';
 
 import type IndexController from '../controllers';
 
-import type CardController from '../controllers/card';
-
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
 // This is because we don't have a way to serialize a stack configuration of linked cards that have not been saved yet.
@@ -188,8 +186,8 @@ export default class OperatorModeStateService extends Service {
     let cardRealmUrl = await this.cardService.getRealmURL(card);
     let realmPaths = new RealmPaths(cardRealmUrl);
     let cardPath = realmPaths.local(new URL(`${card.id}.json`));
-    this.recentFilesService.removeRecentFile(cardPath);
     await this.cardService.deleteCard(card);
+    this.recentFilesService.removeRecentFile(cardPath);
   }
 
   trimItemsFromStack(item: StackItem) {
@@ -615,22 +613,11 @@ export default class OperatorModeStateService extends Service {
     this.operatorModeController.workspaceChooserOpened = workspaceChooserOpened;
   }
 
-  // Operator mode state is persisted in a query param, which lives in a controller.
-  // Currently, we have two controllers that could contain operator mode state:
-  // - card controller (viewing a card and entering operator mode from there)
-  // - index controller (viewing the realm server home page and choosing a workspace)
-  // We are in the process of removing host mode for viewing cards, so query params in card controller
-  // will be removed soon - when we are able to do that, remove this method and just use the index controller
-  get operatorModeController(): CardController | IndexController {
-    let controller: CardController | IndexController;
-
-    if (this.router.currentRouteName === 'index') {
-      controller = getOwner(this)!.lookup(
-        'controller:index',
-      ) as IndexController;
-    } else {
-      controller = getOwner(this)!.lookup('controller:card') as CardController;
-    }
+  // Operator mode state is persisted in a query param, which lives in the index controller
+  get operatorModeController(): IndexController {
+    let controller = getOwner(this)!.lookup(
+      'controller:index',
+    ) as IndexController;
 
     return controller;
   }

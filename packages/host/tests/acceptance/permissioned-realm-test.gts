@@ -1,10 +1,6 @@
-import { visit, currentURL, triggerEvent, waitFor } from '@ember/test-helpers';
-
-import { module, test } from 'qunit';
+import { module } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
-
-import { Submodes } from '@cardstack/host/components/submode-switcher';
 
 import {
   setupLocalIndexing,
@@ -93,34 +89,5 @@ module('Acceptance | permissioned realm tests', function (hooks) {
       },
       permissions: { users: ['read', 'write'] },
     });
-  });
-
-  test('visiting realm root', async function (assert) {
-    await visit('/test/');
-
-    // Redirecting to operator mode if realm is not publicly readable
-    assert.operatorModeParametersMatch(currentURL(), {
-      stacks: [
-        [
-          {
-            id: `${testRealmURL}`,
-            format: 'isolated',
-          },
-        ],
-      ],
-      submode: Submodes.Interact,
-    });
-
-    await waitFor('[data-test-stack-card]');
-    assert.dom(`[data-test-stack-card="${testRealmURL}"]`).exists();
-    assert.dom('[data-test-index-card]').containsText('Hello, world');
-
-    // Cannot go to guest mode
-    await triggerEvent(document.body, 'keydown', {
-      code: 'Key.',
-      key: '.',
-      ctrlKey: true,
-    });
-    assert.dom('[data-test-stack-card="http://test-realm/test/"]').exists();
   });
 });

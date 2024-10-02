@@ -47,7 +47,6 @@ import {
   Submodes,
 } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
-import type CardController from '@cardstack/host/controllers/card';
 
 import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
 import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
@@ -67,6 +66,7 @@ import type {
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import { Skill } from '../components/ai-assistant/skill-menu';
+import IndexController from '../controllers';
 import { getCard } from '../resources/card-resource';
 import { importResource } from '../resources/import';
 
@@ -249,10 +249,10 @@ export default class MatrixService extends Service {
 
   async initializeNewUser(auth: LoginResponse, displayName: string) {
     displayName = displayName.trim();
-    let cardController = getOwner(this)!.lookup(
-      'controller:card',
-    ) as CardController;
-    cardController.workspaceChooserOpened = true;
+    let controller = getOwner(this)!.lookup(
+      'controller:index',
+    ) as IndexController;
+    controller.workspaceChooserOpened = true;
     this.start({ auth });
     this.setDisplayName(displayName);
     await this.createPersonalRealmForUser({

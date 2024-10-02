@@ -36,8 +36,9 @@ test.describe('Create Realm via Dashboard', () => {
   test('it can create a new realm for a logged in user upon request', async ({
     page,
   }) => {
-    await clearLocalStorage(page, appURL);
-    await login(page, 'user1', 'pass', { url: appURL });
+    let serverIndexUrl = new URL(appURL).origin;
+    await clearLocalStorage(page, serverIndexUrl);
+    await login(page, 'user1', 'pass', { url: serverIndexUrl });
     await page.locator('[data-test-workspace-chooser-toggle]').click();
     await page.locator('[data-test-add-workspace]').click();
     await page.locator('[data-test-display-name-field]').fill('New Workspace');
@@ -50,8 +51,7 @@ test.describe('Create Realm via Dashboard', () => {
       page.locator('[data-test-create-workspace-modal]'),
     ).toHaveCount(0);
     await page.locator('[data-test-workspace="New Workspace"]').click();
-    let newRealmURL = new URL('user1/new-workspace/', new URL(appURL).origin)
-      .href;
+    let newRealmURL = new URL('user1/new-workspace/', serverIndexUrl).href;
     await expect(
       page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toBeVisible();

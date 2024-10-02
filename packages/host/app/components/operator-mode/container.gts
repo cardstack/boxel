@@ -25,6 +25,8 @@ import {
   type Search,
 } from '@cardstack/host/resources/search';
 
+import MessageService from '@cardstack/host/services/message-service';
+
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import CardCatalogModal from '../card-catalog/modal';
@@ -46,18 +48,16 @@ export default class OperatorModeContainer extends Component<Signature> {
   @service private declare cardService: CardService;
   @service declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare messageService: MessageService;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
+    (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
 
-    if (isTesting()) {
-      (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
-      registerDestructor(this, () => {
-        delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
-      });
-    }
+    this.messageService.register();
 
     registerDestructor(this, () => {
+      delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
       this.operatorModeStateService.clearStacks();
     });
   }

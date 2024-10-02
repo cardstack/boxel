@@ -8,7 +8,6 @@ import {
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
 import {
   openRoot,
-  toggleOperatorMode,
   clearLocalStorage,
   gotoRegistration,
   assertLoggedIn,
@@ -46,7 +45,7 @@ test.describe('Login using email', () => {
 
   test('Login using email', async ({ page }) => {
     await openRoot(page);
-    await toggleOperatorMode(page);
+
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
     await page.locator('[data-test-username-field]').fill('user1@example.com');
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
