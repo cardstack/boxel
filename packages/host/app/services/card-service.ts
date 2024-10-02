@@ -174,7 +174,7 @@ export default class CardService extends Service {
       });
       // send doc over the wire with absolute URL's. The realm server will convert
       // to relative URL's as it serializes the cards
-      let realmURL = await this.getRealmURL(card);
+      let realmURL = await this.getRealmURL(card, { isWritableRealm: true });
       let json = await this.saveCardDocument(doc, realmURL);
       let isNew = !card.id;
 
@@ -451,13 +451,21 @@ export default class CardService extends Service {
     return card[api.realmInfo];
   }
 
-  async getRealmURL(card?: CardDef) {
+  async getRealmURL(card: CardDef, opts?: { isWritableRealm: boolean }) {
     let api = await this.getAPI();
+    if (opts?.isWritableRealm) {
+      let url = card?.[api.realmURL];
+      if (url && this.realm.canWrite(url.href)) {
+        return url;
+      }
+      if (!this.realm.defaultWritableRealm) {
+        throw new Error('Could not find a writable realm');
+      }
+      return new URL(this.realm.defaultWritableRealm.path);
+    }
     // in the case where we get no realm URL from the card, we are dealing with
     // a new card instance that does not have a realm URL yet.
-    return (
-      card?.[api.realmURL] ?? new URL(this.realm.defaultReadableRealm.path)
-    );
+    return card[api.realmURL] ?? new URL(this.realm.defaultReadableRealm.path);
   }
 
   async cardsSettled() {
