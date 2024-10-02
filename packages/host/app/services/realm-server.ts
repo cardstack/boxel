@@ -11,8 +11,8 @@ import { TrackedArray } from 'tracked-built-ins/.';
 import { baseRealm, SupportedMimeType } from '@cardstack/runtime-common';
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
-import type NetworkService from './network';
 import type { ExtendedClient } from './matrix-sdk-loader';
+import type NetworkService from './network';
 import type ResetService from './reset';
 
 interface RealmServerTokenClaims {

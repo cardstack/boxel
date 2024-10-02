@@ -1,3 +1,4 @@
+import Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
 import {
@@ -14,6 +15,7 @@ import { shimExternals } from '../lib/externals';
 
 import type LoaderService from './loader-service';
 import type RealmService from './realm';
+import type ResetService from './reset';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
@@ -34,10 +36,16 @@ function getNativeFetch(): typeof fetch {
 
 export default class NetworkService extends Service {
   @service declare fastboot: { isFastBoot: boolean };
-  @service declare realm: RealmService;
   @service declare loaderService: LoaderService;
+  @service declare realm: RealmService;
+  @service declare reset: ResetService;
 
   virtualNetwork = this.makeVirtualNetwork();
+
+  constructor(owner: Owner) {
+    super(owner);
+    this.reset.register(this);
+  }
 
   get fetch() {
     return this.virtualNetwork.fetch;
@@ -81,4 +89,8 @@ export default class NetworkService extends Service {
     shimExternals(virtualNetwork);
     return virtualNetwork;
   }
+
+  resetState = () => {
+    this.virtualNetwork = this.makeVirtualNetwork();
+  };
 }
