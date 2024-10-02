@@ -89,7 +89,6 @@
     "concurrently": "^8.0.1",
     "esbuild": "^0.24.0",
     "eslint": "^8.26.0",
-    "semver": "^7.6.3",
     "typescript": "~5.1.6"
   }
 }
