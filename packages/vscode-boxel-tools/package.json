@@ -19,7 +19,7 @@
   "activationEvents": [
     "onAuthenticationRequest:synapse"
   ],
-  "main": "./out/vscode-boxel-tools/src/extension",
+  "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
@@ -62,14 +62,15 @@
   "scripts": {
     "vscode:prepublish": "pnpm run compile",
     "vscode:package": "pnpm vsce package --no-dependencies",
-    "compile": "glint --build -p ./",
+    "compile": "glint --build -p ./ && node esbuild.js --production",
     "lint": "eslint \"src/**/*.ts\"",
-    "watch": "glint --watch -p ./"
+    "watch": "glint --watch -p ./ # FIXME does this still work?"
   },
   "dependencies": {
     "matrix-js-sdk": "^31.0.0"
   },
   "devDependencies": {
+    "@babel/preset-typescript": "^7.24.7",
     "@cardstack/runtime-common": "workspace:*",
     "@glint/core": "^1.3.0",
     "@glint/environment-ember-loose": "^1.3.0",
@@ -80,6 +81,7 @@
     "@typescript-eslint/eslint-plugin": "^7.14.0",
     "@typescript-eslint/parser": "^7.14.0",
     "@vscode/vsce": "^3.1.0",
+    "esbuild": "^0.24.0",
     "eslint": "^8.26.0",
     "typescript": "~5.1.6"
   }

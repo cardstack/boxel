@@ -1,5 +1,5 @@
 import { marked } from 'marked';
-import { sanitizeHtml } from './dompurify';
+import { sanitizeHtml } from './dompurify-runtime';
 
 export function markedSync(markdown: string) {
   return marked(markdown, { async: false }) as string;
