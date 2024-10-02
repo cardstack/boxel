@@ -1,6 +1,7 @@
 import { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
+
 import ItemContainer from './item-container';
 
 interface Signature {
