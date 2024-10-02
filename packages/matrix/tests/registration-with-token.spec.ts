@@ -117,6 +117,10 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       page.locator(`[data-test-workspace="Test User's Workspace"] img`),
       'the "T" icon URL is shown',
     ).toHaveAttribute('src', 'https://i.postimg.cc/Rq550Bwv/T.png');
+    await expect(
+      page.locator(`[data-test-workspace="Test User's Workspace"] .icon`),
+      'has background image',
+    ).toHaveAttribute('style', /--workspace-background-image-url:/);
 
     let newRealmURL = new URL('user1/personal/', new URL(appURL).origin).href;
     await enterWorkspace(page, "Test User's Workspace");

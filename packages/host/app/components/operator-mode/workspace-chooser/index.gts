@@ -3,6 +3,7 @@ import Component from '@glimmer/component';
 
 import RealmServerService from '@cardstack/host/services/realm-server';
 
+import AddWorkspace from './add-workspace';
 import Workspace from './workspace';
 
 interface Signature {
@@ -31,6 +32,7 @@ export default class WorkspaceChooser extends Component<Signature> {
               data-test-workspace={{realmURL}}
             />
           {{/each}}
+          <AddWorkspace />
         </div>
         {{#if this.displayCatalogWorkspaces}}
           <span class='workspace-chooser__title'>Community Catalogs</span>

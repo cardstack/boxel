@@ -34,6 +34,11 @@ export function iconURLFor(word: string) {
   return iconURLs[word.toLocaleLowerCase().charAt(0)];
 }
 
+export function getRandomBackgroundURL() {
+  const index = Math.floor(Math.random() * backgroundURLs.length);
+  return backgroundURLs[index];
+}
+
 // TODO move the hosting to our S3
 const iconURLs: { [letter: string]: string } = Object.freeze({
   a: 'https://i.postimg.cc/BZwv0LyC/A.png',
@@ -63,3 +68,31 @@ const iconURLs: { [letter: string]: string } = Object.freeze({
   y: 'https://i.postimg.cc/Qdqtv4rF/Y.png',
   z: 'https://i.postimg.cc/k5X4CQnf/Z.png',
 });
+const backgroundURLs: readonly string[] = Object.freeze([
+  'https://i.postimg.cc/WpyVYDN9/4k-atmosphere-curvature.jpg',
+  'https://i.postimg.cc/k57PRKs5/4k-brushed-slabs.jpg',
+  'https://i.postimg.cc/Sx6pKDW5/4k-crescent-lake.jpg',
+  'https://i.postimg.cc/52dV1ZFL/4k-curvilinear-stairs.jpg',
+  'https://i.postimg.cc/zXRrsJ3q/4k-desert-dunes.jpg',
+  'https://i.postimg.cc/d0nP23Nj/4k-flowing-mesh.jpg',
+  'https://i.postimg.cc/4dFD0MgK/4k-glass-reflection.jpg',
+  'https://i.postimg.cc/G220qRZw/4k-glow-cells.jpg',
+  'https://i.postimg.cc/mkzvWwLm/4k-green-wormhole.jpg',
+  'https://i.postimg.cc/RCWh0xqD/4k-joshua-dawn.jpg',
+  'https://i.postimg.cc/Y2T9GDWq/4k-leaves-moss.jpg',
+  'https://i.postimg.cc/br7Kytdp/4k-light-streaks.jpg',
+  'https://i.postimg.cc/SKQNFwwV/4k-metallic-leather.jpg',
+  'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
+  'https://i.postimg.cc/6pf5P91y/4k-paint-swirl.jpg',
+  'https://i.postimg.cc/Lsy4HxSS/4k-pastel-triangles.jpg',
+  'https://i.postimg.cc/gJnzr3cZ/4k-perforated-sheet.jpg',
+  'https://i.postimg.cc/FR89S11n/4k-plastic-ripples.jpg',
+  'https://i.postimg.cc/4ycXQZ94/4k-powder-puff.jpg',
+  'https://i.postimg.cc/tRnRjdM0/4k-redrock-canyon.jpg',
+  'https://i.postimg.cc/8P8pPF27/4k-rock-portal.jpg',
+  'https://i.postimg.cc/13BsHvfF/4k-sand-stone.jpg',
+  'https://i.postimg.cc/L6zHq9SN/4k-techno-floor.jpg',
+  'https://i.postimg.cc/fbbZgY9r/4k-water-surface.jpg',
+  'https://i.postimg.cc/qv4pyPM0/4k-watercolor-splashes.jpg',
+  'https://i.postimg.cc/mr6Rxh32/4k-wildflower-field.jpg',
+]);

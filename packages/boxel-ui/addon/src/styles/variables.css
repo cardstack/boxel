@@ -69,6 +69,7 @@
   --boxel-border-radius: 7.5px;
   --boxel-border-radius-lg: 11.25px;
   --boxel-border-radius-xl: 15px;
+  --boxel-border-radius-xxl: 22px;
   --boxel-transition: 0.2s ease;
   --boxel-box-shadow: 0 1px 3px rgb(0 0 0 / 25%);
   --boxel-box-shadow-hover: 0 3px 10px rgb(0 0 0 / 15%);

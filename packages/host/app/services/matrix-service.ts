@@ -49,7 +49,7 @@ import {
 import ENV from '@cardstack/host/config/environment';
 
 import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
-import { iconURLFor } from '@cardstack/host/lib/utils';
+import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
@@ -255,11 +255,30 @@ export default class MatrixService extends Service {
     controller.workspaceChooserOpened = true;
     this.start({ auth });
     this.setDisplayName(displayName);
-
-    let personalRealmURL = await this.realmServer.createRealm({
+    await this.createPersonalRealmForUser({
       endpoint: 'personal',
       name: `${displayName}'s Workspace`,
       iconURL: iconURLFor(displayName),
+      backgroundURL: getRandomBackgroundURL(),
+    });
+  }
+
+  public async createPersonalRealmForUser({
+    endpoint,
+    name,
+    iconURL,
+    backgroundURL,
+  }: {
+    endpoint: string;
+    name: string;
+    iconURL?: string;
+    backgroundURL?: string;
+  }) {
+    let personalRealmURL = await this.realmServer.createRealm({
+      endpoint,
+      name,
+      iconURL,
+      backgroundURL,
     });
     let { realms = [] } =
       (await this.client.getAccountDataFromServer<{ realms: string[] }>(
