@@ -22,7 +22,6 @@ import {
   isInRoom,
   getRoomsFromSync,
   initialRoomName,
-  enterWorkspace,
 } from '../helpers';
 
 test.describe('Room creation', () => {
