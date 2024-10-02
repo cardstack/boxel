@@ -1,6 +1,7 @@
 import { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
+import ItemContainer from './item-container';
 
 interface Signature {
   Blocks: {
@@ -10,10 +11,10 @@ interface Signature {
 }
 
 const WorkspaceLoadingIndicator: TemplateOnlyComponent<Signature> = <template>
-  <button class='workspace' data-test-workspace-loading-indicator>
+  <ItemContainer class='workspace' data-test-workspace-loading-indicator>
     <div class='loading-small-icon' />
     <LoadingIndicator @color='var(--boxel-light)' />
-  </button>
+  </ItemContainer>
   <style scoped>
     .workspace {
       min-width: 251.6px;

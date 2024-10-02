@@ -120,6 +120,7 @@ export default class Workspace extends Component<Signature> {
   }
 
   private loadRealmTask = task(async () => {
+    await this.realm.login(this.args.realmURL);
     await this.realm.ensureRealmMeta(this.args.realmURL);
   });
 
