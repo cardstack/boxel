@@ -188,7 +188,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     // directly to card in private repo
     await logout(page);
     await assertLoggedOut(page);
-    // await page.goto();
+
     await login(page, 'user1', 'mypassword1!', {
       url: `${newRealmURL}hello-world`,
       skipOpeningAssistant: true,
