@@ -109,6 +109,7 @@ export default class MatrixService extends Service {
   @service private declare router: RouterService;
   @service private declare reset: ResetService;
   @tracked private _client: ExtendedClient | undefined;
+  @tracked private postLoginCompleted = false;
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
@@ -185,7 +186,7 @@ export default class MatrixService extends Service {
   }
 
   get isLoggedIn() {
-    return this.client.isLoggedIn();
+    return this.client.isLoggedIn() && this.postLoginCompleted;
   }
 
   get client() {
@@ -225,6 +226,7 @@ export default class MatrixService extends Service {
       await this.flushMembership;
       await this.flushTimeline;
       clearAuth();
+      this.postLoginCompleted = false;
       this.reset.resetAll();
       this.unbindEventListeners();
       await this.client.logout(true);
@@ -351,7 +353,7 @@ export default class MatrixService extends Service {
       userId,
       deviceId,
     });
-    if (this.isLoggedIn) {
+    if (this.client.isLoggedIn()) {
       this.realmServer.setClient(this.client);
       saveAuth(auth);
       this.bindEventListeners();
@@ -365,6 +367,7 @@ export default class MatrixService extends Service {
           accountDataContent?.realms ?? [],
         );
         await this.loginToRealms();
+        this.postLoginCompleted = true;
       } catch (e) {
         console.log('Error starting Matrix client', e);
         await this.logout();
