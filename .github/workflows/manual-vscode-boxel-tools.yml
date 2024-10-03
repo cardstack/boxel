@@ -23,10 +23,31 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "16"
+      - name: Install vsce
+        run: npm install -g @vscode/vsce
       - name: Check for version change and subsequent modifications
         id: check
         run: |
           PACKAGE_JSON="packages/vscode-boxel-tools/package.json"
+
+          # Get current version from package.json
+          CURRENT_VERSION=$(node -p "require('./$PACKAGE_JSON').version")
+          echo "Current version: $CURRENT_VERSION"
+
+          # Get latest version from VS Code Marketplace
+          MARKETPLACE_DATA=$(vsce show cardstack.boxel-tools --json)
+          MARKETPLACE_VERSION=$(echo "$MARKETPLACE_DATA" | jq -r '.versions[0].version')
+          echo "Marketplace version: $MARKETPLACE_VERSION"
+
+          if [ "$CURRENT_VERSION" = "$MARKETPLACE_VERSION" ]; then
+            echo "Error: The version in package.json ($CURRENT_VERSION) is the same as the Marketplace version. Please update the version before publishing."
+            exit 1
+          fi
+
           LAST_VERSION_CHANGE=$(git log -1 --pretty=format:%H --grep="version" -- $PACKAGE_JSON)
           echo "Last version change commit: $LAST_VERSION_CHANGE"
 
