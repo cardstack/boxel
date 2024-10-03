@@ -362,21 +362,10 @@ module('Acceptance | interact submode tests', function (hooks) {
     test('Can open a recent card in empty stack', async function (assert) {
       await visitOperatorMode({});
 
-      await click('[data-test-add-card-button]');
-
       await click('[data-test-search-field]');
       await fillIn('[data-test-search-field]', `${testRealmURL}person-entry`);
 
-      assert.dom('[data-test-realm-filter-button]').isDisabled();
-
-      assert
-        .dom(`[data-test-realm="Test Workspace B"] [data-test-results-count]`)
-        .hasText('1 result');
-
-      assert.dom('[data-test-card-catalog-item]').exists({ count: 1 });
-      await click('[data-test-select]');
-
-      await click('[data-test-card-catalog-go-button]');
+      await click('[data-test-card="http://test-realm/test/person-entry"]');
 
       assert
         .dom(`[data-test-stack-card="${testRealmURL}person-entry"]`)
@@ -1201,12 +1190,12 @@ module('Acceptance | interact submode tests', function (hooks) {
         ],
       });
 
-      // Close the last card in the last stack that is left - should get the empty state
+      // Close the last card in the last stack that is left
       await click(
         '[data-test-operator-mode-stack="0"] [data-test-close-button]',
       );
 
-      assert.dom('.no-cards').includesText('Add a card to get started');
+      assert.dom('[data-test-workspace-chooser]').exists();
     });
 
     test('visiting 2 stacks from differing realms', async function (assert) {
