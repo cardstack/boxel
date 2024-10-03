@@ -29,7 +29,7 @@ jobs:
         run: pnpm vscode:package
         working-directory: packages/vscode-boxel-tools
       - name: Test
-        run: xfvb-run -a pnpm test
+        run: xvfb-run -a pnpm test
         working-directory: packages/vscode-boxel-tools
       - name: Publish
         if: success()
