@@ -3,6 +3,8 @@ import { baseRealm } from './index';
 import {
   PackageShimHandler,
   PACKAGES_FAKE_ORIGIN,
+  type ModuleLike,
+  ModuleDescriptor,
 } from './package-shim-handler';
 import type { Readable } from 'stream';
 import { fetcher, type FetcherMiddlewareHandler } from './fetcher';
@@ -30,8 +32,12 @@ export class VirtualNetwork {
 
   private packageShimHandler = new PackageShimHandler(this.resolveImport);
 
-  shimModule(moduleIdentifier: string, module: Record<string, any>) {
+  shimModule(moduleIdentifier: string, module: ModuleLike) {
     this.packageShimHandler.shimModule(moduleIdentifier, module);
+  }
+
+  shimAsyncModule(descriptor: ModuleDescriptor) {
+    this.packageShimHandler.shimAsyncModule(descriptor);
   }
 
   addURLMapping(from: URL, to: URL) {

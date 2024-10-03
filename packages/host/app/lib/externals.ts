@@ -23,7 +23,6 @@ import * as emberProvideConsumeContextContextProvider from 'ember-provide-consum
 import * as emberResources from 'ember-resources';
 import * as ethers from 'ethers';
 import * as flat from 'flat';
-import * as lodash from 'lodash';
 import * as matrixJsSDK from 'matrix-js-sdk';
 import * as superFastMD5 from 'super-fast-md5';
 import * as tracked from 'tracked-built-ins';
@@ -86,7 +85,10 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     emberProvideConsumeContextContextProvider,
   );
   virtualNetwork.shimModule('flat', flat);
-  virtualNetwork.shimModule('lodash', lodash);
+  virtualNetwork.shimAsyncModule({
+    id: 'lodash',
+    resolve: () => import(`lodash`),
+  });
   virtualNetwork.shimModule('tracked-built-ins', tracked);
   virtualNetwork.shimModule('date-fns', dateFns);
   virtualNetwork.shimModule('@ember/destroyable', emberDestroyable);
