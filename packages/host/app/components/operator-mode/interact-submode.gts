@@ -18,13 +18,11 @@ import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
 import { Tooltip } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
-import { IconPlus, Download } from '@cardstack/boxel-ui/icons';
+import { Download } from '@cardstack/boxel-ui/icons';
 
 import {
   aiBotUsername,
   Deferred,
-  baseCardRef,
-  chooseCard,
   codeRefWithAbsoluteURL,
   getCard,
   moduleFrom,
@@ -301,18 +299,6 @@ export default class InteractSubmode extends Component<Signature> {
     }
     return item;
   }
-
-  private addCard = restartableTask(async () => {
-    let type = baseCardRef;
-    let chosenCard: CardDef | undefined = await chooseCard({
-      filter: { type },
-    });
-
-    if (chosenCard) {
-      // This is called when there are no cards in the stack left, so we can assume the stackIndex is 0
-      this.publicAPI(this, 0).viewCard(chosenCard, 'isolated');
-    }
-  });
 
   private close = task(async (item: StackItem) => {
     let { card, request } = item;
