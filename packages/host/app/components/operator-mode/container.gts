@@ -25,6 +25,8 @@ import {
   type Search,
 } from '@cardstack/host/resources/search';
 
+import MessageService from '@cardstack/host/services/message-service';
+
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import CardCatalogModal from '../card-catalog/modal';
@@ -46,18 +48,16 @@ export default class OperatorModeContainer extends Component<Signature> {
   @service private declare cardService: CardService;
   @service declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare messageService: MessageService;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
+    (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
 
-    if (isTesting()) {
-      (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
-      registerDestructor(this, () => {
-        delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
-      });
-    }
+    this.messageService.register();
 
     registerDestructor(this, () => {
+      delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
       this.operatorModeStateService.clearStacks();
     });
   }
@@ -133,15 +133,6 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.operatorModeStateService.state?.submode === Submodes.Code;
   }
 
-  // Note that there is a moment of time where you have logged into matrix but
-  // have not yet obtained realm authorization. We guard for that scenario here.
-  private get hasIdentityWithRealmAuthorization() {
-    return (
-      this.matrixService.isLoggedIn &&
-      !this.operatorModeStateService.needsRealmAuthorization
-    );
-  }
-
   <template>
     <Modal
       class='operator-mode'
@@ -152,14 +143,12 @@ export default class OperatorModeContainer extends Component<Signature> {
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
     >
       <CardCatalogModal />
-      {{#if (and this.hasIdentityWithRealmAuthorization this.isCodeMode)}}
+      {{#if (and this.matrixService.isLoggedIn this.isCodeMode)}}
         <CodeSubmode
           @saveSourceOnClose={{perform this.saveSource}}
           @saveCardOnClose={{perform this.write}}
         />
-      {{else if
-        (and this.hasIdentityWithRealmAuthorization (not this.isCodeMode))
-      }}
+      {{else if (and this.matrixService.isLoggedIn (not this.isCodeMode))}}
         <InteractSubmode @write={{perform this.write}} />
       {{else}}
         <Auth />

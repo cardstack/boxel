@@ -51,8 +51,10 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
-import LoaderService from '../services/loader-service';
 import { type RenderCard } from '../services/render-service';
+
+import type LoaderService from '../services/loader-service';
+import type NetworkService from '../services/network';
 
 const log = logger('current-run');
 
@@ -89,7 +91,8 @@ export class CurrentRun {
     moduleErrors: 0,
     totalIndexEntries: 0,
   };
-  @service declare loaderService: LoaderService;
+  @service private declare loaderService: LoaderService;
+  @service private declare network: NetworkService;
 
   constructor({
     realmURL,
@@ -429,7 +432,7 @@ export class CurrentRun {
       );
 
       if (!this.#realmInfo) {
-        let realmInfoResponse = await this.loaderService.loader.fetch(
+        let realmInfoResponse = await this.network.authedFetch(
           `${this.realmURL}_info`,
           { headers: { Accept: SupportedMimeType.RealmInfo } },
         );

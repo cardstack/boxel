@@ -50,13 +50,14 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
   });
 
   test('it can register a user with a registration token', async ({ page }) => {
+    let serverIndexUrl = new URL(appURL).origin;
     test.setTimeout(120_000);
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await registerUser(synapse, 'user2', 'pass');
     await registerRealmUsers(synapse);
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
-    await clearLocalStorage(page, appURL);
-    await gotoRegistration(page, appURL);
+    await clearLocalStorage(page, serverIndexUrl);
+    await gotoRegistration(page, serverIndexUrl);
 
     await expect(
       page.locator('[data-test-token-field]'),
@@ -131,7 +132,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       'has background image',
     ).toHaveAttribute('style', /--workspace-background-image-url:/);
 
-    let newRealmURL = new URL('user1/personal/', new URL(appURL).origin).href;
+    let newRealmURL = new URL('user1/personal/', serverIndexUrl).href;
     await enterWorkspace(page, "Test User's Workspace");
 
     await expect(
@@ -148,8 +149,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
 
     // assert workspaces state don't leak into other sessions
     await login(page, 'user2', 'pass', {
-      url: appURL,
-      skipOpeningOperatorMode: true,
+      url: serverIndexUrl,
       skipOpeningAssistant: true,
     });
     await assertLoggedIn(page, {
@@ -169,8 +169,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await logout(page);
     await assertLoggedOut(page);
     await login(page, 'user1', 'mypassword1!', {
-      url: appURL,
-      skipOpeningOperatorMode: true,
+      url: serverIndexUrl,
       skipOpeningAssistant: true,
     });
     await assertLoggedIn(page, { displayName: 'Test User' });
@@ -198,10 +197,9 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     // directly to card in private repo
     await logout(page);
     await assertLoggedOut(page);
-    await page.goto(`${newRealmURL}hello-world`);
+
     await login(page, 'user1', 'mypassword1!', {
-      url: appURL,
-      skipOpeningOperatorMode: true,
+      url: `${newRealmURL}hello-world`,
       skipOpeningAssistant: true,
     });
     await assertLoggedIn(page, { displayName: 'Test User' });

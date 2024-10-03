@@ -1,9 +1,9 @@
 import Service, { service } from '@ember/service';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
+import type NetworkService from './network';
 
 export default class RealmInfoService extends Service {
-  @service declare loaderService: LoaderService;
+  @service declare network: NetworkService;
 
   cachedPublicReadableRealms: Map<string, boolean> = new Map();
 
@@ -12,7 +12,7 @@ export default class RealmInfoService extends Service {
     if (this.cachedPublicReadableRealms.has(realmURLString)) {
       return this.cachedPublicReadableRealms.get(realmURLString)!;
     }
-    let response = await this.loaderService.loader.fetch(realmURL, {
+    let response = await this.network.authedFetch(realmURL, {
       method: 'HEAD',
     });
     let isPublicReadable = Boolean(

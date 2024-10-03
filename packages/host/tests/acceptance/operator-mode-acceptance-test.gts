@@ -4,7 +4,6 @@ import {
   click,
   waitFor,
   fillIn,
-  triggerEvent,
   waitUntil,
 } from '@ember/test-helpers';
 
@@ -378,15 +377,8 @@ module('Acceptance | operator mode tests', function (hooks) {
 
   test('visiting operator mode', async function (assert) {
     await visit('/');
+    await click('[data-test-workspace="Test Workspace B"]');
 
-    // Enter operator mode
-    await triggerEvent(document.body, 'keydown', {
-      code: 'Key.',
-      key: '.',
-      ctrlKey: true,
-    });
-
-    await waitFor('[data-test-operator-mode-stack]');
     assert.dom('[data-test-operator-mode-stack]').exists();
     assert.dom('[data-test-stack-card-index="0"]').exists(); // Index card opens in the stack
     await click('[data-test-boxel-filter-list-button="All Cards"]');
@@ -670,14 +662,6 @@ module('Acceptance | operator mode tests', function (hooks) {
     test('realm session refreshes within 5 minute window of expiration', async function (assert) {
       await visit('/');
 
-      // Enter operator mode
-      await triggerEvent(document.body, 'keydown', {
-        code: 'Key.',
-        key: '.',
-        ctrlKey: true,
-      });
-
-      await waitFor('[data-test-operator-mode-stack]');
       let originalToken = window.localStorage.getItem(sessionLocalStorageKey);
       await waitUntil(
         () =>
