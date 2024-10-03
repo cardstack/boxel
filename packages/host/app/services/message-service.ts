@@ -36,13 +36,6 @@ export default class MessageService extends Service {
 
   subscribe(realmURL: URL, cb: (ev: MessageEvent) => void): () => void {
     let realm = realmURL.href;
-    // the /_freestyle route is trying to subscribe to SSE events as a result of
-    // trying to use a CardResource, hence the testing guard
-    if (!isTesting() && !this.matrixService.isLoggedIn) {
-      throw new Error(
-        `Cannot subscribe to events from realm ${realm} before logging in`,
-      );
-    }
     let { eventSource: maybeEventSource, unsubscribes = [] } =
       this.subscriptions.get(realm) ?? {};
 
