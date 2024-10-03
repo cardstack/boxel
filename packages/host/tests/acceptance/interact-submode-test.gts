@@ -387,8 +387,6 @@ module('Acceptance | interact submode tests', function (hooks) {
         `[data-test-stack-card="${testRealmURL}person-entry"] [data-test-close-button]`,
       );
 
-      assert.dom('[data-test-add-card-button]').exists('stack is empty');
-
       await click('[data-test-search-field]');
       assert.dom('[data-test-search-sheet]').hasClass('prompt');
 
@@ -397,19 +395,6 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert
         .dom(`[data-test-stack-card="${testRealmURL}person-entry"]`)
         .exists();
-    });
-
-    test('Handles a URL with no results', async function (assert) {
-      await visitOperatorMode({});
-
-      await click('[data-test-add-card-button]');
-
-      await fillIn(
-        '[data-test-search-field]',
-        `${testRealmURL}xyz-does-not-exist`,
-      );
-
-      assert.dom(`[data-test-card-catalog]`).hasText('No cards available');
     });
   });
 
