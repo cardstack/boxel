@@ -33,7 +33,6 @@ import {
   setupLocalIndexing,
   setupServerSentEvents,
   setupOnSave,
-  showSearchResult,
   type TestContextWithSave,
   lookupLoaderService,
 } from '../../helpers';
