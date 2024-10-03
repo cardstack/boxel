@@ -53,6 +53,7 @@ interface Signature {
 }
 
 let boundRenderedCardElement = new WeakSet<HTMLElement>();
+let computedZIndex = new WeakMap<HTMLElement, string>();
 
 export default class OperatorModeOverlays extends Component<Signature> {
   <template>
@@ -61,22 +62,19 @@ export default class OperatorModeOverlays extends Component<Signature> {
         renderedCard.cardDefOrId
         (this.getCardId renderedCard.cardDefOrId)
         (this.isSelected renderedCard.cardDefOrId)
-        as |cardDefOrId cardId isSelected|
+        (this.isHovered renderedCard)
+        as |cardDefOrId cardId isSelected isHovered|
       }}
-        {{#if (or isSelected (this.isHovered renderedCard))}}
+        {{#if (or isSelected isHovered)}}
           <div
-            class={{cn
-              'actions-overlay'
-              selected=isSelected
-              hovered=(this.isHovered renderedCard)
-            }}
+            class={{cn 'actions-overlay' selected=isSelected hovered=isHovered}}
             {{velcro renderedCard.element middleware=(Array this.offset)}}
             data-test-overlay-selected={{if
               isSelected
               (removeFileExtension cardId)
             }}
             data-test-overlay-card={{removeFileExtension cardId}}
-            style={{renderedCard.overlayZIndexStyle}}
+            style={{this.computeZIndex renderedCard}}
             ...attributes
           >
             <div class={{cn 'actions' field=(this.isField renderedCard)}}>
@@ -412,7 +410,6 @@ export default class OperatorModeOverlays extends Component<Signature> {
         );
       });
       renderedCard.element.style.cursor = 'pointer';
-      renderedCard.overlayZIndexStyle = this.zIndexStyle(renderedCard.element);
     }
 
     return renderedCards;
@@ -515,13 +512,49 @@ export default class OperatorModeOverlays extends Component<Signature> {
   }
 
   @action private isSelected(cardDefOrId: CardDefOrId) {
+    console.log(
+      'isSelected',
+      this.args.selectedCards?.some(
+        (card: CardDefOrId) => card === cardDefOrId,
+      ),
+      cardDefOrId,
+    );
     return this.args.selectedCards?.some(
       (card: CardDefOrId) => card === cardDefOrId,
     );
   }
 
   @action private isHovered(renderedCard: RenderedCardForOverlayActions) {
-    return this.currentlyHoveredCard === renderedCard;
+    console.log(
+      'isHovered',
+      this.currentlyHoveredCard === renderedCard,
+      renderedCard.cardDefOrId,
+    );
+    if (
+      (renderedCard.cardDefOrId ===
+        'http://localhost:4201/experiments/Task/346cc7ac-eb65-41fd-a1d7-0400668da097.json' &&
+        this.currentlyHoveredCard?.cardDefOrId ===
+          'http://localhost:4201/experiments/Task/346cc7ac-eb65-41fd-a1d7-0400668da097.json') ||
+      (renderedCard.cardDefOrId ===
+        'http://localhost:4201/experiments/Task/20058a9d-3c2d-4b42-8430-a95b6183245c.json' &&
+        this.currentlyHoveredCard?.cardDefOrId ===
+          'http://localhost:4201/experiments/Task/20058a9d-3c2d-4b42-8430-a95b6183245c.json')
+    ) {
+      if (this.currentlyHoveredCard !== renderedCard) {
+        debugger;
+      }
+    }
+    return this.currentlyHoveredCard?.element === renderedCard.element;
+  }
+
+  @action computeZIndex(renderedCard: RenderedCardForOverlayActions) {
+    let zIndex = computedZIndex.get(renderedCard.element);
+    if (!zIndex) {
+      let newZIndex = this.zIndexStyle(renderedCard.element);
+      computedZIndex.set(renderedCard.element, newZIndex);
+      return newZIndex;
+    }
+    return zIndex;
   }
 
   private viewCard = dropTask(
