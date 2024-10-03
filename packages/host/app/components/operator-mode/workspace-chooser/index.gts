@@ -1,10 +1,12 @@
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import MatrixService from '@cardstack/host/services/matrix-service';
 import RealmServerService from '@cardstack/host/services/realm-server';
 
 import AddWorkspace from './add-workspace';
 import Workspace from './workspace';
+import WorkspaceLoadingIndicator from './workspace-loading-indicator';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -12,6 +14,7 @@ interface Signature {
 }
 
 export default class WorkspaceChooser extends Component<Signature> {
+  @service declare matrixService: MatrixService;
   @service declare realmServer: RealmServerService;
 
   private get displayCatalogWorkspaces() {
@@ -32,6 +35,9 @@ export default class WorkspaceChooser extends Component<Signature> {
               data-test-workspace={{realmURL}}
             />
           {{/each}}
+          {{#if this.matrixService.isInitializingNewUser}}
+            <WorkspaceLoadingIndicator />
+          {{/if}}
           <AddWorkspace />
         </div>
         {{#if this.displayCatalogWorkspaces}}
