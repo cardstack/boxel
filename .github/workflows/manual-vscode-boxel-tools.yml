@@ -59,7 +59,7 @@ jobs:
             exit 1
           else
             echo "Checking for changes since version was updated in $LAST_VERSION_CHANGE"
-            CHANGES=$(git diff --name-only $LAST_VERSION_CHANGE HEAD -- packages/vscode-boxel-tools packages/runtime-common)
+            CHANGES=$(git diff --name-only $LAST_VERSION_CHANGE HEAD -- packages/vscode-boxel-tools packages/runtime-common/realm-auth-client.ts)
             echo "Changes detected:"
             echo "$CHANGES"
 
