@@ -37,7 +37,7 @@ jobs:
             echo "should_publish=true" >> $GITHUB_OUTPUT
           else
             echo "Checking for changes since $LAST_VERSION_CHANGE"
-            CHANGES=$(git diff --name-only $LAST_VERSION_CHANGE HEAD -- packages/vscode-boxel-tools packages/realm-server)
+            CHANGES=$(git diff --name-only $LAST_VERSION_CHANGE HEAD -- packages/vscode-boxel-tools packages/runtime-common)
             echo "Changes detected:"
             echo "$CHANGES"
 
