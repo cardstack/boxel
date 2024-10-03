@@ -765,8 +765,7 @@ test.describe('Room messages', () => {
       await expect(page.locator(`[data-test-attached-card]`)).toHaveCount(0);
     });
 
-    // Flaky matrix test: CS-7275
-    test.skip('replaces auto-attached card when drilling down (1 stack)', async ({
+    test('replaces auto-attached card when drilling down (1 stack)', async ({
       page,
     }) => {
       const testCard1 = `${testHost}/jersey`;
