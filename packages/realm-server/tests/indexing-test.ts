@@ -2,6 +2,7 @@ import { module, test } from 'qunit';
 import { dirSync, setGracefulCleanup } from 'tmp';
 import {
   baseRealm,
+  DBAdapter,
   LooseSingleCardDocument,
   Realm,
   RealmPermissions,
@@ -31,6 +32,9 @@ function trimCardContainer(text: string) {
     '$1',
   );
 }
+
+let testDbAdapter: DBAdapter;
+
 setGracefulCleanup();
 
 // Using the node tests for indexing as it is much easier to support the dynamic
@@ -54,6 +58,7 @@ module('indexing', function (hooks) {
 
   setupDB(hooks, {
     beforeEach: async (dbAdapter, publisher, runner) => {
+      testDbAdapter = dbAdapter;
       let virtualNetwork = createVirtualNetwork();
       dir = dirSync().name;
       realm = await createRealm({
@@ -841,11 +846,14 @@ module('indexing', function (hooks) {
   });
 
   test('will not invalidate non-json/non-executable files', async function (assert) {
-    let deletedEntries =
-      await realm.realmIndexQueryEngine.fetchDeletedEntries();
+    let deletedEntries = (await testDbAdapter.execute(
+      `SELECT url FROM boxel_index WHERE is_deleted = TRUE`,
+    )) as { url: string }[];
+
+    let deletedEntryUrls = deletedEntries.map((row) => row.url);
 
     ['random-file.txt', 'random-image.png', '.DS_Store'].forEach((file) => {
-      assert.notOk(deletedEntries.includes(file));
+      assert.notOk(deletedEntryUrls.includes(file));
     });
   });
 });
