@@ -16,8 +16,33 @@ on:
   pull_request:
 
 jobs:
+  check-version:
+    name: Check for changes since last version update
+    runs-on: ubuntu-latest
+    outputs:
+      should_publish: ${{ steps.check.outputs.should_publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check for changes
+        id: check
+        run: |
+          PACKAGE_JSON="packages/vscode-boxel-tools/package.json"
+          LAST_VERSION_COMMIT=$(git log -1 --pretty=format:%H -- $PACKAGE_JSON)
+          CHANGES=$(git diff --name-only $LAST_VERSION_COMMIT HEAD -- packages/vscode-boxel-tools packages/realm-server)
+          if [ -z "$CHANGES" ]; then
+            echo "No changes detected. Skipping publish."
+            echo "should_publish=false" >> $GITHUB_OUTPUT
+          else
+            echo "Changes detected. Proceeding with publish."
+            echo "should_publish=true" >> $GITHUB_OUTPUT
+          fi
+
   publish:
     name: Package, test, and publish VS Code Boxel Tools extension
+    needs: check-version
+    if: needs.check-version.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
