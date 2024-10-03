@@ -2,7 +2,7 @@ import GlimmerComponent from '@glimmer/component';
 import type { CardContext, BaseDef, CardDef } from '../card-api';
 // @ts-ignore no types
 import cssUrl from 'ember-css-url';
-import { cardTypeDisplayName } from '@cardstack/runtime-common';
+import { cardTypeDisplayName, cardTypeIcon } from '@cardstack/runtime-common';
 
 export default class DefaultFittedTemplate extends GlimmerComponent<{
   Args: {
@@ -16,17 +16,23 @@ export default class DefaultFittedTemplate extends GlimmerComponent<{
     <div class='fitted-template'>
       {{#if @model}}
         <div class='thumbnail-section'>
-          <div
-            class='card-thumbnail'
-            style={{cssUrl 'background-image' @model.thumbnailURL}}
-          >
-            {{#unless @model.thumbnailURL}}
-              <div
-                class='card-thumbnail-placeholder'
-                data-test-card-thumbnail-placeholder
-              ></div>
-            {{/unless}}
-          </div>
+          {{#if @model.thumbnailURL}}
+            <div
+              class='card-thumbnail'
+              style={{cssUrl 'background-image' @model.thumbnailURL}}
+            >
+              {{#unless @model.thumbnailURL}}
+                <div
+                  class='card-thumbnail-placeholder'
+                  data-test-card-thumbnail-placeholder
+                ></div>
+              {{/unless}}
+            </div>
+          {{else}}
+            {{#let (cardTypeIcon @model) as |CardTypeIcon|}}
+              <CardTypeIcon data-test-card-type-icon />
+            {{/let}}
+          {{/if}}
         </div>
         <div class='info-section'>
           <h3 class='card-title' data-test-card-title>{{@model.title}}</h3>
