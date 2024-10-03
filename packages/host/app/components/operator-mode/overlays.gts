@@ -512,37 +512,12 @@ export default class OperatorModeOverlays extends Component<Signature> {
   }
 
   @action private isSelected(cardDefOrId: CardDefOrId) {
-    console.log(
-      'isSelected',
-      this.args.selectedCards?.some(
-        (card: CardDefOrId) => card === cardDefOrId,
-      ),
-      cardDefOrId,
-    );
     return this.args.selectedCards?.some(
       (card: CardDefOrId) => card === cardDefOrId,
     );
   }
 
   @action private isHovered(renderedCard: RenderedCardForOverlayActions) {
-    console.log(
-      'isHovered',
-      this.currentlyHoveredCard === renderedCard,
-      renderedCard.cardDefOrId,
-    );
-    if (
-      (renderedCard.cardDefOrId ===
-        'http://localhost:4201/experiments/Task/346cc7ac-eb65-41fd-a1d7-0400668da097.json' &&
-        this.currentlyHoveredCard?.cardDefOrId ===
-          'http://localhost:4201/experiments/Task/346cc7ac-eb65-41fd-a1d7-0400668da097.json') ||
-      (renderedCard.cardDefOrId ===
-        'http://localhost:4201/experiments/Task/20058a9d-3c2d-4b42-8430-a95b6183245c.json' &&
-        this.currentlyHoveredCard?.cardDefOrId ===
-          'http://localhost:4201/experiments/Task/20058a9d-3c2d-4b42-8430-a95b6183245c.json')
-    ) {
-      if (this.currentlyHoveredCard !== renderedCard) {
-      }
-    }
     return this.currentlyHoveredCard?.element === renderedCard.element;
   }
 
