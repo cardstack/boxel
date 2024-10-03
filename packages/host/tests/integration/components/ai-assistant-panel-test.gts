@@ -1860,7 +1860,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .containsText('Search for the following card');
     assert
       .dom('[data-test-comand-result-header]')
-      .containsText('Search Results 2 results');
+      .containsText('Search Results 2 Results');
 
     assert.dom('.result-list li:nth-child(1)').containsText('Jackie');
     assert.dom('.result-list li:nth-child(2)').containsText('Mango');
@@ -1918,7 +1918,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .containsText('Search for the following card');
     assert
       .dom('[data-test-comand-result-header]')
-      .containsText('Search Results 1 results');
+      .containsText('Search Results 1 Result');
 
     assert.dom('.result-list li:nth-child(1)').containsText('Mango');
     assert.dom('[data-test-toggle-show-button]').doesNotExist();
@@ -1975,5 +1975,79 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('.result-list li:nth-child(4)').containsText('Hassan');
     assert.dom('.result-list li:nth-child(5)').containsText('Ian');
     assert.dom('.result-list li:nth-child(6)').doesNotExist();
+  });
+
+  test('it can copy search results card to workspace', async function (assert) {
+    const id1 = `${testRealmURL}Pet/jackie`;
+    const id2 = `${testRealmURL}Pet/mango`;
+    const roomId = await renderAiAssistantPanel(id1);
+
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: 'org.boxel.command',
+      body: 'Search for the following card',
+      formatted_body: 'Search for the following card',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'searchCard',
+          arguments: {
+            description: 'Searching for card',
+            filter: {
+              type: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        eventId: '__EVENT_ID__',
+      }),
+    });
+
+    assert
+      .dom(
+        `[data-test-operator-mode-stack="0"] [data-test-stack-card-index="0"][data-test-stack-card="${id1}"]`,
+      )
+      .exists();
+
+    await waitFor('[data-test-command-apply]');
+    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+    await waitFor('[data-test-command-result]');
+    await waitFor('.result-list li:nth-child(2)');
+    assert
+      .dom('[data-test-comand-result-header]')
+      .containsText('Search Results 2 Results');
+    assert.dom('.result-list li:nth-child(1)').containsText('Jackie');
+    assert.dom('.result-list li:nth-child(2)').containsText('Mango');
+
+    const rightStackCard =
+      '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="0"]';
+    assert.dom(rightStackCard).doesNotExist();
+
+    await click('[data-test-command-result] [data-test-more-options-button]');
+    await click('[data-test-boxel-menu-item-text="Copy to Workspace"]');
+    await this.pauseTest();
+    assert
+      .dom(`${rightStackCard} [data-test-boxel-header-title]`)
+      .hasText('Command Result');
+    assert
+      .dom(`${rightStackCard} [data-test-result-isolated-title]`)
+      .hasText('Search Results');
+    assert
+      .dom(`${rightStackCard} [data-test-result-isolated-count]`)
+      .hasText('2 Results');
+    assert
+      .dom(`${rightStackCard} [data-test-result-list] > li`)
+      .exists({ count: 2 });
+    assert
+      .dom(
+        `${rightStackCard} [data-test-card="${id1}"][data-test-card-format="embedded"]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `${rightStackCard} [data-test-card="${id2}"][data-test-card-format="embedded"]`,
+      )
+      .exists();
   });
 });
