@@ -153,8 +153,8 @@ export default class CommandService extends Service {
     commandResultEvent: CommandResultEvent,
   ) {
     let toolCall = commandEvent.content.data.toolCall;
-    let results = this.deserializeResults(commandResultEvent);
     if (toolCall.name === 'searchCard') {
+      let results = this.deserializeResults(commandResultEvent);
       return {
         toolCallName: toolCall.name,
         toolCallId: toolCall.id,
