@@ -29,6 +29,7 @@ import {
   setupAcceptanceTestRealm,
   visitOperatorMode,
   lookupLoaderService,
+  lookupNetworkService,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -547,7 +548,7 @@ module('Acceptance | operator mode tests', function (hooks) {
   });
 
   test('open workspace chooser when boxel icon is clicked', async function (assert) {
-    lookupLoaderService().virtualNetwork.mount(
+    lookupNetworkService().mount(
       async (req: Request) => {
         let isOnWorkspaceChooser = document.querySelector(
           '[data-test-workspace-chooser]',
