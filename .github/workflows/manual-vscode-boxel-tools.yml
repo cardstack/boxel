@@ -17,7 +17,7 @@ on:
 
 jobs:
   publish:
-    name: Package and publish VS Code Boxel Tools extension
+    name: Package, test, and publish VS Code Boxel Tools extension
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,6 +27,9 @@ jobs:
         working-directory: packages/boxel-ui/addon
       - name: Package
         run: pnpm vscode:package
+        working-directory: packages/vscode-boxel-tools
+      - name: Test
+        run: pnpm test
         working-directory: packages/vscode-boxel-tools
       - name: Publish
         if: success()
