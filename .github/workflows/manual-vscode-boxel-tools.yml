@@ -25,16 +25,22 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Check for relevant modifications after extension version change
+      - name: Check for version change and subsequent modifications
         id: check
         run: |
           PACKAGE_JSON="packages/vscode-boxel-tools/package.json"
           LAST_VERSION_CHANGE=$(git log -1 --pretty=format:%H --grep="version" -- $PACKAGE_JSON)
+          echo "Last version change commit: $LAST_VERSION_CHANGE"
+
           if [ -z "$LAST_VERSION_CHANGE" ]; then
             echo "No version change found in git history. Proceeding with publish."
             echo "should_publish=true" >> $GITHUB_OUTPUT
           else
+            echo "Checking for changes since $LAST_VERSION_CHANGE"
             CHANGES=$(git diff --name-only $LAST_VERSION_CHANGE HEAD -- packages/vscode-boxel-tools packages/realm-server)
+            echo "Changes detected:"
+            echo "$CHANGES"
+
             if [ -z "$CHANGES" ]; then
               echo "No changes detected since last version update. Skipping publish."
               echo "should_publish=false" >> $GITHUB_OUTPUT
@@ -43,6 +49,13 @@ jobs:
               echo "should_publish=true" >> $GITHUB_OUTPUT
             fi
           fi
+
+          # Additional debugging information
+          echo "Current directory structure:"
+          ls -R packages/vscode-boxel-tools packages/realm-server
+
+          echo "Recent commits:"
+          git log -n 5 --oneline
 
   publish:
     name: Package, test, and publish VS Code Boxel Tools extension
