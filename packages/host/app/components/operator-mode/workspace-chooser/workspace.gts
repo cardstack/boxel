@@ -4,15 +4,20 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
-import { cssVar, not } from '@cardstack/boxel-ui/helpers';
+import { task } from 'ember-concurrency';
+
+import { cssVar } from '@cardstack/boxel-ui/helpers';
 import { Lock } from '@cardstack/boxel-ui/icons';
 
 import CardService from '@cardstack/host/services/card-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RealmService from '@cardstack/host/services/realm';
 
+import ItemContainer from './item-container';
+import WorkspaceLoadingIndicator from './workspace-loading-indicator';
+
 interface Signature {
-  Element: HTMLDivElement;
+  Element: HTMLButtonElement;
   Args: {
     realmURL: string;
   };
@@ -20,39 +25,32 @@ interface Signature {
 
 export default class Workspace extends Component<Signature> {
   <template>
-    <button
-      class='workspace'
-      data-test-workspace={{this.name}}
-      {{on 'click' this.openWorkspace}}
-    >
-      <div
-        class='icon'
-        style={{cssVar workspace-background-image-url=this.backgroundImageURL}}
+    {{#if this.loadRealmTask.isRunning}}
+      <WorkspaceLoadingIndicator />
+    {{else}}
+      <ItemContainer
+        data-test-workspace={{this.name}}
+        {{on 'click' this.openWorkspace}}
       >
-        <img src={{this.iconURL}} alt='Workspace Icon' />
-        {{#if (not this.isPublic)}}
+        <div
+          class='icon'
+          style={{cssVar
+            workspace-background-image-url=this.backgroundImageURL
+          }}
+        >
+          <img src={{this.iconURL}} alt='Workspace Icon' />
+          {{!-- {{#if (not this.isPublic)}} --}}
           <div class='small-icon'>
-            <Lock width='11px' height='11px' />
+            <Lock width='100%' height='100%' />
           </div>
-        {{/if}}
-      </div>
-      <div class='info'>
-        <span class='name' data-test-workspace-name>{{this.name}}</span>
-        <span class='type'>{{if this.isPublic 'Catalog' 'Personal'}}</span>
-      </div>
-    </button>
+        </div>
+        <div class='info'>
+          <span class='name' data-test-workspace-name>{{this.name}}</span>
+          <span class='type'>{{if this.isPublic 'Catalog' 'Personal'}}</span>
+        </div>
+      </ItemContainer>
+    {{/if}}
     <style scoped>
-      .workspace {
-        min-width: 251.6px;
-        width: 251.6px;
-        height: 215.3px;
-        display: flex;
-        flex-direction: column;
-        border-radius: 15px;
-        border: solid 1px rgba(255, 255, 255, 0.5);
-        overflow: hidden;
-        padding: 0;
-      }
       .icon {
         background-color: var(--boxel-500);
         background-image: var(--workspace-background-image-url);
@@ -74,9 +72,11 @@ export default class Workspace extends Component<Signature> {
       }
       .small-icon {
         position: absolute;
-        top: var(--boxel-sp-xxxs);
-        left: var(--boxel-sp-xxxs);
-        padding: var(--boxel-sp-6xs) var(--boxel-sp-5xs);
+        top: var(--boxel-sp-xs);
+        left: var(--boxel-sp-xs);
+        width: 20px;
+        height: 20px;
+        padding: var(--boxel-sp-5xs);
         background: var(--boxel-dark);
         border-radius: 5px;
 
@@ -113,6 +113,16 @@ export default class Workspace extends Component<Signature> {
   @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
+
+  constructor(...args: [any, any]) {
+    super(...args);
+    this.loadRealmTask.perform();
+  }
+
+  private loadRealmTask = task(async () => {
+    await this.realm.login(this.args.realmURL);
+    await this.realm.ensureRealmMeta(this.args.realmURL);
+  });
 
   @cached
   private get realmInfo() {

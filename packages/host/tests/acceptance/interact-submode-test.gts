@@ -35,6 +35,7 @@ import {
   setupAcceptanceTestRealm,
   visitOperatorMode,
   lookupLoaderService,
+  lookupNetworkService,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -501,7 +502,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       });
 
       await click('[data-test-operator-mode-stack] [data-test-pet="Mango"]');
-      let expectedURL = `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+      let expectedURL = `/?operatorModeState=${encodeURIComponent(
         stringify({
           stacks: [
             [
@@ -528,7 +529,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       // The edit format should be reflected in the URL
       assert.strictEqual(
         currentURL(),
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        `/?operatorModeState=${encodeURIComponent(
           stringify({
             stacks: [
               [
@@ -1109,7 +1110,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         ],
       });
 
-      lookupLoaderService().virtualNetwork.mount(
+      lookupNetworkService().mount(
         async (req) => {
           if (req.method !== 'GET' && req.method !== 'HEAD') {
             let token = req.headers.get('Authorization');

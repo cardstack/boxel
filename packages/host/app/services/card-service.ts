@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
 import { stringify } from 'qs';
@@ -21,9 +22,6 @@ import type { Query } from '@cardstack/runtime-common/query';
 
 import ENV from '@cardstack/host/config/environment';
 
-import type MessageService from '@cardstack/host/services/message-service';
-import type Realm from '@cardstack/host/services/realm';
-
 import type {
   BaseDef,
   CardDef,
@@ -36,6 +34,10 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { trackCard } from '../resources/card-resource';
 
 import type LoaderService from './loader-service';
+import type MessageService from './message-service';
+import type NetworkService from './network';
+import type Realm from './realm';
+import type ResetService from './reset';
 
 export type CardSaveSubscriber = (
   url: URL,
@@ -47,13 +49,24 @@ const { environment } = ENV;
 export default class CardService extends Service {
   @service private declare loaderService: LoaderService;
   @service private declare messageService: MessageService;
+  @service private declare network: NetworkService;
   @service private declare realm: Realm;
+  @service private declare reset: ResetService;
 
   private subscriber: CardSaveSubscriber | undefined;
   // For tracking requests during the duration of this service. Used for being able to tell when to ignore an incremental indexing SSE event.
   // We want to ignore it when it is a result of our own request so that we don't reload the card and overwrite any unsaved changes made during auto save request and SSE event.
-  clientRequestIds = new Set<string>();
-  loaderToCardAPILoadingCache = new WeakMap<Loader, Promise<typeof CardAPI>>();
+  private declare loaderToCardAPILoadingCache: WeakMap<
+    Loader,
+    Promise<typeof CardAPI>
+  >;
+  declare clientRequestIds: Set<string>;
+
+  constructor(owner: Owner) {
+    super(owner);
+    this.resetState();
+    this.reset.register(this);
+  }
 
   async getAPI(): Promise<typeof CardAPI> {
     let loader = this.loaderService.loader;
@@ -88,7 +101,7 @@ export default class CardService extends Service {
     let clientRequestId = uuidv4();
     this.clientRequestIds.add(clientRequestId);
 
-    let response = await this.loaderService.loader.fetch(url, {
+    let response = await this.network.authedFetch(url, {
       headers: {
         Accept: SupportedMimeType.CardJson,
         'X-Boxel-Client-Request-Id': clientRequestId,
@@ -202,7 +215,7 @@ export default class CardService extends Service {
   }
 
   async saveSource(url: URL, content: string) {
-    let response = await this.loaderService.loader.fetch(url, {
+    let response = await this.network.authedFetch(url, {
       method: 'POST',
       headers: {
         Accept: 'application/vnd.card+source',
@@ -222,7 +235,7 @@ export default class CardService extends Service {
   }
 
   async deleteSource(url: URL) {
-    let response = await this.loaderService.loader.fetch(url, {
+    let response = await this.network.authedFetch(url, {
       method: 'DELETE',
       headers: {
         Accept: 'application/vnd.card+source',
@@ -293,7 +306,11 @@ export default class CardService extends Service {
       ${JSON.stringify(json, null, 2)}`,
       );
     }
-    let card = await this.createFromSerialized(json.data, json, url);
+    let card = await this.createFromSerialized(
+      json.data,
+      json,
+      new URL(json.data.id),
+    );
     return card;
   }
 
@@ -448,7 +465,7 @@ export default class CardService extends Service {
   }
 
   async getRealmInfoByRealmURL(realmURL: URL): Promise<RealmInfo> {
-    let response = await this.loaderService.loader.fetch(`${realmURL}_info`, {
+    let response = await this.network.authedFetch(`${realmURL}_info`, {
       headers: { Accept: SupportedMimeType.RealmInfo },
       method: 'GET',
     });

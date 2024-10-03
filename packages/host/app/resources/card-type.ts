@@ -33,6 +33,7 @@ import type {
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import type LoaderService from '../services/loader-service';
+import type NetworkService from '../services/network';
 
 interface Args {
   named: {
@@ -73,7 +74,8 @@ const moduleInfoCache: Map<string, ModuleInfo> = new Map();
 
 export class CardType extends Resource<Args> {
   @tracked type: Type | undefined;
-  @service declare cardService: CardService;
+  @service private declare cardService: CardService;
+  @service private declare network: NetworkService;
   declare loader: Loader;
   typeCache: Map<string, Type> = new Map();
   ready: Promise<void> | undefined;
@@ -169,7 +171,7 @@ export class CardType extends Resource<Args> {
   }
 
   private fetchModuleInfo = async (url: URL) => {
-    let response = await this.loader.fetch(url, {
+    let response = await this.network.authedFetch(url, {
       headers: { Accept: SupportedMimeType.CardSource },
     });
 

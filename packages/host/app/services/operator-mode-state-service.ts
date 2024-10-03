@@ -1,4 +1,5 @@
 import { getOwner } from '@ember/application';
+import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { scheduleOnce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
@@ -33,11 +34,10 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { type Stack } from '../components/operator-mode/interact-submode';
 
+import type CardService from './card-service';
+import type ResetService from './reset';
+
 import type IndexController from '../controllers';
-
-import type CardController from '../controllers/card';
-
-import type CardService from '../services/card-service';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
@@ -82,18 +82,34 @@ export default class OperatorModeStateService extends Service {
     codePath: null,
     openDirs: new TrackedMap<string, string[]>(),
   });
-
   private cachedRealmURL: URL | null = null;
-
-  @service declare cardService: CardService;
-  @service declare loaderService: LoaderService;
-  @service declare messageService: MessageService;
-  @service declare realm: Realm;
-  @service declare recentCardsService: RecentCardsService;
-  @service declare recentFilesService: RecentFilesService;
-  @service declare router: RouterService;
-
   private openFileSubscribers: OpenFileSubscriber[] = [];
+
+  @service private declare cardService: CardService;
+  @service private declare loaderService: LoaderService;
+  @service private declare messageService: MessageService;
+  @service private declare realm: Realm;
+  @service private declare recentCardsService: RecentCardsService;
+  @service private declare recentFilesService: RecentFilesService;
+  @service private declare router: RouterService;
+  @service private declare reset: ResetService;
+
+  constructor(owner: Owner) {
+    super(owner);
+    this.reset.register(this);
+  }
+
+  resetState() {
+    this.state = new TrackedObject({
+      stacks: new TrackedArray([]),
+      submode: Submodes.Interact,
+      codePath: null,
+      openDirs: new TrackedMap<string, string[]>(),
+    });
+    this.cachedRealmURL = null;
+    this.openFileSubscribers = [];
+    this.schedulePersist();
+  }
 
   async restore(rawState: SerializedState) {
     this.state = await this.deserialize(rawState);
@@ -156,8 +172,8 @@ export default class OperatorModeStateService extends Service {
     let cardRealmUrl = await this.cardService.getRealmURL(card);
     let realmPaths = new RealmPaths(cardRealmUrl);
     let cardPath = realmPaths.local(new URL(`${card.id}.json`));
-    this.recentFilesService.removeRecentFile(cardPath);
     await this.cardService.deleteCard(card);
+    this.recentFilesService.removeRecentFile(cardPath);
   }
 
   trimItemsFromStack(item: StackItem) {
@@ -583,22 +599,11 @@ export default class OperatorModeStateService extends Service {
     this.operatorModeController.workspaceChooserOpened = workspaceChooserOpened;
   }
 
-  // Operator mode state is persisted in a query param, which lives in a controller.
-  // Currently, we have two controllers that could contain operator mode state:
-  // - card controller (viewing a card and entering operator mode from there)
-  // - index controller (viewing the realm server home page and choosing a workspace)
-  // We are in the process of removing host mode for viewing cards, so query params in card controller
-  // will be removed soon - when we are able to do that, remove this method and just use the index controller
-  get operatorModeController(): CardController | IndexController {
-    let controller: CardController | IndexController;
-
-    if (this.router.currentRouteName === 'index') {
-      controller = getOwner(this)!.lookup(
-        'controller:index',
-      ) as IndexController;
-    } else {
-      controller = getOwner(this)!.lookup('controller:card') as CardController;
-    }
+  // Operator mode state is persisted in a query param, which lives in the index controller
+  get operatorModeController(): IndexController {
+    let controller = getOwner(this)!.lookup(
+      'controller:index',
+    ) as IndexController;
 
     return controller;
   }

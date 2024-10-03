@@ -9,17 +9,6 @@ export default function (assert: Assert) {
       currentURL.split('?')[1].replace(/^\/\?/, '') ?? '';
     let urlParameters = new URLSearchParams(urlParameterString);
 
-    let operatorModeEnabled = urlParameters.get('operatorModeEnabled');
-
-    if (operatorModeEnabled !== 'true') {
-      this.pushResult({
-        result: false,
-        actual: operatorModeEnabled,
-        expected: 'true',
-        message: 'expected operatorModeEnabled=true',
-      });
-    }
-
     let operatorModeStateString = urlParameters.get('operatorModeState');
 
     if (!operatorModeStateString) {

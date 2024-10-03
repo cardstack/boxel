@@ -984,6 +984,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         done();
       },
     });
+
     await waitFor('[data-test-empty-code-mode]');
     await percySnapshot(
       'Acceptance | operator mode tests | can delete a card instance from code submode with no recent files - empty code submode',
@@ -1028,6 +1029,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         [testRealmURL, 'Pet/mango.json'],
       ]),
     );
+
     await visitOperatorMode({
       stacks: [
         [
@@ -1049,6 +1051,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
+
     await waitForCodeEditor();
     assert.strictEqual(
       window.localStorage.getItem('recent-files'),
@@ -1069,6 +1072,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         await click('[data-test-confirm-delete-button]');
       },
     });
+
     await waitForCodeEditor();
     assert
       .dom('[data-test-card-url-bar-input]')
@@ -1086,6 +1090,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         },
       },
     });
+
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Interact"]');
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/1"`);

@@ -2,11 +2,11 @@ import Service, { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 
-import type LoaderService from './loader-service';
+import type NetworkService from './network';
 
 export default class MessageService extends Service {
   @tracked subscriptions: Map<string, EventSource> = new Map();
-  @service declare loaderService: LoaderService;
+  @service private declare network: NetworkService;
 
   register() {
     (globalThis as any)._CARDSTACK_REALM_SUBSCRIBE = this;
@@ -16,8 +16,7 @@ export default class MessageService extends Service {
     let maybeEventSource = this.subscriptions.get(realmURL);
 
     if (!maybeEventSource) {
-      maybeEventSource =
-        this.loaderService.virtualNetwork.createEventSource(realmURL);
+      maybeEventSource = this.network.createEventSource(realmURL);
       maybeEventSource.onerror = () => eventSource.close();
       this.subscriptions.set(realmURL, maybeEventSource);
     }

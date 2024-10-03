@@ -215,7 +215,6 @@ test.describe('Room creation', () => {
 
     await logout(page);
     await login(page, 'xuser', 'pass', {
-      skipOpeningOperatorMode: true,
       skipOpeningAssistant: true,
     });
 
