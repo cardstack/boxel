@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import { ALL_ICON_COMPONENTS } from '@cardstack/boxel-icons/meta';
+import { ALL_ICON_COMPONENTS } from '@cardstack/boxel-icons/boxel-icons-meta';
 import { Tooltip } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';

@@ -18,7 +18,11 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@cardstack/boxel-ui/icons', {
     default() {},
   });
-  virtualNetwork.shimModule('@cardstack/boxel-icons', {});
+  virtualNetwork.shimAsyncModule({
+    prefix: '@cardstack/boxel-icons/',
+    resolve: async () => ({}),
+  });
+
   virtualNetwork.shimModule('@cardstack/boxel-ui/modifiers', {
     setCssVar: class {},
     SortableGroupModifier: class {},
@@ -119,10 +123,7 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     // implementations
     TrackedWeakMap: WeakMap,
   });
-  virtualNetwork.shimAsyncModule({
-    id: 'lodash',
-    resolve: async () => lodash,
-  });
+  virtualNetwork.shimModule('lodash', lodash);
   virtualNetwork.shimModule('date-fns', dateFns);
   virtualNetwork.shimModule('ember-resources', { Resource: class {} });
   virtualNetwork.shimModule('@ember/destroyable', {});

@@ -62,8 +62,9 @@ export class PackageShimHandler {
         descriptor.resolve,
       );
     } else {
+      let moduleIdentifier = this.resolveImport(descriptor.id);
       this.moduleIds.set(
-        trimModuleIdentifier(descriptor.id),
+        trimModuleIdentifier(moduleIdentifier),
         descriptor.resolve,
       );
     }

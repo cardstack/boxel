@@ -10,7 +10,7 @@ import * as emberTemplateFactory from '@ember/template-factory';
 import * as glimmerComponent from '@glimmer/component';
 import * as glimmerTracking from '@glimmer/tracking';
 
-// import * as boxelIcons from '@cardstack/boxel-icons';
+import loadIconComponent from '@cardstack/boxel-icons/boxel-icons-loader';
 import * as dateFns from 'date-fns';
 import * as emberConcurrency from 'ember-concurrency';
 //@ts-expect-error no types available
@@ -23,6 +23,7 @@ import * as emberProvideConsumeContextContextProvider from 'ember-provide-consum
 import * as emberResources from 'ember-resources';
 import * as ethers from 'ethers';
 import * as flat from 'flat';
+import * as lodash from 'lodash';
 import * as matrixJsSDK from 'matrix-js-sdk';
 import * as superFastMD5 from 'super-fast-md5';
 import * as tracked from 'tracked-built-ins';
@@ -44,7 +45,6 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@cardstack/boxel-ui/helpers', boxelUiHelpers);
   virtualNetwork.shimModule('@cardstack/boxel-ui/icons', boxelUiIcons);
   virtualNetwork.shimModule('@cardstack/boxel-ui/modifiers', boxelUiModifiers);
-  // virtualNetwork.shimModule('@cardstack/boxel-icons', boxelIcons);
   virtualNetwork.shimModule('@glimmer/component', glimmerComponent);
   virtualNetwork.shimModule('@ember/component', emberComponent);
   virtualNetwork.shimModule(
@@ -65,12 +65,11 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     'ember-concurrency/-private/async-arrow-runtime',
     emberConcurrencyAsyncArrowRuntime,
   );
-  virtualNetwork.asyncShimModule(
-    '@cardstack/boxel-icons/:name',
-    async ({ name }) => {
-      return await import('@cardstack/boxel-icons/${name}');
-    },
-  );
+  virtualNetwork.shimAsyncModule({
+    prefix: '@cardstack/boxel-icons/',
+    resolve: (rest) => loadIconComponent(rest),
+  });
+
   virtualNetwork.shimModule('ember-modifier', emberModifier2);
   virtualNetwork.shimModule(
     'ember-provide-consume-context',
@@ -85,10 +84,7 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     emberProvideConsumeContextContextProvider,
   );
   virtualNetwork.shimModule('flat', flat);
-  virtualNetwork.shimAsyncModule({
-    id: 'lodash',
-    resolve: () => import(`lodash`),
-  });
+  virtualNetwork.shimModule('lodash', lodash);
   virtualNetwork.shimModule('tracked-built-ins', tracked);
   virtualNetwork.shimModule('date-fns', dateFns);
   virtualNetwork.shimModule('@ember/destroyable', emberDestroyable);

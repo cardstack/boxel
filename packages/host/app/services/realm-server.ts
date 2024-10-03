@@ -6,7 +6,7 @@ import { task, restartableTask, rawTimeout } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
 
-import { TrackedArray } from 'tracked-built-ins/.';
+import { TrackedArray } from 'tracked-built-ins';
 
 import { baseRealm, SupportedMimeType } from '@cardstack/runtime-common';
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';

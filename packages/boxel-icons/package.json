@@ -92,9 +92,17 @@
     "version": 2
   },
   "exports": {
+    "./boxel-icons-loader": {
+      "types": "./declarations/boxel-icons-loader.d.ts",
+      "default": "./dist/boxel-icons-loader.js"
+    },
+    "./boxel-icons-meta": {
+      "types": "./declarations/boxel-icons-meta.d.ts",
+      "default": "./dist/boxel-icons-meta.js"
+    },
     "./*": {
-      "types": "./declarations/*.d.ts",
-      "default": "./dist/*.js"
+      "types": "./declarations/icons/*.d.ts",
+      "default": "./dist/icons/*.js"
     },
     "./addon-main.js": "./addon-main.cjs"
   },

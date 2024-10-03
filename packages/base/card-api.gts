@@ -1646,7 +1646,9 @@ export class BaseDef {
   static baseDef: undefined;
   static data?: Record<string, any>; // TODO probably refactor this away all together
   static displayName = 'Base';
-  static icon: GlimmerComponent;
+  static icon: ComponentLike<{
+    Element: Element;
+  }>;
 
   static getDisplayName(instance: BaseDef) {
     return instance.constructor.displayName;
