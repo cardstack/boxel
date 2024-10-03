@@ -182,7 +182,6 @@ export class RoomResource extends Resource<Args> {
 
   private async loadRoomMessages(roomId: string) {
     let index = this._messageCache.size;
-
     for (let event of this.events) {
       if (event.type !== 'm.room.message') {
         continue;

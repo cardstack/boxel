@@ -31,7 +31,6 @@ import {
   loaderFor,
   LooseCardResource,
   ResolvedCodeRef,
-  Relationship,
 } from '@cardstack/runtime-common';
 import {
   basicMappings,
@@ -777,7 +776,6 @@ export default class MatrixService extends Service {
   async createCard<T extends typeof BaseDef>(
     codeRef: ResolvedCodeRef,
     attr: Record<string, any>,
-    relationships?: Record<string, Relationship>,
   ) {
     let data: LooseCardResource = {
       meta: {
@@ -787,9 +785,6 @@ export default class MatrixService extends Service {
         ...attr,
       },
     };
-    if (relationships) {
-      data.relationships = relationships;
-    }
     let card = await this.cardAPI.createFromSerialized<T>(
       data,
       { data },

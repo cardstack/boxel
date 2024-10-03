@@ -392,9 +392,6 @@ export default class RoomMessage extends Component<Signature> {
       return JSON.stringify({}, null, 2);
     }
     let { name, payload } = this.command;
-    if (typeof payload === 'string') {
-      payload = JSON.parse(payload);
-    }
     return JSON.stringify({ name, payload }, null, 2);
   }
 
