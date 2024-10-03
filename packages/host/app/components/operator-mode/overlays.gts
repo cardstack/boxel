@@ -2,7 +2,7 @@ import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
-import { htmlSafe } from '@ember/template';
+import { SafeString, htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -53,7 +53,7 @@ interface Signature {
 }
 
 let boundRenderedCardElement = new WeakSet<HTMLElement>();
-let computedZIndex = new WeakMap<HTMLElement, string>();
+let computedZIndex = new WeakMap<HTMLElement, SafeString>();
 
 export default class OperatorModeOverlays extends Component<Signature> {
   <template>
