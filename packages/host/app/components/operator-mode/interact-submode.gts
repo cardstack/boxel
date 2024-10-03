@@ -639,61 +639,45 @@ export default class InteractSubmode extends Component<Signature> {
           </Tooltip>
         {{/if}}
         <div class='stacks'>
-          {{#if (eq this.allStackItems.length 0)}}
-            <div class='no-cards' data-test-empty-stack>
-              <p class='add-card-title'>
-                Add a card to get started
-              </p>
-
-              <button
-                class='add-card-button'
-                {{on 'click' (fn (perform this.addCard))}}
-                data-test-add-card-button
-              >
-                <IconPlus width='36px' height='36px' />
-              </button>
-            </div>
-          {{else}}
-            {{#each this.stacks as |stack stackIndex|}}
-              {{#let
-                (get
-                  this.stackBackgroundsState.differingBackgroundImageURLs
-                  stackIndex
-                )
-                as |backgroundImageURLSpecificToThisStack|
-              }}
-                <OperatorModeStack
-                  data-test-operator-mode-stack={{stackIndex}}
-                  class={{cn
-                    'operator-mode-stack'
-                    (if backgroundImageURLSpecificToThisStack 'with-bg-image')
-                  }}
-                  style={{if
-                    backgroundImageURLSpecificToThisStack
-                    (htmlSafe
-                      (concat
-                        'background-image: url('
-                        backgroundImageURLSpecificToThisStack
-                        ')'
-                      )
+          {{#each this.stacks as |stack stackIndex|}}
+            {{#let
+              (get
+                this.stackBackgroundsState.differingBackgroundImageURLs
+                stackIndex
+              )
+              as |backgroundImageURLSpecificToThisStack|
+            }}
+              <OperatorModeStack
+                data-test-operator-mode-stack={{stackIndex}}
+                class={{cn
+                  'operator-mode-stack'
+                  (if backgroundImageURLSpecificToThisStack 'with-bg-image')
+                }}
+                style={{if
+                  backgroundImageURLSpecificToThisStack
+                  (htmlSafe
+                    (concat
+                      'background-image: url('
+                      backgroundImageURLSpecificToThisStack
+                      ')'
                     )
-                  }}
-                  @stackItems={{stack}}
-                  @stackIndex={{stackIndex}}
-                  @publicAPI={{this.publicAPI this stackIndex}}
-                  @close={{perform this.close}}
-                  @onSelectedCards={{this.onSelectedCards}}
-                  @setupStackItem={{this.setupStackItem}}
-                />
-              {{/let}}
-            {{/each}}
+                  )
+                }}
+                @stackItems={{stack}}
+                @stackIndex={{stackIndex}}
+                @publicAPI={{this.publicAPI this stackIndex}}
+                @close={{perform this.close}}
+                @onSelectedCards={{this.onSelectedCards}}
+                @setupStackItem={{this.setupStackItem}}
+              />
+            {{/let}}
+          {{/each}}
 
-            <CopyButton
-              @selectedCards={{this.selectedCards}}
-              @copy={{fn (perform this.copy)}}
-              @isCopying={{this.copy.isRunning}}
-            />
-          {{/if}}
+          <CopyButton
+            @selectedCards={{this.selectedCards}}
+            @copy={{fn (perform this.copy)}}
+            @isCopying={{this.copy.isRunning}}
+          />
         </div>
         {{#if this.canCreateNeighborStack}}
           <Tooltip @placement='left'>
@@ -744,29 +728,6 @@ export default class InteractSubmode extends Component<Signature> {
       .operator-mode__main .add-card-to-neighbor-stack {
         flex: 0;
         flex-basis: var(--container-button-size);
-      }
-      .no-cards {
-        max-width: 50rem;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-      }
-      .add-card-title {
-        color: var(--boxel-light);
-        font: var(--boxel-font-lg);
-      }
-      .add-card-button {
-        --icon-color: var(--boxel-light);
-        height: 350px;
-        width: 200px;
-        vertical-align: middle;
-        background-color: var(--boxel-highlight);
-        border: none;
-        border-radius: var(--boxel-border-radius);
-      }
-      .add-card-button:hover {
-        background-color: var(--boxel-highlight-hover);
       }
       .add-card-to-neighbor-stack {
         --icon-color: var(--boxel-highlight-hover);

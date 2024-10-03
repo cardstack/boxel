@@ -520,7 +520,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-pet]').includesText('Paper Bad cat!');
   });
 
-  test('displays add card button if user closes the only card in the stack and opens a card from card chooser', async function (assert) {
+  test('opens workspace chooser after closing the only remainingcard on the stack', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
 
     await renderComponent(
@@ -537,23 +537,8 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-close-button]');
     await waitUntil(() => !document.querySelector('[data-test-stack-card]'));
     assert.dom('[data-test-person]').isNotVisible();
-    assert.dom('[data-test-add-card-button]').isVisible();
-
-    await click('[data-test-add-card-button]');
-    assert.dom('[data-test-card-catalog-modal]').isVisible();
-
-    await waitFor(`[data-test-select]`);
-    await showSearchResult(
-      'Operator Mode Workspace',
-      `${testRealmURL}Person/fadhlan`,
-    );
-
+    assert.dom('[data-test-workspace-chooser]').isVisible();
     await percySnapshot(assert);
-
-    await click(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
-    await click('[data-test-card-catalog-go-button]');
-
-    await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
   });
 
   test('displays cards on cards-grid and includes `catalog-entry` instances', async function (assert) {
