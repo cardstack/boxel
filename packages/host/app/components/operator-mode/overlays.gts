@@ -541,7 +541,6 @@ export default class OperatorModeOverlays extends Component<Signature> {
           'http://localhost:4201/experiments/Task/20058a9d-3c2d-4b42-8430-a95b6183245c.json')
     ) {
       if (this.currentlyHoveredCard !== renderedCard) {
-        debugger;
       }
     }
     return this.currentlyHoveredCard?.element === renderedCard.element;
