@@ -50,13 +50,6 @@ jobs:
             fi
           fi
 
-          # Additional debugging information
-          echo "Current directory structure:"
-          ls -R packages/vscode-boxel-tools packages/realm-server
-
-          echo "Recent commits:"
-          git log -n 5 --oneline
-
   publish:
     name: Package, test, and publish VS Code Boxel Tools extension
     needs: check-version
