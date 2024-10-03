@@ -17,6 +17,7 @@ import {
   timeout,
   waitForProperty,
 } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
 import { provide } from 'ember-provide-consume-context';
 import { trackedFunction } from 'ember-resources/util/function';
@@ -63,10 +64,6 @@ import config from '@cardstack/host/config/environment';
 
 import { type StackItem } from '@cardstack/host/lib/stack-item';
 
-import type EnvironmentService from '@cardstack/host/services/environment-service';
-
-import RealmService from '@cardstack/host/services/realm';
-
 import type {
   CardDef,
   Format,
@@ -79,6 +76,9 @@ import Preview from '../preview';
 import OperatorModeOverlays from './overlays';
 
 import type CardService from '../../services/card-service';
+import type EnvironmentService from '../../services/environment-service';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import type RealmService from '../../services/realm';
 
 interface Signature {
   Args: {
@@ -116,12 +116,14 @@ export interface RenderedCardForOverlayActions {
 export default class OperatorModeStackItem extends Component<Signature> {
   @service private declare cardService: CardService;
   @service private declare environmentService: EnvironmentService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
 
   // @tracked private selectedCards = new TrackedArray<CardDef>([]);
   @tracked private selectedCards = new TrackedArray<CardDefOrId>([]);
   @tracked private isHoverOnRealmIcon = false;
   @tracked private isSaving = false;
+  @tracked private hasUnsavedChanges = false;
   @tracked private lastSaved: number | undefined;
   @tracked private lastSavedMsg: string | undefined;
   private refreshSaveMsg: number | undefined;
@@ -320,9 +322,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
   };
 
   private initiateAutoSaveTask = restartableTask(async () => {
+    this.hasUnsavedChanges = true;
     await timeout(this.environmentService.autoSaveDelayMs);
     this.isSaving = true;
-    this.args.publicAPI.saveCard(this.card, false);
+    await this.args.publicAPI.saveCard(this.card, false);
+    this.hasUnsavedChanges = false;
     this.isSaving = false;
     this.lastSaved = Date.now();
     this.calculateLastSavedMsg();
@@ -343,6 +347,25 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
     }
   }
+
+  private doneEditing = restartableTask(async () => {
+    // if the card is actually different do the save and dismiss, otherwise
+    // just change the stack item's format to isolated
+    if (this.hasUnsavedChanges) {
+      // we dont want to have the user wait for the save to complete before
+      // dismissing edit mode so intentionally not awaiting here
+      this.args.publicAPI.saveCard(this.card, true);
+    } else {
+      let { request } = this.args.item;
+      this.operatorModeStateService.replaceItemInStack(
+        this.args.item,
+        this.args.item.clone({
+          request,
+          format: 'isolated',
+        }),
+      );
+    }
+  });
 
   private doWithStableScroll = restartableTask(
     async (changeSizeCallback: () => Promise<void>) => {
@@ -479,7 +502,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                         @height='20px'
                         class='icon-save'
                         aria-label='Finish Editing'
-                        {{on 'click' (fn @publicAPI.saveCard this.card true)}}
+                        {{on 'click' (perform this.doneEditing)}}
                         data-test-edit-button
                       />
                     </:trigger>
