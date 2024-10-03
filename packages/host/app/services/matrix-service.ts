@@ -109,6 +109,7 @@ export default class MatrixService extends Service {
   @service private declare router: RouterService;
   @service private declare reset: ResetService;
   @tracked private _client: ExtendedClient | undefined;
+  @tracked private _isInitializingNewUser = false;
   @tracked private postLoginCompleted = false;
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
@@ -249,12 +250,17 @@ export default class MatrixService extends Service {
     }
   }
 
+  get isInitializingNewUser() {
+    return this._isInitializingNewUser;
+  }
+
   async initializeNewUser(auth: LoginResponse, displayName: string) {
     displayName = displayName.trim();
     let controller = getOwner(this)!.lookup(
       'controller:index',
     ) as IndexController;
     controller.workspaceChooserOpened = true;
+    this._isInitializingNewUser = true;
     this.start({ auth });
     this.setDisplayName(displayName);
     await this.createPersonalRealmForUser({
@@ -263,6 +269,7 @@ export default class MatrixService extends Service {
       iconURL: iconURLFor(displayName),
       backgroundURL: getRandomBackgroundURL(),
     });
+    this._isInitializingNewUser = false;
   }
 
   public async createPersonalRealmForUser({
@@ -289,7 +296,6 @@ export default class MatrixService extends Service {
     realms.push(personalRealmURL.href);
     await this.client.setAccountData('com.cardstack.boxel.realms', { realms });
     await this.realmServer.setAvailableRealmURLs(realms);
-    await this.loginToRealms();
   }
 
   async setDisplayName(displayName: string) {
