@@ -2,6 +2,8 @@ import type Owner from '@ember/owner';
 
 import Service, { service } from '@ember/service';
 
+import { isTesting } from '@embroider/macros';
+
 import { tracked } from '@glimmer/tracking';
 
 import window from 'ember-window-mock';
@@ -83,6 +85,10 @@ export default class MessageService extends Service {
 }
 
 function getPersistedTokenForRealm(realmURL: string) {
+  if (isTesting()) {
+    return 'TEST TOKEN';
+  }
+
   let sessionStr = window.localStorage.getItem(sessionLocalStorageKey) ?? '{}';
   let session = JSON.parse(sessionStr);
   return session[realmURL] as string | undefined;
