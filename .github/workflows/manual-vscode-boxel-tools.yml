@@ -65,6 +65,7 @@ jobs:
               echo "No changes detected since last version update. Proceeding with publish."
               exit 0
             else
+              git status
               git diff
               echo ""
               echo "Error: Changes have been detected since the extension version was updated. Will not publish."
