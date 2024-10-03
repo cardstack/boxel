@@ -1092,7 +1092,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test('the edit button respects the realm permissions of the cards in differing realms', async function (assert) {
-      assert.expect(10);
+      assert.expect(6);
       await visitOperatorMode({
         stacks: [
           [

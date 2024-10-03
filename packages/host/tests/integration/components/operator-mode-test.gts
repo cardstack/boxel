@@ -462,7 +462,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test<TestContextWithSave>('it auto saves the field value', async function (assert) {
-    assert.expect(3);
+    assert.expect(7);
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
 
     await renderComponent(
@@ -475,18 +475,73 @@ module('Integration | operator-mode', function (hooks) {
     );
     await waitFor('[data-test-person]');
     await click('[data-test-edit-button]');
+    let finishedSaving = false;
     this.onSave((_, json) => {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
+      finishedSaving = true;
       assert.strictEqual(json.data.attributes?.firstName, 'EditedName');
     });
-    await fillIn('[data-test-boxel-input]', 'EditedName');
+
+    // not awaiting so that we can test in-between the test waiter
+    fillIn('[data-test-boxel-input]', 'EditedName');
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-auto-save-indicator]')
+          ?.textContent?.trim() === 'Saving…',
+    );
+    assert.dom('[data-test-auto-save-indicator]').containsText('Saving…');
+    assert.strictEqual(
+      finishedSaving,
+      false,
+      'save in-flight message is correct',
+    );
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-auto-save-indicator]')
+          ?.textContent?.trim() == 'Saved less than a minute ago',
+    );
+    assert.strictEqual(
+      finishedSaving,
+      true,
+      'finished saving message is correct',
+    );
+    assert
+      .dom('[data-test-auto-save-indicator]')
+      .containsText('Saved less than a minute ago');
+
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
 
     await waitFor('[data-test-person="EditedName"]');
     assert.dom('[data-test-person]').hasText('EditedName');
     assert.dom('[data-test-first-letter-of-the-name]').hasText('E');
+  });
+
+  test<TestContextWithSave>('it does not auto save when exiting edit mode when there are no changes made', async function (assert) {
+    // note that because of the test waiters we can't do the inverse of this
+    // test because it is impossible to tell the difference between a normal
+    // autosave and an auto save as a result of clicking on the edit button since
+    // the test waiters include the auto save async.
+    assert.expect(0);
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-person]');
+    await click('[data-test-edit-button]');
+    this.onSave(() => {
+      assert.ok(false, 'does not save when file is not changed');
+    });
+    await click('[data-test-edit-button]');
   });
 
   // TODO CS-6268 visual indicator for failed auto-save should build off of this test
@@ -672,7 +727,6 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test<TestContextWithSave>('create new card editor opens in the stack at each nesting level', async function (assert) {
-    assert.expect(9);
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -774,16 +828,6 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
       .containsText('Mad As a Hatter by Alice Enwunder');
-
-    this.onSave((_, json) => {
-      if (typeof json === 'string') {
-        throw new Error('expected JSON save data');
-      }
-      assert.strictEqual(
-        json.data.attributes!.socialBlurb,
-        `Everyone knows that Alice ran the show in the Brady household. But when Alice’s past comes to light, things get rather topsy turvy…`,
-      );
-    });
 
     await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
 
