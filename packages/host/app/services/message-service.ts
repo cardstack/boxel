@@ -10,15 +10,11 @@ import qs from 'qs';
 
 import { sessionLocalStorageKey } from './realm';
 
-import type MatrixService from './matrix-service';
 import type NetworkService from './network';
-import type ResetService from './reset';
 
 export default class MessageService extends Service {
   @tracked subscriptions: Map<string, EventSource> = new Map();
   @service private declare network: NetworkService;
-  @service private declare reset: ResetService;
-  @service private declare matrixService: MatrixService;
 
   register() {
     (globalThis as any)._CARDSTACK_REALM_SUBSCRIBE = this;
@@ -39,6 +35,7 @@ export default class MessageService extends Service {
       maybeEventSource.onerror = () => eventSource.close();
       this.subscriptions.set(realmURL, maybeEventSource);
     }
+
     let eventSource = maybeEventSource;
     // TODO might want to consider making separate subscription methods so that
     // you can subscribe to a specific type of events instead of all of the
