@@ -1,7 +1,6 @@
 import { unixTime } from './index';
 import { TokenClaims } from './realm';
 
-// FAKE CHANGE
 // iat - issued at (seconds since epoch)
 // exp - expires at (seconds since epoch)
 export type JWTPayload = TokenClaims & { iat: number; exp: number };
