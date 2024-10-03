@@ -118,7 +118,10 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     // implementations
     TrackedWeakMap: WeakMap,
   });
-  virtualNetwork.shimModule('lodash', lodash);
+  virtualNetwork.shimAsyncModule({
+    id: 'lodash',
+    resolve: async () => lodash,
+  });
   virtualNetwork.shimModule('date-fns', dateFns);
   virtualNetwork.shimModule('ember-resources', { Resource: class {} });
   virtualNetwork.shimModule('@ember/destroyable', {});
