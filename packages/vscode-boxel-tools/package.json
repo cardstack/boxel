@@ -19,6 +19,7 @@
   "activationEvents": [
     "onAuthenticationRequest:synapse"
   ],
+  "icon": "images/boxel-icon.png",
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
