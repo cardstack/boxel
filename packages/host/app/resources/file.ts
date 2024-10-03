@@ -94,16 +94,15 @@ class _FileResource extends Resource<Args> {
     realmURL: string,
     callback: (ev: { type: string; data: string }) => void,
   ) {
-    let messageServiceUrl = `${realmURL}_message`;
-    if (this.subscription && this.subscription.url !== messageServiceUrl) {
+    if (this.subscription && this.subscription.url !== realmURL) {
       this.subscription.unsubscribe();
       this.subscription = undefined;
     }
 
     if (!this.subscription) {
       this.subscription = {
-        url: messageServiceUrl,
-        unsubscribe: this.messageService.subscribe(messageServiceUrl, callback),
+        url: realmURL,
+        unsubscribe: this.messageService.subscribe(new URL(realmURL), callback),
       };
     }
   }

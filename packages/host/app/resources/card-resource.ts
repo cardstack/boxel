@@ -199,7 +199,7 @@ export class CardResource extends Resource<Args> {
     }
     realmSubscribers.set(this, {
       unsubscribe: this.messageService.subscribe(
-        `${realmURL}_message`,
+        realmURL,
         ({ type, data: dataStr }) => {
           if (type !== 'index') {
             return;
