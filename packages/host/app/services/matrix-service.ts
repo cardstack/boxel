@@ -260,6 +260,7 @@ export default class MatrixService extends Service {
       'controller:index',
     ) as IndexController;
     controller.workspaceChooserOpened = true;
+    this._isInitializingNewUser = true;
     this.start({ auth });
     this.setDisplayName(displayName);
     await this.createPersonalRealmForUser({
