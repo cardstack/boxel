@@ -19,8 +19,6 @@ jobs:
   check-version:
     name: Check for changes since last version update
     runs-on: ubuntu-latest
-    outputs:
-      should_publish: ${{ steps.check.outputs.should_publish }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,27 +31,26 @@ jobs:
           echo "Last version change commit: $LAST_VERSION_CHANGE"
 
           if [ -z "$LAST_VERSION_CHANGE" ]; then
-            echo "No version change found in git history. Proceeding with publish."
-            echo "should_publish=true" >> $GITHUB_OUTPUT
+            echo "Error: No version change found in git history. Build should fail."
+            exit 1
           else
             echo "Checking for changes since $LAST_VERSION_CHANGE"
-            CHANGES=$(git diff --name-only $LAST_VERSION_CHANGE HEAD -- packages/vscode-boxel-tools packages/runtime-common)
+            CHANGES=$(git diff --name-only $LAST_VERSION_CHANGE HEAD -- packages/vscode-boxel-tools packages/realm-server)
             echo "Changes detected:"
             echo "$CHANGES"
 
             if [ -z "$CHANGES" ]; then
-              echo "No changes detected since last version update. Skipping publish."
-              echo "should_publish=false" >> $GITHUB_OUTPUT
+              echo "No changes detected since last version update. Proceeding with publish."
+              exit 0
             else
-              echo "Changes detected since last version update. Proceeding with publish."
-              echo "should_publish=true" >> $GITHUB_OUTPUT
+              echo "Error: Changes detected since last version update. Build should fail."
+              exit 1
             fi
           fi
 
   publish:
     name: Package, test, and publish VS Code Boxel Tools extension
     needs: check-version
-    if: needs.check-version.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -68,7 +65,6 @@ jobs:
         run: xvfb-run -a pnpm test
         working-directory: packages/vscode-boxel-tools
       - name: Publish
-        if: success()
         run: pnpm vscode:publish
         working-directory: packages/vscode-boxel-tools
         env:
