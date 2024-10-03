@@ -769,16 +769,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
 
     test('the editor is read-only', async function (assert) {
       await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: `${testRealmURL}Pet/mango`,
-              format: 'isolated',
-            },
-          ],
-        ],
         submode: 'code',
-        codePath: `${testRealmURL}Pet/mango.json`,
+        codePath: `${testRealmURL}pet.gts`,
       });
 
       await waitForCodeEditor();
@@ -798,6 +790,13 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         'rgb(235, 234, 237)', // equivalent to #ebeaed
         'monaco editor is greyed out when read-only',
       );
+
+      assert
+        .dom('[data-test-add-field-button]')
+        .doesNotExist('add field button does not exist');
+      assert
+        .dom('[data-test-schema-editor-field-contextual-button]')
+        .doesNotExist('field context menu button does not exist');
     });
   });
 });
