@@ -63,12 +63,15 @@ export class DirectoryResource extends Resource<Args> {
     if (!this.subscription) {
       this.subscription = {
         url: realmURL.href,
-        unsubscribe: this.messageService.subscribe(realmURL, ({ type }) => {
-          // we are only interested in the filesystem based events
-          if (type === 'update') {
-            this.readdir.perform();
-          }
-        }),
+        unsubscribe: this.messageService.subscribe(
+          realmURL.href,
+          ({ type }) => {
+            // we are only interested in the filesystem based events
+            if (type === 'update') {
+              this.readdir.perform();
+            }
+          },
+        ),
       };
     }
   }

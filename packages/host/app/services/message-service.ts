@@ -34,23 +34,22 @@ export default class MessageService extends Service {
     (globalThis as any)._CARDSTACK_REALM_SUBSCRIBE = this;
   }
 
-  subscribe(realmURL: URL, cb: (ev: MessageEvent) => void): () => void {
-    let realm = realmURL.href;
+  subscribe(realmURL: string, cb: (ev: MessageEvent) => void): () => void {
     let { eventSource: maybeEventSource, unsubscribes = [] } =
-      this.subscriptions.get(realm) ?? {};
+      this.subscriptions.get(realmURL) ?? {};
 
     let eventSource: EventSource;
     if (!maybeEventSource) {
-      let token = getPersistedTokenForRealm(realm);
+      let token = getPersistedTokenForRealm(realmURL);
       if (!token) {
-        throw new Error(`Could not find JWT for realm ${realm}`);
+        throw new Error(`Could not find JWT for realm ${realmURL}`);
       }
-      let urlWithAuth = `${realm}_message?${qs.stringify({
+      let urlWithAuth = `${realmURL}_message?${qs.stringify({
         authHeader: 'Bearer ' + token,
       })}`;
       eventSource = this.network.createEventSource(urlWithAuth);
       eventSource.onerror = () => eventSource!.close();
-      this.subscriptions.set(realm, { eventSource, unsubscribes });
+      this.subscriptions.set(realmURL, { eventSource, unsubscribes });
     } else {
       eventSource = maybeEventSource;
     }

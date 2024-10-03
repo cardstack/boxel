@@ -102,7 +102,7 @@ class _FileResource extends Resource<Args> {
     if (!this.subscription) {
       this.subscription = {
         url: realmURL,
-        unsubscribe: this.messageService.subscribe(new URL(realmURL), callback),
+        unsubscribe: this.messageService.subscribe(realmURL, callback),
       };
     }
   }
