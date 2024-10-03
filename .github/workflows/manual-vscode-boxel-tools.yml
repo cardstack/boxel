@@ -46,6 +46,9 @@ jobs:
           if [ "$CURRENT_VERSION" = "$MARKETPLACE_VERSION" ]; then
             echo "Error: The version in package.json ($CURRENT_VERSION) is the same as the Marketplace version. Please update the version before publishing."
             exit 1
+          else
+            echo "Extension version has changed. Proceeding with check for relevant changes since then."
+            echo ""
           fi
 
           LAST_VERSION_CHANGE=$(git log -1 --pretty=format:%H --grep="version" -- $PACKAGE_JSON)
