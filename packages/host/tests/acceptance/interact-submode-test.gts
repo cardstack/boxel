@@ -344,66 +344,19 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-field]').hasValue('');
     });
 
-    test('Can add a card by URL using the add button', async function (assert) {
+    test('Can search for an index card by URL (without "index" in path)', async function (assert) {
       await visitOperatorMode({});
 
-      assert.dom('[data-test-operator-mode-stack]').doesNotExist();
+      await click('[data-test-search-field]');
 
-      await click('[data-test-add-card-button]');
-      await fillIn(
-        '[data-test-card-catalog-modal] [data-test-search-field]',
-        `${testRealmURL}index`,
-      );
+      await fillIn('[data-test-search-field]', testRealmURL);
 
       assert
-        .dom(`[data-test-card-catalog-item="${testRealmURL}index"] .card-title`)
-        .hasText('Test Workspace B');
-      await click(`[data-test-select="${testRealmURL}index"]`);
-      await click('[data-test-card-catalog-go-button]');
-      assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
-      assert.dom('[data-test-stack-card-index]').exists({ count: 1 });
-      assert.dom('[data-test-stack-card-header]').hasText('Test Workspace B');
-    });
-
-    test('Can add an index card by URL (without "index" in path) using the add button', async function (assert) {
-      const wrongURL = 'https://example.test/this/is/a/wrong/url';
-      await visitOperatorMode({});
-
-      assert.dom('[data-test-operator-mode-stack]').doesNotExist();
-
-      await click('[data-test-add-card-button]');
-      await fillIn(
-        '[data-test-card-catalog-modal] [data-test-search-field]',
-        wrongURL,
-      );
-
-      await fillIn(
-        '[data-test-card-catalog-modal] [data-test-search-field]',
-        baseRealm.url.slice(0, -1),
-      );
-
+        .dom('[data-test-search-label]')
+        .includesText('Card found at http://test-realm/test/');
       assert
-        .dom('[data-test-card-catalog-item] .card-title')
-        .hasText('Base Workspace');
-
-      await fillIn(
-        '[data-test-card-catalog-modal] [data-test-search-field]',
-        testRealmURL,
-      );
-      assert
-        .dom('[data-test-card-catalog-item] .card-title')
-        .hasText('Test Workspace B');
-      assert.dom('[data-test-boxel-input-error-message]').doesNotExist();
-      assert
-        .dom('[data-test-boxel-input-validation-state="invalid"]')
-        .doesNotExist();
-
-      await click(`[data-test-select="${testRealmURL}index"]`);
-      await click('[data-test-card-catalog-go-button]');
-
-      assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
-      assert.dom('[data-test-stack-card-index]').exists({ count: 1 });
-      assert.dom('[data-test-stack-card-header]').hasText('Test Workspace B');
+        .dom('[data-test-card="http://test-realm/test/index"]')
+        .exists({ count: 1 });
     });
 
     test('Can open a recent card in empty stack', async function (assert) {
