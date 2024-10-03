@@ -22,7 +22,6 @@ import {
   livenessCheck,
   healthCheck,
   httpLogging,
-  httpBasicAuth,
   ecsMetadata,
   setContextResponse,
   fetchRequestFromContext,
@@ -193,7 +192,6 @@ export class RealmServer {
       })
       .use(convertAcceptHeaderQueryParam)
       .use(convertAuthHeaderQueryParam)
-      .use(httpBasicAuth)
       .use(router.routes())
       .use(this.serveIndex)
       .use(this.serveFromRealm);
