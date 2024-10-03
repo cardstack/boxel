@@ -31,19 +31,21 @@ jobs:
           echo "Last version change commit: $LAST_VERSION_CHANGE"
 
           if [ -z "$LAST_VERSION_CHANGE" ]; then
-            echo "Error: No version change found in git history. Build should fail."
+            echo "Error: No version change found in git history. Will not publish."
             exit 1
           else
-            echo "Checking for changes since $LAST_VERSION_CHANGE"
+            echo "Checking for changes since version was updated in $LAST_VERSION_CHANGE"
             CHANGES=$(git diff --name-only $LAST_VERSION_CHANGE HEAD -- packages/vscode-boxel-tools packages/realm-server)
             echo "Changes detected:"
             echo "$CHANGES"
 
             if [ -z "$CHANGES" ]; then
+              echo ""
               echo "No changes detected since last version update. Proceeding with publish."
               exit 0
             else
-              echo "Error: Changes detected since last version update. Build should fail."
+              echo ""
+              echo "Error: Changes have been detected since the extension version was updated. Will not publish."
               exit 1
             fi
           fi
