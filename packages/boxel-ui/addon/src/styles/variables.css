@@ -62,12 +62,14 @@
   --boxel-border-color: #d3d3d3;
   --boxel-border: 1px solid var(--boxel-border-color);
   --boxel-border-dark: 1px solid var(--boxel-dark);
+  --boxel-border-flexible: 1px solid rgba(255, 255, 255, 0.35);
   --boxel-border-card: 1px solid rgba(0,0,0, 0.1 );
   --boxel-border-radius-xs: 1.5px;
   --boxel-border-radius-sm: 6px;
   --boxel-border-radius: 7.5px;
   --boxel-border-radius-lg: 11.25px;
   --boxel-border-radius-xl: 15px;
+  --boxel-border-radius-xxl: 22px;
   --boxel-transition: 0.2s ease;
   --boxel-box-shadow: 0 1px 3px rgb(0 0 0 / 25%);
   --boxel-box-shadow-hover: 0 3px 10px rgb(0 0 0 / 15%);

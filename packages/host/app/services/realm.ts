@@ -1,4 +1,5 @@
 import { associateDestroyableChild } from '@ember/destroyable';
+import type Owner from '@ember/owner';
 import { setOwner, getOwner } from '@ember/owner';
 import Service from '@ember/service';
 
@@ -25,8 +26,9 @@ import {
 
 import ENV from '@cardstack/host/config/environment';
 
-import type LoaderService from './loader-service';
 import type MatrixService from './matrix-service';
+import type NetworkService from './network';
+import type ResetService from './reset';
 
 const log = logger('service:realm');
 
@@ -41,7 +43,7 @@ type AuthStatus =
 
 class RealmResource {
   @service private declare matrixService: MatrixService;
-  @service declare loaderService: LoaderService;
+  @service private declare network: NetworkService;
 
   @tracked meta: Meta | undefined;
 
@@ -82,6 +84,10 @@ class RealmResource {
 
   get info() {
     return this.meta?.info;
+  }
+
+  get isPublic() {
+    return this.meta?.isPublic;
   }
 
   get claims(): JWTPayload | undefined {
@@ -157,12 +163,9 @@ class RealmResource {
           ? { Authorization: `Bearer ${this.token}` }
           : {}),
       };
-      let response = await this.loaderService.loader.fetch(
-        `${this.realmURL}_info`,
-        {
-          headers,
-        },
-      );
+      let response = await this.network.authedFetch(`${this.realmURL}_info`, {
+        headers,
+      });
       if (response.status !== 200) {
         throw new Error(
           `Failed to fetch realm info for ${this.realmURL}: ${response.status}`,
@@ -204,7 +207,8 @@ class RealmResource {
 }
 
 export default class RealmService extends Service {
-  @service declare loaderService: LoaderService;
+  @service private declare network: NetworkService;
+  @service private declare reset: ResetService;
 
   // This is not a TrackedMap, it's a regular Map. Conceptually, we want it to
   // be tracked, but we're using it as a read-through cache and glimmer/tracking
@@ -216,6 +220,15 @@ export default class RealmService extends Service {
   private reauthentications = new Map<string, Promise<string | undefined>>();
 
   @tracked private identifyRealmTracker = 0;
+
+  constructor(owner: Owner) {
+    super(owner);
+    this.reset.register(this);
+  }
+
+  resetState() {
+    this.logout();
+  }
 
   async ensureRealmMeta(realmURL: string): Promise<void> {
     let resource = this.getOrCreateRealmResource(realmURL);
@@ -238,6 +251,7 @@ export default class RealmService extends Service {
         name: 'Unknown Workspace',
         backgroundURL: null,
         iconURL: null,
+        showAsCatalog: null,
       };
     }
 
@@ -247,10 +261,15 @@ export default class RealmService extends Service {
         name: 'Unknown Workspace',
         backgroundURL: null,
         iconURL: null,
+        showAsCatalog: null,
       };
     } else {
       return resource.meta.info;
     }
+  };
+
+  isPublic = (url: string): boolean => {
+    return this.knownRealm(url)?.isPublic ?? false;
   };
 
   canRead = (url: string): boolean => {
@@ -424,7 +443,7 @@ export default class RealmService extends Service {
         // could have already been discovered while we were queued
         return;
       }
-      let response = await this.loaderService.loader.fetch(url, {
+      let response = await this.network.authedFetch(url, {
         method: 'HEAD',
       });
       let realmURL = response.headers.get('x-boxel-realm-url');

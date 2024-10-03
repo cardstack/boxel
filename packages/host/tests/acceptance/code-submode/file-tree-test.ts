@@ -596,6 +596,10 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
   });
 
   test('scroll position is restored when returning to file view but only for one file per realm', async function (assert) {
+    window.localStorage.setItem(
+      'code-mode-panel-widths',
+      JSON.stringify({ leftPanel: 200 }),
+    ); // make it wide enough for the directory contents to show without wrapping which causes makes height of the folder list to be unpredictable
     await visitOperatorMode({
       stacks: [
         [

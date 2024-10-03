@@ -24,7 +24,6 @@ interface LoginOptions {
   url?: string;
   expectFailure?: true;
   skipOpeningAssistant?: true;
-  skipOpeningOperatorMode?: true;
 }
 
 export async function registerRealmUsers(synapse: SynapseInstance) {
@@ -70,15 +69,6 @@ export async function reloadAndOpenAiAssistant(page: Page) {
   await openAiAssistant(page);
 }
 
-export async function toggleOperatorMode(page: Page) {
-  let isOperatorMode = !!(await page.evaluate(() =>
-    document.querySelector('dialog.operator-mode'),
-  ));
-  if (!isOperatorMode) {
-    await page.locator('[data-test-operator-mode-btn]').click();
-  }
-}
-
 export async function openAiAssistant(page: Page) {
   await page.locator('[data-test-open-ai-assistant]').click();
   await page.waitForFunction(() =>
@@ -95,13 +85,6 @@ export async function openAiAssistant(page: Page) {
 
 export async function openRoot(page: Page, url = testHost) {
   await page.goto(url);
-  await expect(page.locator('.cards-grid')).toHaveCount(1);
-  let isOperatorMode = !!(await page.evaluate(() =>
-    document.querySelector('dialog.operator-mode'),
-  ));
-  if (!isOperatorMode) {
-    await page.keyboard.press('Control+,');
-  }
 }
 
 export async function clearLocalStorage(page: Page, appURL = testHost) {
@@ -242,14 +225,14 @@ export async function validateEmailForResetPassword(
 
 export async function gotoRegistration(page: Page, appURL = testHost) {
   await openRoot(page, appURL);
-  await toggleOperatorMode(page);
+
   await page.locator('[data-test-register-user]').click();
   await expect(page.locator('[data-test-register-btn]')).toHaveCount(1);
 }
 
 export async function gotoForgotPassword(page: Page, appURL = testHost) {
   await openRoot(page, appURL);
-  await toggleOperatorMode(page);
+
   await page.locator('[data-test-forgot-password]').click();
   await expect(page.locator('[data-test-reset-your-password-btn]')).toHaveCount(
     1,
@@ -262,10 +245,7 @@ export async function login(
   password: string,
   opts?: LoginOptions,
 ) {
-  if (!opts?.skipOpeningOperatorMode) {
-    await openRoot(page, opts?.url);
-    await toggleOperatorMode(page);
-  }
+  await openRoot(page, opts?.url);
 
   await page.waitForFunction(() =>
     document.querySelector('[data-test-username-field]'),
@@ -281,6 +261,33 @@ export async function login(
       await openAiAssistant(page);
     }
   }
+}
+
+export async function enterWorkspace(
+  page: Page,
+  workspace = 'Test Workspace A',
+) {
+  await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
+  await expect(
+    page.locator(`[data-test-workspace="${workspace}"]`),
+  ).toHaveCount(1);
+  await page.locator(`[data-test-workspace="${workspace}"]`).click();
+}
+
+export async function showAllCards(page: Page) {
+  // TODO: there seems to be something off with show all cards for cards grid.
+  // sometimes after clicking on it in our matrix tests, the cards grid goes
+  // back to displaying favorite cards--like some async thing is triggering a
+  // rerender of the cards grid with its initial state. There is some mystery
+  // async that we need to await before we can actually click on the all cards
+  // button
+  await new Promise((r) => setTimeout(r, 1000)); // TODO figure out what we need to wait on here
+  await expect(
+    page.locator(`[data-test-boxel-filter-list-button="All Cards"]`),
+  ).toHaveCount(1);
+  await page
+    .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
+    .click();
 }
 
 export async function logout(page: Page) {

@@ -62,7 +62,7 @@ let availableSortOptions: SortOption[] = [
     ],
   },
   {
-    displayName: 'Updated at',
+    displayName: 'Date Updated',
     sort: [
       {
         by: 'lastModified',
@@ -71,7 +71,7 @@ let availableSortOptions: SortOption[] = [
     ],
   },
   {
-    displayName: 'Created at',
+    displayName: 'Date Created',
     sort: [
       {
         by: 'createdAt',
@@ -157,7 +157,6 @@ class Isolated extends Component<typeof CardsGrid> {
                   Loading...
                 </:loading>
                 <:response as |cards|>
-                  {{measureLoadTime}}
                   {{#each cards as |card|}}
                     <li
                       class='card'
@@ -481,16 +480,4 @@ export class CardsGrid extends CardDef {
 }
 function removeFileExtension(cardUrl: string) {
   return cardUrl.replace(/\.[^/.]+$/, '');
-}
-
-function measureLoadTime() {
-  // we consider rendering the cards grid part of the app
-  // boot, so this is where we'll measure the app boot time.
-  if ((globalThis as any).__bootStart) {
-    console.log(
-      `time since app boot: ${
-        performance.now() - (globalThis as any).__bootStart
-      } ms`,
-    );
-  }
 }

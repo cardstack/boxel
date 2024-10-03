@@ -16,6 +16,7 @@ import get from 'lodash/get';
 
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
+import { Tooltip } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { IconPlus, Download } from '@cardstack/boxel-ui/icons';
 
@@ -49,7 +50,7 @@ import SubmodeLayout from './submode-layout';
 
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import type RecentFilesService from '../../services/recent-files-service';
+
 import type { Submode } from '../submode-switcher';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
@@ -123,7 +124,6 @@ export default class InteractSubmode extends Component<Signature> {
   @service private declare cardService: CardService;
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare recentFilesService: RecentFilesService;
 
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked private itemToDelete: CardDef | undefined = undefined;
@@ -621,15 +621,22 @@ export default class InteractSubmode extends Component<Signature> {
     >
       <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
         {{#if this.canCreateNeighborStack}}
-          <NeighborStackTriggerButton
-            data-test-add-card-left-stack
-            @triggerSide={{SearchSheetTriggers.DropCardToLeftNeighborStackButton}}
-            @activeTrigger={{this.searchSheetTrigger}}
-            @onTrigger={{fn
-              this.showSearchWithTrigger
-              search.openSearchToPrompt
-            }}
-          />
+          <Tooltip @placement='right'>
+            <:trigger>
+              <NeighborStackTriggerButton
+                data-test-add-card-left-stack
+                @triggerSide={{SearchSheetTriggers.DropCardToLeftNeighborStackButton}}
+                @activeTrigger={{this.searchSheetTrigger}}
+                @onTrigger={{fn
+                  this.showSearchWithTrigger
+                  search.openSearchToPrompt
+                }}
+              />
+            </:trigger>
+            <:content>
+              {{neighborStackTooltipMessage 'left'}}
+            </:content>
+          </Tooltip>
         {{/if}}
         <div class='stacks'>
           {{#if (eq this.allStackItems.length 0)}}
@@ -689,15 +696,22 @@ export default class InteractSubmode extends Component<Signature> {
           {{/if}}
         </div>
         {{#if this.canCreateNeighborStack}}
-          <NeighborStackTriggerButton
-            data-test-add-card-right-stack
-            @triggerSide={{SearchSheetTriggers.DropCardToRightNeighborStackButton}}
-            @activeTrigger={{this.searchSheetTrigger}}
-            @onTrigger={{fn
-              this.showSearchWithTrigger
-              search.openSearchToPrompt
-            }}
-          />
+          <Tooltip @placement='left'>
+            <:trigger>
+              <NeighborStackTriggerButton
+                data-test-add-card-right-stack
+                @triggerSide={{SearchSheetTriggers.DropCardToRightNeighborStackButton}}
+                @activeTrigger={{this.searchSheetTrigger}}
+                @onTrigger={{fn
+                  this.showSearchWithTrigger
+                  search.openSearchToPrompt
+                }}
+              />
+            </:trigger>
+            <:content>
+              {{neighborStackTooltipMessage 'right'}}
+            </:content>
+          </Tooltip>
         {{/if}}
         {{#if this.itemToDelete}}
           <DeleteModal
@@ -779,3 +793,7 @@ export default class InteractSubmode extends Component<Signature> {
     </style>
   </template>
 }
+
+const neighborStackTooltipMessage = (side: 'left' | 'right') => {
+  return `Open a card to the ${side} of the current card`;
+};

@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import Service from '@ember/service';
 import { service } from '@ember/service';
 
@@ -5,11 +6,14 @@ import { task, restartableTask, rawTimeout } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
 
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import { TrackedArray } from 'tracked-built-ins/.';
+
+import { baseRealm, SupportedMimeType } from '@cardstack/runtime-common';
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
-import type LoaderService from './loader-service';
 import type { ExtendedClient } from './matrix-sdk-loader';
+import type NetworkService from './network';
+import type ResetService from './reset';
 
 interface RealmServerTokenClaims {
   user: string;
@@ -27,9 +31,21 @@ type AuthStatus =
   | { type: 'anonymous' };
 
 export default class RealmServerService extends Service {
-  @service declare loaderService: LoaderService;
+  @service private declare network: NetworkService;
+  @service private declare reset: ResetService;
   private auth: AuthStatus = { type: 'anonymous' };
   private client: ExtendedClient | undefined;
+  private _userRealmURLs = new TrackedArray<string>([baseRealm.url]);
+  private _catalogRealmURLs = new TrackedArray<string>();
+
+  constructor(owner: Owner) {
+    super(owner);
+    this.reset.register(this);
+  }
+
+  resetState() {
+    this.logout();
+  }
 
   setClient(client: ExtendedClient) {
     this.client = client;
@@ -51,7 +67,7 @@ export default class RealmServerService extends Service {
       throw new Error('Could not login to realm server');
     }
 
-    let response = await this.loaderService.loader.fetch(
+    let response = await this.network.authedFetch(
       `${this.url.href}_create-realm`,
       {
         method: 'POST',
@@ -84,14 +100,75 @@ export default class RealmServerService extends Service {
     this.token = undefined;
     this.client = undefined;
     this.loggingIn = undefined;
+    this.auth = { type: 'anonymous' };
+    this._userRealmURLs = new TrackedArray<string>([baseRealm.url]);
+    this._catalogRealmURLs = new TrackedArray<string>();
     window.localStorage.removeItem(sessionLocalStorageKey);
+  }
+
+  get availableRealmURLs() {
+    return [...this._userRealmURLs, ...this._catalogRealmURLs];
+  }
+
+  get userRealmURLs() {
+    return this._userRealmURLs.filter((realmURL) => realmURL != baseRealm.url);
+  }
+
+  get catalogRealmURLs() {
+    return this._catalogRealmURLs;
+  }
+
+  async setAvailableRealmURLs(userRealmURLs: string[]) {
+    userRealmURLs.forEach((userRealmURL) => {
+      if (!this._userRealmURLs.includes(userRealmURL)) {
+        this._userRealmURLs.push(userRealmURL);
+      }
+    });
+
+    this._userRealmURLs.forEach((userRealmURL) => {
+      if (!userRealmURLs.includes(userRealmURL)) {
+        this._userRealmURLs.splice(
+          this._userRealmURLs.indexOf(userRealmURL),
+          1,
+        );
+      }
+    });
+
+    let baseRealmUrl = baseRealm.url;
+
+    if (!this._userRealmURLs.includes(baseRealmUrl)) {
+      this._userRealmURLs.unshift(baseRealmUrl);
+    }
+
+    await this.fetchCatalogRealmURLs();
+  }
+
+  private async fetchCatalogRealmURLs() {
+    let response = await this.network.authedFetch(
+      `${this.url.origin}/_catalog-realms`,
+    );
+    if (response.status !== 200) {
+      throw new Error(
+        `Failed to fetch public realms for realm server ${this.url.origin}: ${response.status}`,
+      );
+    }
+
+    let { data } = await response.json();
+    data.forEach((publicRealm: { id: string }) => {
+      if (!this._catalogRealmURLs.includes(publicRealm.id)) {
+        this._catalogRealmURLs.push(publicRealm.id);
+      }
+    });
   }
 
   get url() {
     let url = globalThis.location.origin;
     // the ember CLI hosted app will use the dev env realm server
     // http://localhost:4201
-    url = url === 'http://localhost:4200' ? 'http://localhost:4201' : url;
+    url =
+      url === 'http://localhost:4200' || url === 'http://localhost:7357'
+        ? 'http://localhost:4201'
+        : url;
     return new URL(url);
   }
 
@@ -165,7 +242,7 @@ export default class RealmServerService extends Service {
       let realmAuthClient = new RealmAuthClient(
         this.url,
         this.client,
-        this.loaderService.loader.fetch.bind(this.loaderService.loader),
+        this.network.authedFetch.bind(this.network),
         {
           authWithRealmServer: true,
         },
