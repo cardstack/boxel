@@ -114,6 +114,15 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
 
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
     await expect(
+      page.locator('[data-test-workspace-list] [data-test-workspace-loading-indicator]'),
+    ).toHaveCount(1);
+    await expect(
+      page.locator('[data-test-workspace-list] [data-test-workspace="Unknown Workspace"]'),
+    ).toHaveCount(0);
+    await expect(
+      page.locator(`[data-test-workspace-list] [data-test-workspace="Test User's Workspace"]`),
+    ).toHaveCount(1);
+    await expect(
       page.locator('[data-test-workspace-list] [data-test-workspace-name]'),
     ).toContainText("Test User's Workspace", { timeout: 30_000 });
     await expect(
