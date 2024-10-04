@@ -1,17 +1,31 @@
 # Boxel Tools VS Code Extension
 
-This extension allows you to interact with your Boxel Realm from VS Code.
+This extension allows you to interact with Boxel workspaces from VS Code.
 
 ## Features
 
-- Open files in your Boxel Realm
-- Create new files in your Boxel Realm
-- Edit files in your Boxel Realm
-- Delete files in your Boxel Realm
+- Open files in your Boxel workspace
+- Create new files in your Boxel workspace
+- Edit files in your Boxel workspace
+- Delete files in your Boxel workspace
 
-## Setup
+## Installation
 
-This project uses volta for toolchain management, and pnpm for package management.
+The extension is available through the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=cardstack.boxel-tools).
+
+You can also build it [locally](#development).
+
+## Usage
+
+Open a new window and in the command palette select "boxelrealm: Setup Workspace".
+
+You will be prompted for your username and password for production. If you want to use another environment, alter the Matrix Server in VS Code settings.
+
+The realm should then be viewable as a folder in your workspace.
+
+## Development
+
+This project uses Volta for toolchain management and pnpm for package management.
 
 Install dependencies with pnpm:
 
@@ -20,7 +34,13 @@ Install dependencies with pnpm:
 pnpm install
 ```
 
-Build the extension:
+Build a dependent package, from `/packages/boxel-ui/addon`:
+
+```bash
+pnpm build
+```
+
+Build the extension, from `/packages/vscode-boxel-tools`:
 
 ```bash
 pnpm run vscode:package
@@ -30,18 +50,10 @@ pnpm run vscode:package
 
 Open VS Code, and drag the created .vsix file into the VS Code extensions list.
 
-## Usage
+## Debugging
 
-Open a new window and in the command pallet select "boxelrealm: Setup Workspace".
-
-You will be prompted for your username and password for production (alter the matrix server url in vscode settings to use locally).
-
-The realm should then be viewable as a folder in your workspace.
-
-## Development
-
-When developing in vscode you can hit F5 and the extension will be run in a vscode dev environment, with debugging available.
+When developing in VS Code you can hit F5 and the extension will be run in a VS Code dev environment, with debugging available.
 
 ## Troubleshooting
 
-If you are seeing errors, a common one is a mistake with the username or password, and then hitting the tight rate limits on the realm server.
+If you are seeing errors, a common one is a mistake with the username or password, and then hitting the tight rate limits on the Matrix server.
