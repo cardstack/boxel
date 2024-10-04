@@ -40,20 +40,22 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
       {{/unless}}
       {{yield}}
     </button>
-  {{else if (bool @loading)}}
-    <button class='add-button loading' disabled ...attributes>
-      <LoadingIndicator />
-    </button>
   {{else}}
-    <IconButton
-      @icon={{PlusCircleIcon}}
-      @width='40px'
-      @height='40px'
-      class='add-button'
-      aria-label='Add'
-      data-test-create-new-card-button
-      ...attributes
-    />
+    {{#if (bool @loading)}}
+      <button class='add-button loading' disabled ...attributes>
+        <LoadingIndicator />
+      </button>
+    {{else}}
+      <IconButton
+        @icon={{PlusCircleIcon}}
+        @width='40px'
+        @height='40px'
+        class='add-button'
+        aria-label='Add'
+        data-test-create-new-card-button
+        ...attributes
+      />
+    {{/if}}
   {{/if}}
 
   <style scoped>
