@@ -1,10 +1,8 @@
 import GlimmerComponent from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 import { array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
-import { restartableTask } from 'ember-concurrency';
 import {
   BoxelDropdown,
   Button,
@@ -122,40 +120,28 @@ class ResourceList extends GlimmerComponent<ResourceListSignature> {
 }
 
 class CommandResultEmbeddedView extends Component<typeof CommandResult> {
-  @tracked attachedResources: AttachedCardResource[] = [];
   @tracked showAllResults = false;
 
-  constructor(owner: Owner, args: any) {
-    super(owner, args);
-    this._getAttachments.perform();
-  }
-
-  private _getAttachments = restartableTask(async () => {
-    try {
-      if (!this.cardIdsToDisplay.length) {
-        this.attachedResources = [];
-      }
-      let cards = await Promise.all(
-        this.cardIdsToDisplay.map(async (id) => {
-          let card = getCard(new URL(id));
-          await card.loaded;
-          if (!card) {
-            return {
-              card: undefined,
-              cardError: {
-                id,
-                error: new Error(`cannot find card for id "${id}"`),
-              },
-            };
-          }
-          return card;
-        }),
-      );
-      this.attachedResources = cards;
-    } catch (e) {
-      throw e;
+  @cached
+  get attachedResources(): AttachedCardResource[] {
+    if (!this.cardIdsToDisplay.length) {
+      return [];
     }
-  });
+    let cards = this.cardIdsToDisplay.map((id) => {
+      let card = getCard(new URL(id));
+      if (!card) {
+        return {
+          card: undefined,
+          cardError: {
+            id,
+            error: new Error(`cannot find card for id "${id}"`),
+          },
+        };
+      }
+      return card;
+    });
+    return cards;
+  }
 
   get cardIdsToDisplay() {
     if (!this.args.model.cardIds?.length) {
@@ -309,7 +295,7 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
         display: flex;
         flex-direction: column;
         font-weight: 600;
-        padding: var(--boxel-sp-sm);
+        padding: var(--boxel-sp-sm) var(--boxel-sp-sm) var(--boxel-sp-xxs);
       }
       .footer {
         color: var(--boxel-header-text-color);
@@ -318,14 +304,19 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
       .toggle-show {
         --icon-color: var(--boxel-highlight);
         --icon-border: var(--boxel-highlight);
+        --boxel-button-min-height: 1.875rem;
         --boxel-button-padding: 0px;
         --boxel-button-font: var(--boxel-font-xs);
         --icon-stroke-width: 2.5;
         font-weight: 600;
         color: var(--boxel-highlight);
         display: flex;
+        justify-content: flex-start;
         gap: var(--boxel-sp-xxxs);
         border: none;
+      }
+      .toggle-show:focus:not(:disabled) {
+        outline-offset: 2px;
       }
       .result-list {
         padding-left: var(--boxel-sp);
@@ -399,6 +390,8 @@ class CommandResultIsolated extends CommandResultEmbeddedView {
       }
     </style>
   </template>
+
+  @tracked showAllResults = true;
 }
 
 export class CommandObjectField extends FieldDef {
