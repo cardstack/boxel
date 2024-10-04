@@ -872,6 +872,7 @@ export default class CodeSubmode extends Component<Signature> {
                         @card={{this.selectedCardOrField.cardOrField}}
                         @cardTypeResource={{this.selectedCardOrField.cardType}}
                         @goToDefinition={{this.goToDefinition}}
+                        @isReadOnly={{this.isReadOnly}}
                         as |SchemaEditorTitle SchemaEditorPanel|
                       >
                         <A.Item

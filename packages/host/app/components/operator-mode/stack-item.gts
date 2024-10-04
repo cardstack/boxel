@@ -610,6 +610,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
         gap: var(--boxel-sp-xxs);
       }
 
+      .header:not(.edit .header) {
+        --boxel-header-detail-max-width: none;
+      }
+
       .header-icon {
         background-color: var(--realm-icon-background);
         border: 1px solid rgba(0, 0, 0, 0.15);

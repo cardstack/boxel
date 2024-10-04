@@ -199,6 +199,10 @@ export default class OperatorModeStateService extends Service {
         });
     }
 
+    if (this.state.stacks.length === 0) {
+      this.operatorModeController.workspaceChooserOpened = true;
+    }
+
     this.schedulePersist();
   }
 
