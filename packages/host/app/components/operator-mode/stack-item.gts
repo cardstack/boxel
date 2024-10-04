@@ -585,7 +585,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
         height: fit-content;
         min-width: 100%;
         gap: var(--boxel-sp-xxs);
+      }
 
+      .header:not(.edit .header) {
         --boxel-header-detail-max-width: none;
       }
 
