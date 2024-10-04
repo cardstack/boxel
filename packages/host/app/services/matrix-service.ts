@@ -40,6 +40,7 @@ import {
 } from '@cardstack/runtime-common/helpers/ai';
 
 import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
+import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import { currentRoomIdPersistenceKey } from '@cardstack/host/components/ai-assistant/panel';
 import {
@@ -199,6 +200,10 @@ export default class MatrixService extends Service {
 
   get userId() {
     return this.client.getUserId();
+  }
+
+  get userName() {
+    return this.userId ? getMatrixUsername(this.userId) : null;
   }
 
   private get cardAPI() {
