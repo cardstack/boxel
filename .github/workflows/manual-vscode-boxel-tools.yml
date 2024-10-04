@@ -75,7 +75,7 @@ jobs:
           fi
 
   publish:
-    name: Package, test, and publish VS Code Boxel Tools extension
+    name: Package and publish VS Code Boxel Tools extension
     needs: check-version
     runs-on: ubuntu-latest
     steps:
