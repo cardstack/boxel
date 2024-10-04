@@ -11,9 +11,15 @@ import { TrackedArray } from 'tracked-built-ins/.';
 import { baseRealm, SupportedMimeType } from '@cardstack/runtime-common';
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
+import ENV from '@cardstack/host/config/environment';
+
+import RealmService from './realm';
+
 import type { ExtendedClient } from './matrix-sdk-loader';
 import type NetworkService from './network';
 import type ResetService from './reset';
+
+const { hostsOwnAssets, resolvedBaseRealmURL } = ENV;
 
 interface RealmServerTokenClaims {
   user: string;
@@ -162,13 +168,13 @@ export default class RealmServerService extends Service {
   }
 
   get url() {
-    let url = globalThis.location.origin;
-    // the ember CLI hosted app will use the dev env realm server
-    // http://localhost:4201
-    url =
-      url === 'http://localhost:4200' || url === 'http://localhost:7357'
-        ? 'http://localhost:4201'
-        : url;
+    let url;
+    if (hostsOwnAssets) {
+      url = new URL(resolvedBaseRealmURL).origin;
+    } else {
+      url = globalThis.location.origin;
+    }
+
     return new URL(url);
   }
 
