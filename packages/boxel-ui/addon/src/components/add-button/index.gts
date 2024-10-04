@@ -11,8 +11,8 @@ interface Signature {
     hideIcon?: boolean;
     iconHeight?: string;
     iconWidth?: string;
-    variant?: AddButtonVariant;
     loading?: boolean;
+    variant?: AddButtonVariant;
   };
   Blocks: {
     default: [];
