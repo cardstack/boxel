@@ -41,5 +41,6 @@ export async function activate(context: vscode.ExtensionContext) {
     }));
     console.log('Realm list', realmList);
     vscode.workspace.updateWorkspaceFolders(0, 0, ...realmList);
+    await vscode.commands.executeCommand('workbench.view.explorer');
   });
 }
