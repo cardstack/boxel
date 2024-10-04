@@ -183,7 +183,7 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
   }
 
   <template>
-    <div data-test-command-result class='command-result'>
+    <div class='command-result' data-test-command-result>
       <Header
         @title='Search Results'
         @subtitle='{{this.numberOfCards}} {{if
@@ -193,7 +193,7 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
         }}'
         @hasBottomBorder={{true}}
         class='header'
-        data-test-comand-result-header
+        data-test-command-result-header
       >
         <:icon>
           <div class='search-icon-container'>
@@ -255,7 +255,7 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
     </div>
     <style scoped>
       .command-result {
-        color: black;
+        color: var(--boxel-dark);
         background-color: var(--boxel-light);
         border-radius: var(--boxel-border-radius);
         --left-padding: var(--boxel-sp-xs);
@@ -342,22 +342,22 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
 
 class CommandResultIsolated extends CommandResultEmbeddedView {
   <template>
-    <section class='search-results'>
+    <section class='command-result' data-test-command-result-isolated>
       <header>
-        <h3>{{@model.title}}</h3>
+        <h3>Search Results</h3>
         <p class='result-count'>
           {{this.numberOfCards}}
           {{if (eq this.numberOfCards 1) 'Result' 'Results'}}
         </p>
       </header>
       <div class='fields'>
-        <FieldContainer
-          @label='Description'
-        >{{@model.description}}</FieldContainer>
-        <FieldContainer @label='Filter'>
-          <pre>{{@model.filterString}}</pre>
+        <FieldContainer @label='Description'>
+          {{@model.description}}
         </FieldContainer>
-        <FieldContainer @label='Results'>
+        <FieldContainer @label='Filter'>
+          <pre>{{this.filterString}}</pre>
+        </FieldContainer>
+        <FieldContainer @label='Results' class='results'>
           <ResourceList
             @resources={{this.attachedResources}}
             @format='fitted'
@@ -367,10 +367,10 @@ class CommandResultIsolated extends CommandResultEmbeddedView {
       </div>
     </section>
     <style scoped>
-      .search-results {
+      .command-result {
         padding: var(--boxel-sp-lg) var(--boxel-sp-xl);
       }
-      .search-results > * + * {
+      .command-result > * + * {
         margin-top: var(--boxel-sp-lg);
       }
       h3 {
@@ -388,16 +388,26 @@ class CommandResultIsolated extends CommandResultEmbeddedView {
       .fields > * + * {
         margin-top: var(--boxel-sp-xxs);
       }
+      .results {
+        margin-top: var(--boxel-sp);
+      }
     </style>
   </template>
 
   @tracked showAllResults = true;
+
+  get filterString() {
+    if (!this.args.model.toolCallArgs?.filter) {
+      return;
+    }
+    return JSON.stringify(this.args.model.toolCallArgs.filter, null, 2);
+  }
 }
 
-export class CommandObjectField extends FieldDef {
+export class ToolCallArg extends FieldDef {
   static [primitive]: Record<string, any>;
   static [queryableValue](value: Record<string, any> | undefined) {
-    return value && typeof value === 'object'
+    return Boolean(value) && typeof value === 'object'
       ? JSON.stringify(value)
       : undefined;
   }
@@ -407,7 +417,7 @@ export class CommandResult extends CardDef {
   static displayName = 'Command Result';
   @field toolCallName = contains(StringField);
   @field toolCallId = contains(StringField);
-  @field toolCallArgs = contains(CommandObjectField);
+  @field toolCallArgs = contains(ToolCallArg);
   @field cardIds = containsMany(StringField);
   @field title = contains(StringField, {
     computeVia: function (this: CommandResult) {
@@ -421,13 +431,6 @@ export class CommandResult extends CardDef {
       return this.toolCallArgs?.description;
     },
   });
-
-  get filterString() {
-    if (!this.toolCallArgs?.filter) {
-      return;
-    }
-    return JSON.stringify(this.toolCallArgs.filter, null, 2);
-  }
 
   static embedded = CommandResultEmbeddedView;
   static isolated = CommandResultIsolated;
