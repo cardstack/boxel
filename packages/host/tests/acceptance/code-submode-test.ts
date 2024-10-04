@@ -405,6 +405,10 @@ const notFoundAdoptionInstance = `{
 
 module('Acceptance | code submode tests', function (_hooks) {
   module('multiple realms', function (hooks) {
+    let personalRealmURL: string;
+    let additionalRealmURL: string;
+    let catalogRealmURL: string;
+
     setupApplicationTest(hooks);
     setupLocalIndexing(hooks);
     setupServerSentEvents(hooks);
@@ -412,13 +416,19 @@ module('Acceptance | code submode tests', function (_hooks) {
       loggedInAs: '@testuser:staging',
     });
 
+    async function openNewFileModal(menuSelection: string) {
+      await waitFor('[data-test-new-file-button]');
+      await click('[data-test-new-file-button]');
+      await click(`[data-test-boxel-menu-item-text="${menuSelection}"]`);
+    }
+
     hooks.beforeEach(async function () {
       let realmServerService = this.owner.lookup(
         'service:realm-server',
       ) as RealmServerService;
-      const personalRealmURL = `${realmServerService.url}testuser/personal/`;
-      const additionalRealmURL = `${realmServerService.url}testuser/aaa/`; // writeable realm that is lexically before the personal realm
-      const catalogRealmURL = `${realmServerService.url}catalog/`;
+      personalRealmURL = `${realmServerService.url}testuser/personal/`;
+      additionalRealmURL = `${realmServerService.url}testuser/aaa/`; // writeable realm that is lexically before the personal realm
+      catalogRealmURL = `${realmServerService.url}catalog/`;
       setActiveRealms([catalogRealmURL, additionalRealmURL, personalRealmURL]);
 
       await setupAcceptanceTestRealm({
@@ -474,6 +484,31 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert
         .dom('[data-test-card-url-bar-realm-info]')
         .containsText(`in Test User's Workspace`);
+    });
+
+    test('first item in add file realm dropdown is the currently displayed realm', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+      });
+
+      await waitFor('[data-test-file]');
+      await openNewFileModal('Card Definition');
+      assert
+        .dom('[data-test-selected-realm]')
+        .containsText(
+          `Test User's Workspace`,
+          'the selected (default) realm is correct',
+        );
+      await click('[data-test-cancel-create-file]');
+
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${additionalRealmURL}hello.txt`,
+      });
+      await openNewFileModal('Card Definition');
+      assert
+        .dom('[data-test-selected-realm]')
+        .containsText(`Additional Workspace`, 'the selected realm is correct');
     });
   });
 
