@@ -63,7 +63,8 @@
   "scripts": {
     "vscode:prepublish": "pnpm run compile",
     "vscode:package": "pnpm vsce package --no-dependencies",
-    "vscode:publish": "pnpm vsce publish --no-dependencies --pre-release",
+    "vscode:publish": "pnpm vsce publish --no-dependencies",
+    "vscode:publish:prerelease": "pnpm vsce publish --no-dependencies --pre-release",
     "compile": "node esbuild.mjs --production",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",

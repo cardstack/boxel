@@ -90,7 +90,12 @@ jobs:
         run: pnpm vscode:package
         working-directory: packages/vscode-boxel-tools
       - name: Publish
-        run: pnpm vscode:publish
+        run: |
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            pnpm vscode:publish
+          else
+            pnpm vscode:publish:prerelease
+          fi
         working-directory: packages/vscode-boxel-tools
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
