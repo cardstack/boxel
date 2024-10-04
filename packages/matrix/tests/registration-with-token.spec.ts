@@ -1,4 +1,6 @@
 import { expect, test } from '@playwright/test';
+import { writeJSONSync } from 'fs-extra';
+import { join } from 'path';
 import {
   synapseStart,
   synapseStop,
@@ -193,6 +195,33 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       page.locator(`[data-test-card="${newRealmURL}hello-world"]`),
     ).toContainText('Hello World');
 
+    // assert that host app can subscribe to SSE events of a private realm
+    let path = join(
+      realmServer.realmPath,
+      '..',
+      'user1',
+      'personal',
+      'hello-world.json',
+    );
+    writeJSONSync(path, {
+      data: {
+        type: 'card',
+        attributes: {
+          title: 'Hello Mars',
+          description: 'This is a test card instance.',
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/card-api',
+            name: 'CardDef',
+          },
+        },
+      },
+    });
+    await expect(
+      page.locator(`[data-test-card="${newRealmURL}hello-world"]`),
+    ).toContainText('Hello Mars');
+
     // assert that non-logged in user is prompted to login before navigating
     // directly to card in private repo
     await logout(page);
@@ -205,7 +234,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await assertLoggedIn(page, { displayName: 'Test User' });
     await expect(
       page.locator(`[data-test-card="${newRealmURL}hello-world"]`),
-    ).toContainText('Hello World');
+    ).toHaveCount(1);
 
     let auth = await loginUser(`user1`, 'mypassword1!');
     let realms = await getAccountData<{ realms: string[] } | undefined>(
