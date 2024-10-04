@@ -240,6 +240,7 @@ export class CurrentRun {
     }
 
     let entries = await this.#reader.directoryListing(url);
+
     for (let { url, kind, lastModified } of entries) {
       let innerURL = new URL(url);
       if (isIgnored(this.#realmURL, this.ignoreMap, innerURL)) {
@@ -249,6 +250,11 @@ export class CurrentRun {
       if (kind === 'directory') {
         await this.discoverInvalidations(innerURL, mtimes);
       } else {
+        if (!url.endsWith('.json') && !hasExecutableExtension(url)) {
+          // Only allow json and executable files to be invalidated so that we don't end up with invalidated files that weren't meant to be indexed (images, etc)
+          continue;
+        }
+
         let indexEntry = mtimes.get(innerURL.href);
         if (
           !indexEntry ||
