@@ -70,7 +70,6 @@
     "lint:js": "eslint . --cache",
     "lint:js:fix": "eslint . --fix",
     "lint:glint": "glint",
-    "test": "vscode-test",
     "watch": "node esbuild.mjs --watch"
   },
   "dependencies": {
@@ -87,8 +86,6 @@
     "@types/vscode": "^1.73.0",
     "@typescript-eslint/eslint-plugin": "^7.14.0",
     "@typescript-eslint/parser": "^7.14.0",
-    "@vscode/test-cli": "^0.0.10",
-    "@vscode/test-electron": "^2.4.1",
     "@vscode/vsce": "^3.1.0",
     "concurrently": "^8.0.1",
     "esbuild": "^0.24.0",

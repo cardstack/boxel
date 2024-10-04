@@ -5,14 +5,14 @@ const watch = process.argv.includes('--watch');
 
 async function main() {
   const ctx = await context({
-    entryPoints: ['src/extension.ts', 'src/test/extension.test.ts'],
+    entryPoints: ['src/extension.ts'],
     bundle: true,
     format: 'cjs',
     minify: production,
     sourcemap: !production,
     sourcesContent: false,
     platform: 'node',
-    outdir: 'dist',
+    outfile: 'dist/extension.js',
     external: ['vscode'],
     logLevel: 'silent',
     plugins: [

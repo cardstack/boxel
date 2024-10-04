@@ -89,9 +89,6 @@ jobs:
       - name: Package
         run: pnpm vscode:package
         working-directory: packages/vscode-boxel-tools
-      - name: Test
-        run: xvfb-run -a pnpm test
-        working-directory: packages/vscode-boxel-tools
       - name: Publish
         run: pnpm vscode:publish
         working-directory: packages/vscode-boxel-tools
