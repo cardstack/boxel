@@ -252,6 +252,7 @@ export default class RealmService extends Service {
         backgroundURL: null,
         iconURL: null,
         showAsCatalog: null,
+        visibility: 'private',
       };
     }
 
@@ -262,6 +263,7 @@ export default class RealmService extends Service {
         backgroundURL: null,
         iconURL: null,
         showAsCatalog: null,
+        visibility: 'private',
       };
     } else {
       return resource.meta.info;

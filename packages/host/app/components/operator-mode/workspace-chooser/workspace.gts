@@ -7,7 +7,7 @@ import { cached } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
 
 import { cssVar } from '@cardstack/boxel-ui/helpers';
-import { Lock } from '@cardstack/boxel-ui/icons';
+import { Group, IconGlobe, Lock } from '@cardstack/boxel-ui/icons';
 
 import CardService from '@cardstack/host/services/card-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -39,14 +39,13 @@ export default class Workspace extends Component<Signature> {
           }}
         >
           <img src={{this.iconURL}} alt='Workspace Icon' />
-          {{!-- {{#if (not this.isPublic)}} --}}
-          <div class='small-icon'>
-            <Lock width='100%' height='100%' />
+          <div class='visibility-icon'>
+            <this.visibilityIcon width='100%' height='100%' />
           </div>
         </div>
         <div class='info'>
           <span class='name' data-test-workspace-name>{{this.name}}</span>
-          <span class='type'>{{if this.isPublic 'Catalog' 'Personal'}}</span>
+          <span class='visibility'>{{this.visibility}}</span>
         </div>
       </ItemContainer>
     {{/if}}
@@ -70,7 +69,7 @@ export default class Workspace extends Component<Signature> {
         width: 60px;
         height: 60px;
       }
-      .small-icon {
+      .visibility-icon {
         position: absolute;
         top: var(--boxel-sp-xs);
         left: var(--boxel-sp-xs);
@@ -103,9 +102,10 @@ export default class Workspace extends Component<Signature> {
         color: var(--boxel-light);
         font: 500 var(--boxel-font-sm);
       }
-      .type {
+      .visibility {
         color: var(--boxel-400);
         font: 500 var(--boxel-font-xs);
+        text-transform: capitalize;
       }
     </style>
   </template>
@@ -148,6 +148,23 @@ export default class Workspace extends Component<Signature> {
 
   private get backgroundImageURL() {
     return this.backgroundURL ? `url(${this.backgroundURL})` : '';
+  }
+
+  private get visibility() {
+    return this.realmInfo.visibility;
+  }
+
+  private get visibilityIcon() {
+    switch (this.visibility) {
+      case 'public':
+        return IconGlobe;
+      case 'shared':
+        return Group;
+      case 'private':
+        return Lock;
+      default:
+        throw new Error('unknown realm visibility');
+    }
   }
 
   @action openWorkspace() {
