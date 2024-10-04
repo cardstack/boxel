@@ -30,7 +30,6 @@ This project uses Volta for toolchain management and pnpm for package management
 Install dependencies with pnpm:
 
 ```bash
-
 pnpm install
 ```
 
@@ -46,11 +45,11 @@ Build the extension, from `/packages/vscode-boxel-tools`:
 pnpm run vscode:package
 ```
 
-## Installation
+### Installation
 
-Open VS Code, and drag the created .vsix file into the VS Code extensions list.
+Open VS Code and drag the created `.vsix` file into the VS Code extensions list.
 
-## Debugging
+### Debugging
 
 When developing in VS Code you can hit F5 and the extension will be run in a VS Code dev environment, with debugging available.
 
