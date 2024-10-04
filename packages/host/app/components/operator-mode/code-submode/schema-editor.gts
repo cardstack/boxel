@@ -30,6 +30,7 @@ interface Signature {
     moduleContentsResource: ModuleContentsResource;
     cardTypeResource?: CardType;
     card: typeof BaseDef;
+    isReadOnly: boolean;
     goToDefinition: (
       codeRef: ResolvedCodeRef | undefined,
       localName: string | undefined,
@@ -40,7 +41,11 @@ interface Signature {
       WithBoundArgs<typeof SchemaEditorTitle, 'totalFields' | 'hasModuleError'>,
       WithBoundArgs<
         typeof CardAdoptionChain,
-        'file' | 'moduleSyntax' | 'cardInheritanceChain' | 'goToDefinition'
+        | 'file'
+        | 'moduleSyntax'
+        | 'cardInheritanceChain'
+        | 'goToDefinition'
+        | 'isReadOnly'
       >,
     ];
   };
@@ -156,6 +161,7 @@ export default class SchemaEditor extends Component<Signature> {
         (component
           CardAdoptionChain
           file=@file
+          isReadOnly=@isReadOnly
           moduleSyntax=this.moduleSyntax
           cardInheritanceChain=this.cardInheritanceChain.value
           goToDefinition=@goToDefinition
