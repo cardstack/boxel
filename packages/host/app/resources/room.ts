@@ -190,6 +190,12 @@ export class RoomResource extends Resource<Args> {
         // TOOD: Refactor having many if conditions to some variant of a strategy pattern
         update = true;
       } else if (event.content['m.relates_to']?.rel_type === 'm.replace') {
+        if (
+          'isStreamingFinished' in event.content &&
+          !event.content.isStreamingFinished
+        ) {
+          continue;
+        }
         event_id = event.content['m.relates_to'].event_id;
         update = true;
       }
