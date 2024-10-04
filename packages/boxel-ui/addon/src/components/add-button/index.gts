@@ -42,9 +42,9 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
     </button>
   {{else}}
     {{#if (bool @loading)}}
-      <button class='add-button loading' disabled ...attributes>
+      <div class='add-button loading'>
         <LoadingIndicator />
-      </button>
+      </div>
     {{else}}
       <IconButton
         @icon={{PlusCircleIcon}}
