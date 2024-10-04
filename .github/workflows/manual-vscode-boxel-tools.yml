@@ -12,8 +12,6 @@ on:
       environment:
         required: true
         type: string
-  # FIXME remove
-  pull_request:
 
 jobs:
   check-version:
