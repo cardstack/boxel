@@ -13,8 +13,6 @@ import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
 import ENV from '@cardstack/host/config/environment';
 
-import RealmService from './realm';
-
 import type { ExtendedClient } from './matrix-sdk-loader';
 import type NetworkService from './network';
 import type ResetService from './reset';
