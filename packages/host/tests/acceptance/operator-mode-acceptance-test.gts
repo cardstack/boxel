@@ -4,7 +4,6 @@ import {
   click,
   waitFor,
   fillIn,
-  triggerEvent,
   waitUntil,
 } from '@ember/test-helpers';
 
@@ -30,6 +29,7 @@ import {
   setupAcceptanceTestRealm,
   visitOperatorMode,
   lookupLoaderService,
+  lookupNetworkService,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -378,15 +378,8 @@ module('Acceptance | operator mode tests', function (hooks) {
 
   test('visiting operator mode', async function (assert) {
     await visit('/');
+    await click('[data-test-workspace="Test Workspace B"]');
 
-    // Enter operator mode
-    await triggerEvent(document.body, 'keydown', {
-      code: 'Key.',
-      key: '.',
-      ctrlKey: true,
-    });
-
-    await waitFor('[data-test-operator-mode-stack]');
     assert.dom('[data-test-operator-mode-stack]').exists();
     assert.dom('[data-test-stack-card-index="0"]').exists(); // Index card opens in the stack
     await click('[data-test-boxel-filter-list-button="All Cards"]');
@@ -555,6 +548,23 @@ module('Acceptance | operator mode tests', function (hooks) {
   });
 
   test('open workspace chooser when boxel icon is clicked', async function (assert) {
+    lookupNetworkService().mount(
+      async (req: Request) => {
+        let isOnWorkspaceChooser = document.querySelector(
+          '[data-test-workspace-chooser]',
+        );
+        if (isOnWorkspaceChooser && req.url.includes('_info')) {
+          assert
+            .dom(
+              `[data-test-workspace-list] [data-test-workspace-loading-indicator]`,
+            )
+            .exists();
+        }
+        return null;
+      },
+      { prepend: true },
+    );
+
     await visitOperatorMode({
       stacks: [
         [
@@ -567,7 +577,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
 
     assert
-      .dom('[data-test-stack-card="http://test-realm/test/Person/fadhlan"]')
+      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
       .exists();
     assert.dom('[data-test-submode-layout-title]').doesNotExist();
     assert.dom('[data-test-workspace-chooser]').doesNotExist();
@@ -580,7 +590,10 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.dom('[data-test-submode-layout-title]').exists();
     assert.dom('[data-test-workspace-chooser]').exists();
     assert
-      .dom(`[data-test-stack-card="http://test-realm/test/Person/fadhlan"]`)
+      .dom(`[data-test-workspace-list] [data-test-workspace-loading-indicator]`)
+      .doesNotExist();
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
       .doesNotExist();
     url = currentURL().split('?')[1].replace(/^\/\?/, '') ?? '';
     urlParameters = new URLSearchParams(url);
@@ -650,14 +663,6 @@ module('Acceptance | operator mode tests', function (hooks) {
     test('realm session refreshes within 5 minute window of expiration', async function (assert) {
       await visit('/');
 
-      // Enter operator mode
-      await triggerEvent(document.body, 'keydown', {
-        code: 'Key.',
-        key: '.',
-        ctrlKey: true,
-      });
-
-      await waitFor('[data-test-operator-mode-stack]');
       let originalToken = window.localStorage.getItem(sessionLocalStorageKey);
       await waitUntil(
         () =>

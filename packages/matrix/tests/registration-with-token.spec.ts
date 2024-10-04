@@ -1,4 +1,6 @@
 import { expect, test } from '@playwright/test';
+import { writeJSONSync } from 'fs-extra';
+import { join } from 'path';
 import {
   synapseStart,
   synapseStop,
@@ -50,13 +52,14 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
   });
 
   test('it can register a user with a registration token', async ({ page }) => {
+    let serverIndexUrl = new URL(appURL).origin;
     test.setTimeout(120_000);
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await registerUser(synapse, 'user2', 'pass');
     await registerRealmUsers(synapse);
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
-    await clearLocalStorage(page, appURL);
-    await gotoRegistration(page, appURL);
+    await clearLocalStorage(page, serverIndexUrl);
+    await gotoRegistration(page, serverIndexUrl);
 
     await expect(
       page.locator('[data-test-token-field]'),
@@ -111,6 +114,15 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
 
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
     await expect(
+      page.locator('[data-test-workspace-list] [data-test-workspace-loading-indicator]'),
+    ).toHaveCount(1);
+    await expect(
+      page.locator('[data-test-workspace-list] [data-test-workspace="Unknown Workspace"]'),
+    ).toHaveCount(0);
+    await expect(
+      page.locator(`[data-test-workspace-list] [data-test-workspace="Test User's Workspace"]`),
+    ).toHaveCount(1);
+    await expect(
       page.locator('[data-test-workspace-list] [data-test-workspace-name]'),
     ).toContainText("Test User's Workspace", { timeout: 30_000 });
     await expect(
@@ -122,7 +134,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       'has background image',
     ).toHaveAttribute('style', /--workspace-background-image-url:/);
 
-    let newRealmURL = new URL('user1/personal/', new URL(appURL).origin).href;
+    let newRealmURL = new URL('user1/personal/', serverIndexUrl).href;
     await enterWorkspace(page, "Test User's Workspace");
 
     await expect(
@@ -139,8 +151,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
 
     // assert workspaces state don't leak into other sessions
     await login(page, 'user2', 'pass', {
-      url: appURL,
-      skipOpeningOperatorMode: true,
+      url: serverIndexUrl,
       skipOpeningAssistant: true,
     });
     await assertLoggedIn(page, {
@@ -160,8 +171,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await logout(page);
     await assertLoggedOut(page);
     await login(page, 'user1', 'mypassword1!', {
-      url: appURL,
-      skipOpeningOperatorMode: true,
+      url: serverIndexUrl,
       skipOpeningAssistant: true,
     });
     await assertLoggedIn(page, { displayName: 'Test User' });
@@ -185,20 +195,46 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       page.locator(`[data-test-card="${newRealmURL}hello-world"]`),
     ).toContainText('Hello World');
 
+    // assert that host app can subscribe to SSE events of a private realm
+    let path = join(
+      realmServer.realmPath,
+      '..',
+      'user1',
+      'personal',
+      'hello-world.json',
+    );
+    writeJSONSync(path, {
+      data: {
+        type: 'card',
+        attributes: {
+          title: 'Hello Mars',
+          description: 'This is a test card instance.',
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/card-api',
+            name: 'CardDef',
+          },
+        },
+      },
+    });
+    await expect(
+      page.locator(`[data-test-card="${newRealmURL}hello-world"]`),
+    ).toContainText('Hello Mars');
+
     // assert that non-logged in user is prompted to login before navigating
     // directly to card in private repo
     await logout(page);
     await assertLoggedOut(page);
-    await page.goto(`${newRealmURL}hello-world`);
+
     await login(page, 'user1', 'mypassword1!', {
-      url: appURL,
-      skipOpeningOperatorMode: true,
+      url: `${newRealmURL}hello-world`,
       skipOpeningAssistant: true,
     });
     await assertLoggedIn(page, { displayName: 'Test User' });
     await expect(
       page.locator(`[data-test-card="${newRealmURL}hello-world"]`),
-    ).toContainText('Hello World');
+    ).toHaveCount(1);
 
     let auth = await loginUser(`user1`, 'mypassword1!');
     let realms = await getAccountData<{ realms: string[] } | undefined>(

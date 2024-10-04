@@ -15,7 +15,7 @@ import {
   getMonacoContent,
   visitOperatorMode as _visitOperatorMode,
   type TestContextWithSave,
-  lookupLoaderService,
+  lookupNetworkService,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -216,7 +216,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       contents: files,
     }));
 
-    lookupLoaderService().virtualNetwork.mount(
+    lookupNetworkService().mount(
       async (req: Request) => {
         // Some tests need a simulated creation failure
         if (req.url.includes('fetch-failure')) {

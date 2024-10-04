@@ -47,7 +47,6 @@ import {
   Submodes,
 } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
-import type CardController from '@cardstack/host/controllers/card';
 
 import { RoomState } from '@cardstack/host/lib/matrix-classes/room';
 import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
@@ -67,6 +66,7 @@ import type {
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import { Skill } from '../components/ai-assistant/skill-menu';
+import IndexController from '../controllers';
 import { getCard } from '../resources/card-resource';
 import { importResource } from '../resources/import';
 
@@ -109,6 +109,8 @@ export default class MatrixService extends Service {
   @service private declare router: RouterService;
   @service private declare reset: ResetService;
   @tracked private _client: ExtendedClient | undefined;
+  @tracked private _isInitializingNewUser = false;
+  @tracked private postLoginCompleted = false;
 
   profile = getMatrixProfile(this, () => this.client.getUserId());
 
@@ -185,7 +187,7 @@ export default class MatrixService extends Service {
   }
 
   get isLoggedIn() {
-    return this.client.isLoggedIn();
+    return this.client.isLoggedIn() && this.postLoginCompleted;
   }
 
   get client() {
@@ -225,6 +227,7 @@ export default class MatrixService extends Service {
       await this.flushMembership;
       await this.flushTimeline;
       clearAuth();
+      this.postLoginCompleted = false;
       this.reset.resetAll();
       this.unbindEventListeners();
       await this.client.logout(true);
@@ -247,12 +250,17 @@ export default class MatrixService extends Service {
     }
   }
 
+  get isInitializingNewUser() {
+    return this._isInitializingNewUser;
+  }
+
   async initializeNewUser(auth: LoginResponse, displayName: string) {
     displayName = displayName.trim();
-    let cardController = getOwner(this)!.lookup(
-      'controller:card',
-    ) as CardController;
-    cardController.workspaceChooserOpened = true;
+    let controller = getOwner(this)!.lookup(
+      'controller:index',
+    ) as IndexController;
+    controller.workspaceChooserOpened = true;
+    this._isInitializingNewUser = true;
     this.start({ auth });
     this.setDisplayName(displayName);
     await this.createPersonalRealmForUser({
@@ -261,6 +269,7 @@ export default class MatrixService extends Service {
       iconURL: iconURLFor(displayName),
       backgroundURL: getRandomBackgroundURL(),
     });
+    this._isInitializingNewUser = false;
   }
 
   public async createPersonalRealmForUser({
@@ -287,7 +296,6 @@ export default class MatrixService extends Service {
     realms.push(personalRealmURL.href);
     await this.client.setAccountData('com.cardstack.boxel.realms', { realms });
     await this.realmServer.setAvailableRealmURLs(realms);
-    await this.loginToRealms();
   }
 
   async setDisplayName(displayName: string) {
@@ -351,7 +359,7 @@ export default class MatrixService extends Service {
       userId,
       deviceId,
     });
-    if (this.isLoggedIn) {
+    if (this.client.isLoggedIn()) {
       this.realmServer.setClient(this.client);
       saveAuth(auth);
       this.bindEventListeners();
@@ -365,6 +373,7 @@ export default class MatrixService extends Service {
           accountDataContent?.realms ?? [],
         );
         await this.loginToRealms();
+        this.postLoginCompleted = true;
       } catch (e) {
         console.log('Error starting Matrix client', e);
         await this.logout();

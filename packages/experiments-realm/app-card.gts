@@ -197,7 +197,12 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
         <div class='add-card-button'>
           <Tooltip @placement='left' @offset={{6}}>
             <:trigger>
-              <AddButton {{on 'click' this.createNew}} />
+              <div class='add-card-button-container'>
+                <AddButton
+                  {{on 'click' this.createNew}}
+                  @loading={{this.isCreateCardRunning}}
+                />
+              </div>
             </:trigger>
             <:content>
               Add a new card to this collection
@@ -219,6 +224,11 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
         left: 100%;
         bottom: 20px;
         z-index: 1;
+      }
+      .add-card-button-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
       }
       .error {
         color: var(--boxel-error-100);

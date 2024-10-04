@@ -19,14 +19,12 @@ import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
 import { Tooltip } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
-import { IconPlus, Download } from '@cardstack/boxel-ui/icons';
+import { Download } from '@cardstack/boxel-ui/icons';
 
 import {
   CardContextName,
   aiBotUsername,
   Deferred,
-  baseCardRef,
-  chooseCard,
   codeRefWithAbsoluteURL,
   getCard,
   moduleFrom,
@@ -52,7 +50,7 @@ import SubmodeLayout from './submode-layout';
 
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import type RecentFilesService from '../../services/recent-files-service';
+
 import type { Submode } from '../submode-switcher';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
@@ -126,7 +124,6 @@ export default class InteractSubmode extends Component<Signature> {
   @service private declare cardService: CardService;
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare recentFilesService: RecentFilesService;
 
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked private itemToDelete: CardDef | undefined = undefined;
@@ -223,9 +220,17 @@ export default class InteractSubmode extends Component<Signature> {
       copyCard: async (card: CardDef): Promise<CardDef | void> => {
         return await here._copyCard.perform(card);
       },
-      saveCard(card: CardDef, dismissItem: boolean): void {
+      saveCard: async (card: CardDef, dismissItem: boolean): Promise<void> => {
         let item = here.findCardInStack(card, stackIndex);
-        here.save.perform(item, dismissItem);
+        // WARNING: never await an ember concurrency perform outside of a task.
+        // Inside of a task, the `await` is actually just syntactic sugar for a
+        // `yield`. But if you await `perform()` outside of a task, that will cast
+        // the the task to an uncancellable promise which defeats the point of using
+        // ember concurrency.
+        // https://ember-concurrency.com/docs/task-cancelation-help
+        let deferred = new Deferred<void>();
+        here.save.perform(item, dismissItem, deferred);
+        await deferred.promise;
       },
       delete: async (card: CardDef | URL | string): Promise<void> => {
         let loadedCard: CardDef;
@@ -308,18 +313,6 @@ export default class InteractSubmode extends Component<Signature> {
     return item;
   }
 
-  private addCard = restartableTask(async () => {
-    let type = baseCardRef;
-    let chosenCard: CardDef | undefined = await chooseCard({
-      filter: { type },
-    });
-
-    if (chosenCard) {
-      // This is called when there are no cards in the stack left, so we can assume the stackIndex is 0
-      this.publicAPI(this, 0).viewCard(chosenCard, 'isolated');
-    }
-  });
-
   private close = task(async (item: StackItem) => {
     let { card, request } = item;
     // close the item first so user doesn't have to wait for the save to complete
@@ -334,24 +327,40 @@ export default class InteractSubmode extends Component<Signature> {
     }
   });
 
-  private save = task(async (item: StackItem, dismissStackItem: boolean) => {
-    let { request } = item;
-    let updatedCard = await this.args.write(item.card);
+  private save = task(
+    async (
+      item: StackItem,
+      dismissStackItem: boolean,
+      done: Deferred<void>,
+    ) => {
+      let { request } = item;
+      let hasRejected = false;
+      try {
+        let updatedCard = await this.args.write(item.card);
 
-    if (updatedCard) {
-      request?.fulfill(updatedCard);
-      if (!dismissStackItem) {
-        return;
+        if (updatedCard) {
+          request?.fulfill(updatedCard);
+          if (!dismissStackItem) {
+            return;
+          }
+          this.operatorModeStateService.replaceItemInStack(
+            item,
+            item.clone({
+              request,
+              format: 'isolated',
+            }),
+          );
+        }
+      } catch (e) {
+        hasRejected = true;
+        done.reject(e);
+      } finally {
+        if (!hasRejected) {
+          done.fulfill();
+        }
       }
-      this.operatorModeStateService.replaceItemInStack(
-        item,
-        item.clone({
-          request,
-          format: 'isolated',
-        }),
-      );
-    }
-  });
+    },
+  );
 
   private runCommand = restartableTask(
     async (card: CardDef, skillCardId: string, message: string) => {
@@ -667,61 +676,45 @@ export default class InteractSubmode extends Component<Signature> {
           </Tooltip>
         {{/if}}
         <div class='stacks'>
-          {{#if (eq this.allStackItems.length 0)}}
-            <div class='no-cards' data-test-empty-stack>
-              <p class='add-card-title'>
-                Add a card to get started
-              </p>
-
-              <button
-                class='add-card-button'
-                {{on 'click' (fn (perform this.addCard))}}
-                data-test-add-card-button
-              >
-                <IconPlus width='36px' height='36px' />
-              </button>
-            </div>
-          {{else}}
-            {{#each this.stacks as |stack stackIndex|}}
-              {{#let
-                (get
-                  this.stackBackgroundsState.differingBackgroundImageURLs
-                  stackIndex
-                )
-                as |backgroundImageURLSpecificToThisStack|
-              }}
-                <OperatorModeStack
-                  data-test-operator-mode-stack={{stackIndex}}
-                  class={{cn
-                    'operator-mode-stack'
-                    (if backgroundImageURLSpecificToThisStack 'with-bg-image')
-                  }}
-                  style={{if
-                    backgroundImageURLSpecificToThisStack
-                    (htmlSafe
-                      (concat
-                        'background-image: url('
-                        backgroundImageURLSpecificToThisStack
-                        ')'
-                      )
+          {{#each this.stacks as |stack stackIndex|}}
+            {{#let
+              (get
+                this.stackBackgroundsState.differingBackgroundImageURLs
+                stackIndex
+              )
+              as |backgroundImageURLSpecificToThisStack|
+            }}
+              <OperatorModeStack
+                data-test-operator-mode-stack={{stackIndex}}
+                class={{cn
+                  'operator-mode-stack'
+                  (if backgroundImageURLSpecificToThisStack 'with-bg-image')
+                }}
+                style={{if
+                  backgroundImageURLSpecificToThisStack
+                  (htmlSafe
+                    (concat
+                      'background-image: url('
+                      backgroundImageURLSpecificToThisStack
+                      ')'
                     )
-                  }}
-                  @stackItems={{stack}}
-                  @stackIndex={{stackIndex}}
-                  @publicAPI={{this.publicAPI this stackIndex}}
-                  @close={{perform this.close}}
-                  @onSelectedCards={{this.onSelectedCards}}
-                  @setupStackItem={{this.setupStackItem}}
-                />
-              {{/let}}
-            {{/each}}
+                  )
+                }}
+                @stackItems={{stack}}
+                @stackIndex={{stackIndex}}
+                @publicAPI={{this.publicAPI this stackIndex}}
+                @close={{perform this.close}}
+                @onSelectedCards={{this.onSelectedCards}}
+                @setupStackItem={{this.setupStackItem}}
+              />
+            {{/let}}
+          {{/each}}
 
-            <CopyButton
-              @selectedCards={{this.selectedCards}}
-              @copy={{fn (perform this.copy)}}
-              @isCopying={{this.copy.isRunning}}
-            />
-          {{/if}}
+          <CopyButton
+            @selectedCards={{this.selectedCards}}
+            @copy={{fn (perform this.copy)}}
+            @isCopying={{this.copy.isRunning}}
+          />
         </div>
         {{#if this.canCreateNeighborStack}}
           <Tooltip @placement='left'>
@@ -772,29 +765,6 @@ export default class InteractSubmode extends Component<Signature> {
       .operator-mode__main .add-card-to-neighbor-stack {
         flex: 0;
         flex-basis: var(--container-button-size);
-      }
-      .no-cards {
-        max-width: 50rem;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-      }
-      .add-card-title {
-        color: var(--boxel-light);
-        font: var(--boxel-font-lg);
-      }
-      .add-card-button {
-        --icon-color: var(--boxel-light);
-        height: 350px;
-        width: 200px;
-        vertical-align: middle;
-        background-color: var(--boxel-highlight);
-        border: none;
-        border-radius: var(--boxel-border-radius);
-      }
-      .add-card-button:hover {
-        background-color: var(--boxel-highlight-hover);
       }
       .add-card-to-neighbor-stack {
         --icon-color: var(--boxel-highlight-hover);

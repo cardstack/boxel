@@ -22,9 +22,6 @@ import type { Query } from '@cardstack/runtime-common/query';
 
 import ENV from '@cardstack/host/config/environment';
 
-import type MessageService from '@cardstack/host/services/message-service';
-import type Realm from '@cardstack/host/services/realm';
-
 import type {
   BaseDef,
   CardDef,
@@ -37,6 +34,9 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { trackCard } from '../resources/card-resource';
 
 import type LoaderService from './loader-service';
+import type MessageService from './message-service';
+import type NetworkService from './network';
+import type Realm from './realm';
 import type ResetService from './reset';
 
 export type CardSaveSubscriber = (
@@ -49,6 +49,7 @@ const { environment } = ENV;
 export default class CardService extends Service {
   @service private declare loaderService: LoaderService;
   @service private declare messageService: MessageService;
+  @service private declare network: NetworkService;
   @service private declare realm: Realm;
   @service private declare reset: ResetService;
 
@@ -100,7 +101,7 @@ export default class CardService extends Service {
     let clientRequestId = uuidv4();
     this.clientRequestIds.add(clientRequestId);
 
-    let response = await this.loaderService.loader.fetch(url, {
+    let response = await this.network.authedFetch(url, {
       headers: {
         Accept: SupportedMimeType.CardJson,
         'X-Boxel-Client-Request-Id': clientRequestId,
@@ -214,7 +215,7 @@ export default class CardService extends Service {
   }
 
   async saveSource(url: URL, content: string) {
-    let response = await this.loaderService.loader.fetch(url, {
+    let response = await this.network.authedFetch(url, {
       method: 'POST',
       headers: {
         Accept: 'application/vnd.card+source',
@@ -234,7 +235,7 @@ export default class CardService extends Service {
   }
 
   async deleteSource(url: URL) {
-    let response = await this.loaderService.loader.fetch(url, {
+    let response = await this.network.authedFetch(url, {
       method: 'DELETE',
       headers: {
         Accept: 'application/vnd.card+source',
@@ -474,7 +475,7 @@ export default class CardService extends Service {
   }
 
   async getRealmInfoByRealmURL(realmURL: URL): Promise<RealmInfo> {
-    let response = await this.loaderService.loader.fetch(`${realmURL}_info`, {
+    let response = await this.network.authedFetch(`${realmURL}_info`, {
       headers: { Accept: SupportedMimeType.RealmInfo },
       method: 'GET',
     });

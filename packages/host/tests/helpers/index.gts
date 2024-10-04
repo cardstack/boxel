@@ -45,6 +45,7 @@ import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
+import type NetworkService from '@cardstack/host/services/network';
 
 import type QueueService from '@cardstack/host/services/queue';
 
@@ -464,6 +465,11 @@ export function lookupLoaderService(): LoaderService {
   return owner.lookup('service:loader-service') as LoaderService;
 }
 
+export function lookupNetworkService(): NetworkService {
+  let owner = (getContext() as TestContext).owner;
+  return owner.lookup('service:network') as NetworkService;
+}
+
 export const testRealmSecretSeed = "shhh! it's a secret";
 async function setupTestRealm({
   contents,
@@ -477,7 +483,7 @@ async function setupTestRealm({
   permissions?: RealmPermissions;
 }) {
   let owner = (getContext() as TestContext).owner;
-  let { virtualNetwork } = lookupLoaderService();
+  let { virtualNetwork } = lookupNetworkService();
   let { queue } = owner.lookup('service:queue') as QueueService;
 
   realmURL = realmURL ?? testRealmURL;

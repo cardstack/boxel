@@ -4,12 +4,14 @@ import { bool, eq } from '../../helpers/truth-helpers.ts';
 import IconPlus from '../../icons/icon-plus.gts';
 import PlusCircleIcon from '../../icons/icon-plus-circle.gts';
 import IconButton from '../icon-button/index.gts';
+import LoadingIndicator from '../loading-indicator/index.gts';
 
 interface Signature {
   Args: {
     hideIcon?: boolean;
     iconHeight?: string;
     iconWidth?: string;
+    loading?: boolean;
     variant?: AddButtonVariant;
   };
   Blocks: {
@@ -39,15 +41,21 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
       {{yield}}
     </button>
   {{else}}
-    <IconButton
-      @icon={{PlusCircleIcon}}
-      @width='40px'
-      @height='40px'
-      class='add-button'
-      aria-label='Add'
-      data-test-create-new-card-button
-      ...attributes
-    />
+    {{#if (bool @loading)}}
+      <div class='add-button loading'>
+        <LoadingIndicator />
+      </div>
+    {{else}}
+      <IconButton
+        @icon={{PlusCircleIcon}}
+        @width='40px'
+        @height='40px'
+        class='add-button'
+        aria-label='Add'
+        data-test-create-new-card-button
+        ...attributes
+      />
+    {{/if}}
   {{/if}}
 
   <style scoped>
@@ -113,6 +121,14 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
       background-color: var(--boxel-highlight-hover);
       box-shadow: var(--boxel-box-shadow);
       cursor: pointer;
+    }
+
+    .loading {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
     }
   </style>
 </template>;

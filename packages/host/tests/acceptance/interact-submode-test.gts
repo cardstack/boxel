@@ -35,6 +35,7 @@ import {
   setupAcceptanceTestRealm,
   visitOperatorMode,
   lookupLoaderService,
+  lookupNetworkService,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -343,86 +344,28 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-field]').hasValue('');
     });
 
-    test('Can add a card by URL using the add button', async function (assert) {
+    test('Can search for an index card by URL (without "index" in path)', async function (assert) {
       await visitOperatorMode({});
 
-      assert.dom('[data-test-operator-mode-stack]').doesNotExist();
+      await click('[data-test-search-field]');
 
-      await click('[data-test-add-card-button]');
-      await fillIn(
-        '[data-test-card-catalog-modal] [data-test-search-field]',
-        `${testRealmURL}index`,
-      );
+      await fillIn('[data-test-search-field]', testRealmURL);
 
       assert
-        .dom(`[data-test-card-catalog-item="${testRealmURL}index"] .card-title`)
-        .hasText('Test Workspace B');
-      await click(`[data-test-select="${testRealmURL}index"]`);
-      await click('[data-test-card-catalog-go-button]');
-      assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
-      assert.dom('[data-test-stack-card-index]').exists({ count: 1 });
-      assert.dom('[data-test-stack-card-header]').hasText('Test Workspace B');
-    });
-
-    test('Can add an index card by URL (without "index" in path) using the add button', async function (assert) {
-      const wrongURL = 'https://example.test/this/is/a/wrong/url';
-      await visitOperatorMode({});
-
-      assert.dom('[data-test-operator-mode-stack]').doesNotExist();
-
-      await click('[data-test-add-card-button]');
-      await fillIn(
-        '[data-test-card-catalog-modal] [data-test-search-field]',
-        wrongURL,
-      );
-
-      await fillIn(
-        '[data-test-card-catalog-modal] [data-test-search-field]',
-        baseRealm.url.slice(0, -1),
-      );
-
+        .dom('[data-test-search-label]')
+        .includesText('Card found at http://test-realm/test/');
       assert
-        .dom('[data-test-card-catalog-item] .card-title')
-        .hasText('Base Workspace');
-
-      await fillIn(
-        '[data-test-card-catalog-modal] [data-test-search-field]',
-        testRealmURL,
-      );
-      assert
-        .dom('[data-test-card-catalog-item] .card-title')
-        .hasText('Test Workspace B');
-      assert.dom('[data-test-boxel-input-error-message]').doesNotExist();
-      assert
-        .dom('[data-test-boxel-input-validation-state="invalid"]')
-        .doesNotExist();
-
-      await click(`[data-test-select="${testRealmURL}index"]`);
-      await click('[data-test-card-catalog-go-button]');
-
-      assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
-      assert.dom('[data-test-stack-card-index]').exists({ count: 1 });
-      assert.dom('[data-test-stack-card-header]').hasText('Test Workspace B');
+        .dom('[data-test-card="http://test-realm/test/index"]')
+        .exists({ count: 1 });
     });
 
     test('Can open a recent card in empty stack', async function (assert) {
       await visitOperatorMode({});
 
-      await click('[data-test-add-card-button]');
-
       await click('[data-test-search-field]');
       await fillIn('[data-test-search-field]', `${testRealmURL}person-entry`);
 
-      assert.dom('[data-test-realm-filter-button]').isDisabled();
-
-      assert
-        .dom(`[data-test-realm="Test Workspace B"] [data-test-results-count]`)
-        .hasText('1 result');
-
-      assert.dom('[data-test-card-catalog-item]').exists({ count: 1 });
-      await click('[data-test-select]');
-
-      await click('[data-test-card-catalog-go-button]');
+      await click('[data-test-card="http://test-realm/test/person-entry"]');
 
       assert
         .dom(`[data-test-stack-card="${testRealmURL}person-entry"]`)
@@ -433,8 +376,6 @@ module('Acceptance | interact submode tests', function (hooks) {
         `[data-test-stack-card="${testRealmURL}person-entry"] [data-test-close-button]`,
       );
 
-      assert.dom('[data-test-add-card-button]').exists('stack is empty');
-
       await click('[data-test-search-field]');
       assert.dom('[data-test-search-sheet]').hasClass('prompt');
 
@@ -443,19 +384,6 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert
         .dom(`[data-test-stack-card="${testRealmURL}person-entry"]`)
         .exists();
-    });
-
-    test('Handles a URL with no results', async function (assert) {
-      await visitOperatorMode({});
-
-      await click('[data-test-add-card-button]');
-
-      await fillIn(
-        '[data-test-search-field]',
-        `${testRealmURL}xyz-does-not-exist`,
-      );
-
-      assert.dom(`[data-test-card-catalog]`).hasText('No cards available');
     });
   });
 
@@ -501,7 +429,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       });
 
       await click('[data-test-operator-mode-stack] [data-test-pet="Mango"]');
-      let expectedURL = `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+      let expectedURL = `/?operatorModeState=${encodeURIComponent(
         stringify({
           stacks: [
             [
@@ -528,7 +456,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       // The edit format should be reflected in the URL
       assert.strictEqual(
         currentURL(),
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        `/?operatorModeState=${encodeURIComponent(
           stringify({
             stacks: [
               [
@@ -1091,7 +1019,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test('the edit button respects the realm permissions of the cards in differing realms', async function (assert) {
-      assert.expect(10);
+      assert.expect(6);
       await visitOperatorMode({
         stacks: [
           [
@@ -1109,7 +1037,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         ],
       });
 
-      lookupLoaderService().virtualNetwork.mount(
+      lookupNetworkService().mount(
         async (req) => {
           if (req.method !== 'GET' && req.method !== 'HEAD') {
             let token = req.headers.get('Authorization');
@@ -1262,12 +1190,12 @@ module('Acceptance | interact submode tests', function (hooks) {
         ],
       });
 
-      // Close the last card in the last stack that is left - should get the empty state
+      // Close the last card in the last stack that is left
       await click(
         '[data-test-operator-mode-stack="0"] [data-test-close-button]',
       );
 
-      assert.dom('.no-cards').includesText('Add a card to get started');
+      assert.dom('[data-test-workspace-chooser]').exists();
     });
 
     test('visiting 2 stacks from differing realms', async function (assert) {

@@ -21,6 +21,7 @@ interface Signature {
     file: Ready;
     cardInheritanceChain: CardInheritance[];
     moduleSyntax: ModuleSyntax;
+    isReadOnly: boolean;
     goToDefinition: (
       codeRef: ResolvedCodeRef | undefined,
       localName: string | undefined,
@@ -125,6 +126,9 @@ export default class CardAdoptionChain extends Component<Signature> {
   }
 
   @action allowFieldManipulation(file: Ready, cardType: Type): boolean {
+    if (this.args.isReadOnly) {
+      return false;
+    }
     // Only allow add/edit/remove for fields from the currently opened module
     return stripFileExtension(file.url) === cardType.module;
   }

@@ -1,10 +1,12 @@
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import MatrixService from '@cardstack/host/services/matrix-service';
 import RealmServerService from '@cardstack/host/services/realm-server';
 
 import AddWorkspace from './add-workspace';
 import Workspace from './workspace';
+import WorkspaceLoadingIndicator from './workspace-loading-indicator';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -12,6 +14,7 @@ interface Signature {
 }
 
 export default class WorkspaceChooser extends Component<Signature> {
+  @service declare matrixService: MatrixService;
   @service declare realmServer: RealmServerService;
 
   private get displayCatalogWorkspaces() {
@@ -32,6 +35,9 @@ export default class WorkspaceChooser extends Component<Signature> {
               data-test-workspace={{realmURL}}
             />
           {{/each}}
+          {{#if this.matrixService.isInitializingNewUser}}
+            <WorkspaceLoadingIndicator />
+          {{/if}}
           <AddWorkspace />
         </div>
         {{#if this.displayCatalogWorkspaces}}
@@ -58,7 +64,7 @@ export default class WorkspaceChooser extends Component<Signature> {
         position: relative;
         background-color: var(--boxel-700);
         height: 100vh;
-        padding: 5.5rem 11.5rem;
+        padding: 5.5rem 0 5.5rem 11.5rem;
         animation: fadeIn 1s ease-in forwards;
       }
       .workspace-chooser__content {
@@ -67,6 +73,7 @@ export default class WorkspaceChooser extends Component<Signature> {
         gap: var(--boxel-sp-lg);
         height: 100%;
         overflow: auto;
+        padding-right: 5.5rem;
       }
       .workspace-chooser__title {
         color: var(--boxel-light);
@@ -79,10 +86,9 @@ export default class WorkspaceChooser extends Component<Signature> {
 
       .workspace-list {
         display: flex;
+        flex-wrap: wrap;
         gap: var(--boxel-sp);
         padding: var(--boxel-sp-xs) 0;
-        overflow: auto hidden;
-        min-height: 255px;
       }
     </style>
   </template>
