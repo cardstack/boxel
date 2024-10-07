@@ -45,7 +45,10 @@ export default class Workspace extends Component<Signature> {
         </div>
         <div class='info'>
           <span class='name' data-test-workspace-name>{{this.name}}</span>
-          <span class='visibility'>{{this.visibility}}</span>
+          <span
+            class='visibility'
+            data-test-workspace-visibility
+          >{{this.visibility}}</span>
         </div>
       </ItemContainer>
     {{/if}}
