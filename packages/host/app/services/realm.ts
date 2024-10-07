@@ -15,19 +15,20 @@ import window from 'ember-window-mock';
 
 import { TrackedSet } from 'tracked-built-ins';
 
-import { Deferred, logger } from '@cardstack/runtime-common';
-
 import {
   Permissions,
-  type RealmInfo,
+  Deferred,
+  logger,
   JWTPayload,
   SupportedMimeType,
+  type RealmInfo,
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 
 import type MatrixService from './matrix-service';
 import type NetworkService from './network';
+import type RealmServerService from './realm-server';
 import type ResetService from './reset';
 
 const log = logger('service:realm');
@@ -207,6 +208,8 @@ class RealmResource {
 }
 
 export default class RealmService extends Service {
+  @service private declare realmServer: RealmServerService;
+  @service private declare matrixService: MatrixService;
   @service private declare network: NetworkService;
   @service private declare reset: ResetService;
 
@@ -317,10 +320,15 @@ export default class RealmService extends Service {
     return realmsMeta;
   }
 
-  // Currently the personal realm has not yet been implemented,
-  // default to the first writable realm lexically
   @cached
   get defaultWritableRealm(): { path: string; info: RealmInfo } | null {
+    let maybePersonalRealm = `${this.realmServer.url.href}${this.matrixService.userName}/personal/`;
+    if (Object.keys(this.allRealmsMeta).find((r) => r === maybePersonalRealm)) {
+      return {
+        path: maybePersonalRealm,
+        info: this.allRealmsMeta[maybePersonalRealm].info,
+      };
+    }
     let writeableRealms = Object.entries(this.allRealmsMeta)
       .filter(([, i]) => i.canWrite)
       .sort(([, i], [, j]) => i.info.name.localeCompare(j.info.name));

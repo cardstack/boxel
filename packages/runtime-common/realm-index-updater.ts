@@ -190,24 +190,19 @@ export class RealmIndexUpdater {
     }
 
     // hard coded test URLs
-    switch (this.realmURL.href) {
-      case 'http://127.0.0.1:4441/':
-        return 'base_realm';
-      case 'http://example.com':
-      case 'http://example.com/':
-      case 'http://example.com/foo':
-      case 'http://test-realm/':
-      case 'http://test-realm/test/':
-      case 'http://test-realm/test2/':
-      case 'http://test-realm/test/root/':
-      case 'http://127.0.0.1:4447/':
-        return 'test_realm';
-      case 'http://127.0.0.1:4444/':
-      case 'http://127.0.0.1:4445/':
-      case 'http://127.0.0.1:4445/test/':
-      case 'http://127.0.0.1:4446/demo/':
-      case 'http://127.0.0.1:4448/':
-        return 'node-test_realm';
+    if ((globalThis as any).__environment === 'test') {
+      switch (this.realmURL.href) {
+        case 'http://127.0.0.1:4441/':
+          return 'base_realm';
+        case 'http://127.0.0.1:4444/':
+        case 'http://127.0.0.1:4445/':
+        case 'http://127.0.0.1:4445/test/':
+        case 'http://127.0.0.1:4446/demo/':
+        case 'http://127.0.0.1:4448/':
+          return 'node-test_realm';
+        default:
+          return 'test_realm';
+      }
     }
     throw new Error(
       `Cannot determine realm owner for realm ${this.realmURL.href}.`,

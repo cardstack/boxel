@@ -2,8 +2,8 @@
   "name": "boxel-tools",
   "displayName": "Boxel Tools",
   "description": "Access boxel realm data and code from your vscode workspace.",
-  "version": "0.0.8",
-  "publisher": "boxel",
+  "version": "0.0.19",
+  "publisher": "cardstack",
   "private": true,
   "license": "MIT",
   "repository": {
@@ -19,6 +19,7 @@
   "activationEvents": [
     "onAuthenticationRequest:synapse"
   ],
+  "icon": "images/boxel-icon.png",
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
@@ -62,6 +63,8 @@
   "scripts": {
     "vscode:prepublish": "pnpm run compile",
     "vscode:package": "pnpm vsce package --no-dependencies",
+    "vscode:publish": "pnpm vsce publish --no-dependencies",
+    "vscode:publish:prerelease": "pnpm vsce publish --no-dependencies --pre-release",
     "compile": "node esbuild.mjs --production",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",

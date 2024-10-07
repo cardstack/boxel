@@ -611,16 +611,16 @@ export default class CodeSubmode extends Component<Signature> {
 
       if (sourceInstance && this.realm.canWrite(sourceInstance.id)) {
         destinationRealm = this.realm.url(sourceInstance.id);
-      }
-
-      if (
+      } else if (
         definitionClass?.ref &&
         this.realm.canWrite(definitionClass.ref.module)
       ) {
         destinationRealm = this.realm.url(definitionClass.ref.module);
-      }
-
-      if (!destinationRealm && this.realm.defaultWritableRealm) {
+      } else if (
+        this.realm.canWrite(this.operatorModeStateService.realmURL.href)
+      ) {
+        destinationRealm = this.operatorModeStateService.realmURL.href;
+      } else if (this.realm.defaultWritableRealm) {
         destinationRealm = this.realm.defaultWritableRealm.path;
       }
 
