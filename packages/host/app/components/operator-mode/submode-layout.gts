@@ -108,6 +108,10 @@ export default class SubmodeLayout extends Component<Signature> {
     return this.allStackItems[this.allStackItems.length - 1].card;
   }
 
+  private get isToggleWorkspaceChooserDisabled() {
+    return this.operatorModeStateService.state.stacks.length === 0;
+  }
+
   @action private updateSubmode(submode: Submode) {
     switch (submode) {
       case Submodes.Interact:
@@ -239,6 +243,7 @@ export default class SubmodeLayout extends Component<Signature> {
               @icon={{BoxelIcon}}
               @width='40px'
               @height='40px'
+              disabled={{this.isToggleWorkspaceChooserDisabled}}
               class={{cn
                 'workspace-button'
                 dark-icon=(not this.workspaceChooserOpened)
@@ -417,6 +422,9 @@ export default class SubmodeLayout extends Component<Signature> {
         outline: var(--boxel-border-flexible);
         margin-right: var(--boxel-sp);
         border-radius: var(--boxel-border-radius);
+      }
+      .workspace-button:disabled {
+        cursor: default;
       }
       .dark-icon {
         --icon-bg-opacity: 1;
