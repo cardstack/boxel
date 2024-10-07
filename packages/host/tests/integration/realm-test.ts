@@ -738,6 +738,14 @@ module('Integration | realm', function (hooks) {
       {
         type: 'index',
         data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}dir/card`,
+        },
+      },
+      {
+        type: 'index',
+        data: {
           type: 'incremental',
           invalidations: [`${testRealmURL}dir/card`],
         },
@@ -2478,6 +2486,14 @@ module('Integration | realm', function (hooks) {
       {
         type: 'index',
         data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}cards/2`,
+        },
+      },
+      {
+        type: 'index',
+        data: {
           type: 'incremental',
           invalidations: [`${testRealmURL}cards/2`],
         },
@@ -2596,6 +2612,14 @@ module('Integration | realm', function (hooks) {
         {
           type: 'index',
           data: {
+            type: 'incremental-index-initiation',
+            realmURL: testRealmURL,
+            updatedFile: `${testRealmURL}dir/person.gts`,
+          },
+        },
+        {
+          type: 'index',
+          data: {
             type: 'incremental',
             invalidations: [`${testRealmURL}dir/person.gts`],
           },
@@ -2663,6 +2687,14 @@ module('Integration | realm', function (hooks) {
     });
 
     let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}person.gts`,
+        },
+      },
       {
         type: 'index',
         data: {
