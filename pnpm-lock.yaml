@@ -1640,6 +1640,9 @@ importers:
 
   packages/realm-server:
     devDependencies:
+      '@cardstack/boxel-icons':
+        specifier: workspace:*
+        version: link:../boxel-icons
       '@cardstack/boxel-ui':
         specifier: workspace:*
         version: link:../boxel-ui/addon
@@ -1865,6 +1868,9 @@ importers:
       '@babel/types':
         specifier: ^7.20.0
         version: 7.20.0
+      '@cardstack/boxel-icons':
+        specifier: workspace:*
+        version: link:../boxel-icons
       '@cardstack/boxel-ui':
         specifier: workspace:*
         version: link:../boxel-ui/addon

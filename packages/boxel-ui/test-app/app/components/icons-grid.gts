@@ -55,12 +55,13 @@ export default class IconsGridComponent extends Component {
   <template>
     <div>
       <div class='boxel-icons-header'>
-        <input
-          type='text'
-          placeholder='Search for an icon'
-          class='boxel-input'
-          {{on 'input' this.updateIconFilterString}}
-        />
+        <label>Filter:
+          <input
+            type='text'
+            placeholder='Search for an icon'
+            class='boxel-input'
+            {{on 'input' this.updateIconFilterString}}
+          /></label>
         <div class='boxel-icons-count'>
           Showing
           {{this.boxelIconsComponents.length}}
