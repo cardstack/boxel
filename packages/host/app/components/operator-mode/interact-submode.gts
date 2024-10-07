@@ -50,6 +50,7 @@ import SubmodeLayout from './submode-layout';
 
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import type Realm from '../../services/realm';
 
 import type { Submode } from '../submode-switcher';
 
@@ -124,6 +125,7 @@ export default class InteractSubmode extends Component<Signature> {
   @service private declare cardService: CardService;
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare realm: Realm;
 
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked private itemToDelete: CardDef | undefined = undefined;
@@ -433,9 +435,16 @@ export default class InteractSubmode extends Component<Signature> {
     // use existing card in stack to determine realm url,
     // otherwise use user's first writable realm
     let topCard = this.operatorModeStateService.topMostStackItems()?.[0]?.card;
-    let realmURL = await this.cardService.getRealmURL(topCard, {
-      isWritableRealm: true,
-    });
+    let realmURL: URL | undefined;
+    if (topCard) {
+      realmURL = await this.cardService.getRealmURL(topCard);
+    }
+    if (!realmURL) {
+      if (!this.realm.defaultWritableRealm) {
+        throw new Error('Could not find a writable realm');
+      }
+      realmURL = new URL(this.realm.defaultWritableRealm.path);
+    }
     let newCard = await this.cardService.copyCard(card, realmURL);
     if (!newCard) {
       throw new Error(`Could not copy card "${card.id}" to workspace.`);
@@ -459,6 +468,9 @@ export default class InteractSubmode extends Component<Signature> {
         let destinationRealmURL = await this.cardService.getRealmURL(
           destinationItem.card,
         );
+        if (!destinationRealmURL) {
+          throw new Error('Could not determine the copy destination realm');
+        }
         let realmURL = destinationRealmURL;
         sources.sort((a, b) => a.title.localeCompare(b.title));
         let scrollToCard: CardDef | undefined;
