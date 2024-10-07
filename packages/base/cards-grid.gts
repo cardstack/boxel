@@ -170,7 +170,7 @@ class Isolated extends Component<typeof CardsGrid> {
                       {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
                       data-cards-grid-item={{removeFileExtension card.url}}
                     >
-                      <CardContainer>
+                      <CardContainer @displayBoundaries='true'>
                         {{card.component}}
                       </CardContainer>
                     </li>
@@ -303,6 +303,7 @@ class Isolated extends Component<typeof CardsGrid> {
         cursor: pointer;
         container-name: fitted-card;
         container-type: size;
+        padding: 1px;
       }
       .add-button {
         display: inline-block;
