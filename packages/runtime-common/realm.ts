@@ -257,7 +257,7 @@ export class Realm {
   readonly loaderTemplate: Loader;
   readonly paths: RealmPaths;
 
-  private visibilityCache: RealmVisibility | null = null;
+  private visibilityPromise?: Promise<RealmVisibility>;
 
   get url(): string {
     return this.paths.url;
@@ -1790,28 +1790,31 @@ export class Realm {
   }
 
   private async visibility(): Promise<RealmVisibility> {
-    if (!this.visibilityCache) {
+    if (this.visibilityPromise) {
+      return this.visibilityPromise;
+    }
+
+    this.visibilityPromise = (async () => {
       let permissions = await fetchUserPermissions(
         this.#dbAdapter,
         new URL(this.url),
       );
 
-      let usernames = Object.keys(permissions);
+      let usernames = Object.keys(permissions).filter((username) =>
+        !username.startsWith('@realm/'),
+      );
       if (usernames.includes('*')) {
-        this.visibilityCache = 'public';
+        return 'public';
       } else if (usernames.includes('users')) {
-        this.visibilityCache = 'shared';
-        // Defaultly a realm will have two users:
-        // 1. The user who created the realm
-        // 2. The worker assigned to it
-      } else if (usernames.length > 2) {
-        this.visibilityCache = 'shared';
+        return 'shared';
+      } else if (usernames.length > 1) {
+        return 'shared';
       } else {
-        this.visibilityCache = 'private';
+        return 'private';
       }
-    }
+    })();
 
-    return this.visibilityCache;
+    return this.visibilityPromise;
   }
 
   #logRequestPerformance(
