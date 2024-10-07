@@ -2151,7 +2151,7 @@ module('Realm Server', function (hooks) {
       },
     );
 
-    module('shared realm because there are non-realm users', function (hooks) {
+    module('shared realm because there are non-realm owner users', function (hooks) {
       setupPermissionedRealm(hooks, {
         bob: ['read'],
         jane: ['read'],
