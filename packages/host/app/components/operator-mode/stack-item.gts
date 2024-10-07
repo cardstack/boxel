@@ -181,13 +181,19 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private get styleForStackedCard(): SafeString {
     const stackItemMaxWidth = '50rem';
     const widthReductionPercent = 5; // Every new card on the stack is 5% wider than the previous one
-    const isLastItem = this.args.index === this.args.stackItems.length - 1;
-    let offsetPx = 15; // Every new card on the stack is 15px lower than the previous one in default
+    const isFirstCard = this.args.index === 0;
+    const isLastCard = this.args.index === this.args.stackItems.length - 1;
 
-    if (this.args.stackItems.length === 2) {
-      offsetPx = 30; // If there are only two items on the stack, the first item is 30px lower than the second one
-    } else if (isLastItem) {
-      offsetPx = 18; // If it's the last item on the stack, it's 18px lower than the second to last item
+    let offsetPx = 15; // Every new card on the stack is 15px lower than the previous one in default
+    let marginTopPx = offsetPx * this.args.index;
+
+    if (isFirstCard) {
+      marginTopPx = 0;
+    } else if (isLastCard) {
+      if (this.args.stackItems.length === 2) {
+        marginTopPx = 30;
+      }
+      marginTopPx = 15 * this.args.index + 25;
     }
 
     let invertedIndex = this.args.stackItems.length - this.args.index - 1;
@@ -197,11 +203,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
       : `calc(${stackItemMaxWidth} * ${maxWidthPercent} / 100)`;
 
     let styles = `
-      height: calc(100% - ${offsetPx}px * ${this.args.index});
+      height: calc(100% - ${marginTopPx}px);
       width: ${width};
       max-width: ${maxWidthPercent}%;
       z-index: calc(${this.args.index} + 1);
-      margin-top: calc(${offsetPx}px * ${this.args.index});
+      margin-top: ${marginTopPx}px;
     `; // using margin-top instead of padding-top to hide scrolled content from view
 
     if (this.args.item.isWideFormat) {

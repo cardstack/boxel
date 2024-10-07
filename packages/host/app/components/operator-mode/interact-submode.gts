@@ -663,10 +663,10 @@ export default class InteractSubmode extends Component<Signature> {
                   'operator-mode-stack'
                   (if backgroundImageURLSpecificToThisStack 'with-bg-image')
                   (if
-                    (gt stack.length 1 and lt stack.length 4)
+                    (gt stack.length 1 and lt stack.length 3)
                     'medium-padding-top'
                   )
-                  (if (gt stack.length 3) 'small-padding-top')
+                  (if (gt stack.length 2) 'small-padding-top')
                 }}
                 style={{if
                   backgroundImageURLSpecificToThisStack
