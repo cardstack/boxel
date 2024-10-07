@@ -3206,6 +3206,7 @@ posts/ignore-me.gts
             backgroundURL: 'https://example-background-url.com',
             iconURL: 'https://example-icon-url.com',
             showAsCatalog: null,
+            visibility: 'public',
           },
         },
       },
