@@ -272,18 +272,27 @@ module('Integration | card-prerender', function (hooks) {
           stripScopedCSSAttributes(results.prerenderedCards[index].html!),
         ),
         cleanWhiteSpace(`
-        <div class="fitted-template">
-          <div class="thumbnail-section">
-            <div class="card-thumbnail">
-              <div class="card-thumbnail-placeholder" data-test-card-thumbnail-placeholder></div>
+          <div class="fitted-template">
+            <div class="thumbnail-section">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                class="lucide lucide-captions"
+                viewBox="0 0 24 24"
+                data-test-card-type-icon><rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect><path d="M7 15h4m4 0h2M7 11h2m4 0h4"></path></svg>
             </div>
+            <div class="info-section">
+              <h3 class="card-title" data-test-card-title>${title}</h3>
+              <h4 class="card-display-name" data-test-card-display-name> ${type} </h4>
+            </div>
+            <div class="card-description" data-test-card-description></div>
           </div>
-          <div class="info-section">
-            <h3 class="card-title" data-test-card-title>${title}</h3>
-            <h4 class="card-display-name" data-test-card-display-name> ${type} </h4>
-          </div>
-          <div class="card-description" data-test-card-description></div>
-        </div>
       `),
       );
     });
