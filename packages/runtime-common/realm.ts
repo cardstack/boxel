@@ -1800,8 +1800,8 @@ export class Realm {
         new URL(this.url),
       );
 
-      let usernames = Object.keys(permissions).filter((username) =>
-        !username.startsWith('@realm/'),
+      let usernames = Object.keys(permissions).filter(
+        (username) => !username.startsWith('@realm/'),
       );
       if (usernames.includes('*')) {
         return 'public';
