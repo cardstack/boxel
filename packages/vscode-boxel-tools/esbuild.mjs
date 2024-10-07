@@ -1,30 +1,41 @@
 import { context } from 'esbuild';
+import { polyfillNode } from 'esbuild-plugin-polyfill-node';
 
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
 
 async function main() {
-  const ctx = await context({
+  const sharedConfig = {
     entryPoints: ['src/extension.ts'],
     bundle: true,
-    format: 'cjs',
     minify: production,
     sourcemap: !production,
     sourcesContent: false,
-    platform: 'node',
-    outfile: 'dist/extension.js',
     external: ['vscode'],
     logLevel: 'silent',
-    plugins: [
-      /* add to the end of plugins array */
-      esbuildProblemMatcherPlugin,
-    ],
+  };
+
+  const nodeCtx = await context({
+    ...sharedConfig,
+    format: 'cjs',
+    platform: 'node',
+    outfile: 'dist/extension.js',
+    plugins: [esbuildProblemMatcherPlugin],
   });
+
+  const browserCtx = await context({
+    ...sharedConfig,
+    format: 'cjs',
+    platform: 'browser',
+    outfile: 'dist/browser.js',
+    plugins: [polyfillNode({}), esbuildProblemMatcherPlugin],
+  });
+
   if (watch) {
-    await ctx.watch();
+    await Promise.all([nodeCtx.watch(), browserCtx.watch()]);
   } else {
-    await ctx.rebuild();
-    await ctx.dispose();
+    await Promise.all([nodeCtx.rebuild(), browserCtx.rebuild()]);
+    await Promise.all([nodeCtx.dispose(), browserCtx.dispose()]);
   }
 }
 
@@ -33,10 +44,9 @@ async function main() {
  */
 const esbuildProblemMatcherPlugin = {
   name: 'esbuild-problem-matcher',
-
   setup(build) {
     build.onStart(() => {
-      console.log('[watch] build started');
+      console.log(`[watch] build started for ${build.initialOptions.outfile}`);
     });
     build.onEnd((result) => {
       result.errors.forEach(({ text, location }) => {
@@ -45,7 +55,7 @@ const esbuildProblemMatcherPlugin = {
           `    ${location.file}:${location.line}:${location.column}:`,
         );
       });
-      console.log('[watch] build finished');
+      console.log(`[watch] build finished for ${build.initialOptions.outfile}`);
     });
   },
 };

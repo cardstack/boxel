@@ -2,7 +2,7 @@
   "name": "boxel-tools",
   "displayName": "Boxel Tools",
   "description": "Access boxel realm data and code from your vscode workspace.",
-  "version": "0.0.19",
+  "version": "0.0.20",
   "publisher": "cardstack",
   "private": true,
   "license": "MIT",
@@ -20,6 +20,7 @@
     "onAuthenticationRequest:synapse"
   ],
   "icon": "images/boxel-icon.png",
+  "browser": "./dist/browser.js",
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
@@ -79,6 +80,7 @@
   "devDependencies": {
     "@babel/preset-typescript": "^7.24.7",
     "@cardstack/runtime-common": "workspace:*",
+    "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
     "@glint/core": "^1.3.0",
     "@glint/environment-ember-loose": "^1.3.0",
     "@glint/environment-ember-template-imports": "^1.3.0",
@@ -90,6 +92,7 @@
     "@vscode/vsce": "^3.1.0",
     "concurrently": "^8.0.1",
     "esbuild": "^0.24.0",
+    "esbuild-plugin-polyfill-node": "^0.3.0",
     "eslint": "^8.26.0",
     "typescript": "~5.1.6"
   }
