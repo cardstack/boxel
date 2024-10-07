@@ -24,16 +24,14 @@ import {
   BaseDef,
   CardDef,
   Component,
-  FieldDef,
   StringField,
   contains,
   containsMany,
   field,
-  primitive,
-  queryableValue,
   type CardContext,
   type Format,
 } from './card-api';
+import { CommandObjectField } from './command';
 
 type AttachedCardResource = {
   card: CardDef | undefined;
@@ -404,20 +402,11 @@ class CommandResultIsolated extends CommandResultEmbeddedView {
   }
 }
 
-export class ToolCallArg extends FieldDef {
-  static [primitive]: Record<string, any>;
-  static [queryableValue](value: Record<string, any> | undefined) {
-    return Boolean(value) && typeof value === 'object'
-      ? JSON.stringify(value)
-      : undefined;
-  }
-}
-
 export class CommandResult extends CardDef {
   static displayName = 'Command Result';
   @field toolCallName = contains(StringField);
   @field toolCallId = contains(StringField);
-  @field toolCallArgs = contains(ToolCallArg);
+  @field toolCallArgs = contains(CommandObjectField);
   @field cardIds = containsMany(StringField);
   @field title = contains(StringField, {
     computeVia: function (this: CommandResult) {
