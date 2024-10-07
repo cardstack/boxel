@@ -49,7 +49,14 @@ jobs:
             echo ""
           fi
 
-          LAST_VERSION_CHANGE=$(git log -1 --pretty=format:%H --grep="version" -- $PACKAGE_JSON)
+          # Find the most recent commit that changed the version in package.json
+          LAST_VERSION_CHANGE=$(git rev-list -n 1 HEAD -- $PACKAGE_JSON | while read commit; do
+            if git show $commit:$PACKAGE_JSON | grep -q "\"version\": \"$CURRENT_VERSION\""; then
+              echo $commit
+              break
+            fi
+          done)
+
           echo "Last version change commit: $LAST_VERSION_CHANGE"
 
           if [ -z "$LAST_VERSION_CHANGE" ]; then
