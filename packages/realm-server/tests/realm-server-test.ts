@@ -2151,42 +2151,45 @@ module('Realm Server', function (hooks) {
       },
     );
 
-    module('shared realm because there are non-realm owner users', function (hooks) {
-      setupPermissionedRealm(hooks, {
-        bob: ['read'],
-        jane: ['read'],
-        john: ['read', 'write', 'realm-owner'],
-        'test-worker': ['read', 'write', 'realm-owner'],
-      });
+    module(
+      'shared realm because there are non-realm owner users',
+      function (hooks) {
+        setupPermissionedRealm(hooks, {
+          bob: ['read'],
+          jane: ['read'],
+          john: ['read', 'write', 'realm-owner'],
+          'test-worker': ['read', 'write', 'realm-owner'],
+        });
 
-      test('200 with permission', async function (assert) {
-        let response = await request
-          .get(`/_info`)
-          .set('Accept', 'application/vnd.api+json')
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', [
-              'read',
-              'write',
-              'realm-owner',
-            ])}`,
-          );
+        test('200 with permission', async function (assert) {
+          let response = await request
+            .get(`/_info`)
+            .set('Accept', 'application/vnd.api+json')
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'john', [
+                'read',
+                'write',
+                'realm-owner',
+              ])}`,
+            );
 
-        assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        let json = response.body;
-        assert.deepEqual(
-          json,
-          {
-            data: {
-              id: testRealmHref,
-              type: 'realm-info',
-              attributes: { ...testRealmInfo, visibility: 'shared' },
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body;
+          assert.deepEqual(
+            json,
+            {
+              data: {
+                id: testRealmHref,
+                type: 'realm-info',
+                attributes: { ...testRealmInfo, visibility: 'shared' },
+              },
             },
-          },
-          '/_info response is correct',
-        );
-      });
-    });
+            '/_info response is correct',
+          );
+        });
+      },
+    );
   });
 
   module('various other realm tests', function (hooks) {
