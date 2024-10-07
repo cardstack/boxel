@@ -1795,12 +1795,15 @@ export class Realm {
         this.#dbAdapter,
         new URL(this.url),
       );
+
       let usernames = Object.keys(permissions);
       if (usernames.includes('*')) {
         this.visibilityCache = 'public';
       } else if (usernames.includes('users')) {
         this.visibilityCache = 'shared';
-        // Defaulty realm will have two usernames bot and user
+        // Defaultly a realm will have two users:
+        // 1. The user who created the realm
+        // 2. The worker assigned to it
       } else if (usernames.length > 2) {
         this.visibilityCache = 'shared';
       } else {

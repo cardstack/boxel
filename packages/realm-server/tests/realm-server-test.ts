@@ -2054,7 +2054,8 @@ module('Realm Server', function (hooks) {
 
     module('permissioned realm', function (hooks) {
       setupPermissionedRealm(hooks, {
-        john: ['read'],
+        john: ['read', 'write', 'realm-owner'],
+        'test-worker': ['read', 'write', 'realm-owner'],
       });
 
       test('401 with invalid JWT', async function (assert) {
@@ -2088,10 +2089,102 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.api+json')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', ['read'])}`,
+            `Bearer ${createJWT(testRealm, 'john', [
+              'read',
+              'write',
+              'realm-owner',
+            ])}`,
           );
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let json = response.body;
+        assert.deepEqual(
+          json,
+          {
+            data: {
+              id: testRealmHref,
+              type: 'realm-info',
+              attributes: { ...testRealmInfo, visibility: 'private' },
+            },
+          },
+          '/_info response is correct',
+        );
+      });
+    });
+
+    module(
+      'shared realm because there is `users` permission',
+      function (hooks) {
+        setupPermissionedRealm(hooks, {
+          users: ['read', 'write'],
+          john: ['read', 'write', 'realm-owner'],
+          'test-worker': ['read', 'write', 'realm-owner'],
+        });
+
+        test('200 with permission', async function (assert) {
+          let response = await request
+            .get(`/_info`)
+            .set('Accept', 'application/vnd.api+json')
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'john', [
+                'read',
+                'write',
+                'realm-owner',
+              ])}`,
+            );
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body;
+          assert.deepEqual(
+            json,
+            {
+              data: {
+                id: testRealmHref,
+                type: 'realm-info',
+                attributes: { ...testRealmInfo, visibility: 'shared' },
+              },
+            },
+            '/_info response is correct',
+          );
+        });
+      },
+    );
+
+    module('shared realm because there are non-realm users', function (hooks) {
+      setupPermissionedRealm(hooks, {
+        bob: ['read'],
+        jane: ['read'],
+        john: ['read', 'write', 'realm-owner'],
+        'test-worker': ['read', 'write', 'realm-owner'],
+      });
+
+      test('200 with permission', async function (assert) {
+        let response = await request
+          .get(`/_info`)
+          .set('Accept', 'application/vnd.api+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'john', [
+              'read',
+              'write',
+              'realm-owner',
+            ])}`,
+          );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let json = response.body;
+        assert.deepEqual(
+          json,
+          {
+            data: {
+              id: testRealmHref,
+              type: 'realm-info',
+              attributes: { ...testRealmInfo, visibility: 'shared' },
+            },
+          },
+          '/_info response is correct',
+        );
       });
     });
   });
