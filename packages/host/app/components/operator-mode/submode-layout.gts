@@ -423,9 +423,7 @@ export default class SubmodeLayout extends Component<Signature> {
         margin-right: var(--boxel-sp);
         border-radius: var(--boxel-border-radius);
       }
-      .workspace-button:disabled {
-        cursor: default;
-      }
+
       .dark-icon {
         --icon-bg-opacity: 1;
         --icon-color: black;
