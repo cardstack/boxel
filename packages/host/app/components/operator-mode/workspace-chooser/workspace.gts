@@ -129,11 +129,6 @@ export default class Workspace extends Component<Signature> {
     return this.realm.info(this.args.realmURL);
   }
 
-  @cached
-  private get isPublic() {
-    return this.realm.isPublic(this.args.realmURL);
-  }
-
   private get name() {
     return this.realmInfo.name;
   }

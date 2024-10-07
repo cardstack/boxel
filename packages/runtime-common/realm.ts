@@ -1800,7 +1800,7 @@ export class Realm {
         this.visibilityCache = 'public';
       } else if (usernames.includes('users')) {
         this.visibilityCache = 'shared';
-      // Defaulty realm will have two usernames bot and user
+        // Defaulty realm will have two usernames bot and user
       } else if (usernames.length > 2) {
         this.visibilityCache = 'shared';
       } else {
