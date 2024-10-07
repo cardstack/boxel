@@ -17,7 +17,7 @@ import get from 'lodash/get';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
 import { Tooltip } from '@cardstack/boxel-ui/components';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq, lt, gt, and } from '@cardstack/boxel-ui/helpers';
 import { Download } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -662,6 +662,11 @@ export default class InteractSubmode extends Component<Signature> {
                 class={{cn
                   'operator-mode-stack'
                   (if backgroundImageURLSpecificToThisStack 'with-bg-image')
+                  (if
+                    (gt stack.length 1 and lt stack.length 4)
+                    'medium-padding-top'
+                  )
+                  (if (gt stack.length 3) 'small-padding-top')
                 }}
                 style={{if
                   backgroundImageURLSpecificToThisStack
