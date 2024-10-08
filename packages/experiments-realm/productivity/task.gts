@@ -6,6 +6,7 @@ import {
   contains,
   field,
   linksTo,
+  linksToMany,
 } from 'https://cardstack.com/base/card-api';
 import NumberField from 'https://cardstack.com/base/number';
 import {
@@ -13,6 +14,7 @@ import {
   Avatar,
   Pill,
   RadioInput,
+  ProgressBar,
 } from '@cardstack/boxel-ui/components';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
@@ -355,6 +357,11 @@ class Fitted extends Component<typeof Task> {
   </template>
 }
 
+export class Tag extends CardDef {
+  static displayName = 'Tag';
+  @field name = contains(StringField);
+}
+
 export class Task extends CardDef {
   static displayName = 'Task';
   @field shortId = contains(StringField, {
@@ -380,12 +387,94 @@ export class Task extends CardDef {
   @field assignee = linksTo(TeamMember);
   @field project = linksTo(Project);
   @field team = linksTo(Team);
+  @field dateStarted = contains(DateField);
   @field dueDate = contains(DateField);
+  @field children = linksToMany(() => Task);
+  @field tags = linksToMany(() => Tag);
   @field title = contains(StringField, {
     computeVia: function (this: Task) {
       return this.taskName;
     },
   });
+
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <div class='task-card'>
+        <div class='task-header'>
+          <h2 class='task-title'>{{@model.taskName}}</h2>
+          <Pill>
+            <:default>
+              {{@model.status.label}}
+            </:default>
+          </Pill>
+        </div>
+        <div class='row-1'>
+          <Avatar
+            @userId={{@model.assignee.id}}
+            @displayName={{@model.assignee.name}}
+            @isReady={{true}}
+          />
+          {{@model.assignee.name}}
+          {{#if this.hasDateRange}}
+            <div class='task-dates'>
+              {{@model.dateStarted}}
+              -
+              {{@model.dueDate}}</div>
+          {{/if}}
+        </div>
+        <div class='row-2'>
+          <Pill>
+            <:default>
+              {{@model.status.label}}
+            </:default>
+          </Pill>
+          <div>
+            Progress
+            <ProgressBar @value={{50}} @max={{100}} />
+            {{#if this.hasProgress}}
+              50%
+            {{/if}}
+          </div>
+        </div>
+        <div>
+          {{@model.taskDetail}}
+        </div>
+        <div>
+          <@fields.children />
+        </div>
+      </div>
+      <style>
+        .task-card {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-sm);
+        }
+        .task-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .row-1 {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-xxs);
+        }
+        .row-2 {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-xxs);
+        }
+      </style>
+    </template>
+
+    get hasDateRange() {
+      return this.args.model.dateStarted && this.args.model.dueDate;
+    }
+
+    get hasProgress() {
+      return this.args.model.children && this.args.model.children.length > 0;
+    }
+  };
 
   static atom = class Atom extends Component<typeof this> {
     <template>

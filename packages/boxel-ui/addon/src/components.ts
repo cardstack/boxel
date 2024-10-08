@@ -29,6 +29,7 @@ import BoxelMessage from './components/message/index.gts';
 import Message from './components/message/index.gts';
 import Modal from './components/modal/index.gts';
 import Pill from './components/pill/index.gts';
+import ProgressBar from './components/progress-bar/index.gts';
 import RadioInput from './components/radio-input/index.gts';
 import ResizablePanelGroup, {
   ResizablePanel,
@@ -71,6 +72,7 @@ export {
   Message,
   Modal,
   Pill,
+  ProgressBar,
   RadioInput,
   ResizablePanel,
   ResizablePanelGroup,
