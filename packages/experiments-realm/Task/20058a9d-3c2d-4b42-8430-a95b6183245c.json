@@ -5,13 +5,14 @@
       "taskName": "Build Multi-Select Component",
       "taskDetail": "Multi-Select component to be used when filtering ",
       "status": {
-        "index": 2,
-        "label": "Current Sprint"
+        "index": 6,
+        "label": "Shipped"
       },
       "priority": {
         "index": 1,
         "label": "Medium"
       },
+      "dateStarted": null,
       "dueDate": "2024-10-03",
       "description": null,
       "thumbnailURL": null
@@ -30,6 +31,16 @@
       "team": {
         "links": {
           "self": "../Team/cc574556-4253-44b8-ba80-0cfb844b4908"
+        }
+      },
+      "children": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
         }
       }
     },

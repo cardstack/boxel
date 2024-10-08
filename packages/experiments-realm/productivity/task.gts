@@ -520,9 +520,12 @@ export class Task extends CardDef {
             </div>
           </div>
         </div>
-        <div class='children-task'>
-          <@fields.children />
-        </div>
+        {{#if this.hasChildren}}
+          <div class='children-task'>
+            <h4 class='children-header'>Subtasks ({{this.childrenCount}})</h4>
+            <@fields.children />
+          </div>
+        {{/if}}
       </div>
       <style>
         .task-card {
@@ -575,6 +578,11 @@ export class Task extends CardDef {
         .date-range {
           font-size: var(--boxel-font-size-sm);
         }
+        .children-header {
+          font-size: var(--boxel-font-size-sm);
+          color: var(--boxel-purple);
+          margin-bottom: var(--boxel-sp-xxs);
+        }
       </style>
     </template>
 
@@ -582,16 +590,32 @@ export class Task extends CardDef {
       return this.args.model.dateStarted && this.args.model.dueDate;
     }
 
-    get hasProgress() {
-      return this.args.model.children && this.args.model.children.length > 0;
-    }
-
     get progress() {
-      return 50;
+      if (!this.hasChildren) return 0;
+      const shippedCount = this.args.model.children.filter(
+        (child) => child.status.label === 'Shipped',
+      ).length;
+      return Math.round((shippedCount / this.childrenCount) * 100);
     }
 
     get progressLabel() {
-      return `${this.progress}%`;
+      return `${this.progress}% (${this.shippedCount}/${this.childrenCount})`;
+    }
+
+    get hasChildren() {
+      return this.args.model.children && this.args.model.children.length > 0;
+    }
+
+    get childrenCount() {
+      return this.args.model.children ? this.args.model.children.length : 0;
+    }
+
+    get shippedCount() {
+      return this.args.model.children
+        ? this.args.model.children.filter(
+            (child) => child.status.label === 'Shipped',
+          ).length
+        : 0;
     }
   };
 
