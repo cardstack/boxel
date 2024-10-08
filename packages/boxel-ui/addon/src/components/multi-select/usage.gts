@@ -1,3 +1,4 @@
+import { IconTrash } from '@cardstack/boxel-ui/icons';
 import { array, fn } from '@ember/helper';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
@@ -8,12 +9,12 @@ import {
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 import { includes } from 'lodash';
+
 import cssVar from '../../helpers/css-var.ts';
 import BoxelMultiSelect, {
-  SelectedItem,
   type SelectedItemSignature,
+  SelectedItem,
 } from './index.gts';
-import { IconTrash } from '@cardstack/boxel-ui/icons';
 
 interface Country {
   name: string;
@@ -103,7 +104,7 @@ class SelectedCountry extends Component<SelectedItemSignature<Country>> {
       </:icon>
     </SelectedItem>
 
-    <style>
+    <style scoped>
       .boxel-multi-select__icon {
         width: 12px;
         height: 12px;

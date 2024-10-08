@@ -1,27 +1,28 @@
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 import { CaretDown, IconX } from '@cardstack/boxel-ui/icons';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import type { ComponentLike } from '@glint/template';
 import type {
   PowerSelectArgs,
   Select,
 } from 'ember-power-select/components/power-select';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
 import PowerSelectMultiple from 'ember-power-select/components/power-select-multiple';
+
 import cn from '../../helpers/cn.ts';
-import type { ComponentLike } from '@glint/template';
 
 export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
   customSelectedItem?: ComponentLike<any> | undefined;
   hasCheckbox?: boolean;
-  useCustomTriggerComponent?: boolean;
   labelledBy?: string;
   options: ItemT[];
   selected: ItemT[];
+  useCustomTriggerComponent?: boolean;
 }
 
 export interface Signature<ItemT = any> {
@@ -334,17 +335,17 @@ export default class BoxelMultiSelect<ItemT> extends Component<
 }
 
 export interface SelectedItemSignature<ItemT> {
-  Element: any;
   Args: {
-    item: ItemT | any;
     customSelectedItem?: ComponentLike<any> | undefined;
-    useCustomTriggerComponent?: boolean;
+    item: ItemT | any;
     removeItem: (item: ItemT, event: MouseEvent) => void;
+    useCustomTriggerComponent?: boolean;
   };
   Blocks: {
     default: [];
     icon: [];
   };
+  Element: any;
 }
 
 export class SelectedItem<ItemT> extends Component<
@@ -362,7 +363,6 @@ export class SelectedItem<ItemT> extends Component<
   <template>
     <div class='ember-power-select-multiple-option'>
       {{#if @useCustomTriggerComponent}}
-
         {{#if (has-block 'default')}}
           {{yield to='default'}}
         {{else}}
@@ -401,18 +401,18 @@ export class SelectedItem<ItemT> extends Component<
 
 export interface defaultTriggerComponentSignature<ItemT> {
   Args: {
+    customSelectedItem?: ComponentLike<any> | undefined;
     hasCheckbox?: boolean;
     option: ItemT;
     placeholder: string;
+    removeItem: (item: ItemT, event: MouseEvent) => void;
     select: {
       actions: {
         select: (items: ItemT[]) => void;
       };
       selected: ItemT[];
     };
-    customSelectedItem?: ComponentLike<any> | undefined;
     useCustomTriggerComponent?: boolean;
-    removeItem: (item: ItemT, event: MouseEvent) => void;
   };
   Blocks: {
     default: [];
@@ -500,19 +500,19 @@ export class DefaultTriggerComponent<ItemT> extends Component<
 
 export interface TriggerComponentSignature<ItemT> {
   Args: {
+    customSelectedItem?: ComponentLike<any> | undefined;
     disabled?: boolean;
     extra: Record<string, unknown>;
     onBlur: (e: FocusEvent) => void;
     onFocus: (e: FocusEvent) => void;
     onKeydown: (e: KeyboardEvent) => void;
     placeholder?: string;
+    removeItem: (item: ItemT, event: MouseEvent) => void;
     searchEnabled?: boolean;
     searchField?: string | null;
     select: Select;
     selected: ItemT | ItemT[] | null;
-    customSelectedItem?: ComponentLike<any> | undefined;
     useCustomTriggerComponent?: boolean;
-    removeItem: (item: ItemT, event: MouseEvent) => void;
   };
   Blocks: {
     default: [];
