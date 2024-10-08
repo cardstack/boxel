@@ -114,7 +114,7 @@ export function setupDB(
     prepareTestDB();
     dbAdapter = new PgAdapter();
     publisher = new PgQueuePublisher(dbAdapter);
-    runner = new PgQueueRunner(dbAdapter, '@realm/test-worker');
+    runner = new PgQueueRunner(dbAdapter, 'test-worker');
   };
 
   const runAfterHook = async () => {
