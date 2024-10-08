@@ -181,22 +181,25 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private get styleForStackedCard(): SafeString {
     const stackItemMaxWidth = '50rem';
     const widthReductionPercent = 5; // Every new card on the stack is 5% wider than the previous one
-    const isFirstCard = this.args.index === 0;
-    const isLastCard = this.args.index === this.args.stackItems.length - 1;
+    const numberOfCards = this.args.stackItems.length;
+    const invertedIndex = numberOfCards - this.args.index - 1;
+    const isLastCard = this.args.index === numberOfCards - 1;
+    const isSecondLastCard = this.args.index === numberOfCards - 2;
 
-    let offsetPx = 15; // Every new card on the stack is 15px lower than the previous one in default
-    let marginTopPx = offsetPx * this.args.index;
+    let marginTopPx = 0;
 
-    if (isFirstCard) {
-      marginTopPx = 0;
-    } else if (isLastCard) {
-      if (this.args.stackItems.length === 2) {
-        marginTopPx = 30;
-      }
-      marginTopPx = 15 * this.args.index + 25;
+    if (invertedIndex > 2) {
+      marginTopPx = -5; // If there are more than 3 cards, those cards are buried behind the header
     }
 
-    let invertedIndex = this.args.stackItems.length - this.args.index - 1;
+    if (numberOfCards > 1) {
+      if (isLastCard) {
+        marginTopPx = numberOfCards === 2 ? 30 : 55;
+      } else if (isSecondLastCard && numberOfCards > 2) {
+        marginTopPx = 25;
+      }
+    }
+
     let maxWidthPercent = 100 - invertedIndex * widthReductionPercent;
     let width = this.isItemFullWidth
       ? '100%'
