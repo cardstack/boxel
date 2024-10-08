@@ -445,6 +445,7 @@ export default class InteractSubmode extends Component<Signature> {
         let realmURL: URL | undefined;
         if (topCard) {
           let url = await this.cardService.getRealmURL(topCard);
+          // open card might be from a realm in which we don't have write permissions
           if (url && this.realm.canWrite(url.href)) {
             realmURL = url;
           }
