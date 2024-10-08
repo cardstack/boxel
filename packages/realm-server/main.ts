@@ -194,13 +194,11 @@ let dist: URL = new URL(distURL);
       {
         url,
         adapter: realmAdapter,
-        getIndexHTML,
         matrix: { url: new URL(matrixURL), username },
         secretSeed: REALM_SECRET_SEED,
         virtualNetwork,
         dbAdapter,
         queue,
-        assetsURL: dist,
       },
       {
         ...(process.env.DISABLE_MODULE_CACHING === 'true'

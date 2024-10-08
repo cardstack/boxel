@@ -201,7 +201,6 @@ export async function createRealm({
     }
   }
 
-  let getIndexHTML = (await getFastbootState()).getIndexHTML;
   let adapter = new NodeAdapter(dir);
   let worker: Worker | undefined;
   if (withWorker) {
@@ -222,13 +221,11 @@ export async function createRealm({
   let realm = new Realm({
     url: realmURL,
     adapter,
-    getIndexHTML,
     matrix: matrixConfig,
     secretSeed,
     virtualNetwork,
     dbAdapter,
     queue: publisher,
-    assetsURL: new URL(`http://example.com/notional-assets-host/`),
   });
   if (worker) {
     virtualNetwork.mount(realm.handle);

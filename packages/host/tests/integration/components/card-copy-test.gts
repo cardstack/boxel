@@ -31,6 +31,7 @@ import {
   type TestContextWithSSE,
   setupIntegrationTestRealm,
   lookupLoaderService,
+  lookupNetworkService,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
@@ -855,7 +856,7 @@ module('Integration | card-copy', function (hooks) {
 
     let waiter = buildWaiter('body-interception-middleware');
 
-    lookupLoaderService().virtualNetwork.mount(
+    lookupNetworkService().mount(
       async (req) => {
         if (req.method !== 'GET' && req.method !== 'HEAD') {
           let token = waiter.beginAsync();
@@ -987,7 +988,7 @@ module('Integration | card-copy', function (hooks) {
 
     let waiter = buildWaiter('body-interception-middleware');
 
-    lookupLoaderService().virtualNetwork.mount(
+    lookupNetworkService().mount(
       async (req) => {
         if (req.method !== 'GET' && req.method !== 'HEAD') {
           let token = waiter.beginAsync();

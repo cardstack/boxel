@@ -1,4 +1,5 @@
 import { getOwner } from '@ember/owner';
+import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
@@ -6,6 +7,8 @@ import { Resource } from 'ember-resources';
 
 import { logger } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
+
+import NetworkService from '../services/network';
 
 import type LoaderService from '../services/loader-service';
 
@@ -16,6 +19,7 @@ interface Args {
 const log = logger('resource:import');
 
 export class ImportResource extends Resource<Args> {
+  @service private declare network: NetworkService;
   @tracked module: object | undefined;
   @tracked error: { type: 'runtime' | 'compile'; message: string } | undefined;
   #loaded!: Promise<void>; // modifier runs at init so we will always have a value
@@ -34,7 +38,7 @@ export class ImportResource extends Resource<Args> {
       let m = await loader.import<object>(url);
       this.module = m;
     } catch (err: any) {
-      let errResponse = await loader.fetch(url, {
+      let errResponse = await this.network.authedFetch(url, {
         headers: { 'content-type': 'text/javascript' },
       });
       if (!errResponse.ok) {

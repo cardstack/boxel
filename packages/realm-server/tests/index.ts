@@ -1,3 +1,5 @@
+(globalThis as any).__environment = 'test';
+
 import '../setup-logger'; // This should be first
 import './auth-client-test';
 import './index-query-engine-test';

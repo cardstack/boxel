@@ -83,6 +83,10 @@ export class StackItem {
     throw new Error(`This StackItem has no card set`);
   }
 
+  get cardError() {
+    return this.cardResource?.cardError?.error;
+  }
+
   get isWideFormat() {
     if (!this.cardResource || !this.cardResource.card) {
       return false;

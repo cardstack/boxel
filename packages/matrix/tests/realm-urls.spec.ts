@@ -51,8 +51,8 @@ test.describe('Realm URLs in Matrix account data', () => {
       .locator('[data-test-workspace-chooser]')
       .waitFor({ state: 'visible' });
 
-    expect(await page.locator('[data-test-workspace]').count()).toBe(1);
-    expect(page.locator('[data-test-workspace-name]')).toHaveText(
+    expect(page.locator('[data-test-workspace-list] [data-test-workspace]')).toHaveCount(1);
+    expect(page.locator('[data-test-workspace-list]  [data-test-workspace-name]')).toHaveText(
       'Test Workspace A',
     );
 
@@ -66,19 +66,19 @@ test.describe('Realm URLs in Matrix account data', () => {
     );
 
     await page
-      .locator('[data-test-workspace]:nth-child(2)')
+      .locator('[data-test-workspace-list] [data-test-workspace]:nth-child(2)')
       .waitFor({ state: 'visible' });
-    expect(await page.locator('[data-test-workspace]').count()).toBe(2);
+      expect(page.locator('[data-test-workspace-list] [data-test-workspace]')).toHaveCount(2);
 
     expect(
       page.locator(
-        '[data-test-workspace="Test Workspace A"] [data-test-workspace-name]',
+        '[data-test-workspace-list] [data-test-workspace="Test Workspace A"] [data-test-workspace-name]',
       ),
     ).toHaveText('Test Workspace A');
 
     expect(
       page.locator(
-        '[data-test-workspace="Unknown Workspace"] [data-test-workspace-name]',
+        '[data-test-workspace-list] [data-test-workspace="Unknown Workspace"] [data-test-workspace-name]',
       ),
     ).toHaveText('Unknown Workspace');
   });

@@ -62,7 +62,7 @@ let availableSortOptions: SortOption[] = [
     ],
   },
   {
-    displayName: 'Updated at',
+    displayName: 'Date Updated',
     sort: [
       {
         by: 'lastModified',
@@ -71,7 +71,7 @@ let availableSortOptions: SortOption[] = [
     ],
   },
   {
-    displayName: 'Created at',
+    displayName: 'Date Created',
     sort: [
       {
         by: 'createdAt',
@@ -83,7 +83,7 @@ let availableSortOptions: SortOption[] = [
 
 class Isolated extends Component<typeof CardsGrid> {
   <template>
-    <div class={{cn 'cards-grid' list-view=(eq this.viewSize 'list')}}>
+    <div class={{cn 'cards-grid' strip-view=(eq this.viewSize 'strip')}}>
       <div class='sidebar'>
         <FilterList
           @filters={{this.filters}}
@@ -104,9 +104,9 @@ class Isolated extends Component<typeof CardsGrid> {
               @height='20px'
               class={{cn
                 'view-as__button'
-                is-selected-view=(eq this.viewSize 'list')
+                is-selected-view=(eq this.viewSize 'strip')
               }}
-              {{on 'click' (fn (mut this.viewSize) 'list')}}
+              {{on 'click' (fn (mut this.viewSize) 'strip')}}
             />
             <IconButton
               @icon={{IconGrid}}
@@ -157,7 +157,6 @@ class Isolated extends Component<typeof CardsGrid> {
                   Loading...
                 </:loading>
                 <:response as |cards|>
-                  {{measureLoadTime}}
                   {{#each cards as |card|}}
                     <li
                       class='card'
@@ -171,7 +170,7 @@ class Isolated extends Component<typeof CardsGrid> {
                       {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
                       data-cards-grid-item={{removeFileExtension card.url}}
                     >
-                      <CardContainer>
+                      <CardContainer @displayBoundaries='true'>
                         {{card.component}}
                       </CardContainer>
                     </li>
@@ -230,7 +229,8 @@ class Isolated extends Component<typeof CardsGrid> {
         letter-spacing: 0.21px;
       }
       .cards-grid {
-        --grid-card-width: 11.125rem;
+        --grid-card-min-width: 11.125rem;
+        --grid-card-max-width: 1fr;
         --grid-card-height: 15.125rem;
 
         padding: var(--cards-grid-padding-top) 0 0 var(--boxel-sp-sm);
@@ -241,12 +241,10 @@ class Isolated extends Component<typeof CardsGrid> {
         max-height: 100vh;
         overflow: hidden;
       }
-      .list-view {
-        --grid-card-width: 100%;
+      .strip-view {
+        --grid-card-min-width: 21.875rem;
+        --grid-card-max-width: calc(50% - var(--boxel-sp));
         --grid-card-height: 6.125rem;
-      }
-      .list-view .cards {
-        flex-direction: column;
       }
       .sidebar {
         position: relative;
@@ -291,19 +289,21 @@ class Isolated extends Component<typeof CardsGrid> {
         list-style-type: none;
         margin: 0;
         padding: 0;
-        display: flex;
-        flex-wrap: wrap;
+        display: grid;
+        grid-template-columns: repeat(
+          auto-fill,
+          minmax(var(--grid-card-min-width), var(--grid-card-max-width))
+        );
+        grid-auto-rows: var(--grid-card-height);
         gap: var(--boxel-sp);
-        justify-items: center;
         flex-grow: 1;
       }
       .card {
-        width: var(--grid-card-width);
-        height: var(--grid-card-height);
         overflow: hidden;
         cursor: pointer;
         container-name: fitted-card;
         container-type: size;
+        padding: 1px;
       }
       .add-button {
         display: inline-block;
@@ -348,7 +348,7 @@ class Isolated extends Component<typeof CardsGrid> {
 
   @tracked private selectedSortOption: SortOption = availableSortOptions[0];
   @tracked activeFilter = this.filters[0];
-  @tracked viewSize: 'grid' | 'list' = 'grid';
+  @tracked viewSize: 'grid' | 'strip' = 'grid';
 
   @action setSelectedSortOption(option: SortOption) {
     this.selectedSortOption = option;
@@ -481,16 +481,4 @@ export class CardsGrid extends CardDef {
 }
 function removeFileExtension(cardUrl: string) {
   return cardUrl.replace(/\.[^/.]+$/, '');
-}
-
-function measureLoadTime() {
-  // we consider rendering the cards grid part of the app
-  // boot, so this is where we'll measure the app boot time.
-  if ((globalThis as any).__bootStart) {
-    console.log(
-      `time since app boot: ${
-        performance.now() - (globalThis as any).__bootStart
-      } ms`,
-    );
-  }
 }

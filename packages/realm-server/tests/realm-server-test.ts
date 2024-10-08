@@ -234,6 +234,7 @@ module('Realm Server', function (hooks) {
                 name: 'Test Realm',
                 backgroundURL: null,
                 iconURL: null,
+                showAsCatalog: null,
               },
               realmURL: testRealmURL.href,
             },
@@ -2051,6 +2052,7 @@ module('Realm Server', function (hooks) {
                 name: 'Test Realm',
                 backgroundURL: null,
                 iconURL: null,
+                showAsCatalog: null,
               },
             },
           },
@@ -2930,6 +2932,7 @@ module('Realm Server', function (hooks) {
                 name: 'Test Realm',
                 backgroundURL: null,
                 iconURL: null,
+                showAsCatalog: null,
               },
               realmURL: testRealmURL.href,
             },
@@ -3070,56 +3073,50 @@ module('Realm Server', function (hooks) {
         ],
       });
     });
-  });
 
-  module('BOXEL_HTTP_BASIC_PW env var', function (hooks) {
-    setupPermissionedRealm(hooks, {
-      '*': ['read', 'write'],
+    test('can fetch catalog realms', async function (assert) {
+      let response = await request2
+        .get('/_catalog-realms')
+        .set('Accept', 'application/json');
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.deepEqual(response.body, {
+        data: [
+          {
+            type: 'catalog-realm',
+            id: `${testRealm2URL}`,
+            attributes: {
+              name: 'Test Realm',
+              iconURL: null,
+              backgroundURL: null,
+              showAsCatalog: null,
+            },
+          },
+        ],
+      });
     });
 
-    hooks.afterEach(function () {
-      delete process.env.BOXEL_HTTP_BASIC_PW;
-    });
+    test(`returns 200 with empty data if failed to fetch catalog realm's info`, async function (assert) {
+      virtualNetwork.mount(
+        async (req: Request) => {
+          if (req.url.includes('_info')) {
+            return new Response('Failed to fetch realm info', {
+              status: 500,
+              statusText: 'Internal Server Error',
+            });
+          }
+          return null;
+        },
+        { prepend: true },
+      );
+      let response = await request2
+        .get('/_catalog-realms')
+        .set('Accept', 'application/json');
 
-    test('serves a text/html GET request', async function (assert) {
-      let response = await request.get('/').set('Accept', 'text/html');
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
-
-      process.env.BOXEL_HTTP_BASIC_PW = '1';
-
-      response = await request.get('/').set('Accept', 'text/html');
-      assert.strictEqual(response.status, 401, 'HTTP 401 status');
-      assert.strictEqual(
-        response.headers['www-authenticate'],
-        'Basic realm="Boxel realm server"',
-      );
-
-      response = await request
-        .get('/')
-        .set('Accept', 'text/html')
-        .auth('cardstack', 'wrong-password');
-      assert.strictEqual(response.status, 401, 'HTTP 401 status');
-      assert.strictEqual(
-        response.text,
-        'Authorization Required',
-        'the text returned is correct',
-      );
-      assert.strictEqual(
-        response.headers['www-authenticate'],
-        'Basic realm="Boxel realm server"',
-      );
-
-      response = await request
-        .get('/')
-        .set('Accept', 'text/html')
-        .auth('cardstack', process.env.BOXEL_HTTP_BASIC_PW);
-      assert.strictEqual(response.status, 200, 'HTTP 200 status');
-      assert.ok(
-        /http:\/\/example.com\/notional-assets-host\/assets\/vendor\.css/.test(
-          response.text,
-        ),
-        'the HTML returned is correct',
-      );
+      assert.deepEqual(response.body, {
+        data: [],
+      });
     });
   });
 });

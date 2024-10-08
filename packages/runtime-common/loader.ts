@@ -428,7 +428,7 @@ export class Loader {
     return new Request(urlOrRequest, init);
   }
 
-  fetch = async (
+  private fetch = async (
     urlOrRequest: string | URL | Request,
     init?: RequestInit,
   ): Promise<Response> => {

@@ -196,9 +196,10 @@ export class RoomResource extends Resource<Args> {
         // otherwise, the message field (may) still but it occurs only accidentally because of a ..thinking event
         // TOOD: Refactor having many if conditions to some variant of a strategy pattern
         update = true;
-      } else if (event.content['m.relates_to']?.rel_type === 'm.replace')
+      } else if (event.content['m.relates_to']?.rel_type === 'm.replace') {
         event_id = event.content['m.relates_to'].event_id;
-      update = true;
+        update = true;
+      }
       if (this._messageCache.has(event_id) && !update) {
         continue;
       }

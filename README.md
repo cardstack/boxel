@@ -10,6 +10,7 @@ For a quickstart, see [here](./QUICKSTART.md)
 - this project uses [volta](https://volta.sh/) for Javascript toolchain version management. Make sure you have the latest verison of volta on your system and have define [the ENV var described here](https://docs.volta.sh/advanced/pnpm).
 - this project uses [pnpm](https://pnpm.io/) for package management. run `pnpm install` to install the project dependencies first.
 - this project uses [docker](https://docker.com). Make sure to install docker on your system.
+- Ensure that node_modules/.bin is in your path. e.g. include `export PATH="./node_modules/.bin:$PATH"` in your .zshrc
 
 ## Orientation
 
@@ -28,6 +29,8 @@ For a quickstart, see [here](./QUICKSTART.md)
 `packages/matrix` is the docker container for running the matrix server: synapse, as well as tests that involve running a matrix client.
 
 `packages/ai-bot` is a node app that runs a matrix client session and an OpenAI session. Matrix message queries sent to the AI bot are packaged with an OpenAI system prompt and operator mode context and sent to OpenAI. The ai bot enriches the OpenAI response and posts the response back into the matrix room.
+
+`packages/vscode-boxel-tools` is a VS Code extension for browsing Boxel workspaces, published as [Boxel Tools](https://marketplace.visualstudio.com/items?itemName=cardstack.boxel-tools). It can be deployed via the bot, with `staging` environment producing a pre-release version.
 
 To learn more about Boxel and Cards, see our [documentation](./docs/README.md)
 

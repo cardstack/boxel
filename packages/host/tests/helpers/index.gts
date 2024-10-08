@@ -45,8 +45,11 @@ import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
+import type NetworkService from '@cardstack/host/services/network';
 
 import type QueueService from '@cardstack/host/services/queue';
+
+import RealmServerService from '@cardstack/host/services/realm-server';
 
 import {
   type CardDef,
@@ -462,6 +465,11 @@ export function lookupLoaderService(): LoaderService {
   return owner.lookup('service:loader-service') as LoaderService;
 }
 
+export function lookupNetworkService(): NetworkService {
+  let owner = (getContext() as TestContext).owner;
+  return owner.lookup('service:network') as NetworkService;
+}
+
 export const testRealmSecretSeed = "shhh! it's a secret";
 async function setupTestRealm({
   contents,
@@ -475,14 +483,14 @@ async function setupTestRealm({
   permissions?: RealmPermissions;
 }) {
   let owner = (getContext() as TestContext).owner;
-  let { virtualNetwork } = lookupLoaderService();
+  let { virtualNetwork } = lookupNetworkService();
   let { queue } = owner.lookup('service:queue') as QueueService;
 
   realmURL = realmURL ?? testRealmURL;
 
-  let cardService = owner.lookup('service:card-service') as CardService;
-  if (!cardService.unresolvedRealmURLs.includes(realmURL)) {
-    cardService.unresolvedRealmURLs.push(realmURL);
+  let realmServer = owner.lookup('service:realm-server') as RealmServerService;
+  if (!realmServer.availableRealmURLs.includes(realmURL)) {
+    realmServer.setAvailableRealmURLs([realmURL]);
   }
 
   if (isAcceptanceTest) {
@@ -519,14 +527,11 @@ async function setupTestRealm({
   realm = new Realm({
     url: realmURL,
     adapter,
-    getIndexHTML: async () =>
-      `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
     matrix: testMatrix,
     secretSeed: testRealmSecretSeed,
     virtualNetwork,
     dbAdapter,
     queue,
-    assetsURL: new URL(`http://example.com/notional-assets-host/`),
   });
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
   virtualNetwork.mount(realm.maybeHandle);

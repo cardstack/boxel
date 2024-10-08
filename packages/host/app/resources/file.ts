@@ -17,8 +17,8 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import type LoaderService from '../services/loader-service';
-
 import type MessageService from '../services/message-service';
+import type NetworkService from '../services/network';
 
 const log = logger('resource:file');
 const utf8 = new TextDecoder();
@@ -73,11 +73,12 @@ class _FileResource extends Resource<Args> {
     state: 'loading',
   };
 
-  @service declare loaderService: LoaderService;
-  @service declare messageService: MessageService;
-  @service declare cardService: CardService;
-  @service declare recentFilesService: RecentFilesService;
-  @service declare operatorModeStateService: OperatorModeStateService;
+  @service private declare loaderService: LoaderService;
+  @service private declare network: NetworkService;
+  @service private declare messageService: MessageService;
+  @service private declare cardService: CardService;
+  @service private declare recentFilesService: RecentFilesService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
 
   constructor(owner: Owner) {
     super(owner);
@@ -93,16 +94,15 @@ class _FileResource extends Resource<Args> {
     realmURL: string,
     callback: (ev: { type: string; data: string }) => void,
   ) {
-    let messageServiceUrl = `${realmURL}_message`;
-    if (this.subscription && this.subscription.url !== messageServiceUrl) {
+    if (this.subscription && this.subscription.url !== realmURL) {
       this.subscription.unsubscribe();
       this.subscription = undefined;
     }
 
     if (!this.subscription) {
       this.subscription = {
-        url: messageServiceUrl,
-        unsubscribe: this.messageService.subscribe(messageServiceUrl, callback),
+        url: realmURL,
+        unsubscribe: this.messageService.subscribe(realmURL, callback),
       };
     }
   }
@@ -134,21 +134,28 @@ class _FileResource extends Resource<Args> {
   }
 
   private read = restartableTask(async () => {
-    let response = await this.loaderService.loader.fetch(this._url, {
-      headers: { Accept: SupportedMimeType.CardSource },
-    });
+    let response;
+    try {
+      response = await this.network.authedFetch(this._url, {
+        headers: { Accept: SupportedMimeType.CardSource },
+      });
 
-    if (!response.ok) {
-      log.error(
-        `Could not get file ${this._url}, status ${response.status}: ${
-          response.statusText
-        } - ${await response.text()}`,
-      );
-      if (response.status === 404) {
-        this.updateState({ state: 'not-found', url: this._url });
-      } else {
-        this.updateState({ state: 'server-error', url: this._url });
+      if (!response.ok) {
+        log.error(
+          `Could not get file ${this._url}, status ${response.status}: ${
+            response.statusText
+          } - ${await response.text()}`,
+        );
+        if (response.status === 404) {
+          this.updateState({ state: 'not-found', url: this._url });
+        } else {
+          this.updateState({ state: 'server-error', url: this._url });
+        }
+        return;
       }
+    } catch (err: any) {
+      log.error(`Could not get file ${this._url}, err: ${err.message}`);
+      this.updateState({ state: 'not-found', url: this._url });
       return;
     }
 

@@ -51,8 +51,10 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
-import LoaderService from '../services/loader-service';
 import { type RenderCard } from '../services/render-service';
+
+import type LoaderService from '../services/loader-service';
+import type NetworkService from '../services/network';
 
 const log = logger('current-run');
 
@@ -89,7 +91,8 @@ export class CurrentRun {
     moduleErrors: 0,
     totalIndexEntries: 0,
   };
-  @service declare loaderService: LoaderService;
+  @service private declare loaderService: LoaderService;
+  @service private declare network: NetworkService;
 
   constructor({
     realmURL,
@@ -237,6 +240,7 @@ export class CurrentRun {
     }
 
     let entries = await this.#reader.directoryListing(url);
+
     for (let { url, kind, lastModified } of entries) {
       let innerURL = new URL(url);
       if (isIgnored(this.#realmURL, this.ignoreMap, innerURL)) {
@@ -246,6 +250,11 @@ export class CurrentRun {
       if (kind === 'directory') {
         await this.discoverInvalidations(innerURL, mtimes);
       } else {
+        if (!url.endsWith('.json') && !hasExecutableExtension(url)) {
+          // Only allow json and executable files to be invalidated so that we don't end up with invalidated files that weren't meant to be indexed (images, etc)
+          continue;
+        }
+
         let indexEntry = mtimes.get(innerURL.href);
         if (
           !indexEntry ||
@@ -429,7 +438,7 @@ export class CurrentRun {
       );
 
       if (!this.#realmInfo) {
-        let realmInfoResponse = await this.loaderService.loader.fetch(
+        let realmInfoResponse = await this.network.authedFetch(
           `${this.realmURL}_info`,
           { headers: { Accept: SupportedMimeType.RealmInfo } },
         );

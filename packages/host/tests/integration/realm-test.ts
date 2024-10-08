@@ -356,6 +356,7 @@ module('Integration | realm', function (hooks) {
               backgroundURL:
                 'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
               iconURL: 'https://i.postimg.cc/d0B9qMvy/icon.png',
+              showAsCatalog: null,
             },
             realmURL: 'http://localhost:4202/test/',
           },
@@ -3030,6 +3031,7 @@ module('Integration | realm', function (hooks) {
               backgroundURL:
                 'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
               iconURL: 'https://i.postimg.cc/d0B9qMvy/icon.png',
+              showAsCatalog: null,
             },
             realmURL: 'http://localhost:4202/test/',
           },
@@ -3203,6 +3205,7 @@ posts/ignore-me.gts
             name: 'Example Workspace',
             backgroundURL: 'https://example-background-url.com',
             iconURL: 'https://example-icon-url.com',
+            showAsCatalog: null,
           },
         },
       },

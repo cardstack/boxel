@@ -196,8 +196,12 @@ export default class Login extends Component<Signature> {
       throw e;
     }
     if (auth) {
-      await this.matrixService.start(auth);
-      await this.router.refresh();
+      // note that any commands after this await will not be executed as the act
+      // of starting the matrix service sets tracked properties that result in this
+      // component being removed from the DOM and destroyed. Keep in mind that in EC tasks,
+      // awaits are really just syntactic sugar for yields, and that we yield to
+      // this.matrixService.start()
+      await this.matrixService.start({ auth, refreshRoutes: true });
     } else {
       throw new Error(
         `bug: should be impossible to get here - successful matrix login with no auth response`,
