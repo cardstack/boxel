@@ -568,39 +568,40 @@ export class CustomTriggerComponent<ItemT> extends Component<
 
   <template>
     <div class='boxel-trigger'>
-      {{#each this.visibleContent as |item|}}
-        {{#let (component @customSelectedItem) as |SelectedItem|}}
-          <SelectedItem
-            @item={{item}}
-            @removeItem={{this.removeItem}}
-            @useCustomTriggerComponent={{true}}
-            @customSelectedItem={{@customSelectedItem}}
-          />
-        {{/let}}
-      {{/each}}
-
-      {{#if this.hasMoreItems}}
-        <span class='ember-power-select-multiple-option'>
-          +
-          {{this.remainingItemsCount}}
-          more
-          <IconX
-            {{on 'click' this.removeExcessItems}}
-            class='boxel-multi-select__icon boxel-multi-select__icon--remove'
-          />
-        </span>
-      {{/if}}
 
       {{#if this.shouldShowPlaceholder}}
         <div class='boxel-trigger-placeholder'>{{@placeholder}}</div>
       {{/if}}
-    </div>
 
-    {{#unless @customSelectedItem}}
-      <div class='error-message'>
-        Error: You are required to create a custom selected component.
-      </div>
-    {{/unless}}
+      {{#unless @customSelectedItem}}
+        <div class='error-message'>
+          Error: You are required to create a custom selected component.
+        </div>
+      {{else}}
+        {{#each this.visibleContent as |item|}}
+          {{#let (component @customSelectedItem) as |SelectedItem|}}
+            <SelectedItem
+              @item={{item}}
+              @removeItem={{this.removeItem}}
+              @useCustomTriggerComponent={{true}}
+              @customSelectedItem={{@customSelectedItem}}
+            />
+          {{/let}}
+        {{/each}}
+
+        {{#if this.hasMoreItems}}
+          <span class='ember-power-select-multiple-option'>
+            +
+            {{this.remainingItemsCount}}
+            more
+            <IconX
+              {{on 'click' this.removeExcessItems}}
+              class='boxel-multi-select__icon boxel-multi-select__icon--remove'
+            />
+          </span>
+        {{/if}}
+      {{/unless}}
+    </div>
 
     <style scoped>
       .boxel-trigger {

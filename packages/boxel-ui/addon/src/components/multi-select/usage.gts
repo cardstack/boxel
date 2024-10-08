@@ -266,7 +266,7 @@ export default class BoxelMultiSelectUsage extends Component {
           <Args.Object
             @name='customSelectedItem'
             @description='A custom component to render selected items when useCustomTriggerComponent is true. This component can customize the visual appearance and icon of the selected item.'
-            @required={{true}}
+            @required={{this.useCustomTriggerComponent}}
           />
         </:api>
         <:cssVars as |Css|>
@@ -300,7 +300,7 @@ export default class BoxelMultiSelectUsage extends Component {
             @matchTriggerWidth={{true}}
             @hasCheckbox={{true}}
             @useCustomTriggerComponent={{this.useCustomTriggerComponent}}
-            @labelledBy='assignee-selct-label'
+            @labelledBy='assignee-select-label'
             @ariaLabel='Select assignees'
             as |option|
           >
