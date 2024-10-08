@@ -547,7 +547,7 @@ export class Task extends CardDef {
           </div>
         {{/if}}
       </div>
-      <style>
+      <style scoped>
         .task-card {
           height: 100%;
           display: flex;
@@ -613,7 +613,7 @@ export class Task extends CardDef {
 
     get progress() {
       if (!this.hasChildren) return 0;
-      const shippedCount = this.args.model.children.filter(
+      const shippedCount = this.args.model.children!.filter(
         (child) => child.status.label === 'Shipped',
       ).length;
       return Math.round((shippedCount / this.childrenCount) * 100);
