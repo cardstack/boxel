@@ -452,6 +452,7 @@ export class Task extends CardDef {
         <div class='task-meta'>
           <div class='row-1'>
             <Avatar
+              class='avatar'
               @userId={{@model.assignee.id}}
               @displayName={{@model.assignee.name}}
               @isReady={{true}}
@@ -543,6 +544,9 @@ export class Task extends CardDef {
           display: flex;
           flex-direction: column;
           gap: var(--boxel-sp-xs);
+        }
+        .avatar {
+          --profile-avatar-icon-size: var(--boxel-icon-med);
         }
         .row-1 {
           display: flex;
