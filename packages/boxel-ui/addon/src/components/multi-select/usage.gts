@@ -96,9 +96,9 @@ class SelectedCountry extends Component<SelectedItemSignature<Country>> {
       @removeItem={{@removeItem}}
       @useCustomTriggerComponent={{true}}
     >
-      <:default>
+      <:content>
         {{@item.name}}
-      </:default>
+      </:content>
       <:icon>
         <IconTrash />
       </:icon>

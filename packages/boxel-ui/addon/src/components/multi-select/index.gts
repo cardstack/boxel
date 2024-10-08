@@ -347,7 +347,7 @@ export interface SelectedItemSignature<ItemT> {
     useCustomTriggerComponent?: boolean;
   };
   Blocks: {
-    default: [];
+    content: [];
     icon: [];
   };
   Element: any;
@@ -368,18 +368,19 @@ export class SelectedItem<ItemT> extends Component<
   <template>
     <div class='ember-power-select-multiple-option'>
       {{#if @useCustomTriggerComponent}}
-        {{#if (has-block 'default')}}
-          {{yield to='default'}}
+        {{#if (has-block 'content')}}
+          {{yield to='content'}}
         {{else}}
           {{this.getItemDisplayValue @item}}
         {{/if}}
 
-        <span
+        <button
+          type='button'
           class='boxel-multi-select__icon boxel-multi-select__icon--remove'
           {{on 'click' (fn @removeItem @item)}}
         >
           {{yield to='icon'}}
-        </span>
+        </button>
       {{else}}
         {{this.getItemDisplayValue @item}}
 
@@ -397,6 +398,7 @@ export class SelectedItem<ItemT> extends Component<
         gap: var(--boxel-sp-xs);
       }
       .boxel-multi-select__icon--remove {
+        all: unset;
         display: flex;
         justify-content: center;
         width: 10px;
@@ -584,11 +586,7 @@ export class CustomTriggerComponent<ItemT> extends Component<
         <div class='boxel-trigger-placeholder'>{{@placeholder}}</div>
       {{/if}}
 
-      {{#unless @customSelectedItem}}
-        <div class='error-message'>
-          Error: You are required to create a custom selected component.
-        </div>
-      {{else}}
+      {{#if @customSelectedItem}}
         {{#each this.visibleContent as |item|}}
           {{#let (component @customSelectedItem) as |SelectedItem|}}
             <SelectedItem
@@ -611,7 +609,11 @@ export class CustomTriggerComponent<ItemT> extends Component<
             />
           </span>
         {{/if}}
-      {{/unless}}
+      {{else}}
+        <div class='error-message'>
+          Error: You are required to create a custom selected component.
+        </div>
+      {{/if}}
     </div>
 
     <style scoped>
