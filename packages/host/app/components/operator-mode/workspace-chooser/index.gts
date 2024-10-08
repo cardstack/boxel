@@ -61,11 +61,13 @@ export default class WorkspaceChooser extends Component<Signature> {
       }
       .workspace-chooser {
         opacity: 0;
-        position: relative;
+        position: absolute;
         background-color: var(--boxel-700);
-        height: 100vh;
+        height: 100%;
+        width: 100%;
         padding: 5.5rem 0 5.5rem 11.5rem;
-        animation: fadeIn 1s ease-in forwards;
+        animation: fadeIn 0.5s ease-in forwards;
+        z-index: 3;
       }
       .workspace-chooser__content {
         display: flex;
