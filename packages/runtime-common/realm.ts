@@ -86,11 +86,14 @@ export interface RealmSession {
   canWrite: boolean;
 }
 
+export type RealmVisibility = 'private' | 'shared' | 'public';
+
 export type RealmInfo = {
   name: string;
   backgroundURL: string | null;
   iconURL: string | null;
   showAsCatalog: boolean | null;
+  visibility: RealmVisibility;
 };
 
 export interface FileRef {
@@ -264,6 +267,8 @@ export class Realm {
   // template that we clone for each indexing operation
   readonly loaderTemplate: Loader;
   readonly paths: RealmPaths;
+
+  private visibilityPromise?: Promise<RealmVisibility>;
 
   get url(): string {
     return this.paths.url;
@@ -1623,6 +1628,7 @@ export class Realm {
       backgroundURL: null,
       iconURL: null,
       showAsCatalog: null,
+      visibility: await this.visibility(),
     };
     if (!realmConfig) {
       return realmInfo;
@@ -1817,6 +1823,34 @@ export class Realm {
       realm: this,
       permissions,
     };
+  }
+
+  private async visibility(): Promise<RealmVisibility> {
+    if (this.visibilityPromise) {
+      return this.visibilityPromise;
+    }
+
+    this.visibilityPromise = (async () => {
+      let permissions = await fetchUserPermissions(
+        this.#dbAdapter,
+        new URL(this.url),
+      );
+
+      let usernames = Object.keys(permissions).filter(
+        (username) => !username.startsWith('@realm/'),
+      );
+      if (usernames.includes('*')) {
+        return 'public';
+      } else if (usernames.includes('users')) {
+        return 'shared';
+      } else if (usernames.length > 1) {
+        return 'shared';
+      } else {
+        return 'private';
+      }
+    })();
+
+    return this.visibilityPromise;
   }
 
   #logRequestPerformance(

@@ -968,6 +968,30 @@ test.describe('Room messages', () => {
     await assertMessages(page, [prompt]);
   });
 
+  test('ai panel stays open when last card is closed and workspace chooser is opened', async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass');
+    await page
+      .locator('[data-test-stack-card] [data-test-close-button]')
+      .click();
+    await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
+
+    page
+      .locator('[data-test-message-field]')
+      .fill('Sending message with no card open');
+
+    await page.locator('[data-test-send-message-btn]').click();
+
+    await assertMessages(page, [
+      {
+        from: 'user1',
+        message: 'Sending message with no card open',
+        cards: [],
+      },
+    ]);
+  });
+
   test('attaches a card in a conversation multiple times', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
 

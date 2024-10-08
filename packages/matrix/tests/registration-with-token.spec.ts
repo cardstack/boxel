@@ -114,17 +114,26 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
 
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
     await expect(
-      page.locator('[data-test-workspace-list] [data-test-workspace-loading-indicator]'),
+      page.locator(
+        '[data-test-workspace-list] [data-test-workspace-loading-indicator]',
+      ),
     ).toHaveCount(1);
     await expect(
-      page.locator('[data-test-workspace-list] [data-test-workspace="Unknown Workspace"]'),
+      page.locator(
+        '[data-test-workspace-list] [data-test-workspace="Unknown Workspace"]',
+      ),
     ).toHaveCount(0);
     await expect(
-      page.locator(`[data-test-workspace-list] [data-test-workspace="Test User's Workspace"]`),
+      page.locator(
+        `[data-test-workspace-list] [data-test-workspace="Test User's Workspace"]`,
+      ),
     ).toHaveCount(1);
     await expect(
       page.locator('[data-test-workspace-list] [data-test-workspace-name]'),
     ).toContainText("Test User's Workspace", { timeout: 30_000 });
+    await expect(
+      page.locator('[data-test-workspace-list] [data-test-workspace-visibility]'),
+    ).toContainText("private", { timeout: 30_000 });
     await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"] img`),
       'the "T" icon URL is shown',
@@ -133,6 +142,10 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       page.locator(`[data-test-workspace="Test User's Workspace"] .icon`),
       'has background image',
     ).toHaveAttribute('style', /--workspace-background-image-url:/);
+    await expect(
+      page.locator(`[data-test-workspace-chooser-toggle]`),
+      'workspace toggle button is disabled when no workspaces opened',
+    ).toBeDisabled();
 
     let newRealmURL = new URL('user1/personal/', serverIndexUrl).href;
     await enterWorkspace(page, "Test User's Workspace");
@@ -143,6 +156,12 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await showAllCards(page);
     await expect(
       page.locator(`[data-test-cards-grid-item="${newRealmURL}hello-world"]`),
+    ).toHaveCount(1);
+    await page.locator(`[data-test-workspace-chooser-toggle]`).click();
+    await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
+    await page.locator(`[data-test-workspace-chooser-toggle]`).click();
+    await expect(
+      page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toHaveCount(1);
 
     // assert that the registration mode state is cleared properly
