@@ -230,6 +230,10 @@ export default class CardPreviewPanel extends Component<Signature> {
         margin: var(--boxel-sp-sm);
       }
 
+      .preview-content > :deep(.boxel-card-container.boundaries) {
+        overflow: hidden;
+      }
+
       .header-actions {
         margin-left: auto;
       }
