@@ -2,13 +2,19 @@ import type Owner from '@ember/owner';
 import Service from '@ember/service';
 import { service } from '@ember/service';
 
+import { cached } from '@glimmer/tracking';
+
 import { task, restartableTask, rawTimeout } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
 
 import { TrackedArray } from 'tracked-built-ins/.';
 
-import { baseRealm, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  SupportedMimeType,
+  Deferred,
+} from '@cardstack/runtime-common';
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
 import ENV from '@cardstack/host/config/environment';
@@ -41,10 +47,12 @@ export default class RealmServerService extends Service {
   private client: ExtendedClient | undefined;
   private _userRealmURLs = new TrackedArray<string>([baseRealm.url]);
   private _catalogRealmURLs = new TrackedArray<string>();
+  private ready = new Deferred<void>();
 
   constructor(owner: Owner) {
     super(owner);
     this.reset.register(this);
+    this.fetchCatalogRealmURLs();
   }
 
   resetState() {
@@ -110,8 +118,12 @@ export default class RealmServerService extends Service {
     window.localStorage.removeItem(sessionLocalStorageKey);
   }
 
+  @cached
   get availableRealmURLs() {
-    return [...this._userRealmURLs, ...this._catalogRealmURLs];
+    return new TrackedArray([
+      ...this._userRealmURLs,
+      ...this._catalogRealmURLs,
+    ]);
   }
 
   get userRealmURLs() {
@@ -123,6 +135,7 @@ export default class RealmServerService extends Service {
   }
 
   async setAvailableRealmURLs(userRealmURLs: string[]) {
+    await this.ready.promise;
     userRealmURLs.forEach((userRealmURL) => {
       if (!this._userRealmURLs.includes(userRealmURL)) {
         this._userRealmURLs.push(userRealmURL);
@@ -143,8 +156,6 @@ export default class RealmServerService extends Service {
     if (!this._userRealmURLs.includes(baseRealmUrl)) {
       this._userRealmURLs.unshift(baseRealmUrl);
     }
-
-    await this.fetchCatalogRealmURLs();
   }
 
   private async fetchCatalogRealmURLs() {
@@ -163,6 +174,7 @@ export default class RealmServerService extends Service {
         this._catalogRealmURLs.push(publicRealm.id);
       }
     });
+    this.ready.fulfill();
   }
 
   get url() {
