@@ -14,7 +14,6 @@ import BeforeOptions from 'ember-power-select/components/power-select/before-opt
 import PowerSelectMultiple from 'ember-power-select/components/power-select-multiple';
 import cn from '../../helpers/cn.ts';
 import type { ComponentLike } from '@glint/template';
-// import { hash } from '@ember/helper';
 
 export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
   customSelectedItem?: ComponentLike<any> | undefined;
@@ -23,7 +22,6 @@ export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
   labelledBy?: string;
   options: ItemT[];
   selected: ItemT[];
-  selectedItemComponent?: ComponentLike<selectedItemComponentSignature<ItemT>>;
 }
 
 export interface Signature<ItemT = any> {
@@ -94,7 +92,7 @@ export default class BoxelMultiSelect<ItemT> extends Component<
             useCustomTriggerComponent=true
           )
           (component
-            SelectedItemComponent
+            DefaultTriggerComponent
             customSelectedItem=null
             useCustomTriggerComponent=false
           )
@@ -362,27 +360,46 @@ export class SelectedItem<ItemT> extends Component<
   }
 
   <template>
-    <span class='ember-power-select-multiple-option'>
+    <div class='ember-power-select-multiple-option'>
       {{#if @useCustomTriggerComponent}}
+
         {{#if (has-block 'default')}}
           {{yield to='default'}}
         {{else}}
           {{this.getItemDisplayValue @item}}
         {{/if}}
-        <span class='icon-wrapper' {{on 'click' (fn @removeItem @item)}}>
+
+        <span
+          class='boxel-multi-select__icon boxel-multi-select__icon--remove'
+          {{on 'click' (fn @removeItem @item)}}
+        >
           {{yield to='icon'}}
         </span>
       {{else}}
         {{this.getItemDisplayValue @item}}
-        <span class='icon-wrapper' {{on 'click' (fn @removeItem @item)}}>
-          x
-        </span>
+
+        <IconX
+          {{on 'click' (fn @removeItem @item)}}
+          class='boxel-multi-select__icon boxel-multi-select__icon--remove'
+        />
       {{/if}}
-    </span>
+    </div>
+
+    <style scoped>
+      .ember-power-select-multiple-option {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+      }
+      .boxel-multi-select__icon--remove {
+        cursor: pointer;
+        --icon-color: var(--boxel-multi-select-pill-color);
+      }
+    </style>
   </template>
 }
 
-export interface selectedItemComponentSignature<ItemT> {
+export interface defaultTriggerComponentSignature<ItemT> {
   Args: {
     hasCheckbox?: boolean;
     option: ItemT;
@@ -402,8 +419,8 @@ export interface selectedItemComponentSignature<ItemT> {
   };
 }
 
-export class SelectedItemComponent<ItemT> extends Component<
-  selectedItemComponentSignature<ItemT>
+export class DefaultTriggerComponent<ItemT> extends Component<
+  defaultTriggerComponentSignature<ItemT>
 > {
   private maxVisibleItems = 3;
 
@@ -462,7 +479,6 @@ export class SelectedItemComponent<ItemT> extends Component<
             <IconX
               {{on 'click' this.removeExcessItems}}
               class='boxel-multi-select__icon boxel-multi-select__icon--remove'
-              aria-label='remove item'
             />
           </span>
         {{/if}}
@@ -473,8 +489,8 @@ export class SelectedItemComponent<ItemT> extends Component<
 
     <style scoped>
       .boxel-multi-select__icon--remove {
-        width: 8px;
-        height: 8px;
+        width: 7px;
+        height: 7px;
         cursor: pointer;
         --icon-color: var(--boxel-multi-select-pill-color);
       }
@@ -496,7 +512,6 @@ export interface TriggerComponentSignature<ItemT> {
     selected: ItemT | ItemT[] | null;
     customSelectedItem?: ComponentLike<any> | undefined;
     useCustomTriggerComponent?: boolean;
-    selectedItemComponent?: any;
     removeItem: (item: ItemT, event: MouseEvent) => void;
   };
   Blocks: {
@@ -572,7 +587,6 @@ export class CustomTriggerComponent<ItemT> extends Component<
           <IconX
             {{on 'click' this.removeExcessItems}}
             class='boxel-multi-select__icon boxel-multi-select__icon--remove'
-            aria-label='remove item'
           />
         </span>
       {{/if}}
@@ -599,6 +613,12 @@ export class CustomTriggerComponent<ItemT> extends Component<
       }
       .error-message {
         color: var(--boxel-red);
+      }
+      .boxel-multi-select__icon--remove {
+        width: 7px;
+        height: 7px;
+        cursor: pointer;
+        --icon-color: var(--boxel-multi-select-pill-color);
       }
     </style>
   </template>
