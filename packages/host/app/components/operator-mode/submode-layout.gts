@@ -397,7 +397,7 @@ export default class SubmodeLayout extends Component<Signature> {
         height: var(--search-sheet-closed-height);
         border-radius: 50px;
         margin-left: var(--boxel-sp);
-        z-index: 1;
+        z-index: 3;
       }
 
       .profile-icon-button {
