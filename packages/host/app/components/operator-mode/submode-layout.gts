@@ -378,7 +378,7 @@ export default class SubmodeLayout extends Component<Signature> {
         top: 0;
         left: 0;
         padding: var(--boxel-sp);
-        z-index: 1;
+        z-index: 4;
 
         display: flex;
         align-items: center;
