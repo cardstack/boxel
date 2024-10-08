@@ -339,6 +339,7 @@ export default class ProfileEmail extends Component<Signature> {
         margin-top: var(--boxel-sp-xl);
         border-radius: var(--boxel-border-radius);
         border: 2px solid var(--boxel-warning-100);
+        overflow: hidden;
       }
       .warning-title {
         display: flex;
@@ -347,8 +348,6 @@ export default class ProfileEmail extends Component<Signature> {
         font-weight: 600;
         padding: var(--boxel-sp-xxs);
         background-color: var(--boxel-warning-100);
-        border-top-left-radius: var(--boxel-border-radius);
-        border-top-right-radius: var(--boxel-border-radius);
       }
       .warning-title span {
         margin-left: var(--boxel-sp-xs);
