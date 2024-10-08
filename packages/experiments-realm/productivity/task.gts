@@ -353,6 +353,46 @@ class Fitted extends Component<typeof Task> {
           text-overflow: ellipsis;
         }
       }
+
+      /* New container query for strip-like layout */
+      @container fitted-card (width > 400px) and (aspect-ratio > 6) {
+        .task-card {
+          flex-direction: row;
+          align-items: center;
+          justify-content: space-between;
+          padding: var(--boxel-sp-xxs) var(--boxel-sp);
+        }
+        .header {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-sm);
+          min-width: 0; /* Allow flexbox to shrink this item */
+        }
+        .footer {
+          display: flex;
+          flex-direction: row;
+          align-items: center;
+          gap: var(--boxel-sp-sm);
+        }
+        .footer-left {
+          margin-left: var(--boxel-sp);
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-xxs);
+        }
+        .footer-right {
+          display: none; /* Hide the date in strip layout */
+        }
+        .task-title {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .avatar {
+          order: 2; /* Move avatar after the project name */
+        }
+      }
     </style>
   </template>
 }
