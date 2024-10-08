@@ -292,8 +292,6 @@ class Fitted extends Component<typeof Task> {
         justify-content: space-between;
         gap: var(--boxel-sp-sm);
         height: 100%;
-        border: var(--boxel-border);
-        border-radius: var(--boxel-border-radius);
         padding: var(--boxel-sp-sm) var(--boxel-sp);
         background-color: #ffffff;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -501,6 +499,11 @@ export class Task extends CardDef {
         .task-detail {
           min-height: var(--boxel-form-control-height);
           margin-bottom: var(--boxel-sp-sm);
+        }
+        .task-meta {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xs);
         }
         .row-1 {
           display: flex;
