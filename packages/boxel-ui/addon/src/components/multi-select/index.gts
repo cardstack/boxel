@@ -25,7 +25,7 @@ export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
   useCustomTriggerComponent?: boolean;
 }
 
-export interface Signature<ItemT = any> {
+export interface Signature<ItemT> {
   Args: BoxelMultiSelectArgs<ItemT>;
   Blocks: {
     default: [ItemT];
@@ -342,7 +342,7 @@ export default class BoxelMultiSelect<ItemT> extends Component<
 export interface SelectedItemSignature<ItemT> {
   Args: {
     customSelectedItem?: ComponentLike<any> | undefined;
-    item: ItemT | any;
+    item: ItemT;
     removeItem: (item: ItemT, event: MouseEvent) => void;
     useCustomTriggerComponent?: boolean;
   };
@@ -350,7 +350,7 @@ export interface SelectedItemSignature<ItemT> {
     content: [];
     icon: [];
   };
-  Element: any;
+  Element: HTMLDivElement;
 }
 
 export class SelectedItem<ItemT> extends Component<

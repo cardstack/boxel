@@ -127,7 +127,7 @@ export default class BoxelMultiSelectUsage extends Component {
 
   @tracked selectedAssignees: AssigneeOption[] = [];
   @tracked hasCheckbox = false;
-  @tracked useCustomTriggerComponent = true;
+  @tracked useCustomTriggerComponent = false;
 
   @cssVariable({ cssClassName: 'boxel-multi-select-usage-container' })
   declare boxelSelectedPillBackgroundColor: CSSVariableInfo;
