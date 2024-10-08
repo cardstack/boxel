@@ -54,6 +54,7 @@ export default class DefaultFittedTemplate extends GlimmerComponent<{
         width: 100%;
         height: 100%;
         display: flex;
+        overflow: hidden;
       }
 
       /* Aspect Ratio <= 1.0 */

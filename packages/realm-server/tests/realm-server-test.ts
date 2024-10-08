@@ -50,6 +50,7 @@ import {
   getFastbootState,
   matrixRegistrationSecret,
   seedPath,
+  testRealmInfo,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
@@ -230,12 +231,7 @@ module('Realm Server', function (hooks) {
                 module: `./person`,
                 name: 'Person',
               },
-              realmInfo: {
-                name: 'Test Realm',
-                backgroundURL: null,
-                iconURL: null,
-                showAsCatalog: null,
-              },
+              realmInfo: testRealmInfo,
               realmURL: testRealmURL.href,
             },
             links: {
@@ -2048,12 +2044,7 @@ module('Realm Server', function (hooks) {
             data: {
               id: testRealmHref,
               type: 'realm-info',
-              attributes: {
-                name: 'Test Realm',
-                backgroundURL: null,
-                iconURL: null,
-                showAsCatalog: null,
-              },
+              attributes: testRealmInfo,
             },
           },
           '/_info response is correct',
@@ -2063,7 +2054,7 @@ module('Realm Server', function (hooks) {
 
     module('permissioned realm', function (hooks) {
       setupPermissionedRealm(hooks, {
-        john: ['read'],
+        john: ['read', 'write'],
       });
 
       test('401 with invalid JWT', async function (assert) {
@@ -2097,10 +2088,87 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.api+json')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', ['read'])}`,
+            `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
           );
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let json = response.body;
+        assert.deepEqual(
+          json,
+          {
+            data: {
+              id: testRealmHref,
+              type: 'realm-info',
+              attributes: { ...testRealmInfo, visibility: 'private' },
+            },
+          },
+          '/_info response is correct',
+        );
+      });
+    });
+
+    module(
+      'shared realm because there is `users` permission',
+      function (hooks) {
+        setupPermissionedRealm(hooks, {
+          users: ['read'],
+        });
+
+        test('200 with permission', async function (assert) {
+          let response = await request
+            .get(`/_info`)
+            .set('Accept', 'application/vnd.api+json')
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'users', ['read'])}`,
+            );
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body;
+          assert.deepEqual(
+            json,
+            {
+              data: {
+                id: testRealmHref,
+                type: 'realm-info',
+                attributes: { ...testRealmInfo, visibility: 'shared' },
+              },
+            },
+            '/_info response is correct',
+          );
+        });
+      },
+    );
+
+    module('shared realm because there are multiple users', function (hooks) {
+      setupPermissionedRealm(hooks, {
+        bob: ['read'],
+        jane: ['read'],
+        john: ['read', 'write'],
+      });
+
+      test('200 with permission', async function (assert) {
+        let response = await request
+          .get(`/_info`)
+          .set('Accept', 'application/vnd.api+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+          );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let json = response.body;
+        assert.deepEqual(
+          json,
+          {
+            data: {
+              id: testRealmHref,
+              type: 'realm-info',
+              attributes: { ...testRealmInfo, visibility: 'shared' },
+            },
+          },
+          '/_info response is correct',
+        );
       });
     });
   });
@@ -2182,7 +2250,7 @@ module('Realm Server', function (hooks) {
             data: {
               type: 'realm',
               attributes: {
-                name: 'Test Realm',
+                ...testRealmInfo,
                 endpoint,
                 backgroundURL: 'http://example.com/background.jpg',
                 iconURL: 'http://example.com/icon.jpg',
@@ -2200,8 +2268,8 @@ module('Realm Server', function (hooks) {
             type: 'realm',
             id: `${testRealm2URL.origin}/${owner}/${endpoint}/`,
             attributes: {
+              ...testRealmInfo,
               endpoint,
-              name: 'Test Realm',
               backgroundURL: 'http://example.com/background.jpg',
               iconURL: 'http://example.com/icon.jpg',
             },
@@ -2928,12 +2996,7 @@ module('Realm Server', function (hooks) {
                 module: `./person`,
                 name: 'Person',
               },
-              realmInfo: {
-                name: 'Test Realm',
-                backgroundURL: null,
-                iconURL: null,
-                showAsCatalog: null,
-              },
+              realmInfo: testRealmInfo,
               realmURL: testRealmURL.href,
             },
             links: {
@@ -3085,12 +3148,7 @@ module('Realm Server', function (hooks) {
           {
             type: 'catalog-realm',
             id: `${testRealm2URL}`,
-            attributes: {
-              name: 'Test Realm',
-              iconURL: null,
-              backgroundURL: null,
-              showAsCatalog: null,
-            },
+            attributes: testRealmInfo,
           },
         ],
       });
