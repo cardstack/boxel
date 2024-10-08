@@ -12,6 +12,7 @@
         "index": null,
         "label": null
       },
+      "dateStarted": null,
       "dueDate": null,
       "description": null,
       "thumbnailURL": null
@@ -19,7 +20,7 @@
     "relationships": {
       "assignee": {
         "links": {
-          "self": null
+          "self": "../TeamMember/5c42e6e9-59c8-4585-a721-e3414d7e7c9e"
         }
       },
       "project": {
@@ -30,6 +31,16 @@
       "team": {
         "links": {
           "self": "../Team/cc574556-4253-44b8-ba80-0cfb844b4908"
+        }
+      },
+      "children": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
         }
       }
     },

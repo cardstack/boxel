@@ -459,9 +459,48 @@ export class Task extends CardDef {
             {{@model.assignee.name}}
             {{#if this.hasDateRange}}
               <div class='task-dates'>
-                <@fields.dateStarted />
-                -
-                <@fields.dueDate />
+                <svg
+                  class='calendar-icon'
+                  width='16'
+                  height='16'
+                  viewBox='0 0 16 16'
+                  fill='none'
+                  xmlns='http://www.w3.org/2000/svg'
+                >
+                  <path
+                    d='M12.6667 2.66667H3.33333C2.59695 2.66667 2 3.26362 2 4V13.3333C2 14.0697 2.59695 14.6667 3.33333 14.6667H12.6667C13.403 14.6667 14 14.0697 14 13.3333V4C14 3.26362 13.403 2.66667 12.6667 2.66667Z'
+                    stroke='currentColor'
+                    stroke-width='1.33333'
+                    stroke-linecap='round'
+                    stroke-linejoin='round'
+                  />
+                  <path
+                    d='M10.6667 1.33333V4'
+                    stroke='currentColor'
+                    stroke-width='1.33333'
+                    stroke-linecap='round'
+                    stroke-linejoin='round'
+                  />
+                  <path
+                    d='M5.33333 1.33333V4'
+                    stroke='currentColor'
+                    stroke-width='1.33333'
+                    stroke-linecap='round'
+                    stroke-linejoin='round'
+                  />
+                  <path
+                    d='M2 6.66667H14'
+                    stroke='currentColor'
+                    stroke-width='1.33333'
+                    stroke-linecap='round'
+                    stroke-linejoin='round'
+                  />
+                </svg>
+                <span class='date-range'>
+                  <@fields.dateStarted />
+                  -
+                  <@fields.dueDate />
+                </span>
               </div>
             {{/if}}
           </div>
@@ -519,6 +558,18 @@ export class Task extends CardDef {
         .progress-bar-container {
           width: 35%;
           max-width: 400px;
+        }
+        .task-dates {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-xxs);
+          color: var(--boxel-400); /* Light grey color for the text */
+        }
+        .calendar-icon {
+          color: var(--boxel-400); /* Light grey color for the icon */
+        }
+        .date-range {
+          font-size: var(--boxel-font-size-sm);
         }
       </style>
     </template>
