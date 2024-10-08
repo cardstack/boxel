@@ -10,7 +10,6 @@ import * as emberTemplateFactory from '@ember/template-factory';
 import * as glimmerComponent from '@glimmer/component';
 import * as glimmerTracking from '@glimmer/tracking';
 
-import loadIconComponent from '@cardstack/boxel-icons/boxel-icons-loader';
 import * as dateFns from 'date-fns';
 import * as emberConcurrency from 'ember-concurrency';
 //@ts-expect-error no types available
@@ -21,7 +20,6 @@ import * as emberProvideConsumeContext from 'ember-provide-consume-context';
 import * as emberProvideConsumeContextContextConsumer from 'ember-provide-consume-context/components/context-consumer';
 import * as emberProvideConsumeContextContextProvider from 'ember-provide-consume-context/components/context-provider';
 import * as emberResources from 'ember-resources';
-import * as ethers from 'ethers';
 import * as flat from 'flat';
 import * as lodash from 'lodash';
 import * as matrixJsSDK from 'matrix-js-sdk';
@@ -65,10 +63,6 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     'ember-concurrency/-private/async-arrow-runtime',
     emberConcurrencyAsyncArrowRuntime,
   );
-  virtualNetwork.shimAsyncModule({
-    prefix: '@cardstack/boxel-icons/',
-    resolve: (rest) => loadIconComponent(rest),
-  });
 
   virtualNetwork.shimModule('ember-modifier', emberModifier2);
   virtualNetwork.shimModule(
@@ -88,7 +82,10 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('tracked-built-ins', tracked);
   virtualNetwork.shimModule('date-fns', dateFns);
   virtualNetwork.shimModule('@ember/destroyable', emberDestroyable);
-  virtualNetwork.shimModule('ethers', ethers);
+  virtualNetwork.shimAsyncModule({
+    id: 'ethers',
+    resolve: () => import('ethers'),
+  });
   virtualNetwork.shimModule('ember-source/types', { default: class {} });
   virtualNetwork.shimModule('ember-source/types/preview', {
     default: class {},

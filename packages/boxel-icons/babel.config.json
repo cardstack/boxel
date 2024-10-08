@@ -13,7 +13,7 @@
     [
       "babel-plugin-ember-template-compilation",
       {
-        "targetFormat": "hbs",
+        "targetFormat": "wire",
         "transforms": []
       }
     ],
