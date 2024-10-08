@@ -134,7 +134,7 @@ export default class BoxelMultiSelectUsage extends Component {
 
   @tracked selectedAssignees: AssigneeOption[] = [];
   @tracked hasCheckbox = false;
-  @tracked useCustomTriggerComponent = true;
+  @tracked useCustomTriggerComponent = false;
 
   @cssVariable({ cssClassName: 'boxel-multi-select-usage-container' })
   declare boxelSelectedPillBackgroundColor: CSSVariableInfo;
@@ -266,26 +266,8 @@ export default class BoxelMultiSelectUsage extends Component {
           <Args.Object
             @name='customSelectedItem'
             @description='A custom component to render selected items when useCustomTriggerComponent is true. This component can customize the visual appearance and icon of the selected item.'
-            @required={{false}}
-          >
-            <Args.String @name='item' @description='The selected item object' />
-            <Args.Action
-              @name='removeItem'
-              @description='Action to remove the item from selection'
-            />
-            <Args.Bool
-              @name='useCustomTriggerComponent'
-              @description='Indicates whether the custom trigger component should be used'
-            />
-            <Args.Yield
-              @name='default'
-              @description='Yields the content of the selected item'
-            />
-            <Args.Yield
-              @name='icon'
-              @description='Yields a slot for custom icon component'
-            />
-          </Args.Object>
+            @required={{true}}
+          />
         </:api>
         <:cssVars as |Css|>
           <Css.Basic
@@ -319,6 +301,7 @@ export default class BoxelMultiSelectUsage extends Component {
             @hasCheckbox={{true}}
             @useCustomTriggerComponent={{this.useCustomTriggerComponent}}
             @labelledBy='assignee-selct-label'
+            @ariaLabel='Select assignees'
             as |option|
           >
             <AssigneePill
