@@ -289,6 +289,7 @@ class Isolated extends Component<typeof CardsGrid> {
         list-style-type: none;
         margin: 0;
         padding: 0;
+        padding-left: 1px;
         display: grid;
         grid-template-columns: repeat(
           auto-fill,
@@ -299,11 +300,8 @@ class Isolated extends Component<typeof CardsGrid> {
         flex-grow: 1;
       }
       .card {
-        overflow: hidden;
-        cursor: pointer;
         container-name: fitted-card;
         container-type: size;
-        padding: 1px;
       }
       .add-button {
         display: inline-block;
