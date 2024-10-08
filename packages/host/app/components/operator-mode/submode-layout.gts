@@ -265,14 +265,14 @@ export default class SubmodeLayout extends Component<Signature> {
           </div>
           {{#if this.workspaceChooserOpened}}
             <WorkspaceChooser />
-          {{else}}
-            {{yield
-              (hash
-                openSearchToPrompt=this.openSearchSheetToPrompt
-                openSearchToResults=this.openSearchAndShowResults
-              )
-            }}
           {{/if}}
+
+          {{yield
+            (hash
+              openSearchToPrompt=this.openSearchSheetToPrompt
+              openSearchToResults=this.openSearchAndShowResults
+            )
+          }}
           <div class='profile-icon-container'>
             <button
               class='profile-icon-button'
@@ -292,13 +292,7 @@ export default class SubmodeLayout extends Component<Signature> {
             @onCardSelect={{this.handleCardSelectFromSearch}}
             @onInputInsertion={{this.storeSearchElement}}
           />
-          {{#if
-            (and
-              APP.experimentalAIEnabled
-              (not @hideAiAssistant)
-              (not this.workspaceChooserOpened)
-            )
-          }}
+          {{#if (and APP.experimentalAIEnabled (not @hideAiAssistant))}}
             <AiAssistantToast
               @hide={{this.isAiAssistantVisible}}
               @onViewInChatClick={{this.toggleChat}}
@@ -310,13 +304,7 @@ export default class SubmodeLayout extends Component<Signature> {
             />
           {{/if}}
         </ResizablePanel>
-        {{#if
-          (and
-            APP.experimentalAIEnabled
-            (not @hideAiAssistant)
-            (not this.workspaceChooserOpened)
-          )
-        }}
+        {{#if (and APP.experimentalAIEnabled (not @hideAiAssistant))}}
           <ResizablePanel
             @defaultLengthFraction={{0.3}}
             @minLengthPx={{371}}
@@ -327,7 +315,8 @@ export default class SubmodeLayout extends Component<Signature> {
               <AiAssistantPanel
                 @onClose={{this.toggleChat}}
                 @resizeHandle={{ResizeHandle}}
-                class='ai-assistant-panel'
+                class='ai-assistant-panel
+                  {{if this.workspaceChooserOpened "left-border"}}'
               />
             {{/if}}
           </ResizablePanel>
@@ -389,7 +378,7 @@ export default class SubmodeLayout extends Component<Signature> {
         top: 0;
         left: 0;
         padding: var(--boxel-sp);
-        z-index: 1;
+        z-index: 4;
 
         display: flex;
         align-items: center;
@@ -408,7 +397,7 @@ export default class SubmodeLayout extends Component<Signature> {
         height: var(--search-sheet-closed-height);
         border-radius: 50px;
         margin-left: var(--boxel-sp);
-        z-index: 1;
+        z-index: 3;
       }
 
       .profile-icon-button {
