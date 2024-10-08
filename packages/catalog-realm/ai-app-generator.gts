@@ -66,24 +66,13 @@ class HowToSidebar extends GlimmerComponent {
       </header>
       <div class='intro-content'>
         <p>
-          Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
-          eiusmod tempor.
+          Add a description of what you want, who it's for and any key features
+          you need. We'll generate a product requirements document for you with
+          the help of AI.
         </p>
         <p>
-          <ul class='intro-list'>
-            <li>Website</li>
-            <li>CRM</li>
-            <li>Scheduler</li>
-            <li>Chess Game</li>
-            <li>Music Instrument</li>
-            <li>Generative Art</li>
-          </ul>
-        </p>
-        <p>
-          Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
-          dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non
-          proident, sunt in culpa qui officia deserunt mollit anim id est
-          laborum.
+          Look for the AI assistant icon in the bottom right of the screen to
+          see the assistant.
         </p>
       </div>
     </aside>
