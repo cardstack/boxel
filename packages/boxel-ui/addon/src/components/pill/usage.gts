@@ -27,6 +27,8 @@ export default class PillUsage extends Component {
   declare pillGap: CSSVariableInfo;
   @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare pillIconSize: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'header-freestyle-container' })
+  declare pillBorderColor: CSSVariableInfo;
 
   <template>
     <div
@@ -37,6 +39,7 @@ export default class PillUsage extends Component {
         pill-padding=this.pillPadding.value
         pill-gap=this.pillGap.value
         pill-icon-size=this.pillIconSize.value
+        pill-border-color=this.pillBorderColor.value
       }}
     >
       <FreestyleUsage @name='Pill'>
@@ -102,6 +105,14 @@ export default class PillUsage extends Component {
             @description='Size of the icon'
             @value={{this.pillIconSize.value}}
             @onInput={{this.pillIconSize.update}}
+          />
+          <Css.Basic
+            @name='pill-border-color'
+            @type='color'
+            @description='Border color of the pill'
+            @defaultValue='var(--boxel-400)'
+            @value={{this.pillBorderColor.value}}
+            @onInput={{this.pillBorderColor.update}}
           />
         </:cssVars>
       </FreestyleUsage>
