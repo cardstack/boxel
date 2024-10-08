@@ -43,9 +43,14 @@
           "self": "./9e23b8b5-d541-48ef-a652-e7afefb29777"
         }
       },
-      "tags": {
+      "tags.0": {
         "links": {
-          "self": null
+          "self": "../Tag/6b8446c8-b185-4de9-ba81-88f8b9eee7f5"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/ad921cba-ffc7-4fdb-af34-ab8b93eae228"
         }
       }
     },
