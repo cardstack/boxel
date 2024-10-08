@@ -207,11 +207,14 @@ export default class AiAssistantPanel extends Component<Signature> {
     {{/if}}
 
     <style scoped>
+      .left-border {
+        border-left: 1px solid var(--boxel-600);
+      }
+
       .ai-assistant-panel {
         display: grid;
         grid-template-rows: auto 1fr;
         background-color: var(--boxel-ai-purple);
-        border: none;
         border-radius: 0;
         color: var(--boxel-light);
         height: 100%;

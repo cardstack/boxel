@@ -327,6 +327,7 @@ class DashboardTab extends GlimmerComponent<{
         gap: var(--boxel-sp-xxl);
         padding: var(--boxel-sp);
         background-color: #f7f7f7;
+        overflow-x: auto;
       }
       .section-header {
         display: flex;

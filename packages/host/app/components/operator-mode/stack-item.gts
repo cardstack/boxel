@@ -181,20 +181,36 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private get styleForStackedCard(): SafeString {
     const stackItemMaxWidth = '50rem';
     const widthReductionPercent = 5; // Every new card on the stack is 5% wider than the previous one
-    const offsetPx = 30; // Every new card on the stack is 30px lower than the previous one
+    const numberOfCards = this.args.stackItems.length;
+    const invertedIndex = numberOfCards - this.args.index - 1;
+    const isLastCard = this.args.index === numberOfCards - 1;
+    const isSecondLastCard = this.args.index === numberOfCards - 2;
 
-    let invertedIndex = this.args.stackItems.length - this.args.index - 1;
+    let marginTopPx = 0;
+
+    if (invertedIndex > 2) {
+      marginTopPx = -5; // If there are more than 3 cards, those cards are buried behind the header
+    }
+
+    if (numberOfCards > 1) {
+      if (isLastCard) {
+        marginTopPx = numberOfCards === 2 ? 30 : 55;
+      } else if (isSecondLastCard && numberOfCards > 2) {
+        marginTopPx = 25;
+      }
+    }
+
     let maxWidthPercent = 100 - invertedIndex * widthReductionPercent;
     let width = this.isItemFullWidth
       ? '100%'
       : `calc(${stackItemMaxWidth} * ${maxWidthPercent} / 100)`;
 
     let styles = `
-      height: calc(100% - ${offsetPx}px * ${this.args.index});
+      height: calc(100% - ${marginTopPx}px);
       width: ${width};
       max-width: ${maxWidthPercent}%;
       z-index: calc(${this.args.index} + 1);
-      margin-top: calc(${offsetPx}px * ${this.args.index});
+      margin-top: ${marginTopPx}px;
     `; // using margin-top instead of padding-top to hide scrolled content from view
 
     if (this.args.item.isWideFormat) {
@@ -592,7 +608,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     <style scoped>
       :global(:root) {
         --stack-card-footer-height: 6rem;
-        --stack-item-header-area-height: 3.5rem;
+        --stack-item-header-area-height: 3.375rem;
         --buried-operator-mode-header-height: 2.5rem;
       }
 
