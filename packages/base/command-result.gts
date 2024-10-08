@@ -16,7 +16,7 @@ import {
   ArrowLeft,
   IconMinusCircle,
   IconPlus,
-  IconSearch,
+  IconSearchThick,
   ThreeDotsHorizontal,
 } from '@cardstack/boxel-ui/icons';
 import { getCard } from '@cardstack/runtime-common';
@@ -195,7 +195,7 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
       >
         <:icon>
           <div class='search-icon-container'>
-            <IconSearch class='search-icon' width='14.6px' height='14.6px' />
+            <IconSearchThick width='16' height='16' />
           </div>
         </:icon>
         <:actions>
@@ -258,9 +258,6 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
         border-radius: var(--boxel-border-radius);
         --left-padding: var(--boxel-sp-xs);
       }
-      .search-icon {
-        --icon-stroke-width: 3.5;
-      }
       .search-icon-container {
         background-color: var(--boxel-border-color);
         display: flex;
@@ -268,7 +265,7 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
         border-radius: var(--boxel-border-radius-sm);
       }
       .header {
-        --boxel-label-color: var(--boxel-400);
+        --boxel-label-color: var(--boxel-450);
         --boxel-label-font: 500 var(--boxel-font-xs);
         --boxel-header-padding: var(--boxel-sp-xxxs) var(--boxel-sp-xxxs) 0
           var(--left-padding);
