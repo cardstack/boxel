@@ -2054,8 +2054,7 @@ module('Realm Server', function (hooks) {
 
     module('permissioned realm', function (hooks) {
       setupPermissionedRealm(hooks, {
-        john: ['read', 'write', 'realm-owner'],
-        '@realm/test-worker': ['read', 'write', 'realm-owner'],
+        john: ['read', 'write'],
       });
 
       test('401 with invalid JWT', async function (assert) {
@@ -2089,11 +2088,7 @@ module('Realm Server', function (hooks) {
           .set('Accept', 'application/vnd.api+json')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', [
-              'read',
-              'write',
-              'realm-owner',
-            ])}`,
+            `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
           );
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -2116,9 +2111,7 @@ module('Realm Server', function (hooks) {
       'shared realm because there is `users` permission',
       function (hooks) {
         setupPermissionedRealm(hooks, {
-          users: ['read', 'write'],
-          john: ['read', 'write', 'realm-owner'],
-          '@realm/test-worker': ['read', 'write', 'realm-owner'],
+          users: ['read'],
         });
 
         test('200 with permission', async function (assert) {
@@ -2127,11 +2120,7 @@ module('Realm Server', function (hooks) {
             .set('Accept', 'application/vnd.api+json')
             .set(
               'Authorization',
-              `Bearer ${createJWT(testRealm, 'john', [
-                'read',
-                'write',
-                'realm-owner',
-              ])}`,
+              `Bearer ${createJWT(testRealm, 'users', ['read'])}`,
             );
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -2151,45 +2140,37 @@ module('Realm Server', function (hooks) {
       },
     );
 
-    module(
-      'shared realm because there are non-realm owner users',
-      function (hooks) {
-        setupPermissionedRealm(hooks, {
-          bob: ['read'],
-          jane: ['read'],
-          john: ['read', 'write', 'realm-owner'],
-          '@realm/test-worker': ['read', 'write', 'realm-owner'],
-        });
+    module('shared realm because there are multiple users', function (hooks) {
+      setupPermissionedRealm(hooks, {
+        bob: ['read'],
+        jane: ['read'],
+        john: ['read', 'write'],
+      });
 
-        test('200 with permission', async function (assert) {
-          let response = await request
-            .get(`/_info`)
-            .set('Accept', 'application/vnd.api+json')
-            .set(
-              'Authorization',
-              `Bearer ${createJWT(testRealm, 'john', [
-                'read',
-                'write',
-                'realm-owner',
-              ])}`,
-            );
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-          let json = response.body;
-          assert.deepEqual(
-            json,
-            {
-              data: {
-                id: testRealmHref,
-                type: 'realm-info',
-                attributes: { ...testRealmInfo, visibility: 'shared' },
-              },
-            },
-            '/_info response is correct',
+      test('200 with permission', async function (assert) {
+        let response = await request
+          .get(`/_info`)
+          .set('Accept', 'application/vnd.api+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
           );
-        });
-      },
-    );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let json = response.body;
+        assert.deepEqual(
+          json,
+          {
+            data: {
+              id: testRealmHref,
+              type: 'realm-info',
+              attributes: { ...testRealmInfo, visibility: 'shared' },
+            },
+          },
+          '/_info response is correct',
+        );
+      });
+    });
   });
 
   module('various other realm tests', function (hooks) {
