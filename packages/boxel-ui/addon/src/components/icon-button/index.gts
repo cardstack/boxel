@@ -65,6 +65,10 @@ class IconButton extends Component<Signature> {
         cursor: pointer;
       }
 
+      button:disabled {
+        cursor: default;
+      }
+
       .primary {
         --icon-bg: var(--boxel-highlight);
         --icon-border: var(--boxel-highlight);

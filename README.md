@@ -30,6 +30,8 @@ For a quickstart, see [here](./QUICKSTART.md)
 
 `packages/ai-bot` is a node app that runs a matrix client session and an OpenAI session. Matrix message queries sent to the AI bot are packaged with an OpenAI system prompt and operator mode context and sent to OpenAI. The ai bot enriches the OpenAI response and posts the response back into the matrix room.
 
+`packages/vscode-boxel-tools` is a VS Code extension for browsing Boxel workspaces, published as [Boxel Tools](https://marketplace.visualstudio.com/items?itemName=cardstack.boxel-tools). It can be deployed via the bot, with `staging` environment producing a pre-release version.
+
 To learn more about Boxel and Cards, see our [documentation](./docs/README.md)
 
 ## Running the Host App
