@@ -50,6 +50,7 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   });
   // import * as glimmerTracking from "@glimmer/tracking";
   virtualNetwork.shimModule('@glimmer/tracking', {
+    cached() {},
     tracked() {},
   });
   // import * as emberObject from "ember-source/dist/packages/@ember/object";

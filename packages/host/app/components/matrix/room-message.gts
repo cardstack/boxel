@@ -18,7 +18,7 @@ import { MatrixEvent } from 'matrix-js-sdk';
 import { Button } from '@cardstack/boxel-ui/components';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
-import { markdownToHtml } from '@cardstack/runtime-common';
+import { isCardInstance, markdownToHtml } from '@cardstack/runtime-common';
 
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
@@ -30,7 +30,7 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-import { type CommandField } from 'https://cardstack.com/base/command';
+import { type CommandCard } from 'https://cardstack.com/base/command';
 
 import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
@@ -113,6 +113,7 @@ export default class RoomMessage extends Component<Signature> {
   }
 
   @tracked streamingTimeout = false;
+  @tracked commandResult: any;
 
   checkStreamingTimeout = task(async () => {
     if (!this.isFromAssistant || !this.args.isStreaming) {
@@ -136,7 +137,11 @@ export default class RoomMessage extends Component<Signature> {
   }
 
   get getComponent() {
-    return this.commandService.getCommandResultComponent(this.args.message);
+    let { commandResult } = this.args.message;
+    if (!commandResult || !isCardInstance(commandResult)) {
+      return undefined;
+    }
+    return commandResult.constructor.getComponent(commandResult);
   }
 
   <template>
@@ -235,7 +240,9 @@ export default class RoomMessage extends Component<Signature> {
             </div>
           {{/if}}
           {{#let this.getComponent as |Component|}}
-            <Component @format='embedded' />
+            {{#if Component}}
+              <Component @format='embedded' />
+            {{/if}}
           {{/let}}
         {{/if}}
       </AiAssistantMessage>
@@ -400,7 +407,7 @@ export default class RoomMessage extends Component<Signature> {
     return this.matrixService.failedCommandState.get(this.command.eventId);
   }
 
-  run = task(async (command: CommandField, roomId: string) => {
+  run = task(async (command: CommandCard, roomId: string) => {
     return this.commandService.run.unlinked().perform(command, roomId);
   });
 

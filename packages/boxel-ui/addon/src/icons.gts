@@ -37,6 +37,7 @@ import IconPencilNotCrossedOut from './icons/icon-pencil-not-crossed-out.gts';
 import IconPlus from './icons/icon-plus.gts';
 import IconPlusCircle from './icons/icon-plus-circle.gts';
 import IconSearch from './icons/icon-search.gts';
+import IconSearchThick from './icons/icon-search-thick.gts';
 import IconTrash from './icons/icon-trash.gts';
 import IconTurnDownRight from './icons/icon-turn-down-right.gts';
 import IconX from './icons/icon-x.gts';
@@ -44,7 +45,6 @@ import ImagePlaceholder from './icons/image-placeholder.gts';
 import LoadingIndicator from './icons/loading-indicator.gts';
 import Lock from './icons/lock.gts';
 import Profile from './icons/profile.gts';
-import Search from './icons/search.gts';
 import Send from './icons/send.gts';
 import Sparkle from './icons/sparkle.gts';
 import SuccessBordered from './icons/success-bordered.gts';
@@ -87,6 +87,7 @@ export const ALL_ICON_COMPONENTS = [
   IconPlus,
   IconPlusCircle,
   IconSearch,
+  IconSearchThick,
   IconTrash,
   IconTurnDownRight,
   IconX,
@@ -94,7 +95,6 @@ export const ALL_ICON_COMPONENTS = [
   LoadingIndicator,
   Lock,
   Profile,
-  Search,
   Send,
   Sparkle,
   SuccessBordered,
@@ -138,6 +138,7 @@ export {
   IconPlus,
   IconPlusCircle,
   IconSearch,
+  IconSearchThick,
   IconTrash,
   IconTurnDownRight,
   IconX,
@@ -145,7 +146,6 @@ export {
   LoadingIndicator,
   Lock,
   Profile,
-  Search,
   Send,
   Sparkle,
   SuccessBordered,
