@@ -28,6 +28,7 @@ import {
 } from './middleware';
 import { registerUser } from './synapse';
 import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp';
+import convertAuthHeaderQueryParam from './middleware/convert-auth-header-qp';
 import { NodeAdapter } from './node-realm';
 import { resolve, join } from 'path';
 import merge from 'lodash/merge';
@@ -190,6 +191,7 @@ export class RealmServer {
         await next();
       })
       .use(convertAcceptHeaderQueryParam)
+      .use(convertAuthHeaderQueryParam)
       .use(router.routes())
       .use(this.serveIndex)
       .use(this.serveFromRealm);

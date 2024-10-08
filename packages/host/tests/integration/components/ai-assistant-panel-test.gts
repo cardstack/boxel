@@ -1706,6 +1706,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
         },
         eventId: '__EVENT_ID__',
       }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
+      },
     });
     let commandReactionEvents = getRoomEvents(roomId).filter(
       (event) =>
@@ -1776,6 +1780,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
         },
         eventId: '__EVENT_ID__',
       }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
+      },
     });
     let commandResultEvents = getRoomEvents(roomId).filter(
       (event) =>
@@ -1836,6 +1844,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
         },
         eventId: '__EVENT_ID__',
       }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
+      },
     });
     await waitFor('[data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
@@ -1947,6 +1959,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
         },
         eventId: '__EVENT_ID__',
       }),
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
+      },
     });
     await waitFor('[data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');

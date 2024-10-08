@@ -51,25 +51,27 @@ export class DirectoryResource extends Resource<Args> {
   }
 
   modify(_positional: never[], named: Args['named']) {
-    this.directoryURL = new URL(named.relativePath, named.realmURL);
+    let { relativePath, realmURL } = named;
+    this.directoryURL = new URL(relativePath, realmURL);
     this.readdir.perform();
 
-    let path = `${named.realmURL}_message`;
-
-    if (this.subscription && this.subscription.url !== path) {
+    if (this.subscription && this.subscription.url !== realmURL.href) {
       this.subscription.unsubscribe();
       this.subscription = undefined;
     }
 
     if (!this.subscription) {
       this.subscription = {
-        url: path,
-        unsubscribe: this.messageService.subscribe(path, ({ type }) => {
-          // we are only interested in the filesystem based events
-          if (type === 'update') {
-            this.readdir.perform();
-          }
-        }),
+        url: realmURL.href,
+        unsubscribe: this.messageService.subscribe(
+          realmURL.href,
+          ({ type }) => {
+            // we are only interested in the filesystem based events
+            if (type === 'update') {
+              this.readdir.perform();
+            }
+          },
+        ),
       };
     }
   }

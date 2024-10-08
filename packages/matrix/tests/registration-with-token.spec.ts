@@ -1,4 +1,6 @@
 import { expect, test } from '@playwright/test';
+import { writeJSONSync } from 'fs-extra';
+import { join } from 'path';
 import {
   synapseStart,
   synapseStop,
@@ -112,13 +114,19 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
 
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
     await expect(
-      page.locator('[data-test-workspace-list] [data-test-workspace-loading-indicator]'),
+      page.locator(
+        '[data-test-workspace-list] [data-test-workspace-loading-indicator]',
+      ),
     ).toHaveCount(1);
     await expect(
-      page.locator('[data-test-workspace-list] [data-test-workspace="Unknown Workspace"]'),
+      page.locator(
+        '[data-test-workspace-list] [data-test-workspace="Unknown Workspace"]',
+      ),
     ).toHaveCount(0);
     await expect(
-      page.locator(`[data-test-workspace-list] [data-test-workspace="Test User's Workspace"]`),
+      page.locator(
+        `[data-test-workspace-list] [data-test-workspace="Test User's Workspace"]`,
+      ),
     ).toHaveCount(1);
     await expect(
       page.locator('[data-test-workspace-list] [data-test-workspace-name]'),
@@ -134,6 +142,10 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       page.locator(`[data-test-workspace="Test User's Workspace"] .icon`),
       'has background image',
     ).toHaveAttribute('style', /--workspace-background-image-url:/);
+    await expect(
+      page.locator(`[data-test-workspace-chooser-toggle]`),
+      'workspace toggle button is disabled when no workspaces opened',
+    ).toBeDisabled();
 
     let newRealmURL = new URL('user1/personal/', serverIndexUrl).href;
     await enterWorkspace(page, "Test User's Workspace");
@@ -144,6 +156,12 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await showAllCards(page);
     await expect(
       page.locator(`[data-test-cards-grid-item="${newRealmURL}hello-world"]`),
+    ).toHaveCount(1);
+    await page.locator(`[data-test-workspace-chooser-toggle]`).click();
+    await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
+    await page.locator(`[data-test-workspace-chooser-toggle]`).click();
+    await expect(
+      page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toHaveCount(1);
 
     // assert that the registration mode state is cleared properly
@@ -196,6 +214,33 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       page.locator(`[data-test-card="${newRealmURL}hello-world"]`),
     ).toContainText('Hello World');
 
+    // assert that host app can subscribe to SSE events of a private realm
+    let path = join(
+      realmServer.realmPath,
+      '..',
+      'user1',
+      'personal',
+      'hello-world.json',
+    );
+    writeJSONSync(path, {
+      data: {
+        type: 'card',
+        attributes: {
+          title: 'Hello Mars',
+          description: 'This is a test card instance.',
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/card-api',
+            name: 'CardDef',
+          },
+        },
+      },
+    });
+    await expect(
+      page.locator(`[data-test-card="${newRealmURL}hello-world"]`),
+    ).toContainText('Hello Mars');
+
     // assert that non-logged in user is prompted to login before navigating
     // directly to card in private repo
     await logout(page);
@@ -208,7 +253,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await assertLoggedIn(page, { displayName: 'Test User' });
     await expect(
       page.locator(`[data-test-card="${newRealmURL}hello-world"]`),
-    ).toContainText('Hello World');
+    ).toHaveCount(1);
 
     let auth = await loginUser(`user1`, 'mypassword1!');
     let realms = await getAccountData<{ realms: string[] } | undefined>(
