@@ -408,6 +408,9 @@ export class Task extends CardDef {
             </:default>
           </Pill>
         </div>
+        <div>
+          {{@model.taskDetail}}
+        </div>
         <div class='row-1'>
           <Avatar
             @userId={{@model.assignee.id}}
@@ -437,9 +440,6 @@ export class Task extends CardDef {
           </div>
         </div>
         <div>
-          {{@model.taskDetail}}
-        </div>
-        <div>
           <@fields.children />
         </div>
       </div>
@@ -462,6 +462,7 @@ export class Task extends CardDef {
         .row-2 {
           display: flex;
           align-items: center;
+          justify-content: space-between;
           gap: var(--boxel-sp-xxs);
         }
       </style>

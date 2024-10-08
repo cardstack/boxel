@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "taskName": "Pair with Lucas to complete demo",
-      "taskDetail": null,
+      "taskDetail": "By Tuesday, we should have a demo that completes everything",
       "status": {
         "index": 2,
         "label": "Current Sprint"
@@ -41,6 +41,11 @@
       "children.1": {
         "links": {
           "self": "./9e23b8b5-d541-48ef-a652-e7afefb29777"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
         }
       }
     },
