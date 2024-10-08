@@ -433,16 +433,16 @@ export class Task extends CardDef {
                 {{@model.status.label}}
               </:default>
             </Pill>
-            <div>
-              Progress
-              <ProgressBar @value={{50}} @max={{100}} />
-              {{#if this.hasProgress}}
-                50%
-              {{/if}}
+            <div class='progress-bar-container'>
+              <ProgressBar
+                @label={{this.progressLabel}}
+                @value={{this.progress}}
+                @max={{100}}
+              />
             </div>
           </div>
         </div>
-        <div>
+        <div class='children-task'>
           <@fields.children />
         </div>
       </div>
@@ -473,6 +473,10 @@ export class Task extends CardDef {
           justify-content: space-between;
           gap: var(--boxel-sp-xxs);
         }
+        .progress-bar-container {
+          width: 35%;
+          max-width: 400px;
+        }
       </style>
     </template>
 
@@ -482,6 +486,14 @@ export class Task extends CardDef {
 
     get hasProgress() {
       return this.args.model.children && this.args.model.children.length > 0;
+    }
+
+    get progress() {
+      return 50;
+    }
+
+    get progressLabel() {
+      return `${this.progress}%`;
     }
   };
 
