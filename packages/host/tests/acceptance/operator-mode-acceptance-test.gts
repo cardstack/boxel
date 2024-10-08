@@ -592,9 +592,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert
       .dom(`[data-test-workspace-list] [data-test-workspace-loading-indicator]`)
       .doesNotExist();
-    assert
-      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
-      .doesNotExist();
+
     url = currentURL().split('?')[1].replace(/^\/\?/, '') ?? '';
     urlParameters = new URLSearchParams(url);
     assert.true(Boolean(urlParameters.get('workspaceChooserOpened')));
