@@ -224,8 +224,11 @@ export default class BoxelMultiSelect<ItemT> extends Component<
         pointer-events: none;
       }
       .boxel-multi-select__icon {
-        width: 12px;
-        height: 12px;
+        display: flex;
+        justify-content: center;
+        width: 10px;
+        height: 10px;
+        cursor: pointer;
       }
       .boxel-multi-select__icon-button--clear {
         --icon-color: var(--boxel-multi-select-pill-color);
@@ -300,8 +303,10 @@ export default class BoxelMultiSelect<ItemT> extends Component<
         padding: var(--boxel-sp-xxs) var(--boxel-sp-sm);
       }
       .boxel-multi-select__icon {
-        width: 12px;
-        height: 12px;
+        display: flex;
+        justify-content: center;
+        width: 10px;
+        height: 10px;
         cursor: pointer;
       }
       .boxel-multi-select__icon--clear {
@@ -392,6 +397,10 @@ export class SelectedItem<ItemT> extends Component<
         gap: var(--boxel-sp-xs);
       }
       .boxel-multi-select__icon--remove {
+        display: flex;
+        justify-content: center;
+        width: 10px;
+        height: 10px;
         cursor: pointer;
         --icon-color: var(--boxel-multi-select-pill-color);
       }
@@ -489,8 +498,10 @@ export class DefaultTriggerComponent<ItemT> extends Component<
 
     <style scoped>
       .boxel-multi-select__icon--remove {
-        width: 7px;
-        height: 7px;
+        display: flex;
+        justify-content: center;
+        width: 10px;
+        height: 10px;
         cursor: pointer;
         --icon-color: var(--boxel-multi-select-pill-color);
       }
@@ -616,8 +627,10 @@ export class CustomTriggerComponent<ItemT> extends Component<
         color: var(--boxel-red);
       }
       .boxel-multi-select__icon--remove {
-        width: 7px;
-        height: 7px;
+        display: flex;
+        justify-content: center;
+        width: 10px;
+        height: 10px;
         cursor: pointer;
         --icon-color: var(--boxel-multi-select-pill-color);
       }

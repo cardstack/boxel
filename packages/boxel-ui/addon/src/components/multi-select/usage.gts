@@ -103,13 +103,6 @@ class SelectedCountry extends Component<SelectedItemSignature<Country>> {
         <IconTrash />
       </:icon>
     </SelectedItem>
-
-    <style scoped>
-      .boxel-multi-select__icon {
-        width: 12px;
-        height: 12px;
-      }
-    </style>
   </template>
 }
 
@@ -134,7 +127,7 @@ export default class BoxelMultiSelectUsage extends Component {
 
   @tracked selectedAssignees: AssigneeOption[] = [];
   @tracked hasCheckbox = false;
-  @tracked useCustomTriggerComponent = false;
+  @tracked useCustomTriggerComponent = true;
 
   @cssVariable({ cssClassName: 'boxel-multi-select-usage-container' })
   declare boxelSelectedPillBackgroundColor: CSSVariableInfo;
