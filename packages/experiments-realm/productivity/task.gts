@@ -453,7 +453,13 @@ export class Task extends CardDef {
       <div class='task-card'>
         <div class='task-header'>
           <h2 class='task-title'>{{@model.taskName}}</h2>
-          <Pill>
+          <Pill
+            class='small-pill'
+            style={{cssVar
+              pill-font-color=@model.status.color
+              pill-border-color=@model.status.color
+            }}
+          >
             <:default>
               {{@model.status.label}}
             </:default>
@@ -519,17 +525,14 @@ export class Task extends CardDef {
             {{/if}}
           </div>
           <div class='row-2'>
-            <Pill
-              style={{cssVar
-                pill-font-color=@model.status.color
-                pill-border-color=@model.status.color
-              }}
-            >
-              <:default>
-                {{@model.status.label}}
-              </:default>
-            </Pill>
-            {{#if this.hasChildren}}
+            {{! Fill in tag list here }}
+          </div>
+        </div>
+        {{#if this.hasChildren}}
+          <div class='subtasks-section'>
+            <div class='subtasks-header-container'>
+              <h4 class='subtasks-header'>Subtasks ({{this.childrenCount}}
+                child tasks)</h4>
               <div class='progress-bar-container'>
                 <ProgressBar
                   @label={{this.progressLabel}}
@@ -537,13 +540,7 @@ export class Task extends CardDef {
                   @max={{100}}
                 />
               </div>
-            {{/if}}
-          </div>
-        </div>
-        {{#if this.hasChildren}}
-          <div class='subtasks-section'>
-            <h4 class='subtasks-header'>Subtasks ({{this.childrenCount}}
-              child tasks)</h4>
+            </div>
             {{#each @fields.children as |child|}}
               <div class='subtask-item'>
                 <child />
@@ -584,8 +581,6 @@ export class Task extends CardDef {
         }
         .row-2 {
           display: flex;
-          align-items: center;
-          justify-content: space-between;
           gap: var(--boxel-sp-xxs);
         }
         .progress-bar-container {
@@ -611,6 +606,13 @@ export class Task extends CardDef {
         }
         .subtasks-section {
           border-radius: var(--boxel-border-radius);
+          min-width: 150px;
+          max-width: 600px;
+        }
+        .subtasks-header-container {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
         }
         .subtasks-header {
           padding: 0 var(--boxel-sp-xxs);
@@ -619,11 +621,15 @@ export class Task extends CardDef {
         }
         .subtask-item {
           padding: var(--boxel-sp-xxs);
-          min-width: 150px;
-          max-width: 600px;
           display: flex;
           align-items: center;
           overflow: hidden;
+        }
+
+        .small-pill {
+          --pill-padding: var(--boxel-sp-5xs) var(--boxel-sp-xxxs);
+          --pill-font-size: var(--boxel-font-size-xs);
+          --pill-border-radius: var(--boxel-border-radius-xs);
         }
       </style>
     </template>
