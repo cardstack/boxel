@@ -266,7 +266,7 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
       }
       .header {
         --boxel-label-color: var(--boxel-450);
-        --boxel-label-font: 500 var(--boxel-font-xs);
+        --boxel-label-font: 600 var(--boxel-font-xs);
         --boxel-header-padding: var(--boxel-sp-xxxs) var(--boxel-sp-xxxs) 0
           var(--left-padding);
       }
@@ -376,6 +376,7 @@ class CommandResultIsolated extends CommandResultEmbeddedView {
       }
       pre {
         margin: 0;
+        white-space: pre-wrap;
       }
       .result-count {
         margin: 0;

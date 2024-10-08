@@ -1,5 +1,6 @@
 import {
   CardDef,
+  Component,
   FieldDef,
   StringField,
   contains,
@@ -14,6 +15,22 @@ class CommandStatusField extends StringField {
   static [primitive]: CommandStatus;
 }
 
+class CommandObjectFieldTemplate extends Component<typeof CommandObjectField> {
+  <template>
+    <pre>{{this.stringValue}}</pre>
+    <style>
+      pre {
+        margin: 0;
+        white-space: pre-wrap;
+      }
+    </style>
+  </template>
+
+  get stringValue() {
+    return JSON.stringify(this.args.model, null, 2);
+  }
+}
+
 export class CommandObjectField extends FieldDef {
   static [primitive]: Record<string, any>;
   static [queryableValue](value: Record<string, any> | undefined) {
@@ -21,6 +38,8 @@ export class CommandObjectField extends FieldDef {
       ? JSON.stringify(value)
       : undefined;
   }
+  static edit = CommandObjectFieldTemplate;
+  static embedded = CommandObjectFieldTemplate;
 }
 
 export class CommandCard extends CardDef {
