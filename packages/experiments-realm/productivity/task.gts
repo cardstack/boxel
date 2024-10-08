@@ -21,7 +21,7 @@ import { fn } from '@ember/helper';
 import { tracked } from '@glimmer/tracking';
 import DateField from 'https://cardstack.com/base/date';
 import TextAreaCard from '../../base/text-area';
-import { cssVar, eq } from '@cardstack/boxel-ui/helpers';
+import { cssVar } from '@cardstack/boxel-ui/helpers';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
 
 export class StatusField extends FieldDef {
@@ -566,7 +566,7 @@ export class Task extends CardDef {
                   <div class='status-indicator'>
                     {{#if isShipped}}
                       <div class='circle completed'>
-                        <CheckMark width='22px' height='22px' />
+                        <CheckMark width='20px' height='20px' />
                       </div>
                     {{else}}
                       <div class='circle incomplete'></div>
