@@ -566,7 +566,7 @@ export class Task extends CardDef {
                   <div class='status-indicator'>
                     {{#if isShipped}}
                       <div class='circle completed'>
-                        <CheckMark width='20px' height='20px' />
+                        <CheckMark width='15px' height='15px' />
                       </div>
                     {{else}}
                       <div class='circle incomplete'></div>
@@ -620,6 +620,7 @@ export class Task extends CardDef {
           gap: var(--boxel-sp-xxs);
         }
         .progress-bar-container {
+          --boxel-progress-bar-fill-color: var(--boxel-highlight);
           width: 35%;
           max-width: 400px;
         }
@@ -731,7 +732,7 @@ export class Task extends CardDef {
     }
 
     get progressLabel() {
-      return `${this.progress}% (${this.shippedCount}/${this.childrenCount})`;
+      return `${this.progress}%`;
     }
 
     get hasChildren() {
