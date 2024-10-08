@@ -43,7 +43,6 @@ export interface CardTypeSummary {
 }
 
 export interface RealmMetaTable {
-  key: string;
   realm_version: number;
   realm_url: string;
   value: Record<string, string>[];

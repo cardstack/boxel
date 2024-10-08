@@ -21,6 +21,7 @@ import Eye from './icons/eye.gts';
 import FailureBordered from './icons/failure-bordered.gts';
 import File from './icons/file.gts';
 import FourLines from './icons/four-lines.gts';
+import Group from './icons/group.gts';
 import IconCircle from './icons/icon-circle.gts';
 import IconCircleSelected from './icons/icon-circle-selected.gts';
 import IconCode from './icons/icon-code.gts';
@@ -70,6 +71,7 @@ export const ALL_ICON_COMPONENTS = [
   FailureBordered,
   File,
   FourLines,
+  Group,
   IconCircle,
   IconCircleSelected,
   IconCode,
@@ -120,6 +122,7 @@ export {
   FailureBordered,
   File,
   FourLines,
+  Group,
   IconCircle,
   IconCircleSelected,
   IconCode,
