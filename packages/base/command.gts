@@ -18,7 +18,7 @@ class CommandStatusField extends StringField {
 class CommandObjectFieldTemplate extends Component<typeof CommandObjectField> {
   <template>
     <pre>{{this.stringValue}}</pre>
-    <style>
+    <style scoped>
       pre {
         margin: 0;
         white-space: pre-wrap;
