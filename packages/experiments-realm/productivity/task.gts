@@ -540,12 +540,12 @@ export class Task extends CardDef {
             {{/if}}
           </div>
         </div>
-        {{#if this.hasChildren}}
-          <div class='children-task'>
-            <h4 class='children-header'>Subtasks ({{this.childrenCount}})</h4>
+        <div class='children-task'>
+          <h4 class='children-header'>Subtasks ({{this.childrenCount}})</h4>
+          {{#if this.hasChildren}}
             <@fields.children />
-          </div>
-        {{/if}}
+          {{/if}}
+        </div>
       </div>
       <style scoped>
         .task-card {
