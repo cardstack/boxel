@@ -184,7 +184,10 @@ export class RealmIndexUpdater {
     let realmUserId =
       owners.length === 1
         ? owners[0]
-        : owners.find((userId) => userId.startsWith('@realm/'));
+        : owners.find(
+            (userId) =>
+              userId.startsWith('@realm/') && userId !== '@realm/test-worker',
+          );
     if (realmUserId) {
       return getMatrixUsername(realmUserId);
     }

@@ -2055,7 +2055,7 @@ module('Realm Server', function (hooks) {
     module('permissioned realm', function (hooks) {
       setupPermissionedRealm(hooks, {
         john: ['read', 'write', 'realm-owner'],
-        'test-worker': ['read', 'write', 'realm-owner'],
+        '@realm/test-worker': ['read', 'write', 'realm-owner'],
       });
 
       test('401 with invalid JWT', async function (assert) {
@@ -2118,7 +2118,7 @@ module('Realm Server', function (hooks) {
         setupPermissionedRealm(hooks, {
           users: ['read', 'write'],
           john: ['read', 'write', 'realm-owner'],
-          'test-worker': ['read', 'write', 'realm-owner'],
+          '@realm/test-worker': ['read', 'write', 'realm-owner'],
         });
 
         test('200 with permission', async function (assert) {
@@ -2158,7 +2158,7 @@ module('Realm Server', function (hooks) {
           bob: ['read'],
           jane: ['read'],
           john: ['read', 'write', 'realm-owner'],
-          'test-worker': ['read', 'write', 'realm-owner'],
+          '@realm/test-worker': ['read', 'write', 'realm-owner'],
         });
 
         test('200 with permission', async function (assert) {
