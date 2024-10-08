@@ -27,11 +27,18 @@ export class StatusField extends FieldDef {
   @field index = contains(NumberField); //sorting order
   @field label = contains(StringField);
   statuses: StatusFieldData[] = []; //help with the types
+
+  get color() {
+    return this.statuses.find((status) => {
+      return status.label === this.label;
+    })?.color;
+  }
 }
 
 interface StatusFieldData {
   index?: number;
   label?: string;
+  color?: string;
 }
 
 class Edit extends Component<typeof StatusField> {
@@ -73,30 +80,36 @@ export class TaskStatusField extends StatusField {
   // loosey goosey pattern
 
   statuses = [
-    { index: 0, label: 'Backlog' },
+    { index: 0, label: 'Backlog', color: '#B0BEC5' },
     {
       index: 1,
       label: 'Next Sprint',
+      color: '#64B5F6',
     },
     {
       index: 2,
       label: 'Current Sprint',
+      color: '#00BCD4',
     },
     {
       index: 3,
       label: 'In Progress',
+      color: '#FFB74D',
     },
     {
       index: 4,
       label: 'In Review',
+      color: '#9575CD',
     },
     {
       index: 5,
       label: 'Staged',
+      color: '#26A69A',
     },
     {
       index: 6,
       label: 'Shipped',
+      color: '#66BB6A',
     },
   ];
 
@@ -506,18 +519,25 @@ export class Task extends CardDef {
             {{/if}}
           </div>
           <div class='row-2'>
-            <Pill>
+            <Pill
+              style={{cssVar
+                pill-font-color=@model.status.color
+                pill-border-color=@model.status.color
+              }}
+            >
               <:default>
                 {{@model.status.label}}
               </:default>
             </Pill>
-            <div class='progress-bar-container'>
-              <ProgressBar
-                @label={{this.progressLabel}}
-                @value={{this.progress}}
-                @max={{100}}
-              />
-            </div>
+            {{#if this.hasChildren}}
+              <div class='progress-bar-container'>
+                <ProgressBar
+                  @label={{this.progressLabel}}
+                  @value={{this.progress}}
+                  @max={{100}}
+                />
+              </div>
+            {{/if}}
           </div>
         </div>
         {{#if this.hasChildren}}
@@ -529,6 +549,7 @@ export class Task extends CardDef {
       </div>
       <style>
         .task-card {
+          height: 100%;
           display: flex;
           flex-direction: column;
           gap: var(--boxel-sp-sm);
