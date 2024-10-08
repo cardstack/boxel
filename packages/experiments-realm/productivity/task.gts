@@ -21,7 +21,8 @@ import { fn } from '@ember/helper';
 import { tracked } from '@glimmer/tracking';
 import DateField from 'https://cardstack.com/base/date';
 import TextAreaCard from '../../base/text-area';
-import { cssVar } from '@cardstack/boxel-ui/helpers';
+import { cssVar, eq } from '@cardstack/boxel-ui/helpers';
+import { CheckMark } from '@cardstack/boxel-ui/icons';
 
 export class StatusField extends FieldDef {
   @field index = contains(NumberField); //sorting order
@@ -411,6 +412,21 @@ class Fitted extends Component<typeof Task> {
 export class Tag extends CardDef {
   static displayName = 'Tag';
   @field name = contains(StringField);
+  @field title = contains(StringField, {
+    computeVia: function (this: Tag) {
+      return this.name;
+    },
+  });
+
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      <Pill>
+        <:default>
+          {{@model.name}}
+        </:default>
+      </Pill>
+    </template>
+  };
 }
 
 export class Task extends CardDef {
@@ -526,6 +542,9 @@ export class Task extends CardDef {
           </div>
           <div class='row-2'>
             {{! Fill in tag list here }}
+            {{#each this.tagNames as |tagLabel|}}
+              {{tagLabel}}
+            {{/each}}
           </div>
         </div>
         {{#if this.hasChildren}}
@@ -541,11 +560,28 @@ export class Task extends CardDef {
                 />
               </div>
             </div>
-            {{#each @fields.children as |child|}}
-              <div class='subtask-item'>
-                <child />
+            <div class='subtasks-container'>
+              <div class='status-column'>
+                {{#each this.shippedArr as |isShipped|}}
+                  <div class='status-indicator'>
+                    {{#if isShipped}}
+                      <div class='circle completed'>
+                        <CheckMark width='22px' height='22px' />
+                      </div>
+                    {{else}}
+                      <div class='circle incomplete'></div>
+                    {{/if}}
+                  </div>
+                {{/each}}
               </div>
-            {{/each}}
+              <div class='children-column'>
+                {{#each @fields.children as |child|}}
+                  <div class='subtask-item'>
+                    <child />
+                  </div>
+                {{/each}}
+              </div>
+            </div>
           </div>
         {{/if}}
       </div>
@@ -619,20 +655,68 @@ export class Task extends CardDef {
           font-size: var(--boxel-font-size-sm);
           color: var(--boxel-purple);
         }
+        .subtasks-container {
+          display: flex;
+          gap: var(--boxel-sp-sm);
+        }
+        .status-column {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xxs);
+        }
+        .children-column {
+          flex-grow: 1;
+        }
+        .status-indicator {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          height: 65px; /* Increased height to match subtask-item */
+        }
         .subtask-item {
-          padding: var(--boxel-sp-xxs);
+          height: 65px; /* Set a fixed height for subtask items */
+          width: 100%;
           display: flex;
           align-items: center;
-          overflow: hidden;
         }
-
-        .small-pill {
-          --pill-padding: var(--boxel-sp-5xs) var(--boxel-sp-xxxs);
-          --pill-font-size: var(--boxel-font-size-xs);
-          --pill-border-radius: var(--boxel-border-radius-xs);
+        .circle {
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 2px solid var(--boxel-dark);
+        }
+        .circle.completed {
+          background-color: var(--boxel-highlight);
+        }
+        .circle.incomplete {
+          background-color: white;
         }
       </style>
     </template>
+
+    get shippedArr() {
+      return (
+        this.args.model.children?.map(
+          (child) => child.status.label === 'Shipped',
+        ) ?? []
+      );
+    }
+
+    @action
+    isShipped(status: unknown): boolean {
+      debugger;
+      if (typeof status === 'string') {
+        return status.includes('Shipped'); // checking for html content
+      }
+      return false;
+    }
+
+    get tagNames() {
+      return this.args.model.tags?.map((tag) => tag.name) ?? [];
+    }
 
     get hasDateRange() {
       return this.args.model.dateStarted && this.args.model.dueDate;
