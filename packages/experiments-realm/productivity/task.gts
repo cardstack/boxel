@@ -21,7 +21,7 @@ import { fn } from '@ember/helper';
 import { tracked } from '@glimmer/tracking';
 import DateField from 'https://cardstack.com/base/date';
 import TextAreaCard from '../../base/text-area';
-import { eq, cssVar } from '@cardstack/boxel-ui/helpers';
+import { cssVar } from '@cardstack/boxel-ui/helpers';
 
 export class StatusField extends FieldDef {
   @field index = contains(NumberField); //sorting order
@@ -540,12 +540,17 @@ export class Task extends CardDef {
             {{/if}}
           </div>
         </div>
-        <div class='children-task'>
-          <h4 class='children-header'>Subtasks ({{this.childrenCount}})</h4>
-          {{#if this.hasChildren}}
-            <@fields.children />
-          {{/if}}
-        </div>
+        {{#if this.hasChildren}}
+          <div class='subtasks-section'>
+            <h4 class='subtasks-header'>Subtasks ({{this.childrenCount}}
+              child tasks)</h4>
+            {{#each @fields.children as |child|}}
+              <div class='subtask-item'>
+                <child />
+              </div>
+            {{/each}}
+          </div>
+        {{/if}}
       </div>
       <style scoped>
         .task-card {
@@ -603,6 +608,22 @@ export class Task extends CardDef {
           font-size: var(--boxel-font-size-sm);
           color: var(--boxel-purple);
           margin-bottom: var(--boxel-sp-xxs);
+        }
+        .subtasks-section {
+          border-radius: var(--boxel-border-radius);
+        }
+        .subtasks-header {
+          padding: 0 var(--boxel-sp-xxs);
+          font-size: var(--boxel-font-size-sm);
+          color: var(--boxel-purple);
+        }
+        .subtask-item {
+          padding: var(--boxel-sp-xxs);
+          min-width: 150px;
+          max-width: 600px;
+          display: flex;
+          align-items: center;
+          overflow: hidden;
         }
       </style>
     </template>
