@@ -8,28 +8,20 @@ import {
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 import { includes } from 'lodash';
-
 import cssVar from '../../helpers/css-var.ts';
-import BoxelMultiSelect from './index.gts';
+import BoxelMultiSelect, {
+  SelectedItem,
+  type SelectedItemSignature,
+} from './index.gts';
 
 interface Country {
-  id: number;
   name: string;
 }
 
 interface AssigneeOption {
   avatar: string;
-  id: number;
   issues: number;
   name: string;
-}
-
-interface CustomPillArgs {
-  Args: {
-    isSelected: boolean;
-    option: Country;
-  };
-  Element: Element;
 }
 
 interface AssigneePillArgs {
@@ -40,20 +32,7 @@ interface AssigneePillArgs {
   Element: Element;
 }
 
-class CustomPill extends Component<CustomPillArgs> {
-  <template>
-    <span class='custom-pill' role='option' aria-selected={{@isSelected}}>
-      {{@option.name}}
-    </span>
-    <style scoped>
-      .custom-pill {
-        display: inline-flex;
-        align-items: center;
-      }
-    </style>
-  </template>
-}
-
+//Custom component for rendering dropdown items with enhanced design and functionality
 class AssigneePill extends Component<AssigneePillArgs> {
   get issueText() {
     const { issues } = this.args.option;
@@ -108,15 +87,32 @@ class AssigneePill extends Component<AssigneePillArgs> {
   </template>
 }
 
+class SelectedCountry extends Component<SelectedItemSignature<Country>> {
+  <template>
+    <SelectedItem
+      @item={{@item}}
+      @removeItem={{@removeItem}}
+      @useCustomTriggerComponent={{true}}
+    >
+      <:default>
+        {{@item.name}}
+      </:default>
+      <:icon>
+        close
+      </:icon>
+    </SelectedItem>
+  </template>
+}
+
 export default class BoxelMultiSelectUsage extends Component {
   @tracked items = [
-    { id: 0, name: 'United States' },
-    { id: 1, name: 'Spain' },
-    { id: 2, name: 'Portugal' },
-    { id: 3, name: 'Russia' },
-    { id: 4, name: 'Latvia' },
-    { id: 5, name: 'Brazil' },
-    { id: 6, name: 'United Kingdom' },
+    { name: 'United States' },
+    { name: 'Spain' },
+    { name: 'Portugal' },
+    { name: 'Russia' },
+    { name: 'Latvia' },
+    { name: 'Brazil' },
+    { name: 'United Kingdom' },
   ] as Array<Country>;
 
   @tracked selectedItems: Country[] = [];
@@ -127,6 +123,10 @@ export default class BoxelMultiSelectUsage extends Component {
   @tracked disabled = false;
   @tracked matchTriggerWidth = true;
 
+  @tracked selectedAssignees: AssigneeOption[] = [];
+  @tracked hasCheckbox = false;
+  @tracked useCustomTriggerComponent = false;
+
   @cssVariable({ cssClassName: 'boxel-multi-select-usage-container' })
   declare boxelSelectedPillBackgroundColor: CSSVariableInfo;
 
@@ -134,17 +134,13 @@ export default class BoxelMultiSelectUsage extends Component {
   declare boxelMultiSelectPillColor: CSSVariableInfo;
 
   @tracked assignees = [
-    { id: 0, name: 'No assignee', issues: 28, avatar: '🚫' },
-    { id: 1, name: 'Current user', issues: 1, avatar: '👤' },
-    { id: 2, name: 'tintinthong', issues: 1, avatar: '🧑' },
-    { id: 3, name: 'lucas.law', issues: 1, avatar: '🧑' },
-    { id: 4, name: 'lukemelia', issues: 2, avatar: '🧑' },
-    { id: 5, name: 'matic', issues: 2, avatar: '👨' },
+    { name: 'No assignee', issues: 28, avatar: '🚫' },
+    { name: 'Current user', issues: 1, avatar: '👤' },
+    { name: 'tintinthong', issues: 1, avatar: '🧑' },
+    { name: 'lucas.law', issues: 1, avatar: '🧑' },
+    { name: 'lukemelia', issues: 2, avatar: '🧑' },
+    { name: 'matic', issues: 2, avatar: '👨' },
   ] as Array<AssigneeOption>;
-
-  @tracked selectedAssignees: AssigneeOption[] = [];
-
-  @tracked hasCheckbox = false;
 
   @action onSelectItems(items: Country[]): void {
     this.selectedItems = items;
@@ -166,9 +162,12 @@ export default class BoxelMultiSelectUsage extends Component {
         <:example>
           <label id='country-select-label' class='visually-hidden'>Select
             countries</label>
+
           <BoxelMultiSelect
             @placeholder={{this.placeholder}}
             @selected={{this.selectedItems}}
+            @customSelectedItem={{component SelectedCountry}}
+            @useCustomTriggerComponent={{this.useCustomTriggerComponent}}
             @onChange={{this.onSelectItems}}
             @options={{this.items}}
             @verticalPosition={{this.verticalPosition}}
@@ -176,16 +175,14 @@ export default class BoxelMultiSelectUsage extends Component {
             @disabled={{this.disabled}}
             @dropdownClass='boxel-multi-select-usage'
             @matchTriggerWidth={{this.matchTriggerWidth}}
-            @selectedItemComponent={{component CustomPill}}
-            @hasCheckbox={{this.hasCheckbox}}
+            @hasCheckbox={{true}}
             @labelledBy='country-select-label'
-            as |item|
+            as |option|
           >
-            <CustomPill
-              @option={{item}}
-              @isSelected={{includes this.selectedItems item}}
-            />
+
+            {{option.name}}
           </BoxelMultiSelect>
+
         </:example>
         <:api as |Args|>
           <Args.Object
@@ -250,6 +247,13 @@ export default class BoxelMultiSelectUsage extends Component {
             @onInput={{fn (mut this.hasCheckbox)}}
             @description='When true, displays a checkbox for each option'
           />
+          <Args.Bool
+            @name='useCustomTriggerComponent'
+            @defaultValue={{false}}
+            @value={{this.useCustomTriggerComponent}}
+            @onInput={{fn (mut this.useCustomTriggerComponent)}}
+            @description='When true, uses a custom trigger component for selected items'
+          />
         </:api>
         <:cssVars as |Css|>
           <Css.Basic
@@ -280,18 +284,19 @@ export default class BoxelMultiSelectUsage extends Component {
             @options={{this.assignees}}
             @renderInPlace={{this.renderInPlace}}
             @matchTriggerWidth={{true}}
-            @selectedItemComponent={{component AssigneePill}}
             @hasCheckbox={{true}}
-            @labelledBy='assignee-select-label'
-            as |assignee|
+            @useCustomTriggerComponent={{this.useCustomTriggerComponent}}
+            @labelledBy='assignee-selct-label'
+            as |option|
           >
             <AssigneePill
-              @option={{assignee}}
-              @isSelected={{includes this.selectedAssignees assignee}}
+              @option={{option}}
+              @isSelected={{includes this.selectedAssignees option}}
             />
           </BoxelMultiSelect>
         </:example>
       </FreestyleUsage>
+
     </div>
     <style scoped>
       .visually-hidden {

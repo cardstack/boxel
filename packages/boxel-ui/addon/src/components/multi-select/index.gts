@@ -1,8 +1,8 @@
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 import { CaretDown, IconX } from '@cardstack/boxel-ui/icons';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -12,18 +12,21 @@ import type {
 } from 'ember-power-select/components/power-select';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
 import PowerSelectMultiple from 'ember-power-select/components/power-select-multiple';
-
 import cn from '../../helpers/cn.ts';
+import type { ComponentLike } from '@glint/template';
+// import { hash } from '@ember/helper';
 
 export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
-  describedBy?: string;
+  customSelectedItem?: ComponentLike<any> | undefined;
   hasCheckbox?: boolean;
+  useCustomTriggerComponent?: boolean;
   labelledBy?: string;
   options: ItemT[];
   selected: ItemT[];
+  selectedItemComponent?: ComponentLike<selectedItemComponentSignature<ItemT>>;
 }
 
-interface Signature<ItemT = any> {
+export interface Signature<ItemT = any> {
   Args: BoxelMultiSelectArgs<ItemT>;
   Blocks: {
     default: [ItemT];
@@ -31,7 +34,7 @@ interface Signature<ItemT = any> {
   Element: HTMLElement;
 }
 
-interface SelectAPI {
+export interface SelectAPI {
   actions: {
     close: () => void;
     open: () => void;
@@ -82,8 +85,20 @@ export default class BoxelMultiSelect<ItemT> extends Component<
       <PowerSelectMultiple
         @options={{@options}}
         @selected={{@selected}}
-        @selectedItemComponent={{component CustomSelectedItemComponent}}
-        @triggerComponent={{component CustomTriggerComponent}}
+        {{! @glint-ignore - Type instantiation is excessively deep and possibly infinite. }}
+        @triggerComponent={{if
+          @useCustomTriggerComponent
+          (component
+            CustomTriggerComponent
+            customSelectedItem=@customSelectedItem
+            useCustomTriggerComponent=true
+          )
+          (component
+            SelectedItemComponent
+            customSelectedItem=null
+            useCustomTriggerComponent=false
+          )
+        }}
         @placeholder={{@placeholder}}
         @onChange={{@onChange}}
         @onOpen={{this.onOpenWrapper}}
@@ -97,9 +112,9 @@ export default class BoxelMultiSelect<ItemT> extends Component<
         @searchEnabled={{true}}
         @closeOnSelect={{false}}
         @searchField='name'
-        @beforeOptionsComponent={{component CustomBeforeOptionsComponent}}
+        @beforeOptionsComponent={{component BeforeOptions}}
         @afterOptionsComponent={{component
-          CustomAfterOptionsComponent
+          BoxelAfterOptionsComponent
           allowClosing=this.allowClosing
         }}
         ...attributes
@@ -320,46 +335,84 @@ export default class BoxelMultiSelect<ItemT> extends Component<
   </template>
 }
 
-interface CustomSelectedItemComponentArgs<ItemT> {
-  hasCheckbox?: boolean;
-  option: ItemT;
-  placeholder: string;
-  select: {
-    actions: {
-      select: (items: ItemT[]) => void;
-    };
-    selected: ItemT[];
+export interface SelectedItemSignature<ItemT> {
+  Element: any;
+  Args: {
+    item: ItemT | any;
+    customSelectedItem?: ComponentLike<any> | undefined;
+    useCustomTriggerComponent?: boolean;
+    removeItem: (item: ItemT, event: MouseEvent) => void;
+  };
+  Blocks: {
+    default: [];
+    icon: [];
   };
 }
 
-interface CustomSelectedItemComponentSignature<ItemT> {
-  Args: CustomSelectedItemComponentArgs<ItemT>;
-  Element: HTMLElement;
+export class SelectedItem<ItemT> extends Component<
+  SelectedItemSignature<ItemT>
+> {
+  get getItemDisplayValue(): any {
+    return (item: ItemT) => {
+      if (item && typeof item === 'object' && 'name' in item) {
+        return item.name;
+      }
+      return String(item);
+    };
+  }
+
+  <template>
+    <span class='ember-power-select-multiple-option'>
+      {{#if @useCustomTriggerComponent}}
+        {{#if (has-block 'default')}}
+          {{yield to='default'}}
+        {{else}}
+          {{this.getItemDisplayValue @item}}
+        {{/if}}
+        <span class='icon-wrapper' {{on 'click' (fn @removeItem @item)}}>
+          {{yield to='icon'}}
+        </span>
+      {{else}}
+        {{this.getItemDisplayValue @item}}
+        <span class='icon-wrapper' {{on 'click' (fn @removeItem @item)}}>
+          x
+        </span>
+      {{/if}}
+    </span>
+  </template>
 }
 
-class CustomSelectedItemComponent<ItemT> extends Component<
-  CustomSelectedItemComponentSignature<ItemT>
+export interface selectedItemComponentSignature<ItemT> {
+  Args: {
+    hasCheckbox?: boolean;
+    option: ItemT;
+    placeholder: string;
+    select: {
+      actions: {
+        select: (items: ItemT[]) => void;
+      };
+      selected: ItemT[];
+    };
+    customSelectedItem?: ComponentLike<any> | undefined;
+    useCustomTriggerComponent?: boolean;
+    removeItem: (item: ItemT, event: MouseEvent) => void;
+  };
+  Blocks: {
+    default: [];
+  };
+}
+
+export class SelectedItemComponent<ItemT> extends Component<
+  selectedItemComponentSignature<ItemT>
 > {
   private maxVisibleItems = 3;
 
-  get visibleContent(): ItemT[] {
+  get visibleContent(): any[] {
     return this.args.select.selected.slice(0, this.maxVisibleItems);
   }
 
   get hasMoreItems(): boolean {
     return this.args.select.selected.length > this.maxVisibleItems;
-  }
-
-  get itemName() {
-    return (item: ItemT) => {
-      if (!item) {
-        return;
-      }
-      if (typeof item === 'object' && 'name' in item) {
-        return String(item.name);
-      }
-      return String(item);
-    };
   }
 
   get remainingItemsCount(): number {
@@ -368,8 +421,11 @@ class CustomSelectedItemComponent<ItemT> extends Component<
 
   @action
   removeItem(item: ItemT, event: MouseEvent) {
+    event.preventDefault();
     event.stopPropagation();
-    const newSelected = this.args.select.selected.filter((i) => i !== item);
+    const newSelected = this.args.select.selected.filter(
+      (i: ItemT) => i !== item,
+    );
     this.args.select.selected = [...newSelected];
     this.args.select.actions.select(newSelected);
   }
@@ -388,15 +444,14 @@ class CustomSelectedItemComponent<ItemT> extends Component<
   <template>
     {{#if @select.selected.length}}
       <div class='ember-power-select-multiple-options'>
+
         {{#each this.visibleContent as |item|}}
-          <span class='ember-power-select-multiple-option'>
-            {{this.itemName item}}
-            <IconX
-              {{on 'click' (fn this.removeItem item)}}
-              class='boxel-multi-select__icon boxel-multi-select__icon--remove'
-              aria-label='remove item'
-            />
-          </span>
+          <SelectedItem
+            @item={{item}}
+            @removeItem={{this.removeItem}}
+            @useCustomTriggerComponent={{false}}
+            @customSelectedItem={{undefined}}
+          />
         {{/each}}
 
         {{#if this.hasMoreItems}}
@@ -427,7 +482,7 @@ class CustomSelectedItemComponent<ItemT> extends Component<
   </template>
 }
 
-interface TriggerComponentSignature<ItemT> {
+export interface TriggerComponentSignature<ItemT> {
   Args: {
     disabled?: boolean;
     extra: Record<string, unknown>;
@@ -439,73 +494,124 @@ interface TriggerComponentSignature<ItemT> {
     searchField?: string | null;
     select: Select;
     selected: ItemT | ItemT[] | null;
-    selectedItemComponent: any;
-  };
-  Element: HTMLElement;
-}
-
-class CustomTriggerComponent<ItemT> extends Component<
-  TriggerComponentSignature<ItemT>
-> {
-  get shouldShowPlaceholder() {
-    return this.args.placeholder && this.args.select.selected.length === 0;
-  }
-
-  <template>
-    <div class='custom-trigger'>
-      {{#let (component @selectedItemComponent) as |SelectedItemComponent|}}
-        <SelectedItemComponent @select={{@select}} />
-        {{#if this.shouldShowPlaceholder}}
-          <div class='custom-trigger-placeholder'>{{@placeholder}}</div>
-        {{/if}}
-      {{/let}}
-    </div>
-
-    <style scoped>
-      .custom-trigger-placeholder {
-        color: var(--boxel-400);
-      }
-    </style>
-  </template>
-}
-interface CustomBeforeOptionsComponentArgs {
-  Args: {
-    onBlur: () => void;
-    onFocus: () => void;
-    onInput: (event: InputEvent) => boolean;
-    onKeydown: (event: KeyboardEvent) => void;
-    searchEnabled: boolean;
-    select: Select;
+    customSelectedItem?: ComponentLike<any> | undefined;
+    useCustomTriggerComponent?: boolean;
+    selectedItemComponent?: any;
+    removeItem: (item: ItemT, event: MouseEvent) => void;
   };
   Blocks: {
     default: [];
   };
+  Element: HTMLElement;
 }
 
-class CustomBeforeOptionsComponent extends Component<CustomBeforeOptionsComponentArgs> {
-  <template>
-    <div class='custom-before-options'>
-      <BeforeOptions
-        @select={{@select}}
-        @searchEnabled={{@searchEnabled}}
-        @onKeydown={{@onKeydown}}
-        @onBlur={{@onBlur}}
-        @onFocus={{@onFocus}}
-        @onInput={{@onInput}}
-      />
+export class CustomTriggerComponent<ItemT> extends Component<
+  TriggerComponentSignature<ItemT>
+> {
+  get shouldShowPlaceholder() {
+    return (
+      this.args.placeholder &&
+      this.args.select.selected.length == 0 &&
+      this.args.customSelectedItem
+    );
+  }
 
+  private maxVisibleItems = 3;
+
+  get visibleContent(): any[] {
+    return this.args.select.selected.slice(0, this.maxVisibleItems);
+  }
+
+  get hasMoreItems(): boolean {
+    return this.args.select.selected.length > this.maxVisibleItems;
+  }
+
+  get remainingItemsCount(): number {
+    return this.args.select.selected.length - this.maxVisibleItems;
+  }
+
+  @action
+  removeExcessItems(event: MouseEvent) {
+    event.stopPropagation();
+    const newSelected = this.args.select.selected.slice(
+      0,
+      this.maxVisibleItems,
+    );
+    this.args.select.selected = [...newSelected];
+    this.args.select.actions.select(newSelected);
+  }
+
+  @action
+  removeItem(item: ItemT, event: MouseEvent) {
+    event.stopPropagation();
+    const newSelected = this.args.select.selected.filter(
+      (i: ItemT) => i !== item,
+    );
+    this.args.select.selected = [...newSelected];
+    this.args.select.actions.select(newSelected);
+  }
+
+  <template>
+    <div class='boxel-trigger'>
+      {{#each this.visibleContent as |item|}}
+        {{#let (component @customSelectedItem) as |SelectedItem|}}
+          <SelectedItem
+            @item={{item}}
+            @removeItem={{this.removeItem}}
+            @useCustomTriggerComponent={{true}}
+            @customSelectedItem={{@customSelectedItem}}
+          />
+        {{/let}}
+      {{/each}}
+
+      {{#if this.hasMoreItems}}
+        <span class='ember-power-select-multiple-option'>
+          +
+          {{this.remainingItemsCount}}
+          more
+          <IconX
+            {{on 'click' this.removeExcessItems}}
+            class='boxel-multi-select__icon boxel-multi-select__icon--remove'
+            aria-label='remove item'
+          />
+        </span>
+      {{/if}}
+
+      {{#if this.shouldShowPlaceholder}}
+        <div class='boxel-trigger-placeholder'>{{@placeholder}}</div>
+      {{/if}}
     </div>
+
+    {{#unless @customSelectedItem}}
+      <div class='error-message'>
+        Error: You are required to create a custom selected component.
+      </div>
+    {{/unless}}
+
+    <style scoped>
+      .boxel-trigger {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-xs);
+      }
+      .boxel-trigger-placeholder {
+        color: var(--boxel-400);
+      }
+      .error-message {
+        color: var(--boxel-red);
+      }
+    </style>
   </template>
 }
 
-interface CustomAfterOptionComponentArgs {
+export interface BoxelAfterOptionComponentArgs {
   Args: {
     allowClosing: () => void;
     select: Select;
   };
 }
 
-class CustomAfterOptionsComponent extends Component<CustomAfterOptionComponentArgs> {
+class BoxelAfterOptionsComponent extends Component<BoxelAfterOptionComponentArgs> {
   @action
   onClearAll() {
     this.args.select.actions.select([]);
