@@ -334,7 +334,9 @@ class CommandResultEmbeddedView extends Component<typeof CommandResult> {
       console.error('Could not copy card to workspace.');
       return;
     }
-    this.args.context?.actions?.viewCard(newCard);
+    this.args.context?.actions?.viewCard(newCard, 'isolated', {
+      openCardInRightMostStack: true,
+    });
   }
 }
 

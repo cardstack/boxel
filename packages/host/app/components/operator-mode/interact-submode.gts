@@ -199,7 +199,11 @@ export default class InteractSubmode extends Component<Signature> {
       viewCard: async (
         card: CardDef,
         format: Format = 'isolated',
+        opts?: { openCardInRightMostStack?: boolean },
       ): Promise<void> => {
+        if (opts?.openCardInRightMostStack) {
+          stackIndex = this.stacks.length;
+        }
         let newItem = new StackItem({
           owner: here,
           card,
@@ -208,6 +212,7 @@ export default class InteractSubmode extends Component<Signature> {
         });
         await newItem.ready();
         here.addToStack(newItem);
+        here.operatorModeStateService.workspaceChooserOpened = false;
       },
       editCard(card: CardDef): void {
         let item = here.findCardInStack(card, stackIndex);
@@ -219,8 +224,10 @@ export default class InteractSubmode extends Component<Signature> {
           }),
         );
       },
-      copyCard: async (card: CardDef): Promise<CardDef | void> => {
-        return await here._copyCard.perform(card);
+      copyCard: async (card: CardDef): Promise<CardDef> => {
+        let deferred = new Deferred<CardDef>();
+        here._copyCard.perform(card, stackIndex, deferred);
+        return await deferred.promise;
       },
       saveCard: async (card: CardDef, dismissItem: boolean): Promise<void> => {
         let item = here.findCardInStack(card, stackIndex);
@@ -275,16 +282,12 @@ export default class InteractSubmode extends Component<Signature> {
         here.operatorModeStateService.updateCodePath(url);
         here.operatorModeStateService.updateSubmode(submode);
       },
-      runCommand: async (
+      runCommand: (
         card: CardDef,
         skillCardId: string,
         message?: string,
-      ): Promise<void> => {
-        await here.runCommand.perform(
-          card,
-          skillCardId,
-          message ?? 'Run command',
-        );
+      ): void => {
+        here.runCommand.perform(card, skillCardId, message ?? 'Run command');
       },
     };
   }
@@ -431,26 +434,37 @@ export default class InteractSubmode extends Component<Signature> {
     }
   }
 
-  private _copyCard = dropTask(async (card: CardDef) => {
-    // use existing card in stack to determine realm url,
-    // otherwise use user's first writable realm
-    let topCard = this.operatorModeStateService.topMostStackItems()?.[0]?.card;
-    let realmURL: URL | undefined;
-    if (topCard) {
-      realmURL = await this.cardService.getRealmURL(topCard);
-    }
-    if (!realmURL) {
-      if (!this.realm.defaultWritableRealm) {
-        throw new Error('Could not find a writable realm');
+  private _copyCard = dropTask(
+    async (card: CardDef, stackIndex: number, done: Deferred<CardDef>) => {
+      let newCard: CardDef | undefined;
+      try {
+        // use existing card in stack to determine realm url,
+        // otherwise use user's first writable realm
+        let topCard =
+          this.operatorModeStateService.topMostStackItems()[stackIndex]?.card;
+        let realmURL: URL | undefined;
+        if (topCard) {
+          let url = await this.cardService.getRealmURL(topCard);
+          if (url && this.realm.canWrite(url.href)) {
+            realmURL = url;
+          }
+        }
+        if (!realmURL) {
+          if (!this.realm.defaultWritableRealm) {
+            throw new Error('Could not find a writable realm');
+          }
+          realmURL = new URL(this.realm.defaultWritableRealm.path);
+        }
+        newCard = await this.cardService.copyCard(card, realmURL);
+      } catch (e) {
+        done.reject(e);
+      } finally {
+        if (newCard) {
+          done.fulfill(newCard);
+        }
       }
-      realmURL = new URL(this.realm.defaultWritableRealm.path);
-    }
-    let newCard = await this.cardService.copyCard(card, realmURL);
-    if (!newCard) {
-      throw new Error(`Could not copy card "${card.id}" to workspace.`);
-    }
-    return newCard;
-  });
+    },
+  );
 
   // dropTask will ignore any subsequent copy requests until the one in progress is done
   private copy = dropTask(
@@ -658,7 +672,7 @@ export default class InteractSubmode extends Component<Signature> {
   // @ts-ignore "cardContext is declared but not used"
   private get cardContext() {
     return {
-      actions: this.publicAPI(this, this.stacks[0]?.length ? 1 : 0),
+      actions: this.publicAPI(this, 0),
     };
   }
 
