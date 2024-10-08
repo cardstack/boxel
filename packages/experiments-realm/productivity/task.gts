@@ -294,7 +294,7 @@ class Fitted extends Component<typeof Task> {
         height: 100%;
         border: var(--boxel-border);
         border-radius: var(--boxel-border-radius);
-        padding: var(--boxel-sp-sm);
+        padding: var(--boxel-sp-sm) var(--boxel-sp);
         background-color: #ffffff;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         transition: box-shadow 0.2s ease;
@@ -408,35 +408,38 @@ export class Task extends CardDef {
             </:default>
           </Pill>
         </div>
-        <div>
+        <div class='task-detail'>
           {{@model.taskDetail}}
         </div>
-        <div class='row-1'>
-          <Avatar
-            @userId={{@model.assignee.id}}
-            @displayName={{@model.assignee.name}}
-            @isReady={{true}}
-          />
-          {{@model.assignee.name}}
-          {{#if this.hasDateRange}}
-            <div class='task-dates'>
-              {{@model.dateStarted}}
-              -
-              {{@model.dueDate}}</div>
-          {{/if}}
-        </div>
-        <div class='row-2'>
-          <Pill>
-            <:default>
-              {{@model.status.label}}
-            </:default>
-          </Pill>
-          <div>
-            Progress
-            <ProgressBar @value={{50}} @max={{100}} />
-            {{#if this.hasProgress}}
-              50%
+        <div class='task-meta'>
+          <div class='row-1'>
+            <Avatar
+              @userId={{@model.assignee.id}}
+              @displayName={{@model.assignee.name}}
+              @isReady={{true}}
+            />
+            {{@model.assignee.name}}
+            {{#if this.hasDateRange}}
+              <div class='task-dates'>
+                <@fields.dateStarted />
+                -
+                <@fields.dueDate />
+              </div>
             {{/if}}
+          </div>
+          <div class='row-2'>
+            <Pill>
+              <:default>
+                {{@model.status.label}}
+              </:default>
+            </Pill>
+            <div>
+              Progress
+              <ProgressBar @value={{50}} @max={{100}} />
+              {{#if this.hasProgress}}
+                50%
+              {{/if}}
+            </div>
           </div>
         </div>
         <div>
@@ -448,11 +451,16 @@ export class Task extends CardDef {
           display: flex;
           flex-direction: column;
           gap: var(--boxel-sp-sm);
+          padding: 0 var(--boxel-sp);
         }
         .task-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
+        }
+        .task-detail {
+          min-height: var(--boxel-form-control-height);
+          margin-bottom: var(--boxel-sp-sm);
         }
         .row-1 {
           display: flex;
