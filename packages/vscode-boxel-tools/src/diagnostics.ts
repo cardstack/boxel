@@ -16,8 +16,8 @@ async function getErrorMessagesForFile(
 function extractErrorsFromMessage(message: string): vscode.Diagnostic[] {
   const diagnostics: vscode.Diagnostic[] = [];
   // Start with a default range
-  let lineNumber: number = 1;
-  let columnNumber: number = 1;
+  let lineNumber = 1;
+  let columnNumber = 1;
 
   //Check the first line looks like a file path, then a colon, and finishes with (number:number)
   const lines = message.split('\n');
