@@ -127,9 +127,7 @@ export default class RealmServerService extends Service {
 
   @cached
   get availableRealmURLs() {
-    return this.availableRealms
-      .filter((r) => r.url !== baseRealm.url)
-      .map((r) => r.url);
+    return this.availableRealms.map((r) => r.url);
   }
 
   @cached
@@ -156,7 +154,7 @@ export default class RealmServerService extends Service {
 
     // pluck out any non-catalog realms that aren't a part of the userRealmsURLs
     this.availableRealms
-      .filter((r) => r.type === 'non-catalog')
+      .filter((r) => r.type === 'non-catalog' && r.url !== baseRealm.url)
       .forEach((realm) => {
         if (!userRealmURLs.includes(realm.url)) {
           this.availableRealms.splice(
