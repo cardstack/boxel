@@ -15,26 +15,28 @@ async function getErrorMessagesForFile(
 
 function extractErrorsFromMessage(message: string): vscode.Diagnostic[] {
   const diagnostics: vscode.Diagnostic[] = [];
+  // Start with a default range
+  let lineNumber: number = 1;
+  let columnNumber: number = 1;
+
   //Check the first line looks like a file path, then a colon, and finishes with (number:number)
   const lines = message.split('\n');
   const firstLine = lines[0];
   const filePathMatch = firstLine.match(/^(.+?):(.+?)\((\d+):(\d+)\)$/);
-  console.log('filePathMatch', filePathMatch);
-  console.log('firstLine', firstLine);
-  let range: vscode.Range;
-  if (filePathMatch) {
-    console.log('filePathMatch', filePathMatch);
-    const lineNumber = parseInt(filePathMatch[3]) - 1;
-    const columnNumber = parseInt(filePathMatch[4]) - 1;
-    range = new vscode.Range(
-      lineNumber,
-      columnNumber,
-      lineNumber,
-      columnNumber,
-    );
-  } else {
-    range = new vscode.Range(0, 0, 0, 0);
+
+  if (filePathMatch && filePathMatch.length >= 5) {
+    // try and parse the line and column numbers, defaulting to 1 if they don't parse
+    // They should as the regex matches \d+:\d+
+    lineNumber = parseInt(filePathMatch[3]) || 1;
+    columnNumber = parseInt(filePathMatch[4]) || 1;
   }
+
+  const range = new vscode.Range(
+    lineNumber - 1,
+    columnNumber - 1,
+    lineNumber - 1,
+    columnNumber - 1,
+  );
 
   const diagnostic = new vscode.Diagnostic(
     range,
