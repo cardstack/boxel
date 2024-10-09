@@ -6,7 +6,7 @@
       "description": "Catalog entry for AppCard",
       "isField": false,
       "ref": {
-        "module": "../app-card",
+        "module": "/catalog/app-card",
         "name": "AppCard"
       }
     },

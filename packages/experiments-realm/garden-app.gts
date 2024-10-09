@@ -1,4 +1,4 @@
-import { AppCard } from './app-card';
+import { AppCard } from '/catalog/app-card';
 // import { Component } from 'https://cardstack.com/base/card-api';
 export class GardenAppCard extends AppCard {
   static displayName = 'Garden App Card';
@@ -19,6 +19,7 @@ export class GardenAppCard extends AppCard {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
 
   */
 }
