@@ -40,19 +40,25 @@ type AuthStatus =
   | { type: 'logged-in'; token: string; claims: RealmServerJWTPayload }
   | { type: 'anonymous' };
 
+interface AvailableRealm {
+  url: string;
+  type: 'catalog' | 'non-catalog';
+}
+
 export default class RealmServerService extends Service {
   @service private declare network: NetworkService;
   @service private declare reset: ResetService;
   private auth: AuthStatus = { type: 'anonymous' };
   private client: ExtendedClient | undefined;
-  private _userRealmURLs = new TrackedArray<string>([baseRealm.url]);
-  private _catalogRealmURLs = new TrackedArray<string>();
+  private availableRealms = new TrackedArray<AvailableRealm>([
+    { type: 'non-catalog', url: baseRealm.url },
+  ]);
   private ready = new Deferred<void>();
 
   constructor(owner: Owner) {
     super(owner);
     this.reset.register(this);
-    this.fetchCatalogRealmURLs();
+    this.fetchCatalogRealms();
   }
 
   resetState() {
@@ -113,52 +119,55 @@ export default class RealmServerService extends Service {
     this.client = undefined;
     this.loggingIn = undefined;
     this.auth = { type: 'anonymous' };
-    this._userRealmURLs = new TrackedArray<string>([baseRealm.url]);
-    this._catalogRealmURLs = new TrackedArray<string>();
+    this.availableRealms = new TrackedArray<AvailableRealm>([
+      { type: 'non-catalog', url: baseRealm.url },
+    ]);
     window.localStorage.removeItem(sessionLocalStorageKey);
   }
 
   @cached
   get availableRealmURLs() {
-    return new TrackedArray([
-      ...this._userRealmURLs,
-      ...this._catalogRealmURLs,
-    ]);
+    return this.availableRealms
+      .filter((r) => r.url !== baseRealm.url)
+      .map((r) => r.url);
   }
 
+  @cached
   get userRealmURLs() {
-    return this._userRealmURLs.filter((realmURL) => realmURL != baseRealm.url);
+    return this.availableRealms
+      .filter((r) => r.type === 'non-catalog' && r.url !== baseRealm.url)
+      .map((r) => r.url);
   }
 
+  @cached
   get catalogRealmURLs() {
-    return this._catalogRealmURLs;
+    return this.availableRealms
+      .filter((r) => r.type === 'catalog' && r.url !== baseRealm.url)
+      .map((r) => r.url);
   }
 
   async setAvailableRealmURLs(userRealmURLs: string[]) {
     await this.ready.promise;
     userRealmURLs.forEach((userRealmURL) => {
-      if (!this._userRealmURLs.includes(userRealmURL)) {
-        this._userRealmURLs.push(userRealmURL);
+      if (!this.availableRealms.find((r) => r.url === userRealmURL)) {
+        this.availableRealms.push({ type: 'non-catalog', url: userRealmURL });
       }
     });
 
-    this._userRealmURLs.forEach((userRealmURL) => {
-      if (!userRealmURLs.includes(userRealmURL)) {
-        this._userRealmURLs.splice(
-          this._userRealmURLs.indexOf(userRealmURL),
-          1,
-        );
-      }
-    });
-
-    let baseRealmUrl = baseRealm.url;
-
-    if (!this._userRealmURLs.includes(baseRealmUrl)) {
-      this._userRealmURLs.unshift(baseRealmUrl);
-    }
+    // pluck out any non-catalog realms that aren't a part of the userRealmsURLs
+    this.availableRealms
+      .filter((r) => r.type === 'non-catalog')
+      .forEach((realm) => {
+        if (!userRealmURLs.includes(realm.url)) {
+          this.availableRealms.splice(
+            this.availableRealms.findIndex((r) => r.url === realm.url),
+            1,
+          );
+        }
+      });
   }
 
-  private async fetchCatalogRealmURLs() {
+  private async fetchCatalogRealms() {
     let response = await this.network.authedFetch(
       `${this.url.origin}/_catalog-realms`,
     );
@@ -170,8 +179,8 @@ export default class RealmServerService extends Service {
 
     let { data } = await response.json();
     data.forEach((publicRealm: { id: string }) => {
-      if (!this._catalogRealmURLs.includes(publicRealm.id)) {
-        this._catalogRealmURLs.push(publicRealm.id);
+      if (!this.availableRealms.find((r) => r.url === publicRealm.id)) {
+        this.availableRealms.push({ type: 'catalog', url: publicRealm.id });
       }
     });
     this.ready.fulfill();
