@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "extensionHost",
+      "request": "launch",
+      "name": "Launch Boxel Tools",
+      "runtimeExecutable": "${execPath}",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceRoot}/packages/vscode-boxel-tools"
+      ],
+      "outFiles": ["${workspaceFolder}/packages/vscode-boxel-tools/dist/**"],
+      "preLaunchTask": "Compile Boxel tools (development)"
+    }
+  ]
+}
