@@ -16,6 +16,7 @@
     "build": "concurrently \"pnpm:build:*\" --names \"build:\"",
     "build:js": "rollup --config",
     "build:types": "glint --declaration",
+    "deploy:s3": "aws s3 sync dist s3://cardstack-boxel-icons-production --region us-east-1",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:glint": "glint",
