@@ -108,8 +108,8 @@ jobs:
       - name: Build boxel-ui
         run: pnpm build
         working-directory: packages/boxel-ui/addon
-      - name: Build boxel-icons
-        run: pnpm build
+      - name: Serve boxel-icons
+        run: pnpm build && pnpm serve
         working-directory: packages/boxel-icons
       - name: Build boxel-motion
         run: pnpm build
@@ -239,8 +239,8 @@ jobs:
       - name: Build boxel-ui
         run: pnpm build
         working-directory: packages/boxel-ui/addon
-      - name: Build boxel-icons
-        run: pnpm build
+      - name: Serve boxel-icons
+        run: pnpm build && pnpm serve &
         working-directory: packages/boxel-icons
       - name: Start host to serve assets for fastboot
         run: pnpm start &

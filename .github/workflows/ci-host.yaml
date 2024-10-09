@@ -30,8 +30,8 @@ jobs:
       - name: Build boxel-ui
         run: pnpm build
         working-directory: packages/boxel-ui/addon
-      - name: Build boxel-icons
-        run: pnpm build
+      - name: Serve boxel-icons
+        run: pnpm build && pnpm serve &
         working-directory: packages/boxel-icons
       # this is to hopefully address the CI network flakiness that we
       # occasionally see in host tests.

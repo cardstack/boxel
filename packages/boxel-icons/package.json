@@ -27,7 +27,7 @@
     "start": "concurrently \"pnpm:start:*\" --names \"start:\"",
     "start:js": "rollup --config --watch --no-watch.clearScreen",
     "start:types": "glint --declaration --watch",
-    "serve": "http-server --cors --port 5800 dist",
+    "serve": "http-server --cors --port 4206 dist",
     "test": "echo 'A v2 addon does not have tests, run tests in test-app'",
     "test:ember": "ember test"
   },
