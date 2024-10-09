@@ -37,6 +37,7 @@ module.exports = function (environment) {
     serverEchoDebounceMs: 5000,
     loginMessageTimeoutMs: 1000,
     minSaveTaskDurationMs: 1000,
+    iconsURL: 'http://localhost:4206',
 
     // the fields below may be rewritten by the realm server
     hostsOwnAssets: true,
