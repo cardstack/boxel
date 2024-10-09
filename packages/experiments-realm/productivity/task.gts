@@ -541,9 +541,13 @@ export class Task extends CardDef {
             {{/if}}
           </div>
           <div class='row-2'>
-            {{! Fill in tag list here }}
             {{#each this.tagNames as |tagLabel|}}
-              {{tagLabel}}
+              <Pill class='tag-pill'>
+                <:default>
+                  <span class='tag-dot'></span>
+                  {{tagLabel}}
+                </:default>
+              </Pill>
             {{/each}}
           </div>
         </div>
@@ -694,6 +698,17 @@ export class Task extends CardDef {
         }
         .circle.incomplete {
           background-color: white;
+        }
+        .tag-pill {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-xxs);
+        }
+        .tag-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background-color: var(--boxel-purple);
         }
       </style>
     </template>
