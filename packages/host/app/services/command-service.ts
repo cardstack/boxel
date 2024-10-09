@@ -5,9 +5,9 @@ import { task } from 'ember-concurrency';
 import flatMap from 'lodash/flatMap';
 
 import {
+  type LooseSingleCardDocument,
   type PatchData,
   baseRealm,
-  LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import {
   type CardTypeFilter,
@@ -19,23 +19,16 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type Realm from '@cardstack/host/services/realm';
 
-import { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
-import { CommandField } from 'https://cardstack.com/base/command';
-
-import { CommandResult } from 'https://cardstack.com/base/command-result';
-import {
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CommandCard } from 'https://cardstack.com/base/command';
+import type { CommandResult } from 'https://cardstack.com/base/command-result';
+import type {
   CommandEvent,
   CommandResultEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
-import { Message } from '../lib/matrix-classes/message';
-
 import CardService from './card-service';
 import RealmServerService from './realm-server';
-
-function getComponent(cardOrField: BaseDef) {
-  return cardOrField.constructor.getComponent(cardOrField);
-}
 
 export default class CommandService extends Service {
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -45,7 +38,7 @@ export default class CommandService extends Service {
   @service private declare realmServer: RealmServerService;
 
   //TODO: Convert to non-EC async method after fixing CS-6987
-  run = task(async (command: CommandField, roomId: string) => {
+  run = task(async (command: CommandCard, roomId: string) => {
     let { payload, eventId } = command;
     let res: any;
     try {
@@ -126,10 +119,20 @@ export default class CommandService extends Service {
     }
   });
 
-  async createCommand(args: any) {
-    return this.matrixService.createCard<typeof CommandField>(
+  async createCommandResult(args: Record<string, any>) {
+    return await this.matrixService.createCard<typeof CommandResult>(
       {
-        name: 'CommandField',
+        name: 'CommandResult',
+        module: `${baseRealm.url}command-result`,
+      },
+      args,
+    );
+  }
+
+  async createCommand(args: Record<string, any>) {
+    return await this.matrixService.createCard<typeof CommandCard>(
+      {
+        name: 'CommandCard',
         module: `${baseRealm.url}command`,
       },
       args,
@@ -146,31 +149,23 @@ export default class CommandService extends Service {
 
   async createCommandResultArgs(
     commandEvent: CommandEvent,
-    event: CommandResultEvent,
+    commandResultEvent: CommandResultEvent,
   ) {
     let toolCall = commandEvent.content.data.toolCall;
-    let results = this.deserializeResults(event);
     if (toolCall.name === 'searchCard') {
+      let results = this.deserializeResults(commandResultEvent);
       return {
+        toolCallName: toolCall.name,
         toolCallId: toolCall.id,
-        toolCallResults: event?.content?.result,
+        toolCallArgs: toolCall.arguments,
         cardIds: results.map((r) => r.data.id),
       };
     } else if (toolCall.name === 'patchCard') {
       return {
+        toolCallName: toolCall.name,
         toolCallId: toolCall.id,
-        toolCallResults: event?.content?.result,
+        toolCallArgs: toolCall.arguments,
       };
-    }
-    return;
-  }
-
-  getCommandResultComponent(message: Message) {
-    if (
-      message?.command?.result?.cardIds.length &&
-      message?.command?.name === 'searchCard'
-    ) {
-      return getComponent(message.command.result as CommandResult);
     }
     return;
   }
