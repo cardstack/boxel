@@ -393,12 +393,25 @@ class Isolated extends Component<typeof CardsGrid> {
   }
 
   private createCard = restartableTask(async () => {
-    let card = await chooseCard<CatalogEntry>({
-      filter: {
-        on: catalogEntryRef,
-        every: [{ eq: { isField: false } }],
+    let preselectedCardTypeQuery: Query | undefined;
+    let activeFilterRef = this.activeFilter?.query?.filter?.type;
+    if (activeFilterRef) {
+      preselectedCardTypeQuery = {
+        filter: {
+          on: catalogEntryRef,
+          eq: { ref: activeFilterRef },
+        },
+      };
+    }
+    let card = await chooseCard<CatalogEntry>(
+      {
+        filter: {
+          on: catalogEntryRef,
+          every: [{ eq: { isField: false } }],
+        },
       },
-    });
+      { preselectedCardTypeQuery },
+    );
     if (!card) {
       return;
     }
