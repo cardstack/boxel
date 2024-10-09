@@ -8,8 +8,9 @@
         "cwd": "${workspaceFolder}/packages/vscode-boxel-tools"
       },
       "command": "pnpm",
-      "args": ["compile:development"],
-      "problemMatcher": []
+      "args": ["watch"],
+      "isBackground": true,
+      "problemMatcher": ["$tsc"]
     }
   ]
 }
