@@ -8,7 +8,9 @@
       "runtimeExecutable": "${execPath}",
       "args": [
         "--extensionDevelopmentPath=${workspaceRoot}/packages/vscode-boxel-tools"
-      ]
+      ],
+      "outFiles": ["${workspaceFolder}/packages/vscode-boxel-tools/dist/**"],
+      "preLaunchTask": "Compile Boxel tools (development)"
     }
   ]
 }

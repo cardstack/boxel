@@ -1,0 +1,15 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Compile Boxel tools (development)",
+      "type": "shell",
+      "options": {
+        "cwd": "${workspaceFolder}/packages/vscode-boxel-tools"
+      },
+      "command": "pnpm",
+      "args": ["compile:development"],
+      "problemMatcher": []
+    }
+  ]
+}
