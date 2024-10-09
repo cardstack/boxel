@@ -550,7 +550,10 @@ export default class OperatorModeOverlays extends Component<Signature> {
         return;
       }
 
-      await this.args.publicAPI.viewCard(card, format, fieldType, fieldName);
+      await this.args.publicAPI.viewCard(card, format, {
+        fieldType,
+        fieldName,
+      });
     },
   );
 

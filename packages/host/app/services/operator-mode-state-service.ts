@@ -170,6 +170,9 @@ export default class OperatorModeStateService extends Service {
     this.recentCardsService.remove(card.id);
 
     let cardRealmUrl = await this.cardService.getRealmURL(card);
+    if (!cardRealmUrl) {
+      throw new Error(`Could not determine the realm for card "${card.id}"`);
+    }
     let realmPaths = new RealmPaths(cardRealmUrl);
     let cardPath = realmPaths.local(new URL(`${card.id}.json`));
     await this.cardService.deleteCard(card);

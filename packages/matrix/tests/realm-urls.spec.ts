@@ -55,6 +55,9 @@ test.describe('Realm URLs in Matrix account data', () => {
     expect(page.locator('[data-test-workspace-list]  [data-test-workspace-name]')).toHaveText(
       'Test Workspace A',
     );
+    expect(page.locator('[data-test-workspace-list]  [data-test-workspace-visibility]')).toHaveText(
+      'public',
+    );
 
     await updateAccountData(
       '@user1:localhost',
@@ -75,11 +78,21 @@ test.describe('Realm URLs in Matrix account data', () => {
         '[data-test-workspace-list] [data-test-workspace="Test Workspace A"] [data-test-workspace-name]',
       ),
     ).toHaveText('Test Workspace A');
+    expect(
+      page.locator(
+        '[data-test-workspace-list] [data-test-workspace="Test Workspace A"] [data-test-workspace-visibility]',
+      ),
+    ).toHaveText('public');
 
     expect(
       page.locator(
         '[data-test-workspace-list] [data-test-workspace="Unknown Workspace"] [data-test-workspace-name]',
       ),
     ).toHaveText('Unknown Workspace');
+    expect(
+      page.locator(
+        '[data-test-workspace-list] [data-test-workspace="Unknown Workspace"] [data-test-workspace-visibility]',
+      ),
+    ).toHaveText('private');
   });
 });
