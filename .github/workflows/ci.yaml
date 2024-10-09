@@ -118,7 +118,7 @@ jobs:
         run: pnpm start &
         env:
           NODE_OPTIONS: --max_old_space_size=4096
-          ICONS_URL: http://localhost:4206
+          ICONS_URL: http://0.0.0.0:4206
         working-directory: packages/host
       - name: Wait for ember-cli to be ready
         run: pnpm npx wait-for-localhost 4200
@@ -247,7 +247,7 @@ jobs:
         run: pnpm start &
         env:
           NODE_OPTIONS: --max_old_space_size=4096
-          ICONS_URL: http://localhost:4206
+          ICONS_URL: http://0.0.0.0:4206
         working-directory: packages/host
       - name: Wait for ember-cli to be ready
         run: pnpm npx wait-for-localhost 4200

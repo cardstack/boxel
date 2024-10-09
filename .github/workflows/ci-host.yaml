@@ -59,7 +59,7 @@ jobs:
           PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
-          ICONS_URL: http://localhost:4206
+          ICONS_URL: http://0.0.0.0:4206
         working-directory: packages/host
       - name: Upload junit report to GitHub Actions Artifacts
         uses: actions/upload-artifact@v4
