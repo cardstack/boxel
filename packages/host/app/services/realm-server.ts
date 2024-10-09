@@ -152,7 +152,8 @@ export default class RealmServerService extends Service {
       }
     });
 
-    // pluck out any non-catalog realms that aren't a part of the userRealmsURLs
+    // pluck out any non-catalog realms that aren't a part of the
+    // userRealmsURLs--don't touch the base realm though
     this.availableRealms
       .filter((r) => r.type === 'non-catalog' && r.url !== baseRealm.url)
       .forEach((realm) => {
