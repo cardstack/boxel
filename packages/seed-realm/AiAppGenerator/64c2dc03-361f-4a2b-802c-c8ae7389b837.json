@@ -8,6 +8,18 @@
           "tabId": "dashboard",
           "ref": {},
           "isTable": false
+        },
+        {
+          "displayName": "Requirements",
+          "tabId": "requirements",
+          "ref": {},
+          "isTable": false
+        },
+        {
+          "displayName": "Your Apps",
+          "tabId": "your-apps",
+          "ref": {},
+          "isTable": false
         }
       ],
       "headerIcon": {
@@ -20,7 +32,7 @@
       "moduleId": null,
       "title": "AI App Generator",
       "description": "Boxel AI Assistant app generator card",
-      "thumbnailURL": "/catalog/AiAppGenerator/ai-app-gen-thumbnail.png"
+      "thumbnailURL": "./AiAppGenerator/ai-app-gen-thumbnail.png"
     },
     "meta": {
       "adoptsFrom": {

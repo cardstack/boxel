@@ -25,10 +25,6 @@ import {
 } from '@cardstack/runtime-common';
 import { AppCard, AppCardTemplate, CardsGrid } from './app-card';
 
-const getCatalogRealm = () => {
-  return new URL('/catalog/', window.location.origin);
-};
-
 const getCardTypeQuery = (cardRef: CodeRef, excludedId?: string): Query => {
   let filter: Query['filter'];
   if (excludedId) {
@@ -136,7 +132,6 @@ class CardListSidebar extends GlimmerComponent<{
       <header class='sidebar-header'>
         <h3 class='sidebar-title'>{{@title}}</h3>
       </header>
-      <!--
       <@context.prerenderedCardSearchComponent
         @query={{@query}}
         @format='fitted'
@@ -150,7 +145,7 @@ class CardListSidebar extends GlimmerComponent<{
             @isListFormat={{true}}
           />
         </:response>
-      </@context.prerenderedCardSearchComponent>-->
+      </@context.prerenderedCardSearchComponent>
     </aside>
     <style scoped>
       .sidebar {
@@ -307,12 +302,12 @@ class DashboardTab extends GlimmerComponent<{
           <p class='error'>{{this.errorMessage}}</p>
         {{/if}}
       </section>
-      <!--<CardListSidebar
+      <CardListSidebar
         @title='Browse Sample Apps'
         @query={{getCardTypeQuery this.appCardRef @appCardId}}
         @realms={{@realms}}
         @context={{@context}}
-      />-->
+      />
     </div>
     <style scoped>
       .dashboard {
@@ -343,11 +338,11 @@ class DashboardTab extends GlimmerComponent<{
   };
   appCardRef = {
     name: 'AppCard',
-    module: 'http://localhost:4200/catalog/app-card',
+    module: new URL('./app-card', import.meta.url).href,
   };
   prdCardRef = {
     name: 'ProductRequirementDocument',
-    module: 'http://localhost:4200/catalog/product-requirement-document',
+    module: new URL('./product-requirement-document', import.meta.url).href,
   };
   @tracked errorMessage = '';
   @tracked prompt: Prompt = this.promptReset;
@@ -358,19 +353,15 @@ class DashboardTab extends GlimmerComponent<{
 
   @action generateProductRequirementsDoc() {
     let appTitle = `${this.prompt.domain} ${this.prompt.appType}`;
-    let prdCardRef = {
-      name: 'ProductRequirementDocument',
-      module: new URL('./product-requirement-document', getCatalogRealm()).href,
-    };
     let requirements = this.prompt.customRequirements
       ? `that has these features: ${this.prompt.customRequirements}`
       : '';
     let prompt = `I want to make a ${this.prompt.appType} tailored for a ${this.prompt.domain} ${requirements}`;
-    this.generateRequirements.perform(prdCardRef, {
+    this.generateRequirements.perform(this.prdCardRef, {
       data: {
         attributes: { appTitle, prompt },
         meta: {
-          adoptsFrom: prdCardRef,
+          adoptsFrom: this.prdCardRef,
           realmURL: this.args.currentRealm?.href,
         },
       },
@@ -393,13 +384,11 @@ class DashboardTab extends GlimmerComponent<{
         if (!card) {
           throw new Error('Error: Failed to create card');
         }
-        // Get the current host URL
-        let currentHost = new URL(window.location.href).origin;
 
         // Construct the relative URL for the SkillCard
         let skillCardUrl = new URL(
           './SkillCard/generate-product-requirements',
-          getCatalogRealm(),
+          import.meta.url,
         ).href;
 
         // Update the runCommand call to use the constructed URL
@@ -448,7 +437,7 @@ class RequirementsTab extends GlimmerComponent<{
         </Button>
       {{/if}}
       <div class='query-container'>
-        <!--<@context.prerenderedCardSearchComponent
+        <@context.prerenderedCardSearchComponent
           @query={{getCardTypeQuery this.cardRef}}
           @format='fitted'
           @realms={{@realms}}
@@ -457,7 +446,7 @@ class RequirementsTab extends GlimmerComponent<{
           <:response as |cards|>
             <CardsGrid @cards={{cards}} @context={{@context}} />
           </:response>
-        </@context.prerenderedCardSearchComponent>-->
+        </@context.prerenderedCardSearchComponent>
       </div>
     </div>
     <style scoped>
@@ -494,7 +483,7 @@ class RequirementsTab extends GlimmerComponent<{
 
   cardRef = {
     name: 'ProductRequirementDocument',
-    module: `/catalog/product-requirement-document`,
+    module: new URL('./product-requirement-document', import.meta.url).href,
   };
 
   get isCreateCardRunning() {
@@ -543,7 +532,7 @@ class YourAppsTab extends GlimmerComponent<{
 
   cardRef = {
     name: 'AppCard',
-    module: 'http://localhost:4200/catalog/app-card',
+    module: new URL('./app-card', import.meta.url).href,
   };
 }
 
