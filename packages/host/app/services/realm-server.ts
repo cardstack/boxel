@@ -42,7 +42,7 @@ type AuthStatus =
 
 interface AvailableRealm {
   url: string;
-  type: 'catalog' | 'non-catalog';
+  type: 'base' | 'catalog' | 'other';
 }
 
 export default class RealmServerService extends Service {
@@ -51,7 +51,7 @@ export default class RealmServerService extends Service {
   private auth: AuthStatus = { type: 'anonymous' };
   private client: ExtendedClient | undefined;
   private availableRealms = new TrackedArray<AvailableRealm>([
-    { type: 'non-catalog', url: baseRealm.url },
+    { type: 'base', url: baseRealm.url },
   ]);
   private ready = new Deferred<void>();
 
@@ -119,9 +119,10 @@ export default class RealmServerService extends Service {
     this.client = undefined;
     this.loggingIn = undefined;
     this.auth = { type: 'anonymous' };
-    this.availableRealms = new TrackedArray<AvailableRealm>([
-      { type: 'non-catalog', url: baseRealm.url },
-    ]);
+    this.availableRealms.splice(0, this.availableRealms.length, {
+      type: 'base',
+      url: baseRealm.url,
+    });
     window.localStorage.removeItem(sessionLocalStorageKey);
   }
 
@@ -133,14 +134,14 @@ export default class RealmServerService extends Service {
   @cached
   get userRealmURLs() {
     return this.availableRealms
-      .filter((r) => r.type === 'non-catalog' && r.url !== baseRealm.url)
+      .filter((r) => r.type === 'other')
       .map((r) => r.url);
   }
 
   @cached
   get catalogRealmURLs() {
     return this.availableRealms
-      .filter((r) => r.type === 'catalog' && r.url !== baseRealm.url)
+      .filter((r) => r.type === 'catalog')
       .map((r) => r.url);
   }
 
@@ -148,14 +149,13 @@ export default class RealmServerService extends Service {
     await this.ready.promise;
     userRealmURLs.forEach((userRealmURL) => {
       if (!this.availableRealms.find((r) => r.url === userRealmURL)) {
-        this.availableRealms.push({ type: 'non-catalog', url: userRealmURL });
+        this.availableRealms.push({ type: 'other', url: userRealmURL });
       }
     });
 
-    // pluck out any non-catalog realms that aren't a part of the
-    // userRealmsURLs--don't touch the base realm though
+    // pluck out any non-catalog realms that aren't a part of the userRealmsURLs
     this.availableRealms
-      .filter((r) => r.type === 'non-catalog' && r.url !== baseRealm.url)
+      .filter((r) => r.type === 'other')
       .forEach((realm) => {
         if (!userRealmURLs.includes(realm.url)) {
           this.availableRealms.splice(
