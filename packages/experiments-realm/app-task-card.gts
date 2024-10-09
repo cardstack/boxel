@@ -1,6 +1,5 @@
 import {
   Component,
-  CardDef,
   realmURL,
   CardContext,
   StringField,
@@ -16,7 +15,6 @@ import {
   BoxelDropdown,
   Menu as BoxelMenu,
   CircleSpinner,
-  IconButton,
 } from '@cardstack/boxel-ui/components';
 import { DropdownArrowFilled, IconPlus } from '@cardstack/boxel-ui/icons';
 import { menuItem } from '@cardstack/boxel-ui/helpers';
@@ -444,17 +442,16 @@ class ColumnQuery extends GlimmerComponent<ColumnQuerySignature> {
       <div class='column-title'>
         <span>{{@column.status.label}}</span>
         <div>
-          {{#if this._createNewTask.isRunning}}
-            <CircleSpinner width='12' height='12' />
-          {{else}}
-            <IconButton
-              @icon={{IconPlus}}
-              @width='12'
-              @height='12'
-              {{on 'click' (fn this.createNewTask @column)}}
-              style='cursor: pointer;'
-            />
-          {{/if}}
+          <button
+            class='create-new-task-button'
+            {{on 'click' (fn this.createNewTask @column)}}
+          >
+            {{#if this._createNewTask.isRunning}}
+              <CircleSpinner width='12px' height='12px' />
+            {{else}}
+              <IconPlus width='12px' height='12px' />
+            {{/if}}
+          </button>
         </div>
       </div>
       <div class='column-data'>
@@ -497,6 +494,10 @@ class ColumnQuery extends GlimmerComponent<ColumnQuerySignature> {
     </div>
 
     <style scoped>
+      .create-new-task-button {
+        all: unset;
+        cursor: pointer;
+      }
       .column {
         flex: 0 0 var(--boxel-xs-container);
         border-right: var(--boxel-border);
