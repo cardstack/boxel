@@ -188,6 +188,7 @@ export async function chooseCard<T extends BaseDef>(
     offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
     multiSelect?: boolean;
     createNewCard?: CreateNewCard;
+    preselectedCardTypeQuery?: Query;
   },
 ): Promise<undefined | T> {
   let here = globalThis as any;
