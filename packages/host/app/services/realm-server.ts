@@ -42,7 +42,7 @@ type AuthStatus =
 
 interface AvailableRealm {
   url: string;
-  type: 'base' | 'catalog' | 'other';
+  type: 'base' | 'catalog' | 'user';
 }
 
 export default class RealmServerService extends Service {
@@ -134,7 +134,7 @@ export default class RealmServerService extends Service {
   @cached
   get userRealmURLs() {
     return this.availableRealms
-      .filter((r) => r.type === 'other')
+      .filter((r) => r.type === 'user')
       .map((r) => r.url);
   }
 
@@ -149,13 +149,13 @@ export default class RealmServerService extends Service {
     await this.ready.promise;
     userRealmURLs.forEach((userRealmURL) => {
       if (!this.availableRealms.find((r) => r.url === userRealmURL)) {
-        this.availableRealms.push({ type: 'other', url: userRealmURL });
+        this.availableRealms.push({ type: 'user', url: userRealmURL });
       }
     });
 
-    // pluck out any non-catalog realms that aren't a part of the userRealmsURLs
+    // pluck out any user realms that aren't a part of the userRealmsURLs
     this.availableRealms
-      .filter((r) => r.type === 'other')
+      .filter((r) => r.type === 'user')
       .forEach((realm) => {
         if (!userRealmURLs.includes(realm.url)) {
           this.availableRealms.splice(
