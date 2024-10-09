@@ -4,7 +4,7 @@ import copy from 'rollup-plugin-copy';
 
 const addon = new Addon({
   srcDir: 'src',
-  destDir: 'dist/@cardstack/boxel-icons',
+  destDir: 'dist/@cardstack/boxel-icons/v1',
 });
 
 export default {

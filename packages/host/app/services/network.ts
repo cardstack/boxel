@@ -88,7 +88,7 @@ export default class NetworkService extends Service {
     }
     shimExternals(virtualNetwork);
     virtualNetwork.addImportMap('@cardstack/boxel-icons/', (rest) => {
-      return `http://localhost:5800/@cardstack/boxel-icons/icons/${rest}.js`;
+      return `http://localhost:5800/@cardstack/boxel-icons/v1/icons/${rest}.js`;
     });
     return virtualNetwork;
   }
