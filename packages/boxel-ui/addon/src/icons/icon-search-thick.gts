@@ -15,13 +15,13 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
       stroke='var(--icon-color, #000)'
       stroke-linecap='round'
       stroke-linejoin='round'
-      stroke-width='1.5'
+      stroke-width='2'
       transform='translate(.75 .75)'
-    ><circle cx='6.222' cy='6.222' r='6.222' /><path
+    ><circle cx='6.222' cy='6.222' r='6' /><path
         d='m14 14-3.383-3.383'
       /></g></svg>
 </template>;
 
 // @ts-expect-error this is the only way to set a name on a Template Only Component currently
-IconComponent.name = 'Search';
+IconComponent.name = 'IconSearchThick';
 export default IconComponent;
