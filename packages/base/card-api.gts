@@ -54,7 +54,7 @@ import DefaultAtomViewTemplate from './default-templates/atom';
 import MissingEmbeddedTemplate from './default-templates/missing-embedded';
 import FieldDefEditTemplate from './default-templates/field-edit';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
-import TextCursorInputIcon from '@cardstack/boxel-icons/text-cursor-input';
+import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 
 export { primitive, isField, type BoxComponent };
 export const serialize = Symbol.for('cardstack-serialize');
@@ -1805,7 +1805,7 @@ export class FieldDef extends BaseDef {
   // class type cannot masquarade as a FieldDef class type
   static isFieldDef = true;
   static displayName = 'Field';
-  static icon = TextCursorInputIcon;
+  static icon = RectangleEllipsisIcon;
 
   static embedded: BaseDefComponent = MissingEmbeddedTemplate;
   static edit: BaseDefComponent = FieldDefEditTemplate;
