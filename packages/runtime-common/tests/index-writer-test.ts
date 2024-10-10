@@ -244,8 +244,8 @@ const tests = Object.freeze({
     );
 
     // invalidations currently do not cross realm boundaries (probably they
-    // will in the future--but via a different mechanism
-    assert.deepEqual(invalidations.sort(), [`${testRealmURL}person.gts`]);
+    // will in the future--but via a different mechanism)
+    assert.deepEqual(invalidations, [`${testRealmURL}person.gts`]);
   },
 
   'only invalidates latest version of content': async (
