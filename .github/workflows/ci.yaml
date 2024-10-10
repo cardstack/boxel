@@ -108,7 +108,7 @@ jobs:
       - name: Build boxel-ui
         run: pnpm build
         working-directory: packages/boxel-ui/addon
-      - name: Serve boxel-icons
+      - name: Serve boxel-icons &
         run: pnpm build && pnpm serve
         working-directory: packages/boxel-icons
       - name: Build boxel-motion
