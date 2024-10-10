@@ -1,3 +1,4 @@
+// @ts-expect-error: Module '/catalog/app-card' may not be available during compilation
 import { AppCard } from '/catalog/app-card';
 // import { Component } from 'https://cardstack.com/base/card-api';
 export class GardenAppCard extends AppCard {
@@ -19,6 +20,9 @@ export class GardenAppCard extends AppCard {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+
+
 
 
   */
