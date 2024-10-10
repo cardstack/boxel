@@ -2,18 +2,18 @@ import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 
-import { cached } from '@glimmer/tracking';
 import Component from '@glimmer/component';
+import { cached } from '@glimmer/tracking';
 
 import { TrackedMap } from 'tracked-built-ins';
 
 import { type IndexEventData } from '@cardstack/runtime-common';
 
-import { assertNever } from '@cardstack/host/utils/assert-never';
-
 import type MessageService from '@cardstack/host/services/message-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
+
+import { assertNever } from '@cardstack/host/utils/assert-never';
 
 export default class RealmIndexingIndicator extends Component {
   @service private declare realmServer: RealmServerService;
