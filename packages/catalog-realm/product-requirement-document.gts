@@ -258,9 +258,14 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
       if (!this.args.context?.actions?.runCommand) {
         throw new Error('Context action "runCommand" is not available');
       }
+      console.log('generating code, current module: ', import.meta.url);
+      let skillCardUrl = new URL('./SkillCard/app-generator', import.meta.url)
+        .href;
+
+      console.log('generating code, skill card url', skillCardUrl);
       await this.args.context.actions.runCommand(
         this.args.model as CardDef,
-        `${baseRealm.url}SkillCard/app-generator`,
+        skillCardUrl,
         'Generate code',
       );
     } catch (e) {
@@ -311,7 +316,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
                 title: this.args.model.appTitle,
                 moduleId: moduleURL,
               },
-              meta: { adoptsFrom: moduleRef },
+              meta: { adoptsFrom: moduleRef, realmURL: this.currentRealm },
             },
           },
           cardModeAfterCreation: 'isolated',

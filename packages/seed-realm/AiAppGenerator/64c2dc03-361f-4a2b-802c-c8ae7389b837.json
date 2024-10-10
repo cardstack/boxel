@@ -36,7 +36,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../ai-app-generator",
+        "module": "/catalog/ai-app-generator",
         "name": "AiAppGenerator"
       }
     }
