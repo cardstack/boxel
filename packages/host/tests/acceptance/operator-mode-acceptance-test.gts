@@ -599,6 +599,62 @@ module('Acceptance | operator mode tests', function (hooks) {
     await percySnapshot(assert);
   });
 
+  test('check code mode states when switching between workspaces', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+      .exists();
+    assert.dom('[data-test-submode-layout-title]').doesNotExist();
+
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    assert
+      .dom(`[data-test-code-mode-card-preview-header="${testRealmURL}"]`)
+      .exists();
+
+    await click('[data-test-file-browser-toggle]');
+    await click('[data-test-file="boom-person.gts"]');
+    await click('[data-test-file="Person/fadhlan.json"]');
+    await click('[data-test-directory="Pet/"]');
+    await click('[data-test-file="Pet/mango.json"]');
+    await click('[data-test-file="Pet/vangogh.json"]');
+    assert.dom('[data-test-recent-file]').exists({ count: 3 });
+    assert
+      .dom(`[data-test-recent-file=${testRealmURL}Pet/mango.json]`)
+      .exists();
+    assert
+      .dom(`[data-test-recent-file=${testRealmURL}Person/fadhlan.json]`)
+      .exists();
+    assert
+      .dom(`[data-test-recent-file=${testRealmURL}boom-person.gts]`)
+      .exists();
+
+    await click('[data-test-workspace-chooser-toggle]');
+    await click('[data-test-workspace="Boxel Catalog"]');
+    assert
+      .dom(
+        `[data-test-code-mode-card-preview-header="http://localhost:4201/catalog/index"]`,
+      )
+      .exists();
+    assert.dom('[data-test-recent-file]').exists({ count: 0 });
+
+    await click('[data-test-workspace-chooser-toggle]');
+    await click('[data-test-workspace="Test Workspace B"]');
+    assert
+      .dom(`[data-test-code-mode-card-preview-header="${testRealmURL}"]`)
+      .exists();
+  });
+
   module('2 stacks', function () {
     test('Toggling submode will open code submode and toggling back will restore the stack', async function (assert) {
       await visitOperatorMode({
