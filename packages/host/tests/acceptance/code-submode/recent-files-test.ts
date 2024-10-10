@@ -283,7 +283,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       'recent-files',
       JSON.stringify([
         [testRealmURL, 'index.json'],
-        ['http://localhost:4202/test/', 'français.json'],
+        [testRealmURL, 'français.json'],
         'a-non-url-to-ignore',
       ]),
     );
@@ -321,9 +321,10 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     await waitFor(
       '[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]',
     );
+
     assert
       .dom('[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]')
-      .hasAttribute('src', 'https://i.postimg.cc/d0B9qMvy/icon.png');
+      .hasAttribute('src', 'https://i.postimg.cc/L8yXRvws/icon.png');
 
     await click('[data-test-file="index.json"]');
     assert
@@ -364,7 +365,6 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
         [testRealmURL, 'index.json'],
         [testRealmURL, 'français.json'],
         [testRealmURL, 'Person/1.json'],
-        ['http://localhost:4202/test/', 'français.json'],
       ],
     );
   });

@@ -614,15 +614,13 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert
       .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
       .exists();
-    assert.dom('[data-test-submode-layout-title]').doesNotExist();
 
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    assert
-      .dom(`[data-test-code-mode-card-preview-header="${testRealmURL}"]`)
-      .exists();
 
     await click('[data-test-file-browser-toggle]');
+    assert.dom(`[data-test-realm-name]`).hasText('In Test Workspace B');
+
     await click('[data-test-file="boom-person.gts"]');
     await click('[data-test-file="Person/fadhlan.json"]');
     await click('[data-test-directory="Pet/"]');
@@ -630,28 +628,35 @@ module('Acceptance | operator mode tests', function (hooks) {
     await click('[data-test-file="Pet/vangogh.json"]');
     assert.dom('[data-test-recent-file]').exists({ count: 3 });
     assert
-      .dom(`[data-test-recent-file=${testRealmURL}Pet/mango.json]`)
+      .dom(`[data-test-recent-file="${testRealmURL}Pet/mango.json"]`)
       .exists();
     assert
-      .dom(`[data-test-recent-file=${testRealmURL}Person/fadhlan.json]`)
+      .dom(`[data-test-recent-file="${testRealmURL}Person/fadhlan.json"]`)
       .exists();
     assert
-      .dom(`[data-test-recent-file=${testRealmURL}boom-person.gts]`)
+      .dom(`[data-test-recent-file="${testRealmURL}boom-person.gts"]`)
       .exists();
 
     await click('[data-test-workspace-chooser-toggle]');
     await click('[data-test-workspace="Boxel Catalog"]');
-    assert
-      .dom(
-        `[data-test-code-mode-card-preview-header="http://localhost:4201/catalog/index"]`,
-      )
-      .exists();
+    assert.dom(`[data-test-realm-name]`).hasText('In Boxel Catalog');
     assert.dom('[data-test-recent-file]').exists({ count: 0 });
 
     await click('[data-test-workspace-chooser-toggle]');
     await click('[data-test-workspace="Test Workspace B"]');
+    assert.dom(`[data-test-realm-name]`).hasText('In Test Workspace B');
+    assert.dom('[data-test-recent-file]').exists({ count: 4 });
     assert
-      .dom(`[data-test-code-mode-card-preview-header="${testRealmURL}"]`)
+      .dom(`[data-test-recent-file="${testRealmURL}Pet/vangogh.json"]`)
+      .exists();
+    assert
+      .dom(`[data-test-recent-file="${testRealmURL}Pet/mango.json"]`)
+      .exists();
+    assert
+      .dom(`[data-test-recent-file="${testRealmURL}Person/fadhlan.json"]`)
+      .exists();
+    assert
+      .dom(`[data-test-recent-file="${testRealmURL}boom-person.gts"]`)
       .exists();
   });
 
