@@ -594,6 +594,7 @@ export default class OperatorModeStateService extends Service {
     await stackItem.ready();
     this.clearStacks();
     this.addItemToStack(stackItem);
+    this.updateCodePath(new URL(card!.id));
 
     this.operatorModeController.workspaceChooserOpened = false;
   });
