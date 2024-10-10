@@ -1,0 +1,54 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "taskName": "Build Multi-Select Component",
+      "taskDetail": "Multi-Select component to be used when filtering ",
+      "status": {
+        "index": 6,
+        "label": "Shipped"
+      },
+      "priority": {
+        "index": 1,
+        "label": "Medium"
+      },
+      "dateStarted": null,
+      "dueDate": "2024-10-03",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/847c1f4e-e0ae-43d3-a012-8ffaa66f5925"
+        }
+      },
+      "project": {
+        "links": {
+          "self": "../Project/51ca069b-1c55-4648-8654-bd82bf162f9d"
+        }
+      },
+      "team": {
+        "links": {
+          "self": "../Team/cc574556-4253-44b8-ba80-0cfb844b4908"
+        }
+      },
+      "children": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../productivity/task",
+        "name": "Task"
+      }
+    }
+  }
+}
