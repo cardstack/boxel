@@ -197,12 +197,14 @@ interface FileRemovedEventData {
   removed: string;
 }
 
+export type IndexEventData =
+  | IncrementalIndexInitiation
+  | IncrementalIndexEventData
+  | FullIndexEventData;
+
 interface IndexEvent {
   type: 'index';
-  data:
-    | IncrementalIndexInitiation
-    | IncrementalIndexEventData
-    | FullIndexEventData;
+  data: IndexEventData;
   id?: string;
   clientRequestId?: string | null;
 }
