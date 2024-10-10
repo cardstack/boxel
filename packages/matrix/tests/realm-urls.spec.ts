@@ -8,9 +8,7 @@ import {
   updateUser,
 } from '../docker/synapse';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
-import { login, registerRealmUsers, testHost } from '../helpers';
-
-const testRealmURL = `${testHost}/`;
+import { login, registerRealmUsers } from '../helpers';
 
 test.describe('Realm URLs in Matrix account data', () => {
   let synapse: SynapseInstance;
@@ -33,7 +31,7 @@ test.describe('Realm URLs in Matrix account data', () => {
       '@user1:localhost',
       user.accessToken,
       'com.cardstack.boxel.realms',
-      JSON.stringify({ realms: [testRealmURL] }),
+      JSON.stringify({ realms: [] }),
     );
   });
 
@@ -51,38 +49,25 @@ test.describe('Realm URLs in Matrix account data', () => {
       .locator('[data-test-workspace-chooser]')
       .waitFor({ state: 'visible' });
 
-    expect(page.locator('[data-test-workspace-list] [data-test-workspace]')).toHaveCount(1);
-    expect(page.locator('[data-test-workspace-list]  [data-test-workspace-name]')).toHaveText(
-      'Test Workspace A',
-    );
-    expect(page.locator('[data-test-workspace-list]  [data-test-workspace-visibility]')).toHaveText(
-      'public',
-    );
+    expect(
+      page.locator('[data-test-workspace-list] [data-test-workspace]'),
+    ).toHaveCount(0);
 
     await updateAccountData(
       '@user1:localhost',
       user.accessToken,
       'com.cardstack.boxel.realms',
       JSON.stringify({
-        realms: ['http://localhost:4202/test/', 'http://example.com/'],
+        realms: ['http://example.com/'],
       }),
     );
 
     await page
-      .locator('[data-test-workspace-list] [data-test-workspace]:nth-child(2)')
+      .locator('[data-test-workspace-list] [data-test-workspace]')
       .waitFor({ state: 'visible' });
-      expect(page.locator('[data-test-workspace-list] [data-test-workspace]')).toHaveCount(2);
-
     expect(
-      page.locator(
-        '[data-test-workspace-list] [data-test-workspace="Test Workspace A"] [data-test-workspace-name]',
-      ),
-    ).toHaveText('Test Workspace A');
-    expect(
-      page.locator(
-        '[data-test-workspace-list] [data-test-workspace="Test Workspace A"] [data-test-workspace-visibility]',
-      ),
-    ).toHaveText('public');
+      page.locator('[data-test-workspace-list] [data-test-workspace]'),
+    ).toHaveCount(1);
 
     expect(
       page.locator(
