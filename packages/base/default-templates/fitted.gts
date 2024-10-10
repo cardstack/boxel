@@ -30,7 +30,7 @@ export default class DefaultFittedTemplate extends GlimmerComponent<{
             </div>
           {{else}}
             {{#let (cardTypeIcon @model) as |CardTypeIcon|}}
-              <CardTypeIcon data-test-card-type-icon />
+              <CardTypeIcon data-test-card-type-icon class='card-type-icon' />
             {{/let}}
           {{/if}}
         </div>
@@ -55,6 +55,10 @@ export default class DefaultFittedTemplate extends GlimmerComponent<{
         height: 100%;
         display: flex;
         overflow: hidden;
+      }
+
+      .thumbnail-section {
+        display: flex;
       }
 
       /* Aspect Ratio <= 1.0 */
@@ -325,6 +329,13 @@ export default class DefaultFittedTemplate extends GlimmerComponent<{
       }
       .thumbnail-section {
         justify-content: center;
+        align-items: center;
+      }
+      .card-type-icon {
+        width: 52px;
+        height: 52px;
+        max-width: 100%;
+        max-height: 100%;
       }
     </style>
   </template>

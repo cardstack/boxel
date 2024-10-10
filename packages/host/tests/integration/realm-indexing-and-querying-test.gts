@@ -3322,7 +3322,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         'https://cardstack.com/base/text-input-validator',
         'https://cardstack.com/base/watched-array',
         'https://packages/@cardstack/boxel-icons/captions',
-        'https://packages/@cardstack/boxel-icons/text-cursor-input',
+        'https://packages/@cardstack/boxel-icons/rectangle-ellipsis',
         'https://packages/@cardstack/boxel-ui/components',
         'https://packages/@cardstack/boxel-ui/helpers',
         'https://packages/@cardstack/boxel-ui/icons',
