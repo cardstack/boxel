@@ -199,19 +199,8 @@ export class RealmFS implements vscode.FileSystemProvider {
     let headers: Record<string, string> = {
       'Content-Type': 'text/plain;charset=UTF-8',
       Authorization: `${await this.getJWT(apiUrl)}`,
+      Accept: 'application/vnd.card+source',
     };
-
-    // Add special header for .gts files
-    if (uri.path.endsWith('.gts')) {
-      headers['Accept'] = 'application/vnd.card+source';
-      requestType = 'POST';
-    } else if (uri.path.endsWith('.json')) {
-      // We cannot write new files so this only works for editing existing ones
-      requestType = 'PATCH';
-      apiUrl = apiUrl.replace('.json', '');
-      console.log('API URL:', apiUrl, 'requestType:', requestType);
-      headers['Accept'] = 'application/vnd.card+json';
-    }
 
     try {
       // Convert Uint8Array to text
@@ -364,7 +353,7 @@ export class RealmFS implements vscode.FileSystemProvider {
 
     try {
       let headers = {
-        Accept: 'application/vnd.api+json',
+        Accept: 'application/vnd.api+source',
         Authorization: `${await this.getJWT(apiUrl)}`,
       };
 
@@ -372,7 +361,7 @@ export class RealmFS implements vscode.FileSystemProvider {
       if (uri.path.endsWith('.gts')) {
         headers['Accept'] = 'application/vnd.card+source';
       } else if (uri.path.endsWith('.json')) {
-        headers['Accept'] = 'application/vnd.card+json';
+        headers['Accept'] = 'application/vnd.card+source';
       }
 
       console.log('Headers:', headers);
@@ -386,11 +375,12 @@ export class RealmFS implements vscode.FileSystemProvider {
       console.log('Response:', response);
 
       const contentType = response.headers.get('Content-Type');
+      console.log('Content type:', contentType);
       let content: Uint8Array;
 
       if (contentType && contentType.includes('application/json')) {
-        const jsonData = await response.json();
-        content = new TextEncoder().encode(JSON.stringify(jsonData, null, 2));
+        const text = await response.text();
+        content = new TextEncoder().encode(text);
       } else {
         content = new Uint8Array(await response.arrayBuffer());
       }
