@@ -123,6 +123,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @tracked private selectedCards = new TrackedArray<CardDefOrId>([]);
   @tracked private isHoverOnRealmIcon = false;
   @tracked private isSaving = false;
+  @tracked private isClosing = false;
   @tracked private hasUnsavedChanges = false;
   @tracked private lastSaved: number | undefined;
   @tracked private lastSavedMsg: string | undefined;
@@ -211,17 +212,18 @@ export default class OperatorModeStackItem extends Component<Signature> {
       max-width: ${maxWidthPercent}%;
       z-index: calc(${this.args.index} + 1);
       margin-top: ${marginTopPx}px;
+      transition: margin-top var(--boxel-transition);
     `; // using margin-top instead of padding-top to hide scrolled content from view
-
-    if (this.args.item.isWideFormat) {
-      styles += 'transition: width var(--boxel-transition)';
-    }
 
     return htmlSafe(styles);
   }
 
   private get isBuried() {
     return this.args.index + 1 < this.args.stackItems.length;
+  }
+
+  private get isLastItem() {
+    return this.args.index === this.args.stackItems.length - 1;
   }
 
   private get cardContext() {
@@ -435,9 +437,19 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.containerEl = el;
   };
 
+  private closeItem = async () => {
+    this.isClosing = true;
+    // wait for the animation to complete
+    await timeout(100);
+    this.args.close(this.args.item);
+  };
+
   <template>
     <div
-      class='item {{if this.isBuried "buried"}}'
+      class='item
+        {{if this.isBuried "buried"}}
+        {{if this.isLastItem "open"}}
+        {{if this.isClosing "dismissed"}}'
       data-test-stack-card-index={{@index}}
       data-test-stack-card={{this.cardIdentifier}}
       {{! In order to support scrolling cards into view
@@ -564,7 +576,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                     @height='16px'
                     class='icon-button'
                     aria-label='Close'
-                    {{on 'click' (fn @close @item)}}
+                    {{on 'click' this.closeItem}}
                     data-test-close-button
                   />
                 </:trigger>
@@ -610,6 +622,28 @@ export default class OperatorModeStackItem extends Component<Signature> {
         --stack-card-footer-height: 6rem;
         --stack-item-header-area-height: 3.375rem;
         --buried-operator-mode-header-height: 2.5rem;
+      }
+
+      @keyframes scaleIn {
+        from {
+          transform: scale(0.1);
+          opacity: 0;
+        }
+        to {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+
+      @keyframes fadeOut {
+        from {
+          opacity: 1;
+          transform: translateY(0);
+        }
+        to {
+          opacity: 0;
+          transform: translateY(100%);
+        }
       }
 
       .header {
@@ -660,6 +694,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
         height: inherit;
         z-index: 0;
         pointer-events: none;
+      }
+      .item.open {
+        animation: scaleIn 0.2s forwards;
+      }
+      .item.dismissed {
+        animation: fadeOut 0.2s forwards;
       }
 
       .card {
