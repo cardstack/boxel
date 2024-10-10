@@ -345,10 +345,14 @@ export interface Actions {
   viewCard: (
     card: CardDef,
     format?: Format,
-    fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
-    fieldName?: string,
+    opts?: {
+      openCardInRightMostStack?: boolean;
+      fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany';
+      fieldName?: string;
+    },
   ) => Promise<void>;
   editCard: (card: CardDef) => void;
+  copyCard?: (card: CardDef) => Promise<CardDef>;
   saveCard(card: CardDef, dismissItem: boolean): Promise<void>;
   delete: (item: CardDef | URL | string) => void;
   doWithStableScroll: (
@@ -360,7 +364,7 @@ export interface Actions {
     card: CardDef, // the card that the command is being run on
     skillCardId: string, // skill card id that the command is associated with
     message?: string, // message that posts in the chat
-  ) => Promise<void>;
+  ) => void;
 }
 
 export function hasExecutableExtension(path: string): boolean {

@@ -6,7 +6,7 @@ import { Resource } from 'ember-resources';
 
 import { TrackedMap, TrackedObject } from 'tracked-built-ins';
 
-import { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import { CommandStatus } from 'https://cardstack.com/base/command';
 import type {
@@ -14,15 +14,12 @@ import type {
   CardMessageContent,
   CommandEvent,
   CommandResultEvent,
+  MatrixEvent as DiscreteMatrixEvent,
   ReactionEvent,
-} from 'https://cardstack.com/base/matrix-event';
-
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
-
-import type {
   RoomCreateEvent,
   RoomNameEvent,
 } from 'https://cardstack.com/base/matrix-event';
+
 import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import {
@@ -31,9 +28,8 @@ import {
 } from '../lib/matrix-classes/member';
 import { Message } from '../lib/matrix-classes/message';
 
-import { RoomState } from '../lib/matrix-classes/room';
-
 import type { Skill } from '../components/ai-assistant/skill-menu';
+import type { RoomState } from '../lib/matrix-classes/room';
 
 import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
@@ -186,9 +182,6 @@ export class RoomResource extends Resource<Args> {
       if (event.type !== 'm.room.message') {
         continue;
       }
-      // if (event?.content?.body?.includes('slow')) {
-      //   debugger;
-      // }
       let event_id = event.event_id;
       let update = false;
       if (event.content['m.relates_to']?.rel_type == 'm.annotation') {
@@ -197,6 +190,12 @@ export class RoomResource extends Resource<Args> {
         // TOOD: Refactor having many if conditions to some variant of a strategy pattern
         update = true;
       } else if (event.content['m.relates_to']?.rel_type === 'm.replace') {
+        if (
+          'isStreamingFinished' in event.content &&
+          !event.content.isStreamingFinished
+        ) {
+          continue;
+        }
         event_id = event.content['m.relates_to'].event_id;
         update = true;
       }
@@ -218,6 +217,7 @@ export class RoomResource extends Resource<Args> {
         attachedCardIds: null,
         attachedSkillCardIds: null,
         command: null,
+        commandResult: null,
         status: event.status,
         eventId: event.event_id,
         index,
@@ -299,23 +299,25 @@ export class RoomResource extends Resource<Args> {
             ? annotation?.content['m.relates_to'].key
             : 'ready';
 
-        let commandFieldArgs = {
+        let commandCardArgs = {
           toolCallId: command.id,
           eventId: event_id,
           name: command.name,
           payload: command.arguments,
           status,
-          result: r,
         };
-
-        let commandField = await this.commandService.createCommand(
-          commandFieldArgs,
+        let commandCard = await this.commandService.createCommand(
+          commandCardArgs,
         );
+        let commandResult = r
+          ? await this.commandService.createCommandResult(r)
+          : undefined;
 
         messageField = new Message({
           ...messageArgs,
           formattedMessage: `<p data-test-command-message class="command-message">${event.content.formatted_body}</p>`,
-          command: commandField,
+          command: commandCard,
+          commandResult,
           isStreamingFinished: true,
         });
       } else {
@@ -334,7 +336,6 @@ export class RoomResource extends Resource<Args> {
           let d2 = messageField.created!;
           messageField.created = d1 < d2 ? d1 : d2;
         }
-
         this._messageCache.set(
           (event.content as CardMessageContent).clientGeneratedId ?? event_id,
           messageField as any,
