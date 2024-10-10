@@ -189,7 +189,7 @@ export class RealmFS implements vscode.FileSystemProvider {
   async writeFile(
     uri: vscode.Uri,
     content: Uint8Array,
-    options: { create: boolean; overwrite: boolean },
+    _options: { create: boolean; overwrite: boolean },
   ): Promise<void> {
     console.log('Writing file:', uri);
 
@@ -199,22 +199,8 @@ export class RealmFS implements vscode.FileSystemProvider {
     let headers: Record<string, string> = {
       'Content-Type': 'text/plain;charset=UTF-8',
       Authorization: `${await this.getJWT(apiUrl)}`,
+      Accept: 'application/vnd.card+source',
     };
-
-    // Add special header for .gts files
-    if (uri.path.endsWith('.gts')) {
-      headers['Accept'] = 'application/vnd.card+source';
-      requestType = 'POST';
-    } else if (uri.path.endsWith('.json')) {
-      if (options.create) {
-        headers['Accept'] = 'application/vnd.card+source';
-      } else {
-        requestType = 'PATCH';
-        apiUrl = apiUrl.replace('.json', '');
-        console.log('API URL:', apiUrl, 'requestType:', requestType);
-        headers['Accept'] = 'application/vnd.card+json';
-      }
-    }
 
     try {
       // Convert Uint8Array to text
