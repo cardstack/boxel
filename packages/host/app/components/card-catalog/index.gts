@@ -6,11 +6,22 @@ import Component from '@glimmer/component';
 
 import { Button } from '@cardstack/boxel-ui/components';
 
-import { add, cn, eq, gt, lt, subtract } from '@cardstack/boxel-ui/helpers';
+import {
+  add,
+  and,
+  cn,
+  eq,
+  gt,
+  lt,
+  subtract,
+} from '@cardstack/boxel-ui/helpers';
 
 import type { RealmInfo } from '@cardstack/runtime-common';
 
 import { HTMLComponent } from '@cardstack/host/lib/html-component';
+
+import RestoreScrollPosition from '@cardstack/host/modifiers/restore-scroll-position';
+import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 
 import { removeFileExtension } from '../search-sheet/utils';
 
@@ -28,6 +39,7 @@ interface Signature {
     cards: PrerenderedCard[];
     select: (cardUrl?: string, ev?: KeyboardEvent | MouseEvent) => void;
     selectedCardUrl?: string;
+    hasPreselectedCard?: boolean;
     realmInfos: Record<string, RealmInfo>;
   };
 }
@@ -45,7 +57,13 @@ export default class CardCatalog extends Component<Signature> {
             @resultsCount={{realmData.cardsTotal}}
           />
 
-          <ul class='card-catalog__group'>
+          <ul
+            class='card-catalog__group'
+            {{RestoreScrollPosition
+              key=@selectedCardUrl
+              container='card-catalog'
+            }}
+          >
             {{#each realmData.cards as |card index|}}
               {{#if (lt index realmData.displayedCardsCount)}}
                 {{#let (eq @selectedCardUrl card.url) as |isSelected|}}
@@ -61,6 +79,11 @@ export default class CardCatalog extends Component<Signature> {
                         card.url
                       }}
                       data-test-card-catalog-item-selected={{isSelected}}
+                      {{scrollIntoViewModifier
+                        (and isSelected @hasPreselectedCard)
+                        container='card-catalog'
+                        key=card.url
+                      }}
                     >
                       {{card.component}}
                     </button>
@@ -209,6 +232,21 @@ export default class CardCatalog extends Component<Signature> {
         displayedCardsCount: pageSize,
         realmInfo: groupedCards[realmUrl].realmInfo,
       };
+
+      // if (this.args.hasPreselectedCard) {
+      //   let selectedCard = groupedCards[realmUrl].cards.find(
+      //     (c) => c.url === this.args.selectedCardUrl,
+      //   );
+      //   let selectedCardIndex = selectedCard
+      //     ? groupedCards[realmUrl].cards.indexOf(selectedCard)
+      //     : undefined;
+      //   console.log(selectedCard, selectedCardIndex);
+      //   let displayedCardsCount =
+      //     selectedCardIndex && selectedCardIndex + 1 > pageSize
+      //       ? pageSize * Math.ceil((selectedCardIndex + 1) / pageSize)
+      //       : pageSize;
+      //   groupedCards[realmUrl].displayedCardsCount = displayedCardsCount;
+      // }
     });
 
     return groupedCards;

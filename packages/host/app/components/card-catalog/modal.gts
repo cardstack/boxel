@@ -5,6 +5,7 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, task, timeout } from 'ember-concurrency';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
@@ -151,6 +152,7 @@ export default class CardCatalogModal extends Component<Signature> {
                     @realmInfos={{this.availableRealms}}
                     @select={{this.selectCard}}
                     @selectedCardUrl={{this.state.selectedCardUrl}}
+                    @hasPreselectedCard={{this.hasPreselectedCard}}
                   />
                 {{/if}}
               </:response>
@@ -253,6 +255,8 @@ export default class CardCatalogModal extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare realmServer: RealmServerService;
   @service declare realm: RealmService;
+
+  @tracked hasPreselectedCard = false;
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);
@@ -394,9 +398,10 @@ export default class CardCatalogModal extends Component<Signature> {
             ),
           ),
         );
-        preselectedCardUrl = instances?.[0]?.id
-          ? `${instances[0].id}.json`
-          : undefined;
+        if (instances?.[0]?.id) {
+          preselectedCardUrl = `${instances[0].id}.json`;
+          this.hasPreselectedCard = true;
+        }
       }
       let cardCatalogState = new TrackedObject<State>({
         id: this.stateId,
@@ -535,6 +540,7 @@ export default class CardCatalogModal extends Component<Signature> {
     }
 
     this.state.selectedCardUrl = cardUrl;
+    this.hasPreselectedCard = false;
 
     if (
       (event instanceof KeyboardEvent && event?.key === 'Enter') ||
