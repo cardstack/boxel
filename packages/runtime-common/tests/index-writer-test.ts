@@ -209,6 +209,45 @@ const tests = Object.freeze({
     ]);
   },
 
+  "invalidations don't cross realm boundaries": async (
+    assert,
+    { indexWriter, adapter },
+  ) => {
+    await setupIndex(
+      adapter,
+      [
+        { realm_url: testRealmURL, current_version: 1 },
+        { realm_url: testRealmURL2, current_version: 5 },
+      ],
+      [
+        {
+          url: `${testRealmURL}person.gts`,
+          file_alias: `${testRealmURL}person`,
+          type: 'module',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [],
+        },
+        {
+          url: `${testRealmURL2}luke.json`,
+          file_alias: `${testRealmURL2}luke.json`,
+          type: 'instance',
+          realm_version: 1,
+          realm_url: testRealmURL2,
+          deps: [`${testRealmURL}person`],
+        },
+      ],
+    );
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let invalidations = await batch.invalidate(
+      new URL(`${testRealmURL}person.gts`),
+    );
+
+    // invalidations currently do not cross realm boundaries (probably they
+    // will in the future--but via a different mechanism
+    assert.deepEqual(invalidations.sort(), [`${testRealmURL}person.gts`]);
+  },
+
   'only invalidates latest version of content': async (
     assert,
     { indexWriter, adapter },

@@ -40,6 +40,14 @@ module('Unit | index-writer', function (hooks) {
     });
   });
 
+  test("invalidations don't cross realm boundaries", async function (assert) {
+    await runSharedTest(indexWriterTests, assert, {
+      indexWriter,
+      indexQueryEngine,
+      adapter,
+    });
+  });
+
   test('only invalidates latest version of content', async function (assert) {
     await runSharedTest(indexWriterTests, assert, {
       indexWriter,
