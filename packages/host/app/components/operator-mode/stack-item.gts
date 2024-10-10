@@ -110,7 +110,6 @@ export interface RenderedCardForOverlayActions {
   fieldName: string | undefined;
   format: Format | 'data';
   stackItem: StackItem;
-  overlayZIndexStyle?: SafeString;
 }
 
 export default class OperatorModeStackItem extends Component<Signature> {

@@ -2,7 +2,7 @@ import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
-import { htmlSafe } from '@ember/template';
+import { SafeString, htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -53,6 +53,7 @@ interface Signature {
 }
 
 let boundRenderedCardElement = new WeakSet<HTMLElement>();
+let computedZIndex = new WeakMap<HTMLElement, SafeString>();
 
 export default class OperatorModeOverlays extends Component<Signature> {
   <template>
@@ -61,22 +62,19 @@ export default class OperatorModeOverlays extends Component<Signature> {
         renderedCard.cardDefOrId
         (this.getCardId renderedCard.cardDefOrId)
         (this.isSelected renderedCard.cardDefOrId)
-        as |cardDefOrId cardId isSelected|
+        (this.isHovered renderedCard)
+        as |cardDefOrId cardId isSelected isHovered|
       }}
-        {{#if (or isSelected (this.isHovered renderedCard))}}
+        {{#if (or isSelected isHovered)}}
           <div
-            class={{cn
-              'actions-overlay'
-              selected=isSelected
-              hovered=(this.isHovered renderedCard)
-            }}
+            class={{cn 'actions-overlay' selected=isSelected hovered=isHovered}}
             {{velcro renderedCard.element middleware=(Array this.offset)}}
             data-test-overlay-selected={{if
               isSelected
               (removeFileExtension cardId)
             }}
             data-test-overlay-card={{removeFileExtension cardId}}
-            style={{renderedCard.overlayZIndexStyle}}
+            style={{this.computeZIndex renderedCard}}
             ...attributes
           >
             <div class={{cn 'actions' field=(this.isField renderedCard)}}>
@@ -412,7 +410,6 @@ export default class OperatorModeOverlays extends Component<Signature> {
         );
       });
       renderedCard.element.style.cursor = 'pointer';
-      renderedCard.overlayZIndexStyle = this.zIndexStyle(renderedCard.element);
     }
 
     return renderedCards;
@@ -521,7 +518,17 @@ export default class OperatorModeOverlays extends Component<Signature> {
   }
 
   @action private isHovered(renderedCard: RenderedCardForOverlayActions) {
-    return this.currentlyHoveredCard === renderedCard;
+    return this.currentlyHoveredCard?.element === renderedCard.element;
+  }
+
+  @action computeZIndex(renderedCard: RenderedCardForOverlayActions) {
+    let zIndex = computedZIndex.get(renderedCard.element);
+    if (!zIndex) {
+      let newZIndex = this.zIndexStyle(renderedCard.element);
+      computedZIndex.set(renderedCard.element, newZIndex);
+      return newZIndex;
+    }
+    return zIndex;
   }
 
   private viewCard = dropTask(
