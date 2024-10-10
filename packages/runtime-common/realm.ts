@@ -197,19 +197,32 @@ interface FileRemovedEventData {
   removed: string;
 }
 
+export type IndexEventData =
+  | IncrementalIndexInitiation
+  | IncrementalIndexEventData
+  | FullIndexEventData;
+
 interface IndexEvent {
   type: 'index';
-  data: IncrementalIndexEventData | FullIndexEventData;
+  data: IndexEventData;
   id?: string;
   clientRequestId?: string | null;
 }
 interface IncrementalIndexEventData {
   type: 'incremental';
+  realmURL: string;
   invalidations: string[];
   clientRequestId?: string | null;
 }
 interface FullIndexEventData {
   type: 'full';
+  realmURL: string;
+}
+
+interface IncrementalIndexInitiation {
+  type: 'incremental-index-initiation';
+  realmURL: string;
+  updatedFile: string;
 }
 
 interface MessageEvent {
@@ -454,16 +467,19 @@ export class Realm {
     contents: string,
     clientRequestId?: string | null,
   ): Promise<WriteResult> {
+    let url = this.paths.fileURL(path);
+    this.sendIndexInitiationEvent(url.href);
     await this.indexing();
     await this.trackOwnWrite(path);
     let results = await this.#adapter.write(path, contents);
-    await this.#realmIndexUpdater.update(this.paths.fileURL(path), {
+    await this.#realmIndexUpdater.update(url, {
       onInvalidation: (invalidatedURLs: URL[]) => {
         this.sendServerEvent({
           type: 'index',
           data: {
             type: 'incremental',
             invalidations: invalidatedURLs.map((u) => u.href),
+            realmURL: this.url,
             clientRequestId: clientRequestId ?? null, // use null instead of undefined for valid JSON serialization
           },
         });
@@ -519,15 +535,18 @@ export class Realm {
   }
 
   async delete(path: LocalPath): Promise<void> {
+    let url = this.paths.fileURL(path);
+    this.sendIndexInitiationEvent(url.href);
     await this.trackOwnWrite(path, { isDelete: true });
     await this.#adapter.remove(path);
-    await this.#realmIndexUpdater.update(this.paths.fileURL(path), {
+    await this.#realmIndexUpdater.update(url, {
       delete: true,
       onInvalidation: (invalidatedURLs: URL[]) => {
         this.sendServerEvent({
           type: 'index',
           data: {
             type: 'incremental',
+            realmURL: this.url,
             invalidations: invalidatedURLs.map((u) => u.href),
           },
         });
@@ -563,7 +582,10 @@ export class Realm {
 
   async reindex() {
     await this.#realmIndexUpdater.run();
-    this.sendServerEvent({ type: 'index', data: { type: 'full' } });
+    this.sendServerEvent({
+      type: 'index',
+      data: { type: 'full', realmURL: this.url },
+    });
   }
 
   async #startup() {
@@ -574,7 +596,10 @@ export class Realm {
       // we only await the full indexing at boot if this is a brand new index
       await promise;
     }
-    this.sendServerEvent({ type: 'index', data: { type: 'full' } });
+    this.sendServerEvent({
+      type: 'index',
+      data: { type: 'full', realmURL: this.url },
+    });
     this.#perfLog.debug(
       `realm server startup in ${Date.now() - this.#startTime}ms`,
     );
@@ -1747,12 +1772,14 @@ export class Realm {
     let items = [...this.#updateItems];
     this.#updateItems = [];
     for (let { operation, url } of items) {
+      this.sendIndexInitiationEvent(url.href);
       await this.#realmIndexUpdater.update(url, {
         onInvalidation: (invalidatedURLs: URL[]) => {
           this.sendServerEvent({
             type: 'index',
             data: {
               type: 'incremental',
+              realmURL: this.url,
               invalidations: invalidatedURLs.map((u) => u.href),
             },
           });
@@ -1761,6 +1788,17 @@ export class Realm {
       });
     }
     itemsDrained!();
+  }
+
+  private sendIndexInitiationEvent(updatedFile: string) {
+    this.sendServerEvent({
+      type: 'index',
+      data: {
+        type: 'incremental-index-initiation',
+        realmURL: this.url,
+        updatedFile,
+      },
+    });
   }
 
   private async sendServerEvent(event: ServerEvents): Promise<void> {

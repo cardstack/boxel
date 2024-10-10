@@ -375,6 +375,14 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       {
         type: 'index',
         data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}Person/john-with-bad-pet-link`,
+        },
+      },
+      {
+        type: 'index',
+        data: {
           type: 'incremental',
           invalidations: [`${testRealmURL}Person/john-with-bad-pet-link`],
         },
@@ -407,6 +415,14 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   >('card instance change made in monaco editor is auto-saved', async function (assert) {
     assert.expect(5);
     let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}Pet/mango`,
+        },
+      },
       {
         type: 'index',
         data: {
@@ -477,6 +493,14 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     assert.expect(3);
 
     let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}Pet/mango`,
+        },
+      },
       {
         type: 'index',
         data: {
@@ -712,6 +736,14 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     }
   `;
     let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}pet.gts`,
+        },
+      },
       {
         type: 'index',
         data: {

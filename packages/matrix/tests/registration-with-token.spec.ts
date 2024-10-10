@@ -224,6 +224,9 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       'personal',
       'hello-world.json',
     );
+    await expect(
+      page.locator('[data-test-realm-indexing-indicator]'),
+    ).toHaveCount(0);
     writeJSONSync(path, {
       data: {
         type: 'card',
@@ -240,8 +243,14 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       },
     });
     await expect(
+      page.locator('[data-test-realm-indexing-indicator]'),
+    ).toContainText(`Indexing realm Test User's Workspace`);
+    await expect(
       page.locator(`[data-test-card="${newRealmURL}hello-world"]`),
     ).toContainText('Hello Mars');
+    await expect(
+      page.locator('[data-test-realm-indexing-indicator]'),
+    ).toHaveCount(0);
 
     // assert that non-logged in user is prompted to login before navigating
     // directly to card in private repo
