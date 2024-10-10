@@ -76,6 +76,7 @@ export default class OperatorModeStack extends Component<Signature> {
         padding: var(--stack-padding-top) var(--boxel-sp)
           var(--stack-padding-bottom);
         position: relative;
+        transition: padding-top var(--boxel-transition);
       }
       .operator-mode-stack.with-bg-image:before {
         content: ' ';
