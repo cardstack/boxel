@@ -305,6 +305,8 @@ export default class DefaultFittedTemplate extends GlimmerComponent<{
         background-repeat: no-repeat;
         color: var(--boxel-light);
         border-radius: var(--boxel-border-radius-sm);
+        width: 100%;
+        height: 100%;
       }
       .card-title {
         text-overflow: ellipsis;
