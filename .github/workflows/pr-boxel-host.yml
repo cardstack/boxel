@@ -5,6 +5,7 @@ on:
     paths:
       - "packages/host/**"
       - "packages/boxel-ui/**"
+      - "packages/boxel-icons/**"
       - ".github/workflows/pr-boxel-host.yml"
       - "package.json"
       - "pnpm-lock.yaml"
@@ -35,6 +36,7 @@ jobs:
             .github/workflows/pr-boxel-host.yml
             packages/host/**
             packages/boxel-ui/**
+            packages/boxel-icons/**
 
   deploy-host-preview-staging:
     name: Deploy a boxel-host staging preview to S3

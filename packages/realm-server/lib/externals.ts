@@ -18,6 +18,11 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@cardstack/boxel-ui/icons', {
     default() {},
   });
+  virtualNetwork.shimAsyncModule({
+    prefix: '@cardstack/boxel-icons/',
+    resolve: async () => ({}),
+  });
+
   virtualNetwork.shimModule('@cardstack/boxel-ui/modifiers', {
     setCssVar: class {},
     SortableGroupModifier: class {},

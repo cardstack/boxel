@@ -593,9 +593,7 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-driver] [data-test-card-display-name]')
         .containsText('Person');
-      assert
-        .dom('[data-test-driver] [data-test-card-thumbnail-placeholder]')
-        .exists();
+      assert.dom('[data-test-driver] [data-test-card-type-icon]').exists();
 
       await percySnapshot(assert);
     });

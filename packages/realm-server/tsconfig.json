@@ -2,7 +2,8 @@
   "compilerOptions": {
     "target": "es2020",
     "allowJs": true,
-    "moduleResolution": "node",
+    "module": "CommonJS",
+    "moduleResolution": "nodenext",
     "allowSyntheticDefaultImports": true,
     "noImplicitAny": true,
     "noImplicitThis": true,
@@ -18,7 +19,6 @@
     "inlineSourceMap": true,
     "inlineSources": true,
     "baseUrl": ".",
-    "module": "CommonJS",
     "esModuleInterop": true,
     "experimentalDecorators": true,
     "skipLibCheck": true,

@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "packages/boxel-ui/**"
+      - "packages/boxel-icons/**"
       - ".github/workflows/pr-boxel-ui.yml"
       - "package.json"
       - "pnpm-lock.yaml"
@@ -30,6 +31,7 @@ jobs:
         with:
           files: |
             packages/boxel-ui/**
+            packages/boxel-icons/**
 
   deploy-ui-preview-staging:
     name: Deploy a boxel-ui staging preview to S3
