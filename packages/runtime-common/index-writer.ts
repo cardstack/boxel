@@ -394,7 +394,7 @@ export class Batch {
   }
 
   private async itemsThatReference(
-    alias: string,
+    resolvedPath: string,
     realmVersion: number,
   ): Promise<
     { url: string; alias: string; type: 'instance' | 'module' | 'error' }[]
@@ -419,7 +419,7 @@ export class Batch {
         'INNER JOIN realm_versions r ON i.realm_url = r.realm_url',
         'WHERE',
         ...every([
-          [`deps_array_element =`, param(alias)],
+          [`deps_array_element =`, param(resolvedPath)],
           realmVersionExpression({ withMaxVersion: realmVersion }),
           // css is a subset of modules, so there won't by any references that
           // are css entries that aren't already represented by a module entry
@@ -441,21 +441,30 @@ export class Batch {
   }
 
   private async calculateInvalidations(
-    alias: string,
+    resolvedPath: string,
     visited: Set<string>,
   ): Promise<string[]> {
-    if (visited.has(alias) || this.nodeResolvedInvalidations.includes(alias)) {
+    if (
+      visited.has(resolvedPath) ||
+      this.nodeResolvedInvalidations.includes(resolvedPath)
+    ) {
       return [];
     }
-    visited.add(alias);
+    visited.add(resolvedPath);
     let childInvalidations = await this.itemsThatReference(
-      alias,
+      resolvedPath,
       this.realmVersion,
     );
-    let invalidations = childInvalidations.map(({ url }) => url);
-    let aliases = childInvalidations.map(({ alias: moduleAlias, type, url }) =>
-      // for instances we expect that the deps for an entry always includes .json extension
-      type === 'instance' ? url : moduleAlias,
+    let realmPath = new RealmPaths(this.realmURL);
+    let invalidationsInThisRealm = childInvalidations.filter((c) =>
+      realmPath.inRealm(new URL(c.url)),
+    );
+
+    let invalidations = invalidationsInThisRealm.map(({ url }) => url);
+    let aliases = invalidationsInThisRealm.map(
+      ({ alias: moduleAlias, type, url }) =>
+        // for instances we expect that the deps for an entry always includes .json extension
+        type === 'instance' ? url : moduleAlias,
     );
     let results = [
       ...invalidations,
