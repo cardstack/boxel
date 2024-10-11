@@ -132,9 +132,14 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       page.locator('[data-test-workspace-list] [data-test-workspace-name]'),
     ).toContainText("Test User's Workspace", { timeout: 30_000 });
     await expect(
+      page.locator(
+        '[data-test-workspace-list] [data-test-workspace-visibility]',
+      ),
+    ).toContainText('private', { timeout: 30_000 });
+    await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"] img`),
       'the "T" icon URL is shown',
-    ).toHaveAttribute('src', 'https://i.postimg.cc/Rq550Bwv/T.png');
+    ).toHaveAttribute('src', 'https://i.postimg.cc/tTPJCJkG/Letter-t.png');
     await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"] .icon`),
       'has background image',

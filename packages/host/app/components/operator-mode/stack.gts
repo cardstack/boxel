@@ -91,6 +91,13 @@ export default class OperatorModeStack extends Component<Signature> {
         display: none;
       }
 
+      .operator-mode-stack.medium-padding-top {
+        padding-top: var(--submode-switcher-trigger-height);
+      }
+      .operator-mode-stack.small-padding-top {
+        padding-top: var(--boxel-sp);
+      }
+
       .operator-mode-stack
         :deep(.field-component-card.fitted-format .missing-embedded-template) {
         margin-top: calc(-1 * var(--boxel-sp-lg));
