@@ -97,7 +97,7 @@ export default class CopyButton extends Component<Signature> {
         margin: 0 var(--boxel-sp-xxs);
       }
       .arrow-icon {
-        --icon-color: var(--boxel-light);
+        --icon-color: var(--boxel-dark);
       }
     </style>
   </template>
