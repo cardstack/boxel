@@ -29,7 +29,7 @@ exports.up = (pgm) => {
     },
   });
 
-  pgm.createTable('subscription_cycles', {
+  pgm.createTable('billing_cycles', {
     id: {
       type: 'serial',
       primaryKey: true,
@@ -50,22 +50,18 @@ exports.up = (pgm) => {
     ended_at: { type: 'timestamp', notNull: true },
     status: { type: 'varchar', notNull: true },
     stripe_subscription_id: { type: 'varchar', notNull: true },
-    current_subscription_cycle_id: {
+    current_billing_cycle_id: {
       type: 'integer',
-      references: 'subscription_cycles(id)',
+      references: 'billing_cycles(id)',
     },
   });
 
-  pgm.addConstraint(
-    'subscription_cycles',
-    'subscription_cycles_subscription_id_fkey',
-    {
-      foreignKeys: {
-        columns: 'subscription_id',
-        references: 'subscriptions(id)',
-      },
+  pgm.addConstraint('billing_cycles', 'billing_cycles_subscription_id_fkey', {
+    foreignKeys: {
+      columns: 'subscription_id',
+      references: 'subscriptions(id)',
     },
-  );
+  });
 
   pgm.createTable('ai_actions', {
     id: {
@@ -124,9 +120,9 @@ exports.up = (pgm) => {
   pgm.createIndex('subscriptions', 'plan_id');
   pgm.createIndex('subscriptions', 'status');
   pgm.createIndex('subscriptions', 'stripe_subscription_id');
-  pgm.createIndex('subscriptions', 'current_subscription_cycle_id');
-  pgm.createIndex('subscription_cycles', 'subscription_id');
-  pgm.createIndex('subscription_cycles', ['period_start', 'period_end']);
+  pgm.createIndex('subscriptions', 'current_billing_cycle_id');
+  pgm.createIndex('billing_cycles', 'subscription_id');
+  pgm.createIndex('billing_cycles', ['period_start', 'period_end']);
   pgm.createIndex('ai_actions', 'user_id');
   pgm.createIndex('ai_actions', 'created_at');
 
@@ -144,9 +140,9 @@ exports.down = (pgm) => {
   pgm.dropIndex('subscriptions', 'plan_id');
   pgm.dropIndex('subscriptions', 'status');
   pgm.dropIndex('subscriptions', 'stripe_subscription_id');
-  pgm.dropIndex('subscriptions', 'current_subscription_cycle_id');
-  pgm.dropIndex('subscription_cycles', 'subscription_id');
-  pgm.dropIndex('subscription_cycles', ['period_start', 'period_end']);
+  pgm.dropIndex('subscriptions', 'current_billing_cycle_id');
+  pgm.dropIndex('billing_cycles', 'subscription_id');
+  pgm.dropIndex('billing_cycles', ['period_start', 'period_end']);
   pgm.dropIndex('ai_actions', 'user_id');
   pgm.dropIndex('ai_actions', 'created_at');
 
@@ -158,11 +154,11 @@ exports.down = (pgm) => {
 
   pgm.dropConstraint(
     'subscriptions',
-    'subscriptions_current_subscription_cycle_id_fkey',
+    'subscriptions_current_billing_cycle_id_fkey',
   );
 
   pgm.dropTable('subscriptions', { cascade: true });
-  pgm.dropTable('subscription_cycles', { cascade: true });
+  pgm.dropTable('billing_cycles', { cascade: true });
   pgm.dropTable('plans', { cascade: true });
   pgm.dropTable('users', { cascade: true });
 };
