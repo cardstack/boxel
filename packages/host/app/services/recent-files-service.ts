@@ -26,7 +26,7 @@ export default class RecentFilesService extends Service {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare reset: ResetService;
 
-  @tracked private declare _recentFiles: TrackedArray<RecentFile>;
+  @tracked declare recentFiles: TrackedArray<RecentFile>;
 
   constructor(owner: Owner) {
     super(owner);
@@ -35,15 +35,8 @@ export default class RecentFilesService extends Service {
     this.extractRecentFilesFromStorage();
   }
 
-  get recentFiles() {
-    return this._recentFiles.filter(
-      (file) =>
-        file.realmURL.href === this.operatorModeStateService.realmURL.href,
-    );
-  }
-
   resetState() {
-    this._recentFiles = new TrackedArray([]);
+    this.recentFiles = new TrackedArray([]);
   }
 
   removeRecentFile(file: LocalPath) {
@@ -54,7 +47,7 @@ export default class RecentFilesService extends Service {
     }
 
     while (index !== -1) {
-      this._recentFiles.splice(index, 1);
+      this.recentFiles.splice(index, 1);
       index = this.findRecentFileIndex(file);
     }
 
@@ -91,16 +84,16 @@ export default class RecentFilesService extends Service {
     const existingIndex = this.findRecentFileIndex(file);
 
     if (existingIndex > -1) {
-      this._recentFiles.splice(existingIndex, 1);
+      this.recentFiles.splice(existingIndex, 1);
     }
 
-    this._recentFiles.unshift({
+    this.recentFiles.unshift({
       realmURL: new URL(currentRealmUrl),
       filePath: file,
     });
 
-    if (this._recentFiles.length > 100) {
-      this._recentFiles.pop();
+    if (this.recentFiles.length > 100) {
+      this.recentFiles.pop();
     }
 
     this.persistRecentFiles();
@@ -110,7 +103,7 @@ export default class RecentFilesService extends Service {
     window.localStorage.setItem(
       'recent-files',
       JSON.stringify(
-        this._recentFiles.map((recentFile) => [
+        this.recentFiles.map((recentFile) => [
           recentFile.realmURL.toString(),
           recentFile.filePath,
         ]),
@@ -123,31 +116,31 @@ export default class RecentFilesService extends Service {
     // code mode...
     let currentRealmUrl = this.operatorModeStateService.realmURL;
 
-    return this._recentFiles.findIndex(
+    return this.recentFiles.findIndex(
       ({ realmURL, filePath }) =>
         realmURL.href === currentRealmUrl.href && filePath === path,
     );
   }
 
   private extractRecentFilesFromStorage() {
-    let _recentFilesString = window.localStorage.getItem('recent-files');
+    let recentFilesString = window.localStorage.getItem('recent-files');
 
-    if (_recentFilesString) {
+    if (recentFilesString) {
       try {
-        this._recentFiles = new TrackedArray(
-          JSON.parse(_recentFilesString).reduce(function (
-            _recentFiles: RecentFile[],
+        this.recentFiles = new TrackedArray(
+          JSON.parse(recentFilesString).reduce(function (
+            recentFiles: RecentFile[],
             [realmUrl, filePath]: SerialRecentFile,
           ) {
             try {
               let url = new URL(realmUrl);
-              _recentFiles.push({ realmURL: url, filePath });
+              recentFiles.push({ realmURL: url, filePath });
             } catch (e) {
               console.log(
                 `Ignoring non-URL recent file from storage: ${realmUrl}`,
               );
             }
-            return _recentFiles;
+            return recentFiles;
           }, []),
         );
       } catch (e) {

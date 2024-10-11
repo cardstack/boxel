@@ -640,14 +640,28 @@ module('Acceptance | operator mode tests', function (hooks) {
     await click('[data-test-workspace-chooser-toggle]');
     await click('[data-test-workspace="Boxel Catalog"]');
     assert.dom(`[data-test-realm-name]`).hasText('In Boxel Catalog');
-    assert.dom('[data-test-recent-file]').exists({ count: 0 });
+    assert.dom(`[data-test-file="index.json"]`).hasClass('selected');
+    assert.dom('[data-test-recent-file]').exists({ count: 4 });
+    assert
+      .dom(`[data-test-recent-file="${testRealmURL}Pet/vangogh.json"]`)
+      .exists();
+    assert
+      .dom(`[data-test-recent-file="${testRealmURL}Pet/mango.json"]`)
+      .exists();
+    assert
+      .dom(`[data-test-recent-file="${testRealmURL}Person/fadhlan.json"]`)
+      .exists();
+    assert
+      .dom(`[data-test-recent-file="${testRealmURL}boom-person.gts"]`)
+      .exists();
 
     await click('[data-test-workspace-chooser-toggle]');
     await click('[data-test-workspace="Test Workspace B"]');
     assert.dom(`[data-test-realm-name]`).hasText('In Test Workspace B');
+    assert.dom(`[data-test-file="Pet/vangogh.json"]`).hasClass('selected');
     assert.dom('[data-test-recent-file]').exists({ count: 4 });
     assert
-      .dom(`[data-test-recent-file="${testRealmURL}Pet/vangogh.json"]`)
+      .dom(`[data-test-recent-file="http://localhost:4201/catalog/index.json"]`)
       .exists();
     assert
       .dom(`[data-test-recent-file="${testRealmURL}Pet/mango.json"]`)

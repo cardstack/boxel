@@ -594,7 +594,15 @@ export default class OperatorModeStateService extends Service {
     await stackItem.ready();
     this.clearStacks();
     this.addItemToStack(stackItem);
-    this.updateCodePath(new URL(card!.id));
+
+    let lastOpenedFile = this.recentFilesService.recentFiles.find(
+      (file) => file.realmURL.href === realmUrl,
+    );
+    this.updateCodePath(
+      lastOpenedFile
+        ? new URL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
+        : new URL(card!.id),
+    );
 
     this.operatorModeController.workspaceChooserOpened = false;
   });
