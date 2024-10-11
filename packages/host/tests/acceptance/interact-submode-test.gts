@@ -724,16 +724,9 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test<TestContextWithSave>('can create a card from the index stack item', async function (assert) {
-      assert.expect(4);
+      assert.expect(7);
       await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: `${testRealmURL}index`,
-              format: 'isolated',
-            },
-          ],
-        ],
+        stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
       });
       let deferred = new Deferred<void>();
       this.onSave((_, json) => {
@@ -749,6 +742,13 @@ module('Acceptance | interact submode tests', function (hooks) {
         deferred.fulfill();
       });
       await click('[data-test-create-new-card-button]');
+      assert
+        .dom('[data-test-card-catalog-item-selected]')
+        .doesNotExist('No card is pre-selected');
+      assert.dom('[data-test-card-catalog-item]').exists({ count: 7 });
+      assert
+        .dom('[data-test-show-more-cards]')
+        .containsText('3 not shown', 'Entries are paginated');
       await click(`[data-test-select="${testRealmURL}person-entry"]`);
       await click('[data-test-card-catalog-go-button]');
 
