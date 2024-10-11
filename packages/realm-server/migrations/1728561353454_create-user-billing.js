@@ -1,18 +1,4 @@
 exports.up = (pgm) => {
-  pgm.createTable('users', {
-    id: {
-      type: 'serial',
-      primaryKey: true,
-    },
-    matrix_user_id: { type: 'varchar', notNull: true, unique: true },
-    stripe_customer_id: { type: 'varchar' },
-    created_at: {
-      type: 'timestamp',
-      notNull: true,
-      default: pgm.func('current_timestamp'),
-    },
-  });
-
   pgm.createTable('plans', {
     id: {
       type: 'serial',
@@ -22,6 +8,21 @@ exports.up = (pgm) => {
     monthly_price: { type: 'numeric(19,4)', notNull: true },
     credits_included: { type: 'integer', notNull: true },
     overage_fee_per_credit_in_usd: { type: 'numeric(19,4)' },
+    created_at: {
+      type: 'timestamp',
+      notNull: true,
+      default: pgm.func('current_timestamp'),
+    },
+  });
+
+  pgm.createTable('users', {
+    id: {
+      type: 'serial',
+      primaryKey: true,
+    },
+    matrix_user_id: { type: 'varchar', notNull: true, unique: true },
+    stripe_customer_id: { type: 'varchar' },
+    plan_id: { type: 'integer', references: 'plans(id)', notNull: true },
     created_at: {
       type: 'timestamp',
       notNull: true,
