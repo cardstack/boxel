@@ -711,7 +711,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
       .edit .header {
         background-color: var(--boxel-highlight);
-        color: var(--boxel-light);
+        color: var(--boxel-dark);
       }
 
       .edit .icon-button {
