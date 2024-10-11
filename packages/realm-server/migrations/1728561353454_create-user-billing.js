@@ -19,9 +19,9 @@ exports.up = (pgm) => {
       primaryKey: true,
     },
     name: { type: 'varchar', notNull: true },
-    monthly_price: { type: 'numeric(19,4)', notNull: true },
+    monthly_price: { type: 'numeric', notNull: true },
     credits_included: { type: 'integer', notNull: true },
-    overage_fee_per_credit_in_usd: { type: 'numeric(19,4)' },
+    overage_fee_per_credit_in_usd: { type: 'numeric' },
     created_at: {
       type: 'timestamp',
       notNull: true,
@@ -70,8 +70,8 @@ exports.up = (pgm) => {
     },
     action_type: { type: 'varchar', notNull: true },
     user_id: { type: 'integer', references: 'users(id)' },
-    cost_in_usd: { type: 'numeric(19,4)', notNull: true },
-    credits_used: { type: 'numeric(19,4)', notNull: true },
+    cost_in_usd: { type: 'numeric', notNull: true },
+    credits_used: { type: 'numeric', notNull: true },
     is_overage: { type: 'boolean', notNull: true, default: false },
     overage_reported_to_stripe: {
       type: 'boolean',
