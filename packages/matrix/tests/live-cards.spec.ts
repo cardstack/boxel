@@ -66,6 +66,9 @@ test.describe('Live Cards', () => {
       realmName,
       'hello-world.json',
     );
+    await expect(
+      page.locator('[data-test-realm-indexing-indicator]'),
+    ).toHaveCount(0);
     writeJSONSync(helloWorldPath, {
       data: {
         type: 'card',
@@ -82,8 +85,14 @@ test.describe('Live Cards', () => {
       },
     });
     await expect(
+      page.locator('[data-test-realm-indexing-indicator]'),
+    ).toContainText(`Indexing realm Test User's Workspace`);
+    await expect(
       page.locator(`[data-test-card="${realmURL}hello-world"]`),
     ).toContainText('Hello Mars');
+    await expect(
+      page.locator('[data-test-realm-indexing-indicator]'),
+    ).toHaveCount(0);
 
     // assert that index card is live bound
     await page.goto(realmURL);
