@@ -99,7 +99,7 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
     }
 
     .add-button--pill {
-      --icon-color: var(--boxel-light);
+      --icon-color: var(--boxel-dark);
       display: flex;
       justify-content: center;
       align-items: center;
