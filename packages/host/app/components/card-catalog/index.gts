@@ -6,15 +6,7 @@ import Component from '@glimmer/component';
 
 import { Button } from '@cardstack/boxel-ui/components';
 
-import {
-  add,
-  and,
-  cn,
-  eq,
-  gt,
-  lt,
-  subtract,
-} from '@cardstack/boxel-ui/helpers';
+import { add, cn, eq, gt, lt, subtract } from '@cardstack/boxel-ui/helpers';
 
 import type { RealmInfo } from '@cardstack/runtime-common';
 
@@ -80,7 +72,7 @@ export default class CardCatalog extends Component<Signature> {
                       }}
                       data-test-card-catalog-item-selected={{isSelected}}
                       {{scrollIntoViewModifier
-                        (and isSelected @hasPreselectedCard)
+                        isSelected
                         container='card-catalog'
                         key=card.url
                       }}
@@ -232,27 +224,13 @@ export default class CardCatalog extends Component<Signature> {
         displayedCardsCount: pageSize,
         realmInfo: groupedCards[realmUrl].realmInfo,
       };
-
-      // if (this.args.hasPreselectedCard) {
-      //   let selectedCard = groupedCards[realmUrl].cards.find(
-      //     (c) => c.url === this.args.selectedCardUrl,
-      //   );
-      //   let selectedCardIndex = selectedCard
-      //     ? groupedCards[realmUrl].cards.indexOf(selectedCard)
-      //     : undefined;
-      //   console.log(selectedCard, selectedCardIndex);
-      //   let displayedCardsCount =
-      //     selectedCardIndex && selectedCardIndex + 1 > pageSize
-      //       ? pageSize * Math.ceil((selectedCardIndex + 1) / pageSize)
-      //       : pageSize;
-      //   groupedCards[realmUrl].displayedCardsCount = displayedCardsCount;
-      // }
     });
 
     return groupedCards;
   }
 
-  pageSize = 5;
+  // do not paginate if there's pre-selected card (because we scroll to it)
+  pageSize = this.args.hasPreselectedCard ? this.args.cards.length : 5;
 
   @action
   handleEnterKey(cardUrl: string, event: KeyboardEvent) {
