@@ -1,6 +1,6 @@
 import Component from '@glimmer/component';
 
-import { task } from 'ember-concurrency';
+import { task, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
 import type { Actions } from '@cardstack/runtime-common';
@@ -37,6 +37,16 @@ export default class OperatorModeStack extends Component<Signature> {
     for (let i = this.args.stackItems.length - 1; i > itemIndex; i--) {
       itemsToDismiss.push(this.args.stackItems[i]);
     }
+
+    // add dismissed animation on last item
+    const lastItemEl = document.querySelector(
+      `.operator-mode-stack > .inner > .item:last-child`,
+    ) as HTMLElement;
+    if (lastItemEl) {
+      lastItemEl.classList.add('dismissed');
+    }
+    await timeout(100);
+
     await Promise.all(itemsToDismiss.map((i) => this.args.close(i)));
   });
 
