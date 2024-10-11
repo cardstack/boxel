@@ -291,7 +291,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
         disabled: !this.card.id,
       }),
     ];
-    if (this.realm.canWrite(this.card.id)) {
+    if (
+      !this.realm.isIndexCard(this.card.id) && // workspace index card cannot be deleted
+      this.realm.canWrite(this.card.id)
+    ) {
       menuItems.push(
         new MenuItem('Delete', 'action', {
           action: () => this.args.publicAPI.delete(this.card),
