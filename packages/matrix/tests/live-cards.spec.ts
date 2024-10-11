@@ -191,6 +191,5 @@ test.describe('Live Cards', () => {
     );
     writeFileSync(instance2Path, 'hi');
     await expect(page.locator('[data-test-file="hello.txt"]')).toHaveCount(1);
-    // assert that code mode file tree is live bound
   });
 });
