@@ -759,7 +759,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test<TestContextWithSave>('card-catalog can pre-select the current filtered card type', async function (assert) {
-      assert.expect(7);
+      assert.expect(12);
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
       });
@@ -785,20 +785,45 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert
         .dom('[data-test-card-catalog-item-selected]')
         .exists({ count: 1 }, 'Only 1 card is selected');
+
+      await click('[data-test-card-catalog-cancel-button]');
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
+      await click('[data-test-create-new-card-button]');
+      assert
+        .dom('[data-test-card-catalog-item-selected]')
+        .doesNotExist(
+          'Pre-selection is cleared when filter does not specify card type',
+        );
+      assert.dom('[data-test-card-catalog-item]').exists({ count: 7 });
+      assert
+        .dom('[data-test-show-more-cards]')
+        .containsText('3 not shown', 'Entries are paginated');
+      await click('[data-test-card-catalog-cancel-button]');
+
+      await click('[data-test-boxel-filter-list-button="Puppy"]');
+      await click('[data-test-create-new-card-button]');
+      assert
+        .dom(
+          `[data-test-card-catalog-item="${testRealmURL}puppy-entry"][data-test-card-catalog-item-selected]`,
+        )
+        .exists('Puppy catalog entry is pre-selected');
+      assert
+        .dom('[data-test-card-catalog-item-selected]')
+        .exists({ count: 1 }, 'Only 1 card is selected');
       await click('[data-test-card-catalog-go-button]');
 
       deferred = new Deferred<SingleCardDocument<string>>();
-      await fillIn(`[data-test-field="firstName"] input`, 'Hassan');
+      await fillIn(`[data-test-field="name"] input`, 'Snoopy');
       await click('[data-test-stack-card-index="1"] [data-test-close-button]');
 
       let json = await deferred.promise;
-      assert.strictEqual(json.data.attributes?.firstName, 'Hassan');
+      assert.strictEqual(json.data.attributes?.name, 'Snoopy');
       assert.strictEqual(json.data.meta.realmURL, testRealmURL);
       assert.deepEqual(
         json.data.meta.adoptsFrom,
         {
-          module: '../person',
-          name: 'Person',
+          module: '../pet',
+          name: 'Puppy',
         },
         'Created card type is correct',
       );

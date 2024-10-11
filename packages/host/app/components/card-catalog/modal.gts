@@ -5,7 +5,6 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, task, timeout } from 'ember-concurrency';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
@@ -94,6 +93,7 @@ type State = {
   originalQuery: Query; // For purposes of resetting the search
   selectedRealmUrls: string[];
   availableRealmUrls: string[];
+  hasPreselectedCard?: boolean;
 };
 
 const DEFAULT_CHOOOSE_CARD_TITLE = 'Choose a Card';
@@ -152,7 +152,7 @@ export default class CardCatalogModal extends Component<Signature> {
                     @realmInfos={{this.availableRealms}}
                     @select={{this.selectCard}}
                     @selectedCardUrl={{this.state.selectedCardUrl}}
-                    @hasPreselectedCard={{this.hasPreselectedCard}}
+                    @hasPreselectedCard={{this.state.hasPreselectedCard}}
                   />
                 {{/if}}
               </:response>
@@ -256,8 +256,6 @@ export default class CardCatalogModal extends Component<Signature> {
   @service declare realmServer: RealmServerService;
   @service declare realm: RealmService;
 
-  @tracked hasPreselectedCard = false;
-
   constructor(owner: Owner, args: {}) {
     super(owner, args);
     (globalThis as any)._CARDSTACK_CARD_CHOOSER = this;
@@ -332,6 +330,7 @@ export default class CardCatalogModal extends Component<Signature> {
     this.state.selectedCardUrl = undefined;
     this.state.dismissModal = false;
     this.state.query = this.state.originalQuery;
+    this.state.hasPreselectedCard = false;
   }
 
   // This is part of our public API for runtime-common to invoke the card chooser
@@ -400,7 +399,6 @@ export default class CardCatalogModal extends Component<Signature> {
         );
         if (instances?.[0]?.id) {
           preselectedCardUrl = `${instances[0].id}.json`;
-          this.hasPreselectedCard = true;
         }
       }
       let cardCatalogState = new TrackedObject<State>({
@@ -415,6 +413,7 @@ export default class CardCatalogModal extends Component<Signature> {
         availableRealmUrls: this.realmServer.availableRealmURLs,
         selectedRealmUrls: this.realmServer.availableRealmURLs,
         selectedCardUrl: preselectedCardUrl,
+        hasPreselectedCard: Boolean(preselectedCardUrl),
       });
       this.stateStack.push(cardCatalogState);
 
@@ -540,7 +539,7 @@ export default class CardCatalogModal extends Component<Signature> {
     }
 
     this.state.selectedCardUrl = cardUrl;
-    this.hasPreselectedCard = false;
+    this.state.hasPreselectedCard = false;
 
     if (
       (event instanceof KeyboardEvent && event?.key === 'Enter') ||
