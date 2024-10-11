@@ -86,7 +86,7 @@ test.describe('Live Cards', () => {
     });
     await expect(
       page.locator('[data-test-realm-indexing-indicator]'),
-    ).toContainText(`Indexing realm Test User's Workspace`);
+    ).toContainText(`Indexing ${realmName}`);
     await expect(
       page.locator(`[data-test-card="${realmURL}hello-world"]`),
     ).toContainText('Hello Mars');

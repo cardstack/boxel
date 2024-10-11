@@ -64,23 +64,18 @@ export default class RealmIndexingIndicator extends Component {
   }
 
   @cached
-  get indexingRealmNames() {
+  private get indexingRealmNames() {
     return [...this.indexingRealms.values()].map((v) => v.name).join(', ');
   }
 
-  get isIndexing() {
+  private get isIndexing() {
     return this.indexingRealms.size > 0;
-  }
-
-  get isPlural() {
-    return this.indexingRealms.size > 1;
   }
 
   <template>
     {{#if this.isIndexing}}
       <div class='realm-indexing-indicator' data-test-realm-indexing-indicator>
         Indexing
-        {{#if this.isPlural}}realms{{else}}realm{{/if}}
         {{this.indexingRealmNames}}
       </div>
     {{/if}}
