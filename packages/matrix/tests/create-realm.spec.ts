@@ -10,7 +10,12 @@ import {
   type IsolatedRealmServer,
   appURL,
 } from '../helpers/isolated-realm-server';
-import { clearLocalStorage, login, registerRealmUsers } from '../helpers';
+import {
+  clearLocalStorage,
+  createRealm,
+  login,
+  registerRealmUsers,
+} from '../helpers';
 
 test.describe('Create Realm via Dashboard', () => {
   let synapse: SynapseInstance;
@@ -42,16 +47,7 @@ test.describe('Create Realm via Dashboard', () => {
       url: serverIndexUrl,
       skipOpeningAssistant: true,
     });
-    await page.locator('[data-test-add-workspace]').click();
-    await page.locator('[data-test-display-name-field]').fill('New Workspace');
-    await page.locator('[data-test-endpoint-field]').fill('new-workspace');
-    await page.locator('[data-test-create-workspace-submit]').click();
-    await expect(
-      page.locator('[data-test-workspace="New Workspace"]'),
-    ).toBeVisible();
-    await expect(
-      page.locator('[data-test-create-workspace-modal]'),
-    ).toHaveCount(0);
+    await createRealm(page, 'new-workspace', 'New Workspace');
     await page.locator('[data-test-workspace="New Workspace"]').click();
     let newRealmURL = new URL('user1/new-workspace/', serverIndexUrl).href;
     await expect(
