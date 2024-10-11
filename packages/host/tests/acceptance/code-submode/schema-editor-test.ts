@@ -536,6 +536,14 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       {
         type: 'index',
         data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}person.gts`,
+        },
+      },
+      {
+        type: 'index',
+        data: {
           type: 'incremental',
           invalidations: [
             `${testRealmURL}person.gts`,
@@ -657,6 +665,14 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert.expect(10);
     let waitForOpts = { timeout: 2000 }; // Helps mitigating flaky tests since Writing to a file + reflecting that in the UI can be a bit slow
     let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}person.gts`,
+        },
+      },
       {
         type: 'index',
         data: {

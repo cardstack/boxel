@@ -927,6 +927,14 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       {
         type: 'index',
         data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}Pet/vangogh`,
+        },
+      },
+      {
+        type: 'index',
+        data: {
           type: 'incremental',
           invalidations: [`${testRealmURL}Pet/vangogh`],
         },
@@ -1014,6 +1022,14 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
   test<TestContextWithSSE>('Can delete a card instance from code submode and fall back to recent file', async function (assert) {
     let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}Pet/vangogh`,
+        },
+      },
       {
         type: 'index',
         data: {
@@ -1110,6 +1126,14 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       {
         type: 'index',
         data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}pet.gts`,
+        },
+      },
+      {
+        type: 'index',
+        data: {
           type: 'incremental',
           invalidations: [
             `${testRealmURL}pet.gts`,
@@ -1169,6 +1193,14 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
   test<TestContextWithSSE>('can delete a card definition with no recent files to fall back on', async function (assert) {
     let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}pet.gts`,
+        },
+      },
       {
         type: 'index',
         data: {
@@ -1694,6 +1726,14 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     );
 
     let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental-index-initiation',
+          realmURL: testRealmURL,
+          updatedFile: `${testRealmURL}in-this-file.gts`,
+        },
+      },
       {
         type: 'index',
         data: {
