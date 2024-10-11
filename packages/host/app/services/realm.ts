@@ -277,6 +277,10 @@ export default class RealmService extends Service {
     return this.knownRealm(url)?.isPublic ?? false;
   };
 
+  isIndexCard = (url: string): boolean => {
+    return url.endsWith('/index');
+  };
+
   canRead = (url: string): boolean => {
     return this.knownRealm(url)?.canRead ?? false;
   };
