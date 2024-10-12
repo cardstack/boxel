@@ -1,5 +1,6 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import Component from '@glimmer/component';
+
 import cssVar from '../../helpers/css-var.ts';
 
 export function stringToColor(string: string | null) {
@@ -26,11 +27,13 @@ export function stringToColor(string: string | null) {
 
 interface Signature {
   Args: {
-    userId: string;
+    // CSS length value
+    border?: string;
     displayName?: string;
-    size?: string; // CSS length value
-    border?: string; // CSS border value
+    // CSS border value
     isReady: boolean;
+    size?: string;
+    userId: string;
   };
   Element: HTMLDivElement;
 }

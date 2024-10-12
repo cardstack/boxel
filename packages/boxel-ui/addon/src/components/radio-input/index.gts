@@ -17,10 +17,10 @@ export interface Signature {
     hideRadio?: boolean;
     invalid?: boolean;
     items: any[];
+    keyName?: string;
     name: string;
     orientation?: string;
-    spacing?: string;
-    keyName?: string; // New argument to specify the key name
+    spacing?: string; // New argument to specify the key name
   };
   Blocks: {
     default: [
