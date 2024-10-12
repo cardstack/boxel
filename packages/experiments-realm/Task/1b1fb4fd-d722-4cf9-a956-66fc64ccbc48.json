@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "taskName": "Embedded Template for Status and Priority",
+      "taskDetail": null,
+      "status": {
+        "index": 2,
+        "label": "Current Sprint"
+      },
+      "priority": {
+        "index": null,
+        "label": null
+      },
+      "dueDate": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "assignee": {
+        "links": {
+          "self": null
+        }
+      },
+      "project": {
+        "links": {
+          "self": "../Project/51ca069b-1c55-4648-8654-bd82bf162f9d"
+        }
+      },
+      "team": {
+        "links": {
+          "self": "../Team/cc574556-4253-44b8-ba80-0cfb844b4908"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../productivity/task",
+        "name": "Task"
+      }
+    }
+  }
+}
