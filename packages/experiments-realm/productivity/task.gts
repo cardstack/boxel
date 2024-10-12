@@ -146,7 +146,7 @@ class EditPriority extends Component<typeof TaskPriorityField> {
     <div class='priority-field'>
       <RadioInput
         @groupDescription='Select Task Priority'
-        @items={{this.args.model.statuses}}
+        @items={{@model.statuses}}
         @checkedId={{this.selectedPriority.label}}
         @orientation='horizontal'
         @spacing='default'
@@ -179,7 +179,7 @@ export class TaskPriorityField extends StatusField {
   static edit = EditPriority;
   static embedded = class Embedded extends Component<typeof TaskPriorityField> {
     <template>
-      {{this.args.model.label}}
+      {{@model.label}}
     </template>
   };
 }
@@ -579,9 +579,9 @@ export class Task extends CardDef {
                 {{/each}}
               </div>
               <div class='children-column'>
-                {{#each @fields.children as |child|}}
+                {{#each @fields.children as |childTask|}}
                   <div class='subtask-item'>
-                    <child />
+                    <childTask />
                   </div>
                 {{/each}}
               </div>

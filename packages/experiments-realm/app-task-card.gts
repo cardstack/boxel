@@ -228,7 +228,7 @@ class AppTaskCardIsolated extends Component<typeof AppTaskCard> {
       </Sheet>
     </div>
 
-    <style>
+    <style scoped>
       .task-app {
         display: flex;
         position: relative;
@@ -302,7 +302,7 @@ class Sheet extends GlimmerComponent<SheetSignature> {
       </div>
     </div>
 
-    <style>
+    <style scoped>
       .sheet-overlay {
         position: absolute;
         top: 0;
