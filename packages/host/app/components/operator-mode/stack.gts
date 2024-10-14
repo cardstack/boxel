@@ -1,8 +1,8 @@
+import { isTesting } from '@embroider/macros';
+
 import Component from '@glimmer/component';
 
 import { task, timeout } from 'ember-concurrency';
-
-import { isTesting } from '@embroider/macros';
 
 import perform from 'ember-concurrency/helpers/perform';
 
