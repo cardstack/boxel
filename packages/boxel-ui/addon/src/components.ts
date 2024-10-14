@@ -37,6 +37,7 @@ import BoxelSelect from './components/select/index.gts';
 import Switch from './components/switch/index.gts';
 import TabbedHeader from './components/tabbed-header/index.gts';
 import Tooltip from './components/tooltip/index.gts';
+import DndKanbanBoard from './components/drag-and-drop/index.gts';
 
 export {
   Accordion,
@@ -76,4 +77,5 @@ export {
   Switch,
   TabbedHeader,
   Tooltip,
+  DndKanbanBoard,
 };
